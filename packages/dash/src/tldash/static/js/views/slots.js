@@ -1,4 +1,4 @@
-// Floor (dash-spec §4): one row per slot, grouped by machine, each bead one BeadLine per piece. A comeback in another slot
+// Slots (dash-spec §4): one row per slot, grouped by machine, each bead one BeadLine per piece. A comeback in another slot
 // is a second piece joined to the first by a dashed curve. Hours back, "now", the hatched future; zoom 2/4/8 h opens on now.
 // The phone (§9) shows one card per slot with a 2 h strip instead.
 import { html, useEffect } from '../../vendor/ui-runtime.js';
@@ -49,7 +49,7 @@ function Track({ snap, slot, x, now, beadOf }) {
   })}
     ${start && html`<div class="nm" style=${`left:${x(now)}px`} onClick=${b ? () => openBead(b) : undefined}><span>${b?.title || slot.bead}</span></div>
       <div class="idl starting" title=${slot.startup} style=${`top:${LINE_Y}px;left:${x(now) + 6}px`}>${starting(slot, now)}${slot.startup && ` · ${slot.startup}`}</div>`}
-    ${idle && html`<div class="idl" style=${`top:${LINE_Y}px;left:${x(now) + 6}px`}>${slot.idle_why || `idle · no ${slot.lane} work ready`}</div>`}
+    ${idle && html`<div class="idl" style=${`top:${LINE_Y}px;left:${x(now) + 6}px`}>${slot.idle_why || `idle · no ${slot.account} work ready`}</div>`}
   </div>`;
 }
 
@@ -67,9 +67,9 @@ function jumps(snap, rows, x) {
   return out;
 }
 
-// a locked lane walls off its slots at now, labelled on the axis row (never over names)
+// a locked account walls off its slots at now, labelled on the axis row (never over names)
 function walls(snap, rows, x, now) {
-  return snap.lanes.filter((l) => l.state === 'locked').flatMap((l) => snap.slots.filter((s) => l.slots.includes(s.id) && rows[key(s.project, s.id)] != null).map((s, i) => html`
+  return snap.accounts.filter((l) => l.state === 'locked').flatMap((l) => snap.slots.filter((s) => l.slots.includes(s.id) && rows[key(s.project, s.id)] != null).map((s, i) => html`
     <div key=${l.id + key(s.project, s.id)} class="wall" style=${`left:${x(now)}px;top:${rows[key(s.project, s.id)]}px;height:${ROW}px`}></div>
     ${i === 0 && html`<div key=${`${l.id}h`} class="wall lbl" style=${`left:${x(now)}px;top:0;height:${AXIS}px`}><span>⛔ ${l.name} locked${l.locked_until ? ` until ${clock(l.locked_until)}` : ''}</span></div>`}`));
 }
@@ -84,7 +84,7 @@ function NowFiles({ slot }) {
 
 const busyBead = (s) => s.bead && s.project && ['running', 'stuck', 'look'].includes(s.state);
 
-export function Floor({ snap, now, filters }) {
+export function Slots({ snap, now, filters }) {
   const [ref, w] = useWidth();
   const zoom = zoomOf();
   const pps = w ? w / ((zoom + 1) * 3600) : 0;
@@ -105,7 +105,7 @@ export function Floor({ snap, now, filters }) {
     H += GRP;
     for (const s of g.slots) {
       rows[key(s.project, s.id)] = H;
-      labs.push(html`<div key=${key(s.project, s.id)} class=${`lab ${s.state === 'starting' ? 'starting' : ''}`}><b>${s.name}</b><small>${s.lane}</small></div>`);
+      labs.push(html`<div key=${key(s.project, s.id)} class=${`lab ${s.state === 'starting' ? 'starting' : ''}`}><b>${s.name}</b><small>${s.account}</small></div>`);
       if (pps) trks.push(html`<${Track} key=${key(s.project, s.id)} snap=${snap} slot=${s} x=${x} now=${now} beadOf=${beadOf} />`);
       H += ROW;
     }
@@ -152,15 +152,15 @@ function SlotCard({ snap, slot, now }) {
   } else if (b) {
     body = html`<div class="t">Free · ${bid(b.id, b.project, ui.project === 'all')} parked here</div><div class="s">${slot.idle_why || 'waits on your answer'}</div>`;
   } else {
-    body = html`<div class="t">${st === 'free' ? 'Free' : slot.lane ? `Idle · no ${slot.lane} work ready` : 'Stray claim'}</div>${slot.idle_why && html`<div class="s">${slot.idle_why}</div>`}`;
+    body = html`<div class="t">${st === 'free' ? 'Free' : slot.account ? `Idle · no ${slot.account} work ready` : 'Stray claim'}</div>${slot.idle_why && html`<div class="s">${slot.idle_why}</div>`}`;
   }
   const m = machineOf(slot);
   return html`<article class=${`slc ${busy ? '' : 'idle'}`} role=${b ? 'button' : undefined} onClick=${b ? () => openBead(b) : undefined}>
-    <div class="h"><b>${MACHINE_ICON(m)} ${slot.name}</b><span>${slot.lane}</span><span class=${`pill ${PILL[st]}`}>${pill}</span></div>
+    <div class="h"><b>${MACHINE_ICON(m)} ${slot.name}</b><span>${slot.account}</span><span class=${`pill ${PILL[st]}`}>${pill}</span></div>
     ${body}<${Strip} pieces=${pieces} pulses=${pieces.map((p) => liveSegment(snap, p))} now=${now} />${busy && b && html`<${NowFiles} slot=${slot} />`}</article>`;
 }
 
-export function PhoneFloor({ snap, now }) {
+export function PhoneSlots({ snap, now }) {
   const slots = groups(snap).flatMap((g) => g.slots);
   if (!slots.length) return html`<${ActiveWork} snap=${snap} now=${now} /><${EmptyState} title="No slots yet." body="Slots appear once the loop runs a worker." /><${Runs} snap=${snap} now=${now} />`;
   const n = (...k) => slots.filter((s) => k.includes(s.state)).length;

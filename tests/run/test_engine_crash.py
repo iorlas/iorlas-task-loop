@@ -5,8 +5,8 @@ import pytest
 from support.checkpoints import read_ck
 from support.engine_land import EngineTest
 
+from tlkernel import accountpauses as pauses
 from tlkernel import closeeffects as effects
-from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
@@ -72,7 +72,7 @@ class EngineCrash(EngineTest):
 
     def test_value_error_at_land_parks_with_checkpoint_and_traceback(self):
         self.crash_land(ValueError("refused"))
-        assert self.eng.kind == Kind.PAUSE_LANE
+        assert self.eng.kind == Kind.PAUSE_ACCOUNT
         assert must(ParkStore(self.eng.home).get(self.eng.bead)).reason == "stage_refused"
         assert self.eng.asked
         assert "crashing" not in str(self.ask())

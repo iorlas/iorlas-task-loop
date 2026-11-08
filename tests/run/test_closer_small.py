@@ -65,14 +65,14 @@ class Settling(Case):
         assert (held.status, held.assignee) == ("open", "")
 
     def test_a_pause_lets_the_bead_go_open_and_unassigned(self):
-        host = FakeSettleHost(oc.apply(oc.make(Kind.PAUSE_LANE, "the lane is out"), "t-1", [], 1000.0))
+        host = FakeSettleHost(oc.apply(oc.make(Kind.PAUSE_ACCOUNT, "the account is out"), "t-1", [], 1000.0))
         host.store.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="t", status="in_progress", assignee="me")
         settling = Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook(), beadtools.peek, beadtools.attempt)
-        rc = settling.leave_open(Kind.PAUSE_LANE, "the lane is out")
+        rc = settling.leave_open(Kind.PAUSE_ACCOUNT, "the account is out")
         assert rc == 0
         held = host.store.beads[BeadId("t-1")]
         assert (held.status, held.assignee) == ("open", "")
-        assert host.warnings == ["the lane is out"]
+        assert host.warnings == ["the account is out"]
 
 
 class Leaving(Case):

@@ -1,5 +1,5 @@
 {
- "v": 1,
+ "v": 2,
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-5ban.3",
@@ -13,7 +13,7 @@
   "t": 1793048880.0,
   "epic": "lifesim-wld",
   "slot": "devbox·2",
-  "lane": "OC Go",
+  "account": "OC Go",
   "review": null,
   "loops": 3,
   "dots": [
@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "f755152ea0f87e70",
+ "version": "7c33989ca52a903b",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "NPC daily schedule pathing. Part of World.",

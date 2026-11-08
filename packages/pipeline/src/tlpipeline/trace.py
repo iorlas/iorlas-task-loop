@@ -17,7 +17,7 @@ WHY_CODE: Mapping[str, WhyCode] = MappingProxyType(
         Kind.ASK_BUDGET.value: WhyCode.OVER_BUDGET,
         Kind.ASK_TICKET.value: WhyCode.TICKET,
         Kind.WAIT_ASK.value: WhyCode.NEEDS_HUMAN,
-        Kind.PAUSE_LANE.value: WhyCode.LANE_OUT,
+        Kind.PAUSE_ACCOUNT.value: WhyCode.ACCOUNT_OUT,
         Kind.PAUSE_NETWORK.value: WhyCode.NETWORK,
         Kind.ENGINE_CRASH.value: WhyCode.PAUSED,
         Kind.PAUSE_KILLED.value: WhyCode.STOPPED_BY_COORDINATOR,
@@ -105,13 +105,13 @@ def run_trace(run: str, f: Mapping[str, Any]) -> t.RunTrace:
         write_rounds=[write_round(w) for w in f.get("write_rounds") or []],
         reflection=reflection(f.get("reflection")),
         strays=[str(x) for x in f.get("strays") or []],
-        lane_notes=[str(x) for x in f.get("lane_notes") or []],
+        account_notes=[str(x) for x in f.get("account_notes") or []],
         **_known(
             t.RunTrace,
             {
                 k: v
                 for k, v in f.items()
-                if k not in ("outcome", "cost", "stats", "sessions", "verified", "write_rounds", "reflection", "strays", "lane_notes")
+                if k not in ("outcome", "cost", "stats", "sessions", "verified", "write_rounds", "reflection", "strays", "account_notes")
             },
         ),
     )

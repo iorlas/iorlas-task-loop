@@ -1,5 +1,5 @@
 // BeadLine: the one-line bead (dash-spec §4), cut into phase segments by 1 px inner rules, radius 6 at its outer ends only.
-// The Floor, the drawer trace and the phone strip all draw it from Piece.segs.
+// The Slots, the drawer trace and the phone strip all draw it from Piece.segs.
 import { html, useEffect, useRef, useState } from '../../vendor/ui-runtime.js';
 import { clock, dur } from '../format.js';
 

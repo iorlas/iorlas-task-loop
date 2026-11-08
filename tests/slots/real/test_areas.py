@@ -71,10 +71,10 @@ class AreasBase(Slots):
         super().setup_method()
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": AREAS_JSON}))
 
-    def lanes(self, script, lanes, slots=2):
+    def areas(self, script, areas, slots=2):
         bd = self.beads(script, slots=slots)
-        for b, lane in lanes.items():
-            bd.beads[b]["labels"] = ["lane:" + lane]
+        for b, area in areas.items():
+            bd.beads[b]["labels"] = ["lane:" + area]
         return bd
 
     def running(self, bd, b, slot="s1", sb="sl-1"):
@@ -89,7 +89,7 @@ class AreasBase(Slots):
 
 class Areas(AreasBase):
     def test_the_queue_skips_a_bead_whose_area_runs_in_another_slot_and_keeps_the_order_of_the_rest(self):
-        bd = self.lanes({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
+        bd = self.areas({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
         self.running(bd, "x-1")
         ids, skipped = self.order()
         assert ids == ["x-3", "x-4"]
@@ -98,7 +98,7 @@ class Areas(AreasBase):
         assert "NEXT x-3" in out
         assert "skip x-2: area live busy: x-1 in s1" in out
     def test_a_live_engine_lock_naming_a_bead_makes_its_area_busy_a_dead_one_does_not(self):
-        bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        bd = self.areas({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         bd.beads["x-1"].update(status="in_progress", assignee="denis")
         k = self.live_lock("s2", bead="x-1")  # a run whose slot bead says nothing (an older engine, a --worktree run)
         assert self.order() == ([], {"x-2": "area live busy: x-1 in s2"})
@@ -107,7 +107,7 @@ class Areas(AreasBase):
         assert self.order()[0] == ["x-2"]
 
     def test_the_area_is_free_again_once_the_running_bead_ends(self):
-        bd = self.lanes({"x-1": [], "x-2": [], "x-3": [rec("landed")]}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
+        bd = self.areas({"x-1": [], "x-2": [], "x-3": [rec("landed")]}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
         seen: dict[str, Any] = {}
 
         def during():  # a second loop starts while x-1 runs in s1 by hand
@@ -126,7 +126,7 @@ class Areas(AreasBase):
 
     def test_the_claim_checks_the_area_again_under_the_area_lock(self):
         """Two loops read the queue at once: both see the area free; the claim re-checks under one lock."""
-        bd = self.lanes({"x-1": [rec("landed")], "x-2": [rec("landed")]}, {"x-1": "live"})
+        bd = self.areas({"x-1": [rec("landed")], "x-2": [rec("landed")]}, {"x-1": "live"})
         real, calls = QueueRule.busy_areas, []
 
         def busy(*a, **kw):
@@ -143,7 +143,7 @@ class Areas(AreasBase):
     def test_the_claim_sees_a_bead_that_began_to_run_while_the_loop_waited_for_its_slot(self):
         """tl-na3: the loop read the queue (x-1 and x-2 of one area, nothing running), then waited in the slot line; a hand run
         of x-1 began meanwhile. The claim's area check read the running set from before the wait and let x-2 start beside x-1."""
-        bd = self.lanes({"x-1": [], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"}, slots=3)
+        bd = self.areas({"x-1": [], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"}, slots=3)
         real, seen = Loop.acquire, {}
 
         def acquire(loop, prio):
@@ -163,7 +163,7 @@ class Areas(AreasBase):
         assert seen["x1"] == "closed", "x-2 ran while x-1 of its area was running"
 
     def test_the_loop_marks_its_slot_with_the_bead_it_runs(self):
-        bd = self.lanes({"x-1": [rec("landed")]}, {"x-1": "live"})
+        bd = self.areas({"x-1": [rec("landed")]}, {"x-1": "live"})
         seen: dict[str, Any] = {}
         self.during.append(lambda: seen.update(meta=dict(bd.slots["sl-1"].get("metadata") or {}),
                                                lock=engine_lock.read_engine_lock(homes.cfg(), self.slot("s1"))))
@@ -173,14 +173,14 @@ class Areas(AreasBase):
 
     def test_a_failed_bead_gives_back_its_slot_and_its_area_so_the_loop_goes_on(self):
         """tl-bjd: w-5 of the race failed and its area stayed busy. The slot's release clears the bead's mark, whatever the outcome."""
-        bd = self.lanes({"x-1": [rec("failed")], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"}, slots=1)
+        bd = self.areas({"x-1": [rec("failed")], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"}, slots=1)
         assert self.run_loop("--max-beads", "2") == 0
         assert self.started == [("x-1", "s1"), ("x-2", "s1")]  # x-2 is of the failed bead's area, in the failed bead's slot
         assert (bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]) == ("open", "")
         assert not set(bd.slots["sl-1"].get("metadata") or {}) & set(marks.HELD_KEYS)
 
     def test_when_every_ready_bead_waits_for_its_area_the_loop_waits_instead_of_draining(self):
-        bd = self.lanes({"x-1": [], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"})
+        bd = self.areas({"x-1": [], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")
 
         def nap(secs, *a, **kw):
@@ -197,7 +197,7 @@ class Areas(AreasBase):
     def test_a_mark_a_reclaim_left_on_a_slot_bead_is_cleared_by_the_next_take(self):
         """bd reclaim frees a dead loop's slot bead but keeps its metadata: a hold or a loop's take there must not
         leave the old bead running in its area."""
-        bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        bd = self.areas({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         bd.beads["x-1"]["status"] = "closed"
         bd.slots["sl-1"]["metadata"] = {"held_bead": "x-1"}  # open, as reclaim left it
         assert self.cli("slot", "hold", "s1", "--why", "screenshots")[0] == 0
@@ -211,7 +211,7 @@ class Areas(AreasBase):
         return wslots_config.profile_slots(str(self.repo))
 
     def test_a_hand_run_in_a_busy_area_warns_and_runs(self):
-        bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        bd = self.areas({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")
         rc, r, out = self.run_task("x-2", slot="s2")
         assert (rc, r["outcome"]) == (0, "landed")
@@ -220,7 +220,7 @@ class Areas(AreasBase):
         self.made.assert_called()
 
     def test_exclusive_area_refuses_a_hand_run_in_a_busy_area_and_gives_the_slot_back(self):
-        bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        bd = self.areas({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")
         rc, r, _out = self.run_task("x-2", slot="s2", flags={"exclusive_area": True})
         assert (rc, r["outcome"]) == (1, "taken")
@@ -230,7 +230,7 @@ class Areas(AreasBase):
         assert not engine_lock_path(homes.cfg(), self.slot("s2")).exists()
 
     def test_a_hand_run_in_a_free_area_or_with_no_area_says_nothing(self):
-        bd = self.lanes({"x-1": [], "x-2": [], "x-3": []}, {"x-1": "live", "x-2": "shell"})
+        bd = self.areas({"x-1": [], "x-2": [], "x-3": []}, {"x-1": "live", "x-2": "shell"})
         self.running(bd, "x-1")
         for b in ("x-2", "x-3"):
             _rc, r, out = self.run_task(b, slot="s2", flags={"exclusive_area": True})
@@ -337,7 +337,7 @@ class ReviewFixes(AreasBase):
 
 
     def test_an_unreadable_holder_makes_every_area_busy_and_is_logged(self):
-        bd = self.lanes({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
+        bd = self.areas({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
         self.running(bd, "x-1")
         real_bd, err = bd, io.StringIO()
 
@@ -353,7 +353,7 @@ class ReviewFixes(AreasBase):
 
 
     def test_a_long_area_wait_says_how_long_and_who_holds_it_and_until_still_ends_the_loop(self):
-        bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        bd = self.areas({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")  # a hung but live holder
         until = (datetime.datetime.fromtimestamp(self.clock()) + datetime.timedelta(minutes=25)).strftime("%H:%M")
         assert self.run_loop("--until", until) == 0
@@ -364,7 +364,7 @@ class ReviewFixes(AreasBase):
 
     @NO_FCNTL
     def test_two_exclusive_hand_runs_in_one_area_let_the_first_in_win(self):
-        self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        self.areas({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         outs, real, gate, done = {}, entry.area_admission.hand, threading.Barrier(2, timeout=60), threading.Barrier(2, timeout=60)
 
         def area(*a, **kw):  # both runs hold their slots before either decides, and neither lets go before both did

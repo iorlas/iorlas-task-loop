@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from tlgate.evidence import compact
+from tlkernel import accountcaps as caps
 from tlkernel import askspecs, trustroots
-from tlkernel import lanecaps as caps
 from tlkernel import workswitch as switch
 from tlkernel.reviewmatchers import AcceptanceItems
 from tlkernel.reviewunavailable import ReviewUnavailable
@@ -66,7 +66,7 @@ class ReviewRound:
         note = f"{s.name}: review unavailable after bounded delegate retries (schema_invalid); stage continues"
         e.steps.outcome("unavailable", "schema_invalid: delegate retries exhausted")
         e.steps.move("next", "review_unavailable", note)
-        e.write.lane_notes.append(note)
+        e.write.account_notes.append(note)
         e.warn(note)
         e.comment("Review (engine): " + note)
         e.checkpoints.keep_pending("review")
@@ -168,7 +168,7 @@ class ReviewRound:
         e.link_check.link_judged(review)
         same = e.last_flag == "same_family"
         if same:
-            e.warn(f"{s.name}: the review is from the writer's own model family (no other lane was free)")
+            e.warn(f"{s.name}: the review is from the writer's own model family (no other account was free)")
         if review["findings"] or review["unmet"] or same:
             lines = [f"{f['file']}:{f['line']} [{f['severity']}] {f['fix']}" for f in review["findings"]]
             lines += ["unmet: " + u for u in review["unmet"]]

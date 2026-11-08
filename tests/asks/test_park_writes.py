@@ -42,7 +42,7 @@ def test_non_pause_has_no_park_wake(workdir):
 
 @pytest.mark.parametrize("permanence", ["needs_owner", "transient"])
 def test_delegate_stop_books_its_permanence(workdir, permanence):
-    rec = parks.paused(ConfigDir(workdir), BEAD, Kind.PAUSE_LANE, "run-1", 100.0,
+    rec = parks.paused(ConfigDir(workdir), BEAD, Kind.PAUSE_ACCOUNT, "run-1", 100.0,
                        producer="delegate", permanence=permanence, draw=lambda: 0.5, store=ParkStore)
     assert rec.permanence == permanence
     assert rec.retry_at == 0.0 if permanence == "needs_owner" else rec.retry_at > 100.0

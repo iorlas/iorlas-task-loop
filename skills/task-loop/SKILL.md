@@ -28,7 +28,7 @@ writer reads first). The profile gives:
 |---|---|
 | setup | the argv list a fresh worktree runs once (no shell) |
 | engine.prepare | coordinator prerequisites: `{cmd: [argv], inputs: [globs], timeout_min: 30}` before writes; unchanged inputs skip; restore/assets reports force one retry without spending a write attempt or replan (`triggers` overrides the substrings) |
-| pick | the `bd ready` filter: labels, lanes, what to exclude |
+| pick | the `bd ready` filter: labels, areas, what to exclude |
 | gate | the checks that say `"run": "gate"` (or `"both"`) in `engine.checks`: the steps that must be green at land |
 | land | the branch to land on and any rule about how (default: `git push origin HEAD:main`) |
 | workers | how workers run here (what a sandbox can and cannot run, build flags): `engine.worker_rules` points at it |
@@ -61,17 +61,17 @@ the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); 
 Workers go through `delegate.api` (`packages/delegate/docs/contracts/delegate-api.md`; the stop facts are delegate's `contract.json`): the
 engine checks the call's grants before any step and blocks the task when delegate refuses them. Delegate, not the engine,
 tells each worker what its sandbox allows and the git and credential rules; the engine's briefs say only what the step is for.
-A stopped answer carries `stop{reason, scope, permanence, retry}`, and `taskloop.domain.lanes.policy.decide` (a pure function of those facts)
+A stopped answer carries `stop{reason, scope, permanence, retry}`, and `taskloop.domain.accounts.policy.decide` (a pure function of those facts)
 is the whole policy: wait, retry, a new thread, reroute, pause, or fail. The engine matches no error text. A network
-stop never counts as a lane failure or toward any retry, replan, ask cap and never opens a breaker: every step
+stop never counts as an account failure or toward any retry, replan, ask cap and never opens a breaker: every step
 (plan, write, review, verify, look, checks, land) waits for the network on the same ref, with a short resume prompt, and
 a finished answer is not asked for again (`done.json`). Past the network wait cap the run pauses (bead open, auto
 label, run id and time budget kept; pause time is not charged) and the next run adopts it. Land detects a push that
-already went through. A paused bead wakes at its park's retry time or on the owner. A writer is a fallback when delegate's answer says `fallback: true`; its first-choice lane is `first_lane`. Each
-later write round reads delegate's status: while that lane is out the fallback thread is resumed, once it is not
+already went through. A paused bead wakes at its park's retry time or on the owner. A writer is a fallback when delegate's answer says `fallback: true`; its first-choice account is `first_account`. Each
+later write round reads delegate's status: while that account is out the fallback thread is resumed, once it is not
 the engine asks fresh so the first choice takes over again (transition `fallback_retake`). The trace keeps each session's
-`reason` and `context` and the run's lane manifest. A command the worker was denied shows as a warning; a `sandbox_limit`
-denial never counts; denied with no answer, a second denied write in the bead (across lanes and runs), or a repeated
+`reason` and `context` and the run's account manifest. A command the worker was denied shows as a warning; a `sandbox_limit`
+denial never counts; denied with no answer, a second denied write in the bead (across accounts and runs), or a repeated
 `secrets` stop blocks it "needs a human: <command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).
 
 A rerun resumes, never restarts. Each step saves a checkpoint (`~/.config/task-loop/checkpoints/<bead>.json`): the
@@ -143,14 +143,14 @@ Dashboard Asks tab: open asks, most urgent first, each answerable in place. An a
 `{action, text, t, by}`, action one of `rerun`, `confirm`, `split`, `text`) and the bead is opened for the loop; first answer wins.
 The dashboard has no auth: any GET or POST is answered, and the server listens only on loopback and the Tailscale address
 (100.64.0.0/10; it refuses 0.0.0.0 and any LAN address), so the page and the JSON API are open to any local agent's curl. A red banner shows when
-delegate says a subscription lane is out.
+delegate says a subscription account is out.
 
 An ask is one record, `~/.config/task-loop/asks/<bead>.json` (`tlkernel.ask.Ask`, `v` 2; an older or unknown `v` reads as
 no ask), written only through `AskStore`. It has a class, one decision sentence (at most 120 characters, ends in `?`), at most 3
 `tried` bullets and 2-5 options, recommended first, each with its consequence and a typed action; the card text is rendered from those
 fields (`tlkernel/asktext.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing
 and the stop is an engine fault. Owner classes: open_question, external_fact, unproven, no_progress, cap_reached, over_budget,
-missing_criteria, too_big. Infra trouble (lane failure, schema or bad request, sandbox denial, stale base, missing tool or recipe, a
+missing_criteria, too_big. Infra trouble (account failure, schema or bad request, sandbox denial, stale base, missing tool or recipe, a
 wrong tree) is never an ask: the bead stays open with an engine fault.
 
 The owner speaks in typed verbs only; prose never acts, and the engine reads no comment as input. `tl answer BEAD [--option N | --rerun |
@@ -203,7 +203,7 @@ writer's family) gets the task, the changed files, the evidence folder and the i
 with the evidence quoted (the item is dropped), `wrong` with the defect (one fix round at land, counted in
 `engine.max_fix_rounds`; none left, the item goes to the owner naming the defect) or `open` (only a person can judge
 it). A `settled` without quoted evidence, or an item it does not answer, is open. Only open items, and what the fix's
-review leaves unchecked, reach the owner; all settled lands. It runs once per land; if it cannot run (no lane, budget)
+review leaves unchecked, reach the owner; all settled lands. It runs once per land; if it cannot run (no account, budget)
 every item goes to the owner as before. The checkpoint keeps what is unchecked, wrong items included until their fix
 is accepted, so a run that pauses in the fix round verifies them again on resume and never lands them. Its answers are a `Verify (engine)` comment, the trace's `verified` and the
 Reflect comment's `self-verified=` count, so the owner can audit what nobody asked him (the 2026-10-21 night:
@@ -214,7 +214,7 @@ Every command (checks, gate, land, setup) is an argv list exec'd as given: no sh
 `$VAR` or `bash -c` in a check. A plan check is one of two things, parsed once from the planner's answer: `{"kind": "ref", "check": "<id>"}` (a repo check of `engine.checks`, named) or `{"kind": "adhoc", "argv": [...], "reads": ["<id>"]}` (a command of its own; `reads` declares the repo checks whose log it reads). A bare string or list, an adhoc argv that carries a shell operator word or a shell run on a command string, is sent back with a one-line message naming the allowed form, and the
 dry-run checks that the program resolves on PATH (or is a file of the tree). `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one, but never a check that timed out (exit 124: the engine's limit or the command's own; the log says "no retry: timed out after N min"). `wall_min` sets one check's time limit in place of `engine.check_wall_min` (60). `fix` (an argv list, e.g. a formatter's write mode) runs in the slot worktree before the round and what it changed is staged and checked, so the engine applies formatting instead of failing on it; a failing fix is that check's red, its output kept; the log notes "<ids>: the fix changed N files". A repo check that passed on the
-same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. A repo check that ran in this block exports its log and exit code to the checks after it as `TL_CHECK_LOG_<ID>` and `TL_CHECK_RC_<ID>` (id upper-cased, other characters `_`); an adhoc plan check asserts through a script that reads the variable from its environment (`{"kind": "adhoc", "argv": ["python3", "tools/assert_log.py", "TL_CHECK_LOG_UI_TESTS", "Passed: 12"], "reads": ["ui-tests"]}`); `reads` orders the check after that repo check and skips it when that check did not pass. An adhoc whose argv starts with a repo check's argv (wrappers like `env` aside, or `just <recipe>` with any arguments) is refused at parse: the plan is sent back naming the repo check id, and a rewrite that still has one stops the run; to require the check, name it with a ref. A quoted mention such as an echo's text is no run. A repo check may declare `"reads": [ids]` too; the profile load refuses a read of an unknown id, a cycle of reads (graphlib), a duplicate id and two ids that become one `$TL_CHECK_LOG_<ID>` name (`ui-test`, `ui_test`). **Resources.** `engine.resources` declares scarce tools, `{"editor": {"limit": 1}}` (at most `limit` at once per machine); a check says `"needs": ["editor"]` (the load refuses a need nobody declared, an unknown key, a limit under 1). A check holds one lease per need while it runs: one of `limit` units of the machine's lease table `~/.config/task-loop/leases` (the vendored shelf package `any_lease`: a flock per unit, so the limit holds across slots, loops and manual runs, and a killed holder frees its unit at once). The profile's limit is the one declared number (kept in `<table>/<name>.limit`; a changed limit replaces it while the resource is idle, and stops the check with both numbers while it is held). A manual run joins the same table: `python3 -m any_lease run --root ~/.config/task-loop/leases editor <limit> <label> -- cmd` (any_lease and process_lock from `skills/task-loop/_vendor`, on `PYTHONPATH`). The check's command gets `ANY_LEASE_HELD=editor` and `ANY_LEASE_ROOT`, so a `run` wrapper inside it does not take a second unit. The holder's label is `bead:check`; `tl status --brief` lists each held resource (holder bead, check, seconds held). How long a check queued is `waited` on its result and its `check_end` row; the `resource` `wait_start`/`wait_end` rows (outside `budget_min`) carry the waiting check, its track and the holders. Units are taken in no queue order (first poller wins, every 0.5 s). Which resources a machine has is `~/.config/task-loop/host.json`, `{"resources": ["editor"]}` (written by a person per machine; no file: the host has every declared resource; `[]`: none). On a host without a need, the check is not run: it is *deferred* (unverified, exit 86, `deferred` names the resource). The land goes on past a deferred check only when the diff did not touch what it reads (`inputs`, and unless `inputs_only` the justfile and lockfiles; a check with no `inputs` reads the whole tree, so any change counts), and says so in a note and in `gate_end.deferred`; otherwise the run ends `pause_moved`: the bead gets the label `needs:<resource>` (written under the claim's fence), is released and re-queued, and the branch is kept. **Affinity.** The pick skips a ready bead whose `needs:<resource>` label names a declared resource this host lacks (typed skip `needs`; `tl next` and `tl status` say why); the author may write the label by hand, the engine only adds it, never removes one. The plan does the same before any code is written: planned files that hit a repo check needing a resource this host lacks set the label and release the bead for a host that has it. **Tracks.** A check may say `"track": "<name>"` (no track: the default track). In one block the tracks run at the same time and the steps of a track run in order (a repo check `reads` only a check of its own track; the load refuses the rest). The first red of any track cancels the others: a running check is stopped through the Spawner (only the process tree the engine started for it, with the usual grace), a check queuing for a lease stops queuing and its lease is freed, and the steps not begun are recorded as skipped with `cancelled: true` (never a pass, never cached); the round is red from the first red. Each check keeps its own log whole. `track`, `at` (seconds after the block began that it started) and `cancelled` are on the `check_start`/`check_end` rows and the check result. Within one checks block each distinct command (whitespace stripped, same directory and time limit) runs once; a repeat gets the first result. Time spent waiting for a shared resource (a tool slot, read from `got slot N after Ns` in a check's output and capped at that run's wall time; a lane wait; an editor-lock wait) is not counted in `budget_min`; the over-budget ask gives wall and waited minutes. `engine.budget_min_by_label` (`{"editor": 300}`) gives a bead with that label that larger budget. `engine.bead_token_cap` (tokens, 0 = none, the default) caps a bead over all its runs: once its earlier runs' `tokens_in + tokens_out` (cached counted in, from `traces.jsonl`) plus this run's reach it, no worker starts and the bead is blocked as a budget ask with the total (checked before every worker call). The gate runs once, on the rebased
+same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. A repo check that ran in this block exports its log and exit code to the checks after it as `TL_CHECK_LOG_<ID>` and `TL_CHECK_RC_<ID>` (id upper-cased, other characters `_`); an adhoc plan check asserts through a script that reads the variable from its environment (`{"kind": "adhoc", "argv": ["python3", "tools/assert_log.py", "TL_CHECK_LOG_UI_TESTS", "Passed: 12"], "reads": ["ui-tests"]}`); `reads` orders the check after that repo check and skips it when that check did not pass. An adhoc whose argv starts with a repo check's argv (wrappers like `env` aside, or `just <recipe>` with any arguments) is refused at parse: the plan is sent back naming the repo check id, and a rewrite that still has one stops the run; to require the check, name it with a ref. A quoted mention such as an echo's text is no run. A repo check may declare `"reads": [ids]` too; the profile load refuses a read of an unknown id, a cycle of reads (graphlib), a duplicate id and two ids that become one `$TL_CHECK_LOG_<ID>` name (`ui-test`, `ui_test`). **Resources.** `engine.resources` declares scarce tools, `{"editor": {"limit": 1}}` (at most `limit` at once per machine); a check says `"needs": ["editor"]` (the load refuses a need nobody declared, an unknown key, a limit under 1). A check holds one lease per need while it runs: one of `limit` units of the machine's lease table `~/.config/task-loop/leases` (the vendored shelf package `any_lease`: a flock per unit, so the limit holds across slots, loops and manual runs, and a killed holder frees its unit at once). The profile's limit is the one declared number (kept in `<table>/<name>.limit`; a changed limit replaces it while the resource is idle, and stops the check with both numbers while it is held). A manual run joins the same table: `python3 -m any_lease run --root ~/.config/task-loop/leases editor <limit> <label> -- cmd` (any_lease and process_lock from `skills/task-loop/_vendor`, on `PYTHONPATH`). The check's command gets `ANY_LEASE_HELD=editor` and `ANY_LEASE_ROOT`, so a `run` wrapper inside it does not take a second unit. The holder's label is `bead:check`; `tl status --brief` lists each held resource (holder bead, check, seconds held). How long a check queued is `waited` on its result and its `check_end` row; the `resource` `wait_start`/`wait_end` rows (outside `budget_min`) carry the waiting check, its track and the holders. Units are taken in no queue order (first poller wins, every 0.5 s). Which resources a machine has is `~/.config/task-loop/host.json`, `{"resources": ["editor"]}` (written by a person per machine; no file: the host has every declared resource; `[]`: none). On a host without a need, the check is not run: it is *deferred* (unverified, exit 86, `deferred` names the resource). The land goes on past a deferred check only when the diff did not touch what it reads (`inputs`, and unless `inputs_only` the justfile and lockfiles; a check with no `inputs` reads the whole tree, so any change counts), and says so in a note and in `gate_end.deferred`; otherwise the run ends `pause_moved`: the bead gets the label `needs:<resource>` (written under the claim's fence), is released and re-queued, and the branch is kept. **Affinity.** The pick skips a ready bead whose `needs:<resource>` label names a declared resource this host lacks (typed skip `needs`; `tl next` and `tl status` say why); the author may write the label by hand, the engine only adds it, never removes one. The plan does the same before any code is written: planned files that hit a repo check needing a resource this host lacks set the label and release the bead for a host that has it. **Tracks.** A check may say `"track": "<name>"` (no track: the default track). In one block the tracks run at the same time and the steps of a track run in order (a repo check `reads` only a check of its own track; the load refuses the rest). The first red of any track cancels the others: a running check is stopped through the Spawner (only the process tree the engine started for it, with the usual grace), a check queuing for a lease stops queuing and its lease is freed, and the steps not begun are recorded as skipped with `cancelled: true` (never a pass, never cached); the round is red from the first red. Each check keeps its own log whole. `track`, `at` (seconds after the block began that it started) and `cancelled` are on the `check_start`/`check_end` rows and the check result. Within one checks block each distinct command (whitespace stripped, same directory and time limit) runs once; a repeat gets the first result. Time spent waiting for a shared resource (a tool slot, read from `got slot N after Ns` in a check's output and capped at that run's wall time; an account wait; an editor-lock wait) is not counted in `budget_min`; the over-budget ask gives wall and waited minutes. `engine.budget_min_by_label` (`{"editor": 300}`) gives a bead with that label that larger budget. `engine.bead_token_cap` (tokens, 0 = none, the default) caps a bead over all its runs: once its earlier runs' `tokens_in + tokens_out` (cached counted in, from `traces.jsonl`) plus this run's reach it, no worker starts and the bead is blocked as a budget ask with the total (checked before every worker call). The gate runs once, on the rebased
 tree at land (see **The gate**). **Every push consults the delivery judge:** tl's pre-push hook (written to
 `<config>/githooks/` by the engine at `loop`, `run-task` and `land-stack` start and by SessionStart, plain python3) forwards the entire Git stdin request to `tl judge-push --repo DIR`. The application reads the
 typed profile and shared check evidence, evaluates all pushed tips and their bases, and returns allowed, refused, or unavailable.
@@ -344,7 +344,7 @@ No `slots` (or `count` 0): slots are off. No profile: say so in one line, use
 
 **First, set up.** Run `tl setup --plan --json` (before the shim exists: `uv run --script <this skill's folder>/tl.py setup --plan --json`).
 It is read-only and returns `checks`, the `fixes` that are safe, and `questions` only the owner can answer; exit 1 means something is to
-do. Ask the owner each question (every one has a default and a reason), write the answers as a JSON object `{"lanes": "4", ...}`, then
+do. Ask the owner each question (every one has a default and a reason), write the answers as a JSON object `{"gate": "yes", ...}`, then
 `tl setup --apply --answers FILE` (or `--yes` for the defaults) makes the machine fixes (config folder, shim, `tl` on PATH, git hooks)
 and opens a PR with the repo's `.task-loop.json` through `gh`; the loop reads the profile from the base commit, so it counts once that
 PR is merged. This works on any host: nothing here needs the SessionStart hook.
@@ -405,7 +405,7 @@ findings, unmet requirements, cost) and **⚠ lines** for what you must look at.
 (the job's output file, or the dashboard's bead page). Never do a step's work yourself; change what makes the
 engine misbehave. Never stop a live run to apply an engine fix: the fix applies to the next bead (the running
 process loaded the old engine anyway; 3 of 5 restarts of one consumer run on 2026-10-18 were stops for fixes, one a step before
-landing). Stop a run only when it is burning a paid lane or doing damage.
+landing). Stop a run only when it is burning a paid account or doing damage.
 
 | ⚠ line | what to do |
 |---|---|
@@ -446,10 +446,10 @@ The first loop's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `fact
 On macOS an available `caffeinate -i -w <pid>` prevents idle sleep while the first newly launched loop lives. No OS service
 is installed; manually run `tl factory start` again after a reboot. Start/stop also work from a phone's SSH terminal on the host.
 Stopping a repo's factory leaves the shared dashboard available.
-Low disk, low RAM and no-lane conditions are waits, each with a probe time and wake condition in loop state.
+Low disk, low RAM and no-account conditions are waits, each with a probe time and wake condition in loop state.
 After repeated quick failures of the same bead in one slot, that loop needs a successful reset/setup probe or a different
 eligible bead before retaking it there. Different beads never accumulate toward this threshold. A failed probe excludes
-the slot until a probe succeeds on a normal loop pass, with no timed hold. Resource and lane waits poll wake conditions;
+the slot until a probe succeeds on a normal loop pass, with no timed hold. Resource and account waits poll wake conditions;
 only retries of failed operations (including vendor usage-limit unlocks) carry retry times.
 
 `tl loop` runs the queue by itself, one bead at a time, in the foreground of any shell (a background job, tmux); the session that starts it only watches it.
@@ -474,11 +474,11 @@ only retries of failed operations (including vendor usage-limit unlocks) carry r
   `area_poll`, ... A key left out keeps its default. `slots.count` is read the same way: a slot beyond it is taken no more
   (a run holding it ends normally).
 - **Outcomes** (`run-task --outcome-file`, also its last stdout line as JSON): `landed` → next. `parked` (an ask was
-  raised, or the bead is blocked for the owner) → next. `paused` (lane out, login, network; the bead stays open) → a
-  lane back within an hour is waited for, otherwise the next bead first; either way the bead is retried at its
+  raised, or the bead is blocked for the owner) → next. `paused` (account out, login, network; the bead stays open) → a
+  account back within an hour is waited for, otherwise the next bead first; either way the bead is retried at its
   `retry_after` plus a 30-90 s random margin, never a fixed step (no time: 15 min); a bead paused 3 times rests an
   hour; when every ready bead is paused the loop sleeps until the earliest is due. A hand run that pauses prints
-  `PAUSED <bead>: the lane is back at <date time>; rerun then` above its outcome line (tl-bxk.10.6). `failed` (anything else, an engine crash included) → 2 in a row stop the loop
+  `PAUSED <bead>: the account is back at <date time>; rerun then` above its outcome line (tl-bxk.10.6). `failed` (anything else, an engine crash included) → 2 in a row stop the loop
   (exit 2); a landing ends the run, parks and pauses never count. `taken` (another live session holds it) → the next
   bead, that one again in 15 minutes. A bead a gone run left assigned (a pause keeps the bead open and assigned) is
   released first, as run-task does.
@@ -586,7 +586,7 @@ duration back (`90m`, `12h`, `2d`); default the last 24 h. `--since HH:MM` is it
   with no live `run-task <bead>`; or a trace closed `failed: engine error ...` (an exception the engine caught). A stop
   (`failed: stopped (SIGTERM)`) is a failure, not a crash. A run's `stderr.log` is the engine's and the worker's (worker test tracebacks
   land there) and is never read.
-- **Also:** minutes per bead (median, p90; all its runs in the window), fix rounds, replans, tokens by lane (codex,
+- **Also:** minutes per bead (median, p90; all its runs in the window), fix rounds, replans, tokens by account (codex,
   claude) and by role.
 - **Verdict:** `M2 PASS` or `M2 FAIL: <what>` against >=10 beads, >=7 landed with no ask, 0 lost, 0 crashes.
 
@@ -678,8 +678,8 @@ Finished tasks stay visible for 7 days.
 
 ## Workers
 
-The engine's node-to-role map is the source for the generated `domain/lanes/roles.py`
-(`python3 dev/generate_lane_roles.py` prints that module; the domain tests check parity):
+The engine's node-to-role map is the source for the generated `domain/accounts/roles.py`
+(`python3 dev/generate_account_roles.py` prints that module; the domain tests check parity):
 
 | node | delegate role |
 |---|---|
@@ -700,7 +700,7 @@ The loop needs these kinds of worker; it does not care what runs them.
 
 How to get them: from the **delegate** library in this plugin. You don't talk to it; the
 engine does, one `delegate.api.run` per AI step (contract: `packages/delegate/docs/contracts/delegate-api.md` in this plugin's repo).
-Delegate picks lane, model and effort from its role table and live plan limits, and never spends API credit for the
+Delegate picks account, model and effort from its role table and live plan limits, and never spends API credit for the
 engine. Its role names (reader → `light`, writer → `worker`, reviewer → `reviewer` with the writer's family, hard →
 `hard`) are the Workers table's second column. The engine has no verifier
 or judge: its own checks are the facts, and accept is a rule (checks green, nothing blocking in the review).

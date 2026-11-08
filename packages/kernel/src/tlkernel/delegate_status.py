@@ -3,7 +3,7 @@ renames or drops fails here, and tests/adapters/test_delegate_status.py runs it 
 import math
 from typing import Any
 
-from tlkernel.snapshots import LaneStatus, NeedInput, StatusSnapshot, WindowStatus
+from tlkernel.snapshots import AccountStatus, NeedInput, StatusSnapshot, WindowStatus
 
 
 def _num(v: object) -> float | None:
@@ -21,7 +21,7 @@ def _strings(v: object) -> list[str]:
 
 
 def snapshot_of(j: object) -> StatusSnapshot:
-    """Raises ValueError when the answer lacks `ts`, `accounts`, `cockpit.accounts` (each row with `id`, `state`) or a lane's `out`."""
+    """Raises ValueError when the answer lacks `ts`, `accounts`, `cockpit.accounts` (each row with `id`, `state`) or an account's `out`."""
     top = _dict(j, "the answer")
     at = _num(top.get("ts"))
     if at is None:
@@ -30,17 +30,17 @@ def snapshot_of(j: object) -> StatusSnapshot:
     rows = _dict(top.get("cockpit"), "cockpit").get("accounts")
     if not isinstance(rows, list):
         raise ValueError("delegate status: cockpit.accounts is not a list")
-    lanes: list[LaneStatus] = []
+    accounts: list[AccountStatus] = []
     for row in rows:
-        r = _dict(row, "a cockpit lane")
+        r = _dict(row, "a cockpit account")
         if not isinstance(r.get("id"), str) or not isinstance(r.get("state"), str):
-            raise ValueError("delegate status: a cockpit lane has no id or state")
-        old = _dict(flat.get(r["id"], {}), "lane " + r["id"])
+            raise ValueError("delegate status: a cockpit account has no id or state")
+        old = _dict(flat.get(r["id"], {}), "account " + r["id"])
         if not isinstance(old.get("out", False), bool):
-            raise ValueError("delegate status: lane out is not a bool")
+            raise ValueError("delegate status: account out is not a bool")
         unlock = r.get("unlock") if isinstance(r.get("unlock"), dict) else {}
         reason = old.get("reason")
-        lanes.append(LaneStatus(
+        accounts.append(AccountStatus(
             id=r["id"], label=str(r.get("label") or ""), family=str(r.get("family") or ""), kind=str(r.get("kind") or ""),
             model=str(r.get("model") or ""), state=r["state"], emoji=str(r.get("emoji") or ""), reason=str(r.get("reason") or ""),
             unlock_at=_num(unlock.get("at")), warnings=_strings(r.get("warnings")),
@@ -51,4 +51,4 @@ def snapshot_of(j: object) -> StatusSnapshot:
             notes=_strings(old.get("notes"))))
     need = [NeedInput(what=str(n.get("what") or ""), why=str(n.get("why") or ""), how=str(n.get("how") or ""))
             for n in top.get("needs_input") or [] if isinstance(n, dict)]
-    return StatusSnapshot(at=at, lanes=lanes, needs_input=need)
+    return StatusSnapshot(at=at, accounts=accounts, needs_input=need)

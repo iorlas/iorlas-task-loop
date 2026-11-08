@@ -115,7 +115,7 @@ class LoopLog(JsonlStore[LoopLogLine]):
 
 
 class UsageHistory(JsonlStore[UsageRow]):
-    """The lane usage history: `tl lanes` is its one writer (`record`), age its only prune."""
+    """The account usage history: the snapshot chore is its writer (`record`), age its only prune."""
 
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.usage_history(), _one(UsageRow), rotate_lock=_beside(cfg.usage_history(), ".lock"))

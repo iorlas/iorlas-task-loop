@@ -61,12 +61,14 @@ class OwnerText(Case):
                 assert len(out.getvalue().splitlines()) == 1
                 locator.assert_not_called()
 
-    def test_engine_loop_run_and_lane_markers_refuse_even_when_empty(self):
+    def test_engine_loop_run_and_account_markers_refuse_even_when_empty(self):
         markers = [var.value for var in EnvVar if not var.name.startswith("TASK_LOOP_DASH_")]
         for name in (*markers, "TL_CHECK_LOG_SUITE", "TL_CHECK_RC_SUITE"):
             with self.subTest(name=name):
                 assert registered(name)
-                assert owner_refusal(TEXT, Env({name: ""})) == "profile change is an owner decision; not available to the engine or a lane"
+                assert owner_refusal(TEXT, Env({name: ""})) == (
+                    "profile change is an owner decision; not available to the engine or an account"
+                )
         assert owner_refusal(TEXT, Env()) == ""
         assert owner_refusal(None, Env({EnvVar.TL_RUN_ID: "run"})) == ""
 
@@ -77,7 +79,7 @@ class OwnerText(Case):
             rc = cmd_land_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ["tl"],
                                 env=Env({EnvVar.TL_RUN_ID: "run"}))
         assert rc == 2
-        assert out.getvalue().strip() == "profile change is an owner decision; not available to the engine or a lane"
+        assert out.getvalue().strip() == "profile change is an owner decision; not available to the engine or an account"
         locator.assert_not_called()
 
 
@@ -107,7 +109,7 @@ class OwnerGate(Case):
         with pytest.raises(Stop) as raised:
             self.gate.require("topic", "tip", profile_change=TEXT)
         assert raised.value.rc == 2
-        assert raised.value.why == "profile change is an owner decision; not available to the engine or a lane"
+        assert raised.value.why == "profile change is an owner decision; not available to the engine or an account"
         self.cmds.port.assert_not_called()
 
     def test_owner_uses_base_gate_and_still_requires_evidence(self):

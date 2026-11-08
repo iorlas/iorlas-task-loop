@@ -111,7 +111,7 @@ def test_card_text_branches(detail, monkeypatch, output):
         "minutes": {"median": 2, "p90": 3},
         "rounds": 4,
         "replans": 5,
-        "tokens": {"lane": {"worker": {"in": 1500000, "cached": 500000, "out": 1234}}, "role": {}},
+        "tokens": {"account": {"worker": {"in": 1500000, "cached": 500000, "out": 1234}}, "role": {}},
         "crash_list": [{"t": 0, "bead": "x-1", "why": "oops"}],
         "lost_list": [{"branch": "task/x-1", "sha": "123456789", "subject": "é", "why": "closed"}],
         "per_bead": [
@@ -134,7 +134,7 @@ def test_card_text_branches(detail, monkeypatch, output):
         "  crashes 1   lost 1   pending branches 0\n"
         + ("  land    2 tries, 1 retried (red 1)  median gate 3s\n" if detail else "")
         + "  minutes per bead: median 2, p90 3   fix rounds 4   replans 5\n"
-        "  tokens lane  worker    1.5M in (0.5M cached), 1k out\n"
+        "  tokens account worker    1.5M in (0.5M cached), 1k out\n"
         "  crash   06:00 x-1  oops\n"
         "  lost    task/x-1 12345678 é  closed\n"
         "  failed  x-1  asks: owner,open  oops\n"

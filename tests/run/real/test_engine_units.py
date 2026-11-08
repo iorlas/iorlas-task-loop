@@ -55,10 +55,10 @@ class Outcome(T.EngineTest):
 class DelegateLauncher(T.EngineTest):
 
 
-    # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered lane_out for an hour and the bead paused; delegate never
-    # switches lanes on a resume, but a fresh call gets the role's next rung (Sonnet on the claude lane) at once
+    # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered account_out for an hour and the bead paused; delegate never
+    # switches accounts on a resume, but a fresh call gets the role's next rung (Sonnet on the claude account) at once
     OUT_LONG = stop("rate_limited", at=time.time() + 3600, say="cannot continue t now")
-    # delegate says the writer fell back off its first lane (to xai, so the reviewer, claude, is another family)
+    # delegate says the writer fell back off its first account (to xai, so the reviewer, claude, is another family)
     FRESH = full(WRITE, "w2", fallback=True, first_account="OPENAI_SUBSCRIPTION", family="xai")
 
 
@@ -70,18 +70,18 @@ class DelegateLauncher(T.EngineTest):
     def transitions(self):
         return [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
 
-    def lanes(self, **out):
-        """`route.py status --json` lanes: name -> {out}."""
+    def accounts(self, **out):
+        """`route.py status --json` accounts: name -> {out}."""
         return mock.patch.object(lroute, "status_json", return_value={"accounts": {k: {"out": v} for k, v in out.items()}})
 
 
-    # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
+    # contract 4: an answer that picked an account says whether it is a fallback (and from which first account, when it can)
     SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_account="OPENAI_SUBSCRIPTION")
     CODEX_FIRST: ClassVar[Any] = dict(BACK, rung=0, fallback=False, fallback_reason=None)
     no_checks: ClassVar[Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
 
 
-    # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
+    # lifesim-5ar.6 2026-10-21: the resumed writer's account_out came with no retry_after, so next was owner, and the bead
     # blocked "needs a human" after 114 min of work
     OUT_OWNER = stop("rate_limited", say="cannot say when OPENAI_SUBSCRIPTION frees")
 
@@ -91,13 +91,13 @@ class DelegateLauncher(T.EngineTest):
     QUICK = stop("vendor_blip", "w1", say="codex failed before any work: workspace routing discovery failed")
 
 
-    # tl-bxk.10.22: the dashboard says which lane a run waits for and until when
+    # tl-bxk.10.22: the dashboard says which account a run waits for and until when
 
 
     LOGIN_CLAUDE = "run `claude auth login`"
 
 
-    # contract 4: logged_out is lane / needs_owner: the lane waits for its owner, the step never retries it and never asks
+    # contract 4: logged_out is account / needs_owner: the account waits for its owner, the step never retries it and never asks
 
 
 class NoBackgroundGit(T.EngineTest):

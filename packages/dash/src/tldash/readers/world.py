@@ -1,6 +1,6 @@
 """The v2 World read from this machine: registered repos, the database bead projection, slot beads, loops' state files, the
 owner-look items, the engine logs as typed runs, the live asks, the ask ledger, the decisions in force, the landed runs and
-delegate's lane status. Read only; bead listings come only from factory.db."""
+delegate's account status. Read only; bead listings come only from factory.db."""
 
 from collections import Counter
 from collections.abc import Sequence

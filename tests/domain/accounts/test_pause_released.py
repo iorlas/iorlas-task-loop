@@ -8,11 +8,11 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from tlkernel import lanepauses as pauses
+from tlkernel import accountpauses as pauses
+from tlkernel.accountpauses import PauseRule
 from tlkernel.bead import Bead
 from tlkernel.delegate import Permanence
 from tlkernel.ids import BeadId
-from tlkernel.lanepauses import PauseRule
 from tlkernel.pausereasons import Producer
 
 # Literal snapshot of the old TABLE, independent of current enums, backoffs and overrides.
@@ -48,7 +48,7 @@ RELEASED: dict[tuple[Producer, str], PauseRule] = {
     ("delegate", "setup"): PauseRule("needs_owner"),
     ("engine", "profile_ahead"): PauseRule("needs_owner"),
     ("engine", "contract_violation"): PauseRule("needs_owner"),
-    ("engine", "pause_lane"): PauseRule("transient", 60, 3600, 3),
+    ("engine", "pause_account"): PauseRule("transient", 60, 3600, 3),
     ("engine", "pause_network"): PauseRule("transient", 30, 1800),
     ("engine", "pause_killed"): PauseRule("transient", 60, 3600, 3),
     ("engine", "pause_moved"): PauseRule("transient", 60, 3600, 3),

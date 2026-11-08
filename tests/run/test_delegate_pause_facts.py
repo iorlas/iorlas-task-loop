@@ -5,8 +5,8 @@ import pytest
 from support.parkmock import through_change
 
 from taskloop.adapters import beadtools
-from taskloop.app.workers.lane_acts import LaneActs
-from taskloop.domain.lanes import policy
+from taskloop.app.workers.account_acts import AccountActs
+from taskloop.domain.accounts import policy
 from tlasks.closing import ClosingAsks
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
@@ -38,12 +38,12 @@ class DelegatePauseFacts(Case):
                 worker.ops.blocked = blocked_for
                 call = mock.Mock(role="worker", node="write", counts={"crashes": 0})
                 with pytest.raises(Blocked):
-                    LaneActs(host, worker).end(call, result, stop, action)
+                    AccountActs(host, worker).end(call, result, stop, action)
                 assert host.pause_permanence == permanence
                 store.return_value.get.return_value = None
                 with mock.patch("taskloop.adapters.beadtools.peek", return_value=bead):
                     Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home),
-                        beadtools.peek).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                        beadtools.peek).pause(oc.make(Kind.PAUSE_ACCOUNT, "paused"))
                 saved = store.return_value.put.call_args.args[0]
                 assert saved.permanence == permanence
                 assert saved.retry_at == (900 if permanence == "transient" else 0)

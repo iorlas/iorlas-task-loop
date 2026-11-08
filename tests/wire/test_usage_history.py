@@ -1,18 +1,18 @@
-"""The lane usage history (append on each filed snapshot, prune by age), the forecast on synthetic series, the lane-card state map,
-and the Snapshot's lanes decoding strictly."""
+"""The account usage history (append on each filed snapshot, prune by age), the forecast on synthetic series, the account-card state map,
+and the Snapshot's accounts decoding strictly."""
 import json
 
 import pytest
 
-from taskloop.app.doctor import lanes
+from taskloop.app.doctor import accounts
 from tldash.views import snapshot
-from tldash.views.lanecards import STATUS_MAX_AGE, lane_cards
+from tldash.views.accountcards import STATUS_MAX_AGE, account_cards
 from tldash.views.world import World
 from tlkernel import wire
 from tlkernel.dash import Snapshot
 from tlkernel.delegate_status import snapshot_of
 from tlkernel.paths import ConfigDir
-from tlkernel.snapshots import LaneStatus, StatusSnapshot, WindowStatus
+from tlkernel.snapshots import AccountStatus, StatusSnapshot, WindowStatus
 from tlkernel.stores import UsageHistory
 from tlkernel.usage import USAGE_KEEP_S, UsageRow, forecast, rows_of
 from tltestkit.case import Case
@@ -23,12 +23,13 @@ T = 1_800_000_000.0
 H = 3600.0
 
 
-def series(points, reset=T + 5 * H, lane="A", window="w"):
-    return [UsageRow(at=T + h * H, lane=lane, window=window, used_pct=u, resets_at=r if r is not None else reset) for h, u, r in points]
+def series(points, reset=T + 5 * H, account="A", window="w"):
+    return [UsageRow(at=T + h * H, account=account, window=window, used_pct=u,
+        resets_at=r if r is not None else reset) for h, u, r in points]
 
 
 def snap(at, state="ready", five=None, week=None, used=10.0, reset=T + 5 * H, out=False, out_until=None):
-    return StatusSnapshot(at=at, lanes=[LaneStatus(
+    return StatusSnapshot(at=at, accounts=[AccountStatus(
         id="A", label="Claude", family="claude", kind="subscription", model="m", state=state, five=five, week=week, unlock_at=at + 600,
         out=out, out_until=out_until,
         windows=[WindowStatus(name="whatever", used_pct=used, resets_at=reset), WindowStatus(name="unknown")])])
@@ -48,7 +49,7 @@ class History(Case):
             [(r.at, r.window, r.used_pct, r.resets_at) for r in self.h.rows()]
             == [(T, "whatever", 10.0, T + 5 * H), (T + 60, "whatever", 12.0, T + 5 * H)]
         )
-        assert rows_of(snap(T))[0].lane == "A"
+        assert rows_of(snap(T))[0].account == "A"
 
     def test_prune_drops_rows_older_than_the_keep_age_and_keeps_the_rest_byte_for_byte(self):
         old = T - USAGE_KEEP_S - 1
@@ -68,7 +69,7 @@ class History(Case):
         UsageHistory(self.cfg).record(snap(T - USAGE_KEEP_S - 5))
         window = {"name": "x", "used_pct": 3, "resets_at": T + H}
         answer = json.dumps({"ts": T, "accounts": {}, "cockpit": {"accounts": [{"id": "A", "state": "ready", "windows": [window]}]}})
-        assert lanes.file_snapshot(snapshot_of(json.loads(answer)), self.cfg) is None
+        assert accounts.file_snapshot(snapshot_of(json.loads(answer)), self.cfg) is None
         assert [(r.at, r.used_pct) for r in self.h.rows()] == [(T, 3.0)]
 
 
@@ -99,7 +100,7 @@ class Forecast(Case):
 
     def test_no_reset_time_or_a_reset_past_or_one_instant_is_none(self):
         rows = series([(0, 10, None), (1, 20, None)])
-        assert forecast([UsageRow(at=r.at, lane="A", window="w", used_pct=r.used_pct) for r in rows], T + H) is None
+        assert forecast([UsageRow(at=r.at, account="A", window="w", used_pct=r.used_pct) for r in rows], T + H) is None
         assert forecast(rows, T + 5 * H) is None
         assert forecast(series([(1, 10, None), (1, 20, None)]), T + H) is None
 
@@ -113,39 +114,39 @@ class Cards(Case):
         for delegate, card in (("ready", "ok"), ("slow", "watch"), ("unknown", "watch"), ("resting", "watch"),
                                ("logged_out", "watch"), ("spend", "watch"), ("off", "watch"), ("new", "watch")):
             with self.subTest(delegate):
-                assert lane_cards(snap(T, state=delegate), T + 60)[0].state == card
+                assert account_cards(snap(T, state=delegate), T + 60)[0].state == card
 
     def test_out_locks_the_card_until_out_until(self):
         for delegate in ("ready", "resting", "new"):
-            c = lane_cards(snap(T, state=delegate, out=True, out_until=T + 900), T + 60)[0]
+            c = account_cards(snap(T, state=delegate, out=True, out_until=T + 900), T + 60)[0]
             assert (c.state, c.locked_until) == ("locked", T + 900)
-        assert lane_cards(snap(T, out=True), T + 60)[0].locked_until is None
-        assert lane_cards(snap(T, state="resting", out_until=T + 900), T + 60)[0].locked_until is None
+        assert account_cards(snap(T, out=True), T + 60)[0].locked_until is None
+        assert account_cards(snap(T, state="resting", out_until=T + 900), T + 60)[0].locked_until is None
 
     def test_an_old_snapshot_greys_every_card_and_keeps_its_age(self):
-        c = lane_cards(snap(T, five=40.0), T + STATUS_MAX_AGE + 1)[0]
+        c = account_cards(snap(T, five=40.0), T + STATUS_MAX_AGE + 1)[0]
         assert (c.state, c.status_t, c.window_pct) == ("stale", T, 40.0)
-        assert lane_cards(snap(T), T + STATUS_MAX_AGE)[0].state == "ok"
-        locked = lane_cards(snap(T, out=True, out_until=T + 9000), T + STATUS_MAX_AGE + 1)[0]
+        assert account_cards(snap(T), T + STATUS_MAX_AGE)[0].state == "ok"
+        locked = account_cards(snap(T, out=True, out_until=T + 9000), T + STATUS_MAX_AGE + 1)[0]
         assert (locked.state, locked.locked_until) == ("stale", None)
 
     def test_only_the_typed_windows_fill_and_the_rest_stays_unset(self):
-        c = lane_cards(snap(T, state="resting", five=41.0, week=6.0, used=99.0, out=True, out_until=T + 600), T + 1)[0]
+        c = account_cards(snap(T, state="resting", five=41.0, week=6.0, used=99.0, out=True, out_until=T + 600), T + 1)[0]
         assert (c.window_pct, c.week_pct, c.locked_until, c.model) == (41.0, 6.0, T + 600, "m")
         assert (c.name, c.plan) == ("claude", "subscription")
         assert (c.forecast_pct, c.resets_at, c.forecast, c.slots) == (None, None, "", [])
-        assert lane_cards(snap(T, state="ready"), T + 1)[0].locked_until is None
-        assert lane_cards(None, T) == []
+        assert account_cards(snap(T, state="ready"), T + 1)[0].locked_until is None
+        assert account_cards(None, T) == []
 
     def test_the_snapshot_carries_the_cards_and_decodes_strictly(self):
         w = World(now=T + 60, host="h", version="v", projects=[], runs={}, asks={}, status=snap(T, five=41.0))
         built = snapshot.build(w)
-        assert [c.window_pct for c in built.lanes] == [41.0]
+        assert [c.window_pct for c in built.accounts] == [41.0]
         assert wire.load(Snapshot, wire.dump(built)) == built
         bad = wire.dump(built)
-        bad["lanes"][0]["window_pct"] = "41"
+        bad["accounts"][0]["window_pct"] = "41"
         with pytest.raises(ValueError):
             wire.load(Snapshot, bad)
-        bad["lanes"][0] = {**wire.dump(built)["lanes"][0], "extra": 1}
+        bad["accounts"][0] = {**wire.dump(built)["accounts"][0], "extra": 1}
         with pytest.raises(ValueError):
             wire.load(Snapshot, bad)

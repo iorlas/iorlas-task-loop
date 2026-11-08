@@ -260,7 +260,7 @@ class EngineConfig(Rec):
     check_wall_min: float = 60  # a check is stopped only when it runs this long; a quiet or idle one is never stopped before
     gate_timeout_min: float = 90
     run_deadline_min: float = 45  # the whole run: past it the run parks, branch and checkpoint kept
-    lane_wait_min: float = 10
+    account_wait_min: float = 10
     look_rounds: int = 2
     look_max_px: int = 1280
     brief_kb: float = 5

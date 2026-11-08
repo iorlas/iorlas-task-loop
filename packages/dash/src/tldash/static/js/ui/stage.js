@@ -6,7 +6,7 @@ import { AttemptFiles } from './artifacts.js';
 import { MsgLine } from './kit.js';
 
 export const PHASES = ['plan', 'write', 'test', 'review', 'look', 'land'];
-export const END = { test_failed: '↩️', replan: '🔁', asked: '🙋', parked: '⏸️', lane_out: '⏸️', sent_back: '↩️', stuck: '🛑', exited: '💀', done: '✅' };
+export const END = { test_failed: '↩️', replan: '🔁', asked: '🙋', parked: '⏸️', account_out: '⏸️', sent_back: '↩️', stuck: '🛑', exited: '💀', done: '✅' };
 const NUM = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
 export const passNum = (n) => NUM[n - 1] || `(${n})`;
 
@@ -36,7 +36,7 @@ function StageLog({ log, phase }) {
     ${!log?.roles.length ? html`<p>no log for this stage</p>` : log.roles.map((r) => html`<section key=${r.role} data-role=${r.role}>
       <h4>${r.role}</h4>${r.attempts.map((a, i) => {
         const lines = a.live ? [...a.lines].reverse().sort((x, y) => y.t - x.t).slice(0, 10) : a.lines;
-        return html`<div key=${a.id} class="stage-attempt"><p>Attempt ${i + 1} · ${a.lane || '—'}${a.model && ` / ${a.model}`} · <time datetime=${new Date(a.t * 1000).toISOString()}>${new Date(a.t * 1000).toISOString()}</time> · ${dur(a.secs)} · ${a.outcome || '—'}</p>
+        return html`<div key=${a.id} class="stage-attempt"><p>Attempt ${i + 1} · ${a.account || '—'}${a.model && ` / ${a.model}`} · <time datetime=${new Date(a.t * 1000).toISOString()}>${new Date(a.t * 1000).toISOString()}</time> · ${dur(a.secs)} · ${a.outcome || '—'}</p>
           <div class=${`term ${a.live ? 'mini' : ''}`}>${lines.map((l, n) => html`<${LogLine} key=${n} line=${l} />`)}</div></div>`;
       })}</section>`)}</section>`;
 }

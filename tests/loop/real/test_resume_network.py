@@ -1,5 +1,5 @@
 """R21 (tl-7y6.2.13, tl-7y6.2.15, tl-kyy): a network drop is not a failure. Every workflow step goes on in the same thread after the
-network is back (no finished output rerun, no counter charged, no lane marked), the land detects a push that already went through,
+network is back (no finished output rerun, no counter charged, no account marked), the land detects a push that already went through,
 a network pause keeps its run id, cost and time budget, and a paused bead wakes when its role is usable, not at a clock."""
 
 import json
@@ -48,10 +48,10 @@ class NetBase(EngineTest):
         return [r.get("cause") for r in self.log(eng) if r.get("kind") == "transition"]
 
     def assert_no_charge(self, eng=None):
-        """What a network drop must leave alone: the lane (no 'out'), the retry and replan counters, the asks and the labels."""
+        """What a network drop must leave alone: the account (no 'out'), the retry and replan counters, the asks and the labels."""
         eng = eng or self.eng
         causes = self.causes(eng)
-        for bad in ("lane_out", "fallback_retake", "denied_retry", "delegate_crash", "lane_wait", "invalid_output", "replan"):
+        for bad in ("account_out", "fallback_retake", "denied_retry", "delegate_crash", "account_wait", "invalid_output", "replan"):
             assert bad not in causes
         assert (eng.stats["replans"], eng.stats["rounds"]) == (0, 0)
         assert (self.blocked, self.ask()) == ([], None)

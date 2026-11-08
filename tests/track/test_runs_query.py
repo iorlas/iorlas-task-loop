@@ -11,7 +11,7 @@ from tlkernel.stores import RunLog
 
 
 def row(kind: str, t: float, **kw):
-    return {"v": 4, "kind": kind, "t": t, "run_id": "R1", "bead": "tl-x", **kw}
+    return {"v": 5, "kind": kind, "t": t, "run_id": "R1", "bead": "tl-x", **kw}
 
 
 FIXTURE = [
@@ -22,7 +22,7 @@ FIXTURE = [
     row("check_end", 191.0, id="c1", exit=0, status="pass", exec_seconds=60.0, wait_seconds=12.0),
     row("cmd_start", 191.5, id="m1", text="git fetch -q origin"),
     row("cmd_end", 197.5, id="m1", exit=0),
-    row("wait_start", 192.0, id="w1", what="lane"),
+    row("wait_start", 192.0, id="w1", what="account"),
     row("wait_end", 300.0, id="w1", wait_seconds=108.0),
     row("close", 301.0, outcome="landed", why="done"),
 ]
@@ -52,7 +52,7 @@ def test_show_prints_the_run_end_to_end(tmp_path):
     assert "bead tl-x" in out
     assert "step   write" in out and "2.1m" in out
     assert "check  unit" in out and "wait 12s" in out
-    assert "wait   lane" in out
+    assert "wait   account" in out
     assert "total exec 3.2m  wait 2.0m  -> landed: done" in out
 
 
@@ -102,7 +102,7 @@ def test_the_rows_are_all_show_and_slow_read(tmp_path):
     """No row, no line: with the log gone but the rows kept, the timed lines are the same; with the rows gone, there are none."""
     cfg = home(tmp_path)
     assert [(i.kind, i.name) for i in timedrows.of_run(cfg, "R1")] == [
-        ("step", "write"), ("check", "unit"), ("cmd", "git fetch -q origin"), ("wait", "lane")]
+        ("step", "write"), ("check", "unit"), ("cmd", "git fetch -q origin"), ("wait", "account")]
     cfg.engine_log("R1").write_text("", encoding="utf-8")
     rc, out = say(runs.show, "R1", cfg)
     assert rc == 0 and "step   write" in out and "2.1m" in out

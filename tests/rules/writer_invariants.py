@@ -8,8 +8,8 @@ from importgraph import bindings, qualified
 WRITERS: Final = {
     'PinStore': {'tlrelease.pins', 'tlrelease.pinning'},
     'HostResourcesStore': {'taskloop.app.doctor.setup_apply'},
-    'StatusStore': {'taskloop.app.doctor.lanes'},
-    'StatusTriedStore': {'taskloop.app.doctor.lanes'},
+    'StatusStore': {'taskloop.app.doctor.accounts'},
+    'StatusTriedStore': {'taskloop.app.doctor.accounts'},
     'ReposStore': {'taskloop.app.track.trail', 'tlkernel.rowstores'},
     'ReleaseResultStore': {'tlrelease.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},

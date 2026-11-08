@@ -1,6 +1,6 @@
 """The stop a step ends with: what the engine does at the close follows from its kind."""
+from tlkernel import accountcaps as caps
 from tlkernel import askspecs
-from tlkernel import lanecaps as caps
 from tlkernel import runoutcome as oc
 from tlkernel.askspec import AskSpec
 from tlkernel.kinds import ASKS, Kind

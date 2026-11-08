@@ -7,7 +7,7 @@ from support.fake_loop_env import slot_loop_env
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
-from tlkernel import lanepauses as pauses
+from tlkernel import accountpauses as pauses
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure
 from tlkernel.config import LoopConfig

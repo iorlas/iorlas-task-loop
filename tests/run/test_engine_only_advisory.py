@@ -42,7 +42,7 @@ class Advisory(te.EngineTest):
         stopped = te.stop("no_account", say="CODEX cannot enforce just check", fix="choose an enforcing harness")
         stopped["stop"]["reason"] = reason
         stopped["text"] = "full stop text " + "x" * 500
-        stopped["trace"] = ["lane CODEX", "recipes: check"]
+        stopped["trace"] = ["account CODEX", "recipes: check"]
         steps = {"plan": [te.PLAN], "write": [te.WRITE, stopped] if resumed else [stopped]}
         if resumed:
             steps["review"] = [te.review(unmet=["more"])]
@@ -104,7 +104,7 @@ class Advisory(te.EngineTest):
         assert detail["text"] == stopped["text"]
         assert stopped["text"] in json.loads(detail["trace"])["text"]
 
-    def test_no_lane_stop_logs_one_typed_note_with_actual_argv_and_full_trace(self):
+    def test_no_account_stop_logs_one_typed_note_with_actual_argv_and_full_trace(self):
         self.assert_stop_log("no_account")
 
     def test_only_family_unready_stop_logs_one_typed_note(self):

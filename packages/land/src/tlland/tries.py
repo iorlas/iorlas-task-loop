@@ -3,8 +3,8 @@ import time
 from typing import Protocol
 
 from tlkernel import log as rec
+from tlkernel.accountliveness import LIVENESS
 from tlkernel.deadline import DeadlineExpired
-from tlkernel.lanesliveness import LIVENESS
 
 from tlland.gate import GatePass, Problem, ProblemKind
 from tlland.host import Land, Next, Phase, Placing
@@ -131,7 +131,7 @@ class Tries:
             except DeadlineExpired as err:
                 if err.scope != "land judge":
                     raise
-                raise e.blocked_for(f"{err}; branch kept for retry", "PAUSE_LANE") from None
+                raise e.blocked_for(f"{err}; branch kept for retry", "PAUSE_ACCOUNT") from None
             return (None, got) if isinstance(got, Problem) else (got, None)
         gate_pass = self.gate.passed()
         if gate_pass is None:  # it was green a moment ago and is not now: main or the tree moved

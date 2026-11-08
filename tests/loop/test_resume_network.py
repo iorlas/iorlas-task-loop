@@ -48,10 +48,10 @@ class NetBase(EngineTest):
         return [r.get("cause") for r in self.log(eng) if r.get("kind") == "transition"]
 
     def assert_no_charge(self, eng=None):
-        """What a network drop must leave alone: the lane (no 'out'), the retry and replan counters, the asks and the labels."""
+        """What a network drop must leave alone: the account (no 'out'), the retry and replan counters, the asks and the labels."""
         eng = eng or self.eng
         causes = self.causes(eng)
-        for bad in ("lane_out", "fallback_retake", "denied_retry", "delegate_crash", "lane_wait", "invalid_output", "replan"):
+        for bad in ("account_out", "fallback_retake", "denied_retry", "delegate_crash", "account_wait", "invalid_output", "replan"):
             assert bad not in causes
         assert (eng.stats["replans"], eng.stats["rounds"]) == (0, 0)
         assert (self.blocked, self.ask()) == ([], None)
@@ -160,8 +160,8 @@ class Pause(NetBase):
             self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(0))
         assert self.eng.log_path.parent.name != run
 
-    def test_a_lane_pause_names_the_role_the_loop_waits_for(self):
+    def test_a_account_pause_names_the_role_the_loop_waits_for(self):
         out = stop("rate_limited", at=time.time() + 3 * 3600, account="OPENAI_SUBSCRIPTION")
         self.run_engine({"plan": [PLAN], "write": [out]})
         r = self.eng.result()
-        assert (r.outcome, r.kind) == ("paused", "pause_lane")
+        assert (r.outcome, r.kind) == ("paused", "pause_account")

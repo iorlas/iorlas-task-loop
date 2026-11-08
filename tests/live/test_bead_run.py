@@ -1,5 +1,5 @@
 """Scenario 1: a bead goes plan, write, checks, review, land and push on a real git remote (a bare repo), with real git and a real check
-process; the worker is the stub lane `tl selftest` uses (a route.py answer per node), never a model and never a real bd."""
+process; the worker is the stub account `tl selftest` uses (a route.py answer per node), never a model and never a real bd."""
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.doctor.selftest import git_repo

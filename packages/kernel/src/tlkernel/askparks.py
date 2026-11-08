@@ -2,9 +2,9 @@
 The rule itself is tlkernel/beadpark.py."""
 from collections.abc import Callable
 
+from tlkernel import accountpauses as pauses
 from tlkernel import beadpark as park
 from tlkernel import holds as hold
-from tlkernel import lanepauses as pauses
 from tlkernel.ask import Ask
 from tlkernel.askport import AskReader
 from tlkernel.bead import Bead

@@ -7,11 +7,11 @@ from typing import Protocol
 
 from tlkernel import askspecs
 from tlkernel import log as rec
+from tlkernel.accountliveness import LIVENESS
 from tlkernel.checkmatchers import slot_wait_secs
 from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
-from tlkernel.lanesliveness import LIVENESS
 from tlkernel.ports import Clock
 from tlkernel.stagefacts import RunLogPort
 from tlkernel.waitenums import WaitWhat
@@ -130,7 +130,7 @@ class Waits:
             if acquired:
                 raise
             self.deadline.check()
-            raise Blocked(f"paused: {what} wait deadline exceeded (held by {err}); retry later", kind=Kind.PAUSE_LANE) from None
+            raise Blocked(f"paused: {what} wait deadline exceeded (held by {err}); retry later", kind=Kind.PAUSE_ACCOUNT) from None
         finally:
             waited()
 

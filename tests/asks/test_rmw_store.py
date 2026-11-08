@@ -22,7 +22,7 @@ from tlkernel.askenums import AskStatus
 from tlkernel.askstore import AskStore
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
-from tlkernel.snapshots import LaneStatus, StatusSnapshot, WindowStatus
+from tlkernel.snapshots import AccountStatus, StatusSnapshot, WindowStatus
 from tlkernel.stores import UsageHistory
 from tlkernel.usage import USAGE_KEEP_S
 from tltestkit.narrow import must
@@ -104,7 +104,7 @@ class Asks(Case):
 
 
 def snap(at):
-    return StatusSnapshot(at=at, lanes=[LaneStatus(
+    return StatusSnapshot(at=at, accounts=[AccountStatus(
         id="A", label="Claude", family="claude", kind="subscription", model="m", state="ready", five=None, week=None, unlock_at=at + 600,
         out=False, out_until=None, windows=[WindowStatus(name="whatever", used_pct=10.0, resets_at=at + 3600)])])
 

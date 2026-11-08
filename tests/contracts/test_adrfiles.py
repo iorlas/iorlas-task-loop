@@ -29,7 +29,7 @@ def test_a_file_without_a_number_in_its_name_is_not_an_adr():
                                               "docs/adr/index.md": "x"}, REPO)] == ["ADR-1", "ADR-2"]
 
 
-def test_the_template_carries_the_ask_and_the_decision_for_the_lane_that_lands_it():
+def test_the_template_carries_the_ask_and_the_decision_for_the_account_that_lands_it():
     body = adrfiles.template("x-1", "t-1", "k", "Which format?", "v1", "Saves stay in format v1.", "denis", 5.0)
     assert "docs/adr/NNNN-" in body and "- Ask: x-1\n" in body and "Saves stay in format v1." in body
 

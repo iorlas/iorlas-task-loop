@@ -52,7 +52,7 @@ RUN = ids.RunId.parse("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
 TOK = trace.Tokens(in_=412000, cached=380000, out=5100)
 
 CALL = trace.AiCall(node="write", family="zai", ref="ses_e85d", status="done", role="worker", t=T,
-                    node_id=4, attempt=1, run_id="r1", resume=True, lane="ZAI_CODING_SUBSCRIPTION", model="glm-5.3", effort="high",
+                    node_id=4, attempt=1, run_id="r1", resume=True, account="ZAI_CODING_SUBSCRIPTION", model="glm-5.3", effort="high",
                     host=False, cost=0.0, tokens=TOK, context_k=35, denied=[trace.Denied(tool="Bash", input={"command": "ls"})],
                     prompt_chars=6598, secs=229.0)
 
@@ -78,7 +78,7 @@ TRACE = trace.RunTrace(
     delegate_path="/d/route.py",
     log="/l.jsonl",
     stderr="/l.stderr",
-    lanes={"codex": {"sees": ["the brief"]}},
+    accounts={"codex": {"sees": ["the brief"]}},
     sessions=[CALL],
     verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")],
     write_rounds=[trace.WriteRound(write=1, round=1, node_id=3, ref="r", resumed="no", input_tokens=10, context_k=5)],
@@ -86,13 +86,13 @@ TRACE = trace.RunTrace(
     reflection=trace.Reflection(
         went_well=["a"], went_badly=[trace.WentBadly(what="w", cause="engine", session="s", evidence="e")], wasted=["w"], change=["c"]
     ),
-    lane_notes=["n"],
+    account_notes=["n"],
     salvaged=False,
     backfilled=False,
     ask="tl-1-1",
     prev_run="tl-7y6.3.0-20261026-101010",
     started_because="answer",
-    faults=[trace.Fault(step="write", lane="L", exit=1, reason="hung", t=T)],
+    faults=[trace.Fault(step="write", account="L", exit=1, reason="hung", t=T)],
 )
 
 OUTCOME = run.RunReport(outcome=Result.PARKED, bead=BeadId("tl-1"), run=str(RUN), why_code=WhyCode.STUCK, why="stuck",
@@ -163,7 +163,7 @@ LOG = {
         status="done",
         reason=None,
         ref="ses",
-        lane="L",
+        account="L",
         model="m",
         effort="high",
         secs=229.0,
@@ -174,7 +174,7 @@ LOG = {
         flag="same_family",
         exit=-15,
     ),
-    "overrun": _log(log.Overrun, stage="review", budget_s=600.0, elapsed_s=601.5, lane="CLAUDE"),
+    "overrun": _log(log.Overrun, stage="review", budget_s=600.0, elapsed_s=601.5, account="CLAUDE"),
     "retry_decision": _log(
         log.RetryDecision,
         step="write",
@@ -184,7 +184,7 @@ LOG = {
         reason="timeout",
         timeout_s=2820.0,
         exit=-15,
-        lane="OPENAI",
+        account="OPENAI",
         evidence="timeout after 47 min, exit -15",
     ),
     "cmd_start": _log(log.CmdStart, id="k1", text="git status", cwd="/w"),
@@ -206,15 +206,15 @@ LOG = {
                      deferred=["unity"]),
     "land_try": _log(log.LandTry, n=2, base_before="1a2b3c4d5e6f", base_after="6f5e4d3c2b1a", rebase_moved=True, failing="gate",
                     gate="outside"),
-    "wait_start": _log(log.WaitStart, id="w1", what=WaitWhat.LANE, holder="", until=T + 60),
+    "wait_start": _log(log.WaitStart, id="w1", what=WaitWhat.ACCOUNT, holder="", until=T + 60),
     "wait_end": _log(log.WaitEnd, id="w1", wait_seconds=60.0, in_budget=True),
     "lock": _log(log.Lock, what="land", holder="tl-7y6.1.2"),
     "unlock": _log(log.Unlock, what="land", secs=240.0),
     "vendor_error": _log(
         log.VendorError,
         node="n4",
-        reason="lane_out",
-        lane="L",
+        reason="account_out",
+        account="L",
         model="m",
         until=T + 900,
         error="out",
@@ -431,7 +431,7 @@ OTHERS: dict[str, Rec] = {
         worktree="/w",
         stop=loop.StopRequest(kind="after_current", by="denis", t=T),
         queue=[loop.QueueRow(bead="tl-2", prio=1, since=T, ahead=0, skip=loop.Skip(why="area busy", until=T + 60))],
-        lanes_seen=["L"],
+        accounts_seen=["L"],
     ),
     "LoopTarget": loop.LoopTarget(pid=4242, started=T),
     "LoopCommand": loop.LoopCommand(action="stop_now", by="denis", t=T),
@@ -455,7 +455,7 @@ OTHERS: dict[str, Rec] = {
     "Owned": worktrees.Owned(path="/r/.worktrees/loop-1", repo="/r", kind="loop", run="tl-1", host="h", created=T, bead="x-1"),
     "Checkout": slots.Checkout(path="/r/.slots/s1", branch="task/x-1", main=False),
     "WindowStatus": snapshots.WindowStatus(name="weekly", used_pct=9.0, resets_at=T + 600),
-    "LaneStatus": snapshots.LaneStatus(
+    "AccountStatus": snapshots.AccountStatus(
         id="OPENAI_SUBSCRIPTION",
         label="ChatGPT / Codex",
         family="openai",
@@ -474,10 +474,10 @@ OTHERS: dict[str, Rec] = {
         out_reason="rate_limited",
         notes=["n"],
     ),
-    "UsageRow": usage.UsageRow(at=T, lane="A", window="weekly", used_pct=9.0, resets_at=T + 600),
+    "UsageRow": usage.UsageRow(at=T, account="A", window="weekly", used_pct=9.0, resets_at=T + 600),
     "NeedInput": snapshots.NeedInput(what="claude_usage", why="unknown", how="pass the windows"),
     "StatusSnapshot": snapshots.StatusSnapshot(
-        at=T, lanes=[snapshots.LaneStatus(id="A", state="ready")], needs_input=[snapshots.NeedInput(what="w")]
+        at=T, accounts=[snapshots.AccountStatus(id="A", state="ready")], needs_input=[snapshots.NeedInput(what="w")]
     ),
     "Landed": landed.Landed(bead=BeadId("t-1"), sha="a" * 40, base="origin/main", t=T),
     "Park": parks.Park(bead=BeadId("t-1"), hash="b" * 40, runs=1, run="t-1-20261030-120000", t=T, fingerprint="a1b2c3d4e5f6"),

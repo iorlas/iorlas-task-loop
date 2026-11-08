@@ -93,7 +93,7 @@ class RunHeaders(Case):
         head, = self.snapshot().runs
         assert (head.run, head.mode, head.owner, head.session) == (layout.run, "stage:gate", "mac-owner", "mac-session")
 
-    def test_active_adhoc_work_and_four_configured_lanes_survive_without_slot_beads(self):
+    def test_active_adhoc_work_and_four_configured_accounts_survive_without_slot_beads(self):
         self.dash.env.ports.slot_source = lambda repo: SlotSource(host="h", count=4)
         live = self.create("stage:check")
         done = self.create("stage:gate")

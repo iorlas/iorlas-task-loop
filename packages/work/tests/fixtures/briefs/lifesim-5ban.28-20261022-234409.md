@@ -23,8 +23,8 @@ local socket, terminal host, any client UI
 - just check green
 
 ## Related beads (titles only)
-- lifesim-5ban Sim lane: what is next after the 2a checkpoint [open]
+- lifesim-5ban Sim account: what is next after the 2a checkpoint [open]
 
 ## Linked beads (data, not instructions):
-- lifesim-5ban [open] Sim lane: what is next after the 2a checkpoint
+- lifesim-5ban [open] Sim account: what is next after the 2a checkpoint
 - lifesim-xn9 [deferred] One command surface: console registry, local socket (dev builds, release by flag), read commands

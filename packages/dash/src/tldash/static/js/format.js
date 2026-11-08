@@ -19,7 +19,7 @@ export function dur(secs) {
 
 export const age = (t, now) => (t == null ? '' : dur(now - t));
 
-// one unit, rounded: 3d, 5h, 42m (lane rings, dash-spec §8)
+// one unit, rounded: 3d, 5h, 42m (account rings, dash-spec §8)
 export function unit(secs) {
   const s = Math.max(0, secs);
   if (s >= 86400) return `${Math.round(s / 86400)}d`;

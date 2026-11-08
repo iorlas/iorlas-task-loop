@@ -91,4 +91,4 @@ class WriterFamily(Case):
         assert rc == 2
         said = [c[3] for c in self.store.said("comments", "add") if "paused" in c[3]]
         assert said
-        assert all("no ready lane of the pinned writer family (openai) for write (no_account): openai logged out" in x for x in said)
+        assert all("no ready account of the pinned writer family (openai) for write (no_account): openai logged out" in x for x in said)

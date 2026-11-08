@@ -4,8 +4,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import accountcaps as caps
 from tlkernel import answers
-from tlkernel import lanecaps as caps
 from tlkernel import log as rec
 from tlkernel.bead import Bead
 from tlkernel.delegate import DelegateResult, RunRequest
@@ -100,7 +100,7 @@ class Reflector:
     def reflect_run(self, outcome: str, why: str) -> Open | None:
         """tl-05s: one cheap read-only call that reflects on this run: what went well and badly (each bad item with its cause class
         and the session it comes from), what wasted tokens or minutes, what to change. Never blocks or changes the outcome: any
-        failure, a missing lane, a paused run, a stop, is no reflection. -> the answer dict or None."""
+        failure, a missing account, a paused run, a stop, is no reflection. -> the answer dict or None."""
         if not self.worth_asking(why):
             return None
         try:

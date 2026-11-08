@@ -9,8 +9,8 @@ from support.narrow_hosts import FakeWaitsHost
 
 from taskloop.adapters import deadline
 from tlkernel import log as rec
+from tlkernel.accountliveness import LIVENESS
 from tlkernel.kinds import Kind
-from tlkernel.lanesliveness import LIVENESS
 from tlkernel.waitenums import WaitWhat
 from tlpipeline.api import Blocked, Waits
 
@@ -39,7 +39,7 @@ def test_wait_cannot_book_more_than_elapsed_time():
     assert host.budget.spent_min() == 0
 
 
-def test_lock_deadline_pauses_lane_and_books_wait(monkeypatch):
+def test_lock_deadline_pauses_account_and_books_wait(monkeypatch):
     host = FakeWaitsHost()
 
     @contextlib.contextmanager
@@ -60,7 +60,7 @@ def test_lock_deadline_pauses_lane_and_books_wait(monkeypatch):
     monkeypatch.setattr(host, "os_lock", busy)
     with pytest.raises(Blocked, match="wait deadline exceeded") as stopped, Waits(host, deadline).locked("land_lock", host.log_path):
         pytest.fail("acquired a busy lock")
-    assert stopped.value.kind is Kind.PAUSE_LANE
+    assert stopped.value.kind is Kind.PAUSE_ACCOUNT
     assert host.waited == LIVENESS.lock_wait_s
     assert host.halted == ["halt"]
     rows = [item.rec for item in host.stores.run_log("run").read_from(0).items]

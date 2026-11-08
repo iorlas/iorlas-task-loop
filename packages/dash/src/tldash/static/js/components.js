@@ -52,7 +52,7 @@ function Sheet1({ snap, beads }) {
     <${Item} name="FilterChips" note="All first, text only, no counts"><${FilterChips} label="epics" value=${chip} onPick=${setChip}
       items=${snap.epics.filter((e) => e.project === snap.projects[0]?.id).map((e) => ({ k: e.id, n: e.title, meter: e.total ? e.done / e.total : 0 }))} /><//>
     <${Item} name="Tag"><div class="row">${['', 'run', 'you', 'bad', 'watch', 'ok'].map((t) => html`<${Tag} key=${t} tone=${t}>${t || 'neutral'}<//>`)}</div><//>
-    <${Item} name="CountBadge"><div class="tabs"><button class="tab">🏭 Floor<${CountBadge} n=${1} tone="bad" /></button><button class="tab">🙋 Decisions<${CountBadge} n=${3} /></button></div><//>
+    <${Item} name="CountBadge"><div class="tabs"><button class="tab">🏭 Slots<${CountBadge} n=${1} tone="bad" /></button><button class="tab">🙋 Decisions<${CountBadge} n=${3} /></button></div><//>
     <${Item} name="Totals" note="tone from the server; grey under 5 landed"><div class="col">
       ${[['', 12], ['watch', 12], ['bad', 12], ['', 3]].map(([tone, n], i) => html`<div key=${i}><${Totals} totals=${{ secs: 7440 + i * 900, tokens: 400e3 * (i + 1), usual: 500e3, usual_n: n, tone }} assumptions=${i} /></div>`)}</div><//>
     <${Item} name="Tabs" note="one look: 2 px ink underline"><${Tabs} items=${[{ k: 'bead', label: '📄 Bead' }, { k: 'p1', label: '① ↩️' }, { k: 'p2', label: '② now', live: true }]} value=${tab} onPick=${setTab} /><//>
@@ -63,7 +63,7 @@ function Sheet1({ snap, beads }) {
     <${Item} name="Dots + Status"><div class="col">${['6dq0', '5ban.3', 'd5f.48'].map((id) => html`<div key=${id}><${Status} card=${by(id)} /><${Dots} dots=${by(id).dots} loops=${by(id).loops} /></div>`)}</div><//>
     <${Item} name="BeadCard"><div class="cards">${['6dq0', '5ban.3', 'fld.27', 'a3k.2', 'q2'].map((id) => html`<${BeadCard} key=${id} card=${by(id)} now=${now} why onOpen=${nop} sel=${id === '6dq0'} />`)}</div><//>
     <${Item} name="BeadRow"><div>${['g1', 'q2', '5ban.3', 'fld.27', '7hv.2'].map((id, i) => html`<${BeadRow} key=${id} card=${by(id)} pad=${i ? 1 : 0} twist=${i ? null : false} onTwist=${nop} onOpen=${nop} />`)}</div><//>
-    <${Item} name="BeadLine" note="Floor, comeback pieces"><div class="lines">${snap.pieces.slice(0, 6).map((p, i) => html`<div key=${i} class="trk"><${BeadLine} segs=${p.segs} x=${x} cl=${!!p.from_slot} cr=${!!p.to_slot} capR=${p.to_slot ? `→ ${p.to_slot}` : ''} /></div>`)}</div><//>
+    <${Item} name="BeadLine" note="Slots, comeback pieces"><div class="lines">${snap.pieces.slice(0, 6).map((p, i) => html`<div key=${i} class="trk"><${BeadLine} segs=${p.segs} x=${x} cl=${!!p.from_slot} cr=${!!p.to_slot} capR=${p.to_slot ? `→ ${p.to_slot}` : ''} /></div>`)}</div><//>
     <${Item} name="Trace + Strip"><${Trace} pieces=${pieces('d5f.48')} now=${now} /><${Strip} pieces=${pieces('6dq0')} now=${now} /><//>
     <${Item} name="StageCard" note="pass ② of a 4-pass bead">${look && html`<${StageCard} pass=${look.passes[1]} now=${now} artifacts=${look.artifacts} />`}<//>
     <${Item} name="StageCard, live">${live && html`<${StageCard} pass=${live.passes[live.passes.length - 1]} now=${now} />`}<//>
@@ -80,7 +80,7 @@ function Sheet1({ snap, beads }) {
     <${Item} name="Popover"><${Popover} label="⚠2 problems"><div>same test failed 3×</div><div>tokens 2.8× usual</div><//><//>
     <${Item} name="Toast">${frame(html`<${Toast} modal=${false} toast=${{ text: '✅ Approved · d5f.48 is landing', n: 1 }} />`)}<//>
     <${Item} name="EmptyState"><${EmptyState} title="No beads yet" body="Register a repo, then start its loop." cmd="tl register <repo>  ·  tl loop" /><${Nothing} /><//>
-    <${Item} name="Ring" note="lanes, refresh circle"><div class="row"><${Ring} v=${0.91} tone="w" value="91%" label="codex" /><${Ring} v=${1} tone="x" value="3d" label="gemini" />
+    <${Item} name="Ring" note="accounts, refresh circle"><div class="row"><${Ring} v=${0.91} tone="w" value="91%" label="codex" /><${Ring} v=${1} tone="x" value="3d" label="gemini" />
       <${Ring} value="2s" /><${Ring} tone="w" value="41s" /><${Ring} v=${0.62} value="62%" size=${46} /></div><//>
     <${Item} name="Spark"><div class="row">${snap.learning.asks_per_landed.length > 1 && html`<${Spark} v=${snap.learning.asks_per_landed} tone="good" />
       <${Spark} v=${snap.learning.repeat_asks} tone="bad" /><${Spark} v=${snap.learning.sendbacks_per_bead} />`}</div><//>

@@ -31,12 +31,12 @@ def append_output(stream: Any) -> Any:
 
 
 def pause_line(rec: RunReport, due: float) -> str:
-    """A paused run's one line for whoever reran it by hand: the exact time the lane is back (tl-bxk.10.6)."""
+    """A paused run's one line for whoever reran it by hand: the exact time the account is back (tl-bxk.10.6)."""
     if rec.outcome is not Result.PAUSED:
         return ""
     if not due:
-        return f"PAUSED {rec.bead}: no time the lane frees (login, network or setup); rerun when fixed: tl run-task {rec.bead}"
-    return "PAUSED {}: the lane is back at {}; rerun then: tl run-task {}".format(
+        return f"PAUSED {rec.bead}: no time the account frees (login, network or setup); rerun when fixed: tl run-task {rec.bead}"
+    return "PAUSED {}: the account is back at {}; rerun then: tl run-task {}".format(
         rec.bead, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due)), rec.bead)
 
 

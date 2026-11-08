@@ -3,7 +3,7 @@
     python3 dev/runtests.py
 
 Workers: min(cpus, free RAM / 2 GB, ceil(tests / 150), 4). A selection of 150 tests or fewer runs in this one pytest process, no xdist.
-The run goes down to nice 10 first, so a box shared by many lanes keeps its editors and landing gates responsive; TL_TEST_FULL=1 (set by
+The run goes down to nice 10 first, so a box shared by many accounts keeps its editors and landing gates responsive; TL_TEST_FULL=1 (set by
 `just gate`, the landing gate) keeps the priority it was given.
 TL_GREEN_LEDGER=1 (off by default): tests whose own files are unchanged since a green run are left out (dev/affected.py, the ledger), and
 a fully green run records the tests that ran. The worker count is NOT reduced by the load: fewer workers expose test
@@ -41,7 +41,7 @@ def load_scratch():
 scratch = load_scratch()
 
 CHUNK = 150          # tests per worker: a worker costs ~2 s to start and a few hundred MB, so a smaller share is not worth one
-MIN_LANE_WORKERS = 2  # a lane's selection past CHUNK tests keeps this many however busy the host is
+MIN_ACCOUNT_WORKERS = 2  # an account's selection past CHUNK tests keeps this many however busy the host is
 MAX_WORKERS = 4      # the box also runs the implementer workers; the tests must not starve them
 WORKER_MB = 2048     # RAM budget of one worker
 WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 15 min in 4 workers); its process tree is killed
@@ -87,7 +87,7 @@ def total_mb():
 
 
 def lower_priority(environ):
-    """Down to nice NICE, never further (an engine-run check is there already): the lanes' runs yield to the landing gate."""
+    """Down to nice NICE, never further (an engine-run check is there already): the accounts' runs yield to the landing gate."""
     if environ.get(FULL):
         return
     now = os.nice(0)
@@ -104,13 +104,13 @@ def busy_cpus():
 
 
 def workers(n_tests, cpus=None, mem_mb=None, busy=None, full=False):
-    """How many pytest workers this selection earns on this host right now (1: no xdist). A lane run leaves the cores the other lanes
-    keep busy (MIN_LANE_WORKERS past CHUNK tests: one worker made wide runs slow); the landing gate takes them all."""
+    """How many pytest workers this selection earns on this host right now (1: no xdist). A account run leaves the cores the other accounts
+    keep busy (MIN_ACCOUNT_WORKERS past CHUNK tests: one worker made wide runs slow); the landing gate takes them all."""
     cpu = cpus if cpus is not None else (os.cpu_count() or 1)
     ram = mem_mb if mem_mb is not None else total_mb()
     free = cpu if full else cpu - (busy if busy is not None else busy_cpus())
     if not full and n_tests > CHUNK:
-        free = max(free, MIN_LANE_WORKERS)
+        free = max(free, MIN_ACCOUNT_WORKERS)
     return max(1, min(free, cpu if ram is None else ram // WORKER_MB, math.ceil(n_tests / CHUNK), MAX_WORKERS))
 
 

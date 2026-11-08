@@ -1,4 +1,4 @@
-"""EngineLog: the union of records an engine run appends to engine/<run>.jsonl (v4). Start/end pairs share an `id`, unique
+"""EngineLog: the union of records an engine run appends to engine/<run>.jsonl (v5). Start/end pairs share an `id`, unique
 within the file; an end without its start, or the reverse, is a run that died in between."""
 from typing import ClassVar, Literal, final
 
@@ -12,7 +12,7 @@ from tlkernel.wire import Rec, load
 
 
 class LogRec(Row):
-    V: ClassVar[int] = 4
+    V: ClassVar[int] = 5
 
 
 @final
@@ -74,7 +74,7 @@ class CallEnd(LogRec, tag="call_end"):
     status: str
     reason: str | None = None
     ref: str = ""
-    lane: str = ""
+    account: str = ""
     model: str = ""
     effort: str = ""
     secs: float = 0.0
@@ -220,7 +220,7 @@ class Unlock(LogRec, tag="unlock"):
 class VendorError(LogRec, tag="vendor_error"):
     node: str
     reason: str
-    lane: str = ""
+    account: str = ""
     model: str = ""
     until: float | None = None
     error: str = ""
@@ -254,7 +254,7 @@ class Overrun(LogRec, tag="overrun"):
     stage: str
     budget_s: float
     elapsed_s: float
-    lane: str = ""
+    account: str = ""
 
 
 @final
@@ -262,13 +262,13 @@ class RetryDecision(LogRec, tag="retry_decision"):
     """What the RetryPlan decided about a stopped call, with the facts it decided on."""
 
     step: str
-    plan: str  # the RetryPlan row (worker_failed, lane_poll, crash, ...) or "" for a decision no row governs
+    plan: str  # the RetryPlan row (worker_failed, account_poll, crash, ...) or "" for a decision no row governs
     action: str  # retry | wait | new_thread | reroute | pause | ask | fault
     attempt: int = 0
     reason: str = ""
     timeout_s: float | None = None
     exit: int | None = None
-    lane: str = ""
+    account: str = ""
     evidence: str = ""
 
 

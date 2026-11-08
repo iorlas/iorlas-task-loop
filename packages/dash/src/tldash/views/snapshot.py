@@ -1,7 +1,7 @@
 """The Snapshot (GET /api/snapshot): everything the four tabs read, built from one World.
 
-Filled from typed facts: server, projects, epics, slots, every bead card (its assumptions and stuck marker included), the Floor's
-pieces, the open asks and looks, the ask ledger, the decisions in force, the learning series and the lane cards (views.lanecards).
+Filled from typed facts: server, projects, epics, slots, every bead card (its assumptions and stuck marker included), the Slots's
+pieces, the open asks and looks, the ask ledger, the decisions in force, the learning series and the account cards (views.accountcards).
 Left at their default until the backend item that records the fact: on a card the cause and ack only. `version` is a hash of the
 encoded snapshot without `t`, so it moves exactly when a field the page shows moves."""
 
@@ -14,10 +14,10 @@ from tlkernel.bead import Bead
 from tlkernel.dash import AskCard, BeadCard, BeadDetail, Column, Epic, Piece, Project, ServerInfo, Slot, Snapshot
 from tlkernel.dashcost import CostPage
 
-from tldash.views import floor, learning, ledger, needs, passes, queue
+from tldash.views import learning, ledger, needs, passes, queue, slots
+from tldash.views.accountcards import account_cards
 from tldash.views.askcards import ask_card, look_card, stale_of
 from tldash.views.board import Board, is_infra, is_work, when
-from tldash.views.lanecards import lane_cards
 from tldash.views.world import ProjectIn, World
 
 BACKLOG_MAX = 200
@@ -69,7 +69,7 @@ def pieces_of(w: World, board: Board, ids: set[tuple[str, str]]) -> list[Piece]:
         for b in p.beads:
             key = (p.id, b.id)
             if key in ids and key in w.runs:
-                out += [x for x in passes.pieces_of(p.id, b.id, w.runs[key], board.passes_of(key)) if floor.in_window(x, w.now)]
+                out += [x for x in passes.pieces_of(p.id, b.id, w.runs[key], board.passes_of(key)) if slots.in_window(x, w.now)]
     return out
 
 
@@ -90,7 +90,7 @@ def slots_of(w: World) -> list[Slot]:
     out: list[Slot] = []
     for p in w.projects:
         runs = {b: rs for (key, b), rs in w.runs.items() if key == p.id}
-        out += [*floor.slots_of(p, runs, w.now), *floor.stray_rows(p)]
+        out += [*slots.slots_of(p, runs, w.now), *slots.stray_rows(p)]
     return out
 
 
@@ -113,7 +113,7 @@ def build(w: World) -> Snapshot:
                           bd_ok_at=p.bd_ok_at, bd_error=p.bd_error, score=p.score) for p in w.projects],
         epics=[e for p in w.projects for e in epics_of(p)],
         slots=slots_of(w), beads=cards, backlog_more=more, pieces=pieces_of(w, board, ids), asks=asks_of(w, cards),
-        lanes=lane_cards(w.status, w.now), ledger=ledger.ledger_rows(w, ids), adrs=ledger.adr_rows(w), learning=learning.build(w))
+        accounts=account_cards(w.status, w.now), ledger=ledger.ledger_rows(w, ids), adrs=ledger.adr_rows(w), learning=learning.build(w))
     return snap.replace(version=version_of(snap), t=w.now)
 
 

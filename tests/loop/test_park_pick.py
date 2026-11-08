@@ -71,7 +71,7 @@ class Pick(Case):
         assert ParkStore(self.cfg).get(BeadId("t-1")) is None
 
     def test_transient_pause_is_persisted_and_the_queue_wakes_exactly_when_due(self):
-        rec = parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5,
+        rec = parks.paused(self.cfg, bead(), Kind.PAUSE_ACCOUNT, "r1", 100, reason="busy", draw=lambda: 0.5,
                            permanence="transient", store=ParkStore)
         assert rec is not None
         assert (rec.reason, rec.permanence, rec.retry_at) == ("busy", "transient", 130)
@@ -86,7 +86,8 @@ class Pick(Case):
                 assert q.skipped[0].skip.until == 130
 
     def test_take_path_cannot_claim_early_but_re_takes_a_due_pause_without_owner_action(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient", store=ParkStore)
+        parks.paused(self.cfg, bead(), Kind.PAUSE_ACCOUNT, "r1", 100, reason="busy",
+            draw=lambda: 0.5, permanence="transient", store=ParkStore)
         env = mock.Mock(cfgdir=self.cfg, now=mock.Mock(return_value=129), claim=mock.Mock(return_value=(True, "")))
         env.areas_host.side_effect = lambda cfg, say: mock.Mock(
             store=env.store, running=env.running, area_lock=env.area_lock, say=say,
@@ -106,18 +107,20 @@ class Pick(Case):
         runner.run.assert_called_once_with(bead(), at)
 
     def test_a_queue_of_timed_pauses_waits_instead_of_exiting_drained(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient", store=ParkStore)
+        parks.paused(self.cfg, bead(), Kind.PAUSE_ACCOUNT, "r1", 100, reason="busy",
+            draw=lambda: 0.5, permanence="transient", store=ParkStore)
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "",
             parked=lambda b: parks.skip_of(asks_wire.host().asks_store(self.cfg), self.cfg, b, now=100, store=ParkStore))
         loop = mock.Mock(env=mock.Mock(now=lambda: 100), until=0)
         assert Loop.idle(loop, rule.rank([bead()], "")) is None
-        assert (loop.wait.reason, loop.wait.probe_at) == ("no_lane", 130)
+        assert (loop.wait.reason, loop.wait.probe_at) == ("no_account", 130)
         loop.publish.assert_called_once_with()
         loop.nap.assert_called_once_with(30, 0)
         loop.left.assert_not_called()
 
     def test_a_persisted_deadline_supersedes_a_stale_role_hold_and_cooldown(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient", store=ParkStore)
+        parks.paused(self.cfg, bead(), Kind.PAUSE_ACCOUNT, "r1", 100, reason="busy",
+            draw=lambda: 0.5, permanence="transient", store=ParkStore)
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "")
         loop = mock.Mock(env=mock.Mock(cfgdir=self.cfg, now=lambda: 130))
         loop.c.later = {"t-1": 99999}
@@ -130,7 +133,7 @@ class Pick(Case):
     @pytest.mark.parametrize("park_run", [None, "older-run"])
     def test_unparked_pause_retries_as_an_engine_fault(self, park_run):
         if park_run:
-            parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, park_run, 100, permanence="transient", store=ParkStore, draw=random)
+            parks.paused(self.cfg, bead(), Kind.PAUSE_ACCOUNT, park_run, 100, permanence="transient", store=ParkStore, draw=random)
         env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
         files, said = mock.Mock(), []
         c = Counters()
@@ -142,7 +145,8 @@ class Pick(Case):
 
     @pytest.mark.parametrize("permanence,message", [("transient", "retry at"), ("needs_owner", "parked for the owner")])
     def test_matching_parks_supply_the_only_wake(self, permanence, message):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, producer="delegate", permanence=permanence, store=ParkStore, draw=random)
+        parks.paused(self.cfg, bead(), Kind.PAUSE_ACCOUNT, "r1", 100, producer="delegate",
+            permanence=permanence, store=ParkStore, draw=random)
         env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
         files, said = mock.Mock(), []
         c = Counters()

@@ -12,8 +12,8 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from tlkernel.accountpauses import OVERRIDES, TABLE, rule
 from tlkernel.delegate import Permanence
-from tlkernel.lanepauses import OVERRIDES, TABLE, rule
 from tlkernel.pausereasons import Reason
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -118,7 +118,7 @@ class Complete(Case):
         assert counts == Counter(Reason)
 
     def test_table_has_no_duplicate_source_keys(self):
-        source = ast.parse((ROOT / "packages/kernel/src/tlkernel/lanepauses.py").read_text())
+        source = ast.parse((ROOT / "packages/kernel/src/tlkernel/accountpauses.py").read_text())
         table = next(n.value for n in source.body if isinstance(n, ast.AnnAssign)
                      and isinstance(n.target, ast.Name) and n.target.id == "TABLE")
         assert isinstance(table, ast.Dict)

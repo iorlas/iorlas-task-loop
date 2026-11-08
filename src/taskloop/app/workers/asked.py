@@ -41,7 +41,7 @@ def thread_updates(c: Call, res: DelegateResult, seen: list[str]) -> Updates:
 
 
 def done_updates(c: Call, res: DelegateResult, thread: Updates) -> Updates:
-    """The updates of a call that ended: its prompt history, the planner's ref, and delegate's lane flag."""
+    """The updates of a call that ended: its prompt history, the planner's ref, and delegate's account flag."""
     flag = res.flag or ""
     return Updates(thread.session, res.ref if c.node == "plan" and res.ref else "", flag)
 

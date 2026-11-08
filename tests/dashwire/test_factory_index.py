@@ -189,7 +189,7 @@ class FactoryIndex(Case):
     def test_facts_do_not_grow_with_log_lines(self):
         for run, count in (("short", 10), ("long_", 1000)):
             bundle = manifest(self.cfg, run, "b", NOW)
-            bundle.log.write_text((json.dumps({"v": 4, "kind": "beat", "t": NOW}) + "\n") * count)
+            bundle.log.write_text((json.dumps({"v": 5, "kind": "beat", "t": NOW}) + "\n") * count)
             os.utime(bundle.log, (NOW, NOW))
         self.ingest()
         con = must(factorydb.open_ro(self.cfg.factory_db()))

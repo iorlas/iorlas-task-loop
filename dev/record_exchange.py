@@ -3,7 +3,7 @@
 
     python3 dev/record_exchange.py RUN_DIR ROLE CASE --bead BEAD.json [--n N] [--prompt FILE --wt PATH] [--source TEXT]
 
-RUN_DIR is a run's folder (<config>/task-loop/runs/<bead>-<stamp>/): it holds the node answers the lane returned (plan.json,
+RUN_DIR is a run's folder (<config>/task-loop/runs/<bead>-<stamp>/): it holds the node answers the account returned (plan.json,
 plan-N.json, write-N.json, review-N.json) and, for a writer or reviewer, the plan the run went by. ROLE is planner, writer or reviewer;
 the answer taken is the last one of its node, or the one numbered --n. BEAD.json is the bead as `bd show ID --json` prints it (the
 first element, or the object). The engine does not keep the prompt it sent (a run folder has only the brief): pass --prompt (a copy of

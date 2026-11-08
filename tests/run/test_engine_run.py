@@ -39,7 +39,7 @@ from taskloop.adapters import delegate as dl
 from taskloop.app.run import engine, entry, running
 from taskloop.app.track import outcome_line
 from taskloop.app.wire import asks as wasks
-from taskloop.domain.lanes.matchers import read_only_command
+from taskloop.domain.accounts.matchers import read_only_command
 from tlasks import admission
 from tlgate.domain import retry
 from tlkernel import checkmatchers as check_matchers
@@ -406,9 +406,9 @@ class EngineRunTest(EngineTest):
     def test_a_wait_is_logged_as_its_own_segment(self):
         eng = self.checks_engine()
         age(eng, 600)
-        eng.waits.add(120, WaitWhat.LANE)
+        eng.waits.add(120, WaitWhat.ACCOUNT)
         (start,), (w,) = records(eng, "wait_start"), self.wait_records(eng)
-        assert (start["what"], start["id"] == w["id"], w["wait_seconds"], w["in_budget"]) == ("lane", True, 120, False)
+        assert (start["what"], start["id"] == w["id"], w["wait_seconds"], w["in_budget"]) == ("account", True, 120, False)
 
     def test_screenshots_in_evidence_are_kept_outside_the_worktree_and_named_on_the_bead(self):
         real = fake_route.Script.reply
@@ -445,7 +445,7 @@ class EngineRunTest(EngineTest):
         log = Path(mkdtemp()) / "run.jsonl"
         log.write_text(
             "\n".join(
-                json.dumps({"v": 4, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "exec_seconds": sec}) + "\n"
+                json.dumps({"v": 5, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "exec_seconds": sec}) + "\n"
                 for st, sec in (("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))
             )
         )
@@ -468,7 +468,7 @@ class EngineRunTest(EngineTest):
                 verdict(3, "open", why="taste"),
             ]
         }
-        busy = stop("rate_limited", at=time.time() + 7200, say="lane out")
+        busy = stop("rate_limited", at=time.time() + 7200, say="account out")
         rc, _ = self.verified(answer, write=[WRITE, busy])
         assert rc == 2
         assert self.blocked == [] and self.ask() is None  # paused: the bead stays open, nothing asked
@@ -584,7 +584,7 @@ class EngineRunTest(EngineTest):
             stuck = stop("secrets", "w1", denied=denied) if reason else full(None, "w1", text="no", denied=denied)
             self.asks().drop(BeadId("t-1"))
             drop_ck(BeadId("t-1"))  # each case starts as a new bead: an open ask would make the run wait
-            # a secrets stop gets the one new thread told to use apply_patch (lane_policy), then the fault; the rest is not retried
+            # a secrets stop gets the one new thread told to use apply_patch (account_policy), then the fault; the rest is not retried
             rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, stuck if reason else WRITE], "review": [CLEAN]})
             assert (rc, [c[0] for c in s.calls].count("worker")) == (2, 2 if reason else 1), denied
 
@@ -716,14 +716,14 @@ class EngineRunTest(EngineTest):
         assert not any(c[:3] == ("label", "add", "t-1") for c in self.bd_calls)
         assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
 
-    def test_the_trace_records_reason_context_and_the_lanes(self):
+    def test_the_trace_records_reason_context_and_the_accounts(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [stop("worker_failed"), WRITE], "review": [CLEAN]})
         assert rc == 2
         assert self.eng.kind.value == "fault_infra"
         assert self.eng.sessions[-1]["reason"] == "worker_failed"
         assert self.eng.sessions[0]["context"]["instructions"] == ["/repo/AGENTS.md"]
         trace = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
-        assert trace["lanes"] == {}
+        assert trace["accounts"] == {}
 
     def test_a_refused_delegate_blocks_before_any_step(self):
         c = wslots_config.load_cfg(str(self.wt), port_git())
@@ -762,11 +762,12 @@ class EngineRunTest(EngineTest):
         assert h(dict(BEAD, description="Blocked: needs the design first"), people) != base  # the owner's own words stay
         assert h(BEAD, [*people, {"author": "denis", "text": "Parked over budget (226 of 180 min): scope change"}]) != base
 
-    def test_a_lane_comment_after_a_block_does_not_hide_the_reopen(self):
+    def test_a_account_comment_after_a_block_does_not_hide_the_reopen(self):
         blocked = dict(BEAD, status="blocked", assignee="")
         cs = [
             {"author": "tl-x", "text": "Blocked: stuck", "created_at": "2026-10-25T10:00:00Z"},
-            {"author": "tl-x", "text": "Lane (engine): the look step ran on the writer's own family", "created_at": "2026-10-25T10:01:00Z"},
+            {"author": "tl-x", "text": "Account (engine): the look step ran on the writer's own family",
+             "created_at": "2026-10-25T10:01:00Z"},
         ]
         calls = []
         with (
@@ -781,7 +782,7 @@ class EngineRunTest(EngineTest):
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):
         calls = []
-        late = stop("no_account", at=time.time() + 3600, family="openai", account="OPENAI", say="no lane. Hold the task; advice")
+        late = stop("no_account", at=time.time() + 3600, family="openai", account="OPENAI", say="no account. Hold the task; advice")
         with self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
             self.run_engine({"plan": [late]})
         assert not [c for c in calls if "--append-notes" in c], calls

@@ -106,5 +106,5 @@ class RepoProfileKeys(Case):
 
 def test_check_track_is_a_hard_profile_key_cut():
     assert load({"engine": {"checks": [{"id": "a", "argv": ["true"], "track": "light"}]}}).engine.checks[0].track == "light"
-    with pytest.raises(ConfigError, match=r"unknown field.*lane"):
-        load({"engine": {"checks": [{"id": "a", "argv": ["true"], "lane": "light"}]}})
+    with pytest.raises(ConfigError, match=r"unknown field.*account"):
+        load({"engine": {"checks": [{"id": "a", "argv": ["true"], "account": "light"}]}})

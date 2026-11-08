@@ -5,8 +5,8 @@ from typing import Final, Protocol
 
 from tlgate.domain import planref
 from tlgate.runner import Checker
+from tlkernel import accountcaps as caps
 from tlkernel import askspecs, childenv, trustroots
-from tlkernel import lanecaps as caps
 from tlkernel import log as rec
 from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
@@ -23,7 +23,7 @@ from tlkernel.stop import Stop
 from taskloop.adapters import ident
 from taskloop.app.workers import writer_pin
 from taskloop.app.workers.call import Call
-from taskloop.domain.lanes import pin
+from taskloop.domain.accounts import pin
 from taskloop.stores.runlog import RunLog
 
 ENGINE_ONLY_ADVISORY: Final = ("\nDo not run the engine-only recipes ({recipes}); the writer's harness may not deny them, "

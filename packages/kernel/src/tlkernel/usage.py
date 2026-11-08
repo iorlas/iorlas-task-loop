@@ -1,4 +1,4 @@
-"""Lane usage history: one row per delegate usage window each time `tl lanes` files a status snapshot, and the projection of a
+"""Account usage history: one row per delegate usage window each time the loop files a status snapshot, and the projection of a
 window's use at its reset from the recent rows. The window name is kept as delegate printed it (the contract types it as a free
 string): this module never reads a name's meaning, it only groups rows by it."""
 from typing import ClassVar, Final, final
@@ -13,11 +13,11 @@ RESET_JITTER_S: Final = 600  # two rows whose resets_at differ by more are of tw
 
 @final
 class UsageRow(Rec):
-    """usage-history.jsonl: one window of one lane as the snapshot filed at `at` (delegate's clock) saw it."""
+    """usage-history.jsonl: one window of one account as the snapshot filed at `at` (delegate's clock) saw it."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     at: float
-    lane: str
+    account: str
     window: str
     used_pct: float
     resets_at: float | None = None
@@ -25,8 +25,8 @@ class UsageRow(Rec):
 
 def rows_of(snap: StatusSnapshot) -> list[UsageRow]:
     """The rows a snapshot adds: each window that reports a use (an unknown use is not a row)."""
-    return [UsageRow(at=snap.at, lane=ln.id, window=w.name, used_pct=w.used_pct, resets_at=w.resets_at)
-            for ln in snap.lanes for w in ln.windows if w.used_pct is not None]
+    return [UsageRow(at=snap.at, account=ln.id, window=w.name, used_pct=w.used_pct, resets_at=w.resets_at)
+            for ln in snap.accounts for w in ln.windows if w.used_pct is not None]
 
 
 def current_window(rows: list[UsageRow]) -> list[UsageRow]:

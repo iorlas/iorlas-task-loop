@@ -38,8 +38,8 @@ class FetchNetwork(Rig):
         assert not {"checkout", "checkout_new", "clean"} & {c[0] for c in self.git.calls}
 
     def test_four_loops_pause_without_runs_failures_cooldowns(self):
-        for lane in range(4):
-            with self.subTest(lane=lane):
+        for account in range(4):
+            with self.subTest(account=account):
                 env = slot_loop_env(self.env)
                 probe = mock.Mock()
                 probe.up.side_effect = [False, True]
@@ -49,7 +49,7 @@ class FetchNetwork(Rig):
                 settle = Settle(env, files, LoopConfig, self.out.append, counts,
                                 net, left)
                 v = vd.Verdict(Result.PAUSED, f"paused: `git fetch -q origin`: {DNS}", kind=vd.NETWORK,
-                               pre_engine=bool(lane % 2))
+                               pre_engine=bool(account % 2))
                 assert settle.apply(v, "x-1", "s1", True) is None
                 assert net.down
                 assert (counts.ran, counts.fails, counts.later) == (0, [], {})

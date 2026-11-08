@@ -46,10 +46,10 @@ class DelegateContract:
             "network", "machine", "transient", "poll", None, True, True)
         assert (answer_status(got), answer_next(got)) == ("stop", "retry")  # type: ignore[attr-defined]
 
-    def test_a_lane_limit_predicts_its_end(self) -> None:
+    def test_a_account_limit_predicts_its_end(self) -> None:
         got = self.make(stopped("rate_limited", "account", "transient", "predicted", 1800000000.0, ref="r")).run(req(), "b", SCHEMA)
         assert got.stop is not None
-        assert (answer_status(got), got.stop.retry.kind, got.stop.retry.at) == ("lane_out", "predicted", 1800000000.0)  # type: ignore[attr-defined]
+        assert (answer_status(got), got.stop.retry.kind, got.stop.retry.at) == ("account_out", "predicted", 1800000000.0)  # type: ignore[attr-defined]
 
     def test_an_owner_stop_says_owner(self) -> None:
         got = self.make(stopped("secrets", "bead", "needs_owner", ref="r")).run(req(), "b", SCHEMA)
@@ -64,4 +64,4 @@ class DelegateContract:
     def test_steps_play_in_order_and_the_last_repeats(self) -> None:
         d = self.make(stopped("busy", "account", "transient", "poll", ref="r"), done(ref="r"))
         statuses = [answer_status(d.run(req(), "b", SCHEMA)) for _ in range(3)]
-        assert statuses == ["lane_out", "done", "done"]  # type: ignore[attr-defined]
+        assert statuses == ["account_out", "done", "done"]  # type: ignore[attr-defined]

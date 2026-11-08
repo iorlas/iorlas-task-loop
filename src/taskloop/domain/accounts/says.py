@@ -5,9 +5,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.domain.lanes import pin
-from taskloop.domain.lanes.denials import command_of
-from taskloop.domain.lanes.policy import Stop
+from taskloop.domain.accounts import pin
+from taskloop.domain.accounts.denials import command_of
+from taskloop.domain.accounts.policy import Stop
 from tlkernel.delegate import REASON_ENGINE_ONLY_UNENFORCED, Denial
 
 
@@ -41,12 +41,12 @@ def _denied(w: Said) -> str:
 
 def _stuck(w: Said) -> str:
     code = f", exit {w.stop.exit_code}" if w.stop.exit_code is not None else ""
-    return f"needs a human: the {w.node} worker stopped ({w.stop.reason}{code}) and a second try on another lane did not help: {w.said}"
+    return f"needs a human: the {w.node} worker stopped ({w.stop.reason}{code}) and a second try on another account did not help: {w.said}"
 
 
 WHY: Final[dict[str, Callable[[Said], str]]] = {
     "PAUSE_NETWORK": lambda w: _paused(w, "network"),
-    "PAUSE_LANE": lambda w: _paused(w, "lane"),
+    "PAUSE_ACCOUNT": lambda w: _paused(w, "account"),
     "PAUSE_KILLED": lambda w: f"failed: stopped (the {w.node} worker was ended by a signal: {w.said})",
     "FAULT_BAD_REQUEST": lambda w: f"failed: infrastructure: {w.stop.reason}: {w.said}{w.fix}",
     "FAULT_DENIED": _denied,

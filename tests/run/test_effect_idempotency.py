@@ -26,7 +26,7 @@ SETTLING = {
     "close done": (fx.CloseBead, oc.make(Kind.DONE, "done")),
     "block on the owner": (fx.BlockBead, oc.make(Kind.ASK_STUCK, "the task is wrong", spec=askspecs.repeated_fault(3, "it fails"))),
     "leave open after a machine fault": (fx.LeaveBead, oc.make(Kind.FAULT_INFRA, "disk full")),
-    "leave open after a pause": (fx.LeaveBead, oc.make(Kind.PAUSE_LANE, "the lane is out")),
+    "leave open after a pause": (fx.LeaveBead, oc.make(Kind.PAUSE_ACCOUNT, "the account is out")),
 }
 NOT_HERE = {
     fx.SaveBranch: "closing_branch: the wip commit of a clean tree is no commit (tests/pipeline/test_closing_branch.py)",

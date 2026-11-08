@@ -17,7 +17,7 @@ from tltestkit.logs import records
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
-from tlkernel import lanepauses as pauses
+from tlkernel import accountpauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.enums import Result
 from tlkernel.kinds import Kind

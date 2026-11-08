@@ -262,7 +262,7 @@ class Stick_(Case):
         return self.adrs().add(Adr(id="", n=0, repo=str(self.repo), text="Rent is weekly.", question="q", answer="a", ask="x-1",
                                    bead="x", key="k", t=NOW, retired_t=NOW if retired else None, retired_by="denis" if retired else ""))
 
-    def test_adr_files_a_bead_for_the_lane_to_land_the_file(self):
+    def test_adr_files_a_bead_for_the_account_to_land_the_file(self):
         assert self.stick("adr", "Rent is weekly.") == Result(ok=True)
         [made] = self.adr_beads()
         assert (made.title, f"- Ask: {self.ask.id}\n" in made.description) == ("ADR: Rent is weekly.", True)

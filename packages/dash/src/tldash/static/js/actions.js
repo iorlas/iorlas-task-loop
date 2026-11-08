@@ -102,7 +102,7 @@ export async function cause(project, bead, run, value, askId = null) {
   return res;
 }
 
-// 👁 Seen: the stuck outline fades and the Floor badge stops counting it until something changes
+// 👁 Seen: the stuck outline fades and the Slots badge stops counting it until something changes
 export async function ack(project, bead, run) {
   const k = `${project}/${bead}`;
   set({ seen: seenPatch(k, { ack: true }) });

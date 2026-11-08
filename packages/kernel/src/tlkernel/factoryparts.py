@@ -14,13 +14,13 @@ from tlkernel.checkpoint import Checkpoint, CursorBody, LandSection, LookSection
 from tlkernel.checks import Durations
 from tlkernel.dbparts import Part, Prune, doc_table
 from tlkernel.docrows import (
+    ACCOUNTS_DOCS,
     BEADCACHE_DOCS,
     CHECKPOINT_SECTIONS,
     DISK_DOCS,
     DURATION_DOCS,
     FLAKE_DOCS,
     INDEX_DOCS,
-    LANES_DOCS,
     LOOK_DOCS,
     LOOP_DOCS,
     QUEUE_DOCS,
@@ -103,11 +103,15 @@ def gate_check_tracks(con: sqlite3.Connection) -> None:
     """gate v1 -> v2: check results name their track; older pass bodies remain foreign."""
 
 
+def account_records(con: sqlite3.Connection) -> None:
+    """Account vocabulary replaces the previous wire fields; older record versions remain foreign."""
+
+
 PIPELINE = Part(
-    name="pipeline", version=6,
+    name="pipeline", version=7,
     tables=("run", "attempt", "step", "effect", "wait", "checkpoint", CHECKPOINT_SECTIONS, "timed", "signal"),
     records=(RunManifest, Checkpoint, CursorBody, PlanSection, WriteSection, LandSection, LookSection, ReviewState, OwnerRequest),
-    steps={1: close_intent, 2: checkpoint_sections, 3: writer_thread, 4: delegate_policy, 5: engine_check_requests},
+    steps={1: close_intent, 2: checkpoint_sections, 3: writer_thread, 4: delegate_policy, 5: engine_check_requests, 6: account_records},
     ddl=f"""
 CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NULL, bead TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT '', owner TEXT, session TEXT, loop TEXT, worktree TEXT, branch TEXT, sha TEXT,
@@ -169,9 +173,9 @@ def add_park(con: sqlite3.Connection) -> None:
 
 
 ASKS = Part(
-    name="asks", version=2, tables=("ask", "ask_ledger", "park"),
+    name="asks", version=3, tables=("ask", "ask_ledger", "park"),
     records=(Ask, LedgerEntry, Park),
-    steps={1: add_park},
+    steps={1: add_park, 2: account_records},
     ddl=f"""
 CREATE TABLE ask (bead TEXT PRIMARY KEY, id TEXT NOT NULL, repo TEXT, status TEXT NOT NULL, t REAL NOT NULL, consumed REAL,
   body TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0);
@@ -212,12 +216,12 @@ LOOP = Part(name="loop", version=2, tables=(LOOP_DOCS,), records=(LoopCommand, R
 LOOK = Part(name="look", version=1, tables=(LOOK_DOCS,), records=(), ddl=doc_table(LOOK_DOCS))
 
 
-def lanes_shared_notes(con: sqlite3.Connection) -> None:
-    """lanes v1 -> v2: the SharedNotes record joined the part; no stored row changes."""
+def accounts_shared_notes(con: sqlite3.Connection) -> None:
+    """accounts v1 -> v2: the SharedNotes record joined the part; no stored row changes."""
 
 
-LANES = Part(name="lanes", version=2, tables=(LANES_DOCS,), records=(StatusSnapshot, StatusTried, SharedNotes),
-             ddl=doc_table(LANES_DOCS), steps={1: lanes_shared_notes})
+ACCOUNTS = Part(name="accounts", version=3, tables=(ACCOUNTS_DOCS,), records=(StatusSnapshot, StatusTried, SharedNotes),
+             ddl=doc_table(ACCOUNTS_DOCS), steps={1: accounts_shared_notes})
 
 RECEIPT = Part(name="receipt", version=1, tables=(RECEIPT_DOCS,), records=(), ddl=doc_table(RECEIPT_DOCS))
 BEADCACHE = Part(name="beadcache", version=1, tables=(BEADCACHE_DOCS,), records=(), ddl=doc_table(BEADCACHE_DOCS))

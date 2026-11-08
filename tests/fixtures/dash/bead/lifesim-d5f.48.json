@@ -1,5 +1,5 @@
 {
- "v": 1,
+ "v": 2,
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-d5f.48",
@@ -13,7 +13,7 @@
   "t": 1793049840.0,
   "epic": "lifesim-d5f",
   "slot": "mac·1",
-  "lane": "claude",
+  "account": "claude",
   "review": null,
   "loops": 2,
   "dots": [
@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 4
  },
- "version": "818c9d88547afede",
+ "version": "974ac2cad45c8086",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Fix save corruption on quit. Part of Save system.",

@@ -36,7 +36,7 @@ OWNERS: dict[str, str] = {
     "signal": "owner",
     "timed": "engine",  # what the engine log's end records timed: tl runs show|slow read these
     "report_doc": "engine",  # the report part's reflect digest state (tl reflect)
-    "lanes_doc": "engine",  # the lanes part's status records (tl lanes, tl usage)
+    "accounts_doc": "engine",  # the accounts part's status records (loop chore, tl usage)
     "work_doc": "engine",  # the work part's decision-record cache (plan refreshes it)
     "release_doc": "engine",  # the release part's pin and last result (tl pin, tl release)
     "checkpoint_section": "engine",

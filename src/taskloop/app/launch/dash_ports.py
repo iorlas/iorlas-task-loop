@@ -146,7 +146,7 @@ def ports(env: Env) -> Ports:
     home = ConfigDir(config_dir(env))
 
     def slot_source(repo: str) -> SlotSource:
-        """What the loops count (origin/main's profile); a profile that does not load shows no lanes, its red row says why."""
+        """What the loops count (origin/main's profile); a profile that does not load shows no accounts, its red row says why."""
         try:
             return wslots_config.slot_source(repo, git, fx=slotfx.FX)
         except (Exception, SystemExit):

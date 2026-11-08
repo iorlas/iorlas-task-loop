@@ -74,7 +74,7 @@ class World:
     asks: Mapping[tuple[str, str], Ask]  # (repo key, bead id) -> its open or parked ask
     run_headers: Sequence[RunHeader] = ()
     leases: Sequence[ResourceLease] = ()
-    status: StatusSnapshot | None = None  # delegate's status as `tl lanes` last filed it
+    status: StatusSnapshot | None = None  # delegate's status as the loop last filed it
     ledger: Sequence[LedgerEntry] = ()  # the ask ledger, oldest row first
     landings: Sequence[Landing] = ()  # runs that landed, from the traces (the learning series' denominator)
     parks: Mapping[str, Park] = field(default_factory=dict)  # bead -> its sealed Park record

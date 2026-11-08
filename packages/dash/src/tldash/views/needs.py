@@ -2,7 +2,7 @@
 
 One row per thing that waits on the owner and has no ask to answer (asks are the Decisions tab): a bead the loop refused or needs
 something of (labels), a blocked bead, a bead the loop will not take again (the queue's `parked` and `capped` skips; the Park record
-gives the time), a run paused for the network, a lane that is out, a slot held, set aside or whose setup failed, a claim nothing runs
+gives the time), a run paused for the network, an account that is out, a slot held, set aside or whose setup failed, a claim nothing runs
 under, a stalled loop and an absent one. A bead appears once, under the first kind that names it.
 
 Not shown, because no record the dashboard may read holds it: the
@@ -17,11 +17,11 @@ from tlkernel.events import Block, EventRec, SlotAside, SlotHold, SlotSetup
 from tlkernel.loop import LoopState
 from tlkernel.needs import NeedRow
 from tlkernel.reconcile import LOOP_ABSENT_S, LOOP_STALL_S, LoopFact, loop_absent
-from tlkernel.snapshots import LaneStatus, NeedInput
+from tlkernel.snapshots import AccountStatus, NeedInput
 
-from tldash.views import floor
+from tldash.views import slots
+from tldash.views.accountcards import state_of
 from tldash.views.board import LOOP_STALE, ask_facts, blockers, is_work, when
-from tldash.views.lanecards import state_of
 from tldash.views.world import ProjectIn, World
 
 WAITS: Final = {  # the labels that put a bead on the owner, and what each asks of him
@@ -107,12 +107,12 @@ def bead_rows(w: World, p: ProjectIn) -> list[NeedRow]:
 def slot_rows(w: World, p: ProjectIn) -> list[NeedRow]:
     out: list[NeedRow] = []
     for b in p.slots:
-        name = floor.slot_name(b)
-        if floor.hold_until(b) > w.now:
+        name = slots.slot_name(b)
+        if slots.hold_until(b) > w.now:
             ev = last_event(p, SlotHold | SlotAside, slot=name)
             out.append(NeedRow(kind="slot_aside" if isinstance(ev, SlotAside) else "slot_held", project=p.id, bead=None,
                                why=f"slot {name}: {b.metadata.get('held_why') or (ev and ev.why) or 'held'}",
-                               since=ev.t if ev else None, until=floor.hold_until(b)))
+                               since=ev.t if ev else None, until=slots.hold_until(b)))
         setup = last_event(p, SlotSetup, slot=name)
         if setup and setup.exit:
             out.append(NeedRow(kind="slot_setup", project=p.id, bead=None,
@@ -133,28 +133,28 @@ def loop_rows(w: World, p: ProjectIn, info: LoopInfo) -> list[NeedRow]:
     return []
 
 
-def out_line(ln: LaneStatus) -> str:
+def out_line(ln: AccountStatus) -> str:
     why = ln.out_reason or ln.reason
-    return f"lane {ln.family or ln.label or ln.id} is out" + (f": {why}" if why else "")
+    return f"account {ln.family or ln.label or ln.id} is out" + (f": {why}" if why else "")
 
 
 def input_line(n: NeedInput) -> str:
     return f"delegate needs: {n.what}" + (f" ({n.why})" if n.why else "")
 
 
-def lane_rows(w: World) -> list[NeedRow]:
-    """A lane that is out (delegate's own reason: network, vendor wall, spend) and what delegate says it needs from the owner."""
+def account_rows(w: World) -> list[NeedRow]:
+    """A account that is out (delegate's own reason: network, vendor wall, spend) and what delegate says it needs from the owner."""
     st = w.status
     if st is None:
         return []
     out = [NeedRow(kind="paused", project="", bead=None, until=ln.out_until, why=out_line(ln))
-           for ln in st.lanes if state_of(ln, w.now - st.at) == "locked"]
+           for ln in st.accounts if state_of(ln, w.now - st.at) == "locked"]
     return out + [NeedRow(kind="paused", project="", bead=None, since=st.at, why=input_line(n)) for n in st.needs_input]
 
 
 def needs_of(w: World, infos: Sequence[LoopInfo]) -> list[NeedRow]:
     """Every row, oldest first; a row with no recorded time goes last."""
-    rows = lane_rows(w)
+    rows = account_rows(w)
     for p in w.projects:
         info = next(i for i in infos if i.project == p.id)
         rows += [*bead_rows(w, p), *slot_rows(w, p), *loop_rows(w, p, info)]

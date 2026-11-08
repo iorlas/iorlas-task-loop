@@ -51,12 +51,12 @@ BACKOFF: Final[dict[str, Backoff | None]] = {
     Reason.LOCK: Backoff(30, 1800),
     Reason.KILLED: Backoff(),
     Reason.WORKER_SURVIVED: None,
-    Reason.NO_LANE: None, Reason.LOOP_EXCLUDED: None, Reason.SAME_FAMILY: None, Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None,
+    Reason.NO_ACCOUNT: None, Reason.LOOP_EXCLUDED: None, Reason.SAME_FAMILY: None, Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None,
     Reason.TRANSIENT_INFRASTRUCTURE: None, Reason.CRASH: None, Reason.NO_ANSWER: None, Reason.ENGINE_ONLY_UNENFORCED: None,
     Reason.OVERRUN: None, Reason.SECRETS: None, Reason.CREDIT_EXHAUSTED: None, Reason.LOGGED_OUT: None,
     Reason.BAD_REQUEST: None, Reason.CALLER: None, Reason.SETUP: None, Reason.SETUP_OWN_TREE: None,
     Reason.PROFILE_AHEAD: None, Reason.CONTRACT_VIOLATION: None,
-    Reason.PAUSE_LANE: None, Reason.PAUSE_NETWORK: None, Reason.PAUSE_KILLED: None, Reason.PAUSE_MOVED: None,
+    Reason.PAUSE_ACCOUNT: None, Reason.PAUSE_NETWORK: None, Reason.PAUSE_KILLED: None, Reason.PAUSE_MOVED: None,
     Reason.FAULT_INFRA: None, Reason.FAULT_CRASHED: None, Reason.FAULT_STALE_BASE: None, Reason.FAULT_SLOT: None,
     Reason.FAULT_DENIED: None, Reason.FAULT_PLAN: None, Reason.FAULT_LAND: None, Reason.FAULT_ENGINE: None,
     Reason.FAULT_BAD_REQUEST: None, Reason.FAULT_CONTRACT_SKEW: None, Reason.FAULT_BASE_RED: None,
@@ -67,7 +67,7 @@ BACKOFF: Final[dict[str, Backoff | None]] = {
 
 # Released engine policy wins even when a delegate supplies transient retry hints.
 OVERRIDES: Final[dict[str, tuple[Permanence, str] | None]] = {
-    Reason.NO_LANE: ("needs_owner", "The owner must restore an available lane; a predicted time cannot repair it."),
+    Reason.NO_ACCOUNT: ("needs_owner", "The owner must restore an available account; a predicted time cannot repair it."),
     Reason.CRASH: ("needs_owner", "A delegate crash needs owner investigation after in-process retries are exhausted."),
     Reason.ONLY_FAMILY_UNREADY: None, Reason.LOOP_EXCLUDED: None, Reason.SAME_FAMILY: None, Reason.BUSY: None, Reason.TIMEOUT: None,
     Reason.NETWORK: None,
@@ -77,7 +77,7 @@ OVERRIDES: Final[dict[str, tuple[Permanence, str] | None]] = {
     Reason.KILLED: None, Reason.WORKER_SURVIVED: None, Reason.ENGINE_ONLY_UNENFORCED: None, Reason.OVERRUN: None, Reason.SECRETS: None,
     Reason.CREDIT_EXHAUSTED: None, Reason.LOGGED_OUT: None, Reason.BAD_REQUEST: None, Reason.CALLER: None,
     Reason.SETUP: None, Reason.SETUP_OWN_TREE: None, Reason.PROFILE_AHEAD: None, Reason.CONTRACT_VIOLATION: None,
-    Reason.PAUSE_LANE: None, Reason.PAUSE_NETWORK: None, Reason.PAUSE_KILLED: None, Reason.PAUSE_MOVED: None,
+    Reason.PAUSE_ACCOUNT: None, Reason.PAUSE_NETWORK: None, Reason.PAUSE_KILLED: None, Reason.PAUSE_MOVED: None,
     Reason.FAULT_INFRA: None, Reason.FAULT_CRASHED: None, Reason.FAULT_STALE_BASE: None, Reason.FAULT_SLOT: None,
     Reason.FAULT_DENIED: None, Reason.FAULT_PLAN: None, Reason.FAULT_LAND: None, Reason.FAULT_ENGINE: None,
     Reason.FAULT_BAD_REQUEST: None, Reason.FAULT_CONTRACT_SKEW: None, Reason.FAULT_BASE_RED: None,
@@ -88,8 +88,8 @@ OVERRIDES: Final[dict[str, tuple[Permanence, str] | None]] = {
 
 
 MACHINE_FIXED: Final[frozenset[Reason]] = frozenset({
-    Reason.NO_LANE,  # The owner restores an available lane.
-    Reason.LOGGED_OUT,  # The owner renews the lane's login.
+    Reason.NO_ACCOUNT,  # The owner restores an available account.
+    Reason.LOGGED_OUT,  # The owner renews the account's login.
     Reason.CREDIT_EXHAUSTED,  # The owner replenishes the account's credit.
     Reason.SECRETS,  # The owner supplies the machine's missing credentials.
     Reason.SETUP,  # The owner repairs the delegate installation or configuration.
@@ -108,7 +108,7 @@ TABLE: Final[dict[tuple[Producer, str], PauseRule]] = {
     ("engine", Reason.PROFILE_AHEAD): PauseRule("needs_owner"),
     ("engine", Reason.SETUP_OWN_TREE): PauseRule("needs_owner"),
     ("engine", Reason.CONTRACT_VIOLATION): PauseRule("needs_owner"),
-    ("engine", Reason.PAUSE_LANE): PauseRule("transient", 60, 3600, 3),
+    ("engine", Reason.PAUSE_ACCOUNT): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.PAUSE_NETWORK): PauseRule("transient", 30, 1800),
     ("engine", Reason.PAUSE_KILLED): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.PAUSE_MOVED): PauseRule("transient", 60, 3600, 3),

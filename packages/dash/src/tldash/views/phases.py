@@ -35,7 +35,7 @@ CODE_END: Final[dict[WhyCode, PassEnd]] = {
     WhyCode.OWNER_DECISION: "asked",
     WhyCode.OVER_BUDGET: "asked",
     WhyCode.TICKET: "asked",
-    WhyCode.LANE_OUT: "lane_out",
+    WhyCode.ACCOUNT_OUT: "account_out",
     WhyCode.PAUSED: "parked",
     WhyCode.NETWORK: "parked",
     WhyCode.STOPPED_BY_COORDINATOR: "parked",
@@ -51,7 +51,7 @@ CAUSE_END: Final[dict[str, PassEnd]] = {
     Cause.PUSH_RACE: "test_failed",
     Cause.VERIFY_WRONG: "sent_back",
     Cause.PLAN_SENT_BACK: "replan",
-    Cause.LANE_OUT: "", Cause.LANE_WAIT: "", Cause.INVALID_OUTPUT: "",
+    Cause.ACCOUNT_OUT: "", Cause.ACCOUNT_WAIT: "", Cause.INVALID_OUTPUT: "",
 }
 END_TEXT: Final[dict[PassEnd, str]] = {
     "": "",
@@ -59,7 +59,7 @@ END_TEXT: Final[dict[PassEnd, str]] = {
     "replan": "re-plan",
     "asked": "asked, waiting for an answer",
     "parked": "parked",
-    "lane_out": "lane ran out, parked",
+    "account_out": "account ran out, parked",
     "sent_back": "sent back",
     "stuck": "stuck",
     "exited": "worker exited",

@@ -1,4 +1,4 @@
-"""Scripted selftest lane, isolated repository scenario, and result reporting."""
+"""Scripted selftest account, isolated repository scenario, and result reporting."""
 import json
 import os
 import shlex
@@ -39,7 +39,7 @@ REVIEW: Final[dict[str, Any]] = {
 }
 
 
-def lane(cmd: list[str], contract_no: int, **kw: object) -> Completed:
+def account(cmd: list[str], contract_no: int, **kw: object) -> Completed:
     """Fake route.py run: one contract 4 answer on stdout."""
     schema = json.loads(Path(cmd[cmd.index("--schema") + 1]).read_text(encoding="utf-8"))
     props, cwd = schema.get("properties", {}), cmd[cmd.index("--cwd") + 1]
@@ -54,8 +54,8 @@ def lane(cmd: list[str], contract_no: int, **kw: object) -> Completed:
         data, node = dict(REVIEW, criteria=[{"item": i, "status": "met", "evidence": "the checks pass"} for i in ids]), "review"
     tokens = {"in": 1, "cached": 0, "out": 1}
     j: dict[str, Any] = {"contract": contract_no, "data": data, "text": "ok", "say": "", "ref": "ref-" + node,
-         "lane": "L", "model": "m", "effort": "e",
-         "family": "openai" if node == "write" else "claude", "flag": None, "fallback": False, "first_lane": "L", "rung": 0,
+         "account": "L", "model": "m", "effort": "e",
+         "family": "openai" if node == "write" else "claude", "flag": None, "fallback": False, "first_account": "L", "rung": 0,
          "tokens": tokens, "cost": 0.0, "secs": 1, "run_id": "selftest", "call_id": "selftest", "denied": [], "git_violation": [],
          "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1, "ref": "ref-" + node}, "stop": None,
          "resumed": False}
@@ -63,7 +63,7 @@ def lane(cmd: list[str], contract_no: int, **kw: object) -> Completed:
 
 
 class Runner(Seam):
-    """The engine's process seam for the fake lane."""
+    """The engine's process seam for the fake account."""
 
     def __init__(self, contract_no: int) -> None:
         super().__init__()
@@ -72,7 +72,7 @@ class Runner(Seam):
     def __call__(self, cmd: list[str], **kw: object) -> Completed:
         self.stop = {}
         self.obs = {}
-        return lane(cmd, self.contract_no, **kw)
+        return account(cmd, self.contract_no, **kw)
 
 
 def git_repo(home: Path, wt: Path, git: Git) -> str | None:

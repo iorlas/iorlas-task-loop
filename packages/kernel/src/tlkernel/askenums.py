@@ -22,7 +22,7 @@ class AskClass(StrEnum):
     TOO_BIG = "too_big"
     PR_OPEN = "pr_open"
     PR_CLOSED = "pr_closed"
-    LANE_FAILURE = "lane_failure"
+    ACCOUNT_FAILURE = "account_failure"
     BAD_REQUEST = "bad_request"
     SANDBOX_DENIAL = "sandbox_denial"
     STALE_BASE = "stale_base"

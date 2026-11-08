@@ -164,7 +164,7 @@ class Outcome(EngineTest):
         r = self.eng.result()
         assert (r.outcome, r.asked) == ("parked", True)
 
-    def test_a_lane_out_for_long_is_paused_with_the_time_the_lane_is_back(self):
+    def test_a_account_out_for_long_is_paused_with_the_time_the_account_is_back(self):
         due = time.time() + 3 * 3600
         self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out")]})
         r = self.eng.result()
@@ -199,7 +199,8 @@ class Outcome(EngineTest):
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
         with contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())  # pyrefly: ignore[missing-attribute]
+            # pyrefly: ignore[missing-attribute]
+            rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
         last = json.loads(out.getvalue().strip().splitlines()[-1])
         return rc, json.loads(Path(outcome_file).read_text()), last
 
@@ -218,7 +219,7 @@ class Outcome(EngineTest):
         made.return_value.retry_after = due
         made.return_value.run.return_value = 2
         made.return_value.result.return_value = RunReport(
-            outcome=Result.PAUSED, bead=BeadId("t-1"), why="paused: no lane for write until 09:36"
+            outcome=Result.PAUSED, bead=BeadId("t-1"), why="paused: no account for write until 09:36"
         )
         a = mock.Mock(
             id="t-1",
@@ -240,11 +241,12 @@ class Outcome(EngineTest):
             redirect_stdout(out),
             mock.patch.object(signal, "signal"),
         ):  # pyrefly: ignore[missing-attribute]
-            entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())  # pyrefly: ignore[missing-attribute]
+            # pyrefly: ignore[missing-attribute]
+            entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
         lines = out.getvalue().strip().splitlines()
         assert json.loads(lines[-1])["outcome"] == "paused"  # the loop reads the last line: still the outcome
         assert any(
-            "PAUSED t-1: the lane is back at {}; rerun then: tl run-task t-1".format(
+            "PAUSED t-1: the account is back at {}; rerun then: tl run-task t-1".format(
                 time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due))
             )
             in ln
@@ -272,13 +274,13 @@ class DelegateLauncher(EngineTest):
         assert all(r.reviewer_other_family for r in s.requests if r.role == "reviewer")
         assert not any("same family" in str(c) for c in self.bd_calls if c[:2] == ("comments", "add"))
 
-    # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered lane_out for an hour and the bead paused; delegate never
-    # switches lanes on a resume, but a fresh call gets the role's next rung (Sonnet on the claude lane) at once
+    # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered account_out for an hour and the bead paused; delegate never
+    # switches accounts on a resume, but a fresh call gets the role's next rung (Sonnet on the claude account) at once
     OUT_LONG = stop("rate_limited", at=time.time() + 3600, say="cannot continue t now")
-    # delegate says the writer fell back off its first lane (to xai, so the reviewer, claude, is another family)
+    # delegate says the writer fell back off its first account (to xai, so the reviewer, claude, is another family)
     FRESH = full(WRITE, "w2", fallback=True, first_account="OPENAI_SUBSCRIPTION", family="xai")
 
-    def test_a_resumed_write_whose_lane_is_out_pauses(self):
+    def test_a_resumed_write_whose_account_is_out_pauses(self):
         rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L], "review": [review(unmet=["more"])]})
         assert rc == 2
         assert [r.thread for r in script.requests if r.role == "worker"] == ["writer", "writer"]
@@ -299,7 +301,7 @@ class DelegateLauncher(EngineTest):
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", "ref-write"]
         st.assert_not_called()
 
-    # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
+    # contract 4: an answer that picked an account says whether it is a fallback (and from which first account, when it can)
     SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_account="OPENAI_SUBSCRIPTION")
     CODEX_FIRST: ClassVar[Any] = dict(BACK, rung=0, fallback=False, fallback_reason=None)
     no_checks: ClassVar[Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
@@ -313,28 +315,32 @@ class DelegateLauncher(EngineTest):
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "w3"]
         st.assert_not_called()
 
-    def test_lanes_read_the_status_lanes(self):
+    def test_accounts_read_the_status_accounts(self):
         raw = {"OPENAI_SUBSCRIPTION": {"out": True, "reason": "limit", "out_until": 90.0}, "X": {"out": False}, "Y": {}}
         with mock.patch.object(lroute, "status_json", return_value={"v": 1, "accounts": raw}):
-            want = [lroute.Lane("OPENAI_SUBSCRIPTION", False, "limit", 90.0), lroute.Lane("X", True), lroute.Lane("Y", None)]
-            assert lroute.lanes() == want
-            assert lroute.lane("X") == lroute.Lane("X", True)
-            assert lroute.lane("NOPE") is None
+            want = [
+                lroute.AccountAvailability("OPENAI_SUBSCRIPTION", False, "limit", 90.0),
+                lroute.AccountAvailability("X", True),
+                lroute.AccountAvailability("Y", None),
+            ]
+            assert lroute.account_availability() == want
+            assert lroute.account("X") == lroute.AccountAvailability("X", True)
+            assert lroute.account("NOPE") is None
         with mock.patch.object(lroute, "status_json", return_value={}):
-            assert lroute.lanes() == []
+            assert lroute.account_availability() == []
 
-    # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
+    # lifesim-5ar.6 2026-10-21: the resumed writer's account_out came with no retry_after, so next was owner, and the bead
     # blocked "needs a human" after 114 min of work
     OUT_OWNER = stop("rate_limited", say="cannot say when OPENAI_SUBSCRIPTION frees")
 
-    def test_a_resumed_write_whose_lane_has_no_time_pauses(self):
+    def test_a_resumed_write_whose_account_has_no_time_pauses(self):
         rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER], "review": [review(unmet=["more"])]})
         assert rc == 2
         assert [r.thread for r in script.requests if r.role == "worker"] == ["writer", "writer"]
         assert self.blocked == []
         assert "needs a human" not in self.eng.log_path.read_text()
 
-    def test_a_fresh_write_whose_lane_has_no_time_pauses(self):
+    def test_a_fresh_write_whose_account_has_no_time_pauses(self):
         rc, script = self.run_engine({"plan": [PLAN], "write": [self.OUT_OWNER]})
         assert rc == 2
         assert [r.thread for r in script.requests if r.role == "worker"] == ["writer"]
@@ -367,8 +373,8 @@ class DelegateLauncher(EngineTest):
         assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
         assert "claude auth login" in self.eng.log_path.read_text()
 
-    # contract 4: logged_out is lane / needs_owner: the lane waits for its owner, the step never retries it and never asks
-    def test_a_logged_out_lane_pauses_with_the_login_fix_and_no_ask(self):
+    # contract 4: logged_out is account / needs_owner: the account waits for its owner, the step never retries it and never asks
+    def test_a_logged_out_account_pauses_with_the_login_fix_and_no_ask(self):
         out = stop("logged_out", family="claude", say="claude is not logged in", fix=self.LOGIN_CLAUDE)
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE]})
         assert rc == 2
@@ -376,7 +382,7 @@ class DelegateLauncher(EngineTest):
         assert (self.blocked, self.ask()) == ([], None)
         assert any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c) for c in self.bd_calls)
 
-    def test_a_resumed_write_on_a_logged_out_lane_pauses_without_an_ask(self):
+    def test_a_resumed_write_on_a_logged_out_account_pauses_without_an_ask(self):
         out = stop("logged_out", "ref-write", family="openai", say="codex login", fix="run `codex login`")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, out], "review": [review(unmet=["more"])]})
         assert rc == 2
@@ -384,18 +390,18 @@ class DelegateLauncher(EngineTest):
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write"]
         assert any(c[:3] == ("comments", "add", "t-1") and any("run `codex login`" in x for x in c) for c in self.bd_calls)
 
-    def test_every_lane_out_with_no_time_pauses_a_resumed_write_without_an_ask(self):
-        none = stop("no_account", say="every lane is out")
+    def test_every_account_out_with_no_time_pauses_a_resumed_write_without_an_ask(self):
+        none = stop("no_account", say="every account is out")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, none], "review": [review(unmet=["more"])]})
         assert rc == 2
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write"]
         assert self.blocked == []
-        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write" in x for x in c) for c in self.bd_calls)
+        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no account for write" in x for x in c) for c in self.bd_calls)
         assert "needs a human" not in self.eng.log_path.read_text()
 
-    def test_no_lane_needs_owner_even_with_a_predicted_time(self):
+    def test_no_account_needs_owner_even_with_a_predicted_time(self):
         due = time.time() + 3 * 3600
-        none = stop("no_account", at=due, say="every lane is out")
+        none = stop("no_account", at=due, say="every account is out")
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE, none], "review": [review(unmet=["more"])]})
         assert rc == 2
         assert self.blocked == []
@@ -417,20 +423,20 @@ class DelegateLauncher(EngineTest):
         eng.closer.close(oc.make(Kind.FAULT_ENGINE))
         assert "stopped before a reason was recorded" in self.said()  # a fault: the bead stays open, the comment says why
 
-    def test_no_lane_pauses_the_bead_open(self):
+    def test_no_account_pauses_the_bead_open(self):
         none = stop("no_account", say="no adequate model")
         rc, _ = self.run_engine({"plan": [none]})
         assert rc == 2
         assert self.blocked == []  # a machine-wide wait is not the bead's fault: it stays open
-        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for plan" in x for x in c) for c in self.bd_calls)
+        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no account for plan" in x for x in c) for c in self.bd_calls)
 
-    def test_a_lane_out_for_long_pauses_at_once_and_frees_the_slot(self):
+    def test_a_account_out_for_long_pauses_at_once_and_frees_the_slot(self):
         later = stop("rate_limited", at=time.time() + 3 * 3600, say="codex out until 21:00")
         rc, s = self.run_engine({"plan": [PLAN], "write": [later]})
         assert rc == 2
         assert [c[0] for c in s.calls].count("worker") == 1  # no hour of sleeping in the slot
         assert self.blocked == []
-        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write until" in x for x in c) for c in self.bd_calls)
+        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no account for write until" in x for x in c) for c in self.bd_calls)
 
     def test_a_bead_branch_left_in_another_clean_slot_is_resumed_here(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
@@ -479,7 +485,7 @@ class DelegateLauncher(EngineTest):
 
 
 ENGINE_LINE = re.compile(
-    r"^(?:- [^:\n]*: )?(?:(?:Lane|Verify|Resume|Look|Land|Plan|Review|Reflect|Ask|Evidence|Follow-up|Parked) \(engine|Blocked:"
+    r"^(?:- [^:\n]*: )?(?:(?:Account|Verify|Resume|Look|Land|Plan|Review|Reflect|Ask|Evidence|Follow-up|Parked) \(engine|Blocked:"
     r"|Engine (?:paused|failed):)"
 )
 

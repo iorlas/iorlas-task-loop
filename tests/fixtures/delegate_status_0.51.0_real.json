@@ -124,7 +124,7 @@
     "model": "grok-4.7 medium",
     "state": "off",
     "emoji": "\u26d4",
-    "reason": "unavailable (no sandbox): opencode lanes need macOS sandbox-exec",
+    "reason": "unavailable (no sandbox): opencode accounts need macOS sandbox-exec",
     "detail": null,
     "unlock": {
      "locked": false,

@@ -110,11 +110,11 @@ class VisualWork(StagesTest):
     def roles(self, s):
         return [c[0] for c in s.calls]
 
-    def test_a_look_judge_with_no_lane_leaves_the_pictures_unjudged_and_the_bead_unparked(self):
-        late = te.stop("no_account", at=time.time() + 3600, family="xai", account="GROK", say="no lane")
+    def test_a_look_judge_with_no_account_leaves_the_pictures_unjudged_and_the_bead_unparked(self):
+        late = te.stop("no_account", at=time.time() + 3600, family="xai", account="GROK", say="no account")
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [late], "review": [CLEAN]})
         assert rc == 0, self.blocked
-        assert "the look judge had no lane" in self.eng.log_path.read_text()
+        assert "the look judge had no account" in self.eng.log_path.read_text()
         assert "look judge, round 1" in self.eng.look.unjudged
         assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer", "reviewer"]  # the judge's one try, then the review
 
@@ -129,7 +129,7 @@ class VisualWork(StagesTest):
             j_extra={"look": [{"flag": "same_family"}]},
         )
         assert rc == 0, self.blocked
-        assert "no lane for the look judge" in " ".join(self.eng.look.notes)
+        assert "no account for the look judge" in " ".join(self.eng.look.notes)
 
     def test_the_writer_is_asked_for_shot_requests_not_screenshots(self):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
@@ -707,7 +707,7 @@ class Claims(StagesTest):
 
     REFLECTION: ClassVar[Any] = {
         "went_well": ["the plan was right at once"],
-        "wasted": ["2 min waiting for a lane"],
+        "wasted": ["2 min waiting for an account"],
         "change": ["engine: none"],
         "went_badly": [
             {
@@ -755,7 +755,7 @@ class Claims(StagesTest):
         )
         assert e.reflector.reflect_run("failed", "failed: x") is None  # a run that only planned
         e.sessions = [{"node": "plan"}, {"node": "write"}]
-        assert e.reflector.reflect_run("blocked", "paused: no lane for write until 04:00") is None
+        assert e.reflector.reflect_run("blocked", "paused: no account for write until 04:00") is None
         e.stop_pending = True
         assert e.reflector.reflect_run("landed", "") is None  # a stop is on its way
         e.stop_pending = False

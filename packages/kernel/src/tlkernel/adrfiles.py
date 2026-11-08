@@ -1,4 +1,4 @@
-"""An ADR as the file `docs/adr/NNNN-title.md` of the repo. The file is the record: a lane writes it and lands it like any change (the
+"""An ADR as the file `docs/adr/NNNN-title.md` of the repo. The file is the record: an account writes it and lands it like any change (the
 `tl adr` outcome files a bead whose body is `template`; tl itself never writes into a checkout). `parse` reads one file into the
 `Adr` the plan stage and the dashboard use; the number is the file name's, the rest is the `- Key: value` lines and the sections."""
 from collections.abc import Mapping

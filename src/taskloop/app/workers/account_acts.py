@@ -1,4 +1,4 @@
-"""What the engine does about a stopped call: `lanes.policy.decide` says what, this does it. Retries set up the next call of
+"""What the engine does about a stopped call: `accounts.policy.decide` says what, this does it. Retries set up the next call of
 the step; a pause or a fault ends the step as a `Blocked` (built by the host's ops). Every decision is a `RetryDecision` record with the
 timeout and the exit it was made on. The lander's git push network wait lives here too."""
 
@@ -17,10 +17,10 @@ from taskloop.app.workers import writer_pin
 from taskloop.app.workers.call import Call
 from taskloop.app.workers.delegation import Delegation
 from taskloop.app.workers.worker_request import Labelled
-from taskloop.domain.lanes import pin
-from taskloop.domain.lanes import policy as lp
-from taskloop.domain.lanes.notes import NOTES
-from taskloop.domain.lanes.roles import READ_ONLY_NODES
+from taskloop.domain.accounts import pin
+from taskloop.domain.accounts import policy as lp
+from taskloop.domain.accounts.notes import NOTES
+from taskloop.domain.accounts.roles import READ_ONLY_NODES
 from taskloop.stores.runlog import RunLog
 
 ASK_KINDS: Final = ("ASK_STUCK",)
@@ -31,11 +31,11 @@ VERBS: Final = {
 }
 
 
-class LaneClock(Protocol):
+class AccountClock(Protocol):
     def now(self) -> float: ...
 
 
-class LaneSteps(Protocol):
+class AccountSteps(Protocol):
     @property
     def id(self) -> str: ...
     def begin(self, step: str, text: str, **meta: object) -> object: ...
@@ -43,13 +43,13 @@ class LaneSteps(Protocol):
     def outcome(self, outcome: str, detail: str = "") -> object: ...
 
 
-class LaneWaits(Protocol):
+class AccountWaits(Protocol):
     def budget_check(self) -> None: ...
     def start(self, what: WaitWhat) -> str: ...
     def add(self, secs: float, what: WaitWhat, wid: str) -> None: ...
 
 
-class LaneHost(Protocol):
+class AccountHost(Protocol):
     retry_after: float
     pause_reason: str
     pause_producer: Producer
@@ -58,33 +58,33 @@ class LaneHost(Protocol):
     @property
     def delegation(self) -> Delegation: ...
     @property
-    def waits(self) -> LaneWaits: ...
+    def waits(self) -> AccountWaits: ...
     @property
-    def steps(self) -> LaneSteps: ...
+    def steps(self) -> AccountSteps: ...
     @property
     def budget(self) -> Labelled: ...
     @property
     def log(self) -> RunLog: ...
     @property
-    def clock(self) -> LaneClock: ...
+    def clock(self) -> AccountClock: ...
     def halt_point(self, when: bool = True, wait: float = 0) -> None: ...
 
 
-class LaneOps(Protocol):
+class AccountOps(Protocol):
     def blocked(self, why: str, kind: str, stop: object = None) -> BaseException: ...
     def stop_why(self, node: str, kind: str, stop: lp.Stop, said: str, until: float, crashes: int,
                  denied: Sequence[Denial], *, now: float) -> str: ...
 
 
-class LaneCall(Protocol):
+class AccountCall(Protocol):
     @property
-    def ops(self) -> LaneOps: ...
+    def ops(self) -> AccountOps: ...
     def charge(self, c: Call, name: str) -> None: ...
     def again(self, c: Call, note: str = "") -> None: ...
 
 
-class LaneActs:
-    def __init__(self, host: LaneHost, call: LaneCall) -> None:
+class AccountActs:
+    def __init__(self, host: AccountHost, call: AccountCall) -> None:
         self.e, self.wc = host, call
 
     # -- the network gate
@@ -130,25 +130,26 @@ class LaneActs:
                 reason=stop.reason,
                 timeout_s=c.limit_s,
                 exit=stop.exit_code,
-                lane=stop.lane,
+                account=stop.account,
                 evidence=f"{stop.scope} {stop.permanence}",
             )
         )
 
     def act(self, c: Any, res: DelegateResult, stop: lp.Stop, a: Any) -> None:
-        """Do what lane_policy.decide said about a stopped call. A Yield or Fail ends the step (Blocked); the rest set up the next call."""
+        """Do what account_policy.decide said about a stopped call. A Yield or Fail ends the step (Blocked); the rest set up the next
+        call."""
         self.record(c, stop, a)
         step = c.step or c.node
         if isinstance(a, lp.NewThread):
             assert a.note == "apply_patch"
             self.e.steps.move(
-                step, "denied_retry", "%s: a new thread" % (stop.reason or "the lane is out")
+                step, "denied_retry", "%s: a new thread" % (stop.reason or "the account is out")
             )
             self.wc.charge(c, a.charges)
             return self.wc.again(c, note=NOTES.get(a.note, ""))
         if isinstance(a, lp.Reroute):
             self.e.log.note("{}: {} stopped the call ({}); routing it again".format(c.node, a.exclude or "the pick", stop.reason))
-            self.e.steps.move(step, "lane_out", "%s: routed again" % (stop.reason or "the lane stopped"))
+            self.e.steps.move(step, "account_out", "%s: routed again" % (stop.reason or "the account stopped"))
             self.wc.charge(c, a.charges)
             return self.wc.again(c)
         return self.end(c, res, stop, a)
@@ -158,7 +159,7 @@ class LaneActs:
         return c.node in READ_ONLY_NODES and res.flag == "same_family"
 
     def refuse_same_family(self, c: Any, res: DelegateResult) -> None:
-        """Pause the step until the other family has a lane: the answer is dropped (a resume must not take it back)."""
+        """Pause the step until the other family has an account: the answer is dropped (a resume must not take it back)."""
         e = self.e
         if c.state is not None:
             c.state.consumed()
@@ -166,10 +167,10 @@ class LaneActs:
         e.pause_reason = "same_family"
         e.pause_producer = "engine"
         e.pause_permanence = None
-        why = f"paused: no lane of another family than the writer's for the {c.node} step; it runs when one is free"
+        why = f"paused: no account of another family than the writer's for the {c.node} step; it runs when one is free"
         e.steps.outcome("paused", "same family")
-        e.steps.move("pause", "paused", f"lane for {c.node}: only the writer's own family answered")
-        raise self.wc.ops.blocked(why, "PAUSE_LANE")
+        e.steps.move("pause", "paused", f"account for {c.node}: only the writer's own family answered")
+        raise self.wc.ops.blocked(why, "PAUSE_ACCOUNT")
 
     def end(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.Yield | lp.Fail) -> None:
         """An exhausted invalid review is unavailable; other stops end the step with their Blocked outcome."""
@@ -194,7 +195,7 @@ class LaneActs:
                 ),
             )
         pinned = writer_pin.prefer(e.budget.labels, c.role)
-        if isinstance(a, lp.Yield) and pinned and stop.reason in pin.STOP_REASONS:  # the pin found no ready lane: say it
+        if isinstance(a, lp.Yield) and pinned and stop.reason in pin.STOP_REASONS:  # the pin found no ready account: say it
             raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix, stop.fix), a.kind, stop)
         why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, 1, res.denied, now=e.clock.now())
         raise ops.blocked(why, a.kind, stop)

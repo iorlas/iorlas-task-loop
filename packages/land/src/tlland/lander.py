@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Protocol
 
 from tlkernel import askspecs, trustroots
+from tlkernel.accountliveness import LIVENESS
 from tlkernel.bead import Bead
-from tlkernel.lanesliveness import LIVENESS
 from tlkernel.netretry import NET_WAIT_CAP_S
 
 from tlland import gate

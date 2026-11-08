@@ -8,7 +8,7 @@ from support.narrow_hosts import Stopped
 from support.narrow_land import table_kit
 
 from taskloop.adapters.deadline import deadline
-from tlkernel.lanesliveness import LIVENESS, LivenessCaps
+from tlkernel.accountliveness import LIVENESS, LivenessCaps
 from tlland.gate import Problem, ProblemKind
 from tlland.host import Placing
 from tltestkit.case import Case
@@ -53,6 +53,6 @@ class Liveness(Case):
                 mock.patch.object(kit.lander.gate, "run", side_effect=lambda: timer.wait(0.5)), \
                 pytest.raises(Stopped) as stopped:
             kit.lander.land()
-        assert stopped.value.kind == "PAUSE_LANE"
+        assert stopped.value.kind == "PAUSE_ACCOUNT"
         assert "deadline" in stopped.value.why
         assert kit.events[-1] == "exit"

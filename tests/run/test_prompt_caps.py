@@ -15,8 +15,8 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.app.run import engine
-from taskloop.domain.lanes.roles import ROLES
-from tlkernel import lanecaps as caps
+from taskloop.domain.accounts.roles import ROLES
+from tlkernel import accountcaps as caps
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind, Task, fault_of

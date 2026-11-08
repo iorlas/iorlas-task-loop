@@ -114,7 +114,7 @@ SlotState = Literal["free", "claimed", "running", "held", "setup", "dead", "reti
 
 @final
 class SlotView(Rec):
-    """One slot as every reader shows it (dash lane, `tl status` line, doctor row); the state is computed from `now`, not a raw mark."""
+    """One slot as every reader shows it (dash account, `tl status` line, doctor row); the state is computed from `now`, not a raw mark."""
 
     id: str
     state: SlotState

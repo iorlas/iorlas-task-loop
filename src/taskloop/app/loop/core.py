@@ -142,7 +142,7 @@ class Core:
 
 
 def prune_logs(runs: Path, own: Path, kept: int) -> None:
-    """Keep the newest `kept` loop logs, `own` among them. Lanes start together and prune the same folder, so a log can vanish between
+    """Keep the newest `kept` loop logs, `own` among them. Accounts start together and prune the same folder, so a log can vanish between
     the listing and its stat (or be a dead link): such a file counts as gone, never as a crash of the loop that is starting."""
     stamped: list[tuple[float, Path]] = []
     for f in runs.glob("loop-*.log"):

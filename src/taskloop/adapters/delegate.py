@@ -19,7 +19,7 @@ from taskloop.adapters import delegate_wire
 from taskloop.adapters.runner import ApiRunner
 from tlkernel.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope, WorkerStarted
 from tlkernel.delegate_status import snapshot_of
-from tlkernel.delegateport import Account, Answer, Lane, Refusal, Resolved, Seam, Stopped
+from tlkernel.delegateport import Account, AccountAvailability, Answer, Refusal, Resolved, Seam, Stopped
 from tlkernel.snapshots import StatusSnapshot
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
@@ -57,29 +57,29 @@ def status_snapshot(claude_usage: object = None) -> StatusSnapshot:
     return snapshot_of(status)
 
 
-def lanes() -> list[Lane]:
-    """Every lane delegate knows, in its order. [] when the status cannot be read."""
+def account_availability() -> list[AccountAvailability]:
+    """Every account delegate knows, in its order. [] when the status cannot be read."""
     raw = status_json().get("accounts")
-    out: list[Lane] = []
+    out: list[AccountAvailability] = []
     for name, row in raw.items() if isinstance(raw, dict) else []:
         v = row if isinstance(row, dict) else {}
         usable = None if v.get("out") is None else not v["out"]
-        out.append(Lane(str(name), usable, str(v.get("reason") or ""), float(v.get("out_until") or 0.0)))
+        out.append(AccountAvailability(str(name), usable, str(v.get("reason") or ""), float(v.get("out_until") or 0.0)))
     return out
 
 
-def lane(name: str) -> Lane | None:
-    """The lane `name`, or None when delegate has no such lane here."""
-    return next((x for x in lanes() if x.name == name), None)
+def account(name: str) -> AccountAvailability | None:
+    """The account `name`, or None when delegate has no such account here."""
+    return next((x for x in account_availability() if x.name == name), None)
 
 
 def accounts() -> list[Account]:
-    """Every lane with its state (enabled, ready, the fix). Raises what delegate raises when it has no config dir."""
+    """Every account with its state (enabled, ready, the fix). Raises what delegate raises when it has no config dir."""
     return [Account(a.name, a.enabled, a.ready, a.fix) for a in api.accounts()]
 
 
-def set_account(lane: str, enabled: bool) -> None:
-    api.set_account(lane, enabled)
+def set_account(account: str, enabled: bool) -> None:
+    api.set_account(account, enabled)
 
 
 class RouteProbe:
@@ -222,8 +222,8 @@ class DelegateRoute:
     def probe(self, hosts: tuple[str, ...] = ()) -> RouteProbe:
         return RouteProbe(hosts)
 
-    def lane(self, name: str) -> Lane | None:
-        return lane(name)
+    def account(self, name: str) -> AccountAvailability | None:
+        return account(name)
 
     def status_snapshot(self, claude_usage: object = None) -> StatusSnapshot:
         return status_snapshot(claude_usage)
@@ -231,8 +231,8 @@ class DelegateRoute:
     def accounts(self) -> list[Account]:
         return accounts()
 
-    def set_account(self, lane: str, enabled: bool) -> None:
-        set_account(lane, enabled)
+    def set_account(self, account: str, enabled: bool) -> None:
+        set_account(account, enabled)
 
 
 class FixedRoute(DelegateRoute):

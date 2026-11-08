@@ -33,7 +33,7 @@ from taskloop.app.run import (
     running,
 )
 from taskloop.app.wire import asks as wasks
-from taskloop.domain.lanes import policy as lp  # noqa: F401
+from taskloop.domain.accounts import policy as lp  # noqa: F401
 from tlasks import admission
 from tlgate.domain import (
     lint,  # noqa: F401
@@ -78,12 +78,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def stop(reason, ref="", **kw):
-    """A stopped answer, contract 4: the row of `reason` in delegate's contract.json (kw: at, fix, partial, say, family, lane ...)."""
+    """A stopped answer, contract 4: the row of `reason` in delegate's contract.json (kw: at, fix, partial, say, family, account ...)."""
     return fake_route.stop_answer(reason, ref, **kw)
 
 
 def full(data, ref="w2", **kw):
-    """A done answer with its lane facts spelled out (a test where the lane, the family or the fallback fields differ)."""
+    """A done answer with its account facts spelled out (a test where the account, the family or the fallback fields differ)."""
     fields = {"cost": 0.5, "secs": 1, "family": "claude", "account": "C", "model": "sonnet", "effort": "e",
                   "tokens": {"in": 1000, "cached": 800, "out": 50}, "context": {"instructions": [], "env_keys": []}}
     fields.update(kw)
@@ -374,7 +374,7 @@ class EngineTest(SlotWorld):
             for ln in re.findall(r"(?m)^(?:Blocked:|Reflect \(engine\)).*$", (BRIEFS / (name + ".md")).read_text(encoding="utf-8"))
         ]
         return [{"author": a, "text": t} for a, t in comments + last if a.startswith("tl-")] + [
-            {"author": "tl-x", "text": "Engine paused: paused: no lane for write until 10:00 (no_account: Hold the task)"}], notes
+            {"author": "tl-x", "text": "Engine paused: paused: no account for write until 10:00 (no_account: Hold the task)"}], notes
 
 
 BRIEFS = ROOT / "packages" / "work" / "tests" / "fixtures" / "briefs"

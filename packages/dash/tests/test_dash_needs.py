@@ -10,7 +10,7 @@ from tlkernel.loop import LoopState, QueueRow, Skip
 from tlkernel.parks import Park
 from tlkernel.reconcile import LOOP_ABSENT_S, LOOP_STALL_S
 from tlkernel.run import NetPause
-from tlkernel.snapshots import LaneStatus, NeedInput, StatusSnapshot
+from tlkernel.snapshots import AccountStatus, NeedInput, StatusSnapshot
 from tltestkit.case import Case
 
 from tldash.readers.observed import strays_of
@@ -89,12 +89,12 @@ class Kinds(Case):
         r = one(world([bead("p-5", "Net")], net_pauses={"p-5": NetPause(run="r", bead="p-5", t=NOW - 600)}), "paused")
         assert (r.bead, r.why, r.since) == ("p-5", "paused for the network", NOW - 600)
 
-    def test_a_lane_that_is_out_and_what_delegate_needs_are_rows_with_their_reason(self):
-        lane = LaneStatus(id="c", family="codex", out=True, out_until=NOW + 600, out_reason="usage limit")
-        st = StatusSnapshot(at=NOW - 10, lanes=[lane],
+    def test_a_account_that_is_out_and_what_delegate_needs_are_rows_with_their_reason(self):
+        account = AccountStatus(id="c", family="codex", out=True, out_until=NOW + 600, out_reason="usage limit")
+        st = StatusSnapshot(at=NOW - 10, accounts=[account],
                             needs_input=[NeedInput(what="log in to xai", why="token expired")])
         got = {n.why: n for n in needs(world(status=st))}
-        assert got["lane codex is out: usage limit"].until == NOW + 600
+        assert got["account codex is out: usage limit"].until == NOW + 600
         assert got["delegate needs: log in to xai (token expired)"].since == NOW - 10
 
     def test_a_held_slot_shows_who_why_until_when_and_since_its_hold_event(self):
@@ -146,7 +146,7 @@ class Rules(Case):
     def test_rows_are_oldest_first_and_a_row_with_no_time_is_last(self):
         w = world([bead("p-1", "a", labels=["needs-ac"], updated_at=iso(NOW - 100)),
                    bead("p-2", "b", labels=["needs-ac"], updated_at=iso(NOW - 900))],
-                  status=StatusSnapshot(at=NOW, lanes=[LaneStatus(id="c", out=True)]))
+                  status=StatusSnapshot(at=NOW, accounts=[AccountStatus(id="c", out=True)]))
         assert [(n.bead, n.kind) for n in needs(w)] == [("p-2", "label"), ("p-1", "label"), (None, "paused")]
 
 

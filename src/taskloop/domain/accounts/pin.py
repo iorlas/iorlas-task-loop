@@ -2,11 +2,11 @@
 from collections.abc import Collection
 from typing import Final
 
-from tlkernel.delegate import REASON_ENGINE_ONLY_UNENFORCED, REASON_NO_LANE, REASON_ONLY_FAMILY
+from tlkernel.delegate import REASON_ENGINE_ONLY_UNENFORCED, REASON_NO_ACCOUNT, REASON_ONLY_FAMILY
 
 LABEL_PREFIX: Final = "writer-family:"
 PINNED_ROLE: Final = "worker"
-STOP_REASONS: Final = (REASON_ONLY_FAMILY, REASON_NO_LANE, REASON_ENGINE_ONLY_UNENFORCED)
+STOP_REASONS: Final = (REASON_ONLY_FAMILY, REASON_NO_ACCOUNT, REASON_ENGINE_ONLY_UNENFORCED)
 
 
 def prefer_of(labels: Collection[str]) -> str:
@@ -26,5 +26,5 @@ def stop_why(node: str, prefer: str, reason: str, said: str, fix: str = "") -> s
     """Explain a refused writer preference; delegate owns the routing policy."""
     if reason == REASON_ENGINE_ONLY_UNENFORCED:
         return unenforced_why(node, said, fix)
-    return (f"paused: no ready lane of the pinned writer family ({prefer}) for {node} ({reason}): {said[:200]}; "
+    return (f"paused: no ready account of the pinned writer family ({prefer}) for {node} ({reason}): {said[:200]}; "
             "no other family is used. It runs when that family is ready, or remove the label writer-family:<f>")

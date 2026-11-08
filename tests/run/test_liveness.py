@@ -13,9 +13,9 @@ from support.narrow_hosts import FakeWaitsHost
 
 from taskloop.adapters import deadline
 from tlkernel import log as rec
+from tlkernel.accountliveness import LIVENESS
 from tlkernel.config import EngineConfig
 from tlkernel.kinds import Kind
-from tlkernel.lanesliveness import LIVENESS
 from tlpipeline.api import Blocked, Waits
 from tltestkit.case import Case
 
@@ -66,7 +66,7 @@ class LockWait(Case):
 
         with mock.patch.object(host, "os_lock", busy), pytest.raises(Blocked) as stopped, waits.locked("land_lock", "lock"):
             pytest.fail("acquired a busy lock")
-        assert stopped.value.kind is Kind.PAUSE_LANE
+        assert stopped.value.kind is Kind.PAUSE_ACCOUNT
         rows = [row.rec for row in host.stores.run_log("run").read_from(0).items]
         assert sum(isinstance(row, rec.WaitEnd) for row in rows) == 1
         assert host.waited == LIVENESS.lock_wait_s

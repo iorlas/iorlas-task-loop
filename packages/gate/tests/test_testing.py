@@ -41,11 +41,11 @@ def test_stores_cache_by_key() -> None:
 def test_waits_record_reports() -> None:
     fake = RecordedWaits()
     waits: WaitsView = fake
-    assert waits.start(WaitWhat.LANE) == "w0"
+    assert waits.start(WaitWhat.ACCOUNT) == "w0"
     waits.note_slot_waits("slot", 1.5)
-    waits.add(2.5, WaitWhat.LANE)
-    assert fake.seen == [("slot", 1.5), ("lane", 2.5)]
-    assert waits.start(WaitWhat.LANE) == "w2"
+    waits.add(2.5, WaitWhat.ACCOUNT)
+    assert fake.seen == [("slot", 1.5), ("account", 2.5)]
+    assert waits.start(WaitWhat.ACCOUNT) == "w2"
 
 
 def test_leases_release_for_reuse() -> None:

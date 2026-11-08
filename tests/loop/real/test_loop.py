@@ -338,7 +338,7 @@ class QueueRuleFromBase(Base):
 
 
 def rec(outcome, **kw):
-    return dict({"v": 3, "bead": "x", "outcome": outcome, "why": "", "run": "run-1", "log": "/e.jsonl", "minutes": 1.0, "rounds": 1,
+    return dict({"v": 4, "bead": "x", "outcome": outcome, "why": "", "run": "run-1", "log": "/e.jsonl", "minutes": 1.0, "rounds": 1,
                  "tests_added": 2, "asked": outcome == "parked"}, **kw)
 
 

@@ -332,7 +332,7 @@ class Loop(Core):
             wake = min([*wakes, *retries])
             self.say("every ready bead waits for a retry or another session: looking again at "
                      + time.strftime("%H:%M:%S", time.localtime(wake)))
-            self.wait = LoopWait(reason="no_lane", wake="retry due", probe_at=wake)
+            self.wait = LoopWait(reason="no_account", wake="retry due", probe_at=wake)
             self.publish()
             delay = max(1, wake - env.now())
             self.nap(delay, self.until)

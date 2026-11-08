@@ -186,7 +186,7 @@ class LostWork(Base):
 
     def test_a_later_run_reclaims_the_wip(self):
         self.branch("task/t-1", [("f.txt", "work\n", "wip (t-1): blocked")], T0)
-        later = wire.load(RunTrace, trace("t-1", "blocked", 10, 20, why="paused: x", kind="pause_lane"))
+        later = wire.load(RunTrace, trace("t-1", "blocked", 10, 20, why="paused: x", kind="pause_account"))
         assert set(self.by_class(self.lost({"t-1": "in_progress"}, [later]))) == {"reclaimed"}
 
     def test_a_tracker_outage_is_unknown_never_lost(self):
@@ -228,7 +228,7 @@ def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0
           stderr="", kind=""):
     started, ended = T0 + start_min * MIN, T0 + end_min * MIN
     stem = run or str(RunId.new(started, hashlib.sha1(f"{bead}{started}".encode()).digest()[:10]))
-    return {"v": 4, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
+    return {"v": 5, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
             "coordinator_session": "", "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
             "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "runs" / stem / "engine.jsonl"),
             "sessions": list(sessions), "stderr": stderr, "kind": kind or outcome if outcome in ("landed", "done") else kind}
@@ -253,7 +253,7 @@ class Scorecard(Base):
             trace("t-3", "blocked", -10, 5, why="owner decision needed", worktree=w, kind="ask_decision"),  # overlaps 06:00: in the window
             trace("t-3", "landed", 30, 45, sha="a3", worktree=w),
             trace("t-4", "blocked", 60, 90, why="stage 1 stuck after 3 rounds and 1 re-plan(s)", replans=1, worktree=w, kind="ask_stuck"),
-            trace("t-5", "blocked", 60, 61, why="paused: logged_out on plan", worktree=w, kind="pause_lane"),
+            trace("t-5", "blocked", 60, 61, why="paused: logged_out on plan", worktree=w, kind="pause_account"),
             trace("t-6", "failed", 60, 70, why="failed: plan node produced no valid output", worktree=w, kind="fault_plan"),
             trace("t-7", "landed", 80, 100, sha="a7", worktree=w),
             trace("t-11", "failed", 100, 110, why="failed: stopped (SIGTERM)", worktree=w, kind="pause_killed"),  # tl stop --now: no crash
@@ -279,7 +279,7 @@ class Scorecard(Base):
         # the loop's own record of a run-task that died before its engine wrote anything
         looptest.log(gitrepo.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
         with open(looptest.log(gitrepo.repo_root(str(self.repo))), "w") as f:  # the loop keys it so
-            f.write(json.dumps({"v": 4, "kind": "loop", "t": T0 + 95 * MIN, "bead": "t-10",
+            f.write(json.dumps({"v": 5, "kind": "loop", "t": T0 + 95 * MIN, "bead": "t-10",
                                 "slot": "s1", "outcome": "failed", "minutes": 0.1, "run_id": "",
                                 "why": "failed: no outcome from run-task (exit 1); see x.log"}) + "\n")
         # an orphan commit on a closed bead's branch
@@ -346,8 +346,8 @@ class Scorecard(Base):
         assert c["minutes"]["p90"] == 45
         assert c["rounds"] == 1
         assert c["replans"] == 1
-        assert c["tokens"]["lane"]["openai"] == {"in": 1010, "cached": 900, "out": 51}
-        assert c["tokens"]["lane"]["claude"] == {"in": 100, "cached": 80, "out": 10}
+        assert c["tokens"]["account"]["openai"] == {"in": 1010, "cached": 900, "out": 51}
+        assert c["tokens"]["account"]["claude"] == {"in": 100, "cached": 80, "out": 10}
         assert c["tokens"]["role"]["worker"]["in"] == 1000
 
     def test_the_m2_verdict_names_what_failed(self):

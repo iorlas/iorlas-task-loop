@@ -38,12 +38,12 @@
   },
   "writer_family": null,
   "writer_fallback": false,
-  "fallback_lane": "",
+  "fallback_account": "",
   "look_notes": [
    "the main screen shows the list"
   ],
   "look_unjudged": {
-   "look judge, round 2": "no lane: busy"
+   "look judge, round 2": "no account: busy"
   },
   "look_done": 2,
   "rendered_names": [

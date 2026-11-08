@@ -37,7 +37,7 @@ class RunScript:
         self.t += secs
         return self
 
-    def step(self, step, secs, tokens=0, lane="", text="", outcome="done", end=True, role="writer", cost=0.0, source=""):
+    def step(self, step, secs, tokens=0, account="", text="", outcome="done", end=True, role="writer", cost=0.0, source=""):
         """One step of `secs` seconds with a worker call of `tokens` fresh tokens (all output); an open step when end=False."""
         self.n += 1
         sid = f"n{self.n}"
@@ -46,7 +46,7 @@ class RunScript:
             self.add("call_start", id=f"c{self.n}", n=1, step=step, node=step, role=role)
         self.t += secs
         if tokens:
-            self.add("call_end", id=f"c{self.n}", status="ok", lane=lane, secs=secs, tokens={"in": 0, "cached": 0, "out": tokens},
+            self.add("call_end", id=f"c{self.n}", status="ok", account=account, secs=secs, tokens={"in": 0, "cached": 0, "out": tokens},
                      cost=cost, cost_source=source)
         if end:
             self.add("step_end", id=sid, step=step, outcome=outcome, exec_seconds=secs)
@@ -117,7 +117,7 @@ def make_run(root):
     put(
         lf,
         [
-            {"t": LIVE_T + 6, "kind": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x",
+            {"t": LIVE_T + 6, "kind": "start", "harness": "codex", "account": "CODEX", "model": "gpt-x",
              "effort": "high", "role": "worker", "pid": 1},
             {"t": LIVE_T + 6.5, "kind": "msg", "text": "between the start and the command"},
             {"t": LIVE_T + 7, "kind": "cmd_start", "id": "1", "text": "pytest -q", "cwd": "/w"},

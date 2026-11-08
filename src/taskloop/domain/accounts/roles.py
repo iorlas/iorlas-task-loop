@@ -1,4 +1,4 @@
-"""Generated from SKILL.md's node-to-role table by dev/generate_lane_roles.py; tests enforce parity."""
+"""Generated from SKILL.md's node-to-role table by dev/generate_account_roles.py; tests enforce parity."""
 
 from typing import Final
 

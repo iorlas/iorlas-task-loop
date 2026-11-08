@@ -12,7 +12,7 @@ class StopRequest(Rec):
     t: float = 0.0
 
 
-SkipKind = Literal["epic", "slot", "label", "epic_only", "lint", "area", "rest", "lane", "taken", "hold", "parked", "capped", "needs",
+SkipKind = Literal["epic", "slot", "label", "epic_only", "lint", "area", "rest", "account", "taken", "hold", "parked", "capped", "needs",
                    "queue", "unordered"]
 
 
@@ -40,7 +40,7 @@ class QueueRow(Rec):
 class LoopWait(Rec):
     """A live loop's wait and the condition checked at its next probe."""
 
-    reason: Literal["low_disk", "low_ram", "no_lane"]
+    reason: Literal["low_disk", "low_ram", "no_account"]
     wake: str
     probe_at: float
     fingerprint: str = ""
@@ -63,7 +63,7 @@ class Carry(Rec):
 class LoopState(Rec):
     """loop/<repo_key>.<pid>.json, rewritten by the loop every pass; the dashboard and `tl status` read it."""
 
-    V: ClassVar[int] = 3
+    V: ClassVar[int] = 4
     pid: int
     started: float
     t: float
@@ -80,7 +80,7 @@ class LoopState(Rec):
     worktree: str = ""
     stop: StopRequest | None = None
     queue: list[QueueRow] = msgspec.field(default_factory=list)
-    lanes_seen: list[str] = msgspec.field(default_factory=list)
+    accounts_seen: list[str] = msgspec.field(default_factory=list)
     log: str = ""
     carry: Carry = msgspec.field(default_factory=Carry)
     wait: LoopWait | None = None

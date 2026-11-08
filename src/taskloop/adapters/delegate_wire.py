@@ -45,7 +45,7 @@ def synth(reason: str, scope: Scope, permanence: Permanence, text: str, ref: str
 
 
 def answer_status(res: DelegateResult) -> str:
-    """done | agent (the agent-tool handoff) | timeout | failed | error | lane_out | stop."""
+    """done | agent (the agent-tool handoff) | timeout | failed | error | account_out | stop."""
     return "agent" if res.stop is None and res.agent_model else status_of(res.stop)
 
 
@@ -62,7 +62,7 @@ def status_of(stop: StopFacts | None) -> str:
         return "failed"
     if stop.reason in _ERROR:
         return "error"
-    return "lane_out" if stop.scope in ("account", "model") else "stop"
+    return "account_out" if stop.scope in ("account", "model") else "stop"
 
 
 def next_of(stop: StopFacts | None) -> str | None:

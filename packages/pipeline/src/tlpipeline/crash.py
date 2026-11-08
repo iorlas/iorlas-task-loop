@@ -29,7 +29,7 @@ class CrashHost(Protocol):
 def parked_crash(host: CrashHost, step: str, err: Exception) -> oc.RunOutcome:
     if isinstance(err, ValueError):
         why = f"{step} refused: {type(err).__name__}: {err}"
-        host.kind, host.why = Kind.PAUSE_LANE, why
+        host.kind, host.why = Kind.PAUSE_ACCOUNT, why
         host.pause_reason, host.pause_producer = "stage_refused", "engine"
         host.crash_fingerprint, host.fp = "", ""
         host.log.warn(why + "\n" + "".join(traceback.format_exception(err)))

@@ -35,17 +35,17 @@ def test_pause_passes_run_facts_without_home(monkeypatch):
     kit.closer.parks = parks
     bead = Bead(id=BeadId("t-1"), title="work", status="open")
     monkeypatch.setattr(kit.closer, "peek", lambda *args: bead)
-    kit.closer.pause(oc.make(Kind.PAUSE_LANE, "paused"))
+    kit.closer.pause(oc.make(Kind.PAUSE_ACCOUNT, "paused"))
     assert len(parks.paused_calls) == 1
     call = parks.paused_calls[0]
-    assert call[:4] == (bead, Kind.PAUSE_LANE, kit.host.run_id, kit.host.clock.now())
+    assert call[:4] == (bead, Kind.PAUSE_ACCOUNT, kit.host.run_id, kit.host.clock.now())
 
 
 def test_dry_pause_does_not_call_park_book():
     kit = CloseKit()
     parks = FakeParkBook()
     kit.closer.parks = parks
-    kit.closer.pause(oc.make(Kind.PAUSE_LANE, "paused"))
+    kit.closer.pause(oc.make(Kind.PAUSE_ACCOUNT, "paused"))
     assert parks.paused_calls == []
 
 
@@ -56,7 +56,7 @@ def test_pause_applies_the_park_books_retry_and_reason(monkeypatch):
                reason="no_account", retry_at=500, permanence="transient")
     kit.closer.parks = FakeParkBook(rec)
     monkeypatch.setattr(kit.closer, "peek", lambda *args: bead)
-    kit.closer.pause(oc.make(Kind.PAUSE_LANE, "paused"))
+    kit.closer.pause(oc.make(Kind.PAUSE_ACCOUNT, "paused"))
     assert kit.host.retry_after == 500
     assert kit.host.pause_reason == "no_account"
     assert not kit.host.asked

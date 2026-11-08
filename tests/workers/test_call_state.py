@@ -27,12 +27,12 @@ class Calls(Case):
         self.tmp.cleanup()
 
     def begin(self, **kw):
-        return cs.begin(self.dir, "run-1", "t-1", KEY, role="worker", lane="OPENAI", now=10.0, **kw)
+        return cs.begin(self.dir, "run-1", "t-1", KEY, role="worker", account="OPENAI", now=10.0, **kw)
 
     def test_begin_writes_calling_before_the_call_and_load_reads_it_back(self):
         self.begin(prompt_sha="abc")
         st = cs.load_for(self.dir, "t-1", KEY)
-        assert (must(st).phase, must(st).ref, must(st).key, must(st).lane, must(st).prompt_sha) == ("calling", "", KEY, "OPENAI", "abc")
+        assert (must(st).phase, must(st).ref, must(st).key, must(st).account, must(st).prompt_sha) == ("calling", "", KEY, "OPENAI", "abc")
         assert list(self.dir.glob("*.tmp")) == []
 
     def test_the_first_ref_sticks_and_survives_a_reload(self):

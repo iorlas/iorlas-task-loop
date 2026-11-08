@@ -7,7 +7,7 @@ from tlkernel.reconcile import Stray
 from tltestkit.case import Case
 
 from tldash.testing import RunScript, T, bead
-from tldash.views.floor import slot_of
+from tldash.views.slots import slot_of
 from tldash.views.snapshot import build
 from tldash.views.world import ProjectIn, World
 
@@ -37,9 +37,9 @@ class Starting(Case):
                 assert slot_of(project(), slot(held_bead="p-1", held_since=since), {}, NOW).t == expected
 
     def test_running_wins_when_the_live_manifest_appears(self):
-        run = RunScript("p-1", slot="a", at=60).step("write", 10, lane="codex", tokens=1, end=False).run(NOW)
+        run = RunScript("p-1", slot="a", at=60).step("write", 10, account="codex", tokens=1, end=False).run(NOW)
         got = slot_of(project(), slot(held_bead="p-1"), {"p-1": [run]}, NOW)
-        assert (got.state, got.bead, got.t, got.lane) == ("running", "p-1", T + 60, "codex")
+        assert (got.state, got.bead, got.t, got.account) == ("running", "p-1", T + 60, "codex")
 
     def test_missing_unknown_closed_and_other_status_targets_stay_idle(self):
         for target, metadata in ((bead("p-1"), {}), (bead("p-2"), {"held_bead": "p-1"}),

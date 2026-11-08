@@ -242,7 +242,7 @@ class SelectedStage(Case):
         self.e.lander.finish.return_value = ""
         rc, manifest = self.invoke("land")
         assert (rc, manifest.state, manifest.next_step) == (1, RunState.STOPPED, Step.LAND)
-        assert (self.e.kind, self.e.pause_reason) == (Kind.PAUSE_LANE, "stage_refused")
+        assert (self.e.kind, self.e.pause_reason) == (Kind.PAUSE_ACCOUNT, "stage_refused")
         assert "no land was recorded" in manifest.reason
         self.e.checkpoints.drop.assert_not_called()
         self.e.checkpoints.drop_unless_fenced.assert_not_called()
@@ -252,7 +252,7 @@ class SelectedStage(Case):
         self.e.lander.finish.side_effect = ValueError("land refused: gate is no longer green for this tree and base")
         rc, manifest = self.invoke("land")
         assert (rc, manifest.state) == (1, RunState.STOPPED)
-        assert (self.e.kind, self.e.pause_reason) == (Kind.PAUSE_LANE, "stage_refused")
+        assert (self.e.kind, self.e.pause_reason) == (Kind.PAUSE_ACCOUNT, "stage_refused")
         assert "crash" not in manifest.reason
 
     def test_typed_network_pause_keeps_the_loop_terminal_state(self):

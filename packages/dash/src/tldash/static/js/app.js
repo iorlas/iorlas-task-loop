@@ -11,11 +11,11 @@ import { Flow } from './views/board.js';
 import { Decisions } from './views/decisions.js';
 import { BeadPage } from './views/drawer.js';
 import { Phone } from './views/phone.js';
-import { Floor } from './views/floor.js';
+import { Slots } from './views/slots.js';
 import { Goals } from './views/goals.js';
-import { Lanes } from './views/lanes.js';
+import { Accounts } from './views/accounts.js';
 import { Cost } from './views/cost.js';
-import { Banners, closeBead, filterGroups, laneValue, openBead, STALE_S, TABS } from './views/shell.js';
+import { Banners, closeBead, filterGroups, accountValue, openBead, STALE_S, TABS } from './views/shell.js';
 
 const PHONE = matchMedia('(max-width:600px)');
 const TICK_MS = 1000;
@@ -38,16 +38,16 @@ function Filters({ snap }) {
 function TopRight({ snap, now }) {
   const a = api.dataAge(), tone = api.net.error ? 'x' : a > STALE_S ? 'w' : '';
   return html`<div class="rt">
-    ${troubled(snap).map((l) => html`<button key=${l.id} class="rbtn" onClick=${() => setTab('lanes')}><${Ring} v=${l.state === 'locked' ? 1 : (l.window_pct || 0) / 100}
-        tone=${l.state === 'locked' ? 'x' : 'w'} value=${laneValue(l, now)} label=${l.name} /></button>`)}
-    <button class="lbtn" onClick=${() => setTab('lanes')}>${snap.lanes.length} lanes ▾</button>
+    ${troubled(snap).map((l) => html`<button key=${l.id} class="rbtn" onClick=${() => setTab('accounts')}><${Ring} v=${l.state === 'locked' ? 1 : (l.window_pct || 0) / 100}
+        tone=${l.state === 'locked' ? 'x' : 'w'} value=${accountValue(l, now)} label=${l.name} /></button>`)}
+    <button class="lbtn" onClick=${() => setTab('accounts')}>${snap.accounts.length} accounts ▾</button>
     <button class="rbtn" title=${`Data ${Math.round(a)} s old · refresh`} onClick=${api.retry}><${Ring} tone=${tone} value=${`${Math.round(a)}s`} /></button></div>`;
 }
 
 function Desktop({ snap, now }) {
   const c = counts(snap), all = ui.project === 'all';
   const tabs = TABS.map(([k, e, n]) => ({ k, label: `${e} ${n}`,
-    badge: k === 'floor' ? html`<${CountBadge} n=${c.stuck} tone="bad" />` : k === 'decisions' ? html`<${CountBadge} n=${c.asks} />` : null }));
+    badge: k === 'slots' ? html`<${CountBadge} n=${c.stuck} tone="bad" />` : k === 'decisions' ? html`<${CountBadge} n=${c.asks} />` : null }));
   const card = findBead(snap, ui.bead, ui.beadProject || ui.project);
   let body;
   if (ui.tab === 'board') {
@@ -56,12 +56,12 @@ function Desktop({ snap, now }) {
       ${ui.opt === 'tree' ? html`<${Goals} snap=${snap} all=${all} />` : html`<${Flow} snap=${snap} all=${all} now=${now} onOpen=${openBead} />`}`;
   } else if (ui.tab === 'decisions') {
     body = html`<${Decisions} snap=${snap} now=${now} />`;
-  } else if (ui.tab === 'floor') {
-    body = html`<${Floor} snap=${snap} now=${now} filters=${html`<${Filters} snap=${snap} />`} />`;
+  } else if (ui.tab === 'slots') {
+    body = html`<${Slots} snap=${snap} now=${now} filters=${html`<${Filters} snap=${snap} />`} />`;
   } else if (ui.tab === 'cost') {
     body = html`<${Cost} snap=${snap} />`;
   } else {
-    body = html`<${Lanes} snap=${snap} now=${now} />`;
+    body = html`<${Accounts} snap=${snap} now=${now} />`;
   }
   if (!snap.beads.length && ui.tab === 'board') body = html`<${EmptyState} title="No beads yet"
     body=${snap.projects.length ? 'Create beads with bd, then start the loop.' : 'Register a repo, then start its loop.'}

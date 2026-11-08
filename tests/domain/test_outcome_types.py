@@ -56,7 +56,7 @@ class RunOutcomeRecord(Case):
             oc.load("nope", detail="x")
         with pytest.raises(ValueError):
             oc.load("fault_infra", v=9, detail="y")
-        assert oc.load("pause_lane").kind == Kind.PAUSE_LANE
+        assert oc.load("pause_account").kind == Kind.PAUSE_ACCOUNT
 
     def test_an_ask_without_a_spec_cannot_be_built(self):
         for k in ASKS:
@@ -70,7 +70,7 @@ class RunOutcomeRecord(Case):
 
     def test_the_trace_word_follows_the_kind_alone(self):
         want = {Kind.LANDED: Outcome.LANDED, Kind.DONE: Outcome.DONE, Kind.PAUSE_KILLED: Outcome.FAILED,
-                Kind.FAULT_INFRA: Outcome.FAILED, Kind.PAUSE_LANE: Outcome.BLOCKED, Kind.WAIT_ASK: Outcome.BLOCKED}
+                Kind.FAULT_INFRA: Outcome.FAILED, Kind.PAUSE_ACCOUNT: Outcome.BLOCKED, Kind.WAIT_ASK: Outcome.BLOCKED}
         for k, w in want.items():
             assert oc.make(k, "x", spec=None).word is w, k
 
@@ -97,6 +97,6 @@ class OutcomeFile(Case):
                 assert not gave, name
                 assert str(f) in v.why, name
             ok = Path(d, "ok.json")
-            ok.write_text('{"v": 3, "outcome": "paused", "bead": "t-1", "kind": "pause_network"}')
+            ok.write_text('{"v": 4, "outcome": "paused", "bead": "t-1", "kind": "pause_network"}')
             v, gave = vd.read(ok, 0, Path(d, "x.log"))
             assert (v.outcome, v.kind, gave) == (Result.PAUSED, "pause_network", True)

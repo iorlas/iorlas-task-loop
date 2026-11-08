@@ -64,7 +64,7 @@ class JournalWrite(Protocol):
     @property
     def strays(self) -> Sequence[str]: ...
     @property
-    def lane_notes(self) -> Sequence[str]: ...
+    def account_notes(self) -> Sequence[str]: ...
 
 
 class JournalLand(Protocol):
@@ -287,7 +287,7 @@ class Journal:
                         write_rounds=self.trace.write.write_rounds,
                         strays=self.trace.write.strays,
                         reflection=self.records.reflection,
-                        lane_notes=self.trace.write.lane_notes,
+                        account_notes=self.trace.write.account_notes,
                         salvaged=self.trace.land_state.salvaged,
                     ),
                 )

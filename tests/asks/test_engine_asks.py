@@ -180,7 +180,7 @@ class EngineAsksTest(EngineTest):
         assert (b["resumed"], b["context_k"]) == ("yes", 149)
         assert b["prompt_chars"] < a["prompt_chars"]
 
-    def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v3_ask(self):
+    def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v4_ask(self):
         unreadable_ask(homes.cfg(), "t-1", json.dumps(
             {"v": 1, "id": "t-1-4", "bead": "t-1", "status": "open", "kind": "verify", "question": "old?"}))
         assert self.asks().orphans() == ["t-1"]
@@ -188,7 +188,7 @@ class EngineAsksTest(EngineTest):
         assert rc == 2
         assert [c[0] for c in s.calls] == ["planner"]  # one planner step, not a second asking of the dropped one
         a = self.ask()
-        assert (a["v"], a["id"], a["status"]) == (3, "t-1-1", "open")
+        assert (a["v"], a["id"], a["status"]) == (4, "t-1-1", "open")
         assert self.asks().orphans() == []
 
     def test_a_decision_ask_takes_the_bead_out_of_the_pick_queue(self):

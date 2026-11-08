@@ -79,7 +79,7 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
 - **prune** (`PruneReq`: `project`, `adr`) retires a decision in force: it stays in the store with `retired_by` and `retired_t`, the plan
   stage and repeat detection stop reading it, and `Snapshot.adrs` drops it. Refused for an unknown or already retired id.
 - **ask_back** appends an `owner` entry to the ask's thread and leaves the ask open; the helper that answers is not built.
-- **Ask v3** (`contracts/ask.py`): `owner_cause` and `cause_by` (declared by the agent through the answer schemas' `owner_cause`;
+- **Ask v4** (`contracts/ask.py`): `owner_cause` and `cause_by` (declared by the agent through the answer schemas' `owner_cause`;
   the owner corrects it through the `cause` verb when `ask` names an ask), `blocking`, `default`, `key`, `similar`, `thread`,
   `outcome`. A soft ask (`blocking=false`) is filed when a plan's question is about a step that can be undone (tl-ntp): the run goes
   on with the `default` assumption (also written as the typed `Assumed` record, as every plan assumption is) and the ask stays open, so the owner can still answer; it is closed when the run lands.
@@ -95,7 +95,7 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
 - **Needs you** `Snapshot.needs` (`NeedRow {kind, project, bead, why, since, until, title}`, oldest first, `views/needs.py`) is a view over
   records the engine already writes, no new recorder: beads labelled `needs-ac`/`needs-info`/`owner-taste`/`owner-look`; blocked beads
   (the newest `block` event's reason); the queue's `parked` and `capped` skips (`Park.t` gives the time); `pauses/<bead>.json`
-  (network); a lane that is out and delegate's `needs_input`; held and set-aside slots (slot bead metadata, `slot_hold`/`slot_aside`
+  (network); an account that is out and delegate's `needs_input`; held and set-aside slots (slot bead metadata, `slot_hold`/`slot_aside`
   events) and failed `slot_setup`; reconcile strays; a stalled loop. Beads with an open ask are not rows (Decisions). `ServerInfo.loops[]`
   carries the strip: `health` ok, `stalled` (a loop beats, holds no bead, `ready` beads wait and the repo logged no event for
   `LOOP_STALL_S`, `contracts/reconcile.py`) or `absent` (the reconcile NoLoop rule, `LOOP_ABSENT_S`). Not shown: a loop's in-memory network wait. events.jsonl rows are the typed `Event` records
@@ -124,10 +124,10 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
   The server clock ages from the snapshot's original successful body fetch, including across 304 responses.
 - `Snapshot.adhoc` lists every live run without a bead, independent of the ten retained headers in `runs`. `RunHeader.branch`
   is the manifest branch, short SHA, or worktree basename. `Snapshot.leases` lists live resource holder hints, joined to runs
-  by PID; the dashboard never acquires a lease. Configured slot lanes remain present while idle or before their first run.
+  by PID; the dashboard never acquires a lease. Configured slot rows remain present while idle or before their first run.
 - `Pass.detail` preserves the leaving transition's full detail; `end_text` supplies its cause in words. The drawer clips the
   reason to one line with the full text on hover. A sent-back plan starts a new pass even when both steps have phase `plan`.
-- `Pass.logs[]` carries `{phase, roles: [{role, attempts: [{id, t, secs, outcome, lane, model, live, lines}]}]}`.
+- `Pass.logs[]` carries `{phase, roles: [{role, attempts: [{id, t, secs, outcome, account, model, live, lines}]}]}`.
   Attempts stay in call order within each recorded role; `lines` are typed `TermLine` records. Worker events join by
   `CallStart.n` to the run's existing live file; check sections carry recorded results and tails, and the engine section
   carries step summaries and the leaving Transition. An absent stage log or empty roles means no log for this stage.
@@ -145,7 +145,7 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
 - `Piece.n` counts a bead's pieces from 0; `from_slot`/`to_slot` link a comeback (a resume in another slot is a new piece).
 - `Phase` maps engine steps: plan/replan → plan, write → write, checks → test, review + verify → review, look → look,
   gate + land → land. The spec calls these stages; the code says phase because three `Stage` records exist.
-- `Slot.lane` is the lane of the slot's current or last call; lanes are per call.
+- `Slot.account` is the account of the slot's current or last call; accounts are per call.
 - A claimed slot with a known open or in-progress `held_bead` and no live run is `starting`: `bead` names that work,
   `t` is its slot claim time (`held_since`, falling back to `updated_at`), and `idle_why` says `starting <bead>`.
   `startup` is a short line of recent claim/setup/rebase phases from the project events already loaded; empty when unavailable.
@@ -163,7 +163,7 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
 - **Frontend** (`tldash` static assets): layout, filters, deep links, drafts, the 5 s answer hold. It derives nothing
   listed below.
 - **Backend** (pure builders under `views/`, each with fixture tests): column and marker as pure functions over typed facts,
-  status line, passes and pieces, comeback joins, roll-up (`Epic.done/total`), goal roots, lane forecast, learning series,
+  status line, passes and pieces, comeback joins, roll-up (`Epic.done/total`), goal roots, account forecast, learning series,
   cause counts. The bd bead list is cached; a poll never runs bd.
 
 ## Backend order
@@ -175,7 +175,7 @@ Readers first; they are safe while a loop runs:
 | 1 | `views/snapshot.py`: beads (column, marker, status), slots, epics, server | M | 1 shell |
 | 2 | pieces and `BeadDetail` passes and cells | L | 2 board + drawer |
 | 3 | `LivePage` over `api/live.py` and `runlife` | S | 2 drawer live tail |
-| 4 | write ports: answer, look, cause, ack, as Intake verbs behind Ports | M | 3 asks, 4 floor |
+| 4 | write ports: answer, look, cause, ack, as Intake verbs behind Ports | M | 3 asks, 4 slots |
 
 New engine facts follow, in one cutover freeze per `docs/cutover.md`, because a running loop refuses unknown log tags and Ask v2:
 
@@ -185,9 +185,9 @@ New engine facts follow, in one cutover freeze per `docs/cutover.md`, because a 
 | 6 | Ask fields (`owner_cause`, `cause_by`, `blocking`, `default`, `similar`, `thread`) and an append-only ask ledger | L | `AskCard`, `ledger`, soft asks |
 | 7 | park, stop and note request files | L | 6 controls |
 | 8 | ADR store, `PlanAnswer.cited`, learning series | L | 5 decisions (`adrs`, `learning`, `stick`) |
-| 9 | lane usage history (at, used_pct) and the forecast | M | 8 lanes (`state`, `window_pct`, `week_pct`, `locked_until`; `forecast_pct` and `resets_at` wait for a typed reset time in delegate's status) |
+| 9 | account usage history (at, used_pct) and the forecast | M | 8 accounts (`state`, `window_pct`, `week_pct`, `locked_until`; `forecast_pct` and `resets_at` wait for a typed reset time in delegate's status) |
 
 Until a field is built the backend sends its default (empty list, 0, null, ""); the page renders that as "no data", not as an
-error. Open: `Seg` kind `projected` (the Floor forecast) has no writer yet; `LaneCard.plan` has no source; so far `LaneCard.forecast_pct`, `resets_at`, `forecast` have none either: delegate's contract types
+error. Open: `Seg` kind `projected` (the Slots forecast) has no writer yet; `AccountCard.plan` has no source; so far `AccountCard.forecast_pct`, `resets_at`, `forecast` have none either: delegate's contract types
 the `five` and `week` percents but no reset time, and names `windows[]` with free strings. History (`usage-history.jsonl`, `contracts.usage`)
 keeps every window as named and `usage.forecast` is ready for the day the reset is typed.

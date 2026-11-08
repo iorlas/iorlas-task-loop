@@ -24,7 +24,7 @@ class FastReads(fixtures.ApiFixture):
             assert worlds.world().projects[0].profile_error == "RED"
             assert row.call_count == 2
 
-    def test_cached_listing_supplies_floor_slots_and_profile_is_cached(self):
+    def test_cached_listing_supplies_slots_slots_and_profile_is_cached(self):
         self.store.put(bead("s-z", f"slot {hostname()} z", labels=["slot"]))
         seed_beads(self.cfg, self.repo, self.store.beads.values(), self.now)
         with patch.object(self.dash.env.ports, "profile_error", return_value="") as profile:

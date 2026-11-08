@@ -48,12 +48,12 @@ class AskV3(Case):
         self.stores = fake_stores()
         self.asks = self.stores.asks
 
-    def test_the_new_fields_round_trip_and_an_ask_is_version_3(self) -> None:
+    def test_the_new_fields_round_trip_and_an_ask_is_version_4(self) -> None:
         ask = must(raiser.raise_ask(self.asks, question("requirement", "keep v1"), asking())[0]).replace(
             cause_by="owner", similar=[SimilarRef(kind="adr", id="ADR-2"), SimilarRef(kind="ask", id="t-0-1")],
             thread=[ThreadEntry(by="owner", t=T, md="why?")], outcome=Stick.ADR, outcome_ref="ADR-3")
         body = wire.dump(ask)
-        assert body["v"] == 3
+        assert body["v"] == 4
         assert wire.load(Ask, json.loads(json.dumps(body))) == ask
         assert (ask.owner_cause, ask.blocking, ask.default) == (OwnerCause.REQUIREMENT, False, "keep v1")
 

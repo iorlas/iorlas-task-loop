@@ -1,4 +1,4 @@
-// Shell parts both shells share: tabs, banners, filter groups, the lane value, opening a bead (dash-spec §2, §10).
+// Shell parts both shells share: tabs, banners, filter groups, the account value, opening a bead (dash-spec §2, §10).
 import { html } from '../../vendor/ui-runtime.js';
 import * as api from '../api.js';
 import { epicsOf, machines, MACHINE_ICON } from '../data.js';
@@ -6,7 +6,7 @@ import { age, pct, projectName, unit } from '../format.js';
 import { set, ui } from '../state.js';
 
 export const STALE_S = 30, STALE_BANNER_S = 300;
-export const TABS = [['board', '🗂️', 'Board'], ['floor', '🏭', 'Floor'], ['decisions', '🙋', 'Decisions'], ['lanes', '🎛', 'Lanes'], ['cost', '💲', 'Cost']];
+export const TABS = [['board', '🗂️', 'Board'], ['slots', '🏭', 'Slots'], ['decisions', '🙋', 'Decisions'], ['accounts', '🎛', 'Accounts'], ['cost', '💲', 'Cost']];
 
 export function BdBanner({ source, project, now }) {
   if (!source.bd_error) return null;
@@ -55,7 +55,7 @@ export function filterGroups(snap) {
   ];
 }
 
-export const laneValue = (l, now) => (l.state === 'locked' ? (l.locked_until ? unit(l.locked_until - now) : 'out') : pct(l.window_pct || 0));
+export const accountValue = (l, now) => (l.state === 'locked' ? (l.locked_until ? unit(l.locked_until - now) : 'out') : pct(l.window_pct || 0));
 
 export const openBead = (b) => set({ bead: b.id, beadProject: b.project, dtab: '', ...(ui.project === 'all' ? {} : { project: b.project }) }, { push: !ui.bead });
 export const closeBead = () => set({ bead: null, beadProject: '', dtab: '' });
