@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
-from support.engine_case import EngineTest
+from support.engine_land import EngineTest
 
 from taskloop.app.wire.asks import host
 from taskloop.app.workers.worker_request import request

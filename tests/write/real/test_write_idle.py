@@ -13,6 +13,7 @@ from unittest import mock
 
 import pytest
 
+from tlland.testing import FakeLandStage
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -99,8 +100,8 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         with te.delegate_stack(script):
             self.eng = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
-            )
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
+            lander_factory=FakeLandStage)
             rc = self.eng.run()
         return rc, script
 

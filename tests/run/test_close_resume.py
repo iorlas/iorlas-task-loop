@@ -3,6 +3,8 @@ from unittest import mock
 
 import pytest
 
+from tlland.testing import FakeLandStage
+
 # isort: split
 from support import engine_case as T
 from support.checkpoints import read_ck
@@ -31,7 +33,7 @@ class Base(T.EngineTest):
     def engine(self) -> engine.Engine:
         c = wslots_config.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         eng.checkpoints.save(step="close")  # the record the keys go into
         return eng
 
@@ -89,7 +91,7 @@ class ColdRestart(Base):
     def cold(self):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         return engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
 
     def test_a_new_process_takes_the_dead_runs_id_from_its_checkpoint(self):
         dead = self.killed_at(fx.CloseBead)

@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from tlland.testing import FakeLandStage
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import gitq
 from support.aging import age
@@ -193,7 +195,7 @@ class EngineChecksTest(EngineTest):
     def test_checks_run_without_the_launchers_claude_session(self):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
             session_env = procsim.fake("session-env", lambda cwd, env: (1 if env.get("CLAUDE_CODE_ENTRYPOINT") else 0, ""))
             res = eng.run_checks({"checks": ck([session_env]), "files": []}, "s")
@@ -265,7 +267,7 @@ class EngineChecksTest(EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         gone = procsim.fake(f"editor-closed {state}", lambda cwd, env: (1 if state.exists() else 0, ""))
         st = {"checks": ck([gone]), "files": []}
         assert eng.run_checks(st, "s")[0].exit == 0
@@ -284,7 +286,7 @@ class EngineChecksTest(EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         st = {"checks": ck([fails]), "files": []}
         eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
@@ -299,7 +301,7 @@ class EngineChecksTest(EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         res = eng.run_checks({"checks": [Adhoc(argv=("echo", "$HOME", "&&", "x;", "(y)"), reads=())], "files": []}, "s")
         assert res[0].exit == 0, res[0].tail
         assert "$HOME && x; (y)" in res[0].tail  # no expansion, no operator: every word reached the program as written

@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+from tlland.testing import FakeLandStage
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as te
 from support import gitq
@@ -49,7 +51,7 @@ class Strays(te.EngineTest):
                 store=self.store,
                 env=snapshot(),
                 spawner=real_spawner(),
-                git=port_git(), who=who())
+                git=port_git(), who=who(), lander_factory=FakeLandStage)
             return eng.run(), eng
 
     def test_a_worker_that_stays_passes(self):

@@ -7,7 +7,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import gitq
-from support.engine_case import EngineTest, real_git
+from support.engine_case import real_git
+from support.engine_land import EngineTest
 
 from tltestkit.logs import records
 from tltestkit.plans import CLEAN, PLAN, WRITE

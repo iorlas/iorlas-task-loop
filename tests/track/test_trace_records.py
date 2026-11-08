@@ -13,6 +13,7 @@ from run import test_engine_units
 from support import engine_case as te
 from support import homes
 from support.engine_case import stop
+from support.engine_land import EngineTest, real_lander_factory
 
 from tltestkit import procsim
 from tltestkit.plans import CLEAN, FALSE, PLAN, WRITE, review
@@ -54,7 +55,7 @@ def calls(eng):
     return [(starts[r.id], r) for r in records(eng, rec.CallEnd)]
 
 
-class TraceRecords(te.EngineTest):
+class TraceRecords(EngineTest):
 
     def steps(self):
         return [(num(r.id), r.step) for r in records(self.eng, rec.StepStart)]
@@ -212,7 +213,7 @@ class TraceRecords(te.EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         assert (old / "00-a.r1.log").exists()  # SWEEPKEEP: the bead may still be open; tl prune knows, a start does not
         assert (old / "00-a.log").exists()
         assert (new / "00-a.r1.log").exists()

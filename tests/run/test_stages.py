@@ -7,12 +7,15 @@ import time
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from support.engine_land import real_lander_factory
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as te
 from support import gitq
 from support.builders import make_engine
 from support.checkpoints import put_ck, read_ck
 from support.engine_case import engine, lint
+from support.engine_land import EngineTest
 from support.engine_locks import put_lock
 from support.fakes import must_bead
 from support.spawn import port_git, real_spawner
@@ -39,7 +42,7 @@ from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from tlwork.write.handoff import HANDOFF_CAP
 
 
-class StagesTest(te.EngineTest):
+class StagesTest(EngineTest):
     def probe(self):
         return PathProbe(cast(Any, self).wt, childenv.current_env(snapshot()))
 
@@ -196,7 +199,7 @@ class Scope(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         item = {"what": "Sit To Stand was not probed", "kind": "checkable"}
         assert e.cases.out_of_scope([item]) == [item]
         assert e.leftovers == []
@@ -256,7 +259,7 @@ class Handoff(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         for k in range(8):
             e.hand.note_round("stage 1/1", k + 1, "review", "w" * 300, ["x" * 200])
         text = e.hand.rounds_text()
@@ -534,7 +537,7 @@ class Executable(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         plan = self.two_stage()
         assert e.cases.promised_missing(plan, 1) == 0  # stage 1 is accepted, the file is gone, stage 2 reads it
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
@@ -551,7 +554,7 @@ class Executable(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         e.tree.reset(must_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
@@ -563,7 +566,7 @@ class Executable(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
         assert again.done == ["an earlier plan's goal"]
@@ -576,7 +579,7 @@ class Executable(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         e.tree.reset(must_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["stage one"], [0]
@@ -588,7 +591,7 @@ class Executable(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         again.tree.reset(must_bead(BEAD))
         _plan, i, state = again.resume.point()
         assert (i, state, again.accepted, again.done) == (0, None, [], [])
@@ -602,7 +605,7 @@ class Executable(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         third.tree.reset(must_bead(BEAD))
         assert third.resume.point()[1] == 1  # the file is there: stage 2 goes on
 

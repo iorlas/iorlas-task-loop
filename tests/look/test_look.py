@@ -5,9 +5,9 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from support.engine_land import EngineTest, real_lander_factory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support import engine_case as T
 from support import gitq
 from support.engine_case import engine
 from support.fakes import must_bead
@@ -47,7 +47,7 @@ class Shooting(fake_route.Script):
         return super().reply(role, prompt, schema, cwd, *a, **kw)
 
 
-class LookTest(T.EngineTest):
+class LookTest(EngineTest):
 
     def go(self, answers, first_shot=0, bead=BEAD, **cfg):
         script = type("S", (Shooting,), {"first_shot": first_shot})
@@ -213,8 +213,8 @@ class LookTest(T.EngineTest):
                     visual_paths=VISUAL)
         assert self.creates() == []
         eng2 = engine.Engine(
-            BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
-        )
+            BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
+        lander_factory=real_lander_factory)
         eng2.tree.reset(must_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume.point()

@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.engine_case import CAP_PARKS, EngineTest, stop
+from support.engine_case import CAP_PARKS, stop
+from support.engine_land import EngineTest
 
 from tltestkit.checks import typed
 from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, review

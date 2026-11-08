@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
+from support.engine_land import EngineTest, real_lander_factory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import gitq, homes
 from support.aging import age
-from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, stop
+from support.engine_case import CAP_PARKS, full, no_repo, stop
 
 from tltestkit import procsim
 from tltestkit.cfgs import PROFILE_PATTERNS
@@ -682,8 +683,8 @@ class EngineRunTest(EngineTest):
             mock.patch.object(dl.DelegateRoute, "runner", lambda self, *a, **k: script),
         ):
             rc = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
-            ).run()
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
+            lander_factory=real_lander_factory).run()
         assert rc == 2
         assert script.calls == []
         assert "delegate refused the call setup (skew_delegate_older" in self.said()

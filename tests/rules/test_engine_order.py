@@ -11,6 +11,7 @@ APP = ROOT / "src/taskloop/app"
 PARTS_FILES = ("parts_run.py", "parts_land.py", "parts_plan.py", "host.py", "engine.py")
 # how a part holds the engine: `self.e`, `self.host`, `self.h`, a local alias, or the look stage's two views of it (`hand`, `ports`)
 HOST_NAMES = {"e", "host", "h", "hand", "ports"}
+INJECTED = {"lander_factory": "lander_over"}
 
 # Resume and reflector take collaborators as role arguments.
 # Construction layers include run composition roots (bead_env, shell, stage_checks) and package nodes (ask_flow, shared).
@@ -70,15 +71,22 @@ def callee(call: ast.Call, known: dict[str, Path]) -> str:
         return f.id
     if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id == "api" and f.attr in known:
         return f.attr
+    if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id == "self":
+        assert f.attr in INJECTED, f"unknown injected factory: {f.attr}"
+        built = INJECTED[f.attr]
+        assert built in known, f"injected factory binding not imported: {built}"
+        return built
     return ""
 
 
 def part_defs() -> dict[str, tuple[str, set[str], Path]]:
     """{part: (the class or factory that builds it, parts its property body names, the file of that class)}."""
     out = {}
+    roots = imports(parsed(APP / "run/entry.py")[1]) | imports(parsed(APP / "launch/selftest.py")[1])
+    injected = {bound: roots[bound] for bound in INJECTED.values()}
     for name in PARTS_FILES:
         _, tree = parsed(APP / "run" / name)
-        known = imports(tree) | (api_homes() if "api" in imports_of_module(tree) else {})
+        known = injected | imports(tree) | (api_homes() if "api" in imports_of_module(tree) else {})
         known |= {n.name: known[n.returns.id] for n in tree.body  # a factory bound in the file itself reads what the class it returns reads
                   if isinstance(n, ast.FunctionDef) and isinstance(n.returns, ast.Name)}
         for cls in (n for n in tree.body if isinstance(n, ast.ClassDef)):

@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 from unittest import mock
 
 import pytest
+from support.engine_land import real_lander_factory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from run.test_stages import StagesTest
@@ -114,7 +115,7 @@ class StaleTree(StagesTest):
             spawner=real_spawner(),
             git=port_git(),
             who=who(),
-        )
+        lander_factory=real_lander_factory)
         self.junk_and_moving_main()
         (self.wt / "a.txt").write_text("edited and not committed\n")
         assert e.rebase.onto_base() == ""
@@ -157,7 +158,7 @@ class StaleTree(StagesTest):
             spawner=real_spawner(),
             git=port_git(),
             who=who(),
-        )
+        lander_factory=real_lander_factory)
         before = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         (self.wt / "g.txt").write_text("more work\n")
         tltestkit.shellkit.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
@@ -215,7 +216,7 @@ class SlotHygiene(StagesTest):
             spawner=real_spawner(),
             git=port_git(),
             who=who(),
-        )
+        lander_factory=real_lander_factory)
         assert e.checkout.dirty_status() == ""
         assert "?? client/" in gitq.git("status", "--porcelain", cwd=e.wt)  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work

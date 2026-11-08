@@ -8,9 +8,8 @@ from unittest import mock
 import pytest
 from support import engine_case as T
 from support.asked import ans
-from support.builders import make_engine
 from support.engine_case import engine
-from support.engine_land import LandReviewBase
+from support.engine_land import LandReviewBase, make_engine
 
 import tltestkit.shellkit
 from tlkernel import answers

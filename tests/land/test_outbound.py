@@ -10,7 +10,7 @@ from unittest import mock
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.engine_case import EngineTest
+from support.engine_land import EngineTest
 from support.narrow_land import BdOut, FakeOutboundHost, FakeSyncHost
 
 from tltestkit.logs import records

@@ -10,6 +10,7 @@ from unittest import mock
 
 import pytest
 
+from tlland.testing import FakeLandStage
 from tltestkit import fake_route
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
@@ -117,8 +118,8 @@ class SlotGitTest(Case):
         sh("git", "config", "core.bare", "true", cwd=self.repo)
         eng = engine.Engine(
             BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who()
-        )
+                git=port_git(), who=who(),
+        lander_factory=FakeLandStage)
         with pytest.raises(engine.Blocked) as cm:
             eng.assert_tree("write")
         assert "core.bare" in cm.value.why
@@ -126,16 +127,16 @@ class SlotGitTest(Case):
     def test_a_clean_slot_passes_the_tree_assert(self):
         eng = engine.Engine(
             BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who()
-        )
+                git=port_git(), who=who(),
+        lander_factory=FakeLandStage)
         eng.assert_tree("plan")
 
     def test_pinned_git_stays_in_the_slot_whatever_the_shared_config_says(self):
         self.plant_decoy()
         eng = engine.Engine(
             BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who()
-        )
+                git=port_git(), who=who(),
+        lander_factory=FakeLandStage)
         assert os.path.realpath(eng.git.toplevel(str(self.wt))) == str(self.wt)
         (self.wt / "f.txt").write_text("f\n")
         eng.accepted_new = ["f.txt"]  # an untracked file is staged only when a review accepts it or a plan stage lists it (tl-bxk.10.24)
@@ -147,8 +148,8 @@ class SlotGitTest(Case):
     def test_stage_all_takes_only_the_slots_status_paths_deletions_and_untracked_included(self):
         eng = engine.Engine(
             BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who()
-        )
+                git=port_git(), who=who(),
+        lander_factory=FakeLandStage)
         (self.wt / "a.txt").unlink()
         (self.wt / "new file.txt").write_text("n\n")
         eng.accepted_new = ["new file.txt"]
@@ -174,8 +175,8 @@ class SlotGitTest(Case):
             )
             eng = engine.Engine(
                 BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
-                    git=port_git(), who=who()
-            )
+                    git=port_git(), who=who(),
+            lander_factory=FakeLandStage)
             rc, tail = eng.sh([show])
             assert r.data["env"] == []
             assert (rc, tail) == (0, "[||]")
@@ -195,8 +196,8 @@ class SlotGitTest(Case):
         sha = sh("git", "rev-parse", "HEAD", cwd=other)
         eng = engine.Engine(
             BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who()
-        )
+                git=port_git(), who=who(),
+        lander_factory=FakeLandStage)
         rc, tail = eng.sh(["git", "-C", str(other), "rev-parse", "HEAD"])
         assert (rc, tail) == (0, sha)
         rc, tail = eng.sh(["git", "-C", str(other), "cat-file", "-e", sha])

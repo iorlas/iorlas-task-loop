@@ -7,6 +7,7 @@ import time
 import uuid
 from argparse import Namespace
 from collections.abc import Generator
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from tlkernel.kinds import Kind
 from tlkernel.procport import Spawner
 from tlkernel.run import Reexec, RunReport
 from tlkernel.run_slot import RUN_SLOT
+from tlland.lander import lander_over
 from tlpipeline.api import admission as pipeline_admission
 from tlpipeline.api import target
 from tlslots import config as wslots_config
@@ -33,6 +35,7 @@ from tlslots import engine_lock
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
+from taskloop.adapters.deadline import deadline
 from taskloop.app.reconcile import leases
 from taskloop.app.run import preflight, running
 from taskloop.app.run.engine import Blocked, Engine
@@ -266,19 +269,12 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
             getattr(a, "slot_gen", None),
         )
         eng = Engine(
-            a.id,
-            wt,
-            cfg,
-            dry_run=a.dry_run,
-            verbose=not getattr(a, "quiet", False),
+            a.id, wt, cfg,
+            dry_run=a.dry_run, verbose=not getattr(a, "quiet", False),
             fresh=bool(getattr(a, "fresh", False)),
-            store=store,
-            claim=claim,
-            held_lock=held,
-            env=env,
-            spawner=spawner,
-            git=git,
-            who=who,
+            store=store, claim=claim, held_lock=held,
+            lander_factory=partial(lander_over, deadline=deadline), env=env,
+            spawner=spawner, git=git, who=who,
             mode="loop" if getattr(a, "loop", False) else f"stage:{a.stage}" if getattr(a, "stage", None) else "auto-next",
         )
         eng.stop_pending = bool(stop)

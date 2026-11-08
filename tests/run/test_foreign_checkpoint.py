@@ -2,6 +2,8 @@
 
 import pytest
 
+from tlland.testing import FakeLandStage
+
 # isort: split
 from support import engine_case as T
 from support.checkpoints import put_ck
@@ -21,7 +23,7 @@ class ForeignCheckpoint(T.EngineTest):
     def test_a_foreign_version_is_refused_by_the_reader_and_the_engine(self):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         put_ck(eng, step="close")
         doc = eng.stores.checkpoints.of(eng.bead)
         assert isinstance(doc, CheckpointDoc)
@@ -34,4 +36,4 @@ class ForeignCheckpoint(T.EngineTest):
             eng.checkpoints.read()
         with pytest.raises(Refused, match="v4"):
             engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who())
+                git=port_git(), who=who(), lander_factory=FakeLandStage)

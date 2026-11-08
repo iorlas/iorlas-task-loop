@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
 
+from tlland.testing import FakeLandStage
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as te
 from support import gitq, homes
@@ -219,13 +221,13 @@ class VisualWork(StagesTest):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
         cfg = cfg_with(wslots_config.load_cfg(str(self.wt), port_git()), shot_table="shots.json")
         e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         assert list(e.pictures.shot_methods()) == ["ScreenShots"]
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
         cfg = cfg_with(wslots_config.load_cfg(str(self.wt), port_git()), shot_table="nowhere.json")
         e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         assert e.pictures.shot_methods() == {}
         assert e.pictures.shot_methods() == {}
 
@@ -323,7 +325,7 @@ class VisualWork(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
         assert (again.look.done, again.look.rendered, again.render_stale) == (1, ["a.png"], True)
@@ -469,7 +471,7 @@ class ResumeCount(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         e.tree.reset(must_bead(BEAD))
         e.plan_data = plan_of(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")

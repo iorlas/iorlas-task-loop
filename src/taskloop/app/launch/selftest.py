@@ -1,5 +1,6 @@
 """Bind the isolated selftest scenario to the installed engine and real adapters."""
 import os
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -8,9 +9,11 @@ from tlkernel.delegateport import Resolved
 from tlkernel.env import Env
 from tlkernel.ids import parse_bead_id
 from tlkernel.memory_beads import MemoryBeads
+from tlland.lander import lander_over
 from tlslots import config as wslots_config
 
 from taskloop.adapters import ident
+from taskloop.adapters.deadline import deadline
 from taskloop.app.doctor import selftest
 from taskloop.app.run.engine import Engine
 from taskloop.app.wire import real
@@ -29,14 +32,10 @@ def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     os.chdir(wt)  # the engine reads cwd
     try:
         rc = Engine(
-            t1,
-            str(wt),
-            cfg,
+            t1, str(wt), cfg,
             route=fixed_route(resolved, selftest.Runner(real_route().contract_no)),
-            store=store,
-            env=env,
-            spawner=real.spawner(env),
-            git=real.git(env),
+            store=store, lander_factory=partial(lander_over, deadline=deadline), env=env,
+            spawner=real.spawner(env), git=real.git(env),
             who=ident.identity(env),
         ).run()
     finally:

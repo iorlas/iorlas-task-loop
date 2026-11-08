@@ -2,6 +2,7 @@
 root of a run: it opens the run's identity, layout and context from the edge, and hands the rest to host.py's parts."""
 import shutil
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, override
 
@@ -19,6 +20,7 @@ from tlkernel.procport import Spawner
 from tlkernel.run import RunReport
 from tlkernel.runlayout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from tlkernel.systemclock import SystemClock
+from tlland.lander_host import LanderHost
 from tlpipeline.api import Blocked, FixFailed, ended
 from tlrelease import reexec
 from tlslots.engine_lock import HeldLock
@@ -27,6 +29,7 @@ from taskloop.adapters import landlock
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.facts import open_facts
 from taskloop.app.run.host import RunHost
+from taskloop.app.run.parts_land import LandStage
 from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
 from taskloop.app.track.console import say
@@ -57,19 +60,17 @@ class Engine(RunHost):
         fresh: bool = False,
         claim: fence.Claim | None = None,
         *,
-        env: Env,
-        spawner: Spawner,
-        git: Git,
-        who: Identity,
+        lander_factory: Callable[[LanderHost], LandStage],
+        env: Env, spawner: Spawner,
+        git: Git, who: Identity,
         mode: str = "task",
         held_lock: HeldLock | None = None,
     ) -> None:
+        self.lander_factory = lander_factory
         self.held_lock = held_lock if held_lock is not None else HeldLock()
         route = route or real_route()
-        self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
-        self.spawner = spawner
-        self.who = who  # the session and bd actor this run acts as, built at the edge
-        self.home = who.config  # the config dir of the identity, built at the edge
+        self.env, self.spawner = env, spawner  # the process environment, taken once at the edge (tl.py); every child is built from it
+        self.who, self.home = who, who.config  # the session and bd actor this run acts as, built at the edge
         self.git = git  # the port every git call of the run goes through, pinned to the slot, built at the edge with the same env
         super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim, who)
         self.clock = clock or SystemClock()
