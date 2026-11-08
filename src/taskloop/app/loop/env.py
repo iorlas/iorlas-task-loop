@@ -47,7 +47,7 @@ class LoopEnv:
     fetch: Callable[[], None]
     lint: Callable[[Bead], str]  # why a bead is not self-contained, "" when it is
     running: Callable[[], dict[BeadId, str]]  # {bead: where} of the runs going now
-    area_lock: Callable[[], AbstractContextManager[Any]]
+    area_lock: Callable[[], AbstractContextManager[object]]
     wt_lock: Callable[[str], AbstractContextManager[Any]]
     start_worktree: Callable[[str], str]
     claim: Callable[[BeadId, str, str], tuple[bool, str]]  # (bead, worktree, slot) -> (won, why not)

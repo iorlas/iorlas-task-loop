@@ -10,10 +10,9 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-from tlareas.policy import has_areas
+from tlareas import admission as area_admission
 from tlasks import admission, sweeps
 from tlkernel import childenv, fence
-from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch, Beads
 from tlkernel.config import EngineConfig
 from tlkernel.enums import Result
@@ -121,30 +120,6 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
             wslots.release_slot(repo, a.slot, bead=a.id, mine=True, store=store, gen=a.slot_gen, spawner=spawner, git=git, who=who)
 
 
-def take_area(a: Any, repo: Any, cfg: Any, lock: Any, git: Git, who: Identity, sb: Any = "", store: Any = None) -> Any:
-    """The engine lock, with the area check before it under the area lock (running.area_lock): "" when this run holds the
-    worktree, else why not. A bead whose area runs elsewhere: a warning, or refused with --exclusive-area."""
-    def mark() -> None:  # the slot says which bead runs in it (held_bead makes its area busy): only once the area is decided
-        if sb:
-            beadtools.attempt((store or beadtools.bd_store(who.actor, repo)).update, sb, BeadPatch(set_metadata={"held_bead": a.id}))
-    if not has_areas(cfg):
-        why = lock.take()
-        if not why:
-            mark()
-        return why
-    with running.area_lock(repo, who):
-        bead = beadtools.peek(store or beadtools.bd_store(who.actor, repo), a.id) or Bead(id=a.id, title="", status="")
-        _area, busy = running.area_busy(repo, cfg, bead, git, who)
-        if busy and getattr(a, "exclusive_area", False):
-            return busy + " (--exclusive-area)"
-        if busy:
-            say(f"⚠ {busy}: running anyway beside it; --exclusive-area refuses instead")
-        why = lock.take()
-        if not why:
-            mark()
-        return why
-
-
 def _handed_slot(slot: Any, env: Env) -> Any:
     """True when TL_REEXEC (set by the run-task that exec'd into this one, not yet read by the Engine) says it took `slot` itself."""
     handed = Reexec.parse(env.get(EnvVar.TL_REEXEC))
@@ -223,7 +198,12 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
             a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(who.actor, repo), took), SLOT_GEN)
         env = env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, took) if took else env  # the engine's heartbeat keeps it
         lock = engine_lock.EngineLock(who.config, wt, a.id, slot, env, fx=slotfx.FX)
-        busy = take_area(a, repo, cfg, lock, git, who, took or sb if slot else "", store)
+        host = running.areas_host(repo, cfg, git, who, store, say)
+        held_slot = (took or sb) if slot else None
+        def mark() -> None:
+            if held_slot:
+                beadtools.attempt(host.store.update, held_slot, BeadPatch(set_metadata={"held_bead": a.id}))
+        busy = area_admission.hand(host, a.id, getattr(a, "exclusive_area", False), lock.take, mark)
         if busy:
             why = busy if busy.startswith("area ") else f"worktree {wt}: {busy}"
             print(f"TAKEN: {why}")

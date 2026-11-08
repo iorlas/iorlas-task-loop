@@ -1,10 +1,10 @@
 """From a free slot to a verdict: the area check, the claim, the slot's reset and the run, bead after bead until one is run."""
-import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from os import EX_CONFIG
 
-from tlareas.policy import has_areas
+from tlareas import admission
+from tlareas.host import AreasHost
 from tlkernel.bdsafe import attempt
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch
@@ -61,20 +61,17 @@ class Taker:
         """The area check, the claim and the mark that makes the area busy, as one. A verdict: the bead is not to be run now;
         None with an empty `why`: go on."""
         env = self.env
-        with env.area_lock() if has_areas(ecfg) else contextlib.nullcontext():
-            if has_areas(ecfg):
-                rule.running = env.running()  # now, not as the queue was read: the slot wait since can be minutes (tl-na3)
-            area, busy = rule.area_busy(b) if has_areas(ecfg) else ("", None)
-            if busy:  # another run took the area since the queue was read
-                self.say(f"{b.id}: {busy.why}; the next bead")
-                return vd.Verdict(Result.SKIPPED)
-            won, why = env.claim(b.id, at.wt, at.slot)
-            if not won:
-                return vd.taken(why)
-            if area:
-                env.loop_lock(at.wt, at.slot, at.slot_bead, b.id)
-                if at.slot_bead:
-                    attempt(env.store.update, at.slot_bead, BeadPatch(set_metadata={"held_bead": b.id}))
+        def publish() -> None:
+            env.loop_lock(at.wt, at.slot, at.slot_bead, b.id)
+            if at.slot_bead:
+                attempt(env.store.update, at.slot_bead, BeadPatch(set_metadata={"held_bead": b.id}))
+        host = AreasHost(env.store, env.running, env.area_lock, self.say, ecfg.areas, ecfg.area_label_prefix)
+        admitted = admission.loop(host, b, rule, lambda: env.claim(b.id, at.wt, at.slot), publish)
+        if admitted.kind == "busy":
+            self.say(f"{b.id}: {admitted.why}; the next bead")
+            return vd.Verdict(Result.SKIPPED)
+        if admitted.kind == "not_won":
+            return vd.taken(admitted.why)
         return None
 
     def _park_profile_ahead(self, b: Bead, v: vd.Verdict) -> None:
