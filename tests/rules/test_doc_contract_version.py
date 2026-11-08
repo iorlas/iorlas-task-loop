@@ -1,4 +1,4 @@
-"""The contract number the docs name is the one delegate speaks (`CONTRACT` in src/delegate/contracts/wire.py)."""
+"""The contract number the docs name is the one delegate speaks (`CONTRACT` in packages/delegate/src/delegate/contracts/wire.py)."""
 import re
 from pathlib import Path
 
@@ -10,7 +10,7 @@ NAMED = re.compile(r"\bcontract (\d+)\b")
 
 
 def spoken() -> int:
-    found = re.search(r"^CONTRACT = (\d+)$", (ROOT / "src/delegate/contracts/wire.py").read_text(encoding="utf-8"), re.M)
+    found = re.search(r"^CONTRACT = (\d+)$", (ROOT / "packages/delegate/src/delegate/contracts/wire.py").read_text(encoding="utf-8"), re.M)
     assert found, "wire.py no longer declares `CONTRACT = N`"
     return int(found.group(1))
 

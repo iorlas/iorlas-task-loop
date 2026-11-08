@@ -75,7 +75,7 @@ RULES_BY_PATH = {
     "tests/rules/test_delegate_scope.py": (
     ),
     "tests/rules/test_doc_contract_version.py": (
-        "src/delegate/contracts/wire.py",
+        "packages/delegate/src/delegate/contracts/wire.py",
         "docs/dev/integrations.md",
         "docs/contracts/delegate-api.md",
         "README.md",

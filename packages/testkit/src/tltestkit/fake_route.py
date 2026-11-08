@@ -10,7 +10,8 @@ In process: `Script`/`DelegateScript`, a `runner` for delegate_link.call (the en
 from queues, the way the engine's own tests need; `stop_answer(reason, ...)` builds one stopped answer. Both build answers from
 `answer()`, which reads contract.json, so a field delegate adds is a field the fakes answer with.
 
-The contract is src/delegate/data/contract.json and the replayed fixtures are tests/delegate/contract/fixtures: the library's own.
+The contract is packages/delegate/src/delegate/data/contract.json and the replayed fixtures are tests/delegate/contract/fixtures:
+the library's own.
 """
 
 import json
@@ -24,7 +25,7 @@ from typing import ClassVar
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-CONTRACT_FILE = ROOT / "src" / "delegate" / "data" / "contract.json"
+CONTRACT_FILE = ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json"
 FIXTURE_DIR = ROOT / "tests" / "delegate" / "contract" / "fixtures"
 
 

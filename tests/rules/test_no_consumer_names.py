@@ -4,7 +4,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ROOTS = (ROOT / "src/taskloop", *(ROOT / "packages").glob("*/src"), ROOT / "skills/task-loop")
-SKIP = {"_vendor", "tltestkit"}
+# Delegate was outside this task-loop-only scan before its source moved into packages/.
+SKIP = {"_vendor", "tltestkit", "delegate"}
 SUFFIXES = {".py", ".md", ".json"}
 CONSUMERS = re.compile(r"unity|dotnet|nuget|msbuild|roslyn|prefab|asmdef|lifesim|\bfld\b", re.I)
 

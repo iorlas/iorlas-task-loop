@@ -1,6 +1,6 @@
 # delegate.api: the one interface between task-loop and delegate
 
-Owner: delegate (`src/delegate`, in this repo). task-loop imports `delegate.api` and nothing else of delegate; delegate imports nothing of
+Owner: delegate (`packages/delegate/src/delegate`, in this repo). task-loop imports `delegate.api` and nothing else of delegate; delegate imports nothing of
 task-loop. Both rules are import-linter contracts (`.importlinter`) and ruff bans (`TID251`). It replaces worker-run v4 (the `route.py`
 subprocess and its JSON wire): there is no process boundary to the router any more, only to the workers.
 

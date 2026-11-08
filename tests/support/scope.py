@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 # tests/conftest.py: tests/delegate/real/test_worker_home.py guards the worker homes it sets up
-DELEGATE_PATHS = ("src/delegate/", "tests/delegate/", "skills/task-loop/_vendor/", "dev/vendor.json", "tests/conftest.py")
+DELEGATE_PATHS = ("packages/delegate/", "tests/delegate/", "skills/task-loop/_vendor/", "dev/vendor.json", "tests/conftest.py")
 
 
 def git(*argv: str) -> subprocess.CompletedProcess[str]:

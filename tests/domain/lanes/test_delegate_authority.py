@@ -15,7 +15,7 @@ from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 
 ROOT = Path(__file__).resolve().parents[3]
-CONTRACT = json.loads((ROOT / "src/delegate/data/contract.json").read_text(encoding="utf-8"))
+CONTRACT = json.loads((ROOT / "packages/delegate/src/delegate/data/contract.json").read_text(encoding="utf-8"))
 
 
 class ContractParity(Case):

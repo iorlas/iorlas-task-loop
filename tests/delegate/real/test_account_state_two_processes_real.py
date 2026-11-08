@@ -42,7 +42,9 @@ class TwoProcessState(RunBase):
     def test_both_processes_writes_all_survive(self):
         done = self.base / "done"
         done.mkdir()
-        child_env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "src"), str(ROOT / "skills" / "task-loop" / "_vendor")]))
+        child_env = dict(os.environ, PYTHONPATH=os.pathsep.join([
+            str(ROOT / "packages" / "delegate" / "src"), str(ROOT / "skills" / "task-loop" / "_vendor"),
+        ]))
         procs = [subprocess.Popen([sys.executable, "-c", CHILD, who, str(done)], env=child_env) for who in ("a", "b")]
         end = time.time() + 50
         for p in procs:

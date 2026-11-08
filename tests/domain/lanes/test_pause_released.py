@@ -79,7 +79,7 @@ RELEASED: dict[tuple[Producer, str], PauseRule] = {
 
 class ReleasedPolicy(Case):
     def test_every_released_rule_keeps_its_classification_and_numbers(self):
-        contract = Path(__file__).resolve().parents[3] / "src/delegate/data/contract.json"
+        contract = Path(__file__).resolve().parents[3] / "packages/delegate/src/delegate/data/contract.json"
         reasons = json.loads(contract.read_text())["reasons"]
         for (producer, reason), expected in RELEASED.items():
             with self.subTest(producer=producer, reason=reason):
