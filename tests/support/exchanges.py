@@ -1,26 +1,26 @@
-"""Recorded exchanges: one model call of the engine as it was (the input it sent, the answer the lane returned), replayed as a golden.
+"""Recorded exchanges: one model call of the engine as it was (the input it sent, the answer the account returned), replayed as a golden.
 
 A case is a folder tests/fixtures/exchanges/<role>/<case>/ (role: planner, writer, reviewer):
   meta.json    node (plan, write, review); answer and input: "real" (kept from a real run) or "synthetic" (written by hand); source;
                calls: the roles the engine calls, in order, when it is fed this exchange
   bead.json    the bead as bd shows it: what the engine builds the brief and the prompt from
   plan.json    writer and reviewer cases: the plan the run goes by (a planner case's plan is its answer)
-  answer.json  the answer the lane returned, as delegate's worker-run output carries it (`data`)
+  answer.json  the answer the account returned, as delegate's worker-run output carries it (`data`)
   input.txt    the prompt the engine sent for that call, the worktree as <WT>; UPDATE_GOLDEN=1 rewrites it (so does dev/record_exchange.py
                --prompt, which keeps the text a real run sent)
 
 `replay` runs the engine with the fake route (tltestkit.fake_route.Script) answering the recorded role's call with answer.json, then checks
 that the parser takes the answer, the engine called the roles meta.json lists, the call's input is input.txt, and its size is under
-the role's cap (tlkernel/lanecaps). A prompt, schema or parser change that breaks a recorded exchange fails here."""
+the role's cap (tlkernel/accountcaps). A prompt, schema or parser change that breaks a recorded exchange fails here."""
 import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.domain.lanes.roles import ROLES
+from taskloop.domain.accounts.roles import ROLES
+from tlkernel import accountcaps as caps
 from tlkernel import answers
-from tlkernel import lanecaps as caps
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCHANGES = ROOT / "tests" / "fixtures" / "exchanges"

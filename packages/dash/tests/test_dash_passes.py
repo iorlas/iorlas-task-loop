@@ -11,7 +11,7 @@ NOW = T + 20_000
 
 
 def comeback() -> list:
-    """Run 1 on slot a: plan, write, a red check, a fix write, then the codex lane runs out. Run 2 on slot b: write, checks, review,
+    """Run 1 on slot a: plan, write, a red check, a fix write, then the codex account runs out. Run 2 on slot b: write, checks, review,
     land."""
     one = (
         RunScript("tl-7", "20261015-100000", slot="a", at=0)
@@ -21,7 +21,7 @@ def comeback() -> list:
         .step("checks", 480, 76_000, outcome="red")
         .move("write", "bad_checks")
         .step("write", 1560, 247_000)
-        .close("parked", "lane_out", "codex out until 14:00")
+        .close("parked", "account_out", "codex out until 14:00")
     )
     two = (
         RunScript("tl-7", "20261015-160000", slot="b", at=7_200, prev_run=one.name)
@@ -51,7 +51,7 @@ class Passes(Case):
         self.ps = passes.passes_of(self.runs)
 
     def test_three_passes_with_how_each_ended(self):
-        assert [(p.n, p.end) for p in self.ps] == [(1, "test_failed"), (2, "lane_out"), (3, "done")]
+        assert [(p.n, p.end) for p in self.ps] == [(1, "test_failed"), (2, "account_out"), (3, "done")]
         assert self.ps[0].text == "test failed: back to write"
         assert self.ps[1].text == "codex out until 14:00"  # the engine's own line wins over the table
         assert self.ps[2].text == "landed"
@@ -83,7 +83,7 @@ class Passes(Case):
         assert [(p.n, p.slot, p.from_slot, p.to_slot, p.landed) for p in pieces] == [(0, "a", None, "b", False), (1, "b", "a", None, True)]
         assert (
             [(s.label, s.kind) for s in pieces[0].segs]
-            == [("plan", "stage"), ("write", "stage"), ("test", "failed"), ("write", "stage"), ("lane ran out, parked", "parked")]
+            == [("plan", "stage"), ("write", "stage"), ("test", "failed"), ("write", "stage"), ("account ran out, parked", "parked")]
         )
         assert (
             [(s.label, s.kind) for s in pieces[1].segs]

@@ -136,7 +136,7 @@ class Pictures:
         return [(f, m) for f, m in run_listing(facts.home.artifact_store(), slot) if m.role == "before" and m.kind in IMAGE_KINDS]
 
     def render_shots(self, reqs: Sequence[Open], rnd: int) -> tuple[list[str], list[str]]:
-        """([picture names under the evidence dir], [errors]): the requested shot methods run by the engine, outside any lane's
+        """([picture names under the evidence dir], [errors]): the requested shot methods run by the engine, outside any account's
         sandbox, each built only from the project's table (looks.build). Full-size copies go to the evidence dir; the judge's
         shrunk ones to <run>/looks/r<rnd>/."""
         hand, facts, ports, state = self.hand, self.facts, self.ports, self.state

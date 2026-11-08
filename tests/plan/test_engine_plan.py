@@ -348,7 +348,7 @@ class EnginePlanTest(EngineTest):
         noise, _ = self.engine_noise(name)
         assert len(noise) > 1, "the fixture has engine comments"
         self.stopped_run()
-        with self.store.stub(show=dict(BEAD, notes="Engine paused: paused: no lane for write")), \
+        with self.store.stub(show=dict(BEAD, notes="Engine paused: paused: no account for write")), \
                 self.store.stub(comments=noise):
             rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         assert rc == 0, self.blocked

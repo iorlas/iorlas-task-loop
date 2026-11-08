@@ -35,7 +35,7 @@ CLOSES = [
     ("ask-budget", "blocked", "over_budget", "over budget: write 61 min of 60"),
     ("ask-ticket", "blocked", "ticket", "ticket: the bead has no acceptance criteria"),
     ("wait-ask", "blocked", "needs_human", "waiting: for the owner's answer to ask g-1 (decision): which?"),
-    ("pause-lane", "blocked", "lane_out", "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)"),
+    ("pause-account", "blocked", "account_out", "paused: no account for the write step (CODEX_SUBSCRIPTION out until 14:00)"),
     ("pause-network", "blocked", "network", "paused: no network for the land push after 90 s; the branch is kept"),
     ("pause-killed", "failed", "stopped_by_coordinator", "failed: stopped (SIGTERM)"),
     ("owner-park", "blocked", "paused", "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)"),

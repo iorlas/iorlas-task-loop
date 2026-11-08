@@ -1,4 +1,4 @@
-"""Stage tests, part 3: the stale tree, slot hygiene, dead lanes, contracts and follow-ups. Split from test_stages."""
+"""Stage tests, part 3: the stale tree, slot hygiene, dead accounts, contracts and follow-ups. Split from test_stages."""
 import sys
 from pathlib import Path
 from typing import Any, ClassVar

@@ -135,7 +135,7 @@ class Interrupter:
                 signal.raise_signal(signal.SIGTERM)
             paused = self.interruption == "pause"
             raise engine.Blocked("paused: validation writer unavailable" if paused else "needs a human: validation command denied",
-                                 kind=Kind.PAUSE_LANE if paused else Kind.FAULT_DENIED)
+                                 kind=Kind.PAUSE_ACCOUNT if paused else Kind.FAULT_DENIED)
         return self.real["delegate"](this, current_role, *a, **kw)
 
     def patched(self):

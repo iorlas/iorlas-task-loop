@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tlkernel import lanepauses as pauses
+from tlkernel import accountpauses as pauses
 
 REASONS = json.loads((Path(__file__).resolve().parents[2] / "packages/delegate/src/delegate/data/contract.json").read_text(
     encoding="utf-8"))["reasons"]
@@ -19,7 +19,7 @@ def test_a_contract_reason_pauses_with_its_recorded_permanence(reason):
         assert pauses.TABLE[("delegate", reason)].permanence == recorded
 
 
-def test_no_lane_and_crash_stay_with_the_owner_whatever_a_stop_says():
+def test_no_account_and_crash_stay_with_the_owner_whatever_a_stop_says():
     for reason in ("no_account", "crash"):
         assert pauses.rule(reason, "delegate", "transient").permanence == "needs_owner"
 

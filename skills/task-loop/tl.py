@@ -25,8 +25,7 @@
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
   tl.py worktrees [clean]                       list the repo's worktrees (owned, foreign, orphaned); clean removes owned merged clean ones
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
-  tl.py accounts [enable|decline LANE]          the worker accounts: ready or not, the fix; enable or decline one
-  tl.py lanes                                   file delegate's lane status for the dashboard (the dashboard runs no delegate)
+  tl.py accounts [enable|decline ACCOUNT]          the worker accounts: ready or not, the fix; enable or decline one
   tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
   tl.py runs show RUN | slow [--top N] [--by exec|wait] [--runs N]  one run end to end; the slowest steps, calls, checks and waits
@@ -79,8 +78,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.doctor import install
+from taskloop.app.launch import accounts as wire_accounts
 from taskloop.app.launch import dash as wire_dash
-from taskloop.app.launch import lanes as wire_lanes
 from taskloop.app.launch.release_host import release_host
 from taskloop.app.parts import STAGE_PARTS
 from taskloop.app.track import trail, verbs
@@ -141,7 +140,7 @@ def v_land_stack(a: Any, c: Ctx) -> int:
 
 def owner_parsers(sp):
     sp.add_parser("actor")
-    sp.add_parser("selftest", help="run one bead through the engine with a fake lane in a temp repo; exit 1 when it cannot")
+    sp.add_parser("selftest", help="run one bead through the engine with a fake account in a temp repo; exit 1 when it cannot")
     p = sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot")
     p.add_argument("--reindex", action="store_true", help="rebuild the dashboard's run index in factory.db")
     p.add_argument("--print-guard-rails", action="store_true", help="print the gh api calls that set the guard rails of main")
@@ -205,8 +204,7 @@ def engine_parsers(sp):
     p.add_argument("--outcome-file", help="also write the outcome (the last stdout line, JSON) to this file")
     p = sp.add_parser("accounts", help="the worker accounts delegate can use: ready or not, the fix, and enable/decline one")
     p.add_argument("op", nargs="?", choices=["list", "enable", "decline"], default="list")
-    p.add_argument("lane", nargs="?", default="")
-    sp.add_parser("lanes", help="file delegate's lane status (route.py status --json) as the snapshot the dashboard reads")
+    p.add_argument("account", nargs="?", default="")
     p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
     p.add_argument("windows")
     p = sp.add_parser("land-lock", help="run a command under the repo's land lock (the one the engine lands under)")
@@ -424,8 +422,7 @@ VERBS: Final[dict[str, Handler]] = {
     "runs": lambda a, c: verbs.runs(a, c.who.config),
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
-    "lanes": lambda a, c: wire_lanes.refresh(c.env),
-    "accounts": lambda a, c: wire_lanes.accounts(a.op, a.lane, c.env),
+    "accounts": lambda a, c: wire_accounts.accounts(a.op, a.account, c.env),
     "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner, {p.name: p.version for p in STAGE_PARTS}),

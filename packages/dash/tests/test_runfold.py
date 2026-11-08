@@ -47,7 +47,7 @@ def fixture_records(path):
                 items.append(item)
             raw["run"] = {"round": raw["round"], "results": items}
         fields = {f.encode_name for f in msgspec.structs.fields(tp)}
-        rows.append(wire.load(rec.EngineLog, {"v": 4, "kind": raw["kind"], **{k: v for k, v in raw.items() if k in fields}}))
+        rows.append(wire.load(rec.EngineLog, {"v": 5, "kind": raw["kind"], **{k: v for k, v in raw.items() if k in fields}}))
     return rows
 
 
@@ -61,7 +61,7 @@ def whole(name, records):
         next((r for r in reversed(body) if isinstance(r, rec.Close)), None),
         tuple(r for r in body if isinstance(r, rec.Transition)), tuple(r for r in body if isinstance(r, rec.Artifacts)),
         next((r for r in reversed(body) if isinstance(r, rec.Checks)), None), facts.open_wait(body),
-        next((r.lane for r in reversed(body) if isinstance(r, rec.CallEnd) and r.lane), ""),
+        next((r.account for r in reversed(body) if isinstance(r, rec.CallEnd) and r.account), ""),
         next((r.exit for r in reversed(body) if isinstance(r, rec.CallEnd) and r.exit is not None), None),
         said=tuple(r for r in body if isinstance(r, rec.Said)),
         assumed=sum(isinstance(r, rec.Assumed) for r in body), stuck=open_episode(body), waits=facts.waits_of(body))
@@ -98,10 +98,10 @@ class RunFold(Case):
         assert count > 0
 
     def test_pairs_stuck_and_non_events_across_every_boundary(self):
-        s = RunScript("b-1").add("wait_start", id="w1", what="lane")
+        s = RunScript("b-1").add("wait_start", id="w1", what="account")
         s.add("wait_start", id="w2", what="network").add("wait_end", id="w1", wait_seconds=4)
         s.add("stuck", why="silent", step="write", since=T).beat()
-        s.step("write", 10, 123, lane="lane").add("wait_end", id="w2", wait_seconds=8)
+        s.step("write", 10, 123, account="account").add("wait_end", id="w2", wait_seconds=8)
         s.add("stuck", why="same_red", step="checks", since=T, sig="red")
         s.add("note", text="still red").add("checks", node_id="n", run={"round": 1, "results": []})
         s.close("done")
@@ -120,7 +120,7 @@ class RunFold(Case):
     def test_generated_stage_facts_and_budget_totals(self):
         s = RunScript("b-1").step("plan", 10, 100, cost=0.1, source="harness")
         s.add("assumed", step="n1", text="one assumption").move("write", "planned")
-        s.step("write", 20, 200, lane="lane").artifacts(2, "write", "answer.json")
+        s.step("write", 20, 200, account="account").artifacts(2, "write", "answer.json")
         s.add("said", step="n2", who="engine", text="written")
         s.add("overrun", stage="write", budget_s=10, elapsed_s=20)
         s.step("checks", 5).add("checks", node_id="n3", run={"round": 1, "results": [

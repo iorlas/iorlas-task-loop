@@ -1,7 +1,7 @@
-"""WorkerCall: one AI step through delegate (contract 4). Delegate picks lane and model, limits apply, it records the run.
+"""WorkerCall: one AI step through delegate (contract 4). Delegate picks account and model, limits apply, it records the run.
 
 `run` builds the request (`RunRequest`; the engine builds no argv), makes the call, and for a stopped call asks
-`lanes.policy.decide` what to do and lets `LaneActs` do it; a done call's answer is validated against the node's schema, a broken
+`accounts.policy.decide` what to do and lets `AccountActs` do it; a done call's answer is validated against the node's schema, a broken
 one is asked for again (the `invalid_output` row of the RetryPlan). The call is on disk while it is in flight (CallState) so a killed
 run, a sleeping laptop or a dropped network goes on in the same thread. The worker's life is delegate's: the engine reads the live
 file's first line (`WorkerStarted`) and the answer's `worker`, and stops a call only through the process seam (stream-proc)."""
@@ -25,14 +25,14 @@ from tlkernel.wire import Open
 from taskloop.adapters import delegate_wire
 from taskloop.app.workers import asked, strays, worker_identity, worker_recovery, worker_request
 from taskloop.app.workers import call_state as callstate
+from taskloop.app.workers.account_acts import AccountActs, AccountHost
 from taskloop.app.workers.call import Call
 from taskloop.app.workers.calls import Calls, timing
 from taskloop.app.workers.delegation import DelegationRoute
-from taskloop.app.workers.lane_acts import LaneActs, LaneHost
-from taskloop.domain.lanes import policy as lp
-from taskloop.domain.lanes.denials import command_of, secret_false_positive
-from taskloop.domain.lanes.retry import PLAN
-from taskloop.domain.lanes.roles import READ_ONLY_NODES, ROLES
+from taskloop.domain.accounts import policy as lp
+from taskloop.domain.accounts.denials import command_of, secret_false_positive
+from taskloop.domain.accounts.retry import PLAN
+from taskloop.domain.accounts.roles import READ_ONLY_NODES, ROLES
 
 READ_TOOLS = ("Bash", "shell", "bash")
 
@@ -55,7 +55,7 @@ class WorkerHand(Protocol):
 
 class WorkerWrite(Protocol):
     @property
-    def lane_notes(self) -> list[str]: ...
+    def account_notes(self) -> list[str]: ...
 
 
 class WorkerRoute(DelegationRoute, Protocol):
@@ -64,7 +64,7 @@ class WorkerRoute(DelegationRoute, Protocol):
              env: Mapping[str, str], delta: str | None = None) -> Answer: ...
 
 
-class WorkerHost(worker_request.RequestHost, worker_request.ToolHost, LaneHost, asked.Settling, Protocol):
+class WorkerHost(worker_request.RequestHost, worker_request.ToolHost, AccountHost, asked.Settling, Protocol):
     stats: dict[str, int]
     planner_ref: str
     run_id: str
@@ -101,7 +101,7 @@ class WorkerHost(worker_request.RequestHost, worker_request.ToolHost, LaneHost, 
 class WorkerCall:
     def __init__(self, host: WorkerHost, ops: Ops) -> None:
         self.e, self.ops = host, ops
-        self.acts = LaneActs(host, self)
+        self.acts = AccountActs(host, self)
         self.active: Call | None = None
 
     # -- the step
@@ -303,7 +303,7 @@ class WorkerCall:
 
     def overrun(self, c: Call, ans: Answer, runner: Any, elapsed: float) -> Answer:
         """A reviewer call that used its budget (delegate stopped its worker at --timeout, or the engine's backstop did): an Overrun record,
-        and the call becomes a stop of its lane, which the policy routes past (the next reviewer rung)."""
+        and the call becomes a stop of its account, which the policy routes past (the next reviewer rung)."""
         res = ans.res
         if c.node not in READ_ONLY_NODES or c.limit_s is None:
             return ans
@@ -311,13 +311,15 @@ class WorkerCall:
         if not (wall or (res.stop is not None and res.stop.reason == delegate_wire.REASON_TIMEOUT)):
             return ans
         live = runner.live_start()
-        lane = res.account or (live.account if live else "")
-        self.e.log.emit(rec.Overrun(stage=c.step or c.node, budget_s=c.limit_s, elapsed_s=round(max(elapsed, res.secs), 1), lane=lane))
+        account = res.account or (live.account if live else "")
+        self.e.log.emit(
+            rec.Overrun(stage=c.step or c.node, budget_s=c.limit_s, elapsed_s=round(max(elapsed, res.secs), 1), account=account)
+        )
         stop = StopFacts(
             reason=REASON_OVERRUN, scope="account", permanence="transient", retry=delegate_wire.Retry(kind="none"), ref=res.ref or ""
         )
         said = f"the {c.node} call used its {int(c.limit_s // 60)} min budget"
-        return Answer(res.replace(stop=stop, account=lane or None, say=said), ans.raw, ans.argv, ans.trace)
+        return Answer(res.replace(stop=stop, account=account or None, say=said), ans.raw, ans.argv, ans.trace)
 
     def note_result(self, c: Call, ans: Answer, runner: Any) -> None:
         """The records a returned call leaves: the vendor error of a stop, the CallState."""
@@ -330,14 +332,15 @@ class WorkerCall:
                 rec.VendorError(
                     node=e.steps.id,
                     reason=s.reason or res.say or "stopped",
-                    lane=res.account or "",
+                    account=res.account or "",
                     model=res.model or "",
                     error=(res.first_error or res.say or "")[:300],
                     error_observed=bool(res.first_error),
                     **timing(runner.obs),
                 )
             )
-            if res.ref and s.resumable:  # the thread this stop can go on in; any other stop forgets it (a lane that is out cannot resume)
+            # the thread this stop can go on in; any other stop forgets it (an account that is out cannot resume)
+            if res.ref and s.resumable:
                 c.state.note_ref(res.ref, e.clock.now())
             else:
                 c.state.ref = ""
@@ -435,12 +438,12 @@ class WorkerCall:
             # the owner's word: when only one family is up, it reviews its own work; say so (delegate's warning when it gives one),
             # in the log, the trace and the bead, and never pause for it
             note = "the {} step ran on the writer's own model family{}".format(
-                c.node, (": " + res.warning.strip()[:300]) if res.warning.strip() else " (no other lane was free)"
+                c.node, (": " + res.warning.strip()[:300]) if res.warning.strip() else " (no other account was free)"
             )
-            if note not in e.write.lane_notes:
-                e.write.lane_notes.append(note)
+            if note not in e.write.account_notes:
+                e.write.account_notes.append(note)
                 e.warn(note)
-                e.comment("Lane (engine): " + note)
+                e.comment("Account (engine): " + note)
         model = f"{res.model} {res.effort} on {res.account}"
         (e.run_dir / f"{c.node}-{e.stats['nodes']}.json").write_text(json.dumps(res.data, indent=1))
         shown = self.ops.summarize(c.node, res.data)

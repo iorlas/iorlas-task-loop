@@ -124,7 +124,7 @@ class Feed(Case):
             put(
                 log,
                 [
-                    typed("wait_start", T + 12, id="w1", what="lane", holder="DEEPSEEK_FREE"),
+                    typed("wait_start", T + 12, id="w1", what="account", holder="DEEPSEEK_FREE"),
                     typed("wait_end", T + 13, id="w1", wait_seconds=60),
                     typed("vendor_error", T + 14, node="write", reason="hung"),
                     typed("kill", T + 15, what="call", why="silent"),

@@ -42,12 +42,12 @@ class Rule:
     loop: Result            # the loop's result
     trace: str              # the trace/ledger value: paused and parked are distinct
     makes_ask: bool
-    resolver: str           # who clears it: none | clock | lane | network | engineer | owner | bead_author
+    resolver: str           # who clears it: none | clock | account | network | engineer | owner | bead_author
     label: str = ""         # bd label added when the bead is left open
     retries: int = 0        # same fingerprint on one bead before escalation (0: never escalates)
     escalate_to: Kind | None = None
     replan: bool = False    # the exit charges the replan cap
-    wake: str = ""          # when a bead may be picked again: "" now | answer | lane | net | spec | cooldown
+    wake: str = ""          # when a bead may be picked again: "" now | answer | account | net | spec | cooldown
 
 
 def _fault(resolver: str = "engineer") -> Rule:
@@ -70,7 +70,7 @@ POLICY: Final = {
     Kind.ASK_BUDGET: _ask(),
     Kind.ASK_TICKET: Rule("block", Result.PARKED, "parked", True, "bead_author", wake="spec"),
     Kind.WAIT_ASK: Rule("none", Result.PARKED, "parked", False, "owner", wake="answer"),
-    Kind.PAUSE_LANE: Rule("open", Result.PAUSED, "paused", False, "lane", wake="lane"),
+    Kind.PAUSE_ACCOUNT: Rule("open", Result.PAUSED, "paused", False, "account", wake="account"),
     Kind.PAUSE_NETWORK: Rule("open", Result.PAUSED, "paused", False, "network", wake="net"),  # counts toward no cap
     Kind.ENGINE_CRASH: Rule("open", Result.PARKED, "parked", False, "engineer"),
     Kind.PAUSE_KILLED: Rule("open", Result.PAUSED, "paused", False, "none"),

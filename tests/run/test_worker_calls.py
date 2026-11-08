@@ -1,6 +1,6 @@
 """tl-ixc: the engine's worker call under the RetryPlan: its rows, a reviewer's wall-time budget (Overrun), a write that timed out or
 ended by SIGTERM (a RetryDecision with the timeout and the exit), and the `exit` in CallEnd. The policy's own tables are in
-test_lane_policy; the live file and the stop are in test_write_idle and test_procs."""
+test_account_policy; the live file and the stop are in test_write_idle and test_procs."""
 
 import sys
 import time
@@ -19,7 +19,7 @@ from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
-from taskloop.domain.lanes import retry
+from taskloop.domain.accounts import retry
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.paths import RunFiles
@@ -29,7 +29,7 @@ from tltestkit.logs import records
 
 
 def napper(nap):
-    """`time` as lane_acts sees it, with a sleep that only counts (the real one is patched nowhere else: threads sleep too)."""
+    """`time` as account_acts sees it, with a sleep that only counts (the real one is patched nowhere else: threads sleep too)."""
     return SimpleNamespace(sleep=nap, strftime=time.strftime, localtime=time.localtime, time=time.time)
 
 
@@ -49,7 +49,7 @@ class Calls(te.EngineTest):
     def go(self, script):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         nap = mock.Mock()
-        with te.delegate_stack(script), mock.patch("taskloop.app.workers.lane_acts.time", napper(nap)):
+        with te.delegate_stack(script), mock.patch("taskloop.app.workers.account_acts.time", napper(nap)):
             self.eng = engine.Engine(
                 BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
             lander_factory=FakeLandStage)

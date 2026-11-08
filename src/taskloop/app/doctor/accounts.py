@@ -1,4 +1,5 @@
-"""`tl lanes`: ask delegate for its status once (`delegate.api.status`, spends no quota) and file it as the StatusSnapshot the
+"""Account commands and the loop snapshot chore: ask delegate for its status once (`delegate.api.status`, spends no quota).
+File it as the StatusSnapshot the
 dashboard reads, and each window's use into the usage history. `tl usage` files it too, on its way. The dashboard never runs delegate."""
 import json
 import time
@@ -60,28 +61,28 @@ def chore(say: Callable[[str], None], route: Route, cfg: paths.ConfigDir, now: f
     return True
 
 
-def accounts(op: str, lane: str, route: Route, cfg: paths.ConfigDir) -> int:
-    """`tl accounts [enable|decline LANE]`: the worker accounts delegate can use, what each needs, and the owner's choice for one."""
+def accounts(op: str, account: str, route: Route, cfg: paths.ConfigDir) -> int:
+    """`tl accounts [enable|decline ACCOUNT]`: the worker accounts delegate can use, what each needs, and the owner's choice for one."""
     try:
         if op in ("enable", "decline"):
-            if not lane:
-                print(f"usage: tl accounts {op} LANE")
+            if not account:
+                print(f"usage: tl accounts {op} ACCOUNT")
                 return 2
-            route.set_account(lane, op == "enable")
-            print(f"{lane}: {'enabled' if op == 'enable' else 'declined'}")
+            route.set_account(account, op == "enable")
+            print(f"{account}: {'enabled' if op == 'enable' else 'declined'}")
         rows = route.accounts()
     except (ValueError, SystemExit, OSError) as e:
         print(f"accounts: {e}")
         return 1
-    width = max((len(r.lane) for r in rows), default=4)
-    print(f"{'lane':<{width}}  enabled  ready  fix")
+    width = max((len(r.account) for r in rows), default=4)
+    print(f"{'account':<{width}}  enabled  ready  fix")
     for r in rows:
-        print(f"{r.lane:<{width}}  {'yes' if r.enabled else 'no':<7}  {'yes' if r.ready else 'no':<5}  {r.fix}".rstrip())
+        print(f"{r.account:<{width}}  {'yes' if r.enabled else 'no':<7}  {'yes' if r.ready else 'no':<5}  {r.fix}".rstrip())
     return 0
 
 
 def feed(windows: str, route: Route, cfg: Callable[[], paths.ConfigDir]) -> int:
-    """Validate and file a usage reading, then report its Claude lane."""
+    """Validate and file a usage reading, then report its Claude account."""
     try:
         reading = json.loads(windows)
     except ValueError as e:
@@ -92,10 +93,11 @@ def feed(windows: str, route: Route, cfg: Callable[[], paths.ConfigDir]) -> int:
     except ValueError:
         print("delegate did not take the reading")
         return 1
-    file_snapshot(snap, cfg())  # the dashboard's lane cards read this
-    lane = next((x for x in snap.lanes if x.id == "CLAUDE_SUBSCRIPTION"), None)
-    if lane is None:
+    file_snapshot(snap, cfg())  # the dashboard's account cards read this
+    account = next((x for x in snap.accounts if x.id == "CLAUDE_SUBSCRIPTION"), None)
+    if account is None:
         print("delegate did not take the reading")
         return 1
-    print("fed {}: Claude subscription 5h {}%, week {}%{}".format(route.library, lane.five, lane.week, ", OUT" if lane.out else ""))
+    print("fed {}: Claude subscription 5h {}%, week {}%{}".format(
+        route.library, account.five, account.week, ", OUT" if account.out else ""))
     return 0

@@ -251,7 +251,7 @@ class OldCheckpoint(Case):
         h = Host()
         Resume(h, h, h, FakeHeadHistory(), ReviewGlue(h), state_names()).restore(ck, late=True)
         assert (h.look.notes, h.look.unjudged, h.look.done) == (
-            ["the main screen shows the list"], {"look judge, round 2": "no lane: busy"}, 2)
+            ["the main screen shows the list"], {"look judge, round 2": "no account: busy"}, 2)
         reqs = [{"method": "Shots", "names": ["home.png"]}]
         assert (h.look.rendered, h.look.last_reqs, h.render_stale) == (["home.png", "list.png"], reqs, True)
         h.checkpoints.save(step="write", stage=1)

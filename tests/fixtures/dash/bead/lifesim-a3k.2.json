@@ -1,5 +1,5 @@
 {
- "v": 1,
+ "v": 2,
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-a3k.2",
@@ -13,7 +13,7 @@
   "t": 1793046600.0,
   "epic": "lifesim-eco",
   "slot": "mac·3",
-  "lane": "claude 2",
+  "account": "claude 2",
   "review": null,
   "loops": 0,
   "dots": [
@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "c3e7e14186ddb007",
+ "version": "50b8f34172f70413",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Prices with a currency sign. Part of Economy.",

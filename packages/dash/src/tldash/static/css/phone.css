@@ -216,7 +216,7 @@ html.phone .dtabs .nb{font-size:12px}
 html.phone .row6.th img{min-height:40px;object-fit:cover}
 html.phone .row6.hd>button{min-height:40px;font-size:12px}
 html.phone .stage-budget{font-size:12px}html.phone .row6>button[data-stage]{height:auto;min-height:44px}
-html.phone .lanesp{margin-top:4px}.lc.stale{opacity:.55}
+html.phone .accountsp{margin-top:4px}.lc.stale{opacity:.55}
 .lc .bx .chip{height:40px;line-height:40px;padding:0 12px;margin:0;border-radius:99px;background:var(--cell);font-size:13px}
 .needs{margin:0 16px 8px}.hs{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--mut);padding:2px 0 8px}.hsi{display:inline-flex;align-items:center;gap:5px}
 .nh{font-size:13px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;padding:4px 0}.nl{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}

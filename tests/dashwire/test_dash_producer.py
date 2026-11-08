@@ -11,8 +11,8 @@ from tlasks import owner_verbs
 from tldash.api import live
 from tldash.readers.logs import live_event
 from tldash.testing import RunScript, T, bead
-from tldash.views.floor import slot_of
 from tldash.views.live_lines import retype
+from tldash.views.slots import slot_of
 from tldash.views.world import ProjectIn
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
@@ -68,7 +68,7 @@ def test_a_claim_with_no_manifest_for_90_seconds_is_starting_and_becomes_running
                    metadata={"held_bead": "p-1"})
     project = ProjectIn(id="p", name="p", beads=[bead("p-1", "Starting work", "in_progress")])
     assert slot_of(project, claimed, {}, T + 90).state == "starting"
-    run = RunScript("p-1", slot="a", at=95).step("write", 10, lane="codex", tokens=1, end=False).run(T + 100)
+    run = RunScript("p-1", slot="a", at=95).step("write", 10, account="codex", tokens=1, end=False).run(T + 100)
     assert slot_of(project, claimed, {"p-1": [run]}, T + 100).state == "running"
 
 

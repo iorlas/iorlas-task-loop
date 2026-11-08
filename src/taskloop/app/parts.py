@@ -5,6 +5,7 @@ The test in tests/rules/test_stage_parts.py fails until it is added.
 from tlgate.store import GATE
 from tlkernel.dbparts import Part
 from tlkernel.factoryparts import (
+    ACCOUNTS,
     ASKS,
     BEADCACHE,
     DASH,
@@ -12,7 +13,6 @@ from tlkernel.factoryparts import (
     DURATION,
     FLAKE,
     INDEX,
-    LANES,
     LOOK,
     LOOP,
     PIPELINE,
@@ -30,6 +30,6 @@ from tlkernel.factoryparts import (
 from tlland.store import LAND
 
 STAGE_PARTS: tuple[Part, ...] = (
-    DASH, PIPELINE, SLOTS, GATE, ASKS, RELEASE, REPORT, LAND, WORK, LANES, LOOP, LOOK, RECEIPT, BEADCACHE, REPOS,
+    DASH, PIPELINE, SLOTS, GATE, ASKS, RELEASE, REPORT, LAND, WORK, ACCOUNTS, LOOP, LOOK, RECEIPT, BEADCACHE, REPOS,
     TICKET, INDEX, WORKTREE, DISK, RUNDOC, DURATION, QUEUE, FLAKE,
 )

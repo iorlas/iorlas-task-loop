@@ -14,8 +14,9 @@ class WindowStatus(Rec):
 
 
 @final
-class LaneStatus(Rec):
-    """One lane as the lane cards and the banner show it: delegate's `cockpit.lanes` row joined with its top-level `lanes` entry."""
+class AccountStatus(Rec):
+    """One account as the account cards and the banner show it: delegate's `cockpit.accounts` row joined with its top-level `accounts`
+    entry."""
 
     id: str
     label: str = ""
@@ -28,8 +29,9 @@ class LaneStatus(Rec):
     unlock_at: float | None = None
     warnings: list[str] = msgspec.field(default_factory=list)
     windows: list[WindowStatus] = msgspec.field(default_factory=list)
-    five: float | None = None  # the contract's typed 5-hour window, percent used (the top-level `lanes[id].five`); windows[] names are free
-    week: float | None = None  # the contract's typed weekly window, percent used (`lanes[id].week`)
+    # the contract's typed 5-hour window, percent used (the top-level `accounts[id].five`); windows[] names are free
+    five: float | None = None
+    week: float | None = None  # the contract's typed weekly window, percent used (`accounts[id].week`)
     out: bool = False
     out_until: float | None = None
     out_reason: str | None = None
@@ -45,12 +47,12 @@ class NeedInput(Rec):
 
 @final
 class StatusSnapshot(Rec):
-    """snapshots/delegate.status.json: delegate's status answer read once by `tl lanes` / `tl usage`; the dashboard reads
+    """snapshots/delegate.status.json: delegate's status answer read once by the loop / `tl usage`; the dashboard reads
     this and never runs delegate. `at` is delegate's own clock."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     at: float
-    lanes: list[LaneStatus] = msgspec.field(default_factory=list)
+    accounts: list[AccountStatus] = msgspec.field(default_factory=list)
     needs_input: list[NeedInput] = msgspec.field(default_factory=list)
 
 
@@ -139,7 +141,8 @@ class ReflectState(Rec):
 
 @final
 class StatusTried(Rec):
-    """snapshots/delegate.tried.json: when `tl lanes` last tried to file delegate's status (a failed try leaves it, so the loop waits)."""
+    """snapshots/delegate.tried.json: when the loop last tried to file delegate's status (a failed try leaves it, so the loop
+    waits)."""
 
     V: ClassVar[int] = 1
     t: float

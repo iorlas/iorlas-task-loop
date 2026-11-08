@@ -132,7 +132,7 @@ class LoopNetwork(LoopBase):
         assert polls == [60, 60]
         assert looptest.last_exit(str(self.repo))["reason"] == "stop_request"
 
-    def test_without_a_delegate_to_probe_a_network_pause_rests_like_a_lane_pause_and_the_next_bead_runs(self):
+    def test_without_a_delegate_to_probe_a_network_pause_rests_like_a_account_pause_and_the_next_bead_runs(self):
         self.probe(None)
         self.beads({"x-1": [rec("paused", **NET), rec("landed")], "x-2": [rec("landed")]})
         assert self.run_loop() == 0

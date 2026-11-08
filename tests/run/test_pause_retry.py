@@ -69,7 +69,7 @@ class Retry(te.EngineTest):
         assert self.ask() is None
         assert not self.eng.asked
 
-    def test_no_lane_and_delegate_crash_need_owner_even_with_a_retry_hint(self):
+    def test_no_account_and_delegate_crash_need_owner_even_with_a_retry_hint(self):
         for reason in ("no_account", "crash"):
             with self.subTest(reason=reason):
                 rc, _ = self.run_engine({"plan": [te.PLAN], "write": [te.stop(reason, at=10**12)]}, fresh=True)

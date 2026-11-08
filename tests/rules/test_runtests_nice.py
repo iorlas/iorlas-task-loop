@@ -1,4 +1,4 @@
-"""dev/runtests.py runs below the lanes' editors and agents; the landing gate (`just gate`, TL_TEST_FULL=1) keeps its priority."""
+"""dev/runtests.py runs below the accounts' editors and agents; the landing gate (`just gate`, TL_TEST_FULL=1) keeps its priority."""
 from unittest import mock
 
 import pytest

@@ -14,7 +14,7 @@ class SessionUpdate:
 class Updates:
     session: SessionUpdate | None = None  # only when the call resumes the writer and delegate gave a ref
     planner_ref: str = ""  # the plan node's session, "" = unchanged
-    flag: str = ""  # same_family | degraded | "": what the call reports about its lane
+    flag: str = ""  # same_family | degraded | "": what the call reports about its account
 
 
 @dataclass(frozen=True)

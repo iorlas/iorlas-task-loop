@@ -54,7 +54,7 @@ def live_event(j: dict[str, Any]) -> Any:
 
 
 def worker_start(path: str | Path) -> LiveStart | None:
-    """The first `start` event of the live file: the harness, lane, model and effort the call ran on."""
+    """The first `start` event of the live file: the harness, account, model and effort the call ran on."""
     for j in live_lines(path):
         if j.get("kind") == "start":
             with contextlib.suppress(ValueError):
@@ -126,7 +126,7 @@ class ApiAgent:
         return worker_started(self.live) if self.live else None
 
     def start_event(self) -> LiveStart | None:
-        """The harness, lane, model and effort the call ran on (the live file's `start` event)."""
+        """The harness, account, model and effort the call ran on (the live file's `start` event)."""
         return worker_start(self.live) if self.live else None
 
     def events(self) -> list[LiveEvent]:

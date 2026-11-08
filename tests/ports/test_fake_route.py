@@ -25,7 +25,7 @@ from support.argv_of import argv_of  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import delegate_wire  # noqa: E402
 from taskloop.app.workers import call_state as cs  # noqa: E402
-from taskloop.domain.lanes import policy as lp  # noqa: E402
+from taskloop.domain.accounts import policy as lp  # noqa: E402
 from tlkernel import childenv  # noqa: E402
 from tlkernel import runoutcome as oc  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
@@ -88,7 +88,7 @@ class Fake(Case):
 
     def test_answer_keeps_the_actual_argv_and_unabridged_stdout_and_stderr(self):
         seen = []
-        body = fake_route.stop_answer("no_account", say="no ready lane")
+        body = fake_route.stop_answer("no_account", say="no ready account")
         stdout = "routing trace " + "x" * 500 + "\n" + json.dumps(body)
         stderr = "harness trace " + "y" * 500
 
@@ -130,7 +130,7 @@ class Fake(Case):
         assert set(CONTRACT["retry_kinds"]) == set(lp.RETRY_KINDS)
         for reason, r in CONTRACT["reasons"].items():  # adding a reason without a row fails here
             facts = (r["scope"], r["permanence"], r["retry"])
-            assert facts in lp.TABLE, f"reason {reason} has no lane_policy row for {facts}"
+            assert facts in lp.TABLE, f"reason {reason} has no account_policy row for {facts}"
 
     # --- synthesized stops, never a raise ---------------------------------------------------------------------------
 

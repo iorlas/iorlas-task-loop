@@ -9,7 +9,7 @@ Unblock the local log file and crash file so a shared build's failure leaves evi
 lifesim-fld.10 needs a requirement in an owning system first. Question for the owner: may the log and crash file go in the game data folder next to saves with no upload (decision 2026-10-11 Q9 A), yes or no?
 
 ## Done when
-- Owner answers; then a requirement with a scenario is written (design lane) and fld.10 is built.
+- Owner answers; then a requirement with a scenario is written (design account) and fld.10 is built.
 
 ## Touches
 nothing (design question)

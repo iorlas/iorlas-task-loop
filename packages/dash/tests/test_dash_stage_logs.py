@@ -21,7 +21,7 @@ class StageLogs(Case):
         s = RunScript("b-1").add("step_start", id="w", step="write")
         for n, role in enumerate(("writer", "writer", "reviewer"), 1):
             s.add("call_start", id=f"c{n}", n=n, step="write", node="w", role=role).wait(10)
-            s.add("call_end", id=f"c{n}", status="ok", lane="codex", model="model", secs=10)
+            s.add("call_end", id=f"c{n}", status="ok", account="codex", model="model", secs=10)
         s.add("step_end", id="w", step="write", outcome="approved", exec_seconds=30)
         s.add("transition", **{"from": "w", "to": "checks", "cause": "written", "detail": "ready to test"})
         s.step("checks", 10).close("done")
@@ -32,7 +32,7 @@ class StageLogs(Case):
         assert [r.role for r in roles] == ["writer", "reviewer", "engine"]
         assert [a.id for a in roles[0].attempts] == ["c1", "c2"]
         a = roles[0].attempts[1]
-        assert (a.lane, a.model, a.t, a.secs, a.outcome) == ("codex", "model", T + 10, 10, "ok")
+        assert (a.account, a.model, a.t, a.secs, a.outcome) == ("codex", "model", T + 10, 10, "ok")
         assert "second writer" in [ln.text for ln in a.lines]
         assert "first writer" not in [ln.text for ln in a.lines]
         assert "ready to test" in " ".join(ln.text for a in roles[-1].attempts for ln in a.lines)

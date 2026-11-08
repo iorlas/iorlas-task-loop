@@ -1,5 +1,5 @@
 {
- "v": 1,
+ "v": 2,
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-fld.27",
@@ -13,7 +13,7 @@
   "t": 1793049480.0,
   "epic": "lifesim-eco",
   "slot": "devbox·1",
-  "lane": "claude",
+  "account": "claude",
   "review": null,
   "loops": 0,
   "dots": [
@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "934bda7f883c93b2",
+ "version": "87c76f97073df6e0",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rent and bills every week. Part of Economy.",

@@ -3,7 +3,7 @@
 
 import pytest
 
-from tlkernel import lanepauses as pauses
+from tlkernel import accountpauses as pauses
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.pausereasons import Reason, Unknown, parse
@@ -74,7 +74,7 @@ class Backoff(Case):
         assert again.attempts == {"delegate:rate_limited": 2, "delegate:busy": 1}
         assert pauses.after_pause(again, b, "r3", 999, "rate_limited", lambda: 1, permanence="transient") == again
 
-    def test_predicted_lane_time_is_a_lower_bound_and_unknown_reasons_need_owner(self):
+    def test_predicted_account_time_is_a_lower_bound_and_unknown_reasons_need_owner(self):
         b = Bead(id=BeadId("t-1"), title="work", status="open")
         rec = pauses.after_pause(None, b, "r1", 100, "rate_limited", lambda: 0, not_before=900, permanence="transient")
         assert rec.retry_at == 900

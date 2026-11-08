@@ -69,7 +69,7 @@ class Silent(Case):
     def test_no_open_step_or_an_open_wait_is_never_silent(self):
         ended = watch(self.START, rec.StepEnd(t=T + 1, id="n1", step="write", outcome="done"))
         assert ended.tick(T + 10 * WRITE_LIMIT) == []
-        waiting = watch(self.START, rec.WaitStart(t=T + 1, id="w1", what=WaitWhat.LANE))
+        waiting = watch(self.START, rec.WaitStart(t=T + 1, id="w1", what=WaitWhat.ACCOUNT))
         assert waiting.tick(T + 10 * WRITE_LIMIT) == []
         waiting.feed(rec.WaitEnd(t=T + 2, id="w1", wait_seconds=1.0))
         assert len(waiting.tick(T + 10 * WRITE_LIMIT)) == 1
@@ -166,16 +166,16 @@ class DashFacts(Case):
     def test_messages_and_cell_last_come_from_said(self):
         s = RunScript("tl-9").step("plan", 60).add("said", step="n1", who="engine", text="Plan (engine): 2 stages\nmore")
         s.step("write", 60).add("said", step="n2", who="owner", text="use the blue one")
-        s.add("said", step="n2", who="engine", text="Lane (engine): fell back")
+        s.add("said", step="n2", who="engine", text="Account (engine): fell back")
         p = passes.passes_of([s.run(s.t)])[0]
         got = passes.pass_rec(p)
         assert (
             [(m.icon, m.who, m.md) for m in got.messages]
-            == [("⚙️", "engine", "Lane (engine): fell back"), ("✉️", "owner", "use the blue one"),
+            == [("⚙️", "engine", "Account (engine): fell back"), ("✉️", "owner", "use the blue one"),
                           ("⚙️", "engine", "Plan (engine): 2 stages\nmore")]
         )
         last = {c.phase.value: c.last for c in got.cells}
-        assert (last["plan"], last["write"], last["test"]) == ("Plan (engine): 2 stages", "Lane (engine): fell back", "")
+        assert (last["plan"], last["write"], last["test"]) == ("Plan (engine): 2 stages", "Account (engine): fell back", "")
 
     def test_a_live_stuck_run_is_the_stuck_marker_cell_and_end(self):
         s = RunScript("tl-9").step("plan", 60).step("write", 60, end=False)
@@ -193,7 +193,7 @@ class DashFacts(Case):
         assert s.run(s.t + 10).stuck is None
 
     def test_resumed_names_the_branch_the_run_recorded(self):
-        a = RunScript("tl-9", stamp="20261015-100000").step("write", 60).close("parked", why_code="lane_out")
+        a = RunScript("tl-9", stamp="20261015-100000").step("write", 60).close("parked", why_code="account_out")
         b = RunScript("tl-9", stamp="20261015-110000", slot="b", at=3600, prev_run=a.name)
         b.rows[0]["branch"] = "task/tl-9"
         b.step("write", 60)

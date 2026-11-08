@@ -106,7 +106,10 @@ class Case(Case):
             ],
             "b-ask": [RunScript("b-ask", slot="b", at=100).step("plan", 100, 1).close("parked", "needs_human").run(now)],
             "b-parked": [
-                RunScript("b-parked", slot="c", at=200).step("write", 100, 1, "Codex").close("parked", "lane_out", "codex ran out").run(now)
+                (
+                RunScript("b-parked", slot="c", at=200).step("write", 100, 1, "Codex")
+                    .close("parked", "account_out", "codex ran out").run(now)
+                )
             ],
             "b-done": [
                 RunScript("b-done", slot="b", at=300)
@@ -141,7 +144,7 @@ class Case(Case):
                 slot_bead("c", hold_until=str(NOW + 600), held_by="denis", held_why="testing by hand"),
             ],
             loops=[
-                loop(NOW - 30, [QueueRow(bead="b-ready", prio=0, since=NOW - 100, skip=Skip(why="codex out until 14:00", kind="lane"))])
+                loop(NOW - 30, [QueueRow(bead="b-ready", prio=0, since=NOW - 100, skip=Skip(why="codex out until 14:00", kind="account"))])
             ],
             looks=[
                 LookItem(
@@ -200,7 +203,7 @@ class Cards(Case):
 
     def test_a_running_card(self):
         c = self.card(self.snap(), "b-run")
-        assert (c.status, c.tone, c.slot, c.lane, c.epic, c.t) == ("write 1: clamp mood", "run", "a", "OC Go", "e-1", T + 3000)
+        assert (c.status, c.tone, c.slot, c.account, c.epic, c.t) == ("write 1: clamp mood", "run", "a", "OC Go", "e-1", T + 3000)
         assert [(d.phase.value, d.state) for d in c.dots][:3] == [("plan", "done"), ("write", "live"), ("test", "todo")]
         assert (c.totals.secs, c.totals.tokens) == (500, 50_000)
 
@@ -282,9 +285,9 @@ class Parts(Case):
 
     def test_slots_held_running_free(self):
         s = {x.id: x for x in self.snap().slots}
-        assert (s["a"].state, s["a"].bead, s["a"].lane, s["a"].t) == ("running", "b-run", "OC Go", T + 3000)
+        assert (s["a"].state, s["a"].bead, s["a"].account, s["a"].t) == ("running", "b-run", "OC Go", T + 3000)
         assert (s["b"].state, s["b"].bead) == ("free", None)
-        assert s["b"].lane == "OC Go"  # the lane of the slot's last call
+        assert s["b"].account == "OC Go"  # the account of the slot's last call
         assert (s["c"].state, s["c"].idle_why) == ("held", "held by denis: testing by hand")
 
     def test_pieces_asks_and_server(self):
@@ -303,9 +306,9 @@ class Parts(Case):
             "/api/look-shot?repo=lifesim&path=b.png",
         ]
         assert (s.server.version, s.server.host, s.projects[0].id) == ("v1", "box", "lifesim")
-        assert (s.ledger, s.adrs, s.lanes) == ([], [], [])  # no source yet
+        assert (s.ledger, s.adrs, s.accounts) == ([], [], [])  # no source yet
 
-    def test_pieces_outside_the_floor_window_are_dropped(self):
+    def test_pieces_outside_the_slots_window_are_dropped(self):
         assert len(self.snap().pieces) == 5
         assert self.snap(now=NOW + 9 * 3600).pieces == []  # every run ended more than 8 h ago
 

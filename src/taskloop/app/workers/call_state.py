@@ -30,7 +30,7 @@ class CallState:
     bead: str
     key: tuple[object, ...]  # (step, stage, round, n): its own coordinates; another key on load discards the file
     phase: str = "calling"  # calling | returned | consumed
-    lane: str = ""
+    account: str = ""
     role: str = ""
     resume_of: str = ""  # the ref this call resumed, "" for a new thread
     ref: str = ""  # the vendor session id, "" until the vendor publishes it
@@ -87,7 +87,7 @@ def begin(
     bead: str,
     key: Sequence[object],
     role: str = "",
-    lane: str = "",
+    account: str = "",
     resume_of: str = "",
     prompt_sha: str = "",
     now: float = 0.0,
@@ -95,7 +95,7 @@ def begin(
 ) -> CallState:
     """phase=calling, on disk before the vendor is called."""
     return CallState(
-        run, bead, tuple(key), "calling", lane, role, resume_of, resume_of, prompt_sha, now, 0.0, "", V, str(dir_), execution_id,
+        run, bead, tuple(key), "calling", account, role, resume_of, resume_of, prompt_sha, now, 0.0, "", V, str(dir_), execution_id,
     ).save()
 
 

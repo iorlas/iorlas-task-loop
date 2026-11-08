@@ -5,8 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from taskloop.app.workers import lane_acts
-from taskloop.domain.lanes import policy as lp
+from taskloop.app.workers import account_acts
+from taskloop.domain.accounts import policy as lp
 from tlkernel.delegate import DelegateResult
 
 
@@ -25,8 +25,8 @@ def test_network_stop_pauses_immediately(monkeypatch):
         thread="writer", denied_retried=False, secret_fp=False, node="write", step="write",
         limit_s=100, role="worker",
     )
-    monkeypatch.setattr(lane_acts.writer_pin, "prefer", lambda *args: "")
-    acts = lane_acts.LaneActs(host, worker)
+    monkeypatch.setattr(account_acts.writer_pin, "prefer", lambda *args: "")
+    acts = account_acts.AccountActs(host, worker)
     stop = lp.Stop("machine", "transient", "poll", reason="network")
     result = DelegateResult()
     with pytest.raises(RuntimeError, match="PAUSE_NETWORK"):

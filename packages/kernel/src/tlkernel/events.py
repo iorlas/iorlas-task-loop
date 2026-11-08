@@ -1,4 +1,4 @@
-"""Event: the union of records appended to events.jsonl, the cross-repo index of claims, stages, slots and landings (v2)."""
+"""Event: the union of records appended to events.jsonl, the cross-repo index of claims, stages, slots and landings (v4)."""
 from typing import ClassVar, final
 
 from tlkernel.enums import WhyCode
@@ -7,7 +7,7 @@ from tlkernel.wire import load
 
 
 class EventRec(Row):
-    V: ClassVar[int] = 3
+    V: ClassVar[int] = 4
     session: str = ""
     actor: str = ""
     repo: str = ""

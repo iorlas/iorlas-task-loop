@@ -48,7 +48,7 @@ TABLES = {
     "disk_doc",
     "loop_doc",
     "look_doc",
-    "lanes_doc",
+    "accounts_doc",
     "followup",
     "park",
     "receipt_doc",
@@ -266,7 +266,7 @@ class FactoryDbTest(Case):
         ):
             self.seed_history(con, run, state, ended)
         con.execute("INSERT INTO lease(kind,name,holder,run,since) VALUES ('run','l','h','lease',1)")
-        con.execute("INSERT INTO wait(repo,run,kind,since) VALUES ('repo','wait','lane',1)")
+        con.execute("INSERT INTO wait(repo,run,kind,since) VALUES ('repo','wait','account',1)")
         con.execute("INSERT INTO signal(run,kind,at) VALUES ('signal','stop',1)")
         for bead, status in (("ask", "open"), ("soft", "open_soft")):
             con.execute("INSERT INTO ask(bead,id,status,t,body) VALUES (?,?,?,1,'{}')", (bead, bead, status))

@@ -52,7 +52,7 @@ class Calls:
         thread or model still names them from the live file: `worker` (the first line) and `live` (the `start` event)."""
         st = res.stop
         ref = res.ref or (worker.run_id if worker else "")
-        model, lane = res.model or (live.model if live else ""), res.account or (live.account if live else "")
+        model, account = res.model or (live.model if live else ""), res.account or (live.account if live else "")
         tk = res.tokens
         row: dict[str, Any] = {
             "node": node,
@@ -62,7 +62,7 @@ class Calls:
             "ref": ref,
             "run_id": res.run_id or (worker.run_id if worker else None),
             "family": res.family or "",
-            "lane": lane,
+            "account": account,
             "model": model,
             "effort": res.effort or (live.effort if live else ""),
             "turns": res.usage.turns if res.usage else None,
@@ -98,7 +98,7 @@ class Calls:
                 status=row["status"],
                 reason=row["reason"],
                 ref=row["ref"] or "",
-                lane=row["lane"] or "",
+                account=row["account"] or "",
                 model=row["model"] or "",
                 effort=row["effort"],
                 secs=float(row["secs"]),

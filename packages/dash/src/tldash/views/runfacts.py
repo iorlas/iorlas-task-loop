@@ -43,7 +43,7 @@ class Span:
 class Call:
     t: float
     step: str
-    lane: str
+    account: str
     tokens: int
     cost: float = 0.0
     cost_known: bool = False  # the cost the worker's answer gave is a fact (harness or free), not a missing number shown as 0
@@ -79,12 +79,12 @@ class Run:
     artifacts: tuple[rec.Artifacts, ...]
     checks: rec.Checks | None
     wait: rec.WaitStart | None
-    lane: str
+    account: str
     exit_code: int | None  # the last call's worker exit code, when it gave one
     said: tuple[rec.Said, ...] = ()  # the engine's comments (and the owner's notes it passed on), oldest first
     assumed: int = 0  # Assumed records: what the planner planned around
     stuck: rec.Stuck | None = None  # the stuck episode still open at the run's newest record (open_episode)
-    waits: tuple[Wait, ...] = ()  # the ended waits (a lane, the network, a resource, a lock ...)
+    waits: tuple[Wait, ...] = ()  # the ended waits (an account, the network, a resource, a lock ...)
     records: tuple[rec.EngineLog, ...] = ()  # drawer-only rows, never attached by the snapshot fold
     budgets: tuple[StepBudget, ...] = ()
 
@@ -118,7 +118,7 @@ def spans_of(records: Sequence[rec.EngineLog]) -> tuple[Span, ...]:
 
 def calls_of(records: Sequence[rec.EngineLog]) -> tuple[Call, ...]:
     starts = {r.id: r for r in records if isinstance(r, rec.CallStart)}
-    return tuple(Call(starts[r.id].t, starts[r.id].step, r.lane, fresh(r.tokens), r.cost or 0.0, cost_known(r))
+    return tuple(Call(starts[r.id].t, starts[r.id].step, r.account, fresh(r.tokens), r.cost or 0.0, cost_known(r))
                  for r in records if isinstance(r, rec.CallEnd) and r.id in starts)
 
 
@@ -177,7 +177,7 @@ class FoldState(Rec):
     close: rec.Close | None = None
     stuck: rec.Stuck | None = None
     assumed: int = 0
-    lane: str = ""
+    account: str = ""
     exit_code: int | None = None
 
 
@@ -197,7 +197,7 @@ def latest(state: FoldState, r: rec.EngineLog) -> FoldState:
     if isinstance(r, rec.RunStart) and state.start is None:
         return state.replace(start=r)
     if isinstance(r, rec.CallEnd):
-        return state.replace(lane=r.lane or state.lane, exit_code=r.exit if r.exit is not None else state.exit_code)
+        return state.replace(account=r.account or state.account, exit_code=r.exit if r.exit is not None else state.exit_code)
     if isinstance(r, rec.Assumed):
         return state.replace(assumed=state.assumed + 1)
     if isinstance(r, rec.Close):
@@ -238,7 +238,7 @@ def fold(state: FoldState, new_records: Sequence[rec.EngineLog]) -> FoldState:
         elif isinstance(r, rec.CallEnd):
             start = pending.pop(r.id, None)
             if start:
-                calls.append(Call(start.t, start.step, r.lane, fresh(r.tokens), r.cost or 0.0, cost_known(r)))
+                calls.append(Call(start.t, start.step, r.account, fresh(r.tokens), r.cost or 0.0, cost_known(r)))
         elif isinstance(r, rec.WaitStart):
             opened[r.id] = r
         elif isinstance(r, rec.WaitEnd):
@@ -261,5 +261,5 @@ def run_from(name: str, state: FoldState, now: float) -> Run:
     s = state
     return Run(name, Liveness.LIVE, s.start, s.start.t if s.start else (s.first_t or 0.0), s.last_t,
                s.spans, s.calls, s.close, s.transitions, s.artifacts, s.checks,
-               s.open_waits[-1] if s.open_waits else None, s.lane, s.exit_code,
+               s.open_waits[-1] if s.open_waits else None, s.account, s.exit_code,
                said=s.said, assumed=s.assumed, stuck=s.stuck, waits=s.waits, budgets=s.budgets)

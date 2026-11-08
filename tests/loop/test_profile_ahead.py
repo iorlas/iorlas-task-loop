@@ -16,7 +16,7 @@ from taskloop.app.loop.files import EXIT_REASONS
 from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.run import Where
 from taskloop.app.loop.stages import EngineSlots
-from tlkernel import lanepauses as pauses
+from tlkernel import accountpauses as pauses
 from tlkernel import wire
 from tlkernel.bead import Bead
 from tlkernel.config import ConfigError, ProfileReadError, RepoProfile

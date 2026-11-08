@@ -2,7 +2,7 @@
 
 A pass is one forward sweep through the phases: a step whose phase is not later than the pass's furthest one starts the next pass
 (a fix round after a red check, a re-plan, a send-back), and so does every run. A pass ends by the Transition that left it, or, for a
-run's last pass, by the run's Close. A piece is the bead's stretch on one slot (the Floor's bar): consecutive runs on one slot are
+run's last pass, by the run's Close. A piece is the bead's stretch on one slot (the Slots's bar): consecutive runs on one slot are
 one piece, a run on another slot starts the next, and `from_slot`/`to_slot` link the comeback."""
 
 from collections.abc import Sequence
@@ -190,7 +190,7 @@ def segs_of(run: Run, ps: Sequence[PassView], nxt: Run | None) -> list[Seg]:
             else:
                 segs.append(seg)
     end = phases.end_of_close(run.close) if run.close else ""
-    if run.close and end in ("asked", "parked", "lane_out"):
+    if run.close and end in ("asked", "parked", "account_out"):
         until = nxt.t0 if nxt else run.close.t
         kind: SegKind = ("answered" if nxt else "ask") if end == "asked" else "parked"
         segs.append(Seg(label=phases.END_TEXT[end], kind=kind, t0=run.close.t, t1=max(run.close.t, until)))

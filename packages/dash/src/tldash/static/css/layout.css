@@ -1,4 +1,4 @@
-/* Desktop views: shell, Board, Goals, Floor, Decisions, Lanes (dash-spec §2-§8), from dash-round-8b / round-9-app. */
+/* Desktop views: shell, Board, Goals, Slots, Decisions, Accounts (dash-spec §2-§8), from dash-round-8b / round-9-app. */
 .app{position:relative;overflow:hidden;background:var(--bg);min-height:100vh}
 .top{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
 .brand{font-weight:700}.nav{display:flex;gap:2px}.nav button{font-size:13px;border:0;border-bottom:2px solid transparent;background:none;color:var(--mut);padding:6px 9px;cursor:pointer}
@@ -21,7 +21,7 @@
 .dots em{font-style:normal;font-size:11px;color:var(--amb);margin-left:4px}.dots em.x{color:var(--red)}
 @keyframes pul{50%{opacity:.35}}
 .small{font-size:12px;color:var(--mut);padding:2px}
-/* floor */
+/* slots */
 .fbar{display:flex;gap:10px;align-items:center;padding:10px 14px 0;font-size:12px;color:var(--mut);flex-wrap:wrap}
 .leg{display:flex;gap:12px;flex-wrap:wrap}.leg span{display:inline-flex;gap:5px;align-items:center}.leg i{width:18px;height:10px;border-radius:3px;display:inline-block}
 .fl{display:grid;grid-template-columns:var(--lw,0px) minmax(0,1fr);margin:10px 14px 14px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -57,7 +57,7 @@ svg.jmp{position:absolute;left:0;top:0;pointer-events:none;z-index:1;overflow:vi
 .tr .tw{width:14px;color:var(--mut);font-size:11px;cursor:pointer;flex:none;text-align:center}.tr .mk{width:20px;flex:none;text-align:center}.tr .id{color:var(--mut);font-size:11px;font-variant-numeric:tabular-nums;min-width:52px;flex:none;white-space:nowrap}
 .tr .tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tr .sl{color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.tr.you .sl{color:var(--you)}.tr.bad .sl{color:var(--red)}.tr.done{color:var(--mut)}
 .tr .ru{color:var(--mut);font-size:12px;white-space:nowrap}.tr .stub{color:var(--mut);font-size:12px}.tr.goal .tt{font-weight:600}
-.lanes2{padding:14px;max-width:1180px}.lt{width:100%;border-collapse:collapse;font-size:13px}.lt th{font-weight:400;color:var(--mut);font-size:12px;text-align:left;padding:4px 8px}.lt td{border-top:1px solid var(--line);padding:8px;vertical-align:middle}
+.accounts2{padding:14px;max-width:1180px}.lt{width:100%;border-collapse:collapse;font-size:13px}.lt th{font-weight:400;color:var(--mut);font-size:12px;text-align:left;padding:4px 8px}.lt td{border-top:1px solid var(--line);padding:8px;vertical-align:middle}
 .lt .nm{display:flex;gap:10px;align-items:center}.lt .nm small{display:block;color:var(--mut)}.lt .ring small{display:none}
 .ub{display:grid;grid-template-columns:1fr 44px;gap:6px;align-items:center;font-size:12px}.ub .bar{height:6px;border-radius:3px;background:var(--cell);overflow:hidden;position:relative}.ub .bar i{display:block;height:100%;background:var(--ink);opacity:.55}.ub .bar i.w{background:var(--amb);opacity:1}.ub .bar i.x{background:var(--red);opacity:1}.ub .bar b{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--amb) 0 2px,transparent 2px 4px);opacity:.5}
 .lt .m{color:var(--mut);font-size:12px}.lt .fx{font-size:12px}.lt .fx.x{color:var(--red)}.lt .fx.w{color:var(--amb)}.lt .bd{font-size:12px}.lt .bd span{display:inline-block;margin-right:8px;cursor:pointer;white-space:nowrap}
@@ -68,7 +68,7 @@ svg.jmp{position:absolute;left:0;top:0;pointer-events:none;z-index:1;overflow:vi
 @media (max-width:900px){.board{grid-template-columns:minmax(64px,.45fr) repeat(5,minmax(0,1fr)) minmax(64px,.45fr);gap:8px;padding:10px}
 .col.backlog>:not(h4),.col.done>:not(h4){display:none}.col.backlog h4,.col.done h4{flex-direction:column;gap:2px}.col h4 .c{margin-left:0}
 .drw{width:100%}}
-/* Floor, slice 4 */
+/* Slots, slice 4 */
 .fbar .leg .lg{background:var(--s1)}.leg .lg.f{background:var(--redbg)}.leg .lg.live{background:var(--runbg);box-shadow:inset 0 0 0 1.5px var(--run)}
 .leg .lg.park{background:repeating-linear-gradient(135deg,var(--youbg) 0 3px,var(--card) 3px 6px);box-shadow:inset 0 0 0 1px var(--you)}
 .leg .lg.parkx{background:repeating-linear-gradient(135deg,var(--cell) 0 3px,var(--card) 3px 6px)}.leg .lg.proj{background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
@@ -80,7 +80,7 @@ svg.jmp path{fill:none;stroke:var(--mut);stroke-width:1.5;stroke-dasharray:4 4}s
 /* Decisions, slice 5 */
 .par .q{color:var(--amb)}.par .d{font-size:12px}.led .you{color:var(--you)}.led .lnk.q{color:var(--amb);font-size:12px}.led .oc .why{max-width:520px}
 .tr.nolink{cursor:default}.tr.nolink:hover{background:none}
-/* Lanes, slice 8 */
+/* Accounts, slice 8 */
 .lt th.w5{width:210px}.lt th.wk{width:130px}.lt th .lo{opacity:.7}.lt .mu{color:var(--mut);font-size:12px}.lt .sls{white-space:nowrap}
 .lt tr.stale td{opacity:.5}.stl{color:var(--mut);font-size:12px}
 .chip{display:inline-block;margin:0 6px 4px 0;font-size:12px;border:0;background:none;padding:0;cursor:pointer;white-space:nowrap;color:var(--tx)}.chip:disabled{cursor:default;color:var(--mut)}

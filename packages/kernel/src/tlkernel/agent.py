@@ -24,7 +24,7 @@ class Agent(Protocol):
         ...
 
     def start_event(self) -> LiveStart | None:
-        """Where the call ran: harness, lane, model, effort; None until the worker says."""
+        """Where the call ran: harness, account, model, effort; None until the worker says."""
         ...
 
     def events(self) -> list[LiveEvent]:

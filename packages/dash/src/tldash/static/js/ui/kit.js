@@ -28,7 +28,7 @@ export function CountBadge({ n, tone = 'you' }) {
 }
 
 // the one home of the token and time thresholds (§2.6): the tone comes from the server, the page only paints it;
-// grey until the lane has 5 landed beads
+// grey until the account has 5 landed beads
 export function Totals({ totals, assumptions = 0, problems = 0, onProblems }) {
   if (!totals || (!totals.secs && !totals.tokens)) return null;
   const base = totals.usual_n < 5;
@@ -182,7 +182,7 @@ export function EmptyState({ title, body, cmd }) {
 
 export const Nothing = () => html`<div class="none">Nothing here.</div>`;
 
-// a ring: lanes in the top bar and the Lanes tab, the refresh circle; the value sits inside
+// a ring: accounts in the top bar and the Accounts tab, the refresh circle; the value sits inside
 export function Ring({ v, tone = '', value, label, size = 34 }) {
   const r = 14, c = 2 * Math.PI * r;
   const col = tone === 'x' ? 'var(--red)' : tone === 'w' ? 'var(--amb)' : 'var(--mut)';

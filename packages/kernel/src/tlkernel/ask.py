@@ -83,7 +83,7 @@ class Ask(Rec):
     run went on with `default` and the owner may still answer. `key` is the repeat key (domain/asks/similar.py), `similar` what it
     matched when the ask was raised. `outcome` is what the owner made of the answer; the ask ledger holds the history."""
 
-    V: ClassVar[int] = 3
+    V: ClassVar[int] = 4
     id: str
     n: int
     bead: BeadId

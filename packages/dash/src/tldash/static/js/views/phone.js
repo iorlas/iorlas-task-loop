@@ -1,5 +1,5 @@
 // The phone shell below 600 px (dash-spec §9): its own layout over the same data and renderers, not a squeeze of the desktop.
-// Header with the lanes-in-trouble pill, a bottom tab bar, the bead page pushed from the right, bottom sheets. System back
+// Header with the accounts-in-trouble pill, a bottom tab bar, the bead page pushed from the right, bottom sheets. System back
 // closes the top layer: sheet → bead page → goal level (each is a history entry).
 import { html, useEffect, useRef } from '../../vendor/ui-runtime.js';
 import * as act from '../actions.js';
@@ -13,16 +13,16 @@ import { NoteSheet, StopSheet } from './controls.js';
 import { Decisions } from './decisions.js';
 import { Needs } from './needs.js';
 import { PhoneGoals } from './goals.js';
-import { PhoneLanes } from './lanes.js';
+import { PhoneAccounts } from './accounts.js';
 import { Cost } from './cost.js';
-import { PhoneFloor } from './floor.js';
+import { PhoneSlots } from './slots.js';
 import { BeadPage } from './drawer.js';
 import { Banners, epicProject, filterGroups, openBead, TABS } from './shell.js';
 
-function LanePill({ snap }) {
-  const lanes = troubled(snap);
-  if (!lanes.length) return null;
-  return html`<button class="lp" onClick=${() => setTab('lanes')}>${lanes.map((l) => html`<span key=${l.id} class="lpi">
+function AccountPill({ snap }) {
+  const accounts = troubled(snap);
+  if (!accounts.length) return null;
+  return html`<button class="lp" onClick=${() => setTab('accounts')}>${accounts.map((l) => html`<span key=${l.id} class="lpi">
     <i class=${`dt ${l.state === 'locked' ? 'x' : 'w'}`}></i>${l.name}${l.state === 'watch' ? ` ${pct(l.window_pct || 0)}` : ''}</span>`)}</button>`;
 }
 
@@ -115,18 +115,18 @@ export function Phone({ snap, now }) {
   let body;
   if (ui.tab === 'board') body = html`<${BoardTab} snap=${snap} now=${now} />`;
   else if (ui.tab === 'decisions') body = html`<${Decisions} snap=${snap} now=${now} phone />`;
-  else if (ui.tab === 'floor') body = html`<${PhoneFloor} snap=${snap} now=${now} />`;
+  else if (ui.tab === 'slots') body = html`<${PhoneSlots} snap=${snap} now=${now} />`;
   else if (ui.tab === 'cost') body = html`<${Cost} snap=${snap} />`;
-  else body = html`<${PhoneLanes} snap=${snap} now=${now} />`;
+  else body = html`<${PhoneAccounts} snap=${snap} now=${now} />`;
   if (!snap.beads.length && ui.tab === 'board') body = html`<${EmptyState} title="No beads yet"
     body=${snap.projects.length ? 'Create beads with bd, then start the loop.' : 'Register a repo, then start its loop.'}
     cmd=${snap.projects.length ? 'tl loop' : 'tl register <repo>  ·  tl loop'} />`;
   return html`<div id="ph">
-    <header class="ph-h"><h1>${TABS.find((t) => t[0] === ui.tab)[2]}</h1><${LanePill} snap=${snap} /></header>
+    <header class="ph-h"><h1>${TABS.find((t) => t[0] === ui.tab)[2]}</h1><${AccountPill} snap=${snap} /></header>
     <${Banners} snap=${snap} now=${now} />
     <main id="phM">${ui.tab === 'board' && html`<${Needs} snap=${snap} now=${now} />`}${body}</main>
     <nav class="tb">${TABS.map(([k, e, n]) => html`<button key=${k} class=${ui.tab === k ? 'on' : ''} onClick=${() => setTab(k)}>
-      <i>${e}</i>${n}${k === 'floor' && html`<span class=${`bd r ${c.stuck ? 'on' : ''}`}>${c.stuck}</span>`}${k === 'decisions' && html`<span class=${`bd b ${c.asks ? 'on' : ''}`}>${c.asks}</span>`}</button>`)}</nav>
+      <i>${e}</i>${n}${k === 'slots' && html`<span class=${`bd r ${c.stuck ? 'on' : ''}`}>${c.stuck}</span>`}${k === 'decisions' && html`<span class=${`bd b ${c.asks ? 'on' : ''}`}>${c.asks}</span>`}</button>`)}</nav>
     <div class=${`pg ${card ? 'on' : ''}`} ref=${pg}>${card && html`<${BeadPage} key=${card.project + card.id} snap=${snap} card=${card} now=${now} phone />`}</div>
     <${Sheet} open=${!!sheet} title=${sheet && sheet[0]} onClose=${back}>${sheet && html`<${sheet[1]} snap=${snap} now=${now} arg=${ui.sheet} />`}</${Sheet}>
   </div>`;

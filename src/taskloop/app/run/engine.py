@@ -116,7 +116,7 @@ class Engine(RunHost):
 
     def result(self) -> RunReport:
         """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one
-        still open), paused (the machine's trouble: lanes, login, network; the bead stays open), failed."""
+        still open), paused (the machine's trouble: accounts, login, network; the bead stays open), failed."""
         finish = finish_of(self.home, self.run_id)
         kind = Kind(finish.kind) if finish else self.kind
         out = finish.result if finish else oc.POLICY[kind].loop

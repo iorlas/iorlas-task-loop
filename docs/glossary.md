@@ -60,9 +60,9 @@ Each entry: one plain sentence, an example, and what it is not. Last audited aga
 
 | Term | Means | Example | Not |
 |---|---|---|---|
-| account `planned` | A metered connection to a model vendor: a subscription or API key with usage windows, reset times and models. Delegate owns it. Dashboard panel: Accounts. | A Codex subscription and a Claude subscription are two accounts. | lane, license, supplier, provider, token source |
+| account | A metered connection to a model vendor: a subscription or API key with usage windows, reset times and models. Delegate owns it. Dashboard panel: Accounts. | A Codex subscription and a Claude subscription are two accounts. | lane, license, supplier, provider, token source |
 | track | Within one gate block, a parallel sequence of checks; the first red cancels the other tracks. Replaces the `lane` key on checks. | A `build` track and a `test` track run side by side. | lane |
-| lane `planned` | Purged word (hard cut, not finished: 80 source files still use it, docs/design/lanepurge.md). It names no concept; use account, track or loop. | | everything |
+| lane | Purged word (hard cut: the code purge is done; docs/design prose is the next step, docs/design/lanepurge.md). It names no concept; use account, track or loop. | | everything |
 
 ## Merge queue (design: docs/design/merge-queue.md)
 
@@ -100,10 +100,10 @@ All `planned`. Running example: five PRs A, B, C, D, E wait to land on main (cal
 
 | Term | Means | Example | Not |
 |---|---|---|---|
-| Board | The tab with every bead by state (Flow) or by goal (Goals). | A bead waiting on an ask sits in its column with a badge. | Floor |
-| Floor | The tab with time on one axis and slots on the other: what each slot is doing and where it is stuck. `planned`: it becomes "Slots". | A red segment is a stuck bead. | floor (queue's fewest gates in flight) |
+| Board | The tab with every bead by state (Flow) or by goal (Goals). | A bead waiting on an ask sits in its column with a badge. | Slots |
+| Slots | The tab with time on one axis and slots on the other: what each slot is doing and where it is stuck. | A red segment is a stuck bead. | floor (queue's fewest gates in flight) |
 | Decisions | The tab with the owner's open asks. | | |
-| Landing strip | `planned`: one strip under the Floor, queue order left to right, one chip per PR with its gate state and wait. | | |
+| Landing strip | `planned`: one strip under Slots, queue order left to right, one chip per PR with its gate state and wait. | | |
 
 ## Rename plan (hard cut, one bead each)
 

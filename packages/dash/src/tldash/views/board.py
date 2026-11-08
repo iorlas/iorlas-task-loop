@@ -11,13 +11,13 @@ from tlkernel.dash import BeadCard, Column, Marker, Phase, Totals
 from tlkernel.ids import BeadId, is_bead_id
 
 from tldash.tails import parse_ts
-from tldash.views import columns, floor, names, passes, phases
+from tldash.views import columns, names, passes, phases, slots
 from tldash.views.runfacts import Run
 from tldash.views.world import ProjectIn, World
 
 SLOT, LOOK = "slot", "owner-look"  # the labels of the loop's own beads: never cards
 EPIC = "epic"
-USUAL_MIN_N = 5  # a lane's usual is advisory (grey) until this many beads landed on it (dash-spec §2.6)
+USUAL_MIN_N = 5  # an account's usual is advisory (grey) until this many beads landed on it (dash-spec §2.6)
 WATCH_AT, BAD_AT = 2, 4  # times the usual that turn a bead's tokens amber, then red
 LOOP_STALE = 3 * 60.0  # a loop beats its state file every 60 s (LoopCfg.beat_every); three missed beats and it is gone
 TotalsTone = Literal["", "watch", "bad", "grey"]
@@ -45,8 +45,8 @@ def blockers(b: Bead, by_id: dict[BeadId, Bead]) -> list[str]:
     return out
 
 
-def lane_of(runs: Sequence[Run]) -> str:
-    return next((r.lane for r in reversed(runs) if r.lane), "")
+def account_of(runs: Sequence[Run]) -> str:
+    return next((r.account for r in reversed(runs) if r.account), "")
 
 
 def review_of(run: Run | None) -> Literal["on", "off", "sampled"] | None:
@@ -71,14 +71,14 @@ def ask_facts(a: Ask | None) -> tuple[bool, bool, str]:
 
 
 class Board:
-    """Everything the cards of one World share: the work beads by project, each bead's passes, the lanes' usual tokens."""
+    """Everything the cards of one World share: the work beads by project, each bead's passes, the accounts' usual tokens."""
 
     def __init__(self, w: World) -> None:
         self.w = w
         self.by_id = {p.id: {b.id: b for b in p.beads} for p in w.projects}
         self._passes: dict[tuple[str, str], list[passes.PassView]] = {}
         self._stalled: dict[str, dict[str, str]] = {}
-        self.usual = self.usual_by_lane()
+        self.usual = self.usual_by_account()
 
     def passes_of(self, bead: tuple[str, str]) -> list[passes.PassView]:
         got = self._passes.get(bead)
@@ -91,18 +91,18 @@ class Board:
         got = self._stalled.get(p.id)
         if got is None:
             runs = {b: rs for (key, b), rs in self.w.runs.items() if key == p.id}
-            table = floor.table_of(p, runs, self.w.now)
+            table = slots.table_of(p, runs, self.w.now)
             got = self._stalled[p.id] = {v.bead: v.idle_why for v in table.slots if v.bead and v.idle_why.startswith("start stalled")}
         return got
 
-    def usual_by_lane(self) -> dict[str, tuple[int, int]]:
-        """{lane: (median fresh tokens, beads)} over the beads whose newest run landed."""
+    def usual_by_account(self) -> dict[str, tuple[int, int]]:
+        """{account: (median fresh tokens, beads)} over the beads whose newest run landed."""
         per: dict[str, list[int]] = {}
         for bead, runs in self.w.runs.items():
-            lane = lane_of(runs)
-            if lane and passes.landed(runs[-1]):
-                per.setdefault(lane, []).append(passes.totals_of(self.passes_of(bead))[1])
-        return {lane: (int(statistics.median(v)), len(v)) for lane, v in per.items()}
+            account = account_of(runs)
+            if account and passes.landed(runs[-1]):
+                per.setdefault(account, []).append(passes.totals_of(self.passes_of(bead))[1])
+        return {account: (int(statistics.median(v)), len(v)) for account, v in per.items()}
 
     def waits(self, p: ProjectIn) -> dict[str, str]:
         """{bead: why no slot takes it}, from the queue of a loop that runs now."""
@@ -130,17 +130,17 @@ class Board:
         col, mark = columns.column(f), columns.marker(f)
         visited = {s.phase for x in ps for s in x.spans if s.phase}
         current = Phase.LOOK if mark is Marker.LOOK else (cur.phase if cur else None)
-        lane = lane_of(runs)
+        account = account_of(runs)
         park = self.w.parks.get(b.id)
         retry_at = park.retry_at if park and park.permanence == "transient" and not f.open_run and not f.closed else 0.0
         return BeadCard(
             id=b.id, project=p.id, run=newest.name if newest else "", title=b.title, column=col, marker=mark,
             status=columns.status_line(f), tone=columns.tone_of(mark),
             t=self.entered(f, b, newest), epic=b.parent if b.parent in self.by_id[p.id] else None,
-            slot=(newest.slot or None) if newest and col is not Column.BACKLOG else None, lane=lane or None, review=review_of(newest),
+            slot=(newest.slot or None) if newest and col is not Column.BACKLOG else None, account=account or None, review=review_of(newest),
             loops=sum(1 for x in ps if x.end in phases.LOOPED), dots=columns.dots_of(visited, current, mark, f.closed),
             needs=blocking,  # the snapshot drops the ids it trimmed away
-            waits_why=waits.get(b.id, "") if col is Column.BACKLOG else "", totals=self.totals(ps, lane),
+            waits_why=waits.get(b.id, "") if col is Column.BACKLOG else "", totals=self.totals(ps, account),
             shots=len(self.shots(runs)), assumptions=sum(r.assumed for r in runs), retry_at=retry_at)
 
     @staticmethod
@@ -154,11 +154,11 @@ class Board:
             return newest.close.t
         return when(b.updated_at) or when(b.created_at)
 
-    def totals(self, ps: list[passes.PassView], lane: str) -> Totals:
+    def totals(self, ps: list[passes.PassView], account: str) -> Totals:
         if not ps:
             return Totals()
         secs, tokens = passes.totals_of(ps)
-        usual, n = self.usual.get(lane, (None, 0))
+        usual, n = self.usual.get(account, (None, 0))
         return Totals(secs=secs, tokens=tokens, usual=usual, usual_n=n, tone=tone_of_totals(tokens, usual, n))
 
     @staticmethod

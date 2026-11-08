@@ -1,5 +1,5 @@
 """dev/runtests.py with TL_GREEN_LEDGER=1: tests already green on their own files are left out, and a green run records the ones that ran.
-Off by default: the ledger is for the lanes' runs until the land gate trusts it."""
+Off by default: the ledger is for the accounts' runs until the land gate trusts it."""
 import runtests
 from affected import Repo
 

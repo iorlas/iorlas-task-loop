@@ -7,6 +7,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -40,7 +41,6 @@
     "epic": null,
     "goal": false,
     "id": "g-6",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -64,6 +64,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -134,8 +135,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -149,8 +150,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000500.0,
@@ -180,8 +181,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -195,8 +196,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000530.0,
@@ -244,8 +245,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "015600e2b1be27dc",
+   "v": 2,
+   "version": "f23b0e14ab8ce5bb",
    "waits_for": []
   },
   "ask-decision": {
@@ -255,6 +256,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -288,7 +290,6 @@
     "epic": null,
     "goal": false,
     "id": "g-3",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -312,6 +313,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -382,8 +384,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -397,8 +399,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000200.0,
@@ -428,8 +430,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -443,8 +445,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000230.0,
@@ -492,8 +494,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "10592a359d1613ae",
+   "v": 2,
+   "version": "d94503f32727850f",
    "waits_for": []
   },
   "ask-stuck": {
@@ -503,6 +505,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -536,7 +539,6 @@
     "epic": null,
     "goal": false,
     "id": "g-5",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -560,6 +562,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -630,8 +633,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -645,8 +648,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000400.0,
@@ -676,8 +679,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -691,8 +694,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000430.0,
@@ -740,8 +743,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "2ffb895a8c92b9e8",
+   "v": 2,
+   "version": "5ddbe7fcf8c94388",
    "waits_for": []
   },
   "ask-ticket": {
@@ -751,6 +754,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -784,7 +788,6 @@
     "epic": null,
     "goal": false,
     "id": "g-7",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -808,6 +811,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -878,8 +882,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -893,8 +897,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000600.0,
@@ -924,8 +928,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -939,8 +943,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000630.0,
@@ -988,8 +992,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "aa38d3695eed40a2",
+   "v": 2,
+   "version": "dd2193dfdff45dd0",
    "waits_for": []
   },
   "ask-verify": {
@@ -999,6 +1003,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -1032,7 +1037,6 @@
     "epic": null,
     "goal": false,
     "id": "g-4",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -1056,6 +1060,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -1126,8 +1131,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -1141,8 +1146,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000300.0,
@@ -1172,8 +1177,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -1187,8 +1192,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000330.0,
@@ -1236,8 +1241,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "0618f6992f62fa40",
+   "v": 2,
+   "version": "fa6ea7174b044217",
    "waits_for": []
   },
   "done": {
@@ -1247,6 +1252,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -1280,7 +1286,6 @@
     "epic": null,
     "goal": false,
     "id": "g-2",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -1304,6 +1309,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -1374,8 +1380,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -1389,8 +1395,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000100.0,
@@ -1420,8 +1426,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -1435,8 +1441,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000130.0,
@@ -1484,8 +1490,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "07472684a2573c07",
+   "v": 2,
+   "version": "a5ef1eb570b96697",
    "waits_for": []
   },
   "fault-denied": {
@@ -1495,6 +1501,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -1528,7 +1535,6 @@
     "epic": null,
     "goal": false,
     "id": "g-13",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -1552,6 +1558,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -1622,8 +1629,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -1637,8 +1644,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800001200.0,
@@ -1668,8 +1675,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -1683,8 +1690,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800001230.0,
@@ -1732,8 +1739,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "756d9a4be2e6cdf9",
+   "v": 2,
+   "version": "76bca26bd3d0abd7",
    "waits_for": []
   },
   "fault-engine": {
@@ -1743,6 +1750,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -1776,7 +1784,6 @@
     "epic": null,
     "goal": false,
     "id": "g-16",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -1800,6 +1807,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -1870,8 +1878,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -1885,8 +1893,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800001500.0,
@@ -1916,8 +1924,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -1931,8 +1939,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800001530.0,
@@ -1980,8 +1988,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "53325b7436094d26",
+   "v": 2,
+   "version": "03092e529976f8b0",
    "waits_for": []
   },
   "fault-infra": {
@@ -1991,6 +1999,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -2024,7 +2033,6 @@
     "epic": null,
     "goal": false,
     "id": "g-15",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -2048,6 +2056,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -2118,8 +2127,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -2133,8 +2142,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800001400.0,
@@ -2164,8 +2173,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -2179,8 +2188,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800001430.0,
@@ -2228,8 +2237,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "7dcd403a93a87aed",
+   "v": 2,
+   "version": "9b8caf032b112ec8",
    "waits_for": []
   },
   "fault-land": {
@@ -2239,6 +2248,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -2272,7 +2282,6 @@
     "epic": null,
     "goal": false,
     "id": "g-14",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -2296,6 +2305,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -2366,8 +2376,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -2381,8 +2391,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800001300.0,
@@ -2412,8 +2422,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -2427,8 +2437,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800001330.0,
@@ -2476,8 +2486,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "72bf298c64d489a8",
+   "v": 2,
+   "version": "9bf71f05319a3aec",
    "waits_for": []
   },
   "landed": {
@@ -2487,6 +2497,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -2520,7 +2531,6 @@
     "epic": null,
     "goal": false,
     "id": "g-1",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -2544,6 +2554,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -2614,8 +2625,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -2629,8 +2640,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000000.0,
@@ -2660,8 +2671,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -2675,8 +2686,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000030.0,
@@ -2724,8 +2735,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "e879ea34764a33d9",
+   "v": 2,
+   "version": "e6cc4606f75f09dd",
    "waits_for": []
   },
   "owner-park": {
@@ -2735,6 +2746,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -2768,7 +2780,6 @@
     "epic": null,
     "goal": false,
     "id": "g-12",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -2792,6 +2803,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -2862,8 +2874,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -2877,8 +2889,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800001100.0,
@@ -2908,8 +2920,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -2923,8 +2935,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800001130.0,
@@ -2972,8 +2984,257 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "77ad556cca45b168",
+   "v": 2,
+   "version": "90a195741e9ce20e",
+   "waits_for": []
+  },
+  "pause-account": {
+   "acceptance": "",
+   "artifacts": [],
+   "ask": null,
+   "bd_error": "",
+   "bd_ok_at": 1800036000.0,
+   "card": {
+    "account": "OC Go",
+    "ack": false,
+    "assumptions": 0,
+    "cause": null,
+    "column": "backlog",
+    "dots": [
+     {
+      "phase": "plan",
+      "state": "done"
+     },
+     {
+      "phase": "write",
+      "state": "done"
+     },
+     {
+      "phase": "test",
+      "state": "todo"
+     },
+     {
+      "phase": "review",
+      "state": "todo"
+     },
+     {
+      "phase": "look",
+      "state": "todo"
+     },
+     {
+      "phase": "land",
+      "state": "todo"
+     }
+    ],
+    "epic": null,
+    "goal": false,
+    "id": "g-9",
+    "loops": 0,
+    "marker": "parked",
+    "needs": [],
+    "project": "lifesim-56f42031",
+    "retry_at": 0.0,
+    "review": "on",
+    "run": "g-9-20261015-100000",
+    "shots": 0,
+    "slot": null,
+    "status": "paused: no account for the write step (CODEX_SUBSCRIPTION out until 14:00)",
+    "t": 1800000871.0,
+    "title": "pause-account",
+    "tone": "",
+    "totals": {
+     "secs": 70,
+     "tokens": 3000,
+     "tone": "grey",
+     "usual": 3000,
+     "usual_n": 2
+    },
+    "waits_why": ""
+   },
+   "comments": [],
+   "decisions": [],
+   "description": "",
+   "live": null,
+   "passes": [
+    {
+     "cells": [
+      {
+       "budget_s": null,
+       "last": "",
+       "outcome": "done",
+       "phase": "plan",
+       "secs": 30,
+       "state": "done",
+       "tokens": 1000
+      },
+      {
+       "budget_s": null,
+       "last": "",
+       "outcome": "done",
+       "phase": "write",
+       "secs": 40,
+       "state": "done",
+       "tokens": 2000
+      },
+      {
+       "budget_s": null,
+       "last": "",
+       "outcome": "",
+       "phase": "test",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "budget_s": null,
+       "last": "",
+       "outcome": "",
+       "phase": "review",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "budget_s": null,
+       "last": "",
+       "outcome": "",
+       "phase": "look",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      },
+      {
+       "budget_s": null,
+       "last": "",
+       "outcome": "",
+       "phase": "land",
+       "secs": 0,
+       "state": "empty",
+       "tokens": 0
+      }
+     ],
+     "detail": "",
+     "end": "account_out",
+     "end_text": "paused: no account for the write step (CODEX_SUBSCRIPTION out until 14:00)",
+     "logs": [
+      {
+       "phase": "plan",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "account": "OC Go",
+           "id": "c1",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 30.0,
+           "t": 1800000800.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "account": "",
+           "id": "n1",
+           "lines": [
+            {
+             "t": 1800000800.0,
+             "text": "> plan",
+             "tone": ""
+            },
+            {
+             "t": 1800000830.0,
+             "text": "plan: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 30.0,
+           "t": 1800000800.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "write",
+       "roles": [
+        {
+         "attempts": [
+          {
+           "account": "",
+           "id": "c2",
+           "lines": [],
+           "live": false,
+           "model": "",
+           "outcome": "ok",
+           "secs": 40.0,
+           "t": 1800000830.0
+          }
+         ],
+         "role": "writer"
+        },
+        {
+         "attempts": [
+          {
+           "account": "",
+           "id": "n2",
+           "lines": [
+            {
+             "t": 1800000830.0,
+             "text": "> write 1",
+             "tone": ""
+            },
+            {
+             "t": 1800000870.0,
+             "text": "write: done",
+             "tone": "dim"
+            }
+           ],
+           "live": false,
+           "model": "",
+           "outcome": "done",
+           "secs": 40.0,
+           "t": 1800000830.0
+          }
+         ],
+         "role": "engine"
+        }
+       ]
+      },
+      {
+       "phase": "test",
+       "roles": []
+      },
+      {
+       "phase": "review",
+       "roles": []
+      },
+      {
+       "phase": "look",
+       "roles": []
+      },
+      {
+       "phase": "land",
+       "roles": []
+      }
+     ],
+     "messages": [],
+     "n": 1,
+     "resumed": null
+    }
+   ],
+   "t": 1800036000.0,
+   "unblocks": [],
+   "v": 2,
+   "version": "f72888a7425aafe2",
    "waits_for": []
   },
   "pause-killed": {
@@ -2983,6 +3244,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -3016,7 +3278,6 @@
     "epic": null,
     "goal": false,
     "id": "g-11",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -3040,6 +3301,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -3110,8 +3372,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -3125,8 +3387,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800001000.0,
@@ -3156,8 +3418,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -3171,8 +3433,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800001030.0,
@@ -3220,256 +3482,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "88d093b170ca80de",
-   "waits_for": []
-  },
-  "pause-lane": {
-   "acceptance": "",
-   "artifacts": [],
-   "ask": null,
-   "bd_error": "",
-   "bd_ok_at": 1800036000.0,
-   "card": {
-    "ack": false,
-    "assumptions": 0,
-    "cause": null,
-    "column": "backlog",
-    "dots": [
-     {
-      "phase": "plan",
-      "state": "done"
-     },
-     {
-      "phase": "write",
-      "state": "done"
-     },
-     {
-      "phase": "test",
-      "state": "todo"
-     },
-     {
-      "phase": "review",
-      "state": "todo"
-     },
-     {
-      "phase": "look",
-      "state": "todo"
-     },
-     {
-      "phase": "land",
-      "state": "todo"
-     }
-    ],
-    "epic": null,
-    "goal": false,
-    "id": "g-9",
-    "lane": "OC Go",
-    "loops": 0,
-    "marker": "parked",
-    "needs": [],
-    "project": "lifesim-56f42031",
-    "retry_at": 0.0,
-    "review": "on",
-    "run": "g-9-20261015-100000",
-    "shots": 0,
-    "slot": null,
-    "status": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)",
-    "t": 1800000871.0,
-    "title": "pause-lane",
-    "tone": "",
-    "totals": {
-     "secs": 70,
-     "tokens": 3000,
-     "tone": "grey",
-     "usual": 3000,
-     "usual_n": 2
-    },
-    "waits_why": ""
-   },
-   "comments": [],
-   "description": "",
-   "live": null,
-   "passes": [
-    {
-     "cells": [
-      {
-       "budget_s": null,
-       "last": "",
-       "outcome": "done",
-       "phase": "plan",
-       "secs": 30,
-       "state": "done",
-       "tokens": 1000
-      },
-      {
-       "budget_s": null,
-       "last": "",
-       "outcome": "done",
-       "phase": "write",
-       "secs": 40,
-       "state": "done",
-       "tokens": 2000
-      },
-      {
-       "budget_s": null,
-       "last": "",
-       "outcome": "",
-       "phase": "test",
-       "secs": 0,
-       "state": "empty",
-       "tokens": 0
-      },
-      {
-       "budget_s": null,
-       "last": "",
-       "outcome": "",
-       "phase": "review",
-       "secs": 0,
-       "state": "empty",
-       "tokens": 0
-      },
-      {
-       "budget_s": null,
-       "last": "",
-       "outcome": "",
-       "phase": "look",
-       "secs": 0,
-       "state": "empty",
-       "tokens": 0
-      },
-      {
-       "budget_s": null,
-       "last": "",
-       "outcome": "",
-       "phase": "land",
-       "secs": 0,
-       "state": "empty",
-       "tokens": 0
-      }
-     ],
-     "detail": "",
-     "end": "lane_out",
-     "end_text": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)",
-     "logs": [
-      {
-       "phase": "plan",
-       "roles": [
-        {
-         "attempts": [
-          {
-           "id": "c1",
-           "lane": "OC Go",
-           "lines": [],
-           "live": false,
-           "model": "",
-           "outcome": "ok",
-           "secs": 30.0,
-           "t": 1800000800.0
-          }
-         ],
-         "role": "writer"
-        },
-        {
-         "attempts": [
-          {
-           "id": "n1",
-           "lane": "",
-           "lines": [
-            {
-             "t": 1800000800.0,
-             "text": "> plan",
-             "tone": ""
-            },
-            {
-             "t": 1800000830.0,
-             "text": "plan: done",
-             "tone": "dim"
-            }
-           ],
-           "live": false,
-           "model": "",
-           "outcome": "done",
-           "secs": 30.0,
-           "t": 1800000800.0
-          }
-         ],
-         "role": "engine"
-        }
-       ]
-      },
-      {
-       "phase": "write",
-       "roles": [
-        {
-         "attempts": [
-          {
-           "id": "c2",
-           "lane": "",
-           "lines": [],
-           "live": false,
-           "model": "",
-           "outcome": "ok",
-           "secs": 40.0,
-           "t": 1800000830.0
-          }
-         ],
-         "role": "writer"
-        },
-        {
-         "attempts": [
-          {
-           "id": "n2",
-           "lane": "",
-           "lines": [
-            {
-             "t": 1800000830.0,
-             "text": "> write 1",
-             "tone": ""
-            },
-            {
-             "t": 1800000870.0,
-             "text": "write: done",
-             "tone": "dim"
-            }
-           ],
-           "live": false,
-           "model": "",
-           "outcome": "done",
-           "secs": 40.0,
-           "t": 1800000830.0
-          }
-         ],
-         "role": "engine"
-        }
-       ]
-      },
-      {
-       "phase": "test",
-       "roles": []
-      },
-      {
-       "phase": "review",
-       "roles": []
-      },
-      {
-       "phase": "look",
-       "roles": []
-      },
-      {
-       "phase": "land",
-       "roles": []
-      }
-     ],
-     "messages": [],
-     "n": 1,
-     "resumed": null
-    }
-   ],
-   "t": 1800036000.0,
-   "unblocks": [],
-   "v": 1,
-   "version": "5d211521336e1b63",
+   "v": 2,
+   "version": "d68020a723d836ff",
    "waits_for": []
   },
   "pause-network": {
@@ -3479,6 +3493,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -3512,7 +3527,6 @@
     "epic": null,
     "goal": false,
     "id": "g-10",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -3536,6 +3550,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -3606,8 +3621,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -3621,8 +3636,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000900.0,
@@ -3652,8 +3667,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -3667,8 +3682,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000930.0,
@@ -3716,8 +3731,8 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "f704e61c2ea1579d",
+   "v": 2,
+   "version": "c9a93f7e4cea9aca",
    "waits_for": []
   },
   "wait-ask": {
@@ -3727,6 +3742,7 @@
    "bd_error": "",
    "bd_ok_at": 1800036000.0,
    "card": {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -3760,7 +3776,6 @@
     "epic": null,
     "goal": false,
     "id": "g-8",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -3784,6 +3799,7 @@
     "waits_why": ""
    },
    "comments": [],
+   "decisions": [],
    "description": "",
    "live": null,
    "passes": [
@@ -3854,8 +3870,8 @@
         {
          "attempts": [
           {
+           "account": "OC Go",
            "id": "c1",
-           "lane": "OC Go",
            "lines": [],
            "live": false,
            "model": "",
@@ -3869,8 +3885,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n1",
-           "lane": "",
            "lines": [
             {
              "t": 1800000700.0,
@@ -3900,8 +3916,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "c2",
-           "lane": "",
            "lines": [],
            "live": false,
            "model": "",
@@ -3915,8 +3931,8 @@
         {
          "attempts": [
           {
+           "account": "",
            "id": "n2",
-           "lane": "",
            "lines": [
             {
              "t": 1800000730.0,
@@ -3964,18 +3980,20 @@
    ],
    "t": 1800036000.0,
    "unblocks": [],
-   "v": 1,
-   "version": "a147b80cf2f617b8",
+   "v": 2,
+   "version": "2d55d324d0e75b34",
    "waits_for": []
   }
  },
  "snapshot": {
+  "accounts": [],
   "adhoc": [],
   "adrs": [],
   "asks": [],
   "backlog_more": 0,
   "beads": [
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4009,7 +4027,6 @@
     "epic": null,
     "goal": false,
     "id": "g-1",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -4033,6 +4050,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4066,7 +4084,6 @@
     "epic": null,
     "goal": false,
     "id": "g-2",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -4090,6 +4107,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4123,7 +4141,6 @@
     "epic": null,
     "goal": false,
     "id": "g-3",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4147,6 +4164,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4180,7 +4198,6 @@
     "epic": null,
     "goal": false,
     "id": "g-4",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4204,6 +4221,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4237,7 +4255,6 @@
     "epic": null,
     "goal": false,
     "id": "g-5",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4261,6 +4278,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4294,7 +4312,6 @@
     "epic": null,
     "goal": false,
     "id": "g-6",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4318,6 +4335,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4351,7 +4369,6 @@
     "epic": null,
     "goal": false,
     "id": "g-7",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4375,6 +4392,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4408,7 +4426,6 @@
     "epic": null,
     "goal": false,
     "id": "g-8",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4432,6 +4449,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4465,7 +4483,6 @@
     "epic": null,
     "goal": false,
     "id": "g-9",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4475,9 +4492,9 @@
     "run": "g-9-20261015-100000",
     "shots": 0,
     "slot": null,
-    "status": "paused: no lane for the write step (CODEX_SUBSCRIPTION out until 14:00)",
+    "status": "paused: no account for the write step (CODEX_SUBSCRIPTION out until 14:00)",
     "t": 1800000871.0,
-    "title": "pause-lane",
+    "title": "pause-account",
     "tone": "",
     "totals": {
      "secs": 70,
@@ -4489,6 +4506,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4522,7 +4540,6 @@
     "epic": null,
     "goal": false,
     "id": "g-10",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4546,6 +4563,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4579,7 +4597,6 @@
     "epic": null,
     "goal": false,
     "id": "g-11",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -4603,6 +4620,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4636,7 +4654,6 @@
     "epic": null,
     "goal": false,
     "id": "g-12",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "parked",
     "needs": [],
@@ -4660,6 +4677,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4693,7 +4711,6 @@
     "epic": null,
     "goal": false,
     "id": "g-13",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -4717,6 +4734,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4750,7 +4768,6 @@
     "epic": null,
     "goal": false,
     "id": "g-14",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -4774,6 +4791,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4807,7 +4825,6 @@
     "epic": null,
     "goal": false,
     "id": "g-15",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -4831,6 +4848,7 @@
     "waits_why": ""
    },
    {
+    "account": "OC Go",
     "ack": false,
     "assumptions": 0,
     "cause": null,
@@ -4864,7 +4882,6 @@
     "epic": null,
     "goal": false,
     "id": "g-16",
-    "lane": "OC Go",
     "loops": 0,
     "marker": "ready",
     "needs": [],
@@ -4889,7 +4906,6 @@
    }
   ],
   "epics": [],
-  "lanes": [],
   "learning": {
    "asks_per_landed": [],
    "causes": [],
@@ -4918,7 +4934,8 @@
     "bd_ok_at": 1800036000.0,
     "id": "lifesim-56f42031",
     "name": "lifesim",
-    "profile_error": ""
+    "profile_error": "",
+    "score": null
    }
   ],
   "queue": [],
@@ -4939,7 +4956,7 @@
   },
   "slots": [],
   "t": 1800036000.0,
-  "v": 1,
-  "version": "f415ada4055b628d"
+  "v": 2,
+  "version": "909218eda1d70bf4"
  }
 }

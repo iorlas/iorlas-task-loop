@@ -24,6 +24,6 @@ def test_no_tries_say_nothing() -> None:
 
 def test_the_tries_are_read_from_a_runs_engine_log(tmp_path: Path) -> None:
     path = tmp_path / "run.jsonl"
-    row = {"v": 4, "kind": "land_try", "t": 1.0, "run_id": "R", "n": 1, "failing": "gate", "fetch_s": 1.5, "rebase_s": 0.5, "gate_s": 9.0}
+    row = {"v": 5, "kind": "land_try", "t": 1.0, "run_id": "R", "n": 1, "failing": "gate", "fetch_s": 1.5, "rebase_s": 0.5, "gate_s": 9.0}
     path.write_text(json.dumps(row) + "\ntorn{\n", encoding="utf-8")
     assert land_stats(tries_of(typed_log(path)))["causes"] == {"gate": 1}

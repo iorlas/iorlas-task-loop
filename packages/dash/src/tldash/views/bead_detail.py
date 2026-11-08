@@ -42,23 +42,23 @@ def land_try_text(x: LandTry) -> str:
 
 def decision_msgs(runs: Sequence[Run]) -> list[Msg]:
     """Why it was slow and why it switched: each Overrun (budget against elapsed), RetryDecision (action and reason) and VendorError
-    (lane, reason, until when it is closed) and LandTry (phase seconds, why it went on or retried) the engine recorded, oldest first."""
+    (account, reason, until when it is closed) and LandTry (phase seconds, why it went on or retried) the engine recorded, oldest first."""
     out: list[Msg] = []
     for r in runs:
         for x in r.records:
             if isinstance(x, Overrun):
-                lane = f" on {x.lane}" if x.lane else ""
+                account = f" on {x.account}" if x.account else ""
                 out.append(Msg(t=x.t, icon="⏱", who="engine",
-                               md=f"{x.stage}{lane} used its {x.budget_s:.0f} s budget ({x.elapsed_s:.0f} s) and was stopped"))
+                               md=f"{x.stage}{account} used its {x.budget_s:.0f} s budget ({x.elapsed_s:.0f} s) and was stopped"))
             elif isinstance(x, RetryDecision):
-                lane = f" on {x.lane}" if x.lane else ""
+                account = f" on {x.account}" if x.account else ""
                 why = f": {x.reason}" if x.reason else ""
-                out.append(Msg(t=x.t, icon="↪", who="engine", md=f"{x.step}{lane}: {x.action} (attempt {x.attempt}){why}"))
+                out.append(Msg(t=x.t, icon="↪", who="engine", md=f"{x.step}{account}: {x.action} (attempt {x.attempt}){why}"))
             elif isinstance(x, LandTry):
                 out.append(Msg(t=x.t, icon="🛬", who="engine", md=land_try_text(x)))
             elif isinstance(x, VendorError):
                 until = f", closed until {hhmm(x.until)}" if x.until else ""
-                out.append(Msg(t=x.t, icon="⛔", who="engine", md=f"{x.lane or 'a lane'} refused: {x.reason}{until}"))
+                out.append(Msg(t=x.t, icon="⛔", who="engine", md=f"{x.account or 'an account'} refused: {x.reason}{until}"))
     return sorted(out, key=lambda m: m.t)
 
 

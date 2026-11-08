@@ -50,7 +50,7 @@ class WhyCode(StrEnum):
     TICKET = "ticket"
     GATE_RED = "gate_red"
     STOPPED_BY_COORDINATOR = "stopped_by_coordinator"
-    LANE_OUT = "lane_out"
+    ACCOUNT_OUT = "account_out"
     NETWORK = "network"
     HUNG = "hung"
     SCHEMA_INVALID = "schema_invalid"
@@ -58,8 +58,8 @@ class WhyCode(StrEnum):
 
 
 class Cause(StrEnum):
-    LANE_OUT = "lane_out"
-    LANE_WAIT = "lane_wait"
+    ACCOUNT_OUT = "account_out"
+    ACCOUNT_WAIT = "account_wait"
     INVALID_OUTPUT = "invalid_output"
     BAD_CHECKS = "bad_checks"
     GATE_RED = "gate_red"

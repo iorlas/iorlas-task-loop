@@ -1,4 +1,4 @@
-"""RunTrace: one engine run as the report reads it (traces.jsonl, v3). A defaulted field is one the older rows did not carry."""
+"""RunTrace: one engine run as the report reads it (traces.jsonl, v5). A defaulted field is one the older rows did not carry."""
 from typing import Any, ClassVar, final
 
 import msgspec
@@ -42,7 +42,7 @@ class AiCall(Rec):
     attempt: int | None = None
     run_id: str = ""
     resume: bool = False
-    lane: str = ""
+    account: str = ""
     model: str = ""
     effort: str = ""
     flag: str | None = None
@@ -114,10 +114,10 @@ class Verified(Rec):
 
 @final
 class Fault(Rec):
-    """A step that failed inside the run; `fingerprint` of a trace hashes (why_code, step, lane, exit), never prose."""
+    """A step that failed inside the run; `fingerprint` of a trace hashes (why_code, step, account, exit), never prose."""
 
     step: str
-    lane: str = ""
+    account: str = ""
     exit: int | None = None
     reason: str = ""
     t: float | None = None
@@ -125,7 +125,7 @@ class Fault(Rec):
 
 @final
 class RunTrace(Rec):
-    V: ClassVar[int] = 4
+    V: ClassVar[int] = 5
     run: RunId
     bead: str
     repo_url: str
@@ -147,13 +147,13 @@ class RunTrace(Rec):
     delegate_path: str = ""
     log: str = ""
     stderr: str = ""
-    lanes: dict[str, Any] = msgspec.field(default_factory=dict)
+    accounts: dict[str, Any] = msgspec.field(default_factory=dict)
     sessions: list[AiCall] = msgspec.field(default_factory=list)
     verified: list[Verified] = msgspec.field(default_factory=list)
     write_rounds: list[WriteRound] = msgspec.field(default_factory=list)
     strays: list[str] = msgspec.field(default_factory=list)
     reflection: Reflection | None = None
-    lane_notes: list[str] = msgspec.field(default_factory=list)
+    account_notes: list[str] = msgspec.field(default_factory=list)
     salvaged: bool = False
     backfilled: bool = False
     ask: str = ""

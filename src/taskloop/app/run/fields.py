@@ -118,7 +118,7 @@ class RunFields(StateAttrs, FieldParts):
         self.state = RunState()  # what survives a park, and its one writer
         self.checkpoints = Checkpoints(self, checkpoint_hooks(lambda: self.state))
         self.look = LookState(lambda: self.state)  # the look stage's state (its checkpointed part views `self.state`)
-        self.write = WriteState()  # the write stage's own state (write_rounds, last_summary, lane_notes, strays): not checkpointed
+        self.write = WriteState()  # the write stage's own state (write_rounds, last_summary, account_notes, strays): not checkpointed
         self.plan_summary, self.bead_title = "", ""
         self.reflection: Mapping[str, object] | None = None
         self.left_dirty, self.branch, self.task_branch = False, "", ""
@@ -133,7 +133,7 @@ class RunFields(StateAttrs, FieldParts):
         self.crash_fingerprint, self.crash_site = "", ""
         self.disp: oc.Disposition | None = None
         self.last_flag = ""  # same_family | degraded | ...: what the last worker call reported (worker_call sets it)
-        self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
+        self.retry_after = 0.0  # a pause for an account: when delegate says it is back (epoch; 0 = unknown)
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
         self.last_run: CheckRun | None = None  # the CheckRun of the last stage round: the engine's evidence for the verifier (tl-bxk.10.25)
         self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False

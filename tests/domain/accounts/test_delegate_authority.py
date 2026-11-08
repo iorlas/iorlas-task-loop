@@ -9,8 +9,8 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from taskloop.domain.lanes import policy, roles
-from tlkernel import lanepauses as pauses
+from taskloop.domain.accounts import policy, roles
+from tlkernel import accountpauses as pauses
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 
@@ -85,7 +85,7 @@ class DelegatePauses(Case):
                 rec = pauses.after_pause(None, self.bead, "r1", 100, reason, lambda: 0.5,
                                          producer="delegate", permanence="needs_owner", not_before=900)
                 assert (rec.permanence, rec.retry_at) == ("needs_owner", 0)
-        # Released no_lane/crash owner wakes override even a transient delegate hint.
+        # Released no_account/crash owner wakes override even a transient delegate hint.
         for reason in ("no_account", "crash"):
             with self.subTest(reason=reason):
                 assert reason in pauses.OVERRIDES

@@ -9,7 +9,7 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from taskloop.app.doctor import lanes
+from taskloop.app.doctor import accounts
 from taskloop.stores.delegate import real_route
 from tlkernel.delegate_status import snapshot_of
 from tlkernel.paths import ConfigDir
@@ -26,17 +26,17 @@ class Chore(Case):
         self.said = []
 
     def chore(self, now, why=None):
-        with mock.patch.object(lanes, "file_status", return_value=why) as ask:
-            return lanes.chore(self.said.append, real_route(), self.cfg, now), ask.call_count
+        with mock.patch.object(accounts, "file_status", return_value=why) as ask:
+            return accounts.chore(self.said.append, real_route(), self.cfg, now), ask.call_count
 
     def test_nothing_filed_asks_once_then_waits_20_minutes_even_when_it_failed(self):
         assert self.chore(5000.0, "delegate status exited 1: x") == (True, 1)
         assert self.said == ["loop: delegate status exited 1: x"]
-        assert self.chore(5000.0 + lanes.EVERY_S - 1) == (False, 0)
-        assert self.chore(5000.0 + lanes.EVERY_S) == (True, 1)
+        assert self.chore(5000.0 + accounts.EVERY_S - 1) == (False, 0)
+        assert self.chore(5000.0 + accounts.EVERY_S) == (True, 1)
 
     def test_a_fresh_snapshot_is_left_alone_and_an_old_one_is_asked_again(self):
         StatusStore(self.cfg).write(snapshot_of(REAL))
         at = REAL["ts"]
         assert self.chore(at + 60) == (False, 0)
-        assert self.chore(at + lanes.EVERY_S + 1) == (True, 1)
+        assert self.chore(at + accounts.EVERY_S + 1) == (True, 1)

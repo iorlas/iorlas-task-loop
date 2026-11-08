@@ -1,6 +1,6 @@
 """Make it stick: what the owner turns an answered ask into (dash-spec 5.3). Each outcome has an effect through a typed port and one
 ledger row. The ADR is landed through a bead (`docs/adr/NNNN-title.md`, contracts/adrfiles.py): the engine and `tl` never write into a
-checkout, so the outcome files the bead and a lane lands the file; a factory bead is filed in the task-loop repo; a fix amends the
+checkout, so the outcome files the bead and an account lands the file; a factory bead is filed in the task-loop repo; a fix amends the
 bead's own text; demote and once record the outcome only.
 
 `Stick.REF` links the ask to a decision already in force (the one its repeat key matched, or the id named in `text`)."""

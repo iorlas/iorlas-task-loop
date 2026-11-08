@@ -43,7 +43,7 @@ class ReviewInvalid(EngineTest):
         assert rc == 0
         assert script.nodes == ["plan", "write", "review"]
         assert [r["outcome"] for r in self.review_ends()] == ["unavailable"]
-        assert len(self.eng.write.lane_notes) == 1
+        assert len(self.eng.write.account_notes) == 1
         assert self.eng.stats["rounds"] == 0
         decisions = records(self.eng, "retry_decision")
         assert [(r["action"], r["reason"]) for r in decisions] == [("fault", "schema_invalid")]
@@ -58,9 +58,9 @@ class ReviewInvalid(EngineTest):
         assert "schema_invalid" in ends[0]["detail"]
         trace = self.eng.stores.traces.read_from(0).items[-1].rec
         assert trace.outcome == Outcome.LANDED
-        assert len(trace.lane_notes) == 1
-        assert "review unavailable" in trace.lane_notes[0]
-        assert "schema_invalid" in trace.lane_notes[0]
+        assert len(trace.account_notes) == 1
+        assert "review unavailable" in trace.account_notes[0]
+        assert "schema_invalid" in trace.account_notes[0]
         assert any("Review (engine):" in c[3] and "review unavailable" in c[3]
                             for c in self.store.said("comments", "add"))
         transitions = records(self.eng, "transition")
@@ -70,14 +70,14 @@ class ReviewInvalid(EngineTest):
         rc, _ = self.go([stop("worker_failed")])
         assert rc == 2
         assert self.eng.kind == Kind.FAULT_INFRA
-        assert not self.eng.write.lane_notes
+        assert not self.eng.write.account_notes
         assert not any(r["outcome"] == "unavailable" for r in self.review_ends())
 
     def test_invalid_writer_still_fails_the_run(self):
         rc, _ = self.go([stop("schema_invalid")], node="write")
         assert rc == 2
         assert self.eng.kind == Kind.FAULT_INFRA
-        assert not self.eng.write.lane_notes
+        assert not self.eng.write.account_notes
 
     def test_unavailable_review_keeps_existing_and_writer_unchecked_items(self):
         earlier = {"what": "earlier stage needs verification", "kind": "requirement"}

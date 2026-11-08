@@ -1,5 +1,5 @@
 """Which worker commands only read (a refused read gets one retry). A command with any shell operator is not judged, so no
-shell grammar is parsed here: shlex words and a per-program table. The one place in the lane rules that uses `re`."""
+shell grammar is parsed here: shlex words and a per-program table. The one place in the account rules that uses `re`."""
 
 import re
 import shlex

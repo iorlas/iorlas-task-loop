@@ -44,7 +44,7 @@ def test_the_reflect_state_is_a_report_doc_row():
     assert store.docs.rows.select("SELECT k FROM report_doc WHERE k='reflect:digest'") == [("reflect:digest",)]
 
 
-def test_the_status_rows_live_in_lanes_doc():
+def test_the_status_rows_live_in_accounts_doc():
     cfg = homes.cfg()
     status, tried = StatusStore(cfg), StatusTriedStore(cfg)
     snapshot, attempt = StatusSnapshot(at=123.0), StatusTried(t=124.0)
@@ -52,9 +52,9 @@ def test_the_status_rows_live_in_lanes_doc():
     tried.write(attempt)
     assert StatusStore(cfg).get() == snapshot
     assert StatusTriedStore(cfg).get() == attempt
-    assert status.docs.table == tried.docs.table == "lanes_doc"
+    assert status.docs.table == tried.docs.table == "accounts_doc"
     keys = [("snapshot:delegate.status",), ("snapshot:delegate.tried",)]
-    assert status.docs.rows.select("SELECT k FROM lanes_doc ORDER BY k") == keys
+    assert status.docs.rows.select("SELECT k FROM accounts_doc ORDER BY k") == keys
 
 
 def test_release_upgrade_discards_the_old_pin_and_preserves_release_result():
@@ -68,13 +68,13 @@ def test_release_upgrade_discards_the_old_pin_and_preserves_release_result():
     assert con.execute("SELECT version FROM schema_part WHERE name='release'").fetchone() == (2,)
 
 
-def test_shared_notes_live_in_lanes_doc():
+def test_shared_notes_live_in_accounts_doc():
     store = SharedNotesStore(homes.cfg(), "repo")
     notes = SharedNotes()
     store.write(notes)
     assert store.get() == notes
-    assert store.docs.table == "lanes_doc"
-    assert store.docs.rows.select("SELECT k FROM lanes_doc WHERE k='shared:repo'") == [("shared:repo",)]
+    assert store.docs.table == "accounts_doc"
+    assert store.docs.rows.select("SELECT k FROM accounts_doc WHERE k='shared:repo'") == [("shared:repo",)]
 
 
 def test_bad_versions_live_in_loop_doc():

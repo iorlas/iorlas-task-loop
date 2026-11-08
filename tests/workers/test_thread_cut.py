@@ -9,8 +9,8 @@ import pytest
 from taskloop.adapters import delegate as adapter
 from taskloop.app.workers import call_state, worker_call, worker_recovery, worker_request
 from taskloop.app.workers.call import Call
-from taskloop.domain.lanes import policy as lp
-from taskloop.domain.lanes.retry import PLAN
+from taskloop.domain.accounts import policy as lp
+from taskloop.domain.accounts.retry import PLAN
 from tlkernel import wire
 from tlkernel.delegate import DelegateResult, Retry, RunRequest, StopFacts
 from tlkernel.delegateport import Answer, Completed
@@ -47,11 +47,11 @@ def test_request_has_thread_and_never_resume(monkeypatch):
 
 @pytest.mark.parametrize("scope", ["account", "model"])
 @pytest.mark.parametrize("attempt", [0, 1, 5])
-def test_lane_stops_do_not_restart_threads(scope, attempt):
+def test_account_stops_do_not_restart_threads(scope, attempt):
     ctx = lp.Ctx(attempt=attempt)
-    predicted = lp.Stop(scope, "transient", "predicted", retry_at=123, lane="acct", model="model")
-    assert lp.decide(predicted, ctx) == lp.Yield("PAUSE_LANE", 123)
-    poll = lp.Stop(scope, "transient", "poll", lane="acct", model="model")
+    predicted = lp.Stop(scope, "transient", "predicted", retry_at=123, account="acct", model="model")
+    assert lp.decide(predicted, ctx) == lp.Yield("PAUSE_ACCOUNT", 123)
+    poll = lp.Stop(scope, "transient", "poll", account="acct", model="model")
     assert lp.decide(poll, ctx) == lp.Reroute("acct" if scope == "account" else "model")
 
 
@@ -123,7 +123,7 @@ def test_writer_loop_sends_delta_and_pauses(monkeypatch):
         pass
 
     def end(c, res, stop, action):
-        assert action == lp.Yield("PAUSE_LANE", 123)
+        assert action == lp.Yield("PAUSE_ACCOUNT", 123)
         raise Paused
 
     monkeypatch.setattr(w.acts, "end", end)

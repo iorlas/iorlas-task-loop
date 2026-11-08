@@ -4,7 +4,7 @@
 // (sheet, bead page, goal level) is one history entry (§9).
 
 const KEY = 'tl-dash-ui', SCROLL_KEY = 'tl-dash-ui-scroll';
-const TABS = ['board', 'floor', 'decisions', 'lanes', 'cost'];
+const TABS = ['board', 'slots', 'decisions', 'accounts', 'cost'];
 
 function load(store, key) {
   try { return JSON.parse(store.getItem(key) || '{}'); } catch { return {}; }
@@ -27,7 +27,7 @@ export const ui = {
   drafts: saved.drafts || {},
   ledger: saved.ledger || 'all',
   wide: !!saved.wide,
-  opts: saved.opts || {}, // the view option each tab had last (Board mode, Floor zoom, Decisions tab)
+  opts: saved.opts || {}, // the view option each tab had last (Board mode, Slots zoom, Decisions tab)
   sheet: null, // {kind, ...}: the phone's bottom sheet; also a history entry
   toast: null, // {text, n}: n changes so the same text shows again
   hold: null, // the 5 s answer hold (dash-api Undo): {key, req, label, until}

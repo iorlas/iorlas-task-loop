@@ -48,7 +48,7 @@ def worker_attempt(start: log.CallStart, rows: Sequence[log.EngineLog], events: 
         lines.append(TermLine(t=end.t, text=end.reason))
     return StageAttempt(id=start.id, t=start.t, secs=end.secs if end else max(0.0, run.last_t - start.t),
                         outcome=end.status if end else "running" if run.life is Liveness.LIVE else "interrupted",
-                        lane=end.lane if end and end.lane else info.account if info else "",
+                        account=end.account if end and end.account else info.account if info else "",
                         model=end.model if end and end.model else info.model if info else "",
                         live=end is None and run.life is Liveness.LIVE, lines=lines)
 
@@ -61,7 +61,7 @@ def step_roles(run: Run, span: Span, events: dict[int, Sequence[delegate.LiveEve
             for i, c in enumerate(r.run):
                 lines = [TermLine(t=r.t, text=text) for text in [c.cmd, *c.tail.splitlines(), c.why] if text]
                 out.append(("checks", StageAttempt(id=f"{span.id}:{r.run.round}:{i}", t=span.t0 + c.at, secs=c.secs,
-                                                  outcome=c.word.value, lane=c.track, lines=lines)))
+                                                  outcome=c.word.value, account=c.track, lines=lines)))
     lines: list[TermLine] = []
     for r in rows:
         if isinstance(r, log.Transition) and r.from_id == span.id:

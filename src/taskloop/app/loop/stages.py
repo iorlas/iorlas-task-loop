@@ -119,11 +119,11 @@ def fetch(repo: str, git: Git) -> None:
         git.fetch(repo)
 
 
-def chores[Config, Store](lanes: Callable[[], object], config: Callable[[], Config], sweep: Callable[[Config], object],
+def chores[Config, Store](accounts: Callable[[], object], config: Callable[[], Config], sweep: Callable[[Config], object],
                           wake: Callable[[Config], object], reflect: Callable[[], object], backup: Callable[[], object],
                           disk: Callable[[], object], store: Store | None, nightly: Callable[[Store], Iterable[str]],
                           say: Callable[[str], object]) -> None:
-    lanes()
+    accounts()
     cfg = config()
     sweep(cfg)
     wake(cfg)

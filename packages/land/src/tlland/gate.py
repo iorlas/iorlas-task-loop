@@ -255,7 +255,7 @@ def owner_refusal(text: str | None, env: Env) -> str:
         return ""
     settings = ("TASK_LOOP_DASH_",)
     if any(registered(name) and not name.startswith(settings) for name in env.vars):
-        return "profile change is an owner decision; not available to the engine or a lane"
+        return "profile change is an owner decision; not available to the engine or an account"
     if len(text.strip()) < 12 or not any(char.isdigit() for char in text):
         return "land-stack: --profile-change requires the owner's words and a timestamp (at least 12 characters and a digit)"
     return ""

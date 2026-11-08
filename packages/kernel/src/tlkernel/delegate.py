@@ -19,7 +19,7 @@ DenialKind = Literal["policy", "sandbox_limit", "secret"]
 WorkerEndKind = Literal["ok", "error", "timeout", "worker_survived"]
 REASON_TIMEOUT: Final = "timeout"  # the wire id of a worker that did not finish within --timeout
 REASON_ONLY_FAMILY: Final = "only_family_unready"  # a worker call pinned by --only-family found no ready step of those families
-REASON_NO_LANE: Final = "no_account"
+REASON_NO_ACCOUNT: Final = "no_account"
 REASON_ENGINE_ONLY_UNENFORCED: Final = "engine_only_unenforced"
 REASON_OVERRUN: Final = "overrun"  # made by the engine: a reviewer call used its budget
 

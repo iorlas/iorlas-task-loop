@@ -157,7 +157,7 @@ containers = taskloop.app
 # The shared release builder is a root below wire/run; the other launch roots stay above them.
 # Colon keeps imports between the other launch modules allowed, as the former launch layer did.
 layers =
-    launch.check : launch.check_host : launch.dash : launch.dash_ports : launch.factory : launch.lanes : launch.loop : launch.loop_ops : launch.loop_start : launch.push_judge : launch.reindex : launch.repos : launch.selftest : launch.setup_ports : launch.staged
+    launch.check : launch.check_host : launch.dash : launch.dash_ports : launch.factory : launch.accounts : launch.loop : launch.loop_ops : launch.loop_start : launch.push_judge : launch.reindex : launch.repos : launch.selftest : launch.setup_ports : launch.staged
     prune
     run
     wire

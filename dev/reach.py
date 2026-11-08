@@ -22,7 +22,7 @@ STAGES = {
     "run": "shell", "launch": "shell", "prune": "shell", "wire": "shell", "loop": "shell",
     "plan": "work", "write": "work", "review": "work", "look": "work", "artifacts": "work", "prompts": "work",
     "workers": "workers", "checks": "gate", "land": "land", "release": "release", "reconcile": "release", "slots": "slots", "asks": "asks",
-    "report": "report", "track": "track", "doctor": "doctor", "lanes": "delegate-glue", "beads": "beads", "layout": "store",
+    "report": "report", "track": "track", "doctor": "doctor", "accounts": "delegate-glue", "beads": "beads", "layout": "store",
 }
 TOP = {"tldash": "dash", "delegate": "delegate", "hook": "hook", "cli": "cli", "stores": "store"}
 

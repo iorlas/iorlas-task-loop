@@ -37,9 +37,9 @@ def test_chores_continue_after_optional_failures_and_keep_output(has_store):
     ports.reflect.side_effect = ValueError("reflect failed")
     ports.backup.side_effect = ValueError("backup failed")
     ports.nightly.return_value = iter(["saved"])
-    stages.chores(ports.lanes, ports.config, ports.sweep, ports.wake, ports.reflect, ports.backup, ports.disk,
+    stages.chores(ports.accounts, ports.config, ports.sweep, ports.wake, ports.reflect, ports.backup, ports.disk,
                   store if has_store else None, ports.nightly, ports.say)
-    expected = [call.lanes(), call.config(), call.sweep(cfg), call.wake(cfg), call.reflect(),
+    expected = [call.accounts(), call.config(), call.sweep(cfg), call.wake(cfg), call.reflect(),
                 call.say("loop: reflect digest: reflect failed"), call.backup(), call.say("loop: db backup: backup failed"),
                 call.disk()]
     if has_store:

@@ -2,7 +2,7 @@
 from collections.abc import Callable
 
 from tlkernel import paths
-from tlkernel.docrows import LANES_DOCS, LOOP_DOCS, RELEASE_DOCS, REPORT_DOCS, REPOS_DOCS, RowDoc, singleton
+from tlkernel.docrows import ACCOUNTS_DOCS, LOOP_DOCS, RELEASE_DOCS, REPORT_DOCS, REPOS_DOCS, RowDoc, singleton
 from tlkernel.docstore import Absent, Present
 from tlkernel.guard import guard
 from tlkernel.loop import BadVersions
@@ -21,17 +21,17 @@ from tlkernel.snapshots import (
 
 class StatusStore(RowDoc[StatusSnapshot]):
     def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
-        super().__init__(singleton(cfg, StatusSnapshot, "snapshot:delegate.status", quiet, table=LANES_DOCS).docs, "")
+        super().__init__(singleton(cfg, StatusSnapshot, "snapshot:delegate.status", quiet, table=ACCOUNTS_DOCS).docs, "")
 
 
 class StatusTriedStore(RowDoc[StatusTried]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, StatusTried, "snapshot:delegate.tried", table=LANES_DOCS).docs, "")
+        super().__init__(singleton(cfg, StatusTried, "snapshot:delegate.tried", table=ACCOUNTS_DOCS).docs, "")
 
 
 class SharedNotesStore(RowDoc[SharedNotes]):
     def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
-        super().__init__(singleton(cfg, SharedNotes, "shared:" + repo_key, table=LANES_DOCS).docs, "")
+        super().__init__(singleton(cfg, SharedNotes, "shared:" + repo_key, table=ACCOUNTS_DOCS).docs, "")
 
 
 class ReposStore:

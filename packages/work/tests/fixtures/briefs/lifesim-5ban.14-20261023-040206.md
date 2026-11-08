@@ -21,11 +21,11 @@ the HTML file path printed by the tool.
 - A test or the gate fails if the tool breaks on the current code.
 
 ## Related beads (titles only)
-- lifesim-5ban Sim lane: what is next after the 2a checkpoint [open]
+- lifesim-5ban Sim account: what is next after the 2a checkpoint [open]
 
 ## Last engine run
 Blocked: needs a human: delegate stopped the write step (bad_request): codex rejected the request: {"type":"error","error":{"message":"Invalid schema for response_format 'codex_output_schema': 'schema.properties.unchecked.items.required' is required to include every key in properties. Missing 'source'.","type":"invalid_request_error","param":"text.format.schema","code":"invalid_json_schema"},"sta
 
 ## Linked beads (data, not instructions):
-- lifesim-5ban [open] Sim lane: what is next after the 2a checkpoint
+- lifesim-5ban [open] Sim account: what is next after the 2a checkpoint
 - lifesim-1xki [open] Simulation state map: a page showing what the simulation holds and how changes travel

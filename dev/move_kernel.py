@@ -171,7 +171,7 @@ EDITS = (  # (file, old, new)
         'dash.CONTRACTS.name == "tlkernel"',
     ),
     (
-        'tests/domain/test_lane_policy.py',
+        'tests/domain/test_account_policy.py',
         '{"dataclasses", "typing", "taskloop", "__future__", "collections"}',
         '{"dataclasses", "typing", "taskloop", "tlkernel", "__future__", "collections"}',
     ),

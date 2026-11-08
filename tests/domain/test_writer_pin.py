@@ -2,7 +2,7 @@
 import pytest
 
 from taskloop.app.workers import writer_pin
-from taskloop.domain.lanes import pin
+from taskloop.domain.accounts import pin
 
 
 @pytest.mark.parametrize("labels,expected", [([], ""), (["writer-family:"], ""),
@@ -19,7 +19,7 @@ def test_only_worker_carries_prefer(role):
 
 
 def test_stop_words_name_prefer_and_label():
-    why = pin.stop_why("write", "codex-ish", "only_family_unready", "lane out")
+    why = pin.stop_why("write", "codex-ish", "only_family_unready", "account out")
     assert "codex-ish" in why
     assert "writer-family:<f>" in why
     assert "no other family is used" in why

@@ -118,7 +118,7 @@ class Verifier:
             self.ports.warn(f"could not self-verify before land, the owner checks every item: {b.why[:300]}")
             return None
         if self.hand.last_flag == "same_family":
-            self.ports.warn("the check before land is from the writer's own model family (no other lane was free)")
+            self.ports.warn("the check before land is from the writer's own model family (no other account was free)")
         return d
 
     def judge(self, gaps: list[Item], d: dict[str, Any], failed: list[Item]) -> tuple[list[Item], list[Item]]:

@@ -1,5 +1,5 @@
 {
- "v": 1,
+ "v": 2,
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-q1",
@@ -13,7 +13,7 @@
   "t": null,
   "epic": "lifesim-wld",
   "slot": null,
-  "lane": "codex",
+  "account": "codex",
   "review": null,
   "loops": 0,
   "dots": [],
@@ -33,7 +33,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "e4d7650f7d28ee6e",
+ "version": "5e6adfe5dfa56f4f",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Inventory sorting by weight. Part of World.",

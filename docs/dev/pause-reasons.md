@@ -1,7 +1,7 @@
 # Pause reasons
 
 Every pause reason is **transient** (the loop retries it by itself after a backoff and shows the next-retry time on the Board) or
-**needs_owner** (parked with a typed reason and an ask). Source: `TABLE` and `OVERRIDES` in `src/taskloop/domain/lanes/pauses.py`
+**needs_owner** (parked with a typed reason and an ask). Source: `TABLE` and `OVERRIDES` in `src/taskloop/domain/accounts/pauses.py`
 and the permanence of each reason in `packages/delegate/src/delegate/data/contract.json`. `tests/rules/test_pause_reasons.py` fails when a row here
 differs from the code or a reason has no row: change the code, then this table.
 
@@ -43,7 +43,7 @@ no budget, the network probe or the fault outcome's own history policy decides; 
 | profile_ahead | engine | needs_owner | - | - | - |
 | setup_own_tree | engine | needs_owner | - | - | - |
 | contract_violation | engine | needs_owner | - | - | - |
-| pause_lane | engine | transient | 60 | 3600 | 3 |
+| pause_account | engine | transient | 60 | 3600 | 3 |
 | pause_network | engine | transient | 30 | 1800 | 0 |
 | pause_killed | engine | transient | 60 | 3600 | 3 |
 | pause_moved | engine | transient | 60 | 3600 | 3 |

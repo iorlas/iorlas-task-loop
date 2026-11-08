@@ -9,7 +9,7 @@ Producer = Literal["delegate", "engine"]
 
 
 class Reason(StrEnum):
-    NO_LANE = "no_account"
+    NO_ACCOUNT = "no_account"
     ONLY_FAMILY_UNREADY = "only_family_unready"
     LOOP_EXCLUDED = "loop_excluded"
     SAME_FAMILY = "same_family"
@@ -42,7 +42,7 @@ class Reason(StrEnum):
     PROFILE_AHEAD = "profile_ahead"
     SETUP_OWN_TREE = "setup_own_tree"
     CONTRACT_VIOLATION = "contract_violation"
-    PAUSE_LANE = Kind.PAUSE_LANE.value
+    PAUSE_ACCOUNT = Kind.PAUSE_ACCOUNT.value
     PAUSE_NETWORK = Kind.PAUSE_NETWORK.value
     PAUSE_KILLED = Kind.PAUSE_KILLED.value
     PAUSE_MOVED = Kind.PAUSE_MOVED.value

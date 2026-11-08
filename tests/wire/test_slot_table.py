@@ -15,7 +15,7 @@ from taskloop.app.wire import brief
 from taskloop.app.wire.slotfx import FX
 from taskloop.app.wire.slots import slot_table
 from tldash.testing import T, bead
-from tldash.views import floor
+from tldash.views import slots
 from tldash.views.world import ProjectIn
 from tlkernel.gitport import Git
 from tlkernel.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
@@ -95,7 +95,7 @@ class OneSetOfSlots(Case):
         for b in self.beads:
             self.store.put(b)
 
-    def test_status_lines_and_dash_lanes_agree(self):
+    def test_status_lines_and_dash_accounts_agree(self):
         git = git_with(3)
         entries = [SimpleNamespace(name=n, is_dir=lambda: True) for n in ("s1", "s3")]
         with mock.patch.object(Path, "read_text", return_value="{}"), mock.patch.object(Path, "iterdir", return_value=iter(entries)), \
@@ -105,8 +105,8 @@ class OneSetOfSlots(Case):
                 lines = brief.slot_lines("/repo", who(), NOW, git)
         src = SlotSource(count=3, source="origin/main", sha="abc1234", dirs=frozenset({"s1", "s3"}))
         project = ProjectIn(id="p", name="p", beads=[], slots=self.beads, slot_source=src)
-        lanes = {s.id: s.state for s in floor.slots_of(project, {}, NOW)}
-        assert lanes == {"s1": "held", "s2": "free", "s3": "idle"}
+        accounts = {s.id: s.state for s in slots.slots_of(project, {}, NOW)}
+        assert accounts == {"s1": "held", "s2": "free", "s3": "idle"}
         assert [(v.id, v.state) for v in table.slots] == [("s1", "held"), ("s2", "free"), ("s3", "claimed")]
-        assert [x.split(":")[0] for x in lines[:3]] == list(lanes)
+        assert [x.split(":")[0] for x in lines[:3]] == list(accounts)
         assert "slots.count 3 from origin/main abc1234" in lines[-1]

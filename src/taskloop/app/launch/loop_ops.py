@@ -21,8 +21,8 @@ from tlslots import engine_lock
 
 from taskloop.adapters import bdbackup, beadtools, factorybackup, ident, ram
 from taskloop.adapters.bd import BdStore
+from taskloop.app.doctor import accounts as waccounts
 from taskloop.app.doctor import disk
-from taskloop.app.doctor import lanes as wlanes
 from taskloop.app.loop import stages
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
@@ -51,7 +51,7 @@ def release_dead(repo: str, store: Beads, now: float, git: Git, who: Identity) -
 
 def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity, store: BdStore | None = None) -> None:
     stages.chores(
-        lambda: wlanes.chore(console.say, real_route(), paths.ConfigDir(ident.config_dir(env))),
+        lambda: waccounts.chore(console.say, real_route(), paths.ConfigDir(ident.config_dir(env))),
         lambda: wslots_config.load_cfg(repo, git),
         lambda cfg: wasks.sweep_asks(who, who.config, console.say, cfg, repo),
         lambda cfg: wasks.wake_prs(who, who.config, spawner, cfg, repo),

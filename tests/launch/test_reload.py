@@ -228,7 +228,7 @@ class Reload(EngineTest):
 
             def wait(self, timeout=None):
                 if len(spawned) == 2:  # the fallback run gives its outcome
-                    Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"v": 3, "outcome": "landed", "bead": "t"}))
+                    Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"v": 4, "outcome": "landed", "bead": "t"}))
                     return 0
                 reexec.reexec_store(homes.cfg(), BeadId("t-1")).write(
                     ReexecNote(run="t-1-20261026-120000", bead="t-1", frm="0.1.0", to="0.2.0", step="write",
@@ -283,7 +283,7 @@ class Reload(EngineTest):
             assert eng.delegation.route() == "/b/route.py"
             assert fr.call_count == 3
 
-    # -- point 4: loop state and dashboard lane
+    # -- point 4: loop state and dashboard account
     def test_loop_state_names_the_running_version_and_code_dir(self):
         repo = str(self.wt)
         env = wloop.build(repo, store=FakeBeads(), here=self.here, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())

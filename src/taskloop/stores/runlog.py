@@ -18,7 +18,7 @@ class RunLog:
         self.quiet = quiet
         self.render = render  # the console line of a record (None: not shown); default: kind and fields
         self.clock = clock
-        self.lock = threading.RLock()  # the lanes of a gate log from several threads
+        self.lock = threading.RLock()  # the accounts of a gate log from several threads
         self.ids = first_id  # one counter for every prefix, so an id is unique in the file whatever its prefix
 
     def emit(self, rec: EngineLog) -> int:

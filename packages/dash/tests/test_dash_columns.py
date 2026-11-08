@@ -12,7 +12,7 @@ from tldash.views import columns, phases
 from tldash.views.columns import Facts
 
 LIVE, CRASHED, ENDED = Liveness.LIVE, Liveness.LOST, Liveness.ENDED
-PARKED = log.Close(t=1.0, outcome=Outcome.PARKED, why_code=WhyCode.LANE_OUT, why="codex ran out\nuntil 14:00")
+PARKED = log.Close(t=1.0, outcome=Outcome.PARKED, why_code=WhyCode.ACCOUNT_OUT, why="codex ran out\nuntil 14:00")
 FAILED = log.Close(t=1.0, outcome=Outcome.FAILED, why_code=WhyCode.FAILED)
 LANDED = log.Close(t=1.0, outcome=Outcome.LANDED)
 NOOP = log.Close(t=1.0, outcome=Outcome.NOOP, why="noop: the plan found nothing to implement: umbrella")
@@ -23,7 +23,7 @@ ROWS = [
     ("blocked backlog", Facts(blocked=True, blocker="b-1"), Column.BACKLOG, Marker.BLOCKED),
     ("ready backlog", Facts(), Column.BACKLOG, Marker.READY),
     ("ready after a failed run", Facts(life=ENDED, close=FAILED), Column.BACKLOG, Marker.READY),
-    ("parked by a lane running out", Facts(life=ENDED, close=PARKED), Column.BACKLOG, Marker.PARKED),
+    ("parked by an account running out", Facts(life=ENDED, close=PARKED), Column.BACKLOG, Marker.PARKED),
     ("claimed, no run", Facts(claimed=True), Column.WORKING, Marker.RUN),
     ("planning", Facts(claimed=True, life=LIVE, phase=Phase.PLAN), Column.WORKING, Marker.RUN),
     ("writing", Facts(claimed=True, life=LIVE, phase=Phase.WRITE), Column.WORKING, Marker.RUN),

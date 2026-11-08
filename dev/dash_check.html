@@ -162,7 +162,7 @@ const SCENARIOS = {
     };
     must($$('.ban').some((el) => shown(el) && el.textContent.includes('Loop not running on task-loop')), 'loop banner uses the project name');
     check('Board');
-    for (const tab of ['Floor', 'Decisions', 'Lanes', 'Cost', 'Board']) {
+    for (const tab of ['Slots', 'Decisions', 'Accounts', 'Cost', 'Board']) {
       await click(phone ? '.tb button' : '.nav button', tab); check(tab);
       if (tab === 'Decisions') {
         for (const sub of ['Ledger', 'In force']) {
@@ -253,12 +253,12 @@ const SCENARIOS = {
   },
   async adhoc() {
     localStorage.clear();
-    await load('/#floor'); await settle(1500);
+    await load('/#slots'); await settle(1500);
     const row = $('.adhoc-row'), lease = $('.lease-row');
-    must(row?.textContent.includes('ad-hoc: stage:check on fixture/check') && row.textContent.includes('fixture-owner'), 'ad-hoc work on Floor');
+    must(row?.textContent.includes('ad-hoc: stage:check on fixture/check') && row.textContent.includes('fixture-owner'), 'ad-hoc work on Slots');
     must(lease?.textContent.includes('unity: held by fixture-owner') && lease.textContent.includes('(run fixture-adhoc)'), 'Unity holder and run shown');
-    const lanes = $(W <= 600 ? '.slc' : '.fl');
-    must(!lanes || !!(row.compareDocumentPosition(lanes) & 4), 'ad-hoc work precedes slot lanes');
+    const accounts = $(W <= 600 ? '.slc' : '.fl');
+    must(!accounts || !!(row.compareDocumentPosition(accounts) & 4), 'ad-hoc work precedes slot accounts');
     rules()('ad-hoc work');
   },
   async headers() {
@@ -271,11 +271,11 @@ const SCENARIOS = {
     const range = doc().createRange();
     range.setStart(doc().body, 0); range.setEndBefore(header);
     must(!/owner:/.test(range.toString()), 'no run identity appears before the nav');
-    must(!$('.runs') && !/owner:/.test(doc().body.textContent), 'run rows only appear on Floor');
+    must(!$('.runs') && !/owner:/.test(doc().body.textContent), 'run rows only appear on Slots');
   },
   async runs() {
     localStorage.clear();
-    await load('/#floor'); await settle(1500);
+    await load('/#slots'); await settle(1500);
     const snap = await (await win().fetch('/api/snapshot')).json();
     must(snap.runs.length >= 11, 'fixture exercises run cap');
     const rows = $$('.runs .run-row');
@@ -297,14 +297,14 @@ const SCENARIOS = {
   },
   async pulse() {
     localStorage.clear();
-    await load('/#floor'); await settle(1500);
+    await load('/#slots'); await settle(1500);
     const snap = await (await win().fetch('/api/snapshot')).json();
     const b = snap.beads.find((b) => b.id === 'lifesim-6dq0');
     must(b?.marker === 'run', 'fixture bead has a LIVE run');
     const phone = W <= 600;
     const line = phone ? $$('.slc').find((c) => c.textContent.includes(b.title))
       : $$('.trk .nm').find((n) => n.textContent.includes('6dq0'))?.nextElementSibling;
-    if (!must(line, 'live bead has a Floor track')) return;
+    if (!must(line, 'live bead has a Slots track')) return;
     const pulses = [...line.querySelectorAll('.pulse')];
     must(pulses.length === 1, 'live bead has exactly one pulsing segment');
     const reduced = win().matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -314,7 +314,7 @@ const SCENARIOS = {
   // a live server (ro=1): every tab and view option under the layout rules, then a slice of real beads' pages
   async survey() {
     localStorage.clear();
-    const views = ['#board', '#board~tree', '#floor', '#floor~2', '#decisions~wait', '#decisions~led', '#decisions~adr', '#lanes'];
+    const views = ['#board', '#board~tree', '#slots', '#slots~2', '#decisions~wait', '#decisions~led', '#decisions~adr', '#accounts'];
     const part = +(q.get('part') || 0);
     if (part === 0) {
       for (const v of views) {
@@ -383,25 +383,25 @@ const SCENARIOS = {
     await click('.flt'); phoneRules('filter sheet'); await back();
     await load('/#board~~lifesim-5ban.3'); await settle(1500);
     await click('.pab button', 'Stop'); phoneRules('stop sheet'); await back();
-    for (const t of ['Floor', 'Decisions', 'Lanes']) { await click('.tb button', t); phoneRules(t); }
+    for (const t of ['Slots', 'Decisions', 'Accounts']) { await click('.tb button', t); phoneRules(t); }
   },
-  // slice 8: lanes worst first, the number inside the ring, a stale lane greyed with its age, chips open their bead;
-  // the header pill / top-bar rings show only lanes that are not fine and lead here
-  async lanes() {
+  // slice 8: accounts worst first, the number inside the ring, a stale account greyed with its age, chips open their bead;
+  // the header pill / top-bar rings show only accounts that are not fine and lead here
+  async accounts() {
     localStorage.clear();
     const phone = W <= 600;
     await load('/#board'); await settle(1500);
     const pill = $$(phone ? '.lp .lpi' : '.rbtn small').map((e) => e.textContent.trim());
-    must(pill.length === 2 && /gemini/.test(pill[0]) && /codex/.test(pill[1]), `only troubled lanes up top: ${pill.join(' | ')}`);
+    must(pill.length === 2 && /gemini/.test(pill[0]) && /codex/.test(pill[1]), `only troubled accounts up top: ${pill.join(' | ')}`);
     await click(phone ? '.lp' : '.rbtn');
-    must(/^#lanes/.test(win().location.hash), `the pill opens Lanes: ${win().location.hash}`);
+    must(/^#accounts/.test(win().location.hash), `the pill opens Accounts: ${win().location.hash}`);
     const rows = $$(phone ? '.lc' : '.lt tbody tr');
     const names = rows.map((r) => r.querySelector(phone ? '.lnm' : '.nm > div:last-child').firstChild.textContent.trim());
     must(names.join(',') === 'gemini,codex,claude,OC Go,claude 2', `worst first: ${names.join(',')}`);
     must(rows[0].querySelector('.ring b').textContent === '3d' && rows[1].querySelector('.ring b').textContent === '91%', 'the number sits in the ring');
     const st = rows.find((r) => r.classList.contains('stale'));
-    must(st && /claude 2/.test(st.textContent) && /updated 2h\d* ago/.test(st.textContent), `stale lane greyed with its age: ${st && st.textContent}`);
-    rules()('lanes');
+    must(st && /claude 2/.test(st.textContent) && /updated 2h\d* ago/.test(st.textContent), `stale account greyed with its age: ${st && st.textContent}`);
+    rules()('accounts');
     await click('.chip', '6dq0');
     must(/6dq0/.test(win().location.hash), 'a chip opens its bead');
   },
@@ -511,13 +511,13 @@ const SCENARIOS = {
     must(!$$('.adr .mu').some((e) => e.textContent === 'ADR-007'), 'a pruned decision leaves the list at once');
     rules()('in force');
   },
-  // slice 4: the Floor draws the comeback as two pieces and a curve; a stuck bead takes a cause and 👁 Seen from its page
-  async floor() {
+  // slice 4: the Slots draws the comeback as two pieces and a curve; a stuck bead takes a cause and 👁 Seen from its page
+  async slots() {
     localStorage.clear();
     const phone = W <= 600;
-    await load('/#floor'); await settle(1500);
-    rules()('floor');
-    must($$('.tb .bd.r.on,.nav .n').some((e) => e.textContent.trim() === '1'), 'Floor badge counts the stuck bead');
+    await load('/#slots'); await settle(1500);
+    rules()('slots');
+    must($$('.tb .bd.r.on,.nav .n').some((e) => e.textContent.trim() === '1'), 'Slots badge counts the stuck bead');
     const start = $(phone ? '.slc .s.starting' : '.trk .idl.starting');
     must(/starting tl-00q · \d+[smh]/.test(start?.textContent), 'starting bead and claim age shown');
     must(start?.textContent.includes('claimed · setup · rebase'), 'loaded start-up phases shown');
@@ -525,7 +525,7 @@ const SCENARIOS = {
     tone.style.color = 'var(--run)'; doc().body.append(tone);
     must(start && win().getComputedStyle(start).color === win().getComputedStyle(tone).color, 'starting uses running tone');
     tone.remove();
-    must((phone ? start?.closest('.slc') : start?.parentElement)?.textContent.includes('Show slot start-up on the Floor'), 'starting bead title shown');
+    must((phone ? start?.closest('.slc') : start?.parentElement)?.textContent.includes('Show slot start-up on the Slots'), 'starting bead title shown');
     if (phone) {
       must($$('.slc').length === 6, `one card per slot (${$$('.slc').length})`);
       must($$('.slc').some((c) => /stuck/.test(c.querySelector('.pill').textContent) && /NPC daily/.test(c.textContent)), 'devbox·2 card is stuck');
@@ -548,7 +548,7 @@ const SCENARIOS = {
     await click('.stopa .fc', 'flaky test');
     const w = (await writes()).slice(n0);
     must(w.length === 2 && w[0][0] === 'ack' && w[0][1].ack === true && w[1][0] === 'cause' && w[1][1].cause === 'flaky_test' && !w[1][1].ask, `ack + cause sent: ${JSON.stringify(w)}`);
-    must(!$$('.tb .bd.r.on').length && !$$('.nav .n.bad').length, 'the Floor badge mutes');
+    must(!$$('.tb .bd.r.on').length && !$$('.nav .n.bad').length, 'the Slots badge mutes');
     rules()(phone ? 'stuck page' : 'stuck drawer');
   },
   // slice 3: answer from the card (5 s hold, then POST, then make it stick), Undo, ask back, a look, a draft across a reload
@@ -647,7 +647,7 @@ const SCENARIOS = {
     await load('/#board'); await settle(1500);
     const phone = W <= 600, check = rules();
     check('board');
-    for (const t of ['Floor', 'Decisions', 'Lanes', 'Board']) { await click(phone ? '.tb button' : '.nav button', t); check(t); }
+    for (const t of ['Slots', 'Decisions', 'Accounts', 'Board']) { await click(phone ? '.tb button' : '.nav button', t); check(t); }
     // a live board may show no card unfolded (all backlog): then there is no bead page to walk to, and no back to take
     const opened = RO && !$(phone ? '.pc' : '.kc') ? (notes.push('no card on the board to open'), false) : await click(phone ? '.pc' : '.kc');
     if (opened) { await settle(800); check('bead page'); }

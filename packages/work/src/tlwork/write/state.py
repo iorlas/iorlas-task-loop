@@ -58,7 +58,7 @@ class WriteState:
     def __init__(self) -> None:
         self.write_rounds: list[Open] = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
-        self.lane_notes: list[str] = []  # steps that ran on the writer's own family, with delegate's warning
+        self.account_notes: list[str] = []  # steps that ran on the writer's own family, with delegate's warning
         self.strays: list[str] = []  # unaccepted untracked files moved to evidence/strays before the land gate (tl-bxk.10.24)
 
 

@@ -8,9 +8,9 @@ from support.parkmock import through_change
 
 from taskloop.adapters import beadtools
 from tlasks.closing import ClosingAsks
+from tlkernel import accountpauses as pauses
 from tlkernel import askparks as parks
 from tlkernel import beadpark as park
-from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.beadpark import text_hash
@@ -55,7 +55,7 @@ class PauseCompatibility(Case):
                     host.run_id = f"r{n}"
                     with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
                         Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home), beadtools.peek).pause(
-                            oc.make(Kind.PAUSE_LANE, "paused")
+                            oc.make(Kind.PAUSE_ACCOUNT, "paused")
                         )
                     assert (host.retry_after, host.asked, host.pause_reason) == (0, False, reason)
                     host.ask_flow.raise_ask.assert_not_called()
@@ -84,7 +84,7 @@ class PauseCompatibility(Case):
                 assert pauses.rule(reason, producer).max_attempts == 0
                 with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
                     Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home), beadtools.peek).pause(
-                        oc.make(Kind.PAUSE_LANE, "paused")
+                        oc.make(Kind.PAUSE_ACCOUNT, "paused")
                     )
                 assert (host.retry_after, host.asked) == (0, True)
                 host.ask_flow.raise_ask.assert_called_once()
@@ -118,7 +118,7 @@ class PauseCompatibility(Case):
                     host.clock.now.return_value = 100
                     with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
                         Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home), beadtools.peek).pause(
-                            oc.make(Kind.PAUSE_LANE, "paused")
+                            oc.make(Kind.PAUSE_ACCOUNT, "paused")
                         )
                     rec = store.return_value.put.call_args.args[0]
                     assert rec.attempts == {pauses.attempt_key(reason, producer): n + 1}
@@ -149,7 +149,7 @@ class PauseCompatibility(Case):
             rec = parks.paused(
                 self.cfg,
                 self.bead,
-                Kind.PAUSE_LANE,
+                Kind.PAUSE_ACCOUNT,
                 "r1",
                 100,
                 reason="rate_limited",

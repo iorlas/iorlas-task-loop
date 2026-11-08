@@ -19,7 +19,7 @@ class RunReport(Rec):
     """The last line run-task prints and loop/<key>/<bead>-<stamp>.outcome.json. `kind` is the outcome.Kind value ("" for a stop
     before the engine ran); a file of another `v` or with an unknown outcome is a parse error, never a default."""
 
-    V: ClassVar[int] = 3
+    V: ClassVar[int] = 4
     outcome: Result
     bead: BeadId
     run: str = ""
@@ -40,7 +40,7 @@ class LoopLogLine(Row, tag="loop"):
     """A line of loop/<key>.jsonl: one bead's run as the loop saw it (`run_id` is the run's id).
     A line without this `v` is not read."""
 
-    V: ClassVar[int] = 4
+    V: ClassVar[int] = 5
     slot: str
     outcome: Result
     minutes: float = 0.0
@@ -203,7 +203,7 @@ class RunManifest(Rec):
     owns it, `reason` why it ended. `ended` is None while the run goes; `attempts` counts the engine processes that worked on it (an exec
     into a newer install or a network pause takes the same run up again)."""
 
-    V: ClassVar[int] = 2
+    V: ClassVar[int] = 3
     run: str
     repo: str
     bead: str

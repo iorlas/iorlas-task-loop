@@ -172,15 +172,15 @@ def _bead_rows(
 
 
 def _tokens(runs: Sequence[RunTrace]) -> dict[str, dict[str, dict[str, int]]]:
-    """{lane|role: {name: {in, cached, out}}} over the sessions of the runs."""
-    tokens = {"lane": {}, "role": {}}
+    """{account|role: {name: {in, cached, out}}} over the sessions of the runs."""
+    tokens = {"account": {}, "role": {}}
     for r in runs:
         for s in r.sessions:
             tk = {"in": s.tokens.in_, "cached": s.tokens.cached, "out": s.tokens.out}
             if not any(tk.values()):
                 continue
-            fam = s.family or (s.lane or "?").split("_")[0].lower()
-            for key, name in (("lane", fam), ("role", s.role or "?")):
+            fam = s.family or (s.account or "?").split("_")[0].lower()
+            for key, name in (("account", fam), ("role", s.role or "?")):
                 d = tokens[key].setdefault(name, {"in": 0, "cached": 0, "out": 0})
                 d["in"] += input_tokens(tk)
                 d["cached"] += tk["cached"]
@@ -358,7 +358,7 @@ def print_card(c: dict[str, Any]) -> None:
             c["minutes"]["median"], c["minutes"]["p90"], int(c["rounds"]), int(c["replans"])
         )
     )
-    for key in ("lane", "role"):
+    for key in ("account", "role"):
         for name, d in sorted(c["tokens"][key].items()):
             print(f"  tokens {key!s:<5} {name!s:<9} {mtok(d)}")
     if c.get("planner") and c["planner"]["calls"]:

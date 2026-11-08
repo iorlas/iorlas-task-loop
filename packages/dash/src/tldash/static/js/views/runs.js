@@ -20,7 +20,7 @@ export function Runs({ snap, now }) {
   </div></section>`;
 }
 
-// Active work and scarce leases belong above the slot lanes on both Floor layouts.
+// Active work and scarce leases belong above the slot accounts on both Slots layouts.
 export function ActiveWork({ snap, now }) {
   const visible = (r) => !r.project || ui.project === 'all' || r.project === ui.project;
   const runs = (snap.adhoc || []).filter(visible), leases = (snap.leases || []).filter(visible);

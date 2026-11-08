@@ -242,8 +242,8 @@ class EngineReviewTest(EngineTest):
         assert "the new guid is unique across Assets" in q
 
     def test_a_verifier_that_cannot_run_leaves_every_item_to_the_owner(self):
-        out = stop("rate_limited", at=time.time() + 7200, say="no lane")
-        rc, _ = self.verified(out, verify=[out])  # the lane is out for hours: given up at once
+        out = stop("rate_limited", at=time.time() + 7200, say="no account")
+        rc, _ = self.verified(out, verify=[out])  # the account is out for hours: given up at once
         assert rc == 2
         q = self.card()
         for item in self.GAPS:

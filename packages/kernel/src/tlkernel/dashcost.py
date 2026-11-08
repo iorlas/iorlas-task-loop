@@ -25,7 +25,7 @@ class CostRow(Rec):
 class CostPage(Rec):
     """The sums of the engine logs still kept, per stage and bead, and per stage of each bead (`drill`). Stage time is the
     steps' time. `waits` is the engine's own waits by what it
-    waited for (a lane, a resource, a lock ...). A run is in the window when its newest record is; `last` > 0 takes that many newest
+    waited for (an account, a resource, a lock ...). A run is in the window when its newest record is; `last` > 0 takes that many newest
     runs instead."""
 
     V: ClassVar[int] = 1

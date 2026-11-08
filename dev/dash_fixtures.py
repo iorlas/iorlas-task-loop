@@ -11,7 +11,7 @@ Serves static/index.html at /, components.html, /<asset> (as the dash serves the
 /api routes from tests/fixtures/dash/ (docs/contracts/dash-api.md). A POST body is decoded strictly with its WRITES
 record, so a page that sends a wrong shape gets a 400 here before the backend sees it. --state empty serves a snapshot with
 no beads (first run); --state down answers 503 to every API call (server unreachable); --state variants adds cases the
-recorded fixture lacks (a shared goal child, a stale lane, an exited worker).
+recorded fixture lacks (a shared goal child, a stale account, an exited worker).
 """
 import argparse
 import contextlib
@@ -43,9 +43,9 @@ def snapshot(state: str) -> dict[str, Any]:
         for k in ("beads", "pieces", "asks", "slots"):
             snap[k] = []
         snap["version"] += "-empty"
-    if state == "variants":  # cases the recorded fixture lacks: a bead two goals need (⤴ stub), a lane status 2 h old
+    if state == "variants":  # cases the recorded fixture lacks: a bead two goals need (⤴ stub), an account status 2 h old
         next(b for b in snap["beads"] if b["id"] == "lifesim-q4")["needs"].append("lifesim-fld.27")
-        next(lane for lane in snap["lanes"] if lane["id"] == "claude-2")["status_t"] = snap["t"] - 7200
+        next(account for account in snap["accounts"] if account["id"] == "claude-2")["status_t"] = snap["t"] - 7200
         next(b for b in snap["beads"] if b["id"] == "lifesim-5ban.3")["marker"] = "exited"  # and its worker exited (bead_detail)
         snap["version"] += "-variants"
         snap["adrs"].append(dict(snap["adrs"][0], project=snap["projects"][1]["id"], id="ADR-OTHER"))

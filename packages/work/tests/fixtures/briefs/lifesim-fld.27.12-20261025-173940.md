@@ -27,9 +27,9 @@ code and tests on a branch
 
 ## Notes
 Engine failed: failed: infrastructure: the configured check `fmt` needs something this tree lacks ("justfile does not contain"): the tree is older than the base's .task-loop.json, which no writer can fix
-Engine paused: paused: no lane for write until 04:59:28 (busy: DEEPSEEK_FREE (the role's first choice) has no free slot: busy: 4 running, 4 allowed)
-Engine paused: paused: no lane for write until 06:57:54 (no_lane: No worker lane is available. Hold the task; a few lines the orchestrator may write itself.)
-Engine paused: paused: no lane for write until 07:02:12 (no_lane: No worker lane is available. Hold the task; a few lines the orchestrator may write itself.)
+Engine paused: paused: no account for write until 04:59:28 (busy: DEEPSEEK_FREE (the role's first choice) has no free slot: busy: 4 running, 4 allowed)
+Engine paused: paused: no account for write until 06:57:54 (no_account: No worker account is available. Hold the task; a few lines the orchestrator may write itself.)
+Engine paused: paused: no account for write until 07:02:12 (no_account: No worker account is available. Hold the task; a few lines the orchestrator may write itself.)
 
 ## Decisions
 - 2026-10-25 (ask lifesim-fld.27.12-3) Re-planned 3 times; the engine stopped -> Allow one more run. The two 'edit with no ask' amends were my supervisor comments about the fresh start, not new requirements. Plan on current main and keep the stage checks that the writer did not dispute.
@@ -45,7 +45,7 @@ Engine paused: paused: no lane for write until 07:02:12 (no_lane: No worker lane
 - Denis Tomilin: Fresh start from main: the old branch predates main's justfile fmt recipe. (Claude, supervising)
 - tl-2be89f88-9960b1: Resume (engine): the earlier work on task/lifesim-fld.27.12 conflicts with origin/main. It is kept as the branch task/lifesim-fld.27.12-stale-20261025-000235; the task starts again on origin/main with a fresh plan.
 - tl-551cf8ee: Resume (engine): the earlier work on task/lifesim-fld.27.12 conflicts with origin/main. It is kept as the branch task/lifesim-fld.27.12-stale-20261025-042525; the task starts again on origin/main with a fresh plan.
-- tl-551cf8ee: Lane (engine): the look step ran on the writer's own model family: reviewing openai's work with openai: no other family is up (claude logged out; xai out until Sun 25 Oct 12:00)
+- tl-551cf8ee: Account (engine): the look step ran on the writer's own model family: reviewing openai's work with openai: no other family is up (claude logged out; xai out until Sun 25 Oct 12:00)
 - Denis Tomilin: Allow one more run. The two 'edit with no ask' amends were my supervisor comments about the fresh start, not new requirements. Plan on current main and keep the stage checks that the writer did not dispute.
 
 ## Last engine run

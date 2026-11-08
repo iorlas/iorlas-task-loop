@@ -8,7 +8,7 @@ from tlwork.api import LOOK_FIELDS
 
 STATE_ONLY = ("replans",)
 
-NOT_ATTRS = ("review",)  # the one field of another lane's type: reached as `engine.state.review` only
+NOT_ATTRS = ("review",)  # the one field of another account's type: reached as `engine.state.review` only
 
 
 class StateField:

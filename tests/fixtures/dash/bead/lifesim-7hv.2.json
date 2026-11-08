@@ -1,5 +1,5 @@
 {
- "v": 1,
+ "v": 2,
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-7hv.2",
@@ -13,7 +13,7 @@
   "t": 1793046600.0,
   "epic": "lifesim-wld",
   "slot": "devbox·1",
-  "lane": "claude",
+  "account": "claude",
   "review": null,
   "loops": 1,
   "dots": [
@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "ac4e7b3a9b75bf32",
+ "version": "e7060e173c3916f7",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Pets need feeding twice a day. Part of World.",
@@ -240,8 +240,8 @@
      "budget_s": null
     }
    ],
-   "end": "lane_out",
-   "end_text": "lane ran out, parked",
+   "end": "account_out",
+   "end_text": "account ran out, parked",
    "detail": "",
    "resumed": null,
    "messages": [

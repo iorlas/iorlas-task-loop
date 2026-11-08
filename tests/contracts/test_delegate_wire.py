@@ -1,10 +1,10 @@
-"""The typed delegate answer (contract 4) agrees with the adapter that reads it and the policy tables (lane policy)."""
+"""The typed delegate answer (contract 4) agrees with the adapter that reads it and the policy tables (account policy)."""
 from typing import get_args, get_type_hints
 
 from contracts import samples as S
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate_wire
-from taskloop.domain.lanes import policy as lp
+from taskloop.domain.accounts import policy as lp
 from tlkernel import delegate, wire
 from tltestkit.case import Case
 
@@ -13,7 +13,7 @@ class Contract4(Case):
     def test_the_contract_number_is_the_one_the_engine_speaks(self):
         assert get_args(get_type_hints(delegate.DelegateResult)["contract"]) == (dl.CONTRACT,)
 
-    def test_the_stop_facts_vocabulary_is_lane_policys(self):
+    def test_the_stop_facts_vocabulary_is_account_policys(self):
         hints = get_type_hints(delegate.StopFacts)
         assert set(get_args(hints["scope"])) == set(lp.SCOPES)
         assert set(get_args(hints["permanence"])) == set(lp.PERMANENCES)

@@ -1,4 +1,4 @@
-"""Names and times the task view prints: lanes by family, models, clock times. No regex: the engine's own text is
+"""Names and times the task view prints: accounts by family, models, clock times. No regex: the engine's own text is
 split with str methods."""
 
 import time
@@ -31,9 +31,9 @@ def num(ident: object) -> int:
     return int(digits) if digits.isdigit() else 0
 
 
-def lane_name(lane: str | None = "", family: str | None = "") -> str:
-    """Delegate's family, or the lane name's first part, title-cased."""
-    return (family or (lane or "").split("_")[0]).title()
+def account_name(account: str | None = "", family: str | None = "") -> str:
+    """Delegate's family, or the account name's first part, title-cased."""
+    return (family or (account or "").split("_")[0]).title()
 
 
 def hhmm(t: float | None) -> str:

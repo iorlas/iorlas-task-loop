@@ -104,7 +104,7 @@ class Api(ApiFixture):
         snap = wire.load(Snapshot, json.loads(body))
         assert headers["ETag"] == f'"{snap.version}"'
         by = {c.id: c for c in snap.beads}
-        assert (by["b-1"].column.value, by["b-1"].marker.value, by["b-1"].slot, by["b-1"].lane) == ("working", "run", "a", "OC Go")
+        assert (by["b-1"].column.value, by["b-1"].marker.value, by["b-1"].slot, by["b-1"].account) == ("working", "run", "a", "OC Go")
         assert (by["b-2"].column.value, by["b-2"].status) == ("questions", "Weekly or monthly?")
         assert (by["b-3"].column.value, by["b-3"].marker.value) == ("backlog", "ready")
         assert [(s.id, s.state, s.bead) for s in snap.slots] == [("a", "running", "b-1")]

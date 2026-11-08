@@ -59,7 +59,7 @@ class Judge:
             ).data
         except hand.Blocked as b:
             return self.unjudged(b, rnd)
-        note = "[same family as the writer: no other lane was free] " if hand.last_flag == "same_family" else ""
+        note = "[same family as the writer: no other account was free] " if hand.last_flag == "same_family" else ""
         found = [
             Defect(item=f.get("item", ""), why=f.get("why", ""), where=f.get("where", ""))
             for f in d["findings"]
@@ -68,17 +68,17 @@ class Judge:
         return found, note + d["summary"]
 
     def unjudged(self, b: Exception, rnd: int) -> tuple[list[Defect], str]:
-        """No lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead."""
+        """No account for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead."""
         hand, ports, state = self.hand, self.ports, self.state
         why = str(getattr(b, "why", b))
         st = getattr(b, "stop", None)
-        if not why.startswith("paused: no lane") or (st is not None and st.permanence == "needs_owner" and st.reason != "no_account"):
+        if not why.startswith("paused: no account") or (st is not None and st.permanence == "needs_owner" and st.reason != "no_account"):
             raise b  # the network (the step resumes), a crash, a login or credit pause: not this node's to swallow
         hand.retry_after = 0.0  # the run goes on: discard the pause retry time
-        ports.steps.outcome("skipped", "no lane")
-        ports.warn(f"the look judge had no lane, the pictures are not judged: {why[:200]}")
-        state.unjudged[f"look judge, round {rnd}"] = "no lane: " + why[:160]
-        return [], "(not judged: no lane for the look judge)"
+        ports.steps.outcome("skipped", "no account")
+        ports.warn(f"the look judge had no account, the pictures are not judged: {why[:200]}")
+        state.unjudged[f"look judge, round {rnd}"] = "no account: " + why[:160]
+        return [], "(not judged: no account for the look judge)"
 
     def look_step(self, st: StageData, w: Open, name: str, last: bool = True, *, checks: bool = True, family: str | None = None) -> str:
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge (`family`: the writer's, not yet handed

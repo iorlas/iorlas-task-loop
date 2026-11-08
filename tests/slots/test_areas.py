@@ -61,10 +61,10 @@ class AreasBase(Slots):
         super().setup_method()
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": AREAS_JSON}))
 
-    def lanes(self, script, lanes, slots=2):
+    def areas(self, script, areas, slots=2):
         bd = self.beads(script, slots=slots)
-        for b, lane in lanes.items():
-            bd.beads[b]["labels"] = ["lane:" + lane]
+        for b, area in areas.items():
+            bd.beads[b]["labels"] = ["lane:" + area]
         return bd
 
     def running(self, bd, b, slot="s1", sb="sl-1"):

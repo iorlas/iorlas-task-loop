@@ -22,7 +22,7 @@ Tone = Literal["", "you", "bad", "run", "watch"]
 SegKind = Literal["stage", "failed", "live", "ask", "answered", "parked", "look", "stuck", "projected", "wait_slot"]
 CellState = Literal["empty", "visited", "small", "skipped", "done", "overrun", "live", "failed", "you", "stuck"]
 DotState = Literal["todo", "done", "live", "you", "bad"]
-PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "lane_out", "sent_back", "stuck", "exited", "done", "noop"]
+PassEnd = Literal["", "test_failed", "replan", "asked", "parked", "account_out", "sent_back", "stuck", "exited", "done", "noop"]
 
 
 # ---- snapshot: GET /api/snapshot
@@ -61,7 +61,7 @@ class Epic(Rec):
 
 @final
 class Totals(Rec):
-    """Bead totals over the passes still in the run logs (7 days); `tone` is decided server-side from the per-lane usual
+    """Bead totals over the passes still in the run logs (7 days); `tone` is decided server-side from the per-account usual
     (dash-spec §2.6)."""
 
     secs: int = 0
@@ -79,7 +79,7 @@ class PhaseDot(Rec):
 
 @final
 class BeadCard(Rec):
-    """One bead as the Board, the Goals tree, lane chips and the drawer header show it."""
+    """One bead as the Board, the Goals tree, account chips and the drawer header show it."""
 
     id: str
     project: str
@@ -92,7 +92,7 @@ class BeadCard(Rec):
     t: Annotated[float | None, msgspec.Meta(description="when the bead entered its current state; the age")] = None
     epic: str | None = None
     slot: str | None = None
-    lane: str | None = None
+    account: str | None = None
     review: Literal["on", "off", "sampled"] | None = None  # RunStart.review of the newest run
     loops: int = 0
     dots: list[PhaseDot] = msgspec.field(default_factory=list)
@@ -117,7 +117,7 @@ class Seg(Rec):
 
 @final
 class Piece(Rec):
-    """A bead's stretch on one slot, for the Floor: a comeback in another slot is a new piece with `from_slot` set."""
+    """A bead's stretch on one slot, for the Slots: a comeback in another slot is a new piece with `from_slot` set."""
 
     bead: str
     project: str
@@ -133,7 +133,7 @@ class Piece(Rec):
 class Slot(Rec):
     id: str
     name: str
-    lane: Annotated[str, msgspec.Meta(description="lane of the slot's current or last call")]
+    account: Annotated[str, msgspec.Meta(description="account of the slot's current or last call")]
     state: Literal["starting", "running", "stuck", "look", "free", "idle", "held"]
     project: str | None = None
     bead: str | None = None
@@ -240,7 +240,7 @@ class Learning(Rec):
 
 
 @final
-class LaneCard(Rec):
+class AccountCard(Rec):
     id: str
     name: str
     plan: str
@@ -261,10 +261,10 @@ class LaneCard(Rec):
 @final
 class Snapshot(Rec):
     """GET /api/snapshot[?since=<version>]: everything the four tabs need; 304 when `since` equals `version`.
-    Trimmed server-side: pieces only inside the Floor window (8 h back, 2 h ahead), done beads only since local midnight,
+    Trimmed server-side: pieces only inside the Slots window (8 h back, 2 h ahead), done beads only since local midnight,
     backlog capped at 200 with `backlog_more` the rest."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     version: str
     t: float
     server: ServerInfo
@@ -281,7 +281,7 @@ class Snapshot(Rec):
     ledger: list[LedgerRow] = msgspec.field(default_factory=list)
     adrs: list[AdrRow] = msgspec.field(default_factory=list)
     learning: Learning = msgspec.field(default_factory=Learning)
-    lanes: list[LaneCard] = msgspec.field(default_factory=list)
+    accounts: list[AccountCard] = msgspec.field(default_factory=list)
     queue: list[QueueItem] = msgspec.field(default_factory=list)  # the owner's queue strip, in pick order
     needs: list[NeedRow] = msgspec.field(default_factory=list)  # everything that waits on the owner without an ask; first on the phone
 
@@ -315,7 +315,7 @@ class StageAttempt(Rec):
     t: float
     secs: float
     outcome: str
-    lane: str = ""
+    account: str = ""
     model: str = ""
     live: bool = False
     lines: list[TermLine] = msgspec.field(default_factory=list)
@@ -403,7 +403,7 @@ class LiveBox(Rec):
 
 @final
 class BeadDetail(Rec):
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     t: float
     card: BeadCard
     version: str = ""

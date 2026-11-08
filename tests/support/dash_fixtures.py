@@ -34,7 +34,7 @@ SlotState = Literal["free", "held", "idle", "look", "running", "stuck"]
 TermTone = Literal["", "dim", "err", "ok"]
 LiveState = Literal["lost", "ended", "live"]
 AskStatus = Literal["answered", "open", "open_soft"]
-LaneState = Literal["locked", "ok", "stale", "watch"]
+AccountState = Literal["locked", "ok", "stale", "watch"]
 
 COLUMN = {"backlog": D.Column.BACKLOG, "working": D.Column.WORKING, "ask": D.Column.QUESTIONS, "review": D.Column.REVIEW,
           "look": D.Column.LOOK, "land": D.Column.LANDING, "done": D.Column.DONE}
@@ -138,7 +138,7 @@ def card(b: dict, by: dict, waiters: dict) -> D.BeadCard:
     return D.BeadCard(
         id=b["id"], project=b["proj"], run=f"{b['id']}-fixture" if work(b) else "", title=b["t"], column=col, marker=marker(b, by),
         status=("⏩ " if b.get("soft") else "") + b["line"], tone=tone, t=ago(b["age"]) if b.get("age") else None,
-        epic=EPICS.get(b["room"]), slot=b.get("slot") if b["col"] != "backlog" else None, lane=b.get("lane"),
+        epic=EPICS.get(b["room"]), slot=b.get("slot") if b["col"] != "backlog" else None, account=b.get("account"),
         loops=b.get("loops", 0), dots=dots(b), needs=[n for n in b.get("needs", []) if n in by and by[n]["col"] != "done"],
         goal=b["short"].startswith("g"),
         waits_why=waits, ack=False, totals=totals(b) if work(b) else D.Totals(),
@@ -168,10 +168,10 @@ def pieces(b: dict) -> list[D.Piece]:
 
 
 def slots(data: dict, all_pieces: list[D.Piece]) -> list[D.Slot]:
-    lanes = {ln["n"]: ln for ln in data["LANES"]}
+    accounts = {ln["n"]: ln for ln in data["ACCOUNTS"]}
     out = []
-    for _machine, name, lane in data["SLOTS"]:
-        state, bead, proj, t, why = "idle", None, None, None, f"no {lane} work ready"
+    for _machine, name, account in data["SLOTS"]:
+        state, bead, proj, t, why = "idle", None, None, None, f"no {account} work ready"
         for p in all_pieces:
             if p.slot != name:
                 continue
@@ -182,8 +182,8 @@ def slots(data: dict, all_pieces: list[D.Piece]) -> list[D.Slot]:
                 state = slot_map.get(k, "running")
                 bead, proj, t = p.bead, p.project, w[-1].t0
                 why = f"{p.bead} parked here, waits on your answer" if k == "ask" else ""
-        nxt = lanes[lane]["next"][0] if lane in lanes and lanes[lane]["next"] and state != "idle" else None
-        out.append(D.Slot(id=name, name=name, lane=lane, state=state, project=proj, bead=bead, t=t, next=nxt, idle_why=why))
+        nxt = accounts[account]["next"][0] if account in accounts and accounts[account]["next"] and state != "idle" else None
+        out.append(D.Slot(id=name, name=name, account=account, state=state, project=proj, bead=bead, t=t, next=nxt, idle_why=why))
     return out
 
 
@@ -231,13 +231,13 @@ def passes(b: dict) -> list[D.Pass]:
         if k == "gap":
             continue
         if k in ("park", "parkx"):
-            lane_out = "codex" in n
+            account_out = "codex" in n
             cur["end"], cur["text"] = (
-                ("lane_out", "lane ran out, parked") if lane_out else ("asked", "asking you" if k == "park" else "asked; answered")
+                ("account_out", "account ran out, parked") if account_out else ("asked", "asking you" if k == "park" else "asked; answered")
             )
             cur["segs"].append(s)
             raw.append(cur)
-            cur = {"c": {}, "end": "", "text": "", "segs": [], "resumed": lane_out}
+            cur = {"c": {}, "end": "", "text": "", "segs": [], "resumed": account_out}
             continue
         st = stage_of(n)
         if st is None:
@@ -364,15 +364,15 @@ def adrs(data: dict) -> list[D.AdrRow]:
     return out
 
 
-def lanes(data: dict) -> list[D.LaneCard]:
+def accounts(data: dict) -> list[D.AccountCard]:
     out = []
-    for ln in data["LANES"]:
-        lane_states: dict[str, LaneState] = {"": "ok", "w": "watch", "x": "locked"}
-        st = lane_states[ln["st"]]
+    for ln in data["ACCOUNTS"]:
+        account_states: dict[str, AccountState] = {"": "ok", "w": "watch", "x": "locked"}
+        st = account_states[ln["st"]]
         hm = re.search(r"(\d\d):(\d\d)", ln["reset"])
         resets = NOW + 3600 * 2 if hm else None
         plan, _, model = ln["plan"].partition(" · ")
-        out.append(D.LaneCard(id=ln["n"].replace(" ", "-").lower(), name=ln["n"], plan=plan, model=model, state=st,
+        out.append(D.AccountCard(id=ln["n"].replace(" ", "-").lower(), name=ln["n"], plan=plan, model=model, state=st,
                               window_pct=float(ln["h5"]), forecast_pct=float(ln["proj"]), resets_at=resets, week_pct=float(ln["wk"]),
                               locked_until=NOW + 3 * 86400 if st == "locked" else None, forecast=ln["fx"], slots=ln["slots"],
                               running=ln["run"], waiting=ln["next"], status_t=NOW - 300))
@@ -400,7 +400,7 @@ def full_ids(data: dict) -> dict:
     data["TERM"] = {full(proj[k], k): v for k, v in data["TERM"].items()}
     for row in data["LED"]:
         row[1] = full(proj.get(row[1], "lifesim"), row[1])
-    for ln in data["LANES"]:
+    for ln in data["ACCOUNTS"]:
         ln["run"] = [full(proj.get(b, "lifesim"), b) for b in ln["run"]]
         ln["next"] = [full(proj.get(b, "lifesim"), b) for b in ln["next"]]
     return data
@@ -423,7 +423,7 @@ def needs(cards: list[Any]) -> list[NeedRow]:
         NeedRow(kind="slot_held", project=PROJECTS["lifesim"], bead=None, why="slot b: testing by hand", since=NOW - 900, until=NOW + 1800),
         NeedRow(kind="slot_setup", project=PROJECTS["lifesim"], bead=None, why="slot c: setup failed (exit 1)", since=NOW - 600),
         NeedRow(kind="stray", project=PROJECTS["lifesim"], bead=ids[0], why="claimed by tl-x, no live run (lease ended)"),
-        NeedRow(kind="paused", project="", bead=None, why="lane codex is out", until=NOW + 5400),
+        NeedRow(kind="paused", project="", bead=None, why="account codex is out", until=NOW + 5400),
         NeedRow(kind="absent", project=PROJECTS["task-loop"], bead=None, why="3 ready bead(s) and no loop alive", since=NOW - 7200),
     ]
 
@@ -466,10 +466,10 @@ def build() -> dict[str, Any]:
               for i in range(11)],
         slots=slots(data, all_pieces), beads=cards, pieces=all_pieces,
         asks=[ask_card(b) for b in beads if b["col"] in ("ask", "look")],
-        ledger=ledger(data), adrs=adrs(data), learning=learning(), lanes=lanes(data))
-    starting = D.BeadCard(id="tl-00q", project=PROJECTS["task-loop"], title="Show slot start-up on the Floor", column=D.Column.WORKING,
+        ledger=ledger(data), adrs=adrs(data), learning=learning(), accounts=accounts(data))
+    starting = D.BeadCard(id="tl-00q", project=PROJECTS["task-loop"], title="Show slot start-up on the Slots", column=D.Column.WORKING,
                           marker=D.Marker.RUN, status="claimed by tl-loop-fixture", tone="run", t=NOW - 60, slot="mac·4")
-    start_slot = D.Slot(id="mac·4", name="mac·4", lane="codex", state="starting", project=PROJECTS["task-loop"], bead=starting.id,
+    start_slot = D.Slot(id="mac·4", name="mac·4", account="codex", state="starting", project=PROJECTS["task-loop"], bead=starting.id,
                         t=NOW - 60, idle_why="starting tl-00q", startup="claimed · setup · rebase")
     out: dict[str, Any] = {"snapshot.json": snap.replace(slots=[start_slot, *snap.slots], beads=[starting, *snap.beads]),
                            "bead/tl-00q.json": D.BeadDetail(t=NOW, card=starting, description="The loop is setting up its slot.")}
@@ -518,7 +518,7 @@ def cost_page() -> DC.CostPage:
         beads=[row("lifesim-d5f.58", 6300, 760_000, 5.5, 8, 2), row("lifesim-d5f.56", 2180, 200_000, 1.5, 3, 1)],
         drill=[row("write", 4000, 500_000, 4.5, 4, 1, "lifesim-d5f.58"), row("plan", 900, 120_000, 0.5, 2, 0, "lifesim-d5f.58"),
                row("review", 600, 70_000, 0.0, 2, 2, "lifesim-d5f.58")],
-        waits=[row("lane", 1800, 0, 0.0, 0), row("resource", 120, 0, 0.0, 0)])
+        waits=[row("account", 1800, 0, 0.0, 0), row("resource", 120, 0, 0.0, 0)])
 
 
 def encode(obj: Any) -> str:

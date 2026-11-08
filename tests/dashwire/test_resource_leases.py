@@ -1,4 +1,4 @@
-"""The Floor reads resource holder hints through ConfigDir without taking or changing a lock."""
+"""The Slots reads resource holder hints through ConfigDir without taking or changing a lock."""
 import sys
 import time
 from pathlib import Path

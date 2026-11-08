@@ -1,6 +1,6 @@
 // The needs-you list and the loop-health strip (tl-9un.2): everything that waits on the owner with no ask to answer, oldest first,
 // shown first on the phone's Board. The server builds the rows from records the engine already writes (views/needs.py); the page
-// only lays them out. A bead row opens its bead page; a row with no bead (a slot, a lane, a loop) is text.
+// only lays them out. A bead row opens its bead page; a row with no bead (a slot, an account, a loop) is text.
 import { html } from '../../vendor/ui-runtime.js';
 import { bead as findBead } from '../data.js';
 import { age, bid, clock, projectName } from '../format.js';

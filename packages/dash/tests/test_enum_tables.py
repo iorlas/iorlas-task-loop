@@ -17,7 +17,7 @@ class DisplayTables(Case):
         for code in (WhyCode.FAILED, WhyCode.STUCK, WhyCode.CHECK_BEFORE_LAND,
                      WhyCode.HUNG, WhyCode.SCHEMA_INVALID, WhyCode.RESOURCE):
             assert phases.CODE_END[code] == ""
-        for cause in (Cause.LANE_OUT, Cause.LANE_WAIT, Cause.INVALID_OUTPUT):
+        for cause in (Cause.ACCOUNT_OUT, Cause.ACCOUNT_WAIT, Cause.INVALID_OUTPUT):
             assert phases.CAUSE_END[cause] == ""
 
     def test_passive_markers_preserve_the_current_dot_state(self):

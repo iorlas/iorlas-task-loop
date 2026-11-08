@@ -5,7 +5,7 @@ from tlkernel.ids import BeadId
 from tltestkit.case import Case
 
 from tldash.readers.observed import strays_of
-from tldash.views.floor import stray_rows
+from tldash.views.slots import stray_rows
 from tldash.views.world import ProjectIn
 
 NOW = 1793318400.0  # 2026-10-30T00:00:00Z
@@ -43,7 +43,7 @@ class Strays(Case):
         got = strays_of(beads, [slot("sb-1", "s1", ends=RUNNING, held_bead="a-2")], {}, NOW)
         assert [(s.kind, s.ref, s.expired) for s in got] == [("bead", "a-1", True), ("slot", "sb-1", False)]
 
-    def test_the_floor_shows_a_stray_bead_as_an_idle_row_with_its_why(self):
+    def test_the_slots_shows_a_stray_bead_as_an_idle_row_with_its_why(self):
         beads = [Bead(id=BeadId("a-1"), title="", status="in_progress", assignee="tl-x", lease_expires_at=ENDED)]
         rows = stray_rows(ProjectIn(id="p", name="p", beads=beads, strays=strays_of(beads, [slot("sb-1", "s1")], {}, NOW)))
         assert [(r.name, r.state, r.idle_why) for r in rows] == [("a-1", "idle", "claimed by tl-x, no live run (lease ended)")]

@@ -1,4 +1,4 @@
-"""Stage tests, part 3: the stale tree, slot hygiene, dead lanes, contracts and follow-ups. Split from test_stages."""
+"""Stage tests, part 3: the stale tree, slot hygiene, dead accounts, contracts and follow-ups. Split from test_stages."""
 
 import json
 import os
@@ -287,18 +287,18 @@ class SlotHygiene(StagesTest):
         assert not gitq.git("symbolic-ref", "--short", "-q", "HEAD", cwd=self.eng.wt)
 
 
-class DeadLane(StagesTest):
-    """A lane that fails to start without being marked out must not hold a read-only step for ten minutes."""
+class DeadAccount(StagesTest):
+    """A account that fails to start without being marked out must not hold a read-only step for ten minutes."""
 
-    def blips(self, n, lane="GROK_SUBSCRIPTION"):
-        """vendor_blip (lane / transient / poll): the lane failed to start. Three polls wait for it, the next try goes elsewhere."""
-        return [te.stop("vendor_blip", family="xai", account=lane, say="opencode failed before any work: spending limit")] * n
+    def blips(self, n, account="GROK_SUBSCRIPTION"):
+        """vendor_blip (account / transient / poll): the account failed to start. Three polls wait for it, the next try goes elsewhere."""
+        return [te.stop("vendor_blip", family="xai", account=account, say="opencode failed before any work: spending limit")] * n
 
     def test_a_reviewer_retry_still_avoids_the_writers_family(self):  # tl-9un.15: the failing family was sent as the writer
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), CLEAN]})
         assert rc == 0, self.blocked
         reviews = [c for c in s.calls if c[0] == "reviewer"]
-        assert len(reviews) == 5  # three polls of the lane, then the route is asked again
+        assert len(reviews) == 5  # three polls of the account, then the route is asked again
         assert all(r.reviewer_other_family for r in s.requests if r.role == "reviewer")
         assert s.results[1]["family"] == "openai"
         assert s.results[-1]["family"] != "openai"
@@ -316,16 +316,16 @@ class DeadLane(StagesTest):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), te.full(CLEAN, "r", family="openai")]})
         assert rc != 0
         assert not self.closed
-        assert (self.eng.retry_after or 0) > 0  # a missing lane is transient: it is retried on a timer
-        assert "no lane of another family" in self.eng.log_path.read_text()
+        assert (self.eng.retry_after or 0) > 0  # a missing account is transient: it is retried on a timer
+        assert "no account of another family" in self.eng.log_path.read_text()
 
     def test_delegates_same_family_flag_pauses_the_step_too(self):
-        extra = {"review": [{"flag": "same_family", "warning": "only the Codex lane is up: the review is the writer's own model"}]}
+        extra = {"review": [{"flag": "same_family", "warning": "only the Codex account is up: the review is the writer's own model"}]}
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, j_extra=extra)
         assert rc != 0
         assert not self.closed
 
-    def test_a_busy_lane_is_waited_for_as_before(self):
+    def test_a_busy_account_is_waited_for_as_before(self):
         busy = te.stop("busy", family="openai", account="OPENAI_SUBSCRIPTION", say="no free slot")
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [busy, CLEAN]})
         reviews = [c for c in s.calls if c[0] == "reviewer"]
@@ -386,26 +386,26 @@ class Contracts(StagesTest):
         assert "wip commit" in warn.call_args[0][0]
         assert "boom" in warn.call_args[0][0]
 
-    def test_a_lane_that_is_out_for_hours_pauses_with_its_reset_time_and_is_not_waited_for(self):
-        # lifesim r0yc/rl4s: the dead lane's own reset time is hours away; delegate re-routes inside the call, so a stop is final
+    def test_a_account_that_is_out_for_hours_pauses_with_its_reset_time_and_is_not_waited_for(self):
+        # lifesim r0yc/rl4s: the dead account's own reset time is hours away; delegate re-routes inside the call, so a stop is final
         due = time.time() + 3 * 3600
-        out = te.stop("rate_limited", say="lane_out: ZAI", account="ZAI", at=due)
+        out = te.stop("rate_limited", say="account_out: ZAI", account="ZAI", at=due)
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
         assert rc == 2
         assert [c[0] for c in s.calls] == ["planner", "worker"]
         assert self.eng.retry_after == pytest.approx(due, abs=1)
         assert any(
-                c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write until" in c[3]
+                c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no account for write until" in c[3]
                 for c in self.bd_calls
             )
 
-    def test_a_lane_that_is_out_with_no_reset_time_pauses_at_once(self):
-        out = te.stop("rate_limited", say="lane_out: ZAI", account="ZAI")
+    def test_a_account_that_is_out_with_no_reset_time_pauses_at_once(self):
+        out = te.stop("rate_limited", say="account_out: ZAI", account="ZAI")
         rc, s = self.run_engine({"plan": [PLAN], "write": [out], "review": [CLEAN]})
         assert rc == 2
         assert [c[0] for c in s.calls] == ["planner", "worker"]
         assert any(
-                c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write" in c[3]
+                c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no account for write" in c[3]
                 for c in self.bd_calls
             )
 
@@ -564,7 +564,7 @@ class ClaimPerBead(StagesTest):
         assert "changed hands" in why
 
     def test_a_loop_that_pauses_a_bead_clears_its_assignee(self):
-        late = te.stop("no_account", at=time.time() + 3600, family="openai", account="OPENAI", say="no lane")
+        late = te.stop("no_account", at=time.time() + 3600, family="openai", account="OPENAI", say="no account")
         _rc, _s = self.run_engine({"plan": [late]})
         assert self.eng.why.startswith("paused:"), self.eng.why
         updates = [c for c in self.bd_calls if c[:2] == ("update", "t-1") and "--append-notes" not in c]

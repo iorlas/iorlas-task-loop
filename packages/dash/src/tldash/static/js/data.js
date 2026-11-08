@@ -8,7 +8,7 @@ const memo = new WeakMap();
 export function idx(snap) {
   let m = memo.get(snap);
   if (!m) {
-    m = { beads: new Map(), slots: new Map(), asks: new Map(), pieces: new Map(), lanes: new Map() };
+    m = { beads: new Map(), slots: new Map(), asks: new Map(), pieces: new Map(), accounts: new Map() };
     for (const b of snap.beads) m.beads.set(key(b.project, b.id), b);
     for (const s of snap.slots) m.slots.set(key(s.project, s.id), s);
     for (const a of snap.asks) m.asks.set(key(a.project, a.bead), a);
@@ -17,7 +17,7 @@ export function idx(snap) {
       if (!m.pieces.has(k)) m.pieces.set(k, []);
       m.pieces.get(k).push(p);
     }
-    for (const l of snap.lanes) m.lanes.set(l.id, l);
+    for (const l of snap.accounts) m.accounts.set(l.id, l);
     memo.set(snap, m);
   }
   return m;
@@ -78,7 +78,7 @@ export function causeOf(b) {
   const c = b.cause && b.cause !== 'unknown' ? b.cause : (ui.seen[key(b.project, b.id)] || {}).cause;
   return c || null;
 }
-// a stuck bead stays loud (red outline, Floor badge) until a cause is picked or 👁 Seen (§4)
+// a stuck bead stays loud (red outline, Slots badge) until a cause is picked or 👁 Seen (§4)
 export const muted = (b) => b.ack || !!causeOf(b) || !!(ui.seen[key(b.project, b.id)] || {}).ack;
 
 export function counts(snap) {
@@ -88,10 +88,10 @@ export function counts(snap) {
   };
 }
 
-const LANE_ORDER = { locked: 0, watch: 1, stale: 2, ok: 3 };
-export const lanesSorted = (snap) => [...snap.lanes].sort((a, b) => LANE_ORDER[a.state] - LANE_ORDER[b.state]);
-// the top bar and the phone pill show only lanes that are not fine (dash-spec §8)
-export const troubled = (snap) => lanesSorted(snap).filter((l) => l.state === 'watch' || l.state === 'locked');
+const ACCOUNT_ORDER = { locked: 0, watch: 1, stale: 2, ok: 3 };
+export const accountsSorted = (snap) => [...snap.accounts].sort((a, b) => ACCOUNT_ORDER[a.state] - ACCOUNT_ORDER[b.state]);
+// the top bar and the phone pill show only accounts that are not fine (dash-spec §8)
+export const troubled = (snap) => accountsSorted(snap).filter((l) => l.state === 'watch' || l.state === 'locked');
 
 export const piecesOf = (snap, b) => idx(snap).pieces.get(key(b.project, b.id)) || [];
 

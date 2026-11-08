@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, get_args
 
-from taskloop.domain.lanes.retry import PLAN, RetryPlan
+from taskloop.domain.accounts.retry import PLAN, RetryPlan
 from tlkernel.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RetryKind, Scope
 from tlkernel.pausereasons import Producer
 
@@ -26,9 +26,9 @@ class Stop:
     scope: str
     permanence: str
     retry_kind: str = "none"
-    retry_at: float = 0.0  # epoch the lane is predicted back, or the suggested poll gap (0: none given)
+    retry_at: float = 0.0  # epoch the account is predicted back, or the suggested poll gap (0: none given)
     reason: str = ""  # wording only
-    lane: str = ""
+    account: str = ""
     model: str = ""
     signal: int = 0  # the signal that ended the call (killed), 0 for none
     fix: str = ""
@@ -88,7 +88,7 @@ class NewThread:
 
 @dataclass(frozen=True)
 class Reroute:
-    exclude: str  # lane or model the next pick must not use
+    exclude: str  # account or model the next pick must not use
     charges: str = "attempt"
     plan: str = ""
 
@@ -111,7 +111,7 @@ Action = NewThread | Reroute | Yield | Fail
 
 
 def _excluded(stop: Stop) -> str:
-    return stop.lane if stop.scope == "account" or not stop.model else stop.model
+    return stop.account if stop.scope == "account" or not stop.model else stop.model
 
 
 def _machine_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
@@ -137,21 +137,21 @@ def _bead_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     return Fail("FAULT_INFRA", "worker_failed")
 
 
-def _lane_predicted(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
+def _account_predicted(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """Delegate exhausted its short waits; park the call."""
-    return Yield("PAUSE_LANE", stop.retry_at)
+    return Yield("PAUSE_ACCOUNT", stop.retry_at)
 
 
-def _lane_poll(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
-    """Delegate exhausted its polls; try another lane."""
+def _account_poll(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
+    """Delegate exhausted its polls; try another account."""
     return Reroute(_excluded(stop))
 
 
-def _lane_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
-    """A lane or model transient with no time: one other pick, then a pause."""
+def _account_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
+    """A account or model transient with no time: one other pick, then a pause."""
     if ctx.attempt < 2:
         return Reroute(_excluded(stop))
-    return Yield("PAUSE_LANE")
+    return Yield("PAUSE_ACCOUNT")
 
 
 # The table. Every legal tuple has a row; a new reason is a delegate classifier line, never a row here.
@@ -159,9 +159,9 @@ def _lane_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
 Row = tuple[str, bool] | Callable[[Stop, Ctx, RetryPlan], Action]
 TABLE: Final[dict[tuple[str, str, str], Row]] = {
     ("machine", "transient", "poll"): ("PAUSE_NETWORK", False),
-    ("machine", "transient", "predicted"): ("PAUSE_LANE", True),
+    ("machine", "transient", "predicted"): ("PAUSE_ACCOUNT", True),
     ("machine", "transient", "none"): _machine_none,
-    ("machine", "needs_owner", "none"): ("PAUSE_LANE", False),
+    ("machine", "needs_owner", "none"): ("PAUSE_ACCOUNT", False),
     ("caller", "needs_owner", "none"): ("FAULT_BAD_REQUEST", False),
     ("caller", "transient", "none"): ("FAULT_BAD_REQUEST", False),  # no doc row: a caller's request does not heal by waiting
     ("caller", "transient", "predicted"): ("FAULT_BAD_REQUEST", False),  # no doc row
@@ -169,15 +169,15 @@ TABLE: Final[dict[tuple[str, str, str], Row]] = {
     ("bead", "needs_owner", "none"): _bead_owner,
     ("bead", "transient", "none"): _bead_none,
     ("bead", "transient", "predicted"): _bead_none,  # the bead's own failure after delegate recovery
-    ("bead", "transient", "poll"): ("PAUSE_LANE", False),
-    ("account", "needs_owner", "none"): ("PAUSE_LANE", False),
-    ("model", "needs_owner", "none"): ("PAUSE_LANE", False),
-    ("account", "transient", "predicted"): _lane_predicted,
-    ("model", "transient", "predicted"): _lane_predicted,
-    ("account", "transient", "poll"): _lane_poll,
-    ("model", "transient", "poll"): _lane_poll,
-    ("account", "transient", "none"): _lane_none,
-    ("model", "transient", "none"): _lane_none,
+    ("bead", "transient", "poll"): ("PAUSE_ACCOUNT", False),
+    ("account", "needs_owner", "none"): ("PAUSE_ACCOUNT", False),
+    ("model", "needs_owner", "none"): ("PAUSE_ACCOUNT", False),
+    ("account", "transient", "predicted"): _account_predicted,
+    ("model", "transient", "predicted"): _account_predicted,
+    ("account", "transient", "poll"): _account_poll,
+    ("model", "transient", "poll"): _account_poll,
+    ("account", "transient", "none"): _account_none,
+    ("model", "transient", "none"): _account_none,
 }
 
 # The executable grid is checked against the vendored contract, including its reason facts.
@@ -186,12 +186,12 @@ LEGAL: Final = tuple(TABLE)
 
 def decide(stop: Stop, ctx: Ctx, plan: RetryPlan = PLAN) -> Action:
     """The next Action for a stopped call. A signal on a machine stop is a kill (checkpoint kept, never a fail, never an
-    ask). An unknown tuple pauses the lane: the contract may grow, the loop never fails or asks on what it cannot read."""
+    ask). An unknown tuple pauses the account: the contract may grow, the loop never fails or asks on what it cannot read."""
     if stop.signal and stop.scope == "machine":
         return Yield("PAUSE_KILLED")
     row = TABLE.get((stop.scope, stop.permanence, stop.retry_kind))
     if row is None:
-        return Yield("PAUSE_LANE")
+        return Yield("PAUSE_ACCOUNT")
     if callable(row):
         return row(stop, ctx, plan)
     kind, predicted = row

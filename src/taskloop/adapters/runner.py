@@ -40,7 +40,7 @@ class ApiRunner(Seam):
 
     @override
     def live_start(self) -> LiveStart | None:
-        """The harness, lane and model the call ran on, from the live file's `start` event."""
+        """The harness, account and model the call ran on, from the live file's `start` event."""
         return self.agent.start_event() if self.agent else None
 
     def __call__(

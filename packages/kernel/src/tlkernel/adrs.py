@@ -1,5 +1,5 @@
 """The decisions of one repo as tl reads them: a cache (`work_doc` rows `adr:<repo key>:<id>`) of the repo's `docs/adr/NNNN-title.md`
-files at the base commit, plus the log of plans that cited them. The files are the record (contracts/adrfiles.py): a lane lands each
+files at the base commit, plus the log of plans that cited them. The files are the record (contracts/adrfiles.py): an account lands each
 through a bead, so tl never writes into a checkout. Whoever has git (the engine's plan stage, the owner verbs) calls `sync` with the
 files it read at the base; the dashboard only reads the rows."""
 from pathlib import Path

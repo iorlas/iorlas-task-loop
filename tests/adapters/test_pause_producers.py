@@ -1,4 +1,4 @@
-"""Locally synthesized no-answer stops retain engine provenance through the lane exit."""
+"""Locally synthesized no-answer stops retain engine provenance through the account exit."""
 import sys
 from pathlib import Path
 from unittest import mock
@@ -10,9 +10,9 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from taskloop.adapters import delegate, delegate_wire
-from taskloop.app.workers.lane_acts import LaneActs
-from taskloop.domain.lanes import policy
-from tlkernel import lanepauses as pauses
+from taskloop.app.workers.account_acts import AccountActs
+from taskloop.domain.accounts import policy
+from tlkernel import accountpauses as pauses
 from tlkernel.delegate import RunRequest
 from tlpipeline.api import Blocked, blocked_for
 
@@ -30,7 +30,7 @@ class PauseProducers(Case):
                 assert (stop.reason, stop.producer) == ("no_answer", "engine")
                 assert pauses.rule(stop.reason, stop.producer).permanence == "transient"
 
-    def test_lane_exit_uses_stop_producer_for_synthetic_and_wire_stops(self):
+    def test_account_exit_uses_stop_producer_for_synthetic_and_wire_stops(self):
         for producer in ("engine", "delegate"):
             with self.subTest(producer=producer):
                 result = delegate_wire.synth("no_answer", "machine", "transient", "no answer")
@@ -46,5 +46,5 @@ class PauseProducers(Case):
                 worker.ops.blocked = blocked_for
                 worker.ops.stop_why.return_value = "paused"
                 with pytest.raises(Blocked):
-                    LaneActs(host, worker).end(call, result, stop, policy.Yield("PAUSE_LANE"))
+                    AccountActs(host, worker).end(call, result, stop, policy.Yield("PAUSE_ACCOUNT"))
                 assert (host.pause_reason, host.pause_producer) == ("no_answer", producer)

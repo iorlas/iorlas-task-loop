@@ -21,7 +21,7 @@ from taskloop.stores.delegate import fixed_route, real_route
 
 
 def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
-    """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
+    """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted account."""
     cfg = wslots_config.load_cfg(str(wt), real.git(env))
     found = real_route().resolve()
     resolved = Resolved(Path("/selftest"), "/selftest/route.py", found.contract if isinstance(found, Resolved) else {}, "explicit")

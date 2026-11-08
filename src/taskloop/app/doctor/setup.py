@@ -85,13 +85,13 @@ def machine(plugin_root: Path, env: Env, route: Route) -> Plan:
 
 
 def accounts_check(route: Route) -> Check:
-    """Worker accounts: at least one enabled lane that is ready. The login itself is the owner's (`tl accounts` names each fix)."""
+    """Worker accounts: at least one enabled account that is ready. The login itself is the owner's (`tl accounts` names each fix)."""
     try:
         rows = route.accounts()
     except (ValueError, SystemExit, OSError) as e:
         return Check("accounts", False, f"delegate has no account state yet: {e}")
-    ready = [r.lane for r in rows if r.enabled and r.ready]
-    return Check("accounts", bool(ready), ", ".join(ready) + " ready" if ready else "no enabled lane is ready; run `tl accounts`")
+    ready = [r.account for r in rows if r.enabled and r.ready]
+    return Check("accounts", bool(ready), ", ".join(ready) + " ready" if ready else "no enabled account is ready; run `tl accounts`")
 
 
 def stacks(repo: Path) -> dict[str, str]:

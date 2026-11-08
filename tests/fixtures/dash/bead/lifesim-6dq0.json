@@ -1,5 +1,5 @@
 {
- "v": 1,
+ "v": 2,
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-6dq0",
@@ -13,7 +13,7 @@
   "t": 1793048340.0,
   "epic": "lifesim-wld",
   "slot": "mac·2",
-  "lane": "codex",
+  "account": "codex",
   "review": null,
   "loops": 1,
   "dots": [
@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "5c60e93c96516bd7",
+ "version": "2178b53394550b7d",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rain lowers mood outdoors. Part of World.",
@@ -178,7 +178,7 @@
          "t": 1793043200.0,
          "secs": 30.0,
          "outcome": "ok",
-         "lane": "codex",
+         "account": "codex",
          "model": "fixture-model",
          "live": false,
          "lines": [
@@ -204,7 +204,7 @@
          "t": 1793044200.0,
          "secs": 30.0,
          "outcome": "ok",
-         "lane": "codex",
+         "account": "codex",
          "model": "fixture-model",
          "live": false,
          "lines": [
@@ -220,7 +220,7 @@
          "t": 1793045200.0,
          "secs": 30.0,
          "outcome": "ok",
-         "lane": "codex",
+         "account": "codex",
          "model": "fixture-model",
          "live": false,
          "lines": [
@@ -241,7 +241,7 @@
          "t": 1793046200.0,
          "secs": 30.0,
          "outcome": "ok",
-         "lane": "codex",
+         "account": "codex",
          "model": "fixture-model",
          "live": false,
          "lines": [
@@ -348,7 +348,7 @@
          "t": 1793050100.0,
          "secs": 100.0,
          "outcome": "running",
-         "lane": "codex",
+         "account": "codex",
          "model": "fixture-model",
          "live": true,
          "lines": [

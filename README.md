@@ -72,7 +72,7 @@ This lifts only the profile-change refusal for this call's items; the base profi
 After the gate passes and before each item's push or merge, one atomic audit row is appended to
 `<config>/profile-changes.jsonl` with the time, owner text, repo, branch, tip, base, SHA-256 of the profile diff text, and PID.
 The pre-push judge accepts a profile change only with a matching tip and diff hash audited within the last 600 seconds.
-The engine, loop, run processes and worker lanes cannot use this flag; no environment variable grants approval.
+The engine, loop, run processes and workers cannot use this flag; no environment variable grants approval.
 A process that can write `<config>/profile-changes.jsonl` can forge an approval row.
 
 ## Slots
@@ -98,17 +98,17 @@ On macOS, installed `caffeinate` prevents idle sleep while the first newly launc
 After a reboot, manually run `tl factory start` again. From a phone's SSH terminal, run `tl factory start --repo /path/to/repo`
 or `tl factory stop --repo /path/to/repo` on the host. The shared dashboard stays available after a stop.
 
-Low disk, low available RAM and unavailable lanes keep loops alive as waits with explicit probe times and wake
-conditions. Disk and RAM wake when their configured thresholds (`loop.min_free_gb`, `loop.min_ram_mb`) are met; lanes wake when usable or their retry is due. Stops and `--until` still work.
+Low disk, low available RAM and unavailable accounts keep loops alive as waits with explicit probe times and wake
+conditions. Disk and RAM wake when their configured thresholds (`loop.min_free_gb`, `loop.min_ram_mb`) are met; accounts wake when usable or their retry is due. Stops and `--until` still work.
 Consecutive quick failures of the same bead in a slot make that bead wait for a successful reset/setup probe or different
 eligible work. Different beads do not accumulate failures together. Failed probes exclude the slot until a probe passes
-on a normal loop pass; there is no timed set-aside. Resource and lane waits poll their wake conditions at the pass interval.
+on a normal loop pass; there is no timed set-aside. Resource and account waits poll their wake conditions at the pass interval.
 
 - **Board:** every bead of every registered repo by stage (backlog, working, asking, AI review, your look, landing, done),
   and the goal tree.
-- **Floor:** each slot's timeline of stage passes, 2 to 8 hours back, and what is running now.
+- **Slots:** each slot's timeline of stage passes, 2 to 8 hours back, and what is running now.
 - **Decisions:** the asks waiting on you, the ledger of every ask and what it became, the decisions in force.
-- **Lanes:** each delegate lane's usage and state.
+- **Accounts:** each delegate account's usage and state.
 - **A bead:** its passes, stage by stage, the live tail of its running worker, screenshots and files; park, stop, a note.
 
 It works on a phone (below 600 px it switches to a phone layout).
@@ -127,7 +127,7 @@ skills/task-loop/tl.py           the command line only: every verb lives in src/
 skills/task-loop/_vendor/        the shelf packages src/ imports by name (`just vendor`; never edited)
 src/taskloop/                    the engine, the loop and the verbs, in layers: contracts, domain, adapters, stores, app, cli, hook
 src/taskloop/app/launch/         what tl starts: loop.py (tl loop / next / stop), selftest.py (tl selftest: one bead through the
-                                 engine with a scripted lane, on this install's code), dash.py (tl dash), dash_ports.py
+                                 engine with a scripted account, on this install's code), dash.py (tl dash), dash_ports.py
 src/taskloop/app/prune/          tl prune: run data, merged build worktrees and release branches past loop.keep_days (also run at loop start)
 src/taskloop/app/report/         tl report, lost and reflect digest: the data (cli/report.py prints it)
 packages/dash/src/tldash/               the dashboard package (imports tlkernel, so msgspec; runs on the interpreter `tl dash ensure` runs on)

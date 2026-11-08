@@ -35,8 +35,8 @@ def keys(j: dict, path: str = "") -> set[str]:
 class Reader(Case):
     def test_a_real_answer_reads_into_a_snapshot_with_every_card_field(self):
         snap = snapshot_of(REAL)
-        assert [ln.id for ln in snap.lanes] == [r["id"] for r in REAL["cockpit"]["accounts"]]
-        for ln in snap.lanes:
+        assert [ln.id for ln in snap.accounts] == [r["id"] for r in REAL["cockpit"]["accounts"]]
+        for ln in snap.accounts:
             assert ln.label and ln.family and ln.kind and ln.model and ln.state and ln.emoji and ln.reason, ln
         assert snap.at == REAL["ts"]
         assert wire.load(StatusSnapshot, wire.dump(snap)) == snap
@@ -109,11 +109,11 @@ class Schema(Case):
 
     def test_every_key_the_reader_consumes_is_one_the_schema_names(self):
         props = FIXTURE_SCHEMA["properties"]
-        lane = props["cockpit"]["properties"]["accounts"]["items"]["properties"]
+        account = props["cockpit"]["properties"]["accounts"]["items"]["properties"]
         old = props["accounts"]["additionalProperties"]["properties"]
         for k in ("ts", "accounts", "cockpit", "needs_input"):
             assert k in props
         for k in ("id", "label", "family", "kind", "model", "state", "emoji", "reason", "unlock", "windows", "warnings"):
-            assert k in lane, "delegate's cockpit lane dropped a key snapshot_of reads"
+            assert k in account, "delegate's cockpit account dropped a key snapshot_of reads"
         for k in ("out", "out_until", "reason", "notes"):
-            assert k in old, "delegate's flat lane dropped a key snapshot_of reads"
+            assert k in old, "delegate's flat account dropped a key snapshot_of reads"

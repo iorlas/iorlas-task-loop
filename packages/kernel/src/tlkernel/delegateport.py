@@ -63,8 +63,9 @@ class Stopped(Exception):
 
 
 @dataclass(frozen=True)
-class Lane:
-    """One lane of delegate's fleet as the engine may ask it: usable now (None: delegate does not know the lane), why not, until when."""
+class AccountAvailability:
+    """One account of delegate's fleet as the engine may ask it: usable now (None: delegate does not know the account), why not, until
+    when."""
 
     name: str
     usable: bool | None
@@ -74,9 +75,9 @@ class Lane:
 
 @dataclass(frozen=True)
 class Account:
-    """One lane of the fleet: whether the router may use it, whether this machine can run it, and what fixes it when it cannot."""
+    """One account of the fleet: whether the router may use it, whether this machine can run it, and what fixes it when it cannot."""
 
-    lane: str
+    account: str
     enabled: bool
     ready: bool
     fix: str
@@ -90,7 +91,7 @@ def survivors_of(stop: Json, res: DelegateResult | None = None) -> list[int]:
 
 
 class Seam:
-    """What the engine reads off a process seam after a call (stop, obs, secs, worker, live_start): a fake lane's defaults."""
+    """What the engine reads off a process seam after a call (stop, obs, secs, worker, live_start): a fake account's defaults."""
 
     def __init__(self) -> None:
         self.stop: Json = {}
@@ -128,7 +129,7 @@ class Route(Protocol):
     def call(self, resolved: Resolved, req: RunRequest, brief: str, schema: Json, runner: Callable[..., Completed],
              env: Mapping[str, str], delta: str | None = None) -> Answer: ...
     def probe(self, hosts: tuple[str, ...] = ()) -> Probe: ...
-    def lane(self, name: str) -> Lane | None: ...
+    def account(self, name: str) -> AccountAvailability | None: ...
     def status_snapshot(self, claude_usage: object = None) -> StatusSnapshot: ...
     def accounts(self) -> list[Account]: ...
-    def set_account(self, lane: str, enabled: bool) -> None: ...
+    def set_account(self, account: str, enabled: bool) -> None: ...

@@ -49,7 +49,7 @@ class Fingerprint(Case):
 
     def test_distinct_failures_keep_distinct_fingerprints(self):
         assert lifecycle.fingerprint("missing recipe: just unity-tests") != lifecycle.fingerprint("compile error in Assets/Player.cs")
-        assert lifecycle.fingerprint("no lane for write") != lifecycle.fingerprint("review sent it back: unmet acceptance")
+        assert lifecycle.fingerprint("no account for write") != lifecycle.fingerprint("review sent it back: unmet acceptance")
 
     def test_letter_only_bead_ids_are_volatile(self):
         a = lifecycle.fingerprint("failed: bead tl-fsj cannot resume")

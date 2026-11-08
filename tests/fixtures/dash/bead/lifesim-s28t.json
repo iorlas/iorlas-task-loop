@@ -1,5 +1,5 @@
 {
- "v": 1,
+ "v": 2,
  "t": 1793050200.0,
  "card": {
   "id": "lifesim-s28t",
@@ -13,7 +13,7 @@
   "t": 1793039400.0,
   "epic": "lifesim-d5f",
   "slot": "devbox·2",
-  "lane": "OC Go",
+  "account": "OC Go",
   "review": null,
   "loops": 0,
   "dots": [
@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 3
  },
- "version": "699fa416a58de839",
+ "version": "f42cbbbddddcd578",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Save/load screen polish. Part of Save system.",

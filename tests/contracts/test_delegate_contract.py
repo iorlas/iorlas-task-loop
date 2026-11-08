@@ -80,7 +80,7 @@ KNOWN_DRIFT = {
     "status.fields": (
         ("age_s", "asks", "auth", "cheap", "health", "holds", "network", "roles", "running"),
         (),
-        "StatusSnapshot deliberately persists only the lane cards and requests for input.",
+        "StatusSnapshot deliberately persists only the account cards and requests for input.",
     ),
     "status.accounts{}.fields": (("burn", "pace"), (), "The snapshot does not persist delegate's pace display."),
     "status.cockpit.fields": (
@@ -102,7 +102,7 @@ KNOWN_DRIFT = {
     "status.cockpit.accounts[].state.enum": (
         ("logged_out", "off", "ready", "resting", "slow", "spend", "unknown"),
         (),
-        "LaneStatus.state is an open string; narrowing it changes decoding behavior.",
+        "AccountStatus.state is an open string; narrowing it changes decoding behavior.",
     ),
     "status.cockpit.accounts[].unlock.fields": (
         ("in_s", "known", "locked", "text", "why"),
@@ -172,19 +172,19 @@ KNOWN_DRIFT = {
 def status_projection() -> dict:
     """Undo snapshot_of's renames and join without inventing fields or Literals absent from its output records."""
     snapshot = schema.of(StatusSnapshot)["properties"]
-    lane = dict(snapshot["lanes"]["items"]["properties"])
-    flat = {name: lane[name] for name in ("family", "kind", "five", "week", "out", "out_until", "notes")}
-    flat["reason"] = lane["out_reason"]
+    account = dict(snapshot["accounts"]["items"]["properties"])
+    flat = {name: account[name] for name in ("family", "kind", "five", "week", "out", "out_until", "notes")}
+    flat["reason"] = account["out_reason"]
     for name in ("five", "week", "out", "out_until", "out_reason", "notes"):
-        del lane[name]
-    lane["unlock"] = {"properties": {"at": lane.pop("unlock_at")}}
+        del account[name]
+    account["unlock"] = {"properties": {"at": account.pop("unlock_at")}}
     return {
         "properties": {
-            "v": snapshot["v"],
+            "v": {"enum": [1]},
             "ts": snapshot["at"],
             "needs_input": snapshot["needs_input"],
             "accounts": {"additionalProperties": {"properties": flat}},
-            "cockpit": {"properties": {"accounts": {"items": {"properties": lane}}}},
+            "cockpit": {"properties": {"accounts": {"items": {"properties": account}}}},
         }
     }
 

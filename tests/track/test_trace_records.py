@@ -141,16 +141,16 @@ class TraceRecords(EngineTest):
         ends = {num(r.id): r for r in records(self.eng, rec.StepEnd)}
         assert ends[2].outcome == "asks"
 
-    def test_a_resumed_writer_whose_lane_is_out_pauses(self):
-        lane = test_engine_units.DelegateLauncher
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, lane.OUT_LONG],
+    def test_a_resumed_writer_whose_account_is_out_pauses(self):
+        account = test_engine_units.DelegateLauncher
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, account.OUT_LONG],
                                  "review": [review(unmet=["more"])]})
         assert rc == 2
         sessions = [(s, e) for s, e in calls(self.eng) if num(s.node) == 6]
         assert [(e.status, e.reason, s.resume) for s, e in sessions] == [("stopped", "rate_limited", True)]
-        assert not [r for r in records(self.eng, rec.Transition) if r.cause == "lane_out"]
+        assert not [r for r in records(self.eng, rec.Transition) if r.cause == "account_out"]
 
-    def test_a_long_lane_out_pauses_with_the_time_the_lane_is_back(self):
+    def test_a_long_account_out_pauses_with_the_time_the_account_is_back(self):
         due = time.time() + 3 * 3600
         self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out", account="OPENAI_SUBSCRIPTION")]})
         t = next(r for r in records(self.eng, rec.Transition) if r.cause == "paused")

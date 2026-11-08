@@ -1,21 +1,23 @@
 """Ask lint: whether a record is an ask an owner can answer. Pure; `lint(ask)` returns the broken rules, empty when the ask may be raised.
 
 An ask has a class, a decision (one sentence of 120 characters or less that ends in '?'), what was tried (3 bullets at most) and
-2 to 5 options, each with its consequence, the recommended one first. The engine's own trouble (a lane that failed, a bad request,
+2 to 5 options, each with its consequence, the recommended one first. The engine's own trouble (an account that failed, a bad request,
 a denied command, a stale base, a missing tool) is a class lint refuses: it never reaches the owner as a question."""
 from typing import Final
 
 from tlkernel.ask import Ask
 from tlkernel.askenums import AskClass, AskKind
 
-INFRA: Final = frozenset({AskClass.LANE_FAILURE, AskClass.BAD_REQUEST, AskClass.SANDBOX_DENIAL, AskClass.STALE_BASE, AskClass.MISSING_TOOL})
+INFRA: Final = frozenset({
+    AskClass.ACCOUNT_FAILURE, AskClass.BAD_REQUEST, AskClass.SANDBOX_DENIAL, AskClass.STALE_BASE, AskClass.MISSING_TOOL,
+})
 KIND_OF: Final = {
     AskClass.OPEN_QUESTION: AskKind.DECISION, AskClass.EXTERNAL_FACT: AskKind.DECISION,
     AskClass.UNPROVEN: AskKind.STUCK, AskClass.NO_PROGRESS: AskKind.STUCK, AskClass.CAP_REACHED: AskKind.STUCK,
     AskClass.OVER_BUDGET: AskKind.BUDGET,
     AskClass.MISSING_CRITERIA: AskKind.TICKET, AskClass.TOO_BIG: AskKind.TICKET,
     AskClass.PR_OPEN: AskKind.DECISION, AskClass.PR_CLOSED: AskKind.DECISION,
-    AskClass.LANE_FAILURE: None, AskClass.BAD_REQUEST: None, AskClass.SANDBOX_DENIAL: None,
+    AskClass.ACCOUNT_FAILURE: None, AskClass.BAD_REQUEST: None, AskClass.SANDBOX_DENIAL: None,
     AskClass.STALE_BASE: None, AskClass.MISSING_TOOL: None,
 }
 DECISION_MAX: Final = 120

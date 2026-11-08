@@ -7,9 +7,9 @@ import time
 from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
+from tlkernel import accountpauses as pauses
 from tlkernel import askspecs
 from tlkernel import closeeffects as effects
-from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.checkpoint import Checkpoint, Notes
 from tlkernel.effectinterpret import CheckpointLedger, interpret
