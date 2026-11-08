@@ -1,6 +1,6 @@
 """Area membership, ancestor lookup and running-bead exclusion policy."""
 from collections.abc import Callable, Mapping, Sequence
-from typing import Protocol
+from typing import Literal, NamedTuple, Protocol
 
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, Beads
@@ -115,3 +115,88 @@ def area_busy_text(areas: Areas, bead: Bead) -> tuple[str, str]:
     """Return the area and the existing busy explanation, or an empty explanation."""
     area, skip = areas.area_busy(bead)
     return area, skip.why if skip else ""
+
+
+class AreaLock(Protocol):
+    def __enter__(self) -> object: ...
+
+    __exit__: Callable[..., bool | None]
+
+
+class AreasHost(Protocol):
+    @property
+    def store(self) -> Beads: ...
+
+    @property
+    def areas(self) -> Mapping[str, Sequence[str] | None]: ...
+
+    @property
+    def area_label_prefix(self) -> str: ...
+
+    @property
+    def running(self) -> Callable[[], dict[BeadId, str]]: ...
+
+    @property
+    def area_lock(self) -> Callable[[], AreaLock]: ...
+
+    @property
+    def say(self) -> Callable[[str], None]: ...
+
+
+class _NoAreaLock:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        return None
+
+
+class AreaRule(Protocol):
+    running: dict[BeadId, str]
+
+    def area_busy(self, bead: Bead, /) -> tuple[str, Skip | None]: ...
+
+
+class Admission(NamedTuple):
+    kind: Literal["busy", "not_won", "won"]
+    why: str
+
+
+def hand(host: AreasHost, bead_id: BeadId, exclusive: bool, take_engine: Callable[[], str],
+         mark: Callable[[], None]) -> str:
+    """Take a hand run's engine lock, warning or refusing when its area is occupied."""
+    with host.area_lock() if has_areas(host) else _NoAreaLock():
+        if has_areas(host):
+            try:
+                bead = host.store.show(bead_id)
+            except BdFailure:
+                bead = None
+            bead = bead or Bead(id=bead_id, title="", status="")
+            areas = Areas(host.store, host.areas, host.area_label_prefix, host.running(), host.say)
+            _area, busy = area_busy_text(areas, bead)
+            if busy and exclusive:
+                return busy + " (--exclusive-area)"
+            if busy:
+                host.say(f"⚠ {busy}: running anyway beside it; --exclusive-area refuses instead")
+        why = take_engine()
+        if not why:
+            mark()
+        return why
+
+
+def loop(host: AreasHost, bead: Bead, rule: AreaRule, claim: Callable[[], tuple[bool, str]],
+         publish: Callable[[], None]) -> Admission:
+    """Admit a loop candidate; publish only a won claim with a configured area."""
+    with host.area_lock() if has_areas(host) else _NoAreaLock():
+        area = ""
+        if has_areas(host):
+            rule.running = host.running()  # refresh after the slot wait, inside the lock (tl-na3)
+            area, busy = rule.area_busy(bead)
+            if busy:
+                return Admission("busy", busy.why)
+        won, why = claim()
+        if not won:
+            return Admission("not_won", why)
+        if area:
+            publish()
+        return Admission("won", "")
