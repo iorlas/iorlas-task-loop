@@ -100,17 +100,17 @@ def heal(env: SlotEnv, v: Violation, watch: Watch, limits: Limits = LIMITS) -> b
     return False
 
 
-def look(env: SlotEnv, *, ready_since: float | None = None, idle_lanes: int = 0, limits: Limits = LIMITS) -> list[Violation]:
+def look(env: SlotEnv, *, ready_since: float | None = None, idle_loops: int = 0, limits: Limits = LIMITS) -> list[Violation]:
     """The violations now; nothing is written."""
     now = env.now()
     try:
         slots, waiters = facts(env, now)
     except (BdFailure, OSError):
         return []
-    return violations(slots, waiters, now, ready_since=ready_since, idle_lanes=idle_lanes, limits=limits)
+    return violations(slots, waiters, now, ready_since=ready_since, idle_loops=idle_loops, limits=limits)
 
 
-def tick(env: SlotEnv, watch: Watch, *, ready_since: float | None = None, idle_lanes: int = 0, limits: Limits = LIMITS) -> list[Violation]:
+def tick(env: SlotEnv, watch: Watch, *, ready_since: float | None = None, idle_loops: int = 0, limits: Limits = LIMITS) -> list[Violation]:
     """Look (at most every EVERY s per `watch`), log each new violation as an event and heal it; -> the violations found."""
     now = env.now()
     if watch.looked is not None and now - watch.looked < EVERY:
@@ -123,7 +123,7 @@ def tick(env: SlotEnv, watch: Watch, *, ready_since: float | None = None, idle_l
     head = waiters[0].seq if waiters else None
     if head is not None and (watch.head is None or watch.head[0] != head):
         watch.head = (head, now)  # who heads the line, and since when this caller has seen it
-    found = violations(slots, waiters, now, ready_since=ready_since, idle_lanes=idle_lanes, limits=limits)
+    found = violations(slots, waiters, now, ready_since=ready_since, idle_loops=idle_loops, limits=limits)
     for v in found:
         healed = heal(env, v, watch, limits)
         key = (v.kind.value, v.slot)
