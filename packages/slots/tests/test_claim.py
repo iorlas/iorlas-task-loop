@@ -205,9 +205,11 @@ def test_a_stop_between_the_lock_release_and_the_slot_give_back_still_gives_the_
             if len(entered) == 1:  # the lock's guard has just closed: the stop arrives before the slot's guard opens
                 raise Terminated
 
-    with pytest.raises(Terminated), machine.claimed(
-            host.host, "/repo", "s1", None, False, "run-task b-1", host.store, env=Env(), guard=guard, **kw):
-        with engine_lock.held(lock, engine_lock.HeldLock(), guard):
-            pass
+    with (
+        pytest.raises(Terminated),
+        machine.claimed(host.host, "/repo", "s1", None, False, "run-task b-1", host.store, env=Env(), guard=guard, **kw),
+        engine_lock.held(lock, engine_lock.HeldLock(), guard),
+    ):
+        pass
     assert order == ["lock", "slot"]
     assert len(entered) == 2
