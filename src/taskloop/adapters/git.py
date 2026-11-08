@@ -14,6 +14,7 @@ from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
 from taskloop.adapters.git_pool import UnpinnedRepo, pool_error, pool_errors, pool_read_error, remote_error
 from tlkernel.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
+from tlkernel.ids import is_bead_id
 from tlkernel.slots import BranchPinned, Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, SlotGitError
 
 
@@ -171,6 +172,17 @@ class RealGit(LandGit):
             rows = self._pool(d).history(include, not_on=exclude or [], limit=limit if limit and not grep else None)
         found = [LogRow(oid=row.sha, time=row.ts, subject=row.subject) for row in rows if grep in row.subject]
         return found[:limit] if limit else found
+
+    def bead_trailers(self, d: str, include: list[str], exclude: list[str] | None = None) -> dict[str, str]:
+        out = self._read(d, "log", "--format=%H%x00%(trailers:key=Bead,valueonly,separator=%x01)%x00%x00",
+                         *include, *(["--not", *exclude] if exclude else []))
+        found: dict[str, str] = {}
+        fields = out.split("\0")
+        for oid, values in zip(fields[::3], fields[1::3], strict=False):
+            bead = values.split("\x01", 1)[0].strip()
+            if is_bead_id(bead):
+                found[oid.strip("\n")] = bead
+        return found
 
     def ls_tree(self, d: str, rev: str, *paths: str, recursive: bool = False) -> list[TreeEntry]:
         out = self._must(d, "ls-tree", "-z", *(["-r"] if recursive else []), rev, *paths)

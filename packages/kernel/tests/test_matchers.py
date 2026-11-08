@@ -1,6 +1,7 @@
 """Every regular expression of the review/verify prose is a named matcher; each has a table of real wording below."""
 
 from tlkernel import reviewkinds as kinds
+from tlkernel.lifecyclematchers import land_bead, with_bead_trailer
 from tlkernel.reviewmatchers import AcceptanceItems, BdDemand, CodeNames, EngineActions, GateProof, Tools, word_in
 from tltestkit.case import Case
 
@@ -119,3 +120,9 @@ class ResolveKind(Case):
         assert kinds.resolve_kind("external_fact", None, "", no, no) == "checkable"
         assert kinds.resolve_kind("external_fact", None, "https://x", no, no) == "external_fact"
         assert kinds.resolve_kind("taste", None, "", no, yes) == "checkable"
+
+
+def test_bead_trailer_preserves_land_subject():
+    message = with_bead_trailer("A title (t-1)", "t-1")
+    assert message == "A title (t-1)\n\nBead: t-1"
+    assert land_bead(message.splitlines()[0]) == "t-1"

@@ -87,6 +87,9 @@ class FakeGit(ScriptedGit):
         out = self.answer("unmerged")
         return list(out) if isinstance(out, (list, tuple)) else str(out).split()
 
+    def bead_trailers(self, d: str, include: list[str], exclude: list[str] | None = None) -> dict[str, str]:
+        return {}
+
     def log(self, d: str, include: list[str], exclude: list[str] | None = None, limit: int = 0, grep: str = "") -> list[LogRow]:
         row = self.answer("log")  # (oid, subject), or "" for no commit
         return [LogRow(oid=row[0], time=0, subject=row[1])] if row else []

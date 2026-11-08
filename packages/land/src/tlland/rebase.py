@@ -12,6 +12,7 @@ from tlkernel.checkpoint import Checkpoint, PlanStep
 from tlkernel.checks import CheckRun
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
+from tlkernel.lifecyclematchers import with_bead_trailer
 from tlkernel.matchers import NetText
 from tlkernel.plancheck import PlanData, StageData
 from tlkernel.slots import SlotGitError
@@ -108,7 +109,8 @@ class Rebase:
             return
         try:
             e.git.reset(e.wt, mb, "soft")
-            ok = e.git.try_commit(e.wt, f"wip ({e.bead}): earlier work, squashed", verify=False, allow_empty=True).ok
+            message = with_bead_trailer(f"wip ({e.bead}): earlier work, squashed", e.bead)
+            ok = e.git.try_commit(e.wt, message, verify=False, allow_empty=True).ok
         except SlotGitError:
             ok = False
         if not ok:  # the branch stays as it was
@@ -280,7 +282,7 @@ class Commit:
         e.newfiles.quarantine_strays()
         if base and not e.git.staged(e.wt):
             return False
-        done = e.git.try_commit(e.wt, f"{bead.title[:72]} ({e.bead})")
+        done = e.git.try_commit(e.wt, with_bead_trailer(f"{bead.title[:72]} ({e.bead})", e.bead))
         if not done.ok:
             raise e.blocked_for("failed: commit refused (hooks)\n" + done.output, "FAULT_LAND")
         return True
