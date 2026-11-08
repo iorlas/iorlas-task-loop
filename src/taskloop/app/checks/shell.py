@@ -73,7 +73,7 @@ class Shell:
         in a group of its own. It ends by itself, at `timeout` seconds of wall time (exit 124; its tree is stopped), or when
         the run's halt is set. Nothing else stops it: a quiet command may be waiting. pin=True: an engine git command, run with
         GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos). `stop`: the flag of one
-        lane of a gate (a first red elsewhere sets it) in place of the run's halt, which the lanes' owner passes on to it.
+        track of a gate (a first red elsewhere sets it) in place of the run's halt, which the tracks' owner passes on to it.
         `network=True`: a check or check fix may use the network, bypassing isolation and its host refusal."""
         e = self.host
         if isinstance(cmd, str):

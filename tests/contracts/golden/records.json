@@ -693,7 +693,7 @@
     "waited": 0.0,
     "deferred": [],
     "inputs_changed": false,
-    "lane": "",
+    "track": "",
     "at": 0.0,
     "cancelled": false,
     "sig": "boom"
@@ -721,7 +721,7 @@
     "waited": 0.0,
     "deferred": [],
     "inputs_changed": false,
-    "lane": "",
+    "track": "",
     "at": 0.0,
     "cancelled": false,
     "sig": ""
@@ -749,7 +749,7 @@
     "waited": 0.0,
     "deferred": [],
     "inputs_changed": false,
-    "lane": "",
+    "track": "",
     "at": 0.0,
     "cancelled": false,
     "sig": ""
@@ -799,7 +799,7 @@
   "pass_files": false,
   "files": [],
   "run_in": "slot",
-  "lane": "",
+  "track": "",
   "where": "host"
  },
  "plancheck.Ref": {
@@ -833,7 +833,7 @@
   "plan_output": "pout1"
  },
  "PassRecord": {
-  "v": 1,
+  "v": 2,
   "key": {
    "check": "lint",
    "cmd": "c1",
@@ -872,7 +872,7 @@
    "waited": 0.0,
    "deferred": [],
    "inputs_changed": false,
-   "lane": "",
+   "track": "",
    "at": 0.0,
    "cancelled": false,
    "sig": ""
@@ -1550,7 +1550,7 @@
   "full_reasons": [],
   "steps": [
    {
-    "lane": "static",
+    "track": "static",
     "run": false,
     "argv": [
      "lint"
@@ -1641,7 +1641,7 @@
      "keep": [],
      "why": "",
      "reads": [],
-     "lane": "",
+     "track": "",
      "needs": [],
      "network": true,
      "pass_files": false,
@@ -1673,7 +1673,7 @@
      "keep": [],
      "why": "",
      "reads": [],
-     "lane": "",
+     "track": "",
      "needs": [
       "unity"
      ],

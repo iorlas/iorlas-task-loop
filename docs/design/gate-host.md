@@ -33,7 +33,7 @@ Every number below that does not come from that table is marked **(est.)** with 
 
 ## 1. How a check is run today (what the design touches)
 
-- **One check lane per gate in lifesim.** Execution splits into lanes only when the profile names a `lane`
+- **One check track per gate in lifesim.** Execution splits into tracks only when the profile names a `track`
   (`src/taskloop/domain/checks/plan.py:25-30`, `contracts/checks.py:81`). lifesim's checks name none, so each factory loop
   runs its gate steps one after another (`app/checks/executor.py:77-88`). The parallelism comes from the 4 factory loops
   and from inside each .NET process.
@@ -50,7 +50,7 @@ Every number below that does not come from that table is marked **(est.)** with 
   depend on how busy the machine is.
 - **Machine-wide leases already exist.** `engine.resources` + `needs` give one of `limit` flocks in
   `~/.config/task-loop/locks` (`app/checks/resources.py:72-83`, `:84-107`). The wait is recorded outside the run budget,
-  and a cancelled lane stops waiting. This is how the unity lease works.
+  and a cancelled track stops waiting. This is how the unity lease works.
 - **The same `needs` decides where a check may run.** `Resources.lacking` (`resources.py:67-69`, through `domain/checks/affinity.py:22-24`):
   if a `host.json` exists, only the resources it lists are present. A check that needs a missing one is *deferred*,
   not run (`executor.py:109-110`, `:133-143`), and the engine labels the bead `needs:<r>` to move it to another host (`app/run/engine.py:272-279`).
@@ -219,14 +219,14 @@ Mac engine (gate round)                                     devbox
         --checks build,test,allocation,faults [--expect-keys]   (devbox's own `dotnet` lease, limit 1)
   <- stream: log lines; final: receipts JSON + logs tarball <-
   verify keys, import receipts, publish TL_CHECK_LOG_*
-  meanwhile the Unity lane runs locally (unity lease)
+  meanwhile the Unity track runs locally (unity lease)
 ```
 
-- The eligible checks become their own check lane (`lane: "remote"`, `contracts/checks.py:81`), so `Lanes` runs
-  them alongside the local Unity lane, and the first red on either side cancels the other (`app/checks/lanes.py`, module docstring).
+- The eligible checks become their own check track (`track: "remote"`, `contracts/checks.py:81`), so `Tracks` runs
+  them alongside the local Unity track, and the first red on either side cancels the other (`app/checks/tracks.py`, module docstring).
   This is where the wall-time gain comes from.
 - **Fallback:** if the devbox is unreachable, its identity differs from the pinned one, or the gate host lease is busy for more
-  than `lane_wait_min` (`contracts/config.py:223`), the lane runs locally under the `dotnet` lease from part (a). This keeps the
+  than `lane_wait_min` (`contracts/config.py:223`), the track runs locally under the `dotnet` lease from part (a). This keeps the
   devbox an overflow, not a dependency. Every fallback is written to the run log with its reason.
 - `ssh` is started through the Spawner like any check command, so a stop or a halt kills it (`app/checks/shell.py:54-66`), and the
   devbox side ends its process group when the ssh session drops (`gate-serve` treats a closed stdin as a stop).
@@ -235,7 +235,7 @@ Mac engine (gate round)                                     devbox
 
 | Failure | Behaviour |
 |---|---|
-| devbox down / ssh times out | the lane falls back to local (dotnet lease); a wait event; no verdict lost |
+| devbox down / ssh times out | the track falls back to local (dotnet lease); a wait event; no verdict lost |
 | push rejected (disk full, ref exists) | fallback; the ref name includes the run id, so it never collides |
 | devbox SDK patch differs from the Mac's (`rollForward: latestPatch`) | it is a different identity, not a wrong one: the key carries it. A red that shows only on the devbox is a real Linux red; the fix bead says so |
 | Linux-only or macOS-only test behaviour (paths, case sensitivity, culture; `InvariantGlobalization` is on in tests) | a portability red shows up as a normal red. **Unverified** that the lifesim suites pass on Linux; slice 1 measures it |
@@ -243,7 +243,7 @@ Mac engine (gate round)                                     devbox
 | the check output imitates a receipt | ignored: receipts come only from the runner's final frame after the process tree has exited |
 | ssh drops after the check went green on the devbox | no receipt imported, the check reruns (a pass is never assumed) |
 | devbox overloaded by its own loops | its `dotnet` lease queues remote work; the Mac's gate-host lease times out, then falls back |
-| NuGet restore from the devbox network fails | `prepare` red is an infrastructure fault (`FAULT_INFRA`), the lane falls back to local |
+| NuGet restore from the devbox network fails | `prepare` red is an infrastructure fault (`FAULT_INFRA`), the track falls back to local |
 | stale `refs/tl/gate/*` and worktrees | `gate-serve` removes the worktree in `finally`; a daily prune of refs older than 1 day |
 
 ### 3.6 Load and wall time, with and without (est.)
@@ -259,9 +259,9 @@ Mac-core-seconds** of .NET work, plus 400 x 3 ≈ 1200 for design-tests. Taking 
 
 | | Mac load | Gate wall (src change) | Notes |
 |---|---|---|---|
-| today | ≈ 281 (measured) | 60 + 400 + 500 + 650 + 9-20 min Unity ≈ **35-46 min** + unity lease wait | sequential in one check lane |
+| today | ≈ 281 (measured) | 60 + 400 + 500 + 650 + 9-20 min Unity ≈ **35-46 min** + unity lease wait | sequential in one check track |
 | (a) caps only | ≈ 30-55 | ≈ the same per gate (est. ±15 %); 2 of 4 loops queue on the dotnet lease | timeouts largely gone |
-| (b) devbox + local Unity lane | ≈ 15-30 (Unity, light, writers) | max(12 min devbox + ≈ 1 min push and import, 9-20 min Unity) + light ≈ **21-27 min** | saves ≈ 9-15 min per gate *when the devbox is free* |
+| (b) devbox + local Unity track | ≈ 15-30 (Unity, light, writers) | max(12 min devbox + ≈ 1 min push and import, 9-20 min Unity) + light ≈ **21-27 min** | saves ≈ 9-15 min per gate *when the devbox is free* |
 | (b) with 4 loops all gating | | devbox busy ≈ 13 min per gate; at one gate per loop every ≈ 45 min (unknown cadence), demand = 4 x 13 / 45 ≈ **1.2 > 1** | about 2 loops' worth at most; the rest fall back to the local lease |
 
 The cadence (gates per loop per hour) is the input that decides how many loops one devbox serves. It is in the Mac's `runs/*/checks`
@@ -273,7 +273,7 @@ durations and `events.jsonl`, which I could not read. Slice 1 has to bring it.
 |---|---|---|---|---|---|
 | 1 | **dotnet lease (limit 2) + `DOTNET_PROCESSOR_COUNT=4` + `CsCheck_Threads=1` + `nice -n 10`**: profile and `host.json` only | S, today | 281 to ≈ 40 | ≈ same | low; one-time cache invalidation; forgetting `host.json` defers every dotnet check |
 | 2 | **design-tests worker cap** (lifesim `run_tests_parallel.py:97`) | XS | −(4N−16) processes | ≈ same | none |
-| 3 | **devbox as an overflow gate host** for build, test, allocation, faults (section 3) | L (identity, transport, import, lane, fallback) | to ≈ 15-30 | −9-15 min per gate, for about 2 loops | Linux portability of the suites unknown; a new trust edge |
+| 3 | **devbox as an overflow gate host** for build, test, allocation, faults (section 3) | L (identity, transport, import, track, fallback) | to ≈ 15-30 | −9-15 min per gate, for about 2 loops | Linux portability of the suites unknown; a new trust edge |
 | 4 | load-aware loop start (`loop.py:201-218`) | S | caps admits only | none | it hides symptoms; useful as a guard rail after 1 |
 | 5 | whole lifesim factory loops on the devbox, using the existing bead affinity (`engine.py:272-279`) | M | some | - | `unity-analyzers`/`unity-tests` have `when: src/**, config/**, content/**` (lifesim `.task-loop.json`), so nearly every sim bead needs unity and is moved back to the Mac. Only docs/design/tools beads benefit |
 | 6 | `taskpolicy -b` for loops | XS | load unchanged | heavy steps several times slower on E-cores (unverified) | no |
@@ -291,7 +291,7 @@ the Mac: the per-step `exec_seconds`/`wait_seconds` of the last 50 gates (`Durat
 gate cadence per loop. These two tables replace every **(est.)** in 2.3 and 3.6, and they decide whether slices 2-4 are worth building.
 
 Then: slice 2, shadow mode (`tl gate-remote` run by hand pushes a landed commit and runs the steps; receipts are compared, never
-imported). Slice 3, identity and authorization changes (3.3, items 1-4) behind `portable`. Slice 4, the remote lane, import and fallback
+imported). Slice 3, identity and authorization changes (3.3, items 1-4) behind `portable`. Slice 4, the remote track, import and fallback
 in the round.
 
 ## 6. Beads to file
@@ -326,7 +326,7 @@ in the round.
 9. **GATEHOST-RECEIPT: import a remote receipt over ssh, fail closed.** *Acceptance:* tests: a receipt with any key field different from
    the Mac's expected key is rejected; receipt-shaped text in check output is ignored; a dropped session imports nothing; the imported
    record has `host` = the devbox and a readable local log.
-10. **GATEHOST-LANE: eligible checks run as a remote lane beside the Unity lane, falling back to local.** *Acceptance:* with the devbox
+10. **GATEHOST-LANE: eligible checks run as a remote track beside the Unity track, falling back to local.** *Acceptance:* with the devbox
     up, a src-changing lifesim gate runs the dotnet steps remotely and the Unity steps locally at the same time (dashboard shows both); a red on
     either side cancels the other; with the devbox down, the same gate runs locally under the dotnet lease and the run log names the
     fallback reason; Mac gate wall time over 10 gates is reported against the GATEHOST-MEASURE baseline.

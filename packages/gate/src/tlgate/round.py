@@ -1,4 +1,4 @@
-"""Round: what a block of checks has decided so far, and a lane's stop flag."""
+"""Round: what a block of checks has decided so far, and a track's stop flag."""
 import threading
 from dataclasses import dataclass, field
 
@@ -6,7 +6,7 @@ from tlkernel.checks import CheckResult, Duration
 
 
 class Cancel(threading.Event):
-    """A lane's stop flag: set when another lane went red first; `red` says which check."""
+    """A track's stop flag: set when another track went red first; `red` says which check."""
 
     red: str = ""
 
@@ -23,4 +23,4 @@ class Round:
     env: dict[str, str] = field(default_factory=dict)  # $TL_CHECK_LOG_/RC_<ID> of what ran, for the checks after it
     timings: list[Duration] = field(default_factory=list)  # a row per command that passed, for the duration history
     changed: list[str] | None = None
-    cancel: Cancel | None = None  # a lane's flag: set when another lane went red first
+    cancel: Cancel | None = None  # a track's flag: set when another track went red first

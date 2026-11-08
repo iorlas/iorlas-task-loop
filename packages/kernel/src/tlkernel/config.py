@@ -115,7 +115,8 @@ class CheckSpec(Rec):
     keep: list[str] = msgspec.field(default_factory=list)  # tree globs (an editor log, a result XML) copied after each attempt
     why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
     reads: list[CheckId] = msgspec.field(default_factory=list)  # checks whose log and exit code it reads: it runs after them
-    lane: str = ""  # checks of one lane run in order, lanes run in parallel; the first red cancels the other lanes ("": the default lane)
+    # Checks of one track run in order, tracks run in parallel; the first red cancels the others ("": the default track).
+    track: str = ""
     needs: list[str] = msgspec.field(default_factory=list)  # engine.resources it holds a machine-wide lease on while it runs
     network: bool = False  # allow network access even when engine.check_net_isolate is enabled
     pass_files: bool = False  # the changed files (those matching `when`) are appended to argv; none: the check is skipped
@@ -374,11 +375,11 @@ def graph_problem(checks: list[CheckSpec]) -> str:
         gone = [r for r in k.reads if r not in known]
         if gone:
             return f"check {k.id} reads {gone[0]}, which engine.checks does not have"
-        lane = {c.id: c.lane for c in checks}
-        apart = [r for r in k.reads if lane[r] != k.lane]
+        track = {c.id: c.track for c in checks}
+        apart = [r for r in k.reads if track[r] != k.track]
         if apart:
-            return (f"check {k.id} (lane {k.lane!r}) reads {apart[0]} of lane {lane[apart[0]]!r}: "
-                    "lanes run at the same time, a read stays in its lane")
+            return (f"check {k.id} (track {k.track!r}) reads {apart[0]} of track {track[apart[0]]!r}: "
+                    "tracks run at the same time, a read stays in its track")
     try:
         TopologicalSorter({k.id: k.reads for k in checks}).prepare()
     except CycleError as e:

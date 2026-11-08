@@ -19,10 +19,10 @@ from tlgate.domain.plan import CheckPlan, Step
 from tlgate.domain.specs import due
 from tlgate.gateplan import PlanDecision
 from tlgate.host import CheckFault, CheckHost
-from tlgate.lanes import Lanes
 from tlgate.passfiles import files_for, none_why
 from tlgate.resources import LeaseCancelled, Resources
 from tlgate.round import Round
+from tlgate.tracks import Tracks
 
 PROJECT_LOG_LINES = 20
 FAILED_FIRST = " failed first"
@@ -51,9 +51,9 @@ class CheckExecutor:
         self.began = time.time()
         if self.slot is not None:
             self.slot.began = self.began
-        lanes = plan.lanes()
-        if len(lanes) > 1:  # lanes run at the same time; the first red cancels the rest
-            st = Lanes(self.host, self.step, self.drop).run(plan, lanes, st)
+        tracks = plan.tracks()
+        if len(tracks) > 1:  # tracks run at the same time; the first red cancels the rest
+            st = Tracks(self.host, self.step, self.drop).run(plan, tracks, st)
         else:
             for n, step in enumerate(plan.steps):
                 self.step(step, n, st)
@@ -82,7 +82,7 @@ class CheckExecutor:
         self.checklog.close(step.check, res, cid, st.n)
 
     def drop(self, step: Step, n: int, st: Round, red: str) -> None:
-        """A step its lane never began because another lane went red first."""
+        """A step its track never began because another track went red first."""
         res = CheckResult.cancelled_by(step.check, red, at=round(time.time() - self.began, 1))
         st.results.append(res)
         st.by_step[n] = res
@@ -112,7 +112,7 @@ class CheckExecutor:
         if hit is not None:
             self.memo.receipts[c.id] = hit
             self.memo.reuse(hit)
-            res, where = self.memo.cached(c, hit).replace(lane=c.lane), hit.log_abs
+            res, where = self.memo.cached(c, hit).replace(track=c.track), hit.log_abs
             if res.note:
                 self.host.log.note(f"cached: {c.id}, {res.note}")
         elif self.resources.lacking(c):
@@ -120,7 +120,7 @@ class CheckExecutor:
         else:
             cid = self.checklog.start(c, st.n, "checks/" + name)
             res, where = self._launch(step, st, name, key), str(self.logs / name)
-            if res.cancelled:  # another lane's red stopped it: no verdict, nothing to remember, no red of its own
+            if res.cancelled:  # another track's red stopped it: no verdict, nothing to remember, no red of its own
                 return res, cid
         self.memo.ran[self.memo.command_key(c)] = (res, c.wall_min)
         self._publish(c, res, where, st)
@@ -144,7 +144,7 @@ class CheckExecutor:
         why = f"deferred: needs {', '.join(lack)}, which this host does not have; {said}"
         self.host.log.note(f"`{c.id}` {why}")
         return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=UNVERIFIED_EXIT, status="unverified", why=why, deferred=lack,
-                           inputs_changed=changed, tags=list(c.tags), lane=c.lane)
+                           inputs_changed=changed, tags=list(c.tags), track=c.track)
 
     @staticmethod
     def _log_name(n: int, c: Check, rnd: int) -> str:
@@ -203,7 +203,7 @@ class CheckExecutor:
             return None
         self.host.log.note(f"`{c.cmd[:120]}` already ran in this block: its result is reused")
         return before[0].replace(id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="", waited=0.0,
-                                lane=c.lane)
+                                track=c.track)
 
     def _key(self, c: Check) -> RunKey | None:
         """The memo key of this run, None when it may not be cached. A glob that selects nothing would cache a green over changed
@@ -234,7 +234,7 @@ class CheckExecutor:
         if out.stopped:  # the lease is back already: the block above ended
             return CheckResult.cancelled_by(c, st.cancel.red if st.cancel else "", "checks/" + name, round(t0 - self.began, 1), took)
         self._fault(c, out, st)
-        res = self._result(c, out, name, took).replace(waited=round(lease.waited, 1), lane=c.lane, at=round(t0 - self.began, 1))
+        res = self._result(c, out, name, took).replace(waited=round(lease.waited, 1), track=c.track, at=round(t0 - self.began, 1))
         res = res.replace(tail=res.tail + self._missing_log(out))
         if out.rc == 0:  # only a green run says what the check costs: a red one stops early
             self._unchanged()

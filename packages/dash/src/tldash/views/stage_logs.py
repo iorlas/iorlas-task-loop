@@ -61,7 +61,7 @@ def step_roles(run: Run, span: Span, events: dict[int, Sequence[delegate.LiveEve
             for i, c in enumerate(r.run):
                 lines = [TermLine(t=r.t, text=text) for text in [c.cmd, *c.tail.splitlines(), c.why] if text]
                 out.append(("checks", StageAttempt(id=f"{span.id}:{r.run.round}:{i}", t=span.t0 + c.at, secs=c.secs,
-                                                  outcome=c.word.value, lane=c.lane, lines=lines)))
+                                                  outcome=c.word.value, lane=c.track, lines=lines)))
     lines: list[TermLine] = []
     for r in rows:
         if isinstance(r, log.Transition) and r.from_id == span.id:

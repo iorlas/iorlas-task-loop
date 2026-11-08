@@ -1,6 +1,6 @@
 # checks is a converted stage (tests/rules/test_host_ban.py): it takes ports and values, never an engine or a host typed Any.
 # Like the app layer it came from (src/taskloop/app/ruff.toml): the root config plus the bans below. Unlike the kernel it may run threads
-# (the check lanes), so it does not extend the kernel's contracts-only config.
+# (the check tracks), so it does not extend the kernel's contracts-only config.
 extend = "../../ruff.toml"
 src = ["src"]
 

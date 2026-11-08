@@ -511,7 +511,7 @@ OTHERS: dict[str, Rec] = {
     "HostResources": config.HostResources(resources=["unity"]),
     "PrepareConfig": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"], timeout_min=20),
     "GatePlan": gateplan.GatePlan(version=1, base="abc", empty=False, full=False, full_reasons=[], steps=[
-        gateplan.GatePlanStep(name="lint", lane="static", run=False, argv=["lint"], pre=[], recipe=None, reason="unchanged")]),
+        gateplan.GatePlanStep(name="lint", track="static", run=False, argv=["lint"], pre=[], recipe=None, reason="unchanged")]),
     "RepoProfile": config.RepoProfile(engine=config.EngineConfig(check_scratch_home=True, **CMD),
                                      slots=config.SlotsConfig(count=2, setup=["just", "setup"]),
                                      loop=config.LoopConfig(wait_poll=30)),

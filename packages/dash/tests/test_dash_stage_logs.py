@@ -53,7 +53,7 @@ class StageLogs(Case):
         s = RunScript("b-1").step("checks", 30, outcome="green")
         s.add("checks", node_id="n1", run={"round": 1, "results": [
             {"id": "unit", "cmd": "pytest", "group": "tests", "exit": 0, "status": "passed",
-             "tail": "all tests passed", "secs": 30, "wall_min": 1, "lane": "unit"}]}).close("done")
+             "tail": "all tests passed", "secs": 30, "wall_min": 1, "track": "unit"}]}).close("done")
         (p,) = passes.passes_of([s.run(T + 100)])
         cell = next(c for c in passes.cells_of(p) if c.phase == "test")
         assert (cell.state, cell.secs, cell.budget_s) == ("done", 30, 60)

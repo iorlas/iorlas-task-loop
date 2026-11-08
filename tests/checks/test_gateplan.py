@@ -23,7 +23,7 @@ from tltestkit.plans import FALSE
 
 
 def step(name="coverage", run=False, **extra):
-    return dict(name=name, lane="tests", run=run, argv=["true"], pre=[], recipe=None, reason="no relevant change", **extra)
+    return dict(name=name, track="tests", run=run, argv=["true"], pre=[], recipe=None, reason="no relevant change", **extra)
 
 
 def document(steps=None, **extra):
@@ -325,7 +325,7 @@ class GatePlans(CheckHostCase):
         aliased = step(optional="future", resources=["tool"])
         aliased["id"], aliased["why"] = aliased.pop("name"), aliased.pop("reason")
         assert parse(json.dumps(document([aliased], optional=True))).steps[0].id == "coverage"
-        for key in ("lane", "run", "argv", "pre", "recipe", "name", "reason"):
+        for key in ("track", "run", "argv", "pre", "recipe", "name", "reason"):
             bad = step()
             del bad[key]
             with self.subTest(key=key), pytest.raises(ValueError):

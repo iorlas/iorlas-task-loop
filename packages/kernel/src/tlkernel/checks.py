@@ -82,7 +82,7 @@ class Check(Rec):
     pass_files: bool = False  # the repo check takes the changed files as trailing argv (`files`, resolved per round)
     files: list[str] = msgspec.field(default_factory=list)  # those files; part of the result key
     run_in: Literal["clean", "slot"] = "clean"  # filesystem used by the committed land gate; stage rounds always use the slot
-    lane: str = ""  # its lane: the checks of one run in order, the lanes in parallel
+    track: str = ""  # its track: the checks of one run in order, the tracks in parallel
     where: Literal["host", "linux"] = "host"  # linux: run on engine.executor over ssh, from the pushed commit
 
 
@@ -110,20 +110,20 @@ class CheckResult(Rec):
     waited: float = 0.0  # seconds it queued for the leases of its `needs` before it ran (not part of secs)
     deferred: list[str] = msgspec.field(default_factory=list)  # the resources this host lacks: it did not run (exit UNVERIFIED_EXIT)
     inputs_changed: bool = False  # deferred: the diff touches what it reads, so the land may not go on past it
-    lane: str = ""  # the lane it ran in
-    at: float = 0.0  # seconds after its block began that it started (lane timing; with `secs` and `waited`: where its lane's time went)
-    cancelled: bool = False  # not run, or stopped, because another lane went red first: not a verdict on this check
+    track: str = ""  # the track it ran in
+    at: float = 0.0  # seconds after its block began that it started (track timing; with `secs` and `waited`: where its track's time went)
+    cancelled: bool = False  # not run, or stopped, because another track went red first: not a verdict on this check
     sig: str = ""  # what a red's output says, timings aside: two reds with one sig failed the same way
 
     @classmethod
     def skipped(cls, check: Check, why: str, producer: str = "") -> CheckResult:
         """The result of a check that did not run, and why."""
         return cls(id=check.id, cmd=check.cmd, group=check.group, exit=None, status="skipped", why=why, producer=producer,
-                   tags=list(check.tags), lane=check.lane)
+                   tags=list(check.tags), track=check.track)
 
     @classmethod
     def cancelled_by(cls, check: Check, red: str, log: str = "", at: float = 0.0, secs: float = 0.0) -> CheckResult:
-        """A check another lane's red stopped (or kept from starting): skipped, never a verdict; `log` holds what it printed before."""
+        """A check another track's red stopped (or kept from starting): skipped, never a verdict; `log` holds what it printed before."""
         return cls.skipped(check, f"cancelled: {red} failed first").replace(cancelled=True, log=log, at=at, secs=secs)
 
     @classmethod
@@ -212,7 +212,7 @@ class PassRecord(Rec):
     tree and base it was last true for (a key without them is true for any). run_id, host, ts: who made it; `origin`: the run that
     first made the result when this record is a reuse on a newer tree or base. log_abs: the saved output (may be gone: it expires)."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     key: RunKey
     result: CheckResult
     tree: TreeSha

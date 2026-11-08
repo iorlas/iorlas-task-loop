@@ -114,7 +114,7 @@ class EngineChecksTest(CheckHostCase):
 
     @no_repo
     def test_a_passing_check_still_shows_its_notable_lines(self):
-        out = check_evidence.compact([res("just check", 0, tail="lane light: ok\nunity steps run: client changed\nfoo\nbar\n439 passed")])
+        out = check_evidence.compact([res("just check", 0, tail="track light: ok\nunity steps run: client changed\nfoo\nbar\n439 passed")])
         assert "unity steps run" in out
         assert "439 passed" in out
 

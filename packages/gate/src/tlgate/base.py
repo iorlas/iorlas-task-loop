@@ -24,7 +24,7 @@ class BaseCheck:
         Never for a pass_files check: the base has other files, not the ones it was handed."""
         if c.pass_files or not self.host.cfg.base_red or not self.sha:
             return False
-        with self.lock:  # two lanes may both be red: one clean checkout of the base at a time
+        with self.lock:  # two tracks may both be red: one clean checkout of the base at a time
             return self._red(c, stop)
 
     def _red(self, c: Check, stop: threading.Event | None) -> bool:

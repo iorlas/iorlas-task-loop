@@ -61,7 +61,7 @@ Each entry: one plain sentence, an example, and what it is not. Last audited aga
 | Term | Means | Example | Not |
 |---|---|---|---|
 | account `planned` | A metered connection to a model vendor: a subscription or API key with usage windows, reset times and models. Delegate owns it. Dashboard panel: Accounts. | A Codex subscription and a Claude subscription are two accounts. | lane, license, supplier, provider, token source |
-| track `planned` | Within one gate block, a parallel sequence of checks; the first red cancels the other tracks. Replaces the `lane` key on checks. | A `build` track and a `test` track run side by side. | lane |
+| track | Within one gate block, a parallel sequence of checks; the first red cancels the other tracks. Replaces the `lane` key on checks. | A `build` track and a `test` track run side by side. | lane |
 | lane `planned` | Purged word (hard cut, not finished: 80 source files still use it, docs/design/lanepurge.md). It names no concept; use account, track or loop. | | everything |
 
 ## Merge queue (design: docs/design/merge-queue.md)
@@ -110,7 +110,7 @@ All `planned`. Running example: five PRs A, B, C, D, E wait to land on main (cal
 0. Purge: the word "lane" leaves code, docs, tests, dashboard and the delegate copy in one cut (no alias). Three meanings, three names: delegate lane -> account; check lane -> track; factory lane (a loop process) -> loop. Occurrence counts come from the naming audit (docs/design/naming-audit.md: about 1,760 lines in task-loop and 2,019 in delegate).
 1. Delegate: `lane` becomes `account` in routing.json, `route.py status`/`run` output, docs, skills. The interface is the typed `delegate.api` (docs/design/topology.md), so there is no wire contract to version. 122 files in task-loop mention "lane" today, so the task-loop side is the larger edit.
 2. Dashboard: the "Lanes" panel becomes "Accounts"; the "Floor" tab becomes "Slots".
-3. `tl lanes` becomes `tl accounts`; `tl setup` stops asking about lanes; `checks[].lane` becomes `track` (profile key: a hard cut, shipped one release after the code that reads it, per CLAUDE.md); `tl factory status` prints loops.
+3. `tl lanes` becomes `tl accounts`; `tl setup` stops asking about lanes; `checks[].track` names a check track (hard cut: the former key is refused as unknown, per CLAUDE.md); `tl factory status` prints loops.
 
 ## Visuals rename (with the visuals epic, hard cut)
 

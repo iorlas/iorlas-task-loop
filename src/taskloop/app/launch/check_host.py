@@ -30,10 +30,10 @@ from taskloop.stores.runlog import RunLog
 
 class _Waits:
     def note_slot_waits(self, text: str, wall: float) -> None: ...
-    def start(self, what: WaitWhat, holder: str = "", until: float | None = None, lane: str = "", check: str = "") -> str:
+    def start(self, what: WaitWhat, holder: str = "", until: float | None = None, track: str = "", check: str = "") -> str:
         return ""
 
-    def add(self, secs: float, what: WaitWhat, wid: str | None = None, lane: str = "", check: str = "") -> None: ...
+    def add(self, secs: float, what: WaitWhat, wid: str | None = None, track: str = "", check: str = "") -> None: ...
 
 
 class CliHost:

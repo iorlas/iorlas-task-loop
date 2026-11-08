@@ -52,18 +52,18 @@ class PlannedSkips(CheckHostCase):
         assert (run[1].status, run[1].planned, run[1].why) == ("skipped", False, "static failed first")
         assert not self.green("coverage")
 
-    def test_a_planned_skip_in_another_lane_is_not_recorded_when_a_lane_fails(self):
+    def test_a_planned_skip_in_another_track_is_not_recorded_when_a_track_fails(self):
         self.eng = self.checks_engine(checks=[
-            {"id": "coverage", "cmd": "true", "run": "gate", "when": ["ui/**"], "lane": "a"},
-            {"id": "red", "cmd": FALSE, "run": "gate", "lane": "b"},
+            {"id": "coverage", "cmd": "true", "run": "gate", "when": ["ui/**"], "track": "a"},
+            {"id": "red", "cmd": FALSE, "run": "gate", "track": "b"},
         ])
         self.eng.checker.run_items(gate_items(self.eng.cfg))
         assert not self.green("coverage")
 
-    def test_a_clean_multilane_round_records_planned_skips_after_folding(self):
+    def test_a_clean_multitrack_round_records_planned_skips_after_folding(self):
         self.eng = self.checks_engine(checks=[
-            {"id": "coverage", "cmd": "true", "run": "gate", "when": ["ui/**"], "lane": "a"},
-            {"id": "lint", "cmd": "true", "run": "gate", "lane": "b"},
+            {"id": "coverage", "cmd": "true", "run": "gate", "when": ["ui/**"], "track": "a"},
+            {"id": "lint", "cmd": "true", "run": "gate", "track": "b"},
         ])
         self.eng.checker.run_items(gate_items(self.eng.cfg))
         assert self.green("coverage")

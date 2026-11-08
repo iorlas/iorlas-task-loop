@@ -40,12 +40,12 @@ class FakeWaits:
     def __init__(self) -> None:
         self.rows: list[tuple] = []
 
-    def start(self, what, holder="", until=None, lane="", check=""):
-        self.rows.append(("start", what, holder, lane, check))
+    def start(self, what, holder="", until=None, track="", check=""):
+        self.rows.append(("start", what, holder, track, check))
         return "w1"
 
-    def add(self, secs, what, wid=None, lane="", check=""):
-        self.rows.append(("add", what, secs, lane, check))
+    def add(self, secs, what, wid=None, track="", check=""):
+        self.rows.append(("add", what, secs, track, check))
 
 
 class FakeHost:
@@ -61,8 +61,8 @@ class FakeHost:
     def halt_point(self, when=True, wait=0): ...
 
 
-def unity_check(id="u", lane="") -> Check:
-    return Check(id=CheckId(id), cmd=id, needs=["unity"], lane=lane)
+def unity_check(id="u", track="") -> Check:
+    return Check(id=CheckId(id), cmd=id, needs=["unity"], track=track)
 
 
 def python(code: str, *args: str) -> subprocess.Popen:
@@ -86,7 +86,7 @@ class Lease(Case):
         now, top, lock, waited = [0], [0], threading.Lock(), []
 
         def one(i):
-            with res.hold(unity_check(f"u{i}", lane=f"l{i}")) as lease:
+            with res.hold(unity_check(f"u{i}", track=f"l{i}")) as lease:
                 with lock:
                     now[0] += 1
                     top[0] = max(top[0], now[0])
@@ -116,23 +116,23 @@ class Lease(Case):
         assert kinds == [("start", WaitWhat.RESOURCE), ("add", WaitWhat.RESOURCE)]
         assert self.host.fake_waits.rows[1][2] > 0.1
 
-    def test_the_wait_names_the_waiting_check_its_lane_and_the_holder(self):
+    def test_the_wait_names_the_waiting_check_its_track_and_the_holder(self):
         host, first = FakeHost(1), threading.Event()
         res = Resources(host)
 
         def holder():
-            with res.hold(unity_check("first", lane="a")):
+            with res.hold(unity_check("first", track="a")):
                 first.set()
                 time.sleep(0.2)
 
         t = threading.Thread(target=holder)
         t.start()
         first.wait(5)
-        with res.hold(unity_check("second", lane="b")):
+        with res.hold(unity_check("second", track="b")):
             pass
         t.join()
         start, add = host.fake_waits.rows
-        assert start[2:] == ("t-1:first", "b", "second")  # holder bead:check, waiting lane and check
+        assert start[2:] == ("t-1:first", "b", "second")  # holder bead:check, waiting track and check
         assert (add[3], add[4]) == ("b", "second")
 
     def test_status_reads_the_holder_bead_and_check_from_the_lease_label(self):
@@ -150,11 +150,11 @@ class Lease(Case):
 
     def test_the_lease_is_the_machine_table_and_is_freed_after_the_block(self):
         host = FakeHost(1)
-        with Resources(host).hold(unity_check("u", lane="a")) as lease:
+        with Resources(host).hold(unity_check("u", track="a")) as lease:
             (occ,) = host.stores.leases.holders("unity", 1)
             assert occ.holder is not None
             assert occ.holder.created == pytest.approx(time.time(), abs=5)  # `tl status` counts the seconds held from it
-            assert (occ.holder.label, occ.holder.meta["lane"]) == ("t-1:u", "a")
+            assert (occ.holder.label, occ.holder.meta["track"]) == ("t-1:u", "a")
             assert lease.env == {"ANY_LEASE_HELD": "unity", "ANY_LEASE_ROOT": str(host.stores.leases.root)}
         assert host.stores.leases.holders("unity", 1) == ()
 

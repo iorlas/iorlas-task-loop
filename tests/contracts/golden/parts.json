@@ -99,6 +99,10 @@
    "1": {
     "ddl": "58123ec3b52045d7fd0b1b9d88e43ee98422c4a75ce51537ffa9314b640c2110",
     "record": "697318f27f5f52a87a20d2de728ac8f5e7d497ba7cc957723d0239be845c1471"
+   },
+   "2": {
+    "ddl": "58123ec3b52045d7fd0b1b9d88e43ee98422c4a75ce51537ffa9314b640c2110",
+    "record": "b0df5b7ad44b16eef37906e583a9516e249c1b9cfa923ea723f12abf404c82ce"
    }
   },
   "records": {
@@ -107,11 +111,11 @@
     "v": 1
    },
    "PassRecord": {
-    "schema": "c3801950c3bbfe22959a110e641b4b3199e42ef4764329757f72c1cbc2d149f2",
-    "v": 1
+    "schema": "cf92f21d615ff0f8263ce7145027673c32c5bb1fb7eb98e43b37c9b9ccc78f9c",
+    "v": 2
    }
   },
-  "version": 1
+  "version": 2
  },
  "index": {
   "ddl": "dc4d274154a1813bf8e54e0571a7a5ac4df93687a899f14a180ea39b4fb76649",
