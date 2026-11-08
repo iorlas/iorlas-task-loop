@@ -5,13 +5,13 @@ from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 from support.narrow_land import FakeGateHost
 
-from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.stores.runlog import RunLog
 from tlgate.domain.specs import engine_digest
 from tlkernel.checks import Check, CheckRun
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha
+from tlland.gate import Gate, GatePass, Problem, ProblemKind
 from tltestkit.case import Case
 
 

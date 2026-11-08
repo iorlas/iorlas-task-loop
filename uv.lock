@@ -12,6 +12,7 @@ members = [
     "tldelegate",
     "tlgate",
     "tlkernel",
+    "tlland",
     "tlpipeline",
     "tlrelease",
     "tlslots",
@@ -322,6 +323,37 @@ requires-dist = [{ name = "msgspec" }]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pytest" },
+    { name = "tltestkit", editable = "packages/testkit" },
+]
+
+[[package]]
+name = "tlland"
+version = "0"
+source = { editable = "packages/land" }
+dependencies = [
+    { name = "tlgate" },
+    { name = "tlkernel" },
+    { name = "tlslots" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "msgspec" },
+    { name = "pytest" },
+    { name = "tltestkit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "tlgate", editable = "packages/gate" },
+    { name = "tlkernel", editable = "packages/kernel" },
+    { name = "tlslots", editable = "packages/slots" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "msgspec" },
     { name = "pytest" },
     { name = "tltestkit", editable = "packages/testkit" },
 ]

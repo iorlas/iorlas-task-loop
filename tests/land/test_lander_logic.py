@@ -8,9 +8,9 @@ from support.narrow_land import FakeLandedHost, FakeLandRebaseHost
 from tltestkit.case import Case
 
 # isort: split
-from taskloop.app.land.push import Landed
-from taskloop.app.land.rebase import LandRebase
 from tlkernel.landmatchers import Push
+from tlland.push import Landed
+from tlland.rebase import LandRebase
 
 
 def rebase(git: FakeGit) -> LandRebase:

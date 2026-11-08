@@ -8,9 +8,9 @@ from support.narrow_hosts import Stopped
 from support.narrow_land import table_kit
 
 from taskloop.adapters.deadline import deadline
-from taskloop.app.land.gate import Problem, ProblemKind
-from taskloop.app.land.host import Placing
 from tlkernel.lanesliveness import LIVENESS, LivenessCaps
+from tlland.gate import Problem, ProblemKind
+from tlland.host import Placing
 from tltestkit.case import Case
 
 
@@ -47,7 +47,7 @@ class Liveness(Case):
         caps = LivenessCaps(judge_s=0.02)
         timer = FakeDeadline()
         kit.lander.deadline = deadline
-        with timer.patched(), mock.patch("taskloop.app.land.lander.LIVENESS", caps), \
+        with timer.patched(), mock.patch("tlland.lander.LIVENESS", caps), \
                 mock.patch.object(kit.lander, "optimistic", return_value=False), \
                 mock.patch.object(kit.lander, "placing", return_value=Placing.INSIDE), \
                 mock.patch.object(kit.lander.gate, "run", side_effect=lambda: timer.wait(0.5)), \

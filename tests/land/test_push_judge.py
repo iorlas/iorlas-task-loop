@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.fakegit import FakeGit
 from support.memstores import fake_stores
 
-from taskloop.app.land.push_judge import PushStatus, judge_push
 from tlgate.cache import InputKeys, RunMemo, plan_digest
 from tlgate.domain.specs import gate_items
 from tlkernel.checks import CheckResult
@@ -22,6 +21,7 @@ from tlkernel.gitfacts import TreeEntry
 from tlkernel.ids import TreeSha
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import GitReadFailure
+from tlland.push_judge import PushStatus, judge_push
 
 
 class PushJudge(Case):
@@ -306,7 +306,7 @@ class PushJudge(Case):
         self.ls_tree.return_value = []
         self.git.replies[("symbolic_ref",)] = "refs/remotes/origin/trunk"
         self.git.replies[("rev_parse", "origin/trunk")] = "trunk-sha"
-        with mock.patch("taskloop.app.land.push_judge.PushJudge.is_green", return_value=True) as green:
+        with mock.patch("tlland.push_judge.PushJudge.is_green", return_value=True) as green:
             assert self.judge(self.request("head", remote="refs/heads/main")).status == PushStatus.ALLOWED
             green.assert_not_called()
             assert self.judge(self.request("head", remote="refs/heads/trunk")).status == PushStatus.ALLOWED

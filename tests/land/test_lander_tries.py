@@ -9,12 +9,12 @@ from support.narrow_land import LandKit, table_kit
 from tltestkit.case import Case
 
 # isort: split
-from taskloop.app.land.gate import Problem, ProblemKind, mint
-from taskloop.app.land.host import Land, Phase
-from taskloop.app.land.lander import Lander
 from tlkernel import log as rec
 from tlkernel.ids import TreeSha
 from tlkernel.runkey import BaseSha
+from tlland.gate import Problem, ProblemKind, mint
+from tlland.host import Land, Phase
+from tlland.lander import Lander
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")

@@ -9,12 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.engine_case import EngineTest
 from support.gate_rig import GateCase
 
-from taskloop.app.land.gate import Gate, GatePass, Problem
 from tlgate.clean import isolated
 from tlgate.domain.specs import gate_items
 from tlgate.host import CheckFault
 from tlgate.runner import cached_gate
 from tlkernel.checks import CheckFaultKind
+from tlland.gate import Gate, GatePass, Problem
 from tltestkit import procsim
 from tltestkit.plans import CLEAN, PLAN, WRITE
 

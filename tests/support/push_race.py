@@ -8,14 +8,14 @@ from typing import Any
 from unittest import mock
 
 from taskloop.adapters.git import RealGit
-from taskloop.app.land.checkout import Checkout
-from taskloop.app.land.fix import Fixer
-from taskloop.app.land.lander import Lander
-from taskloop.app.land.push import pin_head
 from taskloop.app.run import engine
 from tlkernel.checks import CheckRun
 from tlkernel.kinds import Kind
 from tlkernel.waitenums import WaitWhat
+from tlland.checkout import Checkout
+from tlland.fix import Fixer
+from tlland.lander import Lander
+from tlland.push import pin_head
 from tlpipeline.api import Waits
 from tltestkit.checked import run_checked
 from tltestkit.checks import ck, res

@@ -5,7 +5,7 @@ from rules import layout_lock as lock
 
 A = "src/taskloop/app" + "/plan/a.py"
 B = "src/taskloop/app" + "/plan/b.py"
-C = "src/taskloop/app/land/c.py"
+C = "packages/land/src/tlland/c.py"
 SECTION = "importlinter:contract:boundary"
 
 
@@ -29,7 +29,7 @@ def test_whole_node_deletion():
 
 
 def test_cross_node_move():
-    assert lock.classify_files([("R100", A, C)], {A: "app/plan", B: "app/plan", C: "app/land"}) == {
+    assert lock.classify_files([("R100", A, C)], {A: "app/plan", B: "app/plan", C: "packages/land"}) == {
         "move": [f"{A} -> {C}"]}
 
 

@@ -5,7 +5,7 @@ import pytest
 from support.narrow_hosts import Stopped
 from support.narrow_land import BdOut, FakeSyncHost
 
-from taskloop.app.land.record import Sync
+from tlland.record import Sync
 
 SHA = "abc123def456"
 

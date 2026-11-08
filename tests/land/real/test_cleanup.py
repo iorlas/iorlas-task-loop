@@ -13,10 +13,10 @@ from tltestkit.logs import records
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
-from taskloop.app.land import cleanup
-from taskloop.app.land.push import Pusher
 from taskloop.app.wire.slotfx import FX
 from tlkernel.ids import loop_key
+from tlland import cleanup
+from tlland.push import Pusher
 from tlslots import owned
 
 RUN = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}

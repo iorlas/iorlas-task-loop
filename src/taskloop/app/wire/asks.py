@@ -10,11 +10,11 @@ from tlkernel.config import EngineConfig
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
+from tlland import forge
+from tlland.cmds import Runs
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters.beadtools import bd_store
-from taskloop.app.land import forge
-from taskloop.app.land.cmds import Runs
 from taskloop.app.track.trail import now
 from taskloop.stores.real import real_stores
 

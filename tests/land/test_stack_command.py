@@ -5,9 +5,9 @@ from unittest import mock
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.app.land import stack
 from taskloop.app.wire.slotfx import FX
 from tlkernel.env import Env
+from tlland import stack
 
 
 @pytest.mark.parametrize(('value', 'flag'), [('topic', '--bead'), ('=x', '--supersede'), ('topic=', '--bead')])

@@ -12,6 +12,7 @@ from tlkernel.askspec import AskSpec
 from tlkernel.check_files import repo_key
 from tlkernel.kinds import Kind
 from tlkernel.runlayout import repo_of
+from tlland.closing import LandHistory
 from tlpipeline import api
 from tlrelease.reexec import ReexecBook
 from tlslots.engine_lock import HeldLock
@@ -22,7 +23,6 @@ from taskloop.adapters.agent import last_event_t, new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks.shell import Shell
 from taskloop.app.checks.step import StageChecks
-from taskloop.app.land.closing import LandHistory
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.reload_ports import installed_newer, locked_slot

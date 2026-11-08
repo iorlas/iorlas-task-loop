@@ -60,7 +60,6 @@ from taskloop.adapters import (
 from taskloop.adapters import (
     git as git_adapter,
 )
-from taskloop.app.land.lander import lander_over
 from taskloop.app.run import (
     entry,
     running,
@@ -77,6 +76,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.slots import Checkout, SlotGitError
+from tlland.lander import lander_over
 from tlrelease import push as release_push
 from tlslots import config as wslots_config
 from tlslots import engine_lock, marks, reset

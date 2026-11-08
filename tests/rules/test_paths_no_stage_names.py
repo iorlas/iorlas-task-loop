@@ -3,7 +3,7 @@ import ast
 from pathlib import Path
 
 STAGE_MODULES = {
-    "land": "taskloop.app.land.paths",
+    "land": "tlland.paths",
     "slot": "tlslots.paths",
     "ask": "tlasks.paths",
     "release": "tlrelease.paths",

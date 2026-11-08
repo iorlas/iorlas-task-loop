@@ -6,8 +6,6 @@ from unittest import mock
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.app.land.carry import Carry
-from taskloop.app.land.cmds import Cmds
 from taskloop.stores.runlog import RunLog
 from tlgate.cache import InputKeys, RunMemo
 from tlgate.domain.specs import repo_check
@@ -20,6 +18,8 @@ from tlkernel.gitfacts import TreeEntry
 from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha
+from tlland.carry import Carry
+from tlland.cmds import Cmds
 from tltestkit.tmpdir import TemporaryDirectory
 
 TREE, PARENT, MAIN = TreeSha("tree-n"), "q-parent", "main-sha"

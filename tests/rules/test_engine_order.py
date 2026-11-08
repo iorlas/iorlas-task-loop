@@ -27,6 +27,7 @@ LAYERS = {
 
 
 PACKAGE_SRC = {"tlpipeline": "packages/pipeline/src", "tlwork": "packages/work/src",
+               "tlland": "packages/land/src",
                "tlslots": "packages/slots/src", "tlasks": "packages/asks/src", "tlrelease": "packages/release/src"}
 
 
@@ -48,7 +49,7 @@ def imports(tree: ast.Module) -> dict[str, Path]:
             found.update({a.asname or a.name: homes[a.name] for a in n.names if a.name in homes})
             continue
         if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(
-                ("taskloop.app.", "tlpipeline.", "tlwork.", "tlslots.", "tlasks.", "tlrelease.")):
+                ("tlland.", "taskloop.app.", "tlpipeline.", "tlwork.", "tlslots.", "tlasks.", "tlrelease.")):
             package = n.module.split(".")[0]
             base, module = ((ROOT / PACKAGE_SRC[package], n.module) if package in PACKAGE_SRC
                             else (APP, n.module.removeprefix("taskloop.app.")))

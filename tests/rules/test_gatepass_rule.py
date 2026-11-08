@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 MAKERS = {"mint", "_Seal"}
-HOME = SRC / "app" / "land" / "gate.py"
+HOME = SRC.parents[1] / "packages/land/src/tlland/gate.py"
 
 
 def named(path: Path, names: set[str]) -> set[str]:
@@ -33,7 +33,7 @@ def called(path: Path, name: str) -> bool:
 class OnlyTheGateMints(Case):
     def test_no_module_but_the_gate_names_the_makers(self):
         found = {str(f.relative_to(SRC)): named(f, MAKERS) for f in sorted(SRC.rglob("*.py")) if f != HOME and "_vendor" not in f.parts}
-        assert {k: v for k, v in found.items() if v} == {}, "a GatePass is made by taskloop.app.land.gate only (mint, _Seal)"
+        assert {k: v for k, v in found.items() if v} == {}, "a GatePass is made by tlland.gate only (mint, _Seal)"
 
     def test_no_module_but_the_gate_builds_a_gatepass(self):
         others = [f for f in sorted(SRC.rglob("*.py")) if f != HOME and "_vendor" not in f.parts]

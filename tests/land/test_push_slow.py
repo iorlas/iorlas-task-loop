@@ -4,12 +4,12 @@ where its time went."""
 from support.fakegit import FakeGit
 from support.narrow_land import table_kit
 
-from taskloop.app.land import push
-from taskloop.app.land.gate import mint
-from taskloop.app.land.host import Land, Next, Phase
 from tlkernel.ids import TreeSha
 from tlkernel.landmatchers import Push as PushText
 from tlkernel.runkey import BaseSha
+from tlland import push
+from tlland.gate import mint
+from tlland.host import Land, Next, Phase
 from tltestkit.case import Case
 
 TIMED_OUT = (124, "\n(timed out after 10 min: the engine stopped it and everything it started)")

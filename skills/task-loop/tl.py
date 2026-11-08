@@ -78,7 +78,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.doctor import install
-from taskloop.app.land.lock_cmd import cmd_land_lock
 from taskloop.app.launch import dash as wire_dash
 from taskloop.app.launch import lanes as wire_lanes
 from taskloop.app.launch.release_host import release_host
@@ -104,6 +103,7 @@ from taskloop.cli import wait as cli_wait
 from taskloop.cli.ctx import Ctx, declare_stage_parts
 from tlkernel.enums import Step
 from tlkernel.env import snapshot
+from tlland.lock_cmd import cmd_land_lock
 from tlrelease import pinning
 
 HERE = Path(__file__).resolve().parent

@@ -21,7 +21,6 @@ from tltestkit.narrow import must
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.app.land import gate
 from tlgate import evidence
 from tlgate.cache import InputKeys, RunMemo, key_digest
 from tlkernel.bead import Bead
@@ -29,6 +28,7 @@ from tlkernel.checkenums import CheckStatus
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun, PassRecord, verdict_of
 from tlkernel.ids import BeadId, CheckId, TreeSha
 from tlkernel.runkey import BaseSha
+from tlland import gate
 
 
 def unverified(id="render") -> CheckResult:

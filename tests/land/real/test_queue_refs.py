@@ -7,9 +7,9 @@ import pytest
 
 # isort: split
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.land.cmds import Cmds
-from taskloop.app.land.queue_refs import Conflict, Made, QueueRefs
 from tlkernel.env import snapshot
+from tlland.cmds import Cmds
+from tlland.queue_refs import Conflict, Made, QueueRefs
 
 ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
 

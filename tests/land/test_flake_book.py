@@ -2,11 +2,11 @@
 import pytest
 from support.fake_beads import FakeBeads
 
-from taskloop.app.land.flake_book import FlakeBook
 from tlkernel.bead import BdError
 from tlkernel.beadsport import BdFailure, NewBead
 from tlkernel.flakes import FlakeLog, FlakeRow
 from tlkernel.ids import BeadId
+from tlland.flake_book import FlakeBook
 from tltestkit.memdoc import MemDoc
 
 NOW = 40 * 86400.0

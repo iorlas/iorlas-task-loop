@@ -23,7 +23,6 @@ from support.who import who
 
 import tltestkit.shellkit
 from run.test_stages import StagesTest
-from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.run import running as wrunning
 from taskloop.app.track import verbs
 from taskloop.app.wire import asks as wasks
@@ -35,6 +34,7 @@ from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 from tlkernel.run import Round
 from tlkernel.slots import SlotGitError
+from tlland.rebase import MAX_REBASE_RESETS
 from tlpipeline.api import outcomes
 from tlslots import config as wslots_config
 from tltestkit import fake_route, procsim

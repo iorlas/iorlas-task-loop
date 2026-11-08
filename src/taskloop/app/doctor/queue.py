@@ -7,10 +7,10 @@ from tlkernel.gitport import Git
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.wire import Refused
+from tlland.domain.queue_persist import from_doc
+from tlland.domain.queue_reconcile import DropRef, NotifyEjected, RemoveWorktree, ResetPending, reconcile
+from tlland.domain.queue_world import world
 
-from taskloop.domain.land.queue_persist import from_doc
-from taskloop.domain.land.queue_reconcile import DropRef, NotifyEjected, RemoveWorktree, ResetPending, reconcile
-from taskloop.domain.land.queue_world import world
 from taskloop.stores.bundle import Stores
 
 

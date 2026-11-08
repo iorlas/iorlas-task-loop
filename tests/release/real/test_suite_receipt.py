@@ -8,7 +8,6 @@ from support.release_world import release_host
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.stores.real import real_stores
 from tlgate import authorization
 from tlgate.domain.specs import gate_items
@@ -16,6 +15,7 @@ from tlkernel.env import Env
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
+from tlland.push_judge import PushStatus, judge_push
 from tlrelease import flow, gate, shell
 from tlrelease.push import push_main
 from tltestkit.case import Case

@@ -21,7 +21,6 @@ from tltestkit.procsim import real_proc
 from any_lease import Leases
 from support.memstores import fake_stores
 
-from taskloop.app.land import gate
 from taskloop.app.wire.brief import held_resources
 from tlgate import resources
 from tlgate.domain.inputs import touched
@@ -31,6 +30,7 @@ from tlkernel.config import ConfigError, EngineConfig, HostResources, ResourceSp
 from tlkernel.ids import CheckId
 from tlkernel.paths import ConfigDir
 from tlkernel.waitenums import WaitWhat
+from tlland import gate
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 UNITY = {"unity": {"limit": 1}}
