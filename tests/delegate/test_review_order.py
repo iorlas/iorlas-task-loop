@@ -24,7 +24,7 @@ from tltestkit.tmpdir import mkdtemp
 
 LIMIT_S = 10  # the Opus sweep decides about 7000 routes in process
 ROOT = Path(__file__).resolve().parents[2]
-_entry = importlib.util.spec_from_file_location("route", ROOT / "src" / "delegate" / "entry.py")
+_entry = importlib.util.spec_from_file_location("route", ROOT / "packages" / "delegate" / "src" / "delegate" / "entry.py")
 assert _entry is not None
 assert _entry.loader is not None
 route = importlib.util.module_from_spec(_entry)
@@ -33,7 +33,7 @@ _entry.loader.exec_module(route)
 
 os.environ["DELEGATE_CONFIG_DIR"] = mkdtemp()
 T = 1_000_000_000.0
-CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
+CFG = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
 
 NAMES = {
     "openai": ("OPENAI_SUBSCRIPTION", "subscription"),

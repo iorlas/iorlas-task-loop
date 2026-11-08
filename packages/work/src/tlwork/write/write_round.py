@@ -1,7 +1,7 @@
 """WriteRound: the writer's half of a round. The prompt (the whole one, or the delta of a resumed writer), the call, what the answer
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
 
-from tlgate.api import planref
+from tlgate.domain import planref
 from tlkernel import askspecs
 
 from tlwork.prompts.anchors import anchors_text

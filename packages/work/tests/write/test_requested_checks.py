@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from tlgate.api import WriterSplit
+from tlgate.domain.writer_split import WriterSplit
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId

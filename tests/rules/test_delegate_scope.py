@@ -20,7 +20,8 @@ class TestDelegateScope:
         assert not wanted("tests")
 
     @pytest.mark.parametrize(
-        "path", ["src/delegate/app/run.py", "tests/delegate/test_route.py", "skills/task-loop/_vendor/stream_proc/runner.py"]
+        "path", ["packages/delegate/src/delegate/app/run.py", "tests/delegate/test_route.py",
+                 "skills/task-loop/_vendor/stream_proc/runner.py"]
     )
     def test_a_delegate_change_runs_delegate(self, monkeypatch, path):
         monkeypatch.delenv("TL_DELEGATE_TESTS", raising=False)

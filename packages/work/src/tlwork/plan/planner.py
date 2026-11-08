@@ -5,7 +5,8 @@ import contextlib
 import copy
 from pathlib import Path
 
-from tlgate.api import affinity, repo_check
+from tlgate.domain import affinity
+from tlgate.domain.specs import repo_check
 from tlkernel import askspecs, plancheck
 from tlkernel.answers import ASSUMPTION, IRREVERSIBLE
 from tlkernel.askenums import AskClass

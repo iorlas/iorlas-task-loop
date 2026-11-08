@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tlkernel import delegate, schema
 from tlkernel.snapshots import StatusSnapshot
 
-CONTRACT = json.loads((Path(__file__).resolve().parents[2] / "src/delegate/data/contract.json").read_text(
+CONTRACT = json.loads((Path(__file__).resolve().parents[2] / "packages/delegate/src/delegate/data/contract.json").read_text(
     encoding="utf-8"))
 
 # Exact projection differences, never wildcards; a resolved exception fails until removed.

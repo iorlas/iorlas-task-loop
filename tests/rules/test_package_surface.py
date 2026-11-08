@@ -7,7 +7,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SURFACE = {"tlpipeline": ("api", "testing", "contracts")}
 PACKAGE_ONLY = {
-    "tlgate": ("api", "testing", "contracts"),
+    # api and the leaf modules tlwork and tlrelease already import (tl-e5t0.84): routing them through api.py would load land's evidence,
+    # host and ports into every plan, review, write and release closure (+5 to +27 files per stage), so the guard names the leaves instead
+    "tlgate": ("api", "testing", "contracts", "evidence", "authorization", "cache", "domain.planref", "domain.lint", "domain.affinity",
+               "domain.names", "domain.inputs", "domain.specs", "domain.writer_split"),
     "tlslots": ("api", "testing"),
     "tlasks": ("api", "testing", "contracts"),
     "tlartifacts": ("api",),
@@ -20,8 +23,8 @@ def imported_names(node: ast.Import | ast.ImportFrom, package: str) -> list[str]
         return [alias.name for alias in node.names]
     if node.level:
         return []
-    if node.module == package:
-        return [f"{package}.{alias.name}" for alias in node.names]
+    if node.module and (node.module == package or node.module.startswith(f"{package}.domain")):
+        return [f"{node.module}.{alias.name}" for alias in node.names]
     return [node.module] if node.module else []
 
 
@@ -42,7 +45,7 @@ def problems(root: Path = ROOT) -> list[str]:
                     for name in names:
                         if name == package or (
                             name.startswith(f"{package}.")
-                            and name.split(".")[1] not in allowed
+                            and not any(name == f"{package}.{a}" or name.startswith(f"{package}.{a}.") for a in allowed)
                         ):
                             problems.append(f"{path.relative_to(root)}:{node.lineno}: {name}")
     return problems
@@ -67,6 +70,10 @@ def test_package_surface():
 ] + [
     ("tlasks", "from tlasks.contracts.records import Asking\n", None),
     ("tlasks", "from tlasks import contracts\n", None),
+    ("tlgate", "from tlgate.runner import run\n", "tlgate.runner"),
+    ("tlgate", "from tlgate.domain import lint, planref\nfrom tlgate.domain.specs import repo_check\nfrom tlgate import evidence\n", None),
+    ("tlgate", "from tlgate.domain import checks\n", "tlgate.domain.checks"),
+    ("tlgate", "from tlgate.domain.lintx import plan\n", "tlgate.domain.lintx.plan"),
 ])
 def test_other_packages_use_only_public_surface(tmp_path, location, package, source, bad):
     source = source.format(package=package)

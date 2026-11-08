@@ -5,7 +5,7 @@ them by absolute name (process_lock, stream_proc, ...). This is the only bootstr
 import sys
 from pathlib import Path
 
-VENDOR_DIR = str(Path(__file__).resolve().parents[2] / "skills" / "task-loop" / "_vendor")
+VENDOR_DIR = str(Path(__file__).resolve().parents[4] / "skills" / "task-loop" / "_vendor")
 
 if VENDOR_DIR not in sys.path:
     sys.path.append(VENDOR_DIR)

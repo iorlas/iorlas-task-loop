@@ -1,7 +1,7 @@
 """What a worker is told of its checks: which it may run, which are the engine's, which were red on the untouched base too."""
 from collections.abc import Sequence
 
-from tlgate.api import norm as norm_cmd
+from tlgate.domain.names import norm as norm_cmd
 from tlkernel.checks import CheckRun
 
 from tlwork.write.host import BriefingHost

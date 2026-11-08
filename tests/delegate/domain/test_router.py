@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 HERE = Path(__file__).resolve().parent
 T = 1_000_000_000.0
-CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
+CFG = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
 GOLDEN = json.loads((HERE / "golden" / "decisions.json").read_text(encoding="utf-8"))
 
 

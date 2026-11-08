@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Protocol
 
-from tlgate.api import matching
+from tlgate.domain.inputs import matching
 from tlkernel import rundocs
 from tlkernel.checkmatchers import expand_braces
 

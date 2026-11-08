@@ -8,7 +8,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from tlgate.api import RunMemo, authorization, gate_items
+from tlgate import authorization
+from tlgate.cache import RunMemo
+from tlgate.domain.specs import gate_items
 from tlkernel.checks import Check, CheckResult
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
