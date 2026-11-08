@@ -8,8 +8,7 @@ from tlkernel.beadsport import BdFailure
 from tlkernel.ids import BeadId
 from tltestkit.membeads import MemBeads
 
-from tlareas import admission
-from tlareas.host import AreasHost
+from tlareas import policy as admission
 from tlareas.policy import Areas
 
 
@@ -23,7 +22,9 @@ class Host:
         for bid in ("x-1", "x-2"):
             self.store.put(Bead(id=BeadId(bid), title="", status="open", labels=["lane:live"]))
         self.occupancy = {}
-        self.host = AreasHost(self.store, self.running, self.lock, self.said.append, {}, "lane:" if configured else "")
+        self.host = self
+        self.areas, self.area_label_prefix = {}, "lane:" if configured else ""
+        self.area_lock, self.say = self.lock, self.said.append
 
     @contextmanager
     def lock(self):

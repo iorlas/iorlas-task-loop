@@ -107,6 +107,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         lint=lambda b: beadlint.why(b, repo, lambda: lintrun.has_children(store, b.id)),
         running=areas.running,
         area_lock=areas.area_lock,
+        areas_host=lambda cfg, say: areas_host(repo, cfg, git, who, store, say),
         wt_lock=lambda key: hold_path(cfg.lock_record(LockWhat.WORKTREE.value, key), f"pid {os.getpid()}", what=LockWhat.WORKTREE),
         start_worktree=lambda name: wslots.start_worktree(repo, git, who, name),
         claim=lambda b, wt, slot: ops.claim(repo, store, b, wt, slot, git, who, now),

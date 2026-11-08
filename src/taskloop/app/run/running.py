@@ -1,11 +1,12 @@
 """Which beads run now, and the area lock a run-task takes before the engine lock (the loop's and run-task's shared view)."""
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tlareas.host import AreasHost
+from tlareas.policy import AreaLock, AreasHost
 from tlkernel.beadsport import Beads
 from tlkernel.config import EngineConfig
 from tlkernel.gitport import Git
@@ -43,9 +44,19 @@ def area_lock(repo: Any, who: Identity) -> Any:
     return hold_path(record, f"pid {os.getpid()}", what=LockWhat.AREA)
 
 
+@dataclass(frozen=True)
+class _AreasHost:
+    store: Beads
+    running: Callable[[], dict[BeadId, str]]
+    area_lock: Callable[[], AreaLock]
+    say: Callable[[str], None]
+    areas: Mapping[str, Sequence[str] | None]
+    area_label_prefix: str
+
+
 def areas_host(repo: str, cfg: EngineConfig, git: Git, who: Identity, store: Beads | None = None,
                say: Callable[[str], None] = console.say) -> AreasHost:
     """Bind admission to one store and the shared occupancy and area lock."""
     store = store if store is not None else beadtools.bd_store(who.actor, repo)
-    return AreasHost(store, lambda: running(repo, git, who, store), lambda: area_lock(repo, who), say,
+    return _AreasHost(store, lambda: running(repo, git, who, store), lambda: area_lock(repo, who), say,
                      cfg.areas, cfg.area_label_prefix)

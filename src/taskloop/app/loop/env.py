@@ -8,10 +8,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from tlareas.policy import AreasHost
 from tlkernel import paths
 from tlkernel.bead import Bead
 from tlkernel.beadsport import Beads
-from tlkernel.config import HostResources, RepoProfile
+from tlkernel.config import EngineConfig, HostResources, RepoProfile
 from tlkernel.ids import BeadId
 from tlkernel.procport import Child, Hold
 
@@ -48,6 +49,7 @@ class LoopEnv:
     lint: Callable[[Bead], str]  # why a bead is not self-contained, "" when it is
     running: Callable[[], dict[BeadId, str]]  # {bead: where} of the runs going now
     area_lock: Callable[[], AbstractContextManager[object]]
+    areas_host: Callable[[EngineConfig, Callable[[str], None]], AreasHost]
     wt_lock: Callable[[str], AbstractContextManager[Any]]
     start_worktree: Callable[[str], str]
     claim: Callable[[BeadId, str, str], tuple[bool, str]]  # (bead, worktree, slot) -> (won, why not)

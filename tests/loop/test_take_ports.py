@@ -44,6 +44,9 @@ class FakeParks:
 def parts(slots: FakeSlots, parks: FakeParks | None = None) -> tuple[Taker, mock.Mock, mock.Mock]:
     env, run = mock.Mock(pid=7, slots=slots, asks=parks or FakeParks()), mock.Mock()
     env.now.return_value = 1.0
+    env.areas_host.side_effect = lambda cfg, say: mock.Mock(
+        store=env.store, running=env.running, area_lock=env.area_lock, say=say,
+        areas=cfg.areas, area_label_prefix=cfg.area_label_prefix)
     return Taker(env, run, lambda: mock.Mock(pause_retry=60), lambda text: None, mock.Mock(), {}), env, run
 
 

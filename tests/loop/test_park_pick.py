@@ -88,6 +88,9 @@ class Pick(Case):
     def test_take_path_cannot_claim_early_but_re_takes_a_due_pause_without_owner_action(self):
         parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient", store=ParkStore)
         env = mock.Mock(cfgdir=self.cfg, now=mock.Mock(return_value=129), claim=mock.Mock(return_value=(True, "")))
+        env.areas_host.side_effect = lambda cfg, say: mock.Mock(
+            store=env.store, running=env.running, area_lock=env.area_lock, say=say,
+            areas=cfg.areas, area_label_prefix=cfg.area_label_prefix)
         env.asks = EngineAsks(self.cfg, env.now, asks_wire.host().asks_store)
         runner = mock.Mock()
         runner.run.return_value = Verdict(Result.LANDED)

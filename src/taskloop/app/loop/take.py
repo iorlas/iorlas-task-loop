@@ -3,8 +3,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import EX_CONFIG
 
-from tlareas import admission
-from tlareas.host import AreasHost
+from tlareas import policy as admission
 from tlkernel.bdsafe import attempt
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch
@@ -65,7 +64,7 @@ class Taker:
             env.loop_lock(at.wt, at.slot, at.slot_bead, b.id)
             if at.slot_bead:
                 attempt(env.store.update, at.slot_bead, BeadPatch(set_metadata={"held_bead": b.id}))
-        host = AreasHost(env.store, env.running, env.area_lock, self.say, ecfg.areas, ecfg.area_label_prefix)
+        host = env.areas_host(ecfg, self.say)
         admitted = admission.loop(host, b, rule, lambda: env.claim(b.id, at.wt, at.slot), publish)
         if admitted.kind == "busy":
             self.say(f"{b.id}: {admitted.why}; the next bead")

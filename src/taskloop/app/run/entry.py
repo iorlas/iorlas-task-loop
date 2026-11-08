@@ -10,7 +10,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-from tlareas import admission as area_admission
+from tlareas import policy as area_admission
 from tlasks import admission, sweeps
 from tlkernel import childenv, fence
 from tlkernel.beadsport import BeadPatch, Beads
