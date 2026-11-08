@@ -5,21 +5,29 @@ import contextlib
 import functools
 import os
 import sys
+import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tlkernel import fence
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadQuery, Beads
 from tlkernel.config import SlotsConfig
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.fence import SLOT_GEN
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.ids import loop_key as repo_key
 from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.procport import Spawner
+from tlkernel.run import Reexec
 from tlkernel.slots import NotARepo, SlotFail, SlotGitError, SlotTable
 from tlkernel.slottable import LiveSlot, build_slot_table
 
@@ -159,6 +167,35 @@ def worktrees(h: SlotsHost, repo: str, git: Git, who: Identity, slots: list[Bead
     return keep
 
 
+@dataclass(frozen=True)
+class Worktree:
+    path: str
+    failed: str = ""
+
+
+def run_worktree(h: SlotsHost, worktree: str, slot: str, bead_id: BeadId, repo: str,
+                 script: Sequence[str], spawner: Spawner, who: Identity) -> Worktree:
+    """The run's slot, named or newly started worktree, with the main checkout refused."""
+    wt = worktree
+    if not wt and slot:  # the slot is the worktree
+        wt = slot_dir(repo, slot, profile_slots(repo))
+    if not wt:
+        extra = {EnvVar.TASK_LOOP_ACTOR.value: who.actor}
+        if who.session:
+            extra[EnvVar.TASK_LOOP_SESSION.value] = who.session
+        r = spawner.run([*script, "worktree", "start"], extra=extra)
+        wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
+        if not wt:
+            print("tl: no worktree: " + r.err, file=sys.stderr)
+            return Worktree("", "failed: no worktree: " + r.err[-300:])
+    wt = str(Path(wt).resolve())
+    if (Path(wt) / ".git").is_dir():  # the main checkout holds the bead database and config
+        print(f"tl: {wt} is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)",
+              file=sys.stderr)
+        return Worktree("", f"failed: {wt} is the main checkout")
+    return Worktree(wt)
+
+
 def start_worktree(h: SlotsHost, repo: str, git: Git, who: Identity, name: str | None = None) -> str:
     """This session's loop worktree (`name`: the loop's pick, default this actor's), made once and reused."""
     d = owned.loop_path(repo, name or who.actor[3:])
@@ -220,3 +257,76 @@ def owned_worktrees(h: SlotsHost, git: Git, who: Identity, op: str) -> int:
     for r in owned.survey(git, who.config, repo_key(repo), repo, slots_dir):
         print("\t".join([r.state, r.path, r.branch or "-", r.note + (f" since {stamp(r.rec.created)}" if r.rec else "")]))
     return 0
+
+
+@dataclass(frozen=True)
+class Taken:
+    bead: BeadId | None = None
+    refused: str = ""
+
+
+@dataclass(frozen=True)
+class Claim:
+    slot: str
+    worktree: str
+    bead: BeadId
+    gen: int | None
+
+
+@dataclass(frozen=True)
+class Refused:
+    why: str
+
+
+@dataclass(frozen=True)
+class Stopped:
+    pass
+
+
+def handed_slot(slot: str, env: Env) -> bool:
+    """Whether TL_REEXEC hands this run the slot its predecessor took."""
+    handed = Reexec.parse(env.get(EnvVar.TL_REEXEC))
+    return handed is not None and handed.owned == slot
+
+
+def named(h: SlotsHost, repo: str, slot: str, sb: BeadId | None, named_in_env: bool, why: str,
+          store: Beads | None, *, spawner: Spawner, git: Git, who: Identity, env: Env) -> Taken:
+    if slot and sb and named_in_env and handed_slot(slot, env):
+        return Taken(sb)
+    if slot and not (sb and named_in_env):
+        took, refused = take_named_slot(h, repo, slot, profile_slots(repo), why, store=store,
+                               spawner=spawner, git=git, who=who)
+        if not took:
+            return Taken(refused=refused)
+        return Taken(took)
+    return Taken()
+
+
+def any_slot(h: SlotsHost, repo: str, cfg_slots: SlotsConfig, bead_id: BeadId, wait: bool,
+             halt: threading.Event, say: Callable[[str], None], store: Beads | None, *,
+             spawner: Spawner, git: Git, who: Identity) -> Claim | Refused | Stopped:
+    if why := uninitialised(h, repo, cfg_slots, store, spawner=spawner, git=git, who=who):
+        return Refused(why)
+    told: list[int] = []
+
+    def waiting(ahead: int) -> None:
+        if not told:
+            say("no free slot{}; waiting in line".format(f" ({ahead} ahead)" if ahead else ""))
+            told.append(1)
+
+    got = wait_slot(h, repo, cfg_slots, "run-task " + bead_id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
+                    on_wait=waiting, prio=bead_priority(h, repo, bead_id, who, store), store=store,
+                    spawner=spawner, git=git, who=who)
+    if not got and halt.is_set():
+        return Stopped()
+    if not got:
+        return Refused("no free slot (tl slot list); --wait waits in line for one")
+    slot, worktree, sb = got
+    gen = fence.gen_of(h.peek(store or h.bd(who.actor, repo), sb), SLOT_GEN)
+    return Claim(slot, worktree, sb, gen)
+
+
+def give_back(h: SlotsHost, repo: str, slot: str, bead_id: BeadId, gen: int | None, store: Beads | None, *,
+              spawner: Spawner, git: Git, who: Identity, guard: Callable[[], AbstractContextManager[None]]) -> None:
+    with guard():
+        release_slot(h, repo, slot, bead=bead_id, mine=True, store=store, gen=gen, spawner=spawner, git=git, who=who)
