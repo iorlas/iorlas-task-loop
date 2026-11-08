@@ -89,14 +89,14 @@ cannot authorize delivery. Passes from clean gates remain reusable for the same 
 ## Delegate
 
 delegate is a library of this repo (`packages/delegate/src/delegate`, decided 2026-11-05; the iorlas-delegate plugin is retired). task-loop imports
-`delegate.api` and nothing else of it (`docs/contracts/delegate-api.md`; import-linter and ruff hold it). They touch in three places only:
+`delegate.api` and nothing else of it (`packages/delegate/docs/contracts/delegate-api.md`; import-linter and ruff hold it). They touch in three places only:
 
 1. **`delegate.api.status()`**: the lane status the dashboard's lane cards come from (the table above).
 2. **The Workers table in `skills/task-loop/SKILL.md`** maps the loop's worker kinds (reader, writer,
    reviewer, hard) to delegate's role names. That mapping is the only delegate vocabulary in this plugin. When
    delegate renames roles or changes how it is asked, update that table.
 
-3. **`delegate.api.run`** (`docs/contracts/delegate-api.md`): the engine runs each AI step with `api.run(request)` on a thread (`ApiRunner`) and
+3. **`delegate.api.run`** (`packages/delegate/docs/contracts/delegate-api.md`): the engine runs each AI step with `api.run(request)` on a thread (`ApiRunner`) and
    feeds usage with `api.status(claude_usage)` (`tl usage`). Code: `WorkerCall` in `app/workers/worker_call.py`,
    `worker_request.request`, `adapters/delegate.api_request`, `tl.py` `usage`. Before recovery, WorkerCall prepares the effective request
    and identifies the worktree, cwd, HEAD, tree contents, policy, schema and answer producer contract. Completed writer
@@ -112,6 +112,6 @@ delegate is a library of this repo (`packages/delegate/src/delegate`, decided 20
 
 The profile's `engine.writer_exec` defaults false; `engine.reviewer_other_family` defaults true. Host execution requires delegate's
 writer pin exactly `["openai"]` and a nonempty grant in its routing settings. Delegate validates binaries against its host policy.
-See `docs/contracts/delegate-api.md` for the host execution boundary and NETISO limitation.
+See `packages/delegate/docs/contracts/delegate-api.md` for the host execution boundary and NETISO limitation.
 
 Never read delegate's private state, and import only `delegate.api`. Delegate and task-loop release together; there is no compatibility shim.
