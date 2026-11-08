@@ -75,7 +75,7 @@ Every number below that does not come from that table is marked **(est.)** with 
 |---|---|---|
 | `build` | `dotnet build lifesim.slnx --nologo -warnaserror` (justfile:186-187) | MSBuild `-m` defaults to one node per logical CPU; node reuse is on; there is one shared Roslyn server (VBCSCompiler) per user |
 | `test` | `dotnet test --solution lifesim.slnx --no-build ...` (justfile:194-197), or per project (`tools/gate_plan.py:687`) | MTP runs the 3 test projects in `SUITES` (Sim.Architecture, Sim.Properties, Sim.Scenarios) side by side (default module parallelism = CPU count, **unverified for SDK 10.0.401**); xunit v3 `maxParallelThreads` defaults to the CPU count in each module; CsCheck uses the CPU count per property test unless `CsCheck_Threads` is set, and it is not set for `test` |
-| `allocation` | `... --filter-trait Lane=plain -- --parallel none` (justfile:222-223, gate_plan.py:855) | already serial |
+| `allocation` | the plain-allocation trait filter with `--parallel none` (justfile:222-223, gate_plan.py:855) | already serial |
 | `content` | `dotnet build tools/bake ... -m:1 -nodeReuse:false -p:UseSharedCompilation=false` (justfile:331) | already capped |
 | `faults` | `tools/plant.py`: one scratch worktree; per patch `dotnet test --project X` (plant.py:175), which **builds** the project, with `CsCheck_Threads=1` (plant.py:26-31) | MSBuild `-m` = CPU count on every patch build, plus the test host's xunit threads |
 | `design-tests` | `tools/run_tests_parallel.py` | `ThreadPoolExecutor(max_workers=os.cpu_count())` (run_tests_parallel.py:97), with one Python process per module |
@@ -226,7 +226,7 @@ Mac engine (gate round)                                     devbox
   them alongside the local Unity track, and the first red on either side cancels the other (`app/checks/tracks.py`, module docstring).
   This is where the wall-time gain comes from.
 - **Fallback:** if the devbox is unreachable, its identity differs from the pinned one, or the gate host lease is busy for more
-  than `lane_wait_min` (`contracts/config.py:223`), the track runs locally under the `dotnet` lease from part (a). This keeps the
+  than `account_wait_min` (`contracts/config.py:223`), the track runs locally under the `dotnet` lease from part (a). This keeps the
   devbox an overflow, not a dependency. Every fallback is written to the run log with its reason.
 - `ssh` is started through the Spawner like any check command, so a stop or a halt kills it (`app/checks/shell.py:54-66`), and the
   devbox side ends its process group when the ssh session drops (`gate-serve` treats a closed stdin as a stop).
@@ -326,7 +326,7 @@ in the round.
 9. **GATEHOST-RECEIPT: import a remote receipt over ssh, fail closed.** *Acceptance:* tests: a receipt with any key field different from
    the Mac's expected key is rejected; receipt-shaped text in check output is ignored; a dropped session imports nothing; the imported
    record has `host` = the devbox and a readable local log.
-10. **GATEHOST-LANE: eligible checks run as a remote track beside the Unity track, falling back to local.** *Acceptance:* with the devbox
+10. **GATEHOST-TRACK: eligible checks run as a remote track beside the Unity track, falling back to local.** *Acceptance:* with the devbox
     up, a src-changing lifesim gate runs the dotnet steps remotely and the Unity steps locally at the same time (dashboard shows both); a red on
     either side cancels the other; with the devbox down, the same gate runs locally under the dotnet lease and the run log names the
     fallback reason; Mac gate wall time over 10 gates is reported against the GATEHOST-MEASURE baseline.

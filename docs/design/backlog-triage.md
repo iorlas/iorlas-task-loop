@@ -1,10 +1,10 @@
 # Review-backlog triage (2026-11-07)
 
-Scope: the 72 open, non-hold children of REVIEW9 (tl-7i9k), ZOOMOUT (tl-sqd3), REVIEWFIX (tl-br2), ENCAPSULATION (tl-3cl), DASHBACK (tl-xvl) and the stage epic tl-7y6, judged against main at the time of writing and the open PRs then (#519, #522, #526, #529, #531, #533 and the pipeline R4 lane). Evidence was read by subagents with grep and git log, then spot-checked by hand for the top picks (tl-br2.20, tl-br2.5, tl-7i9k.31, tl-7i9k.41, tl-sqd3.7). Closed beads carry the verdict in their reason; STILL VALID beads keep their text.
+Scope: the 72 open, non-hold children of REVIEW9 (tl-7i9k), ZOOMOUT (tl-sqd3), REVIEWFIX (tl-br2), ENCAPSULATION (tl-3cl), DASHBACK (tl-xvl) and the stage epic tl-7y6, judged against main at the time of writing and the open PRs then (#519, #522, #526, #529, #531, #533 and the pipeline R4 stream). Evidence was read by subagents with grep and git log, then spot-checked by hand for the top picks (tl-br2.20, tl-br2.5, tl-7i9k.31, tl-7i9k.41, tl-sqd3.7). Closed beads carry the verdict in their reason; STILL VALID beads keep their text.
 
 Totals: STILL VALID 46, ALREADY DONE 19, WON'T DO 6, DUPLICATE 1.
 
-Rules applied: a design note without code is not "done" (the bead stays valid until its acceptance holds); a container epic with open children stays open and has no work of its own; a bead whose premise a later decision removed (delegate as a library, no hosted CI, no OS service, no backward compatibility) is WON'T DO. Beads in progress under another lane are marked.
+Rules applied: a design note without code is not "done" (the bead stays valid until its acceptance holds); a container epic with open children stays open and has no work of its own; a bead whose premise a later decision removed (delegate as a library, no hosted CI, no OS service, no backward compatibility) is WON'T DO. Beads in progress under another stream are marked.
 
 ## Verdicts
 
@@ -41,7 +41,7 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | tl-7i9k.43 | STILL VALID | P3 | code-cut | src/taskloop/app/release/ still exists (canary.py, catalog.py, clone.py ...); no commit cites the bead. | none |
 | tl-7i9k.44 | STILL VALID | P3 | code-cut | No commit; skills/task-loop/tl.py still 483 lines (above the shim intent) and cli/land.py plus cli/land_stack.py both exist as separate land algorithms. | none |
 | tl-7i9k.46 | STILL VALID | P3 | test | AC path is stale (domain/prompts holds only 2 small files) but prompt text lives in app/plan/prompts.py (131 lines) and prompt.py; no per-node golden prompt tests exist (no prompt goldens in tests). | none |
-| tl-7i9k.48 | STILL VALID | P3 | test | Slice 1 only (#264 dev/record_corpus.py); nightly real-lane canary and per-model scorecard not built (no scorecard code in dev/). | none |
+| tl-7i9k.48 | STILL VALID | P3 | test | Slice 1 only (#264 dev/record_corpus.py); nightly real-account canary and per-model scorecard not built (no scorecard code in dev/). | none |
 | tl-7i9k.54 | STILL VALID | P3 | code-cut | Only design note docs/design/workeruid.md landed (#266); acceptance (checks/workers run as tlgate) has no code; gated on DQ-07. | none |
 | tl-7i9k.64 | STILL VALID | P3 | code-cut | Manifest has loop_id (#92, tlkernel/run.py:211, engine.py:88) but the run table has no loop column and dev/census.py:70-84 still counts owners as stand-in. Remaining: write column, census use. | none |
 | tl-7y6.11 | STILL VALID | P3 | container | All 3 children closed but the artifacts env var and repo-declared project tools are absent: either file the missing child or close on the owner word. | #522 |
@@ -50,7 +50,7 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | tl-sqd3.18 | STILL VALID | P3 | code-cut | No RepoId type; repo_key is a bare str at 83 sites (tlkernel/check_files.py:44 repo_key, tlkernel/reponame.py:43 repo_name, domain/lifecycle/matchers.py:147). | #532 |
 | tl-sqd3.27 | STILL VALID | P3 | code-cut | carries_state still at app/run/state.py:66 and used in run/engine.py:30; host: Any in run/run_once.py:15, workers/delegation.py:10, run/stage_checks.py:16. R4b/R4c partly remove hosts. | #531,#533,#519 |
 | tl-sqd3.28 | STILL VALID | P3 | code-cut | Effects sit in the kernel contract-level code: tlkernel/bdbackup.py:46 and factorybackup.py:61,104 call os.replace; no rule test (importlinter only bans urllib/http/multiprocessing). Low harm. | none |
-| tl-sqd3.7 | STILL VALID | P3 | bug | One caffeinate keyed to children[0].pid only (app/loop/factory_verbs.py:165), so killing loop 1 drops keep-awake for all; 'lane' wording remains in factory_verbs.py and cli/factory.py. | none |
+| tl-sqd3.7 | STILL VALID | P3 | bug | One caffeinate keyed to children[0].pid only (app/loop/factory_verbs.py:165), so killing loop 1 drops keep-awake for all; factory-loop wording also needed updating in factory_verbs.py and cli/factory.py. | none |
 | tl-7y6.2 | STILL VALID | - | container | Container epic: 1 child still open; closes with it. No work of its own. | none |
 | tl-7y6.4 | STILL VALID | - | container | Container epic: 2 children still open; stage carves (#529) supersede its S3 plan, so judge it when those 2 close. | #529 |
 | tl-w7lt | STILL VALID | - | container | Container epic: 11 of 41 children still open; no work of its own. | none |
@@ -83,20 +83,20 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | tl-sqd3.8 | WON'T DO | - | - | | Owner-level release-delivery question (rca-zoomout-three.md:19: 'a design question for the owner, not a defect'); acceptance is a dated measurement on a Mac, not repo work for an agent. | none |
 | tl-br2.9 | DUPLICATE | - | - | | Park is the one typed wake since #458 (STOPCAUSE tl-sqd3.20: a paused run without a park is a loud fault); remaining attempt-keyed episodes is the same as sqd3.26 STORE. Keeper: tl-sqd3.26. | none |
 
-## Notes on STILL VALID beads that need shaping before a lane starts
+## Notes on STILL VALID beads that need shaping before a stream starts
 
 - tl-7i9k.53 (security umbrella), tl-7i9k.33 (substrate rewrite), tl-7i9k.30 (ConfigDir writers) are umbrellas: split them per acceptance item first.
 - tl-br2.7 depends on the owner answer in tl-3cl.9 (is the reload hop kept?); if the hop goes, br2.7 is moot.
 - tl-br2.8, tl-br2.15, tl-br2.19, tl-br2.18, tl-7i9k.35, tl-7i9k.37 and tl-sqd3.27 touch the pipeline files that PRs #531/#533 (pipeline R4) rewrite: start them after those land.
 - tl-sqd3.26 is the keeper for tl-br2.9 (closed as duplicate).
-- tl-xvl.4 and tl-xvl.10 are marked in progress in bd; ask their lane before taking them.
+- tl-xvl.4 and tl-xvl.10 are marked in progress in bd; ask their stream before taking them.
 
-## Top 8 to start as lanes (bug or code cut, no collision with open PRs)
+## Top 8 to start as streams (bug or code cut, no collision with open PRs)
 
 | # | id | what | files |
 |---|---|---|---|
 | 1 | tl-br2.20 | a claim is announced TAKEN before the engine starts and a pre-engine failure loses the attempt (Mac-observed loss path) | src/taskloop/app/loop/take.py, src/taskloop/app/run/entry.py, src/taskloop/app/loop/loop.py |
-| 2 | tl-br2.5 | slot generation is read+1, not an atomic compare-and-increment; bd close has no actor+generation condition (take the marks.py/pool.py half first: closing_settle.py is in the R4 pipeline lane's files) | src/taskloop/app/slots/marks.py, src/taskloop/app/pipeline/closing_settle.py, src/taskloop/app/slots/pool.py |
+| 2 | tl-br2.5 | slot generation is read+1, not an atomic compare-and-increment; bd close has no actor+generation condition (take the marks.py/pool.py half first: closing_settle.py is in the R4 pipeline stream's files) | src/taskloop/app/slots/marks.py, src/taskloop/app/pipeline/closing_settle.py, src/taskloop/app/slots/pool.py |
 | 3 | tl-sqd3.23 | a second host can start a loop on a repo: admission checks claims per bead only | src/taskloop/app/asks/admission.py, src/taskloop/app/launch/loop.py, src/taskloop/app/launch/loop_ops.py |
 | 4 | tl-7i9k.59 | no_network falls back to running the check when the host cannot sandbox; the acceptance says refuse | src/taskloop/app/checks/shell.py, src/taskloop/adapters/check_net.py |
 | 5 | tl-7i9k.31 | 106 literal FAULT_/PAUSE_/ASK_/WAIT_ strings remain; typed Kind lookup and its rule test do not exist | src/taskloop/app/land/checkout.py, src/taskloop/app/land/rebase.py, packages/kernel/src/tlkernel/kinds.py |

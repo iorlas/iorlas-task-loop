@@ -39,7 +39,7 @@ revision, so the last writer wins (`JsonStore`/`Doc`, vendored `any_json_doc`). 
 | 13 | Check durations, per-round checks | `check-durations/<repo>.json`, `runs/<run>/engine-checks*.json` | engine | RMW | W |
 | 14 | Shared flakes | `shared/<sha1>.json` | engine | RMW | C |
 | 15 | Repos index, pin, bad versions, release result | `repos.json`, `pinned.json`, `bad-versions.json`, `releases/last.json` | every tl process / release | locked or atomic RMW | C |
-| 17 | Snapshots | `snapshots/delegate.status.json`, `delegate.tried.json` | `tl lanes` chore -> dashboard | atomic | W |
+| 17 | Snapshots | `snapshots/delegate.status.json`, `delegate.tried.json` | `tl accounts` chore -> dashboard | atomic | W |
 | 18 | Dash/reflect state | `dash.json`, `reflect-*.json`, `dash.pid` | dashboard | atomic | W |
 | 19 | ADRs | `decisions/<repo>/ADR-n.json`, `uses.jsonl` | owner verbs -> engine, dashboard | atomic + append | C |
 | 20 | Run dir files | `runs/<run>/plan.json`, `handoff.json`, `pause.json`, `reexec.json`, `prepare.stamp` | engine -> engine, dashboard | `write_text`, not atomic | W |

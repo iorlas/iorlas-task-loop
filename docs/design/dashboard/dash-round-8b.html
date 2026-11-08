@@ -65,7 +65,7 @@ button{font:inherit;color:inherit}b{font-weight:600}
 .ln .fr{border-radius:0}.ln.cl .w{border-top-left-radius:0;border-bottom-left-radius:0}.ln.cr .w{border-top-right-radius:0;border-bottom-right-radius:0}
 .ln .end{position:absolute;top:1px;font-size:13px}
 .ln .cap{position:absolute;top:2px;font-size:11px;color:var(--mut);white-space:nowrap}
-/* floor */
+/* slots */
 .fbar{display:flex;gap:10px;align-items:center;padding:10px 14px 0;font-size:12px;color:var(--mut);flex-wrap:wrap}
 .leg{display:flex;gap:12px;flex-wrap:wrap}.leg span{display:inline-flex;gap:5px;align-items:center}.leg i{width:18px;height:10px;border-radius:3px;display:inline-block}
 .fl{display:grid;grid-template-columns:var(--lw,0px) minmax(0,1fr);margin:10px 14px 14px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -141,7 +141,7 @@ svg.jmp{position:absolute;left:0;top:0;pointer-events:none;z-index:1;overflow:vi
 .tr .tw{width:14px;color:var(--mut);font-size:11px;cursor:pointer;flex:none;text-align:center}.tr .mk{width:20px;flex:none;text-align:center}.tr .id{color:var(--mut);font-size:11px;font-variant-numeric:tabular-nums;width:52px;flex:none}
 .tr .tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tr .sl{color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.tr.you .sl{color:var(--you)}.tr.bad .sl{color:var(--red)}.tr.done{color:var(--mut)}
 .tr .ru{color:var(--mut);font-size:12px;white-space:nowrap}.tr .stub{color:var(--mut);font-size:12px}.tr.goal .tt{font-weight:600}
-.lanes2{padding:14px;max-width:1180px}.lt{width:100%;border-collapse:collapse;font-size:13px}.lt th{font-weight:400;color:var(--mut);font-size:12px;text-align:left;padding:4px 8px}.lt td{border-top:1px solid var(--line);padding:8px;vertical-align:middle}
+.accounts2{padding:14px;max-width:1180px}.lt{width:100%;border-collapse:collapse;font-size:13px}.lt th{font-weight:400;color:var(--mut);font-size:12px;text-align:left;padding:4px 8px}.lt td{border-top:1px solid var(--line);padding:8px;vertical-align:middle}
 .lt .nm{display:flex;gap:10px;align-items:center}.lt .nm small{display:block;color:var(--mut)}.lt .ring small{display:none}
 .ub{display:grid;grid-template-columns:1fr 44px;gap:6px;align-items:center;font-size:12px}.ub .bar{height:6px;border-radius:3px;background:var(--cell);overflow:hidden;position:relative}.ub .bar i{display:block;height:100%;background:var(--ink);opacity:.55}.ub .bar i.w{background:var(--amb);opacity:1}.ub .bar i.x{background:var(--red);opacity:1}.ub .bar b{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--amb) 0 2px,transparent 2px 4px);opacity:.5}
 .lt .m{color:var(--mut);font-size:12px}.lt .fx{font-size:12px}.lt .fx.x{color:var(--red)}.lt .fx.w{color:var(--amb)}.lt .bd{font-size:12px}.lt .bd span{display:inline-block;margin-right:8px;cursor:pointer;white-space:nowrap}
@@ -152,18 +152,18 @@ svg.jmp{position:absolute;left:0;top:0;pointer-events:none;z-index:1;overflow:vi
 </style></head><body>
 <div class="intro"><h1>Round 8b · Projects, then epics</h1>
 <p><b>Changed:</b> "rooms" was a lifesim word for bd epics. Now: <b>projects</b> (one per repo the machine runs; chips hidden when there is only one) → <b>epics</b> (bd's own word; chips only once a project is picked) → beads. With All projects, every card and tree row names its project. Added 3 task-loop beads to show two projects at once.</p>
-<div class="tg"><span class="k">Settled: Board = Flow, Floor = Slot tracks.</span>
+<div class="tg"><span class="k">Settled: Board = Flow, Slots = Slot tracks.</span>
 <span class="k">Zoom</span><span class="seg" id="optZ"><button data-v="1.6">2h</button><button data-v="1" class="on">4h</button><button data-v=".6">8h</button></span>
 <span class="k">Theme</span><span class="seg" id="optT"><button data-v="" class="on">auto</button><button data-v="light">light</button><button data-v="dark">dark</button></span></div></div>
 <div class="opt"><div class="optnote" id="note"></div></div>
 <div class="wrap"><div class="app">
 <div class="top"><span class="brand">task-loop</span>
-<nav class="nav" id="nav"><button data-t="board" class="on">🗂️ Board</button><button data-t="floor">🏭 Floor</button><button data-t="dec">🙋 Decisions<span class="n">2</span></button><button data-t="lanes">🎛 Lanes</button></nav>
+<nav class="nav" id="nav"><button data-t="board" class="on">🗂️ Board</button><button data-t="slots">🏭 Slots</button><button data-t="dec">🙋 Decisions<span class="n">2</span></button><button data-t="accounts">🎛 Accounts</button></nav>
 <div class="rt" id="rt"></div></div>
 <div class="view on" id="v-board"></div>
-<div class="view" id="v-floor"></div>
+<div class="view" id="v-slots"></div>
 <div class="view" id="v-dec"></div>
-<div class="view" id="v-lanes"></div>
+<div class="view" id="v-accounts"></div>
 <aside class="drw" id="drw"></aside>
 </div></div>
 <div class="toast" id="toast"></div>
@@ -173,39 +173,39 @@ svg.jmp{position:absolute;left:0;top:0;pointer-events:none;z-index:1;overflow:vi
 <tr><td>🙋 Decisions · Is the factory learning</td><td>asks per landed bead, repeat asks, send-backs (guard against guessing), share of asks made durable; causes biggest first with ↑↓ vs last week</td><td>✅ this is the "asks are a smell" loop made visible</td></tr>
 <tr><td>🙋 Decisions · Ledger</td><td>every ask: question → answer → outcome (📜 decision, 🛠 factory bead, ✏️ bead fixed, ⬇ demoted, once); filter chips</td><td>✅ the weekly "improve" sitting starts here</td></tr>
 <tr><td>🙋 Decisions · In force</td><td>decisions agents read at plan, with reuse counts; 0 reuses in 30 days offers prune</td><td>✅ an ADR nobody reads is noise</td></tr>
-<tr><td>🏭 Floor · 5ban.3</td><td>"🛑 stuck · ?" until you pick a reason in its drawer; 👁 Seen fades the red outline</td><td>✅ from Evocon "?" stops and ISA-101 alarm ack</td></tr>
+<tr><td>🏭 Slots · 5ban.3</td><td>"🛑 stuck · ?" until you pick a reason in its drawer; 👁 Seen fades the red outline</td><td>✅ from Evocon "?" stops and ISA-101 alarm ack</td></tr>
 </table></div>
 <script>
 const $=s=>document.querySelector(s);
 const ST=['plan','write','test','review','look','land'];
 // seg: [label, from, to, kind, slot]; kind: ''|f|live|park|parkx|wait|stuck|proj|gap ; minutes, now=0
 const B=[
-{id:'d5f.48',t:'Fix save corruption on quit',room:'Save system',slot:'mac·1',lane:'claude',col:'look',line:'4 screens ready to approve',age:'6m',loops:2,shots:4,
+{id:'d5f.48',t:'Fix save corruption on quit',room:'Save system',slot:'mac·1',account:'claude',col:'look',line:'4 screens ready to approve',age:'6m',loops:2,shots:4,
  seg:[['plan',-232,-216],['write',-216,-172],['test',-172,-163,'f'],['write',-163,-134],['test',-134,-126,'f'],['write',-126,-104],['test',-104,-96],['review',-96,-84],['🙋 answered',-84,-38,'parkx'],['review',-38,-22],['look',-22,-6],['your look',-6,0,'wait']],
  ev:[['−6m','📸','look','4 screens of the quit dialog ready for you'],['−38m','✉️','you','answered: keep autosave, add a confirm'],['−84m','🙋','reviewer · claude','asked: drop autosave on quit or keep it?'],['−126m','🧪','loop','test failed: <code>save_roundtrip</code> (2nd time)'],['−232m','🧭','planner · claude','plan: 5 steps']]},
-{id:'6dq0',t:'Rain lowers mood outdoors',room:'World',slot:'mac·2',lane:'codex',col:'working',line:'write · fixing weather_tick after a test failed',age:'31m',loops:1,
+{id:'6dq0',t:'Rain lowers mood outdoors',room:'World',slot:'mac·2',account:'codex',col:'working',line:'write · fixing weather_tick after a test failed',age:'31m',loops:1,
  seg:[['plan',-124,-104],['write',-104,-44],['test',-44,-33,'f'],['write',-33,0,'live'],['test',0,10,'proj'],['review',10,22,'proj']],
  ev:[['now','✏️','writer · codex','<code>weather_tick()</code> now clamps mood at 0 when outdoors'],['−33m','🧪','loop','test failed: <code>mood_rain_outdoor</code>'],['−124m','🧭','planner · claude','plan: 3 steps']]},
-{id:'fld.27',t:'Rent and bills every week',room:'Economy',slot:'devbox·1',lane:'claude',col:'ask',line:'Which bills are monthly, which weekly?',age:'12m',ask:1,
+{id:'fld.27',t:'Rent and bills every week',room:'Economy',slot:'devbox·1',account:'claude',col:'ask',line:'Which bills are monthly, which weekly?',age:'12m',ask:1,
  seg:[['plan',-70,-58],['write',-58,-26],['test',-26,-19],['review',-19,-12],['🙋 asking you',-12,0,'park']],
  ev:[['−12m','🙋','reviewer · claude','asked: which bills are monthly vs weekly?'],['−19m','🧪','loop','tests pass (14)'],['−70m','🧭','planner · claude','plan: 4 steps']]},
-{id:'7hv.2',t:'Pets need feeding twice a day',room:'World',slot:'devbox·1',lane:'claude',col:'done',line:'landed · came back after codex ran out',age:'1h',loops:1,
+{id:'7hv.2',t:'Pets need feeding twice a day',room:'World',slot:'devbox·1',account:'claude',col:'done',line:'landed · came back after codex ran out',age:'1h',loops:1,
  seg:[['plan',-300,-288,'','mac·2'],['write',-288,-246,'','mac·2'],['test',-246,-238,'f','mac·2'],['write',-238,-212,'','mac·2'],['⏸ codex out',-212,-205,'parkx','mac·2'],['waiting for a slot · 35m',-205,-170,'gap',null],['write',-170,-140,'','devbox·1'],['test',-140,-131,'','devbox·1'],['review',-131,-118,'','devbox·1'],['land',-118,-110,'','devbox·1']],end:'✅',
  ev:[['−110m','🚀','loop','landed on main'],['−170m','↪','loop','resumed on devbox·1 · claude from branch <code>bd/7hv.2</code> (pass ③ continues)'],['−205m','⏸','loop','parked: codex quota ran out mid-write; work kept on the branch'],['−238m','🧪','loop','test failed: <code>pet_hunger_tick</code>'],['−300m','🧭','planner · claude','plan: 3 steps']]},
-{id:'s28t',t:'Save/load screen polish',room:'Save system',slot:'devbox·2',lane:'OC Go',col:'done',line:'landed',age:'3h',shots:3,
+{id:'s28t',t:'Save/load screen polish',room:'Save system',slot:'devbox·2',account:'OC Go',col:'done',line:'landed',age:'3h',shots:3,
  seg:[['plan',-300,-288],['write',-288,-236],['test',-236,-228],['review',-228,-214],['look',-214,-196],['land',-196,-188]],end:'✅',
  ev:[['−188m','🚀','loop','landed on main'],['−300m','🧭','planner · claude','plan: 2 steps']]},
-{id:'5ban.3',t:'NPC daily schedule pathing',room:'World',slot:'devbox·2',lane:'OC Go',col:'working',line:'test failed 3× · no progress 22m',age:'22m',loops:3,bad:1,
+{id:'5ban.3',t:'NPC daily schedule pathing',room:'World',slot:'devbox·2',account:'OC Go',col:'working',line:'test failed 3× · no progress 22m',age:'22m',loops:3,bad:1,
  seg:[['plan',-180,-166],['write',-166,-120],['test',-120,-112,'f'],['write',-112,-86],['test',-86,-78,'f'],['write',-78,-52],['test',-52,-44,'f'],['write',-44,-22],['🛑 stuck',-22,0,'stuck']],
  ev:[['−22m','🛑','watcher','no new commits or tool calls for 22m'],['−44m','🧪','loop','test failed: <code>path_avoids_walls</code> (3rd time)'],['−180m','🧭','planner · claude','plan: 6 steps']]},
-{id:'d5f.16',t:'Autosave every 5 minutes',room:'Save system',slot:'mac·1',lane:'claude',col:'done',line:'landed',age:'4h',
+{id:'d5f.16',t:'Autosave every 5 minutes',room:'Save system',slot:'mac·1',account:'claude',col:'done',line:'landed',age:'4h',
  seg:[['plan',-310,-300],['write',-300,-266],['test',-266,-258],['review',-258,-248],['land',-248,-240]],end:'✅',ev:[['−240m','🚀','loop','landed on main']]},
-{id:'a3k.2',t:'Prices with a currency sign',room:'Economy',slot:'mac·3',lane:'claude 2',col:'ask',line:'Landed with "$". Real currency symbols too?',age:'1h',ask:1,soft:1,
+{id:'a3k.2',t:'Prices with a currency sign',room:'Economy',slot:'mac·3',account:'claude 2',col:'ask',line:'Landed with "$". Real currency symbols too?',age:'1h',ask:1,soft:1,
  seg:[['plan',-150,-140],['write',-140,-95],['test',-95,-88],['write · "$"',-88,-60],['review',-60,-41],['land',-41,-33]],end:'✅',
  ev:[['−60m','🙋','writer · claude','asked, not blocking: going on with "$" meanwhile'],['−150m','🧭','planner · claude','plan: 2 steps']]},
-{id:'9xq.1',t:'Fridge spoils food after 3 days',room:'Economy',slot:'mac·3',lane:'claude 2',col:'review',line:'AI review · 2 notes so far',age:'9m',
+{id:'9xq.1',t:'Fridge spoils food after 3 days',room:'Economy',slot:'mac·3',account:'claude 2',col:'review',line:'AI review · 2 notes so far',age:'9m',
  seg:[['plan',-28,-24],['write',-24,-14],['test',-14,-9],['review',-9,0,'live'],['look',0,8,'proj']],ev:[['now','👀','reviewer · claude','2 notes so far (naming, a missing test)']]},
-{id:'q1',t:'Inventory sorting by weight',room:'World',slot:'mac·2',lane:'codex',col:'backlog',line:'next on codex',seg:[['plan',24,34,'proj'],['write',34,70,'proj']]},
+{id:'q1',t:'Inventory sorting by weight',room:'World',slot:'mac·2',account:'codex',col:'backlog',line:'next on codex',seg:[['plan',24,34,'proj'],['write',34,70,'proj']]},
 {id:'q2',needs:['fld.27'],t:'Bills reminder notification',room:'Economy',col:'backlog',line:'waits for fld.27'},
 {id:'q3',needs:['6dq0'],t:'Weather forecast on the phone',room:'World',col:'backlog',line:'waits for 6dq0'},
 {id:'q4',needs:['d5f.48'],t:'Cloud save conflict dialog',room:'Save system',col:'backlog',line:'waits for d5f.48'},
@@ -215,7 +215,7 @@ const B=[
 {id:'q6',needs:['q2','a3k.2','9xq.1'],t:'Tax at year end',room:'Economy',col:'backlog',line:'waits for 2'},
 {id:'k7m.4',t:'Main menu music fade',room:'World',col:'land',line:'merging · checks 3/4',age:'1m'},
 ];
-B.push({id:'tl-8k4',t:'Asks ledger store',room:'Dashboard v2',proj:'task-loop',col:'backlog',line:'ready'},{id:'tl-9mq',t:'Kanban column from engine state',room:'Dashboard v2',proj:'task-loop',col:'backlog',line:'waits for tl-8k4',needs:['tl-8k4']},{id:'tl-7y6',t:'Contracts: RunState reader',room:'Substrate',proj:'task-loop',col:'review',slot:'devbox·1',lane:'claude',line:'AI review · clean so far',age:'4m'});
+B.push({id:'tl-8k4',t:'Asks ledger store',room:'Dashboard v2',proj:'task-loop',col:'backlog',line:'ready'},{id:'tl-9mq',t:'Kanban column from engine state',room:'Dashboard v2',proj:'task-loop',col:'backlog',line:'waits for tl-8k4',needs:['tl-8k4']},{id:'tl-7y6',t:'Contracts: RunState reader',room:'Substrate',proj:'task-loop',col:'review',slot:'devbox·1',account:'claude',line:'AI review · clean so far',age:'4m'});
 B.forEach(b=>b.proj=b.proj||'lifesim');
 const SLOTS=[['mac','mac·1','claude'],['mac','mac·2','codex'],['mac','mac·3','claude 2'],['devbox','devbox·1','claude'],['devbox','devbox·2','OC Go']];
 const COLS={flow:[['backlog','Backlog'],['working','Working'],['ask','Has questions',1],['review','AI review'],['look','Your look',1],['land','Landing'],['done','Done']],
@@ -223,11 +223,11 @@ const COLS={flow:[['backlog','Backlog'],['working','Working'],['ask','Has questi
 const NOTE={flow:['A · Flow: columns in the order work moves.','Blue rule = needs you, red = trouble. Card: title, one status line + age, stage dots, ↻ loops.'],
  you:['B · You first: "Has questions" and "Your look" merged into one column on the left.','Faster to scan; the rest keeps flow order.'],
  rooms:['C · Rooms: one row per room (bd epic), same columns.','Shows which room is busy; many empty cells.'],
- slots:['Floor A · Slot tracks: one row per slot. Each bead is one line, cut where a stage ends.','Red cut = failed test, teal = running, hatched blue = waiting on you, hatched grey = parked (answered or lane out). 7hv.2 moved from mac·2 to devbox·1: the dashed curve joins its two pieces.'],
+ slots:['Slots A · Slot tracks: one row per slot. Each bead is one line, cut where a stage ends.','Red cut = failed test, teal = running, hatched blue = waiting on you, hatched grey = parked (answered or account out). 7hv.2 moved from mac·2 to devbox·1: the dashed curve joins its two pieces.'],
  tree:['🗂️ Board · Goal tree: same beads, grouped by what they unlock.','Top = goals, under each what it needs; the bottom of each branch runs now. Project, epic and machine chips filter both Flow and Tree.'],
- lanes:['🎛 Lanes: capacity per subscription.','5 h window with a hatched forecast to the reset, the week, what runs on it and what waits for it. Locked and running-out lanes sort first.'],
+ accounts:['🎛 Accounts: capacity per subscription.','5 h window with a hatched forecast to the reset, the week, what runs on it and what waits for it. Locked and running-out accounts sort first.'],
  dec:['🙋 Decisions: "Is the factory learning?" stays on top; below it, three tabs: Waiting on you · Ledger · Decisions in force.','Opens on Waiting when something waits, else on Ledger. Ledger rows are one line each.'],
- beads:['Floor B · Bead lines: one row per bead, name on the left.','A bead that waited for a slot shows the wait as a dotted stretch inside the same line.']};
+ beads:['Slots B · Bead lines: one row per bead, name on the left.','A bead that waited for a slot shows the wait as a dotted stretch inside the same line.']};
 let O={b:'flow',f:'slots',z:1,sel:null,tab:null};
 const by=id=>B.find(x=>x.id==id);
 const work=b=>(b.seg||[]).filter(s=>s[3]!='proj');
@@ -284,9 +284,9 @@ const X=t=>(t-T0)*3*O.z;
 function frags(b){const out=[];let cur=null;for(const s of b.seg){const sl=s[3]=='gap'?null:(s[4]||b.slot);if(sl===null){cur=null;continue}if(!cur||cur.slot!=sl){cur={slot:sl,segs:[]};out.push(cur)}cur.segs.push(s)}return out}
 function axis(){let h='';for(let t=-300;t<=60;t+=30)h+=`<span style="left:${X(t)}px">${t==0?'':t<0?'−'+(-t/60)+'h':'+'+t+'m'}</span>`;return `<div class="axis">${h}</div>`}
 function grid(H){let h='';for(let t=-300;t<=60;t+=30)h+=`<div class="gl" style="left:${X(t)}px;height:${H}px"></div>`;return h}
-function floor(){const W=X(T1);let labs='',trks='',H=22;const Y={};const jumps=[];
- if(O.f=='slots'){let m='';for(const [mc,s,lane] of SLOTS){if(mc!=m){m=mc;labs+=`<div class="lab grp">${mc=='mac'?'💻':'🖥️'} ${mc}</div>`;trks+='<div class="trk grp"></div>';H+=24}
-   Y[s]=H;labs+=`<div class="lab"><b>${s}</b><small>${lane}</small></div>`;let row='';
+function slots(){const W=X(T1);let labs='',trks='',H=22;const Y={};const jumps=[];
+ if(O.f=='slots'){let m='';for(const [mc,s,account] of SLOTS){if(mc!=m){m=mc;labs+=`<div class="lab grp">${mc=='mac'?'💻':'🖥️'} ${mc}</div>`;trks+='<div class="trk grp"></div>';H+=24}
+   Y[s]=H;labs+=`<div class="lab"><b>${s}</b><small>${account}</small></div>`;let row='';
    for(const b of B.filter(b=>b.seg&&b.seg.length)){const F=frags(b);F.forEach((f,i)=>{if(f.slot!=s)return;const st=f.segs[0][1];
      const nm=(i>0?'↪ ':'')+b.id+' · '+b.t+(b.loops?` <small>↻${b.loops}</small>`:'')+(i>0?` <small>from ${F[i-1].slot}</small>`:'');
      row+=`<div class="nm" data-b="${b.id}" style="left:${X(st)}px;width:${X(f.segs[f.segs.length-1][2])-X(st)}px"><span>${nm}</span></div>`;
@@ -294,17 +294,17 @@ function floor(){const W=X(T1);let labs='',trks='',H=22;const Y={};const jumps=[
      if(i<F.length-1)jumps.push([f.slot,f.segs[f.segs.length-1][2],F[i+1].slot,F[i+1].segs[0][1]])})}
    if(s=='devbox·1')row+=`<div class="ln" style="top:18px;left:${X(0)+6}px;width:190px;cursor:default"><div class="w" style="background:none"><div class="sg gap" style="left:0;width:190px"><span>idle · no claude work ready</span></div></div></div>`;
    trks+=`<div class="trk">${row}</div>`;H+=46}}
- else{for(const b of B.filter(x=>x.seg&&x.seg.length&&x.col!='backlog')){labs+=`<div class="lab" data-b="${b.id}" style="cursor:pointer"><b>${b.t}</b><small>${b.id} · ${b.slot} · ${b.lane}${b.loops?' · ↻'+b.loops:''}</small></div>`;
+ else{for(const b of B.filter(x=>x.seg&&x.seg.length&&x.col!='backlog')){labs+=`<div class="lab" data-b="${b.id}" style="cursor:pointer"><b>${b.t}</b><small>${b.id} · ${b.slot} · ${b.account}${b.loops?' · ↻'+b.loops:''}</small></div>`;
    const S=b.seg.map(s=>s);trks+=`<div class="trk">${line(b,S,X,0,{end:b.end,top:12})}</div>`;H+=46}}
  let svg='';if(jumps.length){svg=`<svg class="jmp" width="${W}" height="${H}">`+jumps.map(([s1,t1,s2,t2])=>{const x1=X(t1)+2,y1=Y[s1]+29,x2=X(t2)-2,y2=Y[s2]+29,mx=(x1+x2)/2;
    return `<path d="M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" fill="none" stroke="var(--mut)" stroke-width="1.5" stroke-dasharray="4 4"/><circle cx="${x2}" cy="${y2}" r="2.5" fill="var(--mut)"/>`}).join('')+'</svg>'}
- $('#v-floor').innerHTML=`<div class="fbar"><div class="leg"><span><i style="background:var(--s1)"></i>stage</span><span><i style="background:var(--redbg)"></i>failed test</span><span><i style="background:var(--runbg);box-shadow:inset 0 0 0 1.5px var(--run)"></i>running</span><span><i style="background:repeating-linear-gradient(135deg,var(--youbg) 0 3px,var(--card) 3px 6px);box-shadow:inset 0 0 0 1px var(--you)"></i>waiting on you</span><span><i style="background:repeating-linear-gradient(135deg,var(--cell) 0 3px,var(--card) 3px 6px)"></i>parked</span><span><i style="box-shadow:inset 0 0 0 1px var(--line)"></i>planned</span></div></div>
+ $('#v-slots').innerHTML=`<div class="fbar"><div class="leg"><span><i style="background:var(--s1)"></i>stage</span><span><i style="background:var(--redbg)"></i>failed test</span><span><i style="background:var(--runbg);box-shadow:inset 0 0 0 1.5px var(--run)"></i>running</span><span><i style="background:repeating-linear-gradient(135deg,var(--youbg) 0 3px,var(--card) 3px 6px);box-shadow:inset 0 0 0 1px var(--you)"></i>waiting on you</span><span><i style="background:repeating-linear-gradient(135deg,var(--cell) 0 3px,var(--card) 3px 6px)"></i>parked</span><span><i style="box-shadow:inset 0 0 0 1px var(--line)"></i>planned</span></div></div>
  <div class="fl" style="--lw:${O.f=='slots'?'110px':'230px'}"><div class="labs"><div class="axh"></div>${labs}</div><div class="sc" id="sc"><div class="cv" style="width:${W+120}px">${axis()}${grid(H)}<div class="fut" style="left:${X(0)}px;width:${W-X(0)}px;height:${H-22}px"></div><div class="now" style="left:${X(0)}px;height:${H}px"></div>${svg}${O.f=='slots'?`<div class="wall" style="left:${X(45)}px;top:${Y['mac·2']}px;height:46px"></div><div class="wall" style="left:${X(45)}px;top:0;height:22px;width:0"><span style="top:4px;left:4px">⛔ codex quota ends</span></div>`:''}${trks}</div></div></div>`;
  const sc=$('#sc');sc.scrollLeft=sc.scrollWidth}
 // drawer = round 3b, filled per bead
 const shot=(sky,floor,obj)=>`<svg viewBox="0 0 160 100"><rect width="160" height="62" fill="${sky}"/><rect y="62" width="160" height="38" fill="${floor}"/><rect x="58" y="30" width="34" height="46" rx="3" fill="${obj}"/><circle cx="125" cy="20" r="9" fill="#ffe08a"/></svg>`;
 function passes(b){const P=[];let cur={c:{},end:null};for(const s of work(b)){const [n,a,e,k]=s;if(k=='gap'){continue}
-  if(k=='park'||k=='parkx'){cur.end=k=='park'?['🙋','asking you']:n.includes('codex')?['⏸','lane ran out, parked']:['🙋','asked; answered'];P.push(cur);cur={c:{},end:null,resumed:n.includes('codex')};continue}
+  if(k=='park'||k=='parkx'){cur.end=k=='park'?['🙋','asking you']:n.includes('codex')?['⏸','account ran out, parked']:['🙋','asked; answered'];P.push(cur);cur={c:{},end:null,resumed:n.includes('codex')};continue}
   const st=ST.find(x=>n.startsWith(x))||(n=='your look'?'look':n=='🛑 stuck'?'write':null);if(!st)continue;
   if(cur.c[st]&&ST.indexOf(st)<=Math.max(...Object.keys(cur.c).map(x=>ST.indexOf(x)))&&!(st=='look'&&n=='your look')&&n!='🛑 stuck'){P.push(cur);cur={c:{},end:null}}
   const prev=cur.c[st];cur.c[st]={m:(prev?prev.m:0)+(e-a),k};if(k=='f'){cur.end=['↩️','test failed: back to write']}}
@@ -317,11 +317,11 @@ function drawer(id,tab){const b=by(id);if(!b||!b.seg){toast('queued bead: no run
  O.tab=tab||(b.ask||b.col=='look'||b.bad?'now':'p'+(P.length-1));if(O.tab=='now'&&!live)O.tab='p'+(P.length-1);
  const mins=work(b).filter(s=>s[3]!='gap').reduce((a,s)=>a+s[2]-s[1],0),tok=Math.round(mins*9.5);
  const tabs=[['bead','📄 Bead']].concat(P.map((p,i)=>['p'+i,NUM[i]+' '+(p.end?p.end[0]:i==P.length-1&&live?'now':'✅')]));
- let h=`<div class="dh"><button class="x" data-close>×</button><div class="l1"><span>${b.proj} · ${b.room} · ${b.id} · ${b.slot} · ${b.lane}</span><span class="tot">⏱ ${Math.floor(mins/60)}h${String(mins%60).padStart(2,'0')} · ${tok>999?(tok/1000).toFixed(1)+'M':tok+'k'}</span></div><h3>${b.t}</h3>${trace(b)}
+ let h=`<div class="dh"><button class="x" data-close>×</button><div class="l1"><span>${b.proj} · ${b.room} · ${b.id} · ${b.slot} · ${b.account}</span><span class="tot">⏱ ${Math.floor(mins/60)}h${String(mins%60).padStart(2,'0')} · ${tok>999?(tok/1000).toFixed(1)+'M':tok+'k'}</span></div><h3>${b.t}</h3>${trace(b)}
  <div class="tabs">${tabs.map(([k,n],i)=>`<button class="tab ${O.tab==k||(O.tab=='now'&&k=='p'+(P.length-1))?'on':''}" data-tab="${k}">${n}${i==tabs.length-1&&live&&!b.ask&&b.col!='look'&&!b.bad?'<span class="lv"></span>':''}</button>`).join('')}</div></div><div class="db">`;
  if(O.tab=='bead')h+=beadTab(b);else{const i=O.tab=='now'?P.length-1:+O.tab.slice(1);h+=passTab(b,P,i,live&&i==P.length-1)}
  h+=`</div><div class="ctl"><button data-c="park">⏸ Park</button><button class="stop" data-c="stop">⏹ Stop</button><input id="nt" placeholder="💬 Note for the worker"><button class="pri" data-c="note">Send</button></div>`;
- const d=$('#drw');d.innerHTML=h;d.classList.add('open');board();navBadge();if($('#v-floor').classList.contains('on'))floor()}
+ const d=$('#drw');d.innerHTML=h;d.classList.add('open');board();navBadge();if($('#v-slots').classList.contains('on'))slots()}
 function cells(p,live){let lastIdx=-1;ST.forEach((s,i)=>{if(p.c[s])lastIdx=i});
  return `<div class="row6">${ST.map(s=>`<div class="e">${s}</div>`).join('')}${ST.map((s,i)=>{const c=p.c[s];if(!c)return `<div>${i<lastIdx?'<span style="color:var(--mut)">—</span>':''}</div>`;
   const cl=c.k=='f'?'f':c.k=='live'?'act':c.k=='wait'?'y':c.k=='stuck'?'x':'';return `<div class="v ${cl}"><b style="font-weight:500">${c.m}m</b><span class="k">${Math.round(c.m*9.5)}k</span></div>`}).join('')}</div>`}
@@ -391,38 +391,38 @@ function decisions(){const v=$('#v-dec');if(!v)return;const open=B.filter(b=>b.a
  </div><div class="causes"><div class="l">why agents asked or stopped</div><div class="par">${C.map(([k,n])=>{const d=n-(prev[k]||0);return `<span>${k=='?'?'<span style="color:var(--amb)">? no cause</span>':k}</span><span class="bar"><i class="${k=='?'?'q':''}" style="width:${n/mx*100}%"></i></span><span class="c">${n}</span><span class="d ${d>0?'bad':d<0?'good':'flat'}">${d>0?'↑'+d:d<0?'↓'+(-d):'→'}</span>`}).join('')}</div></div></div>
  <div class="dtabs">${[['wait','Waiting on you',open.length],['led','Ledger',LED.length],['adr','Decisions in force',ADR.length]].map(([k,n,c])=>`<button class="tab ${O.dt==k?'on':''}" data-dt="${k}">${n} <span class="${k=='wait'&&c?'nb':'cnt'}">${c}</span></button>`).join('')}</div>
  ${body}</div>`}
-function navBadge(){const st=B.filter(b=>b.bad&&!b.ack).length;$('#nav [data-t=floor]').innerHTML='🏭 Floor'+(st?`<span class="n" style="background:var(--red)">${st}</span>`:'')}
+function navBadge(){const st=B.filter(b=>b.bad&&!b.ack).length;$('#nav [data-t=slots]').innerHTML='🏭 Slots'+(st?`<span class="n" style="background:var(--red)">${st}</span>`:'')}
 
-const LANES=[
+const ACCOUNTS=[
  {n:'claude',plan:'Max · sonnet',h5:62,proj:78,wk:41,reset:'resets 18:40',st:'',fx:'lasts the window at this burn',slots:['mac·1','devbox·1'],run:['d5f.48','fld.27'],next:[]},
  {n:'codex',plan:'Pro · gpt-5.1',h5:91,proj:100,wk:70,reset:'resets 21:10',st:'w',fx:'runs out in ~45m at this burn; q1 then waits until 21:10',slots:['mac·2'],run:['6dq0'],next:['q1']},
  {n:'OC Go',plan:'OpenCode Go · glm-4.6',h5:55,proj:55,wk:48,reset:'resets 19:05',st:'',fx:'flat: 5ban.3 is stuck, burning nothing',slots:['devbox·2'],run:['5ban.3'],next:[]},
  {n:'claude 2',plan:'Pro · sonnet',h5:38,proj:52,wk:30,reset:'resets 20:15',st:'',fx:'lasts the window',slots:['mac·3'],run:['9xq.1'],next:[]},
  {n:'gemini',plan:'Pro · 2.5 pro',h5:100,proj:100,wk:100,reset:'weekly limit',st:'x',fx:'locked until Mon 09:00 (3d); no slot uses it',slots:[],run:[],next:[]}];
-function lanes(){const ord={x:0,w:1,'':2};const L=[...LANES].sort((a,b)=>ord[a.st]-ord[b.st]);
+function accounts(){const ord={x:0,w:1,'':2};const L=[...ACCOUNTS].sort((a,b)=>ord[a.st]-ord[b.st]);
  const rg=l=>{const c=l.st=='x'?'var(--red)':l.st=='w'?'var(--amb)':'var(--mut)',C=2*Math.PI*14,v=l.st=='x'?'3d':l.h5+'%';return `<div class="ring"><svg viewBox="0 0 34 34"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--cell)" stroke-width="3.5"/><circle cx="17" cy="17" r="14" fill="none" stroke="${c}" stroke-width="3.5" stroke-dasharray="${l.st=='x'?C:C*l.h5/100} ${C}"/></svg><b style="color:${l.st?c:'var(--tx)'}">${v}</b></div>`};
  const bar=(v,p,st)=>`<div class="ub"><span class="bar"><i class="${st}" style="width:${v}%"></i>${p>v?`<b style="left:${v}%;width:${p-v}%"></b>`:''}</span><span>${v}%</span></div>`;
  const bd=ids=>ids.map(id=>{const b=by(id);return `<span data-b="${id}">${MK[bst(b)]} ${id}</span>`}).join('')||'<span class="m">—</span>';
- $('#v-lanes').innerHTML=`<div class="lanes2"><table class="lt"><tr><th>lane</th><th style="width:210px">5 h window <span style="opacity:.7">· hatched = forecast</span></th><th style="width:130px">week</th><th>forecast</th><th>slots</th><th>running</th><th>waiting for it</th></tr>
+ $('#v-accounts').innerHTML=`<div class="accounts2"><table class="lt"><tr><th>account</th><th style="width:210px">5 h window <span style="opacity:.7">· hatched = forecast</span></th><th style="width:130px">week</th><th>forecast</th><th>slots</th><th>running</th><th>waiting for it</th></tr>
  ${L.map(l=>`<tr><td><div class="nm">${rg(l)}<div>${l.n}<small>${l.plan}</small></div></div></td><td>${bar(l.h5,l.proj,l.st)}<div class="m">${l.reset}</div></td><td>${bar(l.wk,l.wk,l.wk>=100?'x':'')}</td><td class="fx ${l.st}">${l.fx}</td><td class="m" style="white-space:nowrap">${l.slots.join('<br>')||'—'}</td><td class="bd">${bd(l.run)}</td><td class="bd">${bd(l.next)}</td></tr>`).join('')}</table>
- <p class="lsec">Sorted: locked first, then running out, then fine. The top bar shows only lanes that are not fine. Numbers come from delegate's usage feed (refreshed by the loop every 20 min).</p></div>`}
-function lanesTop(){const L=[['codex','91%','w',.91],['gemini','3d','x',0]];
+ <p class="lsec">Sorted: locked first, then running out, then fine. The top bar shows only accounts that are not fine. Numbers come from delegate's usage feed (refreshed by the loop every 20 min).</p></div>`}
+function accountsTop(){const L=[['codex','91%','w',.91],['gemini','3d','x',0]];
  const r=(n,v,k,p)=>{const c=k=='x'?'var(--red)':'var(--amb)',C=2*Math.PI*14;return `<div class="ring" title="${n}"><svg viewBox="0 0 34 34"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--cell)" stroke-width="3.5"/><circle cx="17" cy="17" r="14" fill="none" stroke="${c}" stroke-width="3.5" stroke-dasharray="${k=='x'?C:C*p} ${C}"/></svg><b style="color:${c}">${v}</b><small>${n}</small></div>`};
- $('#rt').innerHTML=L.map(l=>r(...l)).join('')+`<button class="lbtn" data-golanes>5 lanes ▾</button><div class="ring" title="refresh"><svg viewBox="0 0 34 34"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--cell)" stroke-width="3"/></svg><b id="age">2s</b></div>`}
-function note(){const k=$('#v-floor').classList.contains('on')?O.f:$('#v-dec').classList.contains('on')?'dec':$('#v-lanes').classList.contains('on')?'lanes':O.bv=='tree'?'tree':O.b;$('#note').innerHTML=`${NOTE[k][0]}<span class="v">${NOTE[k][1]}</span>`}
+ $('#rt').innerHTML=L.map(l=>r(...l)).join('')+`<button class="lbtn" data-goaccounts>5 accounts ▾</button><div class="ring" title="refresh"><svg viewBox="0 0 34 34"><circle cx="17" cy="17" r="14" fill="none" stroke="var(--cell)" stroke-width="3"/></svg><b id="age">2s</b></div>`}
+function note(){const k=$('#v-slots').classList.contains('on')?O.f:$('#v-dec').classList.contains('on')?'dec':$('#v-accounts').classList.contains('on')?'accounts':O.bv=='tree'?'tree':O.b;$('#note').innerHTML=`${NOTE[k][0]}<span class="v">${NOTE[k][1]}</span>`}
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2400)}
 function seg(id,key,fn){$(id).addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;$(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x==t));O[key]=t.dataset.v;fn()})}
-seg('#optZ','z',()=>{O.z=+O.z;floor();show('floor')});
+seg('#optZ','z',()=>{O.z=+O.z;slots();show('slots')});
 seg('#optT','t',()=>{O.t?document.documentElement.dataset.theme=O.t:document.documentElement.removeAttribute('data-theme')});
-function show(t){document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.t==t));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on',x.id=='v-'+t));note();const sc=$('#sc');if(t=='floor'&&sc)sc.scrollLeft=sc.scrollWidth}
+function show(t){document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.t==t));document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on',x.id=='v-'+t));note();const sc=$('#sc');if(t=='slots'&&sc)sc.scrollLeft=sc.scrollWidth}
 $('#nav').addEventListener('click',e=>{const t=e.target.closest('button');if(t)show(t.dataset.t)});
 document.addEventListener('click',e=>{const fo0=e.target.closest('[data-fold]');if(fo0){O.fold[fo0.dataset.fold]=!O.fold[fo0.dataset.fold];board();return}const tb=e.target.closest('[data-tab]');if(tb){drawer(O.sel,tb.dataset.tab);return}
  const c=e.target.closest('[data-b]');if(c&&!e.target.closest('.drw')){drawer(c.dataset.b);return}
- if(e.target.closest('[data-close]')){$('#drw').classList.remove('open');O.sel=null;board();if($('#v-floor').classList.contains('on'))floor();return}
+ if(e.target.closest('[data-close]')){$('#drw').classList.remove('open');O.sel=null;board();if($('#v-slots').classList.contains('on'))slots();return}
  if(e.target.closest('[data-send]')){const bx=e.target.closest('.box');const s=bx&&bx.querySelector('.stick');if(s)s.classList.add('on');return}
  const wy=e.target.closest('[data-why]');if(wy){const b=by(O.sel);b.cause=b.cause==wy.dataset.why?null:wy.dataset.why;drawer(O.sel,O.tab);decisions();return}
  if(e.target.closest('[data-ack]')){const b=by(O.sel);b.ack=!b.ack;drawer(O.sel,O.tab);return}
- if(e.target.closest('[data-golanes]')){show('lanes');return}
+ if(e.target.closest('[data-goaccounts]')){show('accounts');return}
  const bv=e.target.closest('[data-bv]');if(bv){O.bv=bv.dataset.bv;board();return}
  const rm=e.target.closest('[data-room]');if(rm){O.room=rm.dataset.room;board();return}
  const pj=e.target.closest('[data-proj]');if(pj){O.proj=pj.dataset.proj;O.room='all';board();return}
@@ -434,6 +434,6 @@ document.addEventListener('click',e=>{const fo0=e.target.closest('[data-fold]');
  const cc=e.target.closest('[data-c]');if(cc){const v=cc.dataset.c;toast(v=='park'?'⏸ parks at the next safe point; the slot takes other work':v=='stop'?'⏹ asks to confirm; branch kept':'💬 saved as a comment; the next stage reads it')}});
 let age=2,ti=0;setInterval(()=>{age=age>=5?1:age+1;const a=$('#age');if(a)a.textContent=age+'s';
  const t=$('#term');if(t&&O.sel&&TERM[O.sel]){ti++;const L=TERM[O.sel];t.innerHTML=L.slice(0,5+(ti%(L.length-4))).slice(-6).map((l,i,a)=>`<div class="${i==a.length-1?'new':''}">${l}</div>`).join('')}},1000);
-lanesTop();board();floor();decisions();lanes();navBadge();note();
-const H=location.hash.slice(1);if(H){const [v,o,b,tb]=H.split('~');if(v=='floor'&&o){O.f=o;floor()}if(v=='board'&&o){if(o=='tree')O.bv='tree';else O.b=o;board()}show(v);if(b)drawer(b,tb)}
+accountsTop();board();slots();decisions();accounts();navBadge();note();
+const H=location.hash.slice(1);if(H){const [v,o,b,tb]=H.split('~');if(v=='slots'&&o){O.f=o;slots()}if(v=='board'&&o){if(o=='tree')O.bv='tree';else O.b=o;board()}show(v);if(b)drawer(b,tb)}
 </script></body></html>

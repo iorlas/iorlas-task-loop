@@ -14,20 +14,20 @@ Order of authority, highest first:
 
 | area | canonical mock | notes |
 |---|---|---|
-| shell, Board (Flow + Goals), Floor, drawer, Decisions, Lanes, projects → epics | `dash-round-8b.html` | desktop |
+| shell, Board (Flow + Goals), Slots, drawer, Decisions, Accounts, projects → epics | `dash-round-8b.html` | desktop |
 | Decisions tab layout | `dash-round-7b.html` (same in 8b) | |
 | drawer (bead page) | round 3b drawer, as used in `dash-round-8b.html` | |
-| one line per bead, comeback | `dash-round-6b.html` | Floor details |
+| one line per bead, comeback | `dash-round-6b.html` | Slots details |
 | phone | `dash-round-9.html` (frames of `dash-round-9-app.html`) | below 600 px |
 | UI kit, consistency fixes | `dash-kit-audit-1029.md` | 15 components + BeadLine |
 | colour contract, emoji contract | `dash-review-whole-1029.md` | |
 | operator model, ask lifecycle | `dash-operator-model.md` | context only: a draft the owner never decided. Its rules count only where an approved mock shows them (7, 7b, 8b showed the make-it-stick choices, ledger chips, ADR reuse, Seen, stop chips). |
 | research | `dash-research-fleets-2.html`, `research-farms.md` | context only |
 
-The mock data is invented: bead ids, lanes, numbers, ADR texts. The code must never hard-code any of it.
+The mock data is invented: bead ids, accounts, numbers, ADR texts. The code must never hard-code any of it.
 
 Orchestrator defaults: these rules have no owner decision behind them. They are marked "(default)" where they appear, and the owner may change them freely.
-- Floor zoom of 2/4/8 h.
+- Slots zoom of 2/4/8 h.
 - Backlog shows 5 beads, then "+N more".
 - Backlog and Done fold between 600 and 900 px.
 - Stale thresholds of 30 s and 5 min.
@@ -41,8 +41,8 @@ There is one person who wears two hats, split by how often each job comes up:
 
 | hat | job | cadence | where |
 |---|---|---|---|
-| operator | run the line: answer asks, approve looks, unstick, watch quota | continuous, often from the phone | Board, Decisions, drawer, Lanes |
-| operator | fix: a stuck or silent bead, a tool failure, a locked lane | a few times a day to a few times a week | Floor, drawer |
+| operator | run the line: answer asks, approve looks, unstick, watch quota | continuous, often from the phone | Board, Decisions, drawer, Accounts |
+| operator | fix: a stuck or silent bead, a tool failure, a locked account | a few times a day to a few times a week | Slots, drawer |
 | engineer | improve the factory: turn ask clusters into decisions, config and prompt fixes | weekly sitting | Decisions (learning block, Ledger) |
 
 There is no verbosity slider and there are no per-role views. Each view answers one question:
@@ -50,23 +50,23 @@ There is no verbosity slider and there are no per-role views. Each view answers 
 | tab | question | altitude |
 |---|---|---|
 | 🗂️ Board | where is each bead, what needs me | high: Kanban (Flow) or Goals tree |
-| 🏭 Floor | what is each slot doing, where is it stuck | detailed: time × slots |
+| 🏭 Slots | what is each slot doing, where is it stuck | detailed: time × slots |
 | 🙋 Decisions | what waits on me, is the factory learning | asks and their outcomes |
-| 🎛 Lanes | do we have capacity | quota per subscription |
+| 🎛 Accounts | do we have capacity | quota per subscription |
 
 Asks are a smell. Each one costs the owner time and may point to a missing decision, a weak bead text or a gap in the environment. The dashboard therefore answers fast and then offers to make the answer durable.
 
 ## 2. Global rules
 
 ### 2.1 Shell
-- **Desktop.** The top bar holds the brand, the tabs (🗂️ Board · 🏭 Floor · 🙋 Decisions · 🎛 Lanes) and, on the right, the lane rings for lanes that are not fine, "N lanes ▾" (opens Lanes) and a refresh button that shows the data age in seconds inside a circle.
+- **Desktop.** The top bar holds the brand, the tabs (🗂️ Board · 🏭 Slots · 🙋 Decisions · 🎛 Accounts) and, on the right, the account rings for accounts that are not fine, "N accounts ▾" (opens Accounts) and a refresh button that shows the data age in seconds inside a circle.
 - **Phone, below 600 px.** It has its own shell; see §9.
-- **Count badges.** Floor shows the number of unacknowledged stuck beads (red). Decisions shows the number of open asks (blue). No other tab carries a badge.
+- **Count badges.** Slots shows the number of unacknowledged stuck beads (red). Decisions shows the number of open asks (blue). No other tab carries a badge.
 - **Browser tab title.** It carries the number of open asks plus stuck beads, e.g. "(3) task-loop".
 - **Bead ids.** One format everywhere: the bd id as bd prints it (e.g. `fld.27`), prefixed with the project only when All projects is selected.
 - **Selection.** Only the selected bead is marked (ink outline), once per view. Nothing else lights up with it; the owner found cascading highlights confusing (4c).
 - **No "since HH:MM" banner** (4g). The morning report replaces it later (§14).
-- **Drawer behaviour.** Any bead anywhere (card, tree row, bar, ledger id, lane chip) opens the bead drawer (§6). The drawer is the bead page; there is no separate bead page. A deep link reopens it after a reload.
+- **Drawer behaviour.** Any bead anywhere (card, tree row, bar, ledger id, account chip) opens the bead drawer (§6). The drawer is the bead page; there is no separate bead page. A deep link reopens it after a reload.
 - **Deep link format.** `#<tab>~<view option>~<bead>~<drawer tab>`, e.g. `#board~~fld.27~p1`. UI state that must survive a refresh: the tab, the Board mode, the filters, the open drawer, the drawer tab, open folds, and typed drafts.
 
 ### 2.2 Projects, epics, beads
@@ -75,21 +75,21 @@ Asks are a smell. Each one costs the owner time and may point to a missing decis
 - **Machines.** The machine chips (All first) list one chip per machine with its own name and icon. Machines are open-ended: Mac, devbox, Docker, remote.
 - **One filter pattern.** All filter chips follow it: "All" first, text only, no counts. A filter with one possible value is hidden.
 - **Project names in the UI.** With All projects selected, every card, tree row and drawer header names the project.
-- **Universal UI.** The skill is universal. No project-specific words appear in the UI: no "rooms", no lifesim terms. The UI terms are project, epic, bead, slot, lane, pass, stage, ask, look.
+- **Universal UI.** The skill is universal. No project-specific words appear in the UI: no "rooms", no lifesim terms. The UI terms are project, epic, bead, slot, account, pass, stage, ask, look.
 
 ### 2.3 Colour contract (one meaning per colour)
 | token | meaning | never used for |
 |---|---|---|
 | teal `--run` | live: running now | selection |
-| red `--red` | trouble: stuck, worker exited, tokens ≥ 4× usual | needs-you, lane bars |
-| amber `--amb` | watch: tokens ≥ 2×, send-backs, lane running out | |
+| red `--red` | trouble: stuck, worker exited, tokens ≥ 4× usual | needs-you, account bars |
+| amber `--amb` | watch: tokens ≥ 2×, send-backs, account running out | |
 | blue `--you` | needs you: open ask, your look | selection, primary buttons |
 | ink `--ink` | selection, primary buttons, active tab underline | |
 | green `--ok` | done, good trend | "ready" (ready is grey ▷) |
 | violet | tokens (cell tint by absolute token bands) | |
 
 - **Palette.** Light = "Current" cream; dark = "Current" dark. The tokens are in `dash-round-8b.html :root`, with AA contrast fixed. Every colour comes from a token; no hard-coded hex or rgba appears in components.
-- **Meters.** Meters are neutral ink. State is shown by a Tag or a marker, never by bar colour, except for the lane bars (§8), which use the status colours by design.
+- **Meters.** Meters are neutral ink. State is shown by a Tag or a marker, never by bar colour, except for the account bars (§8), which use the status colours by design.
 - **Data freshness.** It is shown as text or as the refresh circle, never as a green dot.
 
 ### 2.4 Markers (emoji contract)
@@ -98,7 +98,7 @@ Asks are a smell. Each one costs the owner time and may point to a missing decis
 | ▶ | running (plus a teal dot on the current pass) |
 | 🙋 | asks you (blocking) / your look |
 | ⏩ | asked, not blocking: went on with a default |
-| ⏸️ | parked: by an ask, by the owner, or by a lane running out. The parked line says which. |
+| ⏸️ | parked: by an ask, by the owner, or by an account running out. The parked line says which. |
 | ▷ | ready (grey) |
 | ⏳ | blocked by another bead |
 | ✅ | bead done |
@@ -126,7 +126,7 @@ Asks are a smell. Each one costs the owner time and may point to a missing decis
 ### 2.6 Tokens and time
 - **Tokens only.** Dollars are never shown.
 - **Fresh tokens.** "Fresh" = input − cached + output, as in today's cockpit layer.
-- **Usual.** "Usual" is the median per model lane, with its sample size shown. It is advisory (grey) until the lane has 5 landed beads.
+- **Usual.** "Usual" is the median per model account, with its sample size shown. It is advisory (grey) until the account has 5 landed beads.
 - **Warnings.** At ≥ 2× usual tokens the bead total turns amber; at ≥ 4× it turns red.
 - **Cell tint.** The violet cell tint uses fixed absolute token bands, never a share of the bead (a share would recolour old cells when a new pass arrives).
 - **Silence limits.** These are fixed per stage. A stage silent past its limit makes the bead 🛑 stuck. The default limits live in one place in config.
@@ -153,7 +153,7 @@ Asks are a smell. Each one costs the owner time and may point to a missing decis
   - stage dots: one per stage (plan, write, test, review, look, land), grey when done, teal pulsing when current, blue when waiting on you, red when stuck;
   - ↻N loops, amber, and red at > 2.
   A left rule is blue for needs-you and red for trouble.
-- **Backlog column.** It shows the first 5 beads, then "+N more" (default). Done shows compact rows. A ready bead that no slot has picked up shows why it waits: lane out until HH:MM, its area is busy, it is held, or no slot fits. Today's Roadmap "Held back" logic supplies this.
+- **Backlog column.** It shows the first 5 beads, then "+N more" (default). Done shows compact rows. A ready bead that no slot has picked up shows why it waits: account out until HH:MM, its area is busy, it is held, or no slot fits. Today's Roadmap "Held back" logic supplies this.
 - **Wide screens.** All columns are visible; they shrink, and none scrolls sideways. Between 600 and 900 px, Backlog and Done fold to their headers (default).
 
 ### 3.1 Board: Goals (tree)
@@ -169,9 +169,9 @@ Asks are a smell. Each one costs the owner time and may point to a missing decis
 - **Shared children.** A bead needed by two parents is shown once in full; other places show a ⤴ stub that links to it.
 - **Sort.** Within a level the order is stuck, ask, you, run, blocked, ready, done.
 
-## 4. Floor: slot tracks
+## 4. Slots: slot tracks
 
-- **Rows.** One row per slot, grouped by machine. Each group header carries its icon and name; each row label shows the slot name and lane.
+- **Rows.** One row per slot, grouped by machine. Each group header carries its icon and name; each row label shows the slot name and account.
 - **The bead line.** Each bead on a slot is one continuous line, cut into stage segments by 1 px inner rules, never by rounded corners between parts. The line has radius 6 at its outer ends only. Above the line sit the bead id and title, plus ↻N. When the line starts before the visible area, the name sticks to the left edge, so it stays on screen while the bar runs past the edge (decision 5).
 - **Segment kinds:**
 
@@ -181,15 +181,15 @@ Asks are a smell. Each one costs the owner time and may point to a missing decis
 | failed test | red tint |
 | live | teal tint, pulsing, teal outline on the whole line |
 | asking you | blue hatch, blue outline |
-| answered / parked by a lane | grey hatch |
+| answered / parked by an account | grey hatch |
 | your look | blue tint |
 | stuck | red tint, red outline; label "🛑 stuck · <cause or ?>" |
 | projected | white with a border, on the hatched future side |
-| waiting for a slot | dotted stretch, in the drawer trace only (the Floor shows the comeback instead) |
+| waiting for a slot | dotted stretch, in the drawer trace only (Slots shows the comeback instead) |
 
 - **Comeback.** A parked bead resumed in another slot shows as two pieces, one per slot. A dashed curve joins the end of the first piece to the start of the second. The first piece ends with "→ <new slot>"; the second starts with "↪ … from <old slot>".
-- **Time axis.** Hours back, "now" as a vertical line, and the future hatched. A lane wall (e.g. "⛔ codex quota ends") is labelled on the axis row and never over names. Zoom offers 2 h, 4 h and 8 h (default); the view opens scrolled to now.
-- **Idle slot.** It shows a dotted "idle · no <lane> work ready" span after now. It shows no "next" (decision 1e).
+- **Time axis.** Hours back, "now" as a vertical line, and the future hatched. An account wall (e.g. "⛔ codex quota ends") is labelled on the axis row and never over names. Zoom offers 2 h, 4 h and 8 h (default); the view opens scrolled to now.
+- **Idle slot.** It shows a dotted "idle · no <account> work ready" span after now. It shows no "next" (decision 1e).
 - **Stuck.** The line keeps a red outline until a cause is picked or 👁 Seen is pressed. Seen fades the outline and mutes the alert until something changes.
 - **Legend.** One line above the tracks.
 
@@ -247,10 +247,10 @@ The chosen outcome is stored on the ask and feeds the Ledger and the learning st
 The drawer opens from the right, 640 px wide, with a ⤢ toggle for full width (review 1029 item 8). It is full width below 900 px and full screen on the phone (§9). It closes with ×, Esc or a click outside.
 
 - **Header:**
-  - project · epic · bead id · slot · lane;
+  - project · epic · bead id · slot · account;
   - on the right, the totals: ⏱ elapsed across all passes (replans included) · tokens (amber or red per §2.6) · ⚠N, which opens the problem list (popover on desktop, sheet on phone);
   - the full title.
-- **Trace.** The whole bead as one line, as on the Floor, fitted to the drawer width, with ticks at start, middle and now.
+- **Trace.** The whole bead as one line, as on Slots, fitted to the drawer width, with ticks at start, middle and now.
 - **Tabs:**
   - 📄 Bead;
   - then one tab per pass: ①②③… Each is followed by its ending marker (↩️ 🔁 🙋 ⏸ ✅), or "now" with a teal dot for the live pass.
@@ -311,11 +311,11 @@ The tab opens on Waiting when something waits, otherwise on Ledger.
   - A decision with 0 reuses in 30 days shows amber and offers prune.
   - A one-line note: agents read these at plan, and `tl ask` checks them first.
 
-## 8. Lanes tab
+## 8. Accounts tab
 
-- **Rows.** One row per subscription lane. A lane is a license (e.g. "claude Max", "codex Pro", "OC Go" for OpenCode Go), not a harness. There is no "opencode" lane.
+- **Rows.** One row per subscription account. An account is a license (e.g. "claude Max", "codex Pro", "OC Go" for OpenCode Go), not a harness. There is no "opencode" account.
 - **Columns:**
-  - lane: a ring and its name; under it, the plan and model;
+  - account: a ring and its name; under it, the plan and model;
   - 5 h window: a used bar, then a hatched forecast to the reset at the current burn rate, the percentage, and "resets HH:MM";
   - week: a bar;
   - forecast: plain text, e.g. "runs out in ~45m at this burn; q1 then waits until 21:10";
@@ -324,8 +324,8 @@ The tab opens on Waiting when something waits, otherwise on Ledger.
   - waiting for it.
 - **Sort.** Locked first, then running out, then fine.
 - **Rings.** The number sits inside the ring: a percentage, or the time to unlock rounded to one unit (3d, 5h, 42m). The ring is larger than in the 4-series mocks.
-- **Stale.** A lane whose status is older than 1 h shows greyed, with its age and "run tl lanes".
-- **Top bar.** The top bar shows only lanes that are not fine. "N lanes ▾" opens this tab.
+- **Stale.** An account whose status is older than 1 h shows greyed, with its age and "run tl accounts".
+- **Top bar.** The top bar shows only accounts that are not fine. "N accounts ▾" opens this tab.
 - **Data source.** Delegate's usage feed. The loop refreshes it every 20 min; the dashboard never calls a vendor.
 
 ## 9. Phone (below 600 px)
@@ -340,8 +340,8 @@ This is its own layout over the same data and content renderers. The desktop is 
   - primary actions in the bottom third;
   - `env(safe-area-inset-*)` respected;
   - system back closes the top layer, in the order sheet → bead page → goal level (history states).
-- **Header.** The tab title (large) and one pill listing only the lanes in trouble, e.g. "● gemini ● codex 91%"; tapping it opens Lanes.
-- **Bottom tab bar.** Board · Floor · Decisions · Lanes, with badges: Floor stuck (red), Decisions open asks (blue).
+- **Header.** The tab title (large) and one pill listing only the accounts in trouble, e.g. "● gemini ● codex 91%"; tapping it opens Accounts.
+- **Bottom tab bar.** Board · Slots · Decisions · Accounts, with badges: Slots stuck (red), Decisions open asks (blue).
 - **Board:**
   - **Controls.** A segmented Flow · Goals and a Filter button. The Filter button opens a bottom sheet with project, epic (after a project is picked) and machine chips, which wrap at 40 px, plus Clear and "Show N beads". An active filter shows a summary line with Clear.
   - **Flow sections:** 🛑 Stuck · 🙋 Needs you (has questions plus your look) · ▶ Working · 👀 AI review · 🚀 Landing · ▷ Backlog (folded) · ✅ Done today (folded).
@@ -352,14 +352,14 @@ This is its own layout over the same data and content renderers. The desktop is 
   - It shows the title, meta lines, the trace fitted to the width with no labels in segments, sticky pass tabs at 46 px, and the pass content per §6. The terminal wraps.
   - The bottom bar holds ⏸ Park · ⏹ Stop · ✉️ Note. A look shows ✅ Approve → land · Note instead.
   - Stop opens a confirm sheet, never one tap. Note opens a sheet with a 16 px textarea.
-- **Floor.** It opens with counts: running · stuck · your look · free. Under them is one card per slot holding:
-  - the machine icon, slot name and lane, with a state pill (running, stuck Nm, your look, free);
+- **Slots.** It opens with counts: running · stuck · your look · free. Under them is one card per slot holding:
+  - the machine icon, slot name and account, with a state pill (running, stuck Nm, your look, free);
   - the current bead's title;
   - the stage and its minutes, ↻N, "↪ from <slot>", and "next: <bead>" on a busy slot only (an empty slot shows no next, 1e);
   - a 2 h strip in segment colours, with "2 h ago · 1 h · now".
   A slot whose bead parked on an ask reads "Free · <bead> parked here · waits on your answer".
 - **Decisions.** The same content as desktop: the learning panel (2×2 stats, causes), sticky three-way tabs (Waiting · Ledger · In force), the ledger as stacked rows, and ADR reuse under its text.
-- **Lanes.** One card per lane, worst first: a 46 px ring, the name and plan, reset and slots, a bar with the forecast hatch, the forecast text, and bead chips.
+- **Accounts.** One card per account, worst first: a 46 px ring, the name and plan, reset and slots, a bar with the forecast hatch, the forecast text, and bead chips.
 
 ## 10. States
 
@@ -372,7 +372,7 @@ This is its own layout over the same data and content renderers. The desktop is 
 | server unreachable | full-width red line under the header, retry with backoff; keep last data greyed |
 | worker exited | 💀 on the bead, red; drawer shows exit code and last 20 lines |
 | no baseline yet | token totals grey with "usual: n=3 of 5" |
-| lane status stale > 1 h | greyed lane row with age and "run tl lanes" |
+| account status stale > 1 h | greyed account row with age and "run tl accounts" |
 | error in one panel | that panel shows the error line; other panels keep working |
 
 ## 11. Data and API
@@ -391,11 +391,11 @@ The dashboard backend needs were sent to the refactor session as a heads-up on 2
 | decisions in force (ADRs) | none (`intake.py` has a `decision` verb that leaves a bead comment) | a decision store (one file per ADR in the repo, e.g. `docs/decisions/`), read at plan, cited by id; a reuse counter from plan citations |
 | stuck | `views/live_state.py` `silent` (fixed 60 s, worker lines), `hung`; `signals.py` churn | stuck = silent past a per-stage limit, or the same check red 3×; also "no commits for N min" (default); stuck `cause` and `ack` stored per bead run |
 | controls | CLI `tl stop`, `tl hold`, `tl hint` (owner_hint, read on the next run), `tl slot hold/release`; dash POSTs only answer, withdraw, look | `tl` verbs + POSTs for park (bead, at the next safe point), stop (one bead), note (a comment read at the next stage start, not only the next run), ack, cause, stick; restart-stage later |
-| lanes | `api/lanes.py` card (`usage[{window, used_pct, resets_at}]`, `out_until`), via the `tl lanes` snapshot | forecast (burn rate from the last hour of `AiCall` tokens per lane); a lane → slots map; "waits for it" from queue rows that need the lane |
-| slots | `tl slot list` (name, bead, status, holder); `LoopState`; slot beads per host | the slot's lane or harness recorded on the slot; a machine field; one dashboard per machine |
+| accounts | `api/accounts.py` card (`usage[{window, used_pct, resets_at}]`, `out_until`), via the `tl accounts` snapshot | forecast (burn rate from the last hour of `AiCall` tokens per account); an account → slots map; "waits for it" from queue rows that need the account |
+| slots | `tl slot list` (name, bead, status, holder); `LoopState`; slot beads per host | the slot's account or harness recorded on the slot; a machine field; one dashboard per machine |
 | projects | `~/.config/task-loop/repos.json` (`tl register`) | none |
 | epics, needs | `/api/graph`, `views/graph.py`, `api/beads.py` deps | parent/epic on each bead in the snapshot; the goal-roots builder |
-| tokens, time, artifacts | `AiCall.tokens`, fresh formula in roadmap briefs, `/api/artifact`, `/api/look-shot` | tokens per stage per pass in the bead endpoint; usual per model lane with n |
+| tokens, time, artifacts | `AiCall.tokens`, fresh formula in roadmap briefs, `/api/artifact`, `/api/look-shot` | tokens per stage per pass in the bead endpoint; usual per model account with n |
 | live tail, tool calls | `/api/live` (paged events, `tool_start`/`tool_end`, long-poll `wait=`), byte-offset tails | a tool-call list shaped for the drawer (kind, name, ok/failed) |
 | learning | `tl report` card, `reflect` cause digest (`/api/reflections`), `traces.jsonl` fingerprint | weekly series for the four stats; send-backs per bead stored; durable share from ask outcomes |
 | auth | none: GETs and POSTs open; the bind is loopback and Tailscale only (`bind.allowed_addr`) | Denis 2026-10-31 |
@@ -405,12 +405,12 @@ The dashboard backend needs were sent to the refactor session as a heads-up on 2
 - **Process.** One dashboard per machine. It keeps running after every Claude session closes (it is a detached process and exits after its idle limit). `tl dash ensure` is idempotent: running it again, from any number of sessions, never starts a second server (decision 1b).
 - **Data path A.** The server keeps what it has read in process memory and reads only new bytes, using an offset and size per file. A restart reads everything once. Measure warm refresh and cold start before adding any persisted cache.
 - **Snapshot.** `GET /api/snapshot` returns one JSON document holding everything the four tabs need. Filters are applied on the client.
-  - `projects[]`, `machines[]`, `slots[]` (machine, name, lane, current bead, state);
+  - `projects[]`, `machines[]`, `slots[]` (machine, name, account, current bead, state);
   - `beads[]` (id, project, epic, title, column, marker, status line, age, loops, needs[], cause, ack, totals);
   - `passes[bead]` (pieces: stage, slot, start, end, kind, outcome);
   - `asks.open[]` (the full card), `asks.ledger[]`;
   - `decisions[]` (ADR id, text, reuses, age), `learning` (the four weekly series plus causes this week and last week);
-  - `lanes[]` (window %, forecast %, reset, week %, locked until, slots, running, waiting, status age);
+  - `accounts[]` (window %, forecast %, reset, week %, locked until, slots, running, waiting, status age);
   - `server` (version, data age, loop state per project).
 - **Per bead.** `GET /api/bead?project&id` returns the full drawer: passes with stage cells, messages per pass, tool calls per stage, artifacts, description, acceptance, comments, waits for, unblocks.
 - **Live.** The live tail of the running worker (terminal lines, tool calls) reuses the run's long-poll, `GET /api/live?project&id&since&wait`. No SSE is added. Everything else polls the snapshot every 2.5 s while the page is visible, and at once when the page regains focus. Polls are keyed by version, so an unchanged snapshot returns 304.
@@ -437,7 +437,7 @@ These live in pure Python functions under `tldash/views/`, each with fixture tes
 - comeback joins;
 - the roll-up;
 - the goal roots;
-- the lane forecast;
+- the account forecast;
 - the learning series;
 - the cause Pareto.
 The client only lays out.
@@ -445,14 +445,14 @@ The client only lays out.
 ## 12. Frontend build
 
 - **Runtime.** Preact + HTM, vendored as one checked-in file, pinned by hash, with no build step. Components are keyed by bead, run and event id. UI state (open ids, drafts, selection, scroll) is kept apart from server snapshots, so a refresh never loses a draft, an open fold, focus or scroll. The terminal tail stays imperative.
-- **Files.** `static/css/{tokens,kit,layout,phone}.css`, `static/js/{app,api,state,format}.js`, `static/js/ui/` (kit components), `static/js/views/{board,goals,floor,drawer,decisions,lanes,phone}.js`, `static/vendor/ui-runtime.js`. `http.py` serves an asset allowlist.
+- **Files.** `static/css/{tokens,kit,layout,phone}.css`, `static/js/{app,api,state,format}.js`, `static/js/ui/` (kit components), `static/js/views/{board,goals,slots,drawer,decisions,accounts,phone}.js`, `static/vendor/ui-runtime.js`. `http.py` serves an asset allowlist.
 - **Kit (the audit's 15 components plus BeadLine; one look each):**
   - Tokens, Button, FilterChips (with All), Tag, CountBadge, Totals (the one home of the token and time thresholds of §2.6);
   - Tabs: one look, a 2 px ink underline;
   - Panel + SectionHeader, Marker;
   - Meter: one size;
   - BeadRow, StageCard (Totals + StageCells + messages, the 1k slot card living on in the drawer);
-  - BeadLine: the one-line bead, used by the Floor, the trace and the phone strip;
+  - BeadLine: the one-line bead, used by Slots, the trace and the phone strip;
   - AskCard, Drawer/Sheet;
   - Message line;
   - Overlays: Popover, Toast, EmptyState.
@@ -469,11 +469,11 @@ The client only lays out.
 | 1 | kit + shell + snapshot endpoint (read-only): tabs, header, filters, projects → epics → machines, deep links, states (§10) | `components.html` renders every kit component; snapshot fixture test; shell on desktop and phone |
 | 2 | Board Flow + drawer read-only (passes, stage cells, messages, Bead tab, live tail via long-poll) | column derivation tests over recorded engine logs; drawer of a 3-pass bead matches the mock |
 | 3 | asks: card, answer + undo, ask back + helper, looks, Decisions › Waiting; `tl ask` validation + similar search | answering from the card and the drawer; invalid ask rejected; similar ask cited |
-| 4 | Floor slot tracks + comeback; stuck detection + cause + ack; Floor badge | a recorded comeback renders as two pieces with a curve; stuck fires at the stage limit |
+| 4 | Slots slot tracks + comeback; stuck detection + cause + ack; Slots badge | a recorded comeback renders as two pieces with a curve; stuck fires at the stage limit |
 | 5 | Decisions › learning block, Ledger, In force; make it stick (5 outcomes); ADR reuse counts | stats recomputed from a fixture ledger; prune offered at 30 days 0 reuse |
 | 6 | controls: park, stop, note, ack, cause | each verb round-trips through `tl` and shows in messages |
 | 7 | Goals tree (desktop) + drill-down (phone) | roots/children from bd deps; shared child stub |
-| 8 | Lanes tab + header pill + forecast | sort order; stale lane greyed |
+| 8 | Accounts tab + header pill + forecast | sort order; stale account greyed |
 | 9 | phone shell complete (§9) | phone checks below pass on 390×844 |
 
 **Checks for every slice:**

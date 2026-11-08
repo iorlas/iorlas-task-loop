@@ -17,7 +17,7 @@ Decision for Denis. Nothing moves until he picks; this note only compares.
 | | A. Stay: isolated package in this repo (today) | B. Move to the shelf |
 |---|---|---|
 | Release drift between two repos | none: one `dev/release.py`, one version | returns: delegate gets its own tag, the engine pins it |
-| Shelf constitution | not involved | Article VI/VIII: a shelf piece is generic substrate pulled by consumers (DEEP, STABLE, WINS; derived consumer list; zero active consumers means orphaned). delegate is a product: lanes, accounts, skills, a plugin; its only consumer is task-loop. Article III: no flags, no shims; the delegate JSON contract and lane config are exactly the optionality the shelf forbids |
+| Shelf constitution | not involved | Article VI/VIII: a shelf piece is generic substrate pulled by consumers (DEEP, STABLE, WINS; derived consumer list; zero active consumers means orphaned). delegate is a product: accounts, skills, a plugin; its only consumer is task-loop. Article III: no flags, no shims; the delegate JSON contract and account config are exactly the optionality the shelf forbids |
 | Isolation | enforced here by import-linter (`package-*` contracts) and `delegate.api` | would be a repo boundary, stronger but paid with release steps on every change that touches the seam |
 | Cost | zero | a Kind for products in the shelf catalog (none exists), a catalog entry, a tag flow, a second CI-less repo to gate, the plugin data folder rename |
 | Who else uses it | nobody (Denis: "no one uses it, aside from us") | nobody: no consumer demonstrably breaks without it (Article V keeps it `candidate`, inert) |
@@ -34,7 +34,7 @@ Decision for Denis. Nothing moves until he picks; this note only compares.
 
 **A, final.** The shelf is for generic, multi-consumer substrate; delegate is a single-consumer product whose contract is already
 enforced in-repo. Moving it would reintroduce the release drift Denis wanted gone. If a second consumer ever appears, extract its
-generic pieces (not the lanes) to the shelf then, as any `any-*` piece.
+generic pieces (not the accounts) to the shelf then, as any `any-*` piece.
 
-Consequence if Denis picks A: close tl-w7lt.37 with his pick quoted, and unblock tl-w7lt.38.11 (LANEPURGE, lane to account/track), which
+Consequence if Denis picks A: close tl-w7lt.37 with his pick quoted, and unblock tl-w7lt.38.11 (LANEPURGE, canonical account/track/loop names), which
 waits on this decision. If he picks B, S1c is undone as a plan and a Kind for products must be decided first in the shelf.

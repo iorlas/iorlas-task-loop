@@ -1,8 +1,8 @@
-# Topology: factory instances, the shelf factory, cross-repo work, lanes, delegate's home (design only)
+# Topology: factory instances, the shelf factory, cross-repo work, accounts, delegate's home (design only)
 
-Bead tl-w7lt.38 (TOPOLOGY); also answers tl-w7lt.37 (DELEGATEHOME) and the lanes/Unity questions of tl-m5pw (SETUPFLOW).
+Bead tl-w7lt.38 (TOPOLOGY); also answers tl-w7lt.37 (DELEGATEHOME) and the accounts/Unity questions of tl-m5pw (SETUPFLOW).
 Verdicts: ✅ do, ❌ refuse. Evidence tags: *read* = read in code or docs, *help* = read from `--help` only, *untested* = no run exists.
-Premise (Denis, as first given; see Status): Mac first, Windows later; one constitution (shelf `docs/constitution.md`); task-loop never knows which harness is underneath; delegate owns processes and lanes.
+Premise (Denis, as first given; see Status): Mac first, Windows later; one constitution (shelf `docs/constitution.md`); task-loop never knows which harness is underneath; delegate owns processes and accounts.
 
 **Status (2026-11-05, read this first).** This note was written in rounds with the owner. Where a section is overridden, the LAST section wins; the final decisions are the table "Decisions recorded" at the end. Overridden statements stay in place for their reasoning and are listed here:
 
@@ -14,7 +14,7 @@ Premise (Denis, as first given; see Status): Mac first, Windows later; one const
 | container checks, then tar to the executor | `in: linux` by git push to a mirrored persistent slot worktree |
 | ADRs written under the state dir | ADRs are landed as files through a bead |
 | D1 to D7, M, A, W open | all answered; see "Decisions recorded" |
-| "lane" means three things; "lane keeps only the check meaning" | the word is purged: account, track, loop (docs/glossary.md) |
+| One word overloaded for vendor connections, checks and loop processes | use account, track, loop (docs/glossary.md) |
 | "factory instance" | factory (one per machine) |
 
 ## What exists today (read)
@@ -22,7 +22,7 @@ Premise (Denis, as first given; see Status): Mac first, Windows later; one const
 - One config folder per machine, `~/.config/task-loop`: `repos.json` (registered repos), one `factory.db`, `leases/`, `loop/<repo>-<hash>.<pid>.json`, `asks/`, `slots/`, `locks/`.
 - One loop per repo (`tl factory start --repo DIR`), one read-only dashboard per machine (port 7878) over every registered repo.
 - Each repo owns its backlog (`.beads/` in the repo) and its rules (`.task-loop.json` on the base branch).
-- Delegate owns lanes and plan limits; task-loop reads `route.py status --json` and calls `route.py run`, nothing else.
+- Delegate owns accounts and plan limits; task-loop reads `route.py status --json` and calls `route.py run`, nothing else.
 - Machine-scarce things are leased in `leases/` (`any_lease`, a flock per unit); `host.json` says which resources the machine has.
 
 So the topology is already "one factory per machine, one loop per repo". The questions below decide whether to keep it and what to add.
@@ -31,8 +31,8 @@ So the topology is already "one factory per machine, one loop per repo". The que
 
 | Option | Verdict | Why |
 |---|---|---|
-| One factory per machine, one loop per repo | ✅ | Everything scarce is per machine: lane usage windows, the Unity limit, disk, RAM, the land lock's host, the dashboard port. Two factories on one machine would each count the same lane budget and the same Unity unit and have to coordinate: a second copy of the lease table. A new repo costs `tl register` plus one loop, no new state. |
-| One factory per repo | ❌ | Duplicates factory.db, dashboard, lease table and lane accounting per repo, and the shelf factory would need its own copy of all of them next to task-loop's. |
+| One factory per machine, one loop per repo | ✅ | Everything scarce is per machine: account usage windows, the Unity limit, disk, RAM, the land lock's host, the dashboard port. Two factories on one machine would each count the same account budget and the same Unity unit and have to coordinate: a second copy of the lease table. A new repo costs `tl register` plus one loop, no new state. |
+| One factory per repo | ❌ | Duplicates factory.db, dashboard, lease table and account accounting per repo, and the shelf factory would need its own copy of all of them next to task-loop's. |
 | One factory per executor | ❌ | An executor is a place where processes run, not a place where decisions are kept. Making it a factory moves queue, asks and landing state onto every machine. |
 
 State owners (single path, constitution: one owner per fact):
@@ -44,7 +44,7 @@ State owners (single path, constitution: one owner per fact):
 | factory.db (runs, asks, slots, landings) | the factory | per machine, rows keyed by repo |
 | Loop (one process, its pidfile and command file) | the factory | per repo, per machine |
 | Dashboard | the factory, read-only | per machine |
-| Lane status, plan limits, worker processes | delegate | per machine |
+| Account status, plan limits, worker processes | delegate | per machine |
 | Resource leases (Unity, ...) and `host.json` | the machine's executor side (today the config folder) | per machine |
 
 **Windows later (executor split): ✅ keep it a boundary, ❌ no code now.** The boundary exists: the engine reaches the machine only through `route.py run/status`, the Spawner port, and `any_lease`. In a split, the engine (factory.db, loops, dashboard) stays on one machine and each executor node owns exactly: process spawn and tree kill, worktrees and slots on its disk, the lease table and `host.json`. The Windows backends the audit listed (`process_lock` fcntl, `stream_proc` tree kill, SIGTERM stop, symlink pid index, sh shims) are shelf packages plus a few shims, so the Windows work lands in shelf, which is a reason to have the shelf factory first. Acceptance of the original bead ("executor port contract, backends list") is met by this paragraph; the port contract itself is written when the migration starts, not before.
@@ -58,7 +58,7 @@ The shelf does not get a second factory. ✅ It is a third registered repo of th
 | Profile | ✅ a `.task-loop.json` in shelf, landed as a PR with Denis's profile-change approval (`land-stack --profile-change`). Nothing in this note lands a profile. | `pick_label: auto`, `owner_author: Denis Tomilin`. |
 | Gate | ✅ one check, `["uv","run","just","check"]`, `"run": "gate"`, `"run_in": "slot"`, `SHELF_HOST_CHECK=1`, `wall_min` at least 30. | `just check` is the shelf's Definition of Done and already narrows tests to the changed packages (`tools/affected.py`). No Docker, so the shelf's own comment applies: the host run took 10 to 17 minutes under the endpoint scanner (2026-10-10, shelf justfile, *read*). Expect that per gate run and per land. |
 | Slots | ✅ `count` 2, `setup` = `mise trust --yes && mise install --locked && uv sync --locked && bd bootstrap` as a recipe called `["just", ...]` (argv only), `setup_inputs`: `mise.toml`, `uv.lock`. | A clean checkout per gate would redo the sync every time; `run_in: slot` needs the slot's tree to equal `HEAD^{tree}` (*read*). |
-| Lanes | ✅ none of its own. Shelf work draws on the machine's delegate lanes like every repo. | Lanes are delegate's (section 4). |
+| Accounts | ✅ none of its own. Shelf work draws on the machine's delegate accounts like every repo. | Accounts are delegate's (section 4). |
 | Landing | ✅ the shelf loop stops at an open PR and never merges. ❌ `land: git push origin HEAD:main` for shelf. | Denis's rule: he merges shelf PRs. Needs a PR-only land (profile `land` as a PR open + bead waits in "your look" until the PR is merged, then closes with the PR's merge sha). Today `land` is one argv and `land-stack` merges (*read*), so this is a **new engine feature, untested**; one bead, filed after Denis answers D1. Until it exists, the shelf loop does not start. |
 | Trust-root files | ✅ as is. | Changes to `AGENTS.md`, `CLAUDE.md`, `mise.toml`, `.claude/`, `.task-loop.json` park the bead unless it carries `owner-approved` (*read*). Shelf beads touching `AGENTS.md` will park; that is the rule working. |
 | Git hooks | ✅ tested 2026-11-05 (throwaway origin, prek pre-push, slot worktree, tl's dispatcher shape). Chain works: from a slot, tl's dispatcher runs first (`tl judge-push`), then the repo's prek hook, once each; a judge refusal stops before the repo gate; a repo gate failure refuses the push. `--no-verify` skips both. A repo's own `core.hooksPath` is chained too. | The judge allows any push that is not to the base branch with no check, so a slot push of a feature branch runs the shelf gate once (prek only), on top of the engine's own gate. A land push to base runs the gate twice (the receipt the judge reads, then prek's `just check`): 10 to 17 min each. Fix: one declared gate. The shelf's prek pre-push stage keeps a cheap check or none; the factory gate is the proof. ❌ `SKIP=<hook>` from the land push: prek fails the push when the skipped hook is the only one ("No hooks found after filtering"). `prek install` refuses under tl's injected `core.hooksPath`, so a slot `setup` must not call it. Evidence: ten push scenarios run 2026-11-05 in throwaway repos. |
@@ -85,12 +85,12 @@ Verdicts: one store per task, in the repo that does the work. ❌ a central inbo
 - ❌ Corrected 2026-11-05 (tested, bd 1.3.1): `bd ready` does NOT honour `external:` edges across two embedded stores. The edge is stored (`bd dep add <id> external:<repo>:<x>`; not accepted by `bd create --deps`) and `external_projects.<repo>` can point at the other store, but an open target leaves the bead in `bd ready` and `bd blocked` empty. So the first bullet's "a blocked bead is absent from `bd ready`" is false for these edges. bd's "shipped" = a closed issue in the target labelled `provides:<cap>`, added by `bd ship <cap>` to the one issue labelled `export:<cap>`; unused here because nothing enforces it.
 - ✅ Instead: keep the edge as the record, `external:<repo>:<target-bead-id>`, and have tl's one ready-read drop a bead whose external target bead is not closed (target store found through repos.json; "shipped" = closed, D4). ❌ a local stub bead (redundancy). The filter is untested; it is one function in the ready read, not loop special-casing.
 
-## 4. Where lanes and the Unity lease live
+## 4. Where accounts and the Unity lease live
 
 | Thing | Verdict | Reason |
 |---|---|---|
-| Lanes (count, models, windows, accounts) | ✅ delegate, machine-wide. Task-loop reads status only. | Constraint from Denis: delegate owns lanes and emits events; task-loop does not know the harness. |
-| `tl setup` question `lanes (default 4)` | ❌ remove it from `tl setup`. | A lane setting asked by task-loop is a second owner of delegate's setting. `tl setup` points to `iorlas-delegate:init` instead. |
+| Accounts (count, models, windows) | ✅ delegate, machine-wide. Task-loop reads status only. | Constraint from Denis: delegate owns accounts and emits events; task-loop does not know the harness. |
+| `tl setup` question `accounts (default 4)` | ❌ remove it from `tl setup`. | An account setting asked by task-loop is a second owner of delegate's setting. `tl setup` points to `iorlas-delegate:init` instead. |
 | Unity: presence on the machine | ✅ `host.json` (`{"resources": ["unity"]}`), written by `tl setup --apply` from the `unity-lease` answer. Machine fact, belongs to the executor side. | Missing file means "has every declared resource", which is wrong on a machine without Unity; setup writes it explicitly. |
 | Unity: the limit number | ✅ the repo profile (`engine.resources: {"unity": {"limit": N}}`). | One declared number, reviewed with the profile. Changing it is a profile change, so it goes through Denis's approval flow. |
 | Unity: the lease mechanism | ✅ `any_lease` only. ❌ the second, repo-side counting lock (`lifesim tools/unity_slot.py`, named in the roadmap's safe-by-construction table; `unity-slot: got slot N` lines are still parsed in check output). | Two mechanisms for one scarce thing. The check's `needs: ["unity"]` already holds the lease. Not verified here whether lifesim's check still takes both; one bead in lifesim to confirm and delete the script. |
@@ -104,7 +104,7 @@ Verdicts: one store per task, in the repo that does the work. ❌ a central inbo
 |---|---|---|
 | Release drift between two repos | ends: one `dev/release.py` path, one version stream, one contract test pair | stays or worsens: a third release path |
 | Contract (was `worker-run v3`, `route.py run/status`; superseded by `delegate.api`) | stays JSON-only; enforce with an import-linter contract (no `taskloop` import of delegate and back) plus a stdlib-only test for delegate's folder | same |
-| Constitution fit | a product with lanes, skills and onboarding living next to the product that needs it | ❌ shelf holds generic, ownable packages (Articles VI to VII). Delegate is not generic substrate; it would need a new Kind (Denis's own note on the bead) |
+| Constitution fit | a product with accounts, skills and onboarding living next to the product that needs it | ❌ shelf holds generic, ownable packages (Articles VI to VII). Delegate is not generic substrate; it would need a new Kind (Denis's own note on the bead) |
 | Who may change it | the factory itself: the factory releases its own executor through `dev/release.py` | ❌ every delegate fix becomes a shelf PR that only Denis merges, behind a 10 to 17 minute host gate, for the component the factory cannot run without |
 | Direction of dependency | task-loop already vendors shelf; delegate inside task-loop adds none | task-loop would depend on shelf for its executor, and shelf's factory would work the executor's beads |
 
@@ -141,7 +141,7 @@ This replaces the process-boundary reading above (the `route.py run/status` rows
 | Slots are reused, tracked by an index | ✅ already so: a slot is a persistent worktree, a bead labelled `slot` with a lease, plus `slot-state`; `tl prune` and `tl worktrees clean` remove owned merged clean ones. | Growing storage would be a bug in prune, not a missing index. Observation, not verified as factory-owned: `~/Workspaces` holds dozens of `iorlas-task-loop-<name>` clones; if the factory made them, prune misses them. |
 | Cross-repo filing: direct bead or through tl | ✅ through tl, always. ❌ a session writing another repo's `.beads` itself. | One entry point sets the actor, the `from:<repo>` label and refuses anything but create. |
 | Ordering | ✅ pick every ready bead not blocked by a dependency, by bd's native priority (0 to 4, P0 first), then `epic_order`, then lowest id. | That is already the pick rule (skills/task-loop/SKILL.md, "Order: priority first..."). bd's priority is the native one; use no second scale. |
-| Names | ✅ rename (canonical list: docs/glossary.md); ❌ keep "lane" for three things. | Today "lane" means (1) a delegate vendor connection with usage windows, (2) a parallel track of checks in one gate block, (3) a swim lane on the dashboard. "Floor" exists only in conversation; the engine's word is **slot** (a persistent worktree), so use slot. Delegate's lane is a subscription or API key with limits: call it **account**. "License" is wrong (a license permits, this meters); "supplier" and "provider" name the vendor, not the metered thing. After the rename "lane" keeps only the check-track meaning. The rename is a hard cut in delegate's contract (worker-run version bump, no alias). |
+| Names | ✅ distinct names (canonical list: docs/glossary.md); ❌ one word for three things. | A delegate vendor connection with usage windows is an **account**; a parallel sequence of checks in one gate block is a **track**; a factory process is a **loop**. The dashboard tab is **Slots**; the engine's word is **slot** (a persistent worktree). An account is a subscription or API key with limits. "License" is wrong (a license permits, this meters); "supplier" and "provider" name the vendor, not the metered thing. The rename is a hard cut in delegate's contract (worker-run version bump, no alias). |
 | Pieces: delegate, task-loop, lifesim, shelf packages all segregated, tests included, thin designed interfaces | ✅ as the rule for every piece. | Each piece owns its tests, publishes one interface document and contract tests that both sides run, and imports nothing of the other. Delegate already has that interface (`worker-run v3`: `route.py run` and `status`). |
 | Delegate into shelf | ❌ still. See D1: segregation does not need the shelf. | Shelf pieces are imported or vendored; delegate is called as a process. Putting it there adds Denis's manual PR merge and a 10 to 17 minute gate to every executor fix, and it makes "one piece among pieces" mean "one repo" for lifesim too, which cannot follow. |
 
@@ -165,11 +165,11 @@ Not decisions (settled by existing rules, listed so they are not re-asked): the 
 2. Done 2026-11-05 (tl-s3hy): `tl task create --repo` works; `bd ready` ignores `external:` edges, so file: tl ready-read filter on external targets, plus the `--repo` policy pre-step (registered name, create only, `from:` label).
 3. Done 2026-11-05 (tl-togq): dispatcher chain works; file: shelf pre-push hook vs factory gate (one declared gate, no double run on land), and no `prek install` inside a tl-spawned slot setup.
 4. Shelf `.task-loop.json` plus slot setup recipe (PR, profile-change approval).
-5. `tl setup`: drop the `lanes` question, write `host.json` from the `unity-lease` answer.
+5. `tl setup`: drop the `accounts` question, write `host.json` from the `unity-lease` answer.
 6. lifesim: confirm `unity_slot.py` is redundant with `needs: unity`, then delete it.
 7. DELEGATEHOME steps 1 to 4 after D1.
 8. Executor port contract and the Windows backends (shelf packages first): when the migration starts.
-9. Glossary rename (docs/glossary.md): delegate `lane` to `account`, `tl lanes` to `tl accounts`, dashboard panel; no wire contract to version (delegate.api is typed).
+9. Glossary names (docs/glossary.md): delegate `account`, `tl accounts`, Accounts dashboard panel; no wire contract to version (delegate.api is typed).
 
 ## D1 move: open check before it starts
 

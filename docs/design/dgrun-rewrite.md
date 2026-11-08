@@ -7,13 +7,13 @@ re-implements `stream_proc.run`), M-397 (this rewrite). Read from the code at or
 ## What is there
 
 - **Retries inside one call, invisible to the caller.** `Run._launch` (`app/run.py`) runs a ladder: canary probe -> the launch -> one network
-  rerun -> schema re-ask (`_schema`) -> and, in `go`, one reroute to another lane on `schema_invalid` (`_reroute`). Each leg is a launch with
+  rerun -> schema re-ask (`_schema`) -> and, in `go`, one reroute to another account on `schema_invalid` (`_reroute`). Each leg is a launch with
   its own history row and usage, but the answer is one `RunResult`: task-loop sees `secs`/`tokens` summed, never that it paid for 3 launches
   (and then retries itself on top: "double retry", M-259).
 - **A second pump loop.** `any_agent.supervisor.Supervisor` (vendored; `_pump`, `_wait`, `run`) spawns, reads stdout/stderr in two threads,
   polls watchers every 0.5 s, kills the tree. `stream_proc.runner.run` (vendored, `_pump`/`_wait`/`_release`) does the same job for the checks.
   Two implementations of "run a child, pump lines, stop it on a limit".
-- **Decide as a dict.** `decide.decision(...)` returns `(d, lanes, warnings, t)` where `d` is `Router.pick.as_dict()` plus keys added in place
+- **Decide as a dict.** `decide.decision(...)` returns `(d, accounts, warnings, t)` where `d` is `Router.pick.as_dict()` plus keys added in place
   (`how`, `cap`, `notice`, `warning`, `limit_reset`...). The launcher passes facts back the same way: `res["hung_words"]`, `res["hung_kind"]`
   (`launch.py:403`) popped in `settle.py:111,132`. A misspelled key is a runtime `KeyError`, not a type error. `decision` also *writes*
   (`env.update_state(mark)`, `apply_profile`) when `apply=True`: it is not pure.
@@ -26,7 +26,7 @@ re-implements `stream_proc.run`), M-397 (this rewrite). Read from the code at or
    Recommendation: do it in shelf, not here; this repo's part is the typed result and typed decide. Until the owner decides DELEGATEHOME, the
    third acceptance item is *blocked on shelf*, say so on the bead.
 2. **Shape of `attempts`.** Recommendation: additive, a list on `RunResult` (`ABSENT` when empty so the golden wire stays unchanged for a
-   single launch): `Attempt(kind: "first"|"canary"|"network_rerun"|"lane_poll"|"lane_wait"|"new_thread"|"worker_retry"|"schema_reask"|"reroute", lane, model, outcome, secs, tokens)`.
+   single launch): `Attempt(kind: "first"|"canary"|"network_rerun"|"account_poll"|"account_wait"|"new_thread"|"worker_retry"|"schema_reask"|"reroute", account, model, outcome, secs, tokens)`.
    task-loop reads the list to charge budget per launch and to stop retrying on top of a delegate that already retried. Contract stays 4
    (additive field, `Absent`); add capability `attempts` so the caller can tell "no field" from "older delegate".
 
@@ -46,7 +46,7 @@ re-implements `stream_proc.run`), M-397 (this rewrite). Read from the code at or
 
 ## Out of scope
 
-`app/env.py` as a locator (M-182) is Ctx/injection work, a separate bead. Moving delegate (DELEGATEHOME). Changing any stop reason or lane
+`app/env.py` as a locator (M-182) is Ctx/injection work, a separate bead. Moving delegate (DELEGATEHOME). Changing any stop reason or account
 decision: this is a refactor with one additive wire field.
 
 ## Risk

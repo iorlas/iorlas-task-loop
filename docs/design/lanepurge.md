@@ -1,6 +1,6 @@
 # LANEPURGE: the file count and the cut order (tl-w7lt.38.11)
 
-Design note only; no code moves with it. The names are fixed by `docs/glossary.md` and `docs/design/naming-audit.md`: delegate lane -> account, check lane -> track, factory lane -> loop, Floor tab -> Slots. This note adds the measured size of the edit and where it has to be cut so each piece lands green.
+Status: steps 1–4 done; step 5 (docs prose) is this PR; step 6 is the rules test. This note retains the measured cut order as the record. The names are fixed by `docs/glossary.md` and `docs/design/naming-audit.md`: delegate lane -> account, check lane -> track, factory lane -> loop, Floor tab -> Slots. This note adds the measured size of the edit and where it has to be cut so each piece lands green.
 
 ## Size (word-boundary and compound matches of `lane`, 2026-11-06, origin/main)
 
