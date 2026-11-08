@@ -310,7 +310,7 @@ R1 applies only where named. Moving an Engine method into a file and passing the
 | app/slots/verbs.py | Slot owner commands | S, force/hold/reset semantics and failure exit codes | U ⚠; R |
 | app/track/trail.py | Event/provenance/repo registration | E/F, advisory failure versus authoritative mutation | U ⚠; R |
 | app/track/verbs.py | Claim/close/block/land/passthrough | E/A/S, actor/generation and bypass surface | U ⚠; R |
-| app/wire/closeguard.py | Close eligibility and manual delivery receipts | E/S, expected work/land/owner waiver facts | U ⚠; R |
+| app/track/closeguard.py | Close eligibility and manual delivery receipts | E/S, expected work/land/owner waiver facts | U ⚠; R |
 | app/wire/doctor.py | Aggregate local installation/setup warnings | Q/S/D, errors are observations, not repairs | U ⚠; R |
 | app/doctor/install.py | Session indexing and generated hook shims | E/F, main checkout and fail policy | U ⚠; R |
 | app/wire/slots.py | Profile/slot/worktree composition | S/E/L, local slot profile versus committed engine profile; A.F05 | U ⚠; R |

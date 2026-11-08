@@ -10,11 +10,12 @@ from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.log import RunStart
 from tlpipeline.api import land_answer
-from tlslots.config import load_cfg, profile_slots
+from tlslots.config import profile_slots
 
 from taskloop.app.land import cleanup
-from taskloop.app.wire import closeguard, slotfx
-from taskloop.app.wire.slots import slot_of
+from taskloop.app.track import closeguard
+from taskloop.app.wire import slotfx
+from taskloop.app.wire.slots import base_of, slot_of
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
@@ -23,7 +24,7 @@ def cmd_land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, work
              base: str | None = None) -> int:
     """The standalone verb is a direct land; PR delivery records through land-stack and never deletes a remote head."""
     where = worktree or "."
-    base = base or load_cfg(where, git).base
+    base = base or base_of(where, git)
     branch = task_branch(bead)
     head = git.rev_parse(where, f"refs/heads/{branch}")
     remote_oid = cleanup.remote_oid(git, where, "origin", branch)

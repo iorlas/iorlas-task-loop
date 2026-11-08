@@ -15,7 +15,8 @@ from tlslots.config import profile_slots
 from taskloop.app.land.cmds import Runs
 from taskloop.app.land.gate import owner_refusal
 from taskloop.app.land.stack import item_of, pairs, run_stack
-from taskloop.app.wire import closeguard, landfx, slotfx
+from taskloop.app.track import closeguard
+from taskloop.app.wire import landfx, slotfx
 from taskloop.app.wire.slots import slot_of
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog

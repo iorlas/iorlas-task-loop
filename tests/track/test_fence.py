@@ -17,8 +17,7 @@ from support.fake_beads import FakeBeads
 from support.lifecycle import lifecycle
 from support.memstores import fake_stores
 
-from taskloop.app.track import verbs
-from taskloop.app.wire import closeguard
+from taskloop.app.track import closeguard, verbs
 from tlkernel import fence
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, BeadPatch
