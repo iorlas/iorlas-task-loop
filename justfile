@@ -19,7 +19,7 @@ test-inner +paths:
 
 # INNER LOOP ONLY developer tool, never the gate: stage tests plus dependencies' contract tests. `just test` stays the gate.
 test-pkg stage:
-    if [ -f packages/{{stage}}/pyproject.toml ]; then uv run --isolated --package tl{{stage}} --group dev pytest -q -c packages/{{stage}}/pyproject.toml --rootdir packages/{{stage}} packages/{{stage}}; else uv run pytest -q $(python3 dev/test_pkg.py {{stage}}); fi
+    if [ -f packages/{{stage}}/pyproject.toml ]; then [ -d packages/{{stage}}/tests ] || exit 0; uv run --isolated --package tl{{stage}} --group dev pytest -q -c packages/{{stage}}/pyproject.toml --rootdir packages/{{stage}} packages/{{stage}}; else uv run pytest -q $(python3 dev/test_pkg.py {{stage}}); fi
 
 # Every test of every kind, in 4 workers then the serial group. Started by a person, never by the gate, the release, a cron or a background job.
 test-full:
@@ -34,7 +34,7 @@ test-live *args:
 vendor *args:
     PYTHONPATH=skills/task-loop/_vendor python3 -m shelf_vendor --vendor-dir skills/task-loop/_vendor --manifest dev/vendor.json {{args}}
 
-# The delegate tests (tests/delegate; real processes, several minutes). No other run collects them unless the change touches src/delegate, tests/delegate or the vendored packages (tests/support/scope.py).
+# The delegate tests (tests/delegate; real processes, several minutes). No other run collects them unless the change touches packages/delegate, tests/delegate or the vendored packages (tests/support/scope.py).
 test-delegate *args:
     TL_DELEGATE_TESTS=1 uv run pytest -m "" tests/delegate {{args}}
 

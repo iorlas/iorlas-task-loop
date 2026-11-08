@@ -16,7 +16,7 @@ from tlkernel.delegate_status import snapshot_of  # noqa: E402
 from tlkernel.snapshots import StatusSnapshot  # noqa: E402
 
 REAL = json.loads((ROOT / "tests" / "fixtures" / "delegate_status_0.51.0_real.json").read_text())
-FIXTURE_SCHEMA = json.loads((ROOT / "src/delegate/data/contract.json").read_text(
+FIXTURE_SCHEMA = json.loads((ROOT / "packages/delegate/src/delegate/data/contract.json").read_text(
     encoding="utf-8"))["status_schema"]
 
 

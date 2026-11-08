@@ -39,7 +39,7 @@ class SecretGuard:
             assert not heredoc_only_hit(c), c
             assert secret_hit(c), c
         r = subprocess.run(
-            [sys.executable, str(ROOT / "src" / "delegate" / "entry.py"), "guard"],
+            [sys.executable, str(ROOT / "packages" / "delegate" / "src" / "delegate" / "entry.py"), "guard"],
             capture_output=True,
             text=True,
             input=json.dumps({"tool_name": "Bash", "tool_input": {"command": hd}}),
@@ -48,7 +48,7 @@ class SecretGuard:
         assert r.returncode == 2
         assert "apply_patch" in r.stderr
         r = subprocess.run(
-            [sys.executable, str(ROOT / "src" / "delegate" / "entry.py"), "guard"],
+            [sys.executable, str(ROOT / "packages" / "delegate" / "src" / "delegate" / "entry.py"), "guard"],
             capture_output=True,
             text=True,
             input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "cat .env"}}),

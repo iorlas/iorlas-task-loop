@@ -26,11 +26,11 @@ class StatusGolden:
             shutil.copytree(FIX / "status_cheap", cfg)
             os.chmod(cfg, 0o700)
             # delegate's code and the shelf packages it vendors (delegate/__init__ puts skills/task-loop/_vendor on sys.path)
-            for part in (Path("src") / "delegate", Path("skills") / "task-loop" / "_vendor"):
+            for part in (Path("packages") / "delegate" / "src" / "delegate", Path("skills") / "task-loop" / "_vendor"):
                 shutil.copytree(ROOT / part, tree / part, ignore=shutil.ignore_patterns("__pycache__"))
             env = dict(os.environ, DELEGATE_CONFIG_DIR=str(cfg), DELEGATE_NOW="1800000000")
             r = subprocess.run(
-                [sys.executable, str(tree / "src" / "delegate" / "entry.py"), "status", "--json", "--cheap"],
+                [sys.executable, str(tree / "packages" / "delegate" / "src" / "delegate" / "entry.py"), "status", "--json", "--cheap"],
                 capture_output=True,
                 text=True,
                 env=env,

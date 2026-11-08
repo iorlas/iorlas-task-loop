@@ -11,7 +11,7 @@ from unittest import mock
 import hermetic  # noqa: F401  (a home of its own for every test)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "delegate" / "src"))
 import test_stream_supervisor as tss
 from any_agent.harnesses.codex import CodexHarness
 
