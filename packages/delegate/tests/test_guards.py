@@ -27,7 +27,7 @@ class SecretGuard:
         for ti in (
             {"command": "cat ~/.ssh/id_ed25519"},
             {"file_path": "/r/.env"},
-            {"command": "cp app/.env.local /tmp"},
+            {"command": "cp app/.env.local /srv"},
             {"path": "/Users/x/.aws"},
             {"pattern": "**/.env"},
             {"command": "cat ~/.config/gh/hosts.yml"},
