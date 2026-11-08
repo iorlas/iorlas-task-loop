@@ -6,7 +6,8 @@ works): a ratchet counts its offenders in the .py files the change touches, at t
 working tree, per key (offender kind, or capability total for needs), and fails when a key's count went up. New needs reasons must
 have at least five words and sit on one test. A move is net zero; a cleanup
 needs no `--write`; two PRs that touch different files share no file. No origin/main (a bare checkout): skipped, said so.
-A deliberate rise is a line in a commit message of the change: `Ratchet-allow: <temp|layer|needs|closure> +N <a reason in words>`.
+A deliberate rise is a commit message line:
+`Ratchet-allow: <temp|layer|needs|closure|effects|root> +N <a reason in words>`.
 """
 import ast
 import functools

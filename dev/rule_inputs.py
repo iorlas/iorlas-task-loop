@@ -85,6 +85,9 @@ RULES_BY_PATH = {
         "README.md",
         "CLAUDE.md",
     ),
+    # tests/rules/effects_ratchet.py
+    "tests/rules/test_effects_ratchet.py": (
+    ),
     # dev/flakes.py
     "tests/rules/test_flakes.py": (
     ),
