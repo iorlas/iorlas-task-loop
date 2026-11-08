@@ -46,7 +46,8 @@ class RequestHost(Protocol):
     log: RunLog
     git: Git
     checker: Checker
-    budget: Labelled
+    @property
+    def budget(self) -> Labelled: ...
 
     def blocked_for(self, why: str, kind: str, stop: object = None, spec: AskSpec | None = None, fix: bool = False) -> Stop: ...
 

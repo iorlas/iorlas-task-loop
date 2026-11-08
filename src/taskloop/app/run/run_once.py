@@ -1,6 +1,5 @@
 """Bind the run body, lifecycle and lease at the application root."""
 from collections.abc import Callable
-from typing import Any
 
 from tlkernel.envvars import EnvVar
 from tlland.closing import LandHistory
@@ -9,10 +8,11 @@ from tlrelease.reexec import ReexecBook
 from tlslots.lease import Lease
 
 from taskloop.adapters import beadtools, deadline, ident
+from taskloop.app.run.host import RunHost
 
 
 class RunOnce:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: RunHost) -> None:
         self.host = host
         body = RunBody(host, host, host, host, host, host, host, LandHistory(host.git), self.beat, beadtools.peek, ident.plugin_version)
         self.lifecycle = Lifecycle(host, host, host, host, body=body.run, lease=self.lease, reexecs=ReexecBook(host.home),
