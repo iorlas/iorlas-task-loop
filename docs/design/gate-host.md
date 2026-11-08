@@ -15,7 +15,7 @@ Short answer:
    steps. That takes about 9-15 minutes off a gate, and the Mac keeps only Unity and the light steps. It does need
    engine work: per-executor check identity, transport, and receipt import. It also needs measurements first: the
    devbox has no dotnet, so all devbox timings below are estimates, not measurements. One devbox gate host serves about two
-   factory lanes, not four (see the arithmetic below). **Do this second, as an overflow executor in front of the
+   factory loops, not four (see the arithmetic below). **Do this second, as an overflow executor in front of the
    local lease.**
 
 ## 0. What I could and could not see
@@ -24,8 +24,8 @@ Short answer:
 |---|---|
 | `~/.config/task-loop` on the devbox | `host.json` = `{"resources": []}`; `results/` holds only `iorlas-task-loop`; there are no lifesim runs, durations or check logs. `handoff/lifesim-02d50712.md`: the loop has never run here. |
 | lifesim clone on the devbox (`~/Workspaces/lifesim`, origin `git@github.com:yoselabs/lifesim.git`, partial clone `blob:limit=1048576`) | `origin/main` at `8b0a28eb1` (2026-11-01): `.task-loop.json`, `justfile`, `tools/gate_plan.py`, `tools/plant.py`, `global.json` (SDK `10.0.401`, `rollForward: latestPatch`, test runner Microsoft.Testing.Platform). |
-| Mac run logs, load samples, Mac core count | **Not reachable.** Only the facts the owner gave: faults about 650 s, test about 500 s, design-tests about 400 s under load; Unity steps 3-5 min each, unity lease 1; load reached 281 with 4 factory lanes; GitHub/PyPI timeouts under load. |
-| beads | No GATECLEAN bead exists (`bd list --all`, read-only). Related beads: `tl-3cl.3` CHECKIDENT (closed, released 0.23.293), `tl-3cl.4` GATESELECT (open), `tl-4af` multi-machine dashboard (open), `tl-sqd3.24` delegate lock load under 4 lanes (open). |
+| Mac run logs, load samples, Mac core count | **Not reachable.** Only the facts the owner gave: faults about 650 s, test about 500 s, design-tests about 400 s under load; Unity steps 3-5 min each, unity lease 1; load reached 281 with 4 factory loops; GitHub/PyPI timeouts under load. |
+| beads | No GATECLEAN bead exists (`bd list --all`, read-only). Related beads: `tl-3cl.3` CHECKIDENT (closed, released 0.23.293), `tl-3cl.4` GATESELECT (open), `tl-4af` multi-machine dashboard (open), `tl-sqd3.24` delegate lock load under 4 loops (open). |
 | devbox hardware | `nproc` = 8, `AMD Ryzen 9 9950X3D` (the container sees 8 of its 16 cores), 35 GB RAM, 62 GB free in `$HOME`; `cpu.max` = `max` (no CFS quota). |
 | `mise registry` | `dotnet  core:dotnet vfox:mise-plugins/vfox-dotnet asdf:...`: mise has a core dotnet backend. **Not installed and not tried.** |
 
@@ -34,8 +34,8 @@ Every number below that does not come from that table is marked **(est.)** with 
 ## 1. How a check is run today (what the design touches)
 
 - **One check lane per gate in lifesim.** Execution splits into lanes only when the profile names a `lane`
-  (`src/taskloop/domain/checks/plan.py:25-30`, `contracts/checks.py:81`). lifesim's checks name none, so each factory lane
-  runs its gate steps one after another (`app/checks/executor.py:77-88`). The parallelism comes from the 4 factory lanes
+  (`src/taskloop/domain/checks/plan.py:25-30`, `contracts/checks.py:81`). lifesim's checks name none, so each factory loop
+  runs its gate steps one after another (`app/checks/executor.py:77-88`). The parallelism comes from the 4 factory loops
   and from inside each .NET process.
 - **Environment of a check.** `Attempts._exec` merges the check's declared `env`, the round's env and the run ids
   (`app/checks/attempts.py:73-77`). `Shell.stream` adds the worker mark and the slot env (`app/checks/shell.py:57`), and
@@ -67,7 +67,7 @@ Every number below that does not come from that table is marked **(est.)** with 
   other hand, `host-v1` is the same constant on every host, so the host's identity is not in the key at all; only
   `system-machine` tells hosts apart. Part (b) has to change both.
 
-## 2. Part (a): capping .NET and the lanes
+## 2. Part (a): capping .NET and the loops
 
 ### 2.1 Where the threads come from (lifesim `origin/main`)
 
@@ -91,42 +91,42 @@ already writes (`--diagnostic`). The explicit flags, if the variable alone is no
 |---|---|---|---|
 | `DOTNET_PROCESSOR_COUNT=4` | check `env` for build, test, faults, allocation | one cap for all managed defaults | **yes** |
 | `-m:2` (or `-maxcpucount:2`) | justfile `build`, and plant.py's `dotnet test` (which builds) | caps MSBuild nodes | yes, if the variable does not reach MSBuild's `-m` |
-| `-nodeReuse:false` / `MSBUILDNODEREUSE=0` | build | nodes exit after the build instead of idling. They use no CPU while idle, only memory. With 4 lanes x N idle nodes that is GBs of RAM, not load | yes (memory) |
-| `UseSharedCompilation=false` | build | **raises** CPU: every csc starts and JITs again | **no**: keep the shared compiler server, one per user across all lanes |
-| `dotnet test --max-parallel-test-modules 1` | justfile `test` | one test project at a time per lane | optional (est. halves peak test threads) |
+| `-nodeReuse:false` / `MSBUILDNODEREUSE=0` | build | nodes exit after the build instead of idling. They use no CPU while idle, only memory. With 4 loops x N idle nodes that is GBs of RAM, not load | yes (memory) |
+| `UseSharedCompilation=false` | build | **raises** CPU: every csc starts and JITs again | **no**: keep the shared compiler server, one per user across all loops |
+| `dotnet test --max-parallel-test-modules 1` | justfile `test` | one test project at a time per loop | optional (est. halves peak test threads) |
 | xunit `--max-threads K` / `xunit.runner.json maxParallelThreads` | after `--` in `test` | caps test threads per module | only if `DOTNET_PROCESSOR_COUNT` is not honored |
 | `CsCheck_Threads=1` | check `env` for `test` | property tests run single-threaded | yes: faults, the bounded run and nightly already use it (plant.py:31, test_suites.py:30) |
 | `DOTNET_gcServer=0`, `DOTNET_GCHeapCount` | - | console apps and test hosts already use workstation GC; HeapCount applies only to server GC; no lifesim project outside `prototype/` sets `ServerGarbageCollector` (git grep) | **no effect, skip** |
 | `DOTNET_TieredPGO=0` | - | trims tier-0 instrumentation in short-lived processes; est. under 5 % CPU, not a load cap (unverified) | skip |
-| design-tests workers | `run_tests_parallel.py:97` | `max_workers=min(4, cpu_count)` or an env override (lifesim change) | yes: est. 4N to 16 processes across 4 lanes |
+| design-tests workers | `run_tests_parallel.py:97` | `max_workers=min(4, cpu_count)` or an env override (lifesim change) | yes: est. 4N to 16 processes across 4 loops |
 
 ### 2.2 The caps the engine can apply
 
 | Cap | Mechanism | Code change | What it cuts |
 |---|---|---|---|
-| **A. Global compute lease** `dotnet` | `engine.resources.dotnet.limit = 2`; `needs: ["dotnet"]` on build, test, faults, allocation, content (the same mechanism as unity, `resources.py:72-107`) | **none** in the engine. Profile edit, plus `"dotnet"` added to the Mac's `host.json` if it lists resources, or every dotnet check is deferred (`affinity.py:22-24`, `executor.py:109`) | at most 2 lanes in a .NET step at once |
+| **A. Global compute lease** `dotnet` | `engine.resources.dotnet.limit = 2`; `needs: ["dotnet"]` on build, test, faults, allocation, content (the same mechanism as unity, `resources.py:72-107`) | **none** in the engine. Profile edit, plus `"dotnet"` added to the Mac's `host.json` if it lists resources, or every dotnet check is deferred (`affinity.py:22-24`, `executor.py:109`) | at most 2 loops in a .NET step at once |
 | **B. Per-process CPU budget** | `DOTNET_PROCESSOR_COUNT=4`, `CsCheck_Threads=1` in check `env` | none (profile) | threads per .NET process from N to 4 |
 | **C. Lower priority for check processes** | `nice -n 10` before check argv. `nice` is already a recognized wrapper (`domain/checks/cmd/matchers.py:9`), so the program matcher still sees `dotnet`/`just`. `taskpolicy -b` is **not** recommended: on Apple Silicon it puts the process in the background QoS on E-cores with IO throttled, which makes heavy steps several times slower (unverified factor) | profile argv, or later an engine `check_nice` in `Shell.stream` (`shell.py:57`) | does **not** lower the load average; it gives network clients, the dashboard and the editor the CPU first |
-| **D. Load-aware lane start** | the loop waits before `queue()` while `os.getloadavg()[0] > 2 x cores` (`app/loop/loop.py:201-218`) | small engine change; shows as a loop wait | stops new beads being admitted while the machine is overloaded; running gates are not touched |
+| **D. Load-aware loop start** | the loop waits before `queue()` while `os.getloadavg()[0] > 2 x cores` (`app/loop/loop.py:201-218`) | small engine change; shows as a loop wait | stops new beads being admitted while the machine is overloaded; running gates are not touched |
 
 ### 2.3 Arithmetic (est.)
 
-Inputs: Mac logical cores N (unknown; **12** is used as the example, an M-series Pro); 4 factory lanes; per-lane thread
+Inputs: Mac logical cores N (unknown; **12** is used as the example, an M-series Pro); 4 factory loops; per-loop thread
 model while a .NET step runs ≈ (modules in parallel x xunit threads) + CsCheck threads ≈ 3N + N = 4N for `test`;
 ≈ N MSBuild nodes + compiler server for builds; N Python processes for design-tests.
 
-- **Today:** 4 lanes x (between N and 4N) = 4N to 16N = 48 to 192 runnable threads for N=12, plus the Unity editor,
-  design-tests' N processes per lane (up to 48), the Codex and delegate processes, and git/uv. The reported 281 ≈ 23 per core
+- **Today:** 4 loops x (between N and 4N) = 4N to 16N = 48 to 192 runnable threads for N=12, plus the Unity editor,
+  design-tests' N processes per loop (up to 48), the Codex and delegate processes, and git/uv. The reported 281 ≈ 23 per core
   **fits this model** (unverified: no thread sample from the Mac).
-- **With A + B (dotnet limit 2, K=4, CsCheck 1):** 2 lanes x (3 modules x 4 + 1) ≈ 26, or 2 x 4 = 8 with
-  `--max-parallel-test-modules 1`. Add design-tests capped at 4 per lane (≤ 16), Unity ≈ 4-8 (est.), and other processes
+- **With A + B (dotnet limit 2, K=4, CsCheck 1):** 2 loops x (3 modules x 4 + 1) ≈ 26, or 2 x 4 = 8 with
+  `--max-parallel-test-modules 1`. Add design-tests capped at 4 per loop (≤ 16), Unity ≈ 4-8 (est.), and other processes
   ≈ 5. **Load ≈ 30-55, against 281.**
 - **What that buys:** under the kernel's round-robin, a process that wants CPU gets roughly cores/load of a core. At 281 on 12
   cores that is 1/23 of a core; at 40 it is 1/3.3. The CPU-bound parts of TLS handshakes, ssh, `uv` resolution and `git` index
   work therefore run **about 7x faster** (23/3.3). That is the timeout fix. With C, `nice`, they go first on top of that.
-- **Gate wall time:** the CPU work is the same core-seconds either way. Today the 4 lanes share N cores, about N/4 each. With
-  the lease, 2 lanes get about N/2 each, and the other 2 wait on the lease (an `RESOURCE` wait in the wait log, outside
-  the budget) while their writers keep working (writers are remote AI calls and use little CPU). Per-lane gate throughput is **about
+- **Gate wall time:** the CPU work is the same core-seconds either way. Today the 4 loops share N cores, about N/4 each. With
+  the lease, 2 loops get about N/2 each, and the other 2 wait on the lease (an `RESOURCE` wait in the wait log, outside
+  the budget) while their writers keep working (writers are remote AI calls and use little CPU). Per-loop gate throughput is **about
   the same**, with an est. 5-15 % gain from less context switching, less cache thrash and less memory pressure. Fewer network
   timeouts also mean fewer reruns, and that gain cannot be estimated without the Mac logs.
 - **What capping cannot do:** shorten a gate. On one Mac, a 1550 s heavy chain (faults 650 + test 500 + design-tests 400)
@@ -252,7 +252,7 @@ Inputs: owner's loaded figures (faults 650, test 500, design-tests 400 s; Unity 
 steps that run are unity-check, unity-analyzers and unity-tests, plus unity-play-tests when planned: 3-4 steps, **9-20 min**. The light
 steps take about 60 s unloaded (justfile comment on `check`). Mac N=12 as above.
 
-**Devbox throughput.** Under load each Mac lane gets about N/4 = 3 cores, so the heavy chain is ≈ (650+500) x 3 ≈ **3450
+**Devbox throughput.** Under load each Mac loop gets about N/4 = 3 cores, so the heavy chain is ≈ (650+500) x 3 ≈ **3450
 Mac-core-seconds** of .NET work, plus 400 x 3 ≈ 1200 for design-tests. Taking a Zen 5 core as roughly 0.8-1.0 of an M-series P-core
 (**unverified**) and 60-70 % parallel efficiency on 8 cores, faults (one patch after another) + test on the devbox take ≈
 3450 / (8 x 0.9 x 0.65) ≈ **740 s ≈ 12 min** per gate, one gate at a time.
@@ -260,11 +260,11 @@ Mac-core-seconds** of .NET work, plus 400 x 3 ≈ 1200 for design-tests. Taking 
 | | Mac load | Gate wall (src change) | Notes |
 |---|---|---|---|
 | today | ≈ 281 (measured) | 60 + 400 + 500 + 650 + 9-20 min Unity ≈ **35-46 min** + unity lease wait | sequential in one check lane |
-| (a) caps only | ≈ 30-55 | ≈ the same per gate (est. ±15 %); 2 of 4 lanes queue on the dotnet lease | timeouts largely gone |
+| (a) caps only | ≈ 30-55 | ≈ the same per gate (est. ±15 %); 2 of 4 loops queue on the dotnet lease | timeouts largely gone |
 | (b) devbox + local Unity lane | ≈ 15-30 (Unity, light, writers) | max(12 min devbox + ≈ 1 min push and import, 9-20 min Unity) + light ≈ **21-27 min** | saves ≈ 9-15 min per gate *when the devbox is free* |
-| (b) with 4 lanes all gating | | devbox busy ≈ 13 min per gate; at one gate per lane every ≈ 45 min (unknown cadence), demand = 4 x 13 / 45 ≈ **1.2 > 1** | about 2 lanes' worth at most; the rest fall back to the local lease |
+| (b) with 4 loops all gating | | devbox busy ≈ 13 min per gate; at one gate per loop every ≈ 45 min (unknown cadence), demand = 4 x 13 / 45 ≈ **1.2 > 1** | about 2 loops' worth at most; the rest fall back to the local lease |
 
-The cadence (gates per lane per hour) is the input that decides how many lanes one devbox serves. It is in the Mac's `runs/*/checks`
+The cadence (gates per loop per hour) is the input that decides how many loops one devbox serves. It is in the Mac's `runs/*/checks`
 durations and `events.jsonl`, which I could not read. Slice 1 has to bring it.
 
 ## 4. Options ranked
@@ -273,10 +273,10 @@ durations and `events.jsonl`, which I could not read. Slice 1 has to bring it.
 |---|---|---|---|---|---|
 | 1 | **dotnet lease (limit 2) + `DOTNET_PROCESSOR_COUNT=4` + `CsCheck_Threads=1` + `nice -n 10`**: profile and `host.json` only | S, today | 281 to ≈ 40 | ≈ same | low; one-time cache invalidation; forgetting `host.json` defers every dotnet check |
 | 2 | **design-tests worker cap** (lifesim `run_tests_parallel.py:97`) | XS | −(4N−16) processes | ≈ same | none |
-| 3 | **devbox as an overflow gate host** for build, test, allocation, faults (section 3) | L (identity, transport, import, lane, fallback) | to ≈ 15-30 | −9-15 min per gate, for about 2 lanes | Linux portability of the suites unknown; a new trust edge |
-| 4 | load-aware lane start (`loop.py:201-218`) | S | caps admits only | none | it hides symptoms; useful as a guard rail after 1 |
-| 5 | whole lifesim factory lanes on the devbox, using the existing bead affinity (`engine.py:272-279`) | M | some | - | `unity-analyzers`/`unity-tests` have `when: src/**, config/**, content/**` (lifesim `.task-loop.json`), so nearly every sim bead needs unity and is moved back to the Mac. Only docs/design/tools beads benefit |
-| 6 | `taskpolicy -b` for lanes | XS | load unchanged | heavy steps several times slower on E-cores (unverified) | no |
+| 3 | **devbox as an overflow gate host** for build, test, allocation, faults (section 3) | L (identity, transport, import, lane, fallback) | to ≈ 15-30 | −9-15 min per gate, for about 2 loops | Linux portability of the suites unknown; a new trust edge |
+| 4 | load-aware loop start (`loop.py:201-218`) | S | caps admits only | none | it hides symptoms; useful as a guard rail after 1 |
+| 5 | whole lifesim factory loops on the devbox, using the existing bead affinity (`engine.py:272-279`) | M | some | - | `unity-analyzers`/`unity-tests` have `when: src/**, config/**, content/**` (lifesim `.task-loop.json`), so nearly every sim bead needs unity and is moved back to the Mac. Only docs/design/tools beads benefit |
+| 6 | `taskpolicy -b` for loops | XS | load unchanged | heavy steps several times slower on E-cores (unverified) | no |
 
 **Recommendation:** do 1 and 2 now. They answer "how would capping help": the Mac stays usable and GitHub/PyPI stop timing out, but no gate
 gets shorter. Then build 3 in slices, starting with a measurement, because the devbox numbers above are estimates and the Linux pass rate of
@@ -288,7 +288,7 @@ the lifesim suites is unknown. Keep the local dotnet lease as the fallback of 3.
 on 3 recent lifesim main commits run `just build`, `just test`, `just allocation`, `just faults` (`LIFESIM_GATE_ALL=1`)
 and `just design-tests` with `time`. Record: wall time per step, pass or red (Linux portability), and peak load. In the same window, from
 the Mac: the per-step `exec_seconds`/`wait_seconds` of the last 50 gates (`Duration` rows, `executor.py:217-220`) and the
-gate cadence per lane. These two tables replace every **(est.)** in 2.3 and 3.6, and they decide whether slices 2-4 are worth building.
+gate cadence per loop. These two tables replace every **(est.)** in 2.3 and 3.6, and they decide whether slices 2-4 are worth building.
 
 Then: slice 2, shadow mode (`tl gate-remote` run by hand pushes a landed commit and runs the steps; receipts are compared, never
 imported). Slice 3, identity and authorization changes (3.3, items 1-4) behind `portable`. Slice 4, the remote lane, import and fallback
@@ -298,7 +298,7 @@ in the round.
 
 1. **LOADCAP: lifesim profile caps .NET load.** `engine.resources.dotnet.limit = 2`; `needs: ["dotnet"]` on build, content,
    test, allocation, faults; `env: {DOTNET_PROCESSOR_COUNT: "4", CsCheck_Threads: "1"}` on build, test, faults, allocation; Mac `host.json` lists
-   `dotnet` (and `unity`). *Acceptance:* with 4 factory lanes gating, `sysctl vm.loadavg` sampled every 60 s over 2 h stays ≤ 60;
+   `dotnet` (and `unity`). *Acceptance:* with 4 factory loops gating, `sysctl vm.loadavg` sampled every 60 s over 2 h stays ≤ 60;
    no dotnet check is `deferred` on the Mac; `tl` wait log shows `RESOURCE dotnet` waits; zero GitHub/PyPI timeout faults in that window,
    against the count of the previous 2 h of comparable work.
 2. **LOADCAP-VERIFY: `DOTNET_PROCESSOR_COUNT` reaches every default.** *Acceptance:* one `dotnet test` and one `dotnet build` under
@@ -310,7 +310,7 @@ in the round.
    matcher still identifies `dotnet`/`just` (test on `domain/checks/cmd/matchers.py`); no change to cache keys.
 5. **GATEHOST-MEASURE: devbox timings and Linux pass rate for the non-Unity gate.** *Acceptance:* a dated table in this doc,
    for 3 commits, of wall time per step and verdict on the devbox; the same steps' `exec_seconds` from the Mac's last 50 gates, and the
-   gate cadence per lane; a decision line: go or no-go for GATEHOST-*.
+   gate cadence per loop; a decision line: go or no-go for GATEHOST-*.
 6. **EXECIDENT: host and remote execution identities.** `host-v1` becomes host-specific; `RemoteExecution` identity; the toolchain
    digest is computed for the executor's system (`cache.py:103`, `:131`). *Acceptance:* a failing test first: a receipt made under
    executor A never satisfies a key expected under executor B (same tree, base, cmd and env); a devbox key computed on the Mac equals the one

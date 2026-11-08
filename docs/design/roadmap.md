@@ -3,7 +3,7 @@
 Rule: a bead that makes checks, tests or lands faster, or deletes code, goes first. Everything else waits.
 Bead ids are the source of truth; this file only orders them. Update it when a wave finishes.
 
-## Wave 1: now (lanes running in parallel)
+## Wave 1: now (streams running in parallel)
 
 | Goal | Beads | Lane |
 |---|---|---|

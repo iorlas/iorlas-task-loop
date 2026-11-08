@@ -92,7 +92,7 @@ One server per machine, reading state and taking the owner's commands through it
 Desktop session or open terminal. It keeps polling when the queue drains. Repeating it reports `already running`.
 Use `tl factory status`, `tl factory stop` (finish the current bead), `tl factory stop --now`, and
 `tl factory logs [-n 50] [-f]`; each accepts `--repo DIR`. Start and status print the repo, version, PID, log and dashboard URL.
-The first lane's PID is in `<config>/loop/<repo-key>/loop.pid`; numbered `factory-lane-K.log` links point to each child's
+The first loop's PID is in `<config>/loop/<repo-key>/loop.pid`; numbered `factory-loop-K.log` links point to each child's
 `factory-<pid>.log`, alongside existing run logs.
 On macOS, installed `caffeinate` prevents idle sleep while the first newly launched loop lives. No OS service is installed.
 After a reboot, manually run `tl factory start` again. From a phone's SSH terminal, run `tl factory start --repo /path/to/repo`

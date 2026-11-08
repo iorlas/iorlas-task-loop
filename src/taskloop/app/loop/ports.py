@@ -28,7 +28,7 @@ class LoopSlots(Protocol):
         """Whether the slot set aside from `source` may be used again by a loop that claimed `claimed`."""
 
     def check_ready(self, name: str) -> None: ...
-    def tick(self, *, ready_since: float | None, idle_lanes: int) -> None:
+    def tick(self, *, ready_since: float | None, idle_loops: int) -> None:
         """The slot liveness invariants (at most every EVERY s)."""
 
     def wait_slot(self, why: str, *, stop: Callable[[], bool], sleep: Callable[[float], object], poll: tuple[float, float],
