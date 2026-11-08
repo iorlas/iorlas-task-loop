@@ -440,7 +440,7 @@ Dash slices stay owned by the dashboard bead owners; bead (h) supplies the data 
 
 ## 10. Slots
 
-Today `land_mode` has `pr` (the loop opens a PR; `pr_land.py` never merges) and `push` (the lander merges under the land lock, up to
+Today `land_mode` has `pr` (the loop opens a PR; `engine.merge: wait` defaults to owner merge, `engine.merge: auto` merges after the gate at the unchanged head) and `push` (the lander merges under the land lock, up to
 `land_optimistic_tries = 2`, config.py:191).
 
 - Queue applies to `pr` mode and `land-stack` only (decision 2). Push mode keeps its optimistic path; it is an out-of-queue pusher
