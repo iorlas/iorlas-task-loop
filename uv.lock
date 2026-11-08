@@ -390,6 +390,7 @@ dependencies = [
 dev = [
     { name = "msgspec" },
     { name = "pytest" },
+    { name = "tlpipeline" },
     { name = "tltestkit" },
 ]
 
@@ -404,5 +405,6 @@ requires-dist = [
 dev = [
     { name = "msgspec" },
     { name = "pytest" },
+    { name = "tlpipeline", editable = "packages/pipeline" },
     { name = "tltestkit", editable = "packages/testkit" },
 ]

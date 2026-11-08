@@ -2,13 +2,13 @@
 from unittest.mock import Mock
 
 import pytest
-
 from tlkernel.bead import Bead
 from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlpipeline.api import Blocked, blocked_for
 from tltestkit.case import Case
+
 from tlwork.write.review_round import ReviewRound
 from tlwork.write.state import RoundStop
 

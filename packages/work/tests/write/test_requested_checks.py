@@ -4,14 +4,13 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-import support.paths  # noqa: F401
-
-from tlgate.domain.writer_split import WriterSplit
+from tlgate.api import WriterSplit
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId
 from tltestkit.cfgs import plan_of
 from tltestkit.plans import PLAN, WRITE
+
 from tlwork.write.briefing import Briefing
 from tlwork.write.check_round import CheckRound
 from tlwork.write.progress import progress_of, restore_progress
