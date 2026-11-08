@@ -1,5 +1,6 @@
 """A typed loop environment for tests exercising only slot preparation and recovery."""
 from typing import Never
+from unittest import mock
 
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.stages import EngineAsks, EngineSlots
@@ -17,7 +18,10 @@ def slot_loop_env(env: SlotEnv) -> LoopEnv:
         repo=env.repo, repo_key=env.repo_key, cfgdir=env.cfgdir, store=env.store,
         slots=EngineSlots(lambda: env), asks=EngineAsks(env.cfgdir, env.now, asks_wire.host().asks_store),
         profile=unused, fetch=unused, lint=unused, running=unused,
-        area_lock=unused, wt_lock=unused, start_worktree=unused, claim=unused,
+        area_lock=unused, areas_host=lambda cfg, say: mock.Mock(
+            store=env.store, running=unused, area_lock=unused, say=say,
+            areas=cfg.areas, area_label_prefix=cfg.area_label_prefix),
+        wt_lock=unused, start_worktree=unused, claim=unused,
         loop_lock=unused, drop_engine_lock=unused, spawn=unused, stop_now=unused,
         stop_tree=unused, run_task_argv=unused, landed_on_base=unused, reload_note=unused,
         chores=unused, release_dead=unused, ask_lines=unused,

@@ -11,7 +11,7 @@ from pathlib import Path
 from tlasks import sweeps as ask_sweeps
 from tlkernel import childenv, paths
 from tlkernel.beadsport import Beads
-from tlkernel.config import RepoProfile
+from tlkernel.config import EngineConfig, RepoProfile
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.gitport import Git
@@ -35,7 +35,7 @@ from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.stages import EngineAsks, EngineSlots
 from taskloop.app.prune import verb as prune_verb
-from taskloop.app.run.running import area_lock, running
+from taskloop.app.run.running import areas_host, running
 from taskloop.app.track import console, trail
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
@@ -93,6 +93,8 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
     def profile() -> RepoProfile:
         return profile_of(repo, git)
 
+    # Bind occupancy effects without reading a profile at startup; Taker supplies its current engine configuration.
+    areas = areas_host(repo, EngineConfig(), git, who, store)
     return LoopEnv(
         repo=repo,
         repo_key=wslots.repo_key(repo),
@@ -103,8 +105,9 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         profile=profile,
         fetch=lambda: ops.fetch(repo, git),
         lint=lambda b: beadlint.why(b, repo, lambda: lintrun.has_children(store, b.id)),
-        running=lambda: running(repo, git, who, store),
-        area_lock=lambda: area_lock(repo, who),
+        running=areas.running,
+        area_lock=areas.area_lock,
+        areas_host=lambda cfg, say: areas_host(repo, cfg, git, who, store, say),
         wt_lock=lambda key: hold_path(cfg.lock_record(LockWhat.WORKTREE.value, key), f"pid {os.getpid()}", what=LockWhat.WORKTREE),
         start_worktree=lambda name: wslots.start_worktree(repo, git, who, name),
         claim=lambda b, wt, slot: ops.claim(repo, store, b, wt, slot, git, who, now),
