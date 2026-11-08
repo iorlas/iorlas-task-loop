@@ -120,6 +120,8 @@ class LinuxRun:
         # what a crashed engine left (a run releases its own): artifact directories nobody has touched for STALE_DAYS
         self._ssh_run(["find", f"{home}/{cfg.root}/{repo}/.artifacts", "-mindepth", "1", "-maxdepth", "1", "-mtime", f"+{STALE_DAYS}",
                        "-exec", "rm", "-rf", "{}", "+"])
+        # File mtime preserves a fresh push even when its commit is old.
+        self._ssh_run(["find", f"{bare}/refs/tl", "-type", "f", "-mtime", f"+{STALE_DAYS}", "-delete"])
         try:
             self.git.push(wt, f"{cfg.host}:{bare}", f"{sha}:refs/tl/{attempt}")
         except SlotGitError as err:
