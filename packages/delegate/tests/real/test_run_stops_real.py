@@ -15,7 +15,7 @@ import pytest
 import routing_support as support
 from any_agent import reset_parse, watch
 from any_agent.classify import classify
-from any_agent.supervisor import AccountGoneWatcher
+from any_agent.supervisor import LaneGoneWatcher  # the vendored tree keeps its own words
 from run_support import RunBase, short_limits
 from test_route import CFG, at, need, no_reader, obj, route, why
 
@@ -380,7 +380,7 @@ class RunStops(RunBase):
     @real_proc("delegate: a worker, git or CLI process")
     def test_workers_of_a_account_marked_out_by_someone_else_are_stopped_within_the_poll_interval(self):
         started = time.time()
-        w = AccountGoneWatcher(launch.account_gone_check("OPENAI_SUBSCRIPTION", started), every=0)
+        w = LaneGoneWatcher(launch.account_gone_check("OPENAI_SUBSCRIPTION", started), every=0)
         assert w.poll() is None
         launch.settler().mark_out("OPENAI_SUBSCRIPTION", env.now() + 3600, "limit refusal: usage limit", env.now())
         stop = need(w.poll())
@@ -393,7 +393,7 @@ class RunStops(RunBase):
             stop = need(w.poll())
             assert stop.why == reason
             assert need(classify(None, structured={"watchdog": stop.why, "msg": stop.msg})).reason == want
-        late = AccountGoneWatcher(
+        late = LaneGoneWatcher(
             launch.account_gone_check("OPENAI_SUBSCRIPTION", time.time() + 5), every=0
         )  # a worker that started after the mark is not affected
         assert late.poll() is None
