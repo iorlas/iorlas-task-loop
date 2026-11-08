@@ -263,7 +263,7 @@ class CheckExecutor:
         if stale:
             raise CheckFault(CheckFaultKind.STALE_BASE, f"failed: infrastructure: the configured check `{c.id}` needs something this tree "
                              f"lacks (\"{stale}\"): the tree is older than the base's .task-loop.json, which no writer can fix", out.rc)
-        if out.rc < 0 and not self.host.killed:
+        if out.rc < 0 and not out.killed:
             raise CheckFault(CheckFaultKind.KILLED, f"failed: stopped: check `{c.id}` was killed by signal {-out.rc}; the bead goes "
                              "back to open and the next run runs it again (no fix round, no failure counted)", out.rc)
 
