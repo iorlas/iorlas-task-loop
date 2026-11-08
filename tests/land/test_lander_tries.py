@@ -48,7 +48,7 @@ class Tries(Case):
     def test_when_main_moves_during_the_land_the_try_says_so_and_the_branch_moved_with_it(self):
         g = repo(["aaaa1111aaaa22", "bbbb3333bbbb44", "bbbb3333bbbb44", "bbbb3333bbbb44"], ["old", "new", "landed"], [PUSHED])
         lander, host = land_with(g)
-        sha, problem = lander.tries(Land())
+        sha, problem = lander.inside.run(Land())
         assert (sha, problem) == ("landed", None)
         (got,) = tries_of(host)
         # the three *_s fields are real seconds rounded to 1 ms: a loaded host makes them nonzero, so they are not compared
@@ -58,7 +58,7 @@ class Tries(Case):
     def test_when_main_stands_still_nothing_moved(self):
         g = repo(["aaa"] * 4, ["h", "h", "landed"], [PUSHED])
         lander, host = land_with(g)
-        lander.tries(Land())
+        lander.inside.run(Land())
         (got,) = tries_of(host)
         assert (got.base_before, got.base_after, got.rebase_moved) == ("aaa", "aaa", False)
 
@@ -67,7 +67,7 @@ class PushedSha(Case):
     def test_the_push_names_the_sha_resolved_before_it_and_the_record_holds_that_sha_not_a_later_head(self):
         g = repo(["a"] * 4, ["h", "h", "pushed", "moved-after"], [PUSHED])
         lander, host = land_with(g)
-        assert lander.tries(Land()) == ("pushed", None)
+        assert lander.inside.run(Land()) == ("pushed", None)
         assert host.pushing.landed_sha == "pushed"
         assert "record pushed" not in host.events  # the push is not an effect: what follows it is a plan, applied by synced
         assert g.ran("push", "-q", "origin", "pushed:main")
@@ -97,7 +97,7 @@ class Pushing(Case):
                 self.addCleanup(host.pushing.tmp.cleanup)
                 state = Land()
                 with pytest.raises(Stopped) as caught:
-                    lander.tries(state)
+                    lander.inside.run(state)
                 assert caught.value.kind == "FAULT_LAND"
                 assert state.pushes == 0
                 assert sum(call[0] == "push" for call in g.calls) == 1
@@ -108,7 +108,7 @@ class Pushing(Case):
         lander, host = land_with(repo(["a"] * 4, ["h", "h", "h"], [(1, output)]))
         self.addCleanup(host.pushing.tmp.cleanup)
         with pytest.raises(Stopped) as raised:
-            lander.tries(Land())
+            lander.inside.run(Land())
         files = list((host.pushing.run_dir / "land-push").glob("*.log"))
         assert len(files) == 1
         assert files[0].read_text() == output
@@ -120,21 +120,21 @@ class Pushing(Case):
         g = repo(["a"] * 4, ["h", "h", "h"], [(128, "fatal: unable to access 'x': Could not resolve host")])
         lander, _ = land_with(g, up=False)
         st = Land()
-        assert lander.tries(st) == ("", None)
+        assert lander.inside.run(st) == ("", None)
         assert st.phase is Phase.NET_DOWN
 
     def test_a_push_the_network_did_not_kill_is_a_fault_not_a_retry(self):
         g = repo(["a"] * 4, ["h", "h", "h"], [(1, "pre-push hook: 3 tests failed")])
         lander, _ = land_with(g)
         with pytest.raises(Stopped) as cm:
-            lander.tries(Land())
+            lander.inside.run(Land())
         assert cm.value.kind == "FAULT_LAND"
 
     def test_a_network_error_while_the_network_looks_up_three_times_pauses_the_task(self):
         g = repo(["a"] * 4, ["h", "h", "h"], [(128, "fatal: unable to access 'x': Could not resolve host")])
         lander, _ = land_with(g, up=True)
         with pytest.raises(Stopped) as cm:
-            lander.tries(Land(flaky=2))
+            lander.inside.run(Land(flaky=2))
         assert cm.value.kind == "PAUSE_NETWORK"
 
 
@@ -167,7 +167,7 @@ class Passes(Case):
         g = repo(["a", "a", "a", "b"], ["h", "h"], [PUSHED])
         lander, _ = land_with(g)
         st = Land()
-        sha, problem = lander.tries(st)  # the pass is made on base a; the base read at the push is b
+        sha, problem = lander.inside.run(st)  # the pass is made on base a; the base read at the push is b
         assert (sha, problem.kind if problem else None, st.moved) == ("", ProblemKind.STALE, 1)
         assert not g.ran("push")
 
