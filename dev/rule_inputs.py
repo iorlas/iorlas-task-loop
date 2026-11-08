@@ -48,6 +48,9 @@ ALWAYS_RULES = {
 
 # SELF helpers are named here for review; imports/mentions normally supply their edges.
 RULES_BY_PATH = {
+    "tests/rules/test_cpu_rerun.py": (
+        "tests/conftest.py",
+    ),
     # dev/affected.py, dev/importgraph.py
     "tests/rules/test_affected_closure.py": (
     ),
