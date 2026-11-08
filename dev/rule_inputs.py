@@ -114,7 +114,7 @@ RULES_BY_PATH = {
         "packages/kernel/src/tlkernel/**/*.py",
     ),
     "tests/rules/test_land_asserts_tree.py": (
-        "src/taskloop/app/land/stack.py",
+        "packages/land/src/tlland/stack.py",
     ),
     # tests/rules/layout_lock.py
     "tests/rules/test_layout_lock.py": (
@@ -151,8 +151,8 @@ RULES_BY_PATH = {
     "tests/rules/test_procsim.py": (
     ),
     "tests/rules/test_queue_terms.py": (
-        "src/taskloop/domain/land/queue*.py",
-        "src/taskloop/app/land/queue*.py",
+        "packages/land/src/tlland/domain/queue*.py",
+        "packages/land/src/tlland/queue*.py",
     ),
     # tests/rules/layer_ratchet.py, tests/rules/needs_ratchet.py, tests/rules/temp_ratchet.py, tests/rules/ratchet_change.py
     "tests/rules/test_ratchets.py": (

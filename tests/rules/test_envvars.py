@@ -13,7 +13,8 @@ from tlkernel.envvars import NOT_VARIABLES, PREFIXES, EnvVar, registered
 ROOT = Path(__file__).resolve().parents[2]
 NAME = re.compile(r"\b(?:TL|TASK_LOOP)_[A-Z0-9_]*[A-Z0-9]_?\b")
 TEXTS = (*(ROOT / "docs").rglob("*.md"), ROOT / "README.md", ROOT / "skills/task-loop/SKILL.md", ROOT / "skills/task-loop/tl.py")
-CODE = (*(ROOT / "src").rglob("*.py"), *(ROOT / "packages/kernel/src").rglob("*.py"))
+CODE = (*(ROOT / "src").rglob("*.py"), *(ROOT / "packages/kernel/src").rglob("*.py"),
+                *(ROOT / "packages/land/src").rglob("*.py"))
 # The edge modules: where the process environment is read or written (contracts/env.py owns os.environ; this list may only shrink).
 ENV_EDGE = frozenset({"packages/kernel/src/tlkernel/env.py"})
 # os.environ outside the edge today (none under taskloop or tldash;

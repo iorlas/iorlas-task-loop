@@ -154,3 +154,5 @@ Each member still needs entries in:
 The rules and mutation tools' Python paths, affected-test scan roots and visibility, production architecture trees, and package selection now discover `packages/*/src` or member manifests automatically. `just test-pkg <stage>` detects a member manifest and runs its isolated environment.
 
 Dash is carved into `packages/dash` (`tldash`), with isolated package tests.
+
+Land L2a: `packages/land` (`tlland`) owns land app/domain code and isolated tests; shell integration tests remain in `tests/land`.

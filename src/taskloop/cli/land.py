@@ -9,10 +9,10 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.log import RunStart
+from tlland import cleanup
 from tlpipeline.api import land_answer
 from tlslots.config import profile_slots
 
-from taskloop.app.land import cleanup
 from taskloop.app.track import closeguard
 from taskloop.app.wire import slotfx
 from taskloop.app.wire.slots import base_of, slot_of

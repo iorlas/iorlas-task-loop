@@ -6,12 +6,12 @@ import pytest
 from support.facts import fake_facts
 from support.memstores import fake_stores
 
-from taskloop.app.land import cleanup
-from taskloop.app.land.closing import LandCleanups, LandFollowUps
 from taskloop.app.wire.slotfx import FX
 from taskloop.stores.runlog import RunLog
 from tlkernel.gitport import Git
 from tlkernel.paths import ConfigDir
+from tlland import cleanup
+from tlland.closing import LandCleanups, LandFollowUps
 from tlslots.effects import Effects
 
 

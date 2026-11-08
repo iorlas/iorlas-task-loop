@@ -39,7 +39,7 @@ def test_a_root_file_counts_its_branches_long_functions_and_code_lines():
 
 
 def test_a_file_that_is_not_a_root_counts_nothing():
-    assert counts("src/taskloop/app/land/x.py") == {}
+    assert counts("packages/land/src/tlland/x.py") == {}
     assert counts("tests/rules/test_x.py") == {}
 
 

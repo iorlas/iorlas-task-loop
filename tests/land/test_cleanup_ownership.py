@@ -8,11 +8,11 @@ from support import homes
 from support.memstores import fake_stores
 
 from land.test_cleanup import CleanupGit
-from taskloop.app.land import cleanup
-from taskloop.app.land.tree import Tree
 from taskloop.app.wire.slotfx import FX
 from taskloop.stores.runlog import RunLog
 from tlkernel.locks import EngineLock
+from tlland import cleanup
+from tlland.tree import Tree
 from tlslots.reset import leave_slot
 from tltestkit.case import Case
 

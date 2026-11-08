@@ -8,7 +8,7 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-STACK = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "app" / "land" / "stack.py"
+STACK = Path(__file__).resolve().parents[2] / "packages/land/src/tlland/stack.py"
 
 
 def merged_calls() -> list[str]:

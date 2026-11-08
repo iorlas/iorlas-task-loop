@@ -10,11 +10,11 @@ from tltestkit.tmpdir import TemporaryDirectory
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.app.land.forge import Forge
 from taskloop.stores.runlog import RunLog
 from tlkernel.paths import ConfigDir
 from tlkernel.slots import SlotGitError
+from tlland.cmds import Cmds, Stop
+from tlland.forge import Forge
 from tltestkit.case import Case
 
 

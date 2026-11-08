@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def sampled(text: str) -> str:
-    return text.replace("taskloop", "sample").replace("tlwork", "sample").replace("tlasks", "sample")
+    return (text.replace("taskloop", "sample").replace("tlwork", "sample").replace("tlasks", "sample")
+            .replace("tlland", "sample"))
 
 
 @pytest.mark.parametrize("stage_import", [False, True])

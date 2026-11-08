@@ -28,13 +28,6 @@ from support.narrow_hosts import (
     deferred,
     stopped,
 )
-from taskloop.app.land.fix import FixOutside
-from taskloop.app.land.gate import Gate, GateChecker, GateCheckout
-from taskloop.app.land.host import LandState
-from taskloop.app.land.lander import GateStep, Lander, LandParts
-from taskloop.app.land.push import Landed, Pusher
-from taskloop.app.land.rebase import Commit, LandRebase, Recheck
-from taskloop.app.land.record import Sync
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -46,6 +39,13 @@ from tlkernel.config import EngineConfig
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.plancheck import PlanData
+from tlland.fix import FixOutside
+from tlland.gate import Gate, GateChecker, GateCheckout
+from tlland.host import LandState
+from tlland.lander import GateStep, Lander, LandParts
+from tlland.push import Landed, Pusher
+from tlland.rebase import Commit, LandRebase, Recheck
+from tlland.record import Sync
 from tlpipeline.api import Steps
 from tltestkit.fake_clock import FakeClock
 

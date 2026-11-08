@@ -167,3 +167,5 @@ inventory. No compatibility forwarding module remains in root support.
 Areas S1 adds the `tlareas` member with flat `policy.py`, kernel-only imports and isolated memory-bead policy tests.
 
 S1c PR-B moves delegate tests to `packages/delegate/tests`. `just test-delegate` runs the member configuration in its isolated environment, including `real/`; the SCOPED rule selects it only for delegate, vendor or testkit changes.
+
+Land L2a: `packages/land` (`tlland`) owns land app/domain code and isolated tests; shell integration tests remain in `tests/land`.

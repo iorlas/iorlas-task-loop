@@ -87,7 +87,7 @@ def test_unclassified_rule_defaults_to_always(tmp_path):
 
 def test_lander_keeps_rules_reached_through_the_gate_helper(repo):
     # gate_rules discovers taskloop modules and is imported by these bounded checks.
-    chosen = set(affected.select(repo, {"src/taskloop/app/land/lander.py"}))
+    chosen = set(affected.select(repo, {"packages/land/src/tlland/lander.py"}))
     assert chosen & affected.RULES_BY_PATH.keys() == {
         "tests/rules/test_dash_engine_sql.py", "tests/rules/test_kernel_has_no_effects.py",
         "tests/rules/test_ratchets.py", "tests/rules/test_round_handoffs.py",

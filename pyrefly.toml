@@ -1,10 +1,10 @@
 # Type checking (88 sec 6). `just check` runs `pyrefly check`; there is no baseline (tests/rules/gate_rules.py).
 python-version = "3.15"
-project-includes = ["src", "packages", "skills", "tests", "dev"]
+project-includes = ["src", "packages/land/src", "packages", "skills", "tests", "dev"]
 # Vendored copies are byte-identical to their source repos and checked there; this repo only imports them.
 project-excludes = ["**/_vendor/**"]
 # `import tl` (the launcher, in tests) resolves through skills/task-loop; tests import their own helpers by bare name.
-search-path = ["src", "packages/delegate/src", "packages/dash/src", "packages/kernel/src", "packages/testkit/src", "packages/artifacts/src", "packages/pipeline/src", "packages/gate/src", "packages/work/src", "packages/slots/src", "packages/areas/src", "packages/asks/src", "packages/release/src", "skills/task-loop", "skills/task-loop/_vendor", "tests", "packages/work/tests/plan", "tests/stores", "packages/delegate/tests", "dev"]
+search-path = ["src", "packages/land/src", "packages/delegate/src", "packages/dash/src", "packages/kernel/src", "packages/testkit/src", "packages/artifacts/src", "packages/pipeline/src", "packages/gate/src", "packages/work/src", "packages/slots/src", "packages/areas/src", "packages/asks/src", "packages/release/src", "skills/task-loop", "skills/task-loop/_vendor", "tests", "packages/work/tests/plan", "tests/stores", "packages/delegate/tests", "dev"]
 check-unannotated-defs = true
 # Off: pyrefly matches .gitignore against absolute paths, so under .claude/worktrees/ it would match no file and pass.
 use-ignore-files = false

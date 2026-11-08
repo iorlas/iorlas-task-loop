@@ -5,10 +5,10 @@ from unittest.mock import Mock, patch
 import pytest
 
 from taskloop.app.doctor.queue import findings, report
-from taskloop.domain.land.queue_model import Entry, Phase
-from taskloop.domain.land.queue_persist import to_doc
 from tlkernel.queue_state import Incident, QueueState
 from tlkernel.wire import Refused
+from tlland.domain.queue_model import Entry, Phase
+from tlland.domain.queue_persist import to_doc
 
 
 def document(phase=Phase.WAITING):

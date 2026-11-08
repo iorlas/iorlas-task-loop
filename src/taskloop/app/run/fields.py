@@ -23,14 +23,14 @@ from tlkernel.procport import Spawner
 from tlkernel.review import Unfiled
 from tlkernel.run import Reexec
 from tlkernel.wire import Open
+from tlland.checkout import Checkout
+from tlland.host import LandState
 from tlpipeline.api import Checkpoints
 from tlwork.api import AmendState, LookState, PlanState, ReviewLive, WriteState
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
-from taskloop.app.land.checkout import Checkout
-from taskloop.app.land.host import LandState
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.field_ports import FieldParts
 from taskloop.app.run.sections import checkpoint_hooks, restarted

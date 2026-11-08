@@ -10,8 +10,8 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
-QUEUE_GLOBS = ("domain/land/queue*.py", "app/land/queue*.py", "app/land/in_flight*.py", "contracts/queue*.py")
+SRC = Path(__file__).resolve().parents[2] / "packages/land/src/tlland"
+QUEUE_GLOBS = ("domain/queue*.py", "queue*.py", "in_flight*.py", "contracts/queue*.py")
 RETIRED = re.compile(r"window|lookahead", re.IGNORECASE)
 NAME_LIKE = re.compile(r"[\w.\-]+")  # a config key, event or metric name; prose (docstrings, messages) has spaces
 

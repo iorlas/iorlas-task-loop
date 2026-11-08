@@ -34,7 +34,6 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters import delegate as dl
-from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import engine, entry, running
 from taskloop.app.track import outcome_line
 from taskloop.app.wire import asks as wasks
@@ -50,6 +49,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.run import RunReport
 from tlkernel.waitenums import WaitWhat
+from tlland.checkout import Checkout
 from tlpipeline.api import outcomes
 from tlslots import config as wslots_config
 from tlslots.lease import Lease

@@ -6,20 +6,20 @@ from typing import override
 from tlkernel.checks import CheckRun
 from tlkernel.repourl import repo_url
 from tlkernel.storeapi import Doc
+from tlland import cleanup
+from tlland.checkout import Checkout
+from tlland.fix import Fixer
+from tlland.lander import Lander, lander_over
+from tlland.lander_host import LanderHost
+from tlland.push import target
+from tlland.rebase import Rebase
+from tlland.record import Restart, Salvage
+from tlland.tree import Tree, TreeHost
 from tlwork.api import NewFiles
 
 from taskloop.adapters import landlock
 from taskloop.adapters.deadline import deadline
 from taskloop.adapters.ignored import ignored_by
-from taskloop.app.land import cleanup
-from taskloop.app.land.checkout import Checkout
-from taskloop.app.land.fix import Fixer
-from taskloop.app.land.lander import Lander, lander_over
-from taskloop.app.land.lander_host import LanderHost
-from taskloop.app.land.push import target
-from taskloop.app.land.rebase import Rebase
-from taskloop.app.land.record import Restart, Salvage
-from taskloop.app.land.tree import Tree, TreeHost
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.track import verbs
 from taskloop.app.wire import slotfx

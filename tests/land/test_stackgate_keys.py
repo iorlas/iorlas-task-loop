@@ -8,9 +8,6 @@ from unittest import mock
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.app.land.carry import Carry
-from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.app.land.stackgate import StackGate
 from taskloop.stores.runlog import RunLog
 from tlgate.cache import InputKeys, RunMemo
 from tlgate.domain.specs import repo_check
@@ -26,6 +23,9 @@ from tlkernel.ids import CheckId, TreeSha
 from tlkernel.procport import Ran
 from tlkernel.runkey import BaseSha, Digest
 from tlkernel.slots import Checkout, NotARepo
+from tlland.carry import Carry
+from tlland.cmds import Cmds, Stop
+from tlland.stackgate import StackGate
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 

@@ -14,7 +14,7 @@ class ArchitectureInvariants(Case):
         for source, target in (("taskloop.app.track.x", "tlgate.x"),
                                ("taskloop.app.new.x", "tlasks.x")):
             assert slice_problems({source: {target}})
-        assert slice_problems({"taskloop.app.land.x": {"tlgate.x"}}) == []
+        assert slice_problems({"tlland.x": {"tlgate.x"}}) == []
 
     def test_domain_touches_no_world(self):
         bad = [problem for module, tree in production_trees().items() if module.startswith(

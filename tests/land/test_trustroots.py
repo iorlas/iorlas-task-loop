@@ -4,11 +4,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from taskloop.app.land.lander import Lander
 from tlkernel.bead import Bead
 from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlland.lander import Lander
 from tlpipeline.api import Blocked, blocked_for
 from tltestkit.case import Case
 

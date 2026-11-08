@@ -5,9 +5,9 @@ import pytest
 from support.fakegit import FakeGit
 from support.memstores import fake_stores
 
-from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.app.land.stackgate import StackGate
 from tlkernel.gitfacts import TreeEntry
+from tlland.cmds import Cmds, Stop
+from tlland.stackgate import StackGate
 from tltestkit.case import Case
 
 

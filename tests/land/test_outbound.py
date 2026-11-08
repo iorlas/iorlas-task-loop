@@ -17,13 +17,13 @@ from tltestkit.logs import records
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
-from taskloop.app.land import push
-from taskloop.app.land.lander import Lander
-from taskloop.app.land.record import Sync as AfterLand
 from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.enums import Result
 from tlkernel.kinds import Kind
+from tlland import push
+from tlland.lander import Lander
+from tlland.record import Sync as AfterLand
 from tlpipeline.api import Blocked, blocked_for
 
 ATTR = "*.bin filter=lfs diff=lfs merge=lfs -text\n"
@@ -105,7 +105,7 @@ class Land(EngineTest):
     def test_an_lfs_repo_without_git_lfs_is_a_fault_with_the_branch_kept(self):
         self.put_repo_file(".gitattributes", ATTR)
         which = shutil.which
-        with mock.patch("taskloop.app.land.push.shutil.which", lambda w, *a, **kw: None if w == "git-lfs" else which(w, *a, **kw)):
+        with mock.patch("tlland.push.shutil.which", lambda w, *a, **kw: None if w == "git-lfs" else which(w, *a, **kw)):
             rc, _ = self.run_engine(RUN)
         assert rc != 0
         assert any("git-lfs is not installed" in r["text"] for r in records(self.eng, "warn"))

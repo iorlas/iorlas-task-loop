@@ -21,8 +21,8 @@ FACTS = {
         {"authorization"},
         {
             "packages/gate/src/tlgate/authorization.py": "THE reader: a check result only counts under the executed key",
-            "src/taskloop/app/land/push_judge.py": "the pre-push judge",
-            "src/taskloop/app/land/stackgate.py": "the stack's gate",
+            "packages/land/src/tlland/push_judge.py": "the pre-push judge",
+            "packages/land/src/tlland/stackgate.py": "the stack's gate",
             "src/taskloop/cli/green.py": "`tl green`, the owner's view of the same verdict",
         },
     ),

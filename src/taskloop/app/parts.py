@@ -27,8 +27,7 @@ from tlkernel.factoryparts import (
     WORK,
     WORKTREE,
 )
-
-from taskloop.app.land.store import LAND
+from tlland.store import LAND
 
 STAGE_PARTS: tuple[Part, ...] = (
     DASH, PIPELINE, SLOTS, GATE, ASKS, RELEASE, REPORT, LAND, WORK, LANES, LOOP, LOOK, RECEIPT, BEADCACHE, REPOS,

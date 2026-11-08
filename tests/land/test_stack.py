@@ -25,11 +25,6 @@ from tltestkit.logs import records
 from support.memstores import fake_stores
 
 from taskloop.adapters import landlock, locks
-from taskloop.app.land.carry import Carry
-from taskloop.app.land.cmds import Cmds
-from taskloop.app.land.forge import Forge
-from taskloop.app.land.stack import MODE, Stack
-from taskloop.app.land.stackgate import StackGate
 from taskloop.app.track import closeguard, runs
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire.slotfx import FX
@@ -55,6 +50,11 @@ from tlkernel.locks import LockTimeout
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import Checkout, NotARepo, SlotGitError
+from tlland.carry import Carry
+from tlland.cmds import Cmds
+from tlland.forge import Forge
+from tlland.stack import MODE, Stack
+from tlland.stackgate import StackGate
 from tlpipeline.api import answer
 
 OID: dict[str, str] = {"task/a": "a" * 40, "task/b": "b" * 40}

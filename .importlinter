@@ -3,6 +3,7 @@
 # here (urllib, http, multiprocessing, re are packages): their ban is ruff TID251 (packages/kernel/src/tlkernel/ruff.toml, src/taskloop/stores/ruff.toml). "delegate" is banned by TID251 in ruff.toml.
 [importlinter]
 root_packages =
+    tlland
     taskloop
     delegate
     tldash
@@ -162,7 +163,6 @@ layers =
     wire
     launch.release_host
     loop
-    land
     report
     reconcile
     checks
@@ -310,7 +310,7 @@ type = forbidden
 source_modules =
     taskloop.app.checks
     taskloop.app.doctor
-    taskloop.app.land
+    tlland
     tlwork.look
     taskloop.app.loop
     tlwork.plan
@@ -399,7 +399,7 @@ forbidden_modules =
     tlwork.write
     tlwork.look
     tlasks
-    taskloop.domain.land
+    tlland.domain
 allow_indirect_imports = True
 
 [importlinter:contract:package-dash-imports-only-the-kernel]
@@ -433,3 +433,36 @@ source_modules =
 forbidden_modules =
     tlrelease.host
     tlgate
+
+[importlinter:contract:package-land-imports-only-the-kernel]
+name = Land imports kernel and declared package APIs only
+type = forbidden
+source_modules = tlland
+forbidden_modules =
+    taskloop
+    delegate
+    tlareas
+    tlartifacts
+    tlasks
+    tldash
+    tldelegate
+    tlgate
+    tlpipeline
+    tlrelease
+    tlslots
+    tlwork
+allow_indirect_imports = True
+ignore_imports =
+    tlland.carry -> tlgate.api
+    tlland.cleanup -> tlslots.api
+    tlland.closing -> tlslots.api
+    tlland.fix -> tlgate.api
+    tlland.fix -> tlgate.api
+    tlland.gate -> tlgate.api
+    tlland.push_judge -> tlgate.api
+    tlland.rebase -> tlgate.api
+    tlland.stack -> tlgate.api
+    tlland.stack -> tlslots.api
+    tlland.stackgate -> tlgate.api
+    tlland.tree -> tlslots.api
+    tlland.domain.queue_flake -> tlgate.api
