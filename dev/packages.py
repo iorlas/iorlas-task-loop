@@ -3,7 +3,8 @@
     python3 dev/packages.py [--base REV] [--changed PATH ...]    prints the package directory names to test, one per line
 
 A changed file always reaches its own package; only public changes reach dependents transitively. With src/*/api.py, public surface is that
-api.py, contracts/ contents and top-level src package testing.py; without api.py every file is public. A changed file outside every
+api.py, contracts/ contents, top-level src package testing.py and the leaves declared in surface.py (shared with the import rule);
+without api.py every file is public. A changed file outside every
 package (the root pyproject, uv.lock, the justfile, dev/) reaches all ordinary members; SCOPED members require their own inputs. The graph
 is the manifests' (what a package declares is what
 its isolated environment contains), never an import scan. Standard library only (docs/design/stage-packages.md section 5)."""
@@ -12,6 +13,8 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
+
+from surface import PACKAGE_ONLY, SURFACE
 
 ROOT = Path(__file__).resolve().parent.parent
 # These members opt out of the root-file fanout. Their own paths and declared
@@ -38,6 +41,15 @@ def public(root: Path, folder: str, path: str) -> bool:
     if not apis:
         return True
     relative = Path(path).relative_to(Path("packages") / folder)
+    surfaces = SURFACE | PACKAGE_ONLY
+    for api in apis:
+        source = Path("src") / api.parent.name
+        if relative.is_relative_to(source):
+            module = relative.relative_to(source).with_suffix("").parts
+            for leaf in surfaces.get(api.parent.name, ()):
+                parts = tuple(leaf.split("."))
+                if module[:len(parts)] == parts:
+                    return True
     return ("contracts" in relative.parts[:-1]
             or any(root / path in (api, api.parent / "testing.py") for api in apis))
 
