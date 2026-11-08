@@ -61,10 +61,10 @@ class Table(Case):
                                "-logFile", "client/Logs/c.log"]
         cmd, _, err = looks.build(m, {"method": "CreatorShots", "args": []}, "/o")
         assert cmd[-3:] == ["Lifesim.Editor.CreatorShots.Run", "-logFile", "client/Logs/c.log"]
-        cmd, _, err = looks.build(m, {"method": "ShellShots", "args": [{"name": "who", "value": "me"}]}, "/tmp/o dir")
+        cmd, _, err = looks.build(m, {"method": "ShellShots", "args": [{"name": "who", "value": "me"}]}, "/o dir")
         assert (
             cmd
-            == ["Unity", "-executeMethod", "Shell.Run", "-out", "/tmp/o dir", "--who", "me"]
+            == ["Unity", "-executeMethod", "Shell.Run", "-out", "/o dir", "--who", "me"]
         )  # one word, no quoting; no {args}: appended
 
     def test_a_request_the_table_does_not_allow_builds_nothing(self):

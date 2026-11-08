@@ -1,11 +1,13 @@
 """The capability ratchet's counter: what each test declares it needs that a logic test does not have (CLAUDE.md, Build & Test).
 
 A declaration is `@needs(capability, reason)`, or the older `@real_proc(reason)` (capability process) and `@real_git(reason)` (git).
-Counted per capability and reason in a test file. Judged on the change (ratchet_change.py): a rise over the files the change touches fails
-unless a commit says `Ratchet-allow: needs +N reason`; a reason that is new must be said once, in words: the same line on many tests
-explains none of them."""
+Counted per capability and reason in a test file. Judged on the change (ratchet_change.py): a capability total rising over the files
+the change touches fails unless a commit says `Ratchet-allow: needs +N reason`. A new reason must have at least five words and sit
+on one test; rewording within an unchanged total passes."""
 import ast
 from pathlib import Path
+
+from rules import ratchet_change
 
 LEGACY = {"real_proc": "process", "real_git": "git"}
 DYNAMIC = "<not a literal>"
@@ -56,3 +58,20 @@ def weak_new(before: dict[str, int], after: dict[str, int]) -> list[str]:
         if n > 1:
             bad.append(f"{key!r} is on {n} tests")
     return bad
+
+
+def capability(key: str) -> str:
+    """The capability before the reason in a counter key."""
+    return key.split(": ", 1)[0]
+
+
+def problems(root: Path) -> list[str] | None:
+    """Capability totals may not rise without an allowance; new reasons must explain one test."""
+    bad = ratchet_change.problems("needs", file_counts, root, group=capability)
+    if bad is None:
+        return None
+    base = ratchet_change.merge_base(root)
+    if base is None:
+        return None
+    before, after = ratchet_change.net(file_counts, root, base, ratchet_change.changed_py(root, base))
+    return bad + weak_new(before, after)

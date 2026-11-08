@@ -20,7 +20,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import tokenize
 import tomllib
 from pathlib import Path
@@ -30,6 +29,7 @@ from unittest import mock
 import pytest
 
 from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
@@ -329,7 +329,7 @@ class Signals(Case):
         assert bad == []
 
     def test_the_rule_finds_a_send(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / "src").mkdir()
             (Path(d) / "src" / "bad.py").write_text("import os\nos.killpg(1, 9)\n")
             (Path(d) / "src" / "ok.py").write_text("import signal\nsignal.signal(signal.SIGTERM, print)\n# os.kill(1, 9)\n")
@@ -394,7 +394,7 @@ class NoShell(Case):
         bad = ("import subprocess\nsubprocess.run('x', shell=True)\nsubprocess.run(['bash', '-c', 'x'])\nrun('bash -n f')\n"
                "def split_top(t): pass\nshell_split(t)\n")
         ok = "import shlex, subprocess\nsubprocess.run(['git', 'status'])\nshlex.split('a b')\nFLAGS = ('-c', '-lc')\nx = ['sh']\n"
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / "src").mkdir()
             (Path(d) / "src" / "bad.py").write_text(bad)
             (Path(d) / "src" / "ok.py").write_text(ok)
@@ -441,7 +441,7 @@ class NoProbe(Case):
                "run(['tasklist'])\n")
         ok = "import subprocess\nsubprocess.run(['git', 'status'])\nNAMES = ['pstree-not', 'x']\nprint('ps')\n"
         vend = "x = ['ps', '-p', '1']\n"
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / "src" / "_vendor").mkdir(parents=True)
             (Path(d) / "src" / "bad.py").write_text(bad)
             (Path(d) / "src" / "ok.py").write_text(ok)
@@ -523,7 +523,7 @@ class RealTree(Case):
 # -- tests: planted trees --------------------------------------------------------------------------------------------------------------
 class Planted(Case):
     def tree(self, files):
-        d = tempfile.TemporaryDirectory()
+        d = TemporaryDirectory()
         self.addCleanup(d.cleanup)
         for rel, text in files.items():
             p = Path(d.name) / rel
@@ -657,7 +657,7 @@ class VendorGuard(Case):
 @real_proc("the gate rules run against a real git repo and the fake one: the same answers")
 class Smoke(Case):
     def setup_method(self):
-        self.tmp = Path(tempfile.mkdtemp()).resolve()
+        self.tmp = Path(mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, self.tmp, True)
         env = hermetic_env(identity=ME, home=self.tmp)
         patcher = mock.patch.dict(os.environ, {k: v for k, v in env.items() if v is not None})

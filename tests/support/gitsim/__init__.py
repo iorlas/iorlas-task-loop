@@ -10,7 +10,6 @@ import re
 import stat
 import subprocess
 import sys
-import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -20,6 +19,7 @@ import stream_proc
 
 from taskloop.adapters import procs
 from tltestkit import procsim
+from tltestkit.tmpdir import TemporaryDirectory
 
 from . import diffs, read, rebase, refs, remote, status, trees, write
 from .ctx import Ctx
@@ -185,7 +185,7 @@ class Sim:
         fake = self.sp_bytes(stream_proc.capture_bytes)
         stack.enter_context(mock.patch.object(sys.modules["stream_proc.capture"], "capture_bytes", fake))
         stack.enter_context(mock.patch.object(subprocess.Popen, "__init__", self.guard(subprocess.Popen.__init__)))
-        shim = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="tl-nogit-")))
+        shim = Path(stack.enter_context(TemporaryDirectory(prefix="tl-nogit-")))
         (shim / "git").write_text(SHIM.replace("SHIM_DIR", str(shim)))
         (shim / "git").chmod((shim / "git").stat().st_mode | stat.S_IXUSR)
         self.shim = shim

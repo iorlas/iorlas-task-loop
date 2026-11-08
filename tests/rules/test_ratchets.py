@@ -1,6 +1,9 @@
 """The three ratchets' pure parts (the change-against-origin/main run is tests/rules/real/test_ratchets_change.py): what each counts in one
 file, and the rise and the allowance."""
 import ast
+from pathlib import Path
+
+import pytest
 
 from rules import layer_ratchet, needs_ratchet, ratchet_change, temp_ratchet
 
@@ -42,3 +45,30 @@ def test_rises_names_only_increases_and_a_move_is_net_zero():
 def test_declared_reads_the_three_spellings():
     src = tree("@needs('long_run', 'a worker waits out its grace')\n@real_proc('r1')\n@te.real_git(why)\ndef test_x(): pass\n")
     assert needs_ratchet.declared(src) == [("long_run", "a worker waits out its grace"), ("process", "r1"), ("git", needs_ratchet.DYNAMIC)]
+
+
+@pytest.mark.parametrize(("before", "after", "expected"), [
+    ({"process: old reason": 1}, {"process: a reworded reason": 1}, []),
+    ({"process: old reason": 1}, {"git: a new reason": 1}, ["git: +1"]),
+    ({"process: old reason": 1}, {"process: old reason": 1, "process: a new reason": 1}, ["process: +1"]),
+])
+def test_needs_rises_are_grouped_by_capability(monkeypatch, before, after, expected):
+    monkeypatch.setattr(ratchet_change, "merge_base", lambda root: "base")
+    monkeypatch.setattr(ratchet_change, "changed_py", lambda root, base: [])
+    monkeypatch.setattr(ratchet_change, "net", lambda *args, **kwargs: (before, after))
+    monkeypatch.setattr(ratchet_change, "allowed", lambda *args: 0)
+    assert ratchet_change.problems("needs", needs_ratchet.file_counts, Path(),
+                                  group=needs_ratchet.capability) == expected
+
+
+def test_temp_exceptions_skip_only_the_documented_paths():
+    src = tree("x = tempfile.tempdir\n")
+    for path, reason in temp_ratchet.EXCEPTIONS.items():
+        assert reason
+        assert temp_ratchet.file_counts(path, src) == {}
+        assert temp_ratchet.file_counts(path + ".other.py", src) == {"site": 1}
+
+
+@pytest.mark.parametrize("path, expected", [("packages/x/tests/test_x.py", {"site": 1}), ("packages/x/src/x.py", {})])
+def test_temp_counts_package_tests_only(path, expected):
+    assert temp_ratchet.file_counts(path, tree("x = tempfile.tempdir")) == expected

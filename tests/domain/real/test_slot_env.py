@@ -10,10 +10,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support.engine_case import real_git
 from support.engine_land import EngineTest
 
+from tlkernel import scratch
 from tltestkit import fake_route, procsim
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
-KEYS = ("TMPDIR", "TMP", "TEMP", "TL_SLOT")
+KEYS = (scratch.TMPDIR_VAR, "TMP", "TEMP", "TL_SLOT")
 
 
 def dumper(name, out, then=None):
@@ -59,5 +60,5 @@ class EverySpawnPath(EngineTest):
         for env in seen:  # the workers, through route.py
             for k in KEYS:
                 assert env[k] == self.eng.bead_env[k], k
-        assert Path(self.eng.bead_env["TMPDIR"]).is_dir()
-        assert str(self.wt) not in self.eng.bead_env["TMPDIR"]  # outside the worktree
+        assert Path(self.eng.bead_env[scratch.TMPDIR_VAR]).is_dir()
+        assert str(self.wt) not in self.eng.bead_env[scratch.TMPDIR_VAR]  # outside the worktree

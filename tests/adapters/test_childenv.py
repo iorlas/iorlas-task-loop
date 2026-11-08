@@ -1,7 +1,7 @@
 """ChildEnv: the one builder of a child's environment. A virtualenv of ours never reaches the gate (VIRTUAL_ENV, 2026-10-30)."""
 from typing import ClassVar
 
-from tlkernel import childenv
+from tlkernel import childenv, scratch
 from tlkernel.env import Env
 from tltestkit.case import Case
 
@@ -38,13 +38,14 @@ class Venv(Case):
 
 class Allowlist(Case):
     def test_only_the_listed_names_reach_a_child(self):
-        base = {"PATH": "/usr/bin", "HOME": "/h", "USER": "u", "LANG": "C", "LC_ALL": "C", "LC_TIME": "C", "TERM": "xterm", "TMPDIR": "/t",
+        base = {"PATH": "/usr/bin", "HOME": "/h", "USER": "u", "LANG": "C", "LC_ALL": "C", "LC_TIME": "C", "TERM": "xterm",
+                scratch.TMPDIR_VAR: "/t",
                 "SHELL": "/bin/sh", "TL_SLOT": "s", "AWS_SECRET_ACCESS_KEY": "no", "ANTHROPIC_API_KEY": "no", "GITHUB_TOKEN": "no",
                 "SSH_AUTH_SOCK": "/s", "EDITOR": "vi", "PYTHONPATH": "/p"}
         out = childenv.tool_env(base, {"DECLARED": "1"})
         assert sorted(out) == ["DECLARED", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "HOME",
                                        "LANG", "LC_ALL", "LC_TIME", "PATH", "SHELL", "SSH_AUTH_SOCK", "TERM", "TL_JUDGE_TL", "TL_SLOT",
-                                       "TMPDIR", "USER"]
+                                       scratch.TMPDIR_VAR, "USER"]
 
     def test_an_empty_environment_gets_only_the_hooks_path(self):
         assert sorted(childenv.tool_env({})) == ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "TL_JUDGE_TL"]

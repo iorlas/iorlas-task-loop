@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from tlkernel import scratch
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,7 +16,7 @@ from support.builders import make_engine
 from tlkernel import config
 from tlslots import slot_env
 
-KEYS = ("TMPDIR", "TMP", "TEMP", "TL_SLOT")
+KEYS = (scratch.TMPDIR_VAR, "TMP", "TEMP", "TL_SLOT")
 
 
 def push(cwd):
@@ -33,8 +34,8 @@ class Pure(Case):
         assert all(a[k] != b[k] for k in KEYS), [k for k in KEYS if a[k] == b[k]]
 
     def test_slot_env_adds_and_overrides_with_placeholders_filled(self):
-        env = slot_env.slot_env(Path("/s/A"), "repo", "A", {"TMPDIR": "{slot_dir}/t2", "X_HOME": "{slot_dir}/x-{repo}-{slot}"})
-        assert (env["TMPDIR"], env["X_HOME"], env["TMP"]) == ("/s/A/t2", "/s/A/x-repo-A", "/s/A/tmp")
+        env = slot_env.slot_env(Path("/s/A"), "repo", "A", {scratch.TMPDIR_VAR: "{slot_dir}/t2", "X_HOME": "{slot_dir}/x-{repo}-{slot}"})
+        assert (env[scratch.TMPDIR_VAR], env["X_HOME"], env["TMP"]) == ("/s/A/t2", "/s/A/x-repo-A", str(Path("/s/A") / "tmp"))
 
     def test_an_unknown_placeholder_is_refused_at_load(self):
         for bad in ("{nope}", "{", "{0}"):
@@ -55,4 +56,4 @@ class EverySpawnPath(te.EngineTest):
         other.mkdir()
         a1, a2, b = mk(self.wt, "t-1"), mk(self.wt, "t-2"), mk(other, "t-3")
         assert a1 == a2
-        assert a1["TMPDIR"] != b["TMPDIR"]
+        assert a1[scratch.TMPDIR_VAR] != b[scratch.TMPDIR_VAR]
