@@ -14,6 +14,7 @@ from run import test_stages_visual
 from support import engine_case as te
 from support import gitq
 from support.engine_case import real_git, stop
+from support.engine_land import EngineTest
 from support.pushsim import CUT, pusher
 
 from tltestkit.plans import CLEAN, PLAN, WRITE
@@ -38,7 +39,7 @@ class Cycling:
         return self.calls > self.down
 
 
-class NetBase(te.EngineTest):
+class NetBase(EngineTest):
 
     def log(self, eng=None):
         return [json.loads(x) for x in (eng or self.eng).log_path.read_text().splitlines()]
