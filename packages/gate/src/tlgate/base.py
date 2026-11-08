@@ -47,7 +47,9 @@ class BaseCheck:
         try:
             rc, _ = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=None, env=c.env, cwd=tree, stop=stop,
                                  what="check", network=c.network)
+            killed = self.host.killed
         except OSError as error:
+            killed = False
             rc = 127 if isinstance(error, FileNotFoundError) else 126
         self.host.log.note(f"base run of `{norm(c.cmd)[:80]}`: exit {rc} in {time.time() - started:.0f} s ({self.sha[:12]})")
-        return None if self.host.killed else rc
+        return None if killed else rc
