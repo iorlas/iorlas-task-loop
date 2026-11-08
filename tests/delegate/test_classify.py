@@ -31,7 +31,7 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 FIXTURES = sorted((ROOT / "tests" / "delegate" / "contract" / "fixtures").glob("*.json"))
-CONTRACT = json.loads((ROOT / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
+CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
 def load(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -270,8 +270,8 @@ class Stop(Case):
 
     def test_the_old_wire_is_gone_from_the_source(self):
         for path in [
-            *(ROOT / "src" / "delegate").rglob("*.py"),
-            ROOT / "src" / "delegate" / "data" / "contract.json",
+            *(ROOT / "packages" / "delegate" / "src" / "delegate").rglob("*.py"),
+            ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json",
         ]:
             text = path.read_text(encoding="utf-8")
             for word in ("to_wire_v2", "vendor_prework", "lane_out", "wire_reasons", "wire_default"):
@@ -289,7 +289,7 @@ class Stop(Case):
 class Docs:
     """The words the orchestrator reads match the code (delegate-fvk): flags, reasons, no dead compat."""
 
-    SRC = (ROOT / "src" / "delegate" / "cli" / "parser.py").read_text(encoding="utf-8")
+    SRC = (ROOT / "packages" / "delegate" / "src" / "delegate" / "cli" / "parser.py").read_text(encoding="utf-8")
     # flags of other tools, named in prose
     FOREIGN: ClassVar[dict[str, set[str]]] = {"codex.md": {"--write", "--background", "--skip-git-repo-check"}}
 

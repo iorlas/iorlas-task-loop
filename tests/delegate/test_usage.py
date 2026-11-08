@@ -146,9 +146,9 @@ class Fields:
             "observed",
         )
         assert usage.fields(None, None, 0)["warm_until"] is None
-        assert "warm_until" not in "".join(
-            p.read_text() for p in (Path(str(route.__file__)).parents[2] / "src/delegate/domain/routing").glob("*.py")
-        )  # no routing policy reads it
+        sources = list((Path(str(route.__file__)).parent / "domain/routing").glob("*.py"))
+        assert sources
+        assert "warm_until" not in "".join(p.read_text() for p in sources)  # no routing policy reads it
 
     def test_merge_adds_counts_and_keeps_unknown_cost_unknown(self):
         a, b = usage.codex(short(CALL1)), usage.codex(short(CALL1))
