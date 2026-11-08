@@ -58,7 +58,7 @@ that the argv calls, `["just", "name"]`.
 host: the writer runs editor and tests itself, on this machine. Only the `.task-loop.json` committed on the base branch
 (`origin/main`) counts: a worker can label its own bead or edit a checkout's config, but not main without review and
 the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); `sandbox` still turns it off for one bead.
-Workers go through `delegate.api` (`docs/contracts/delegate-api.md`; the stop facts are delegate's `contract.json`): the
+Workers go through `delegate.api` (`packages/delegate/docs/contracts/delegate-api.md`; the stop facts are delegate's `contract.json`): the
 engine checks the call's grants before any step and blocks the task when delegate refuses them. Delegate, not the engine,
 tells each worker what its sandbox allows and the git and credential rules; the engine's briefs say only what the step is for.
 A stopped answer carries `stop{reason, scope, permanence, retry}`, and `taskloop.domain.lanes.policy.decide` (a pure function of those facts)
@@ -699,7 +699,7 @@ The loop needs these kinds of worker; it does not care what runs them.
 | hard | a subtask two writers failed | |
 
 How to get them: from the **delegate** library in this plugin. You don't talk to it; the
-engine does, one `delegate.api.run` per AI step (contract: `docs/contracts/delegate-api.md` in this plugin's repo).
+engine does, one `delegate.api.run` per AI step (contract: `packages/delegate/docs/contracts/delegate-api.md` in this plugin's repo).
 Delegate picks lane, model and effort from its role table and live plan limits, and never spends API credit for the
 engine. Its role names (reader → `light`, writer → `worker`, reviewer → `reviewer` with the writer's family, hard →
 `hard`) are the Workers table's second column. The engine has no verifier
