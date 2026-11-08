@@ -69,7 +69,7 @@ Also measured, because it explains the shape: 383 of the 1,198 commits are versi
 | `steps.py` | `plan`, `write`, `check`, `review`, `land`, `close`: `step(inputs, ports) -> Transition` | 1,800 | `app/run/` 6,071, `app/write/` 881, `app/plan/` 945, `app/review/` 611, `app/land/` 2,846 |
 | `policy.py` | the stop table `(scope, permanence, retry) -> Action` and `POLICY[Kind]` | 350 | `domain/lanes/policy.py` 329 (keep most), `domain/outcome.py` 188 (keep), `domain/lanes/pauses.py` 104, `retry.py` 58, `app/run/lane_acts.py` 201 |
 | `prompts.py` | the brief texts, one per step | 500 | `domain/prompts/` (8 files), `domain/plan/brief.py` 182, `domain/brief.py` 120 |
-| `checks.py` | registry, plan, executor, full-key evidence, container run | 700 | `app/checks/` 1,890, `domain/checks/` (16 files), `adapters/container_run.py` 93 |
+| `checks.py` | registry, plan, executor, full-key evidence, container run (history: removed in 0.23.403; `in: linux` replaced it) | 700 | `app/checks/` 1,890, `domain/checks/` (16 files), `adapters/container_run.py` 93 |
 | `judge.py` | `judge(repo, tips, base) -> Allowed | Refused | Unavailable`: the one delivery authority | 150 | `app/land/push_judge.py` 107, `stackgate.py` 69, `app/land/gate.py` 178, `cli/green.py` 40, `checks/cache.py:255-272` |
 | `loop.py` | pick, admit (bundle), spawn `tl run`, settle; N lanes = N processes of this one module | 500 | `app/loop/` 1,733, `app/launch/loop.py` 317, `app/loop/factory.py` 134, `cli/loop*.py` 181, `cli/factory.py` 107 |
 | `cli.py` | 12 verbs, argparse, one `Ctx` | 300 | `tl.py` 460 + `cli/` 1,110 + `app/wire/` 865 + `app/track/` 287 |
