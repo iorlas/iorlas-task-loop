@@ -1,9 +1,13 @@
 """The applier runs the planned actions: each delete carries the oid it was observed at, and a branch waits for its tree."""
 
+from unittest.mock import patch
+
 from support.fake_beads import FakeBeads
+from support.fakegit import ScriptedGit
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.reconcile.apply import apply
+from taskloop.app.reconcile.commits import observe_commits
 from taskloop.app.reconcile.observe import lease_of
 from taskloop.domain.reconcile.facts import (
     Action,
@@ -17,6 +21,7 @@ from taskloop.domain.reconcile.facts import (
 )
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch, NewBead
+from tlkernel.gitfacts import LogRow, Ref
 from tlkernel.ids import BeadId
 from tlkernel.slots import SlotGitError
 from tltestkit.case import Case
@@ -137,3 +142,16 @@ class Given(Case):
         plan: list[Action] = [ReleaseClaim("/r", "r", self.bead, "tl-x", 2), NoLoop("r", 1, 0.0)]
         removed, kept = apply(plan, True, FakeGit(), lambda repo: self.store)
         assert (len(removed), kept, self.store.show(self.bead).assignee) == (1, [], "tl-x")  # type: ignore[union-attr]
+
+
+def test_observe_wip_commit_trailer_and_unowned_commit():
+    git = ScriptedGit()
+    rows = [LogRow(oid="owned", time=1, subject="saved"), LogRow(oid="plain", time=2, subject="unknown")]
+    with patch.object(git, "rev_parse", return_value="base"), \
+         patch.object(git, "for_each_ref", return_value=[Ref(name="refs/heads/wip/saved", oid="plain")]), \
+         patch.object(git, "log", side_effect=[[], rows]), \
+         patch.object(git, "bead_trailers", return_value={"owned": "t-1"}) as trailers, \
+         patch.object(git, "cherry", return_value=[]):
+        found = observe_commits(git, "repo", "main", None, lambda bead: "open", (), lambda bead: None)
+    assert [(row.sha, row.bead) for row in found] == [("owned", "t-1"), ("plain", None)]
+    trailers.assert_called_once_with("repo", ["wip/saved"], ["main", "origin/main"])
