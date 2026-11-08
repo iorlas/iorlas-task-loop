@@ -13,7 +13,7 @@ from tlkernel.ids import CheckId
 from tlkernel.procport import Ran, RanBytes, Streamed
 from tlkernel.slots import SlotGitError
 
-from tlgate.linux import EXECUTOR_DOWN_RC, LinuxRun, Remote
+from tlgate.linux import EXECUTOR_DOWN_RC, STALE_DAYS, LinuxRun, Remote
 
 CFG = ExecutorConfig(host="pix", root="tl")
 
@@ -104,6 +104,19 @@ class TestLinux:
         run_linux(workdir, FakeGit(), sp)
         sweep = next(w for w in (shlex.split(c[-1]) for c in sp.calls) if w[0] == "find")
         assert sweep[1] == "/home/x/tl/repo-1/.artifacts" and sweep[sweep.index("-mtime") + 1] == "+7"
+
+    def test_stale_ref_files_are_swept_before_the_current_attempt_is_pushed(self, workdir):
+        sp = FakeSpawner()
+
+        class SweepGit(FakeGit):
+            def push(self, d: str, remote: str, refspec: str) -> None:
+                words = [shlex.split(c[-1]) for c in sp.calls]
+                assert ["find", "/home/x/tl/repo-1.git/refs/tl", "-type", "f", "-mtime", f"+{STALE_DAYS}", "-delete"] in words
+                super().push(d, remote, refspec)
+
+        git = SweepGit()
+        run_linux(workdir, git, sp)
+        assert len(git.pushed) == 1
 
     def test_the_run_has_a_pty_so_a_killed_ssh_hangs_the_remote_check_up(self, workdir):
         sp = FakeSpawner()
