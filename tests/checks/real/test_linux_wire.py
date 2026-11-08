@@ -33,6 +33,14 @@ def test_a_commit_is_pushed_run_in_the_slot_worktree_and_its_artifacts_come_back
     run_checked(["git", "add", "hello.txt", ".gitignore"], repo)
     run_checked(["git", "commit", "-qm", "init"], repo)
     sha = port_git().rev_parse(str(repo), "HEAD")
+    bare = home / "tl" / "r.git"
+    run_checked(["git", "init", "--bare", "-q", str(bare)], repo)
+    port_git().push(str(repo), str(bare), f"{sha}:refs/tl/fresh")
+    refs = bare / "refs" / "tl"
+    stale = refs / "stale"
+    stale.write_text(f"{sha}\n")
+    old = stale.stat().st_mtime - 10 * 24 * 60 * 60
+    os.utime(stale, (old, old))
     runner = LinuxRun(
         ExecutorConfig(host="exec", root="tl", ssh=[str(shim)], setup=["touch", "setup-ran"], setup_inputs=["hello.txt"]),
         port_git(),
@@ -60,7 +68,9 @@ def test_a_commit_is_pushed_run_in_the_slot_worktree_and_its_artifacts_come_back
     assert (home / "tl" / "r" / "s1" / "setup-ran").is_file()  # the slot's setup ran in its worktree before the check
     assert len(list((home / "tl" / "r" / ".setup").glob("s1-*"))) == 1  # ... once: the second run found its marker
     assert (home / "tl" / "r" / "s1" / "hello.txt").is_file()
-    assert not list((home / "tl" / "r.git" / "refs" / "tl").glob("*"))  # the attempt's ref went with the run
+    assert not stale.exists()
+    assert (refs / "fresh").read_text() == f"{sha}\n"
+    assert not (refs / "r1-t").exists()  # the attempt's ref went with the run
     assert not list((home / "tl" / "r" / ".artifacts").glob("*"))  # ... and its artifacts, once fetched
 
 
