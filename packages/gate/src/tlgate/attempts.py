@@ -33,6 +33,14 @@ def executor_repo(git: GateGit, wt: str) -> str:
     return name if plain else str(check_files.repo_key(git, wt))
 
 
+@dataclass(frozen=True)
+class Ended:
+    rc: int
+    tail: str
+    killed: bool = False
+    wall_hit: bool = False
+
+
 @dataclass
 class Outcome:
     rc: int
@@ -43,6 +51,7 @@ class Outcome:
     base_red: bool = False
     wall_hit: bool = False  # stopped at the check's wall limit
     stopped: bool = False  # stopped by the flag it ran under (its lane was cancelled)
+    killed: bool = False  # stopped by the flag or the wall limit
 
 
 class Attempts:
@@ -55,9 +64,10 @@ class Attempts:
         tries, prior = 0, ""
         while True:
             tries += 1
-            rc, tail, seen, took = self._once(c, log, env, stop)
-            out = Outcome(rc, tail, seen, tries, took, wall_hit=self.host.wall_hit)
-            if stop is not None and stop.is_set() and rc != 0 and self.host.killed:
+            end, seen, took = self._once(c, log, env, stop)
+            rc, tail = end.rc, end.tail
+            out = Outcome(rc, tail, seen, tries, took, wall_hit=end.wall_hit, killed=end.killed)
+            if stop is not None and stop.is_set() and rc != 0 and end.killed:
                 out.stopped = True
                 return out
             if rc in {0, 124, UNVERIFIED_EXIT}:  # a rerun cannot make a check verify what the host lacks
@@ -68,20 +78,20 @@ class Attempts:
             if kind == "lock":
                 return self._wait_lock(c, log, env, out, stop)
             if tries == 1 and c.repo and self.base.red(c, stop):
-                return Outcome(rc, tail, seen, tries, took, base_red=True, wall_hit=self.host.wall_hit)
+                return Outcome(rc, tail, seen, tries, took, base_red=True, wall_hit=end.wall_hit, killed=end.killed)
             if not self._again(c, out, tries, sig, prior):
                 return out
             prior = sig
 
-    def _once(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str, str, float]:
+    def _once(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[Ended, str, float]:
         t0 = time.time()
-        rc, tail = self._exec(c, log, env, stop)
-        seen = self._read(log, tail)
+        end = self._exec(c, log, env, stop)
+        seen = self._read(log, end.tail)
         took = time.time() - t0
         self.host.waits.note_slot_waits(seen, took)
-        return rc, tail, seen, took
+        return end, seen, took
 
-    def _exec(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str]:
+    def _exec(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> Ended:
         """One run of the check on the host: its argv, its log, its kept files."""
         ids = {**step_env(self.host, c.id), EnvVar.TL_ARTIFACT_STEP.value: c.id}  # a new attempt directory for every run, a lock rerun too
         # what the repo's check declares in its `env` (it is part of the cache key: it must reach the child too)
@@ -89,19 +99,21 @@ class Attempts:
         argv = [*argv_of(c.cmd), *c.files]
         try:
             if c.where == "linux":
-                rc, tail = self._linux(c, argv, env, ids, log, stop)
+                end = self._linux(c, argv, env, ids, log, stop)
             else:
                 rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop, network=c.network)
+                end = Ended(rc, tail, self.host.killed, self.host.wall_hit)
         except OSError as error:
             rc = 127 if isinstance(error, FileNotFoundError) else 126
             tail = f"check `{c.id}` could not start `{argv[0]}`: {error}"
             log.write_text(tail + "\n", encoding="utf-8")
+            end = Ended(rc, tail)
         # before a retry, the next check or the slot's reset overwrites what this attempt left
         keep(self.host, c, log, Path(ids[EnvVar.TL_ARTIFACT_DIR.value]))
-        return rc, tail
+        return end
 
     def _linux(self, c: Check, argv: list[str], env: Mapping[str, str], ids: Mapping[str, str], log: Path,
-               stop: threading.Event | None) -> tuple[int, str]:
+               stop: threading.Event | None) -> Ended:
         """The committed HEAD of the checkout this check runs in, on the executor: only what the check was told by its profile and
         the run's names go over (the local paths mean nothing there)."""
         wt, git = str(self.host.wt), self.host.git
@@ -111,8 +123,7 @@ class Attempts:
             wt=wt, repo=executor_repo(git, wt), slot=slot, sha=git.rev_parse(wt, "HEAD"), run_id=self.host.run_id,
             step=c.id, argv=argv, env=told, log=log, artifact_dir=Path(ids[EnvVar.TL_ARTIFACT_DIR.value]),
             timeout_s=c.wall_min * 60, stop=stop)
-        self.host.killed, self.host.wall_hit = done.stopped or done.wall_hit, done.wall_hit  # what host.sh says of a stopped command
-        return done.rc, done.tail
+        return Ended(done.rc, done.tail, done.stopped or done.wall_hit, done.wall_hit)
 
     @staticmethod
     def _read(log: Path, fallback: str) -> str:
@@ -141,6 +152,7 @@ class Attempts:
     def _wait_lock(self, c: Check, log: Path, env: Mapping[str, str], out: Outcome, stop: threading.Event | None) -> Outcome:
         """An editor or project lock: wait, then rerun, 15/30/60 s up to 5 min in all."""
         rc, tail, seen = out.rc, out.tail, out.seen
+        end = Ended(rc, tail, out.killed, out.wall_hit)
         started = time.time() - out.secs
         for n, wait in enumerate(retry.lock_waits(), 1):
             self.host.warn(f"`{c.id}` is held by an editor or project lock; waiting {wait} s ({n})")
@@ -148,14 +160,15 @@ class Attempts:
             if stop is None:
                 self.sleep(wait)
             elif stop.wait(wait):  # the lane was cancelled while it waited
-                return Outcome(rc, tail, seen, out.tries, out.secs, stopped=True)
+                return Outcome(rc, tail, seen, out.tries, out.secs, stopped=True, wall_hit=end.wall_hit, killed=end.killed)
             self.host.waits.add(wait, WaitWhat.EDITOR_LOCK, wid)
-            rc, tail = self._exec(c, log, env, stop)
+            end = self._exec(c, log, env, stop)
+            rc, tail = end.rc, end.tail
             seen = self._read(log, tail)
             self.host.waits.note_slot_waits(seen, time.time() - started)
             if rc == 0 or matchers.failure_kind(seen, self.host.cfg.lock_fail) != "lock":
                 break
         if rc and matchers.failure_kind(seen, self.host.cfg.lock_fail) == "lock":
             tail += f"\n(still locked after {retry.LOCK_WAIT_MAX} s of waiting)"
-        return Outcome(rc, tail, seen, out.tries, out.secs, wall_hit=self.host.wall_hit,
-                       stopped=stop is not None and stop.is_set() and self.host.killed and rc != 0)
+        return Outcome(rc, tail, seen, out.tries, out.secs, wall_hit=end.wall_hit, killed=end.killed,
+                       stopped=stop is not None and stop.is_set() and end.killed and rc != 0)
