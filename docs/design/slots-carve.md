@@ -28,4 +28,4 @@ S1 waits for #607 and #608 (touches run/*), #607 (land gate move, two land impor
 - `engine_lock` is on the run-lifecycle path (the by-hand rule of the factory's cutover protocol): S1 must be a byte-for-byte move plus the `fx` parameter; the slot race tests (tests/slots/real, tests/fixtures/race) are the proof.
 - Every caller of the four engine_lock entry points passes `FX`: a missed one fails type checking, not at run time, because the parameter has no default.
 
-Areas S1 extracts policy to `tlareas.policy`; slot locks, admission and area-lock effects remain in the shell for later slices.
+Areas S1 extracts policy to `tlareas.policy`; S2 keeps atomic admission in `tlareas.policy` over the `AreasHost` protocol, with a frozen concrete host and occupancy and area-lock effects bound by the shell.
