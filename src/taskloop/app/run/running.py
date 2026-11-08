@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tlareas.policy import Areas, area_busy_text
 from tlkernel.beadsport import Beads
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
@@ -13,7 +14,6 @@ from tlslots import engine_lock
 
 from taskloop.adapters import beadtools
 from taskloop.adapters.locks import hold_path
-from taskloop.app.loop.queue import QueueRule, area_busy_text
 from taskloop.app.track import console
 from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
@@ -45,4 +45,4 @@ def area_busy(repo: Any, cfg: Any, bead: Any, git: Git, who: Identity, store: An
     """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "") for none (run-task's
     check before it takes the engine lock)."""
     store = store or beadtools.bd_store(who.actor, repo)
-    return area_busy_text(QueueRule(store, cfg, running(repo, git, who, store), lambda b: "", console.say), bead)
+    return area_busy_text(Areas(store, cfg.areas, cfg.area_label_prefix, running(repo, git, who, store), console.say), bead)

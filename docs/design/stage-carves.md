@@ -93,3 +93,5 @@ Outward imports: for every `.py` under `src/taskloop/app/<stage>`, the distinct 
 
 Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
 `ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.
+
+Areas S1: `packages/areas` (`tlareas.policy`) owns area membership, ancestor caching and busy-area exclusion; queue delegates preserve shell wiring.
