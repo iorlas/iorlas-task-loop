@@ -11,6 +11,8 @@ from tlkernel.ids import BeadId
 from tlkernel.row import Row
 from tlkernel.wire import Rec, Refused
 
+RUN_SLOT: dict[str, str] = {"owned": ""}  # owned by this process across a re-exec handover
+
 
 @final
 class RunReport(Rec):
