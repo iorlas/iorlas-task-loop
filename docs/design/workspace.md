@@ -149,7 +149,7 @@ Root-only setup also includes shell process-adapter registration, complete DB
 part declarations, preload, quarantine/serial policy, worker memory caps,
 worker HOME isolation and temp-cache restoration (`tests/conftest.py:60`,
 `:67`, `:116`, `:259`, `:275`, `:293`). Shell registrations and policy stay in the root;
-delegate retains its own HOME/CLI isolation in `tests/delegate/conftest.py`.
+delegate retains its own HOME/CLI isolation in `packages/delegate/tests/conftest.py`.
 The delegate move must preserve that conftest. These prerequisites do not move
 or register the delegate member.
 
@@ -163,3 +163,9 @@ vendored `any_agent` (supervisor/process records), with no shell dependency;
 `any_agent` is an existing shelf dependency, not a kernel module. This preserves
 the pure move but is an explicit exception to a literal stdlib/testkit/kernel
 inventory. No compatibility forwarding module remains in root support.
+
+Areas S1 adds the `tlareas` member with flat `policy.py`, kernel-only imports and isolated memory-bead policy tests.
+
+S1c PR-B moves delegate tests to `packages/delegate/tests`. `just test-delegate` runs the member configuration in its isolated environment, including `real/`; the SCOPED rule selects it only for delegate, vendor or testkit changes.
+
+Land L2a: `packages/land` (`tlland`) owns land app/domain code and isolated tests; shell integration tests remain in `tests/land`.

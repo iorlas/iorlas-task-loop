@@ -1,4 +1,4 @@
-"""The close guard (app/wire/closeguard.py): a task, feature or bug bead with an engine run or a task branch is closed only with a land on
+"""The close guard (app/track/closeguard.py): a task, feature or bug bead with an engine run or a task branch is closed only with a land on
 record or a typed reason; a manual sha counts only as an ancestor of the base. `tl close`, `tl task close` and the release go through it."""
 import contextlib
 import io
@@ -12,8 +12,7 @@ from support.who import who
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 
-from taskloop.app.track import verbs
-from taskloop.app.wire import closeguard
+from taskloop.app.track import closeguard, verbs
 from tlkernel.bead import Bead
 from tlkernel.enums import Outcome
 from tlkernel.gitfacts import Ref
@@ -52,15 +51,13 @@ class Guarded(Case):
         Guarded.n += 1
         self.bead = BeadId(f"cg-{Guarded.n}")
         self.bd = FakeBeads(actor="tl-me")
-        patch = mock.patch.object(closeguard.wslots_config, "load_cfg", return_value=mock.Mock(base="origin/main"))
-        patch.start()
-        self.addCleanup(patch.stop)
+
 
     def add(self, kind="task"):
         self.bd.beads[self.bead] = Bead(id=self.bead, title="t", status="open", issue_type=kind)
 
     def ask(self, reason, git=None):
-        return closeguard.refusal(who(), self.bd, git or Git(), "/r", self.bead, reason)
+        return closeguard.refusal(who(), self.bd, git or Git(), "/r", self.bead, reason, base_of=lambda repo, git: "origin/main")
 
     def run_of_bead(self):
         RunLocator(homes.cfg()).create("/r", self.bead, time.time())
@@ -122,7 +119,8 @@ class Guarded(Case):
         self.bd.beads[self.bead] = self.bd.beads[self.bead].replace(assignee="tl-me", status="in_progress")
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            rc = verbs.close(who(), self.bead, self.bd, closeguard.guard_for(who(), self.bd, Git(), "/r"), "done")
+            rc = verbs.close(who(), self.bead, self.bd, closeguard.guard_for(who(), self.bd, Git(), "/r",
+                                                                         base_of=lambda repo, git: "origin/main"), "done")
         assert rc == 1
         assert "no land on record" in err.getvalue()
         assert self.bd.beads[self.bead].status == "in_progress"
@@ -134,7 +132,7 @@ class Guarded(Case):
         self.run_of_bead()
         assert verbs.bd_close_args(["close", str(self.bead), "-r", "duplicate x"]) == ([str(self.bead)], "duplicate x")
         assert verbs.bd_close_args(["done", "--reason=wontfix", str(self.bead), "--session", "s"]) == ([str(self.bead)], "wontfix")
-        guard = closeguard.guard_for(who(), self.bd, Git(), "/r")
+        guard = closeguard.guard_for(who(), self.bd, Git(), "/r", base_of=lambda repo, git: "origin/main")
         store = mock.Mock()
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
@@ -150,6 +148,7 @@ class Guarded(Case):
         self.run_of_bead()
         git = Git(on_base=(SHA,))
         git.rev_parse = lambda d, rev: SHA  # type: ignore[method-assign]
-        assert closeguard.close_released(who(), self.bd, git, "/clone", self.bead, "released 1.2.3", "1.2.3") == ""
+        assert closeguard.close_released(who(), self.bd, git, "/clone", self.bead, "released 1.2.3", "1.2.3",
+                                         base_of=lambda repo, git: "origin/main") == ""
         assert self.bd.beads[self.bead].status == "closed"
         assert closeguard.has_land(who(), self.bead)

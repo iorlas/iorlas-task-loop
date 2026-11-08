@@ -29,7 +29,7 @@ T = 1_000_000.0
 
 def parse(*argv: str) -> argparse.Namespace:
     ap = argparse.ArgumentParser()
-    cli.add_parsers(ap.add_subparsers(dest="cmd"))
+    ask_verbs.add_parsers(ap.add_subparsers(dest="cmd"))
     return ap.parse_args(argv)
 
 

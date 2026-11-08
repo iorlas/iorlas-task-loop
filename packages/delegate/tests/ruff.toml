@@ -1,0 +1,4 @@
+# The root config; delegate's tests import delegate itself (see packages/delegate/src/delegate/ruff.toml).
+extend = "../../../ruff.toml"
+
+[lint.flake8-tidy-imports.banned-api]

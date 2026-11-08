@@ -5,9 +5,9 @@ from unittest import mock
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.app.land.push_judge import PushStatus, judge_push
 from tlkernel.env import Env
 from tlkernel.gitport import Git
+from tlland.push_judge import PushStatus, judge_push
 
 SHA = "a" * 40
 

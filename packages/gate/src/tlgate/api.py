@@ -5,6 +5,7 @@ that must not (a package) gets them from."""
 from tlgate import authorization, evidence
 from tlgate.cache import RunnerMemo, satisfied
 from tlgate.domain import planref
+from tlgate.domain.retry import retry_allowed
 from tlgate.domain.specs import engine_digest, gate_items, repo_check
 from tlgate.host import CheckFault
 from tlgate.ports import ReceiptStores
@@ -19,5 +20,6 @@ __all__ = [
     "gate_items",
     "planref",
     "repo_check",
+    "retry_allowed",
     "satisfied",
 ]

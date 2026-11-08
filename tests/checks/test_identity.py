@@ -7,8 +7,6 @@ from support.check_host import CheckHostCase
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.app.land.cmds import Cmds
-from taskloop.app.land.stackgate import StackGate
 from taskloop.cli.green import cmd_green
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
@@ -25,6 +23,8 @@ from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha, Digest
+from tlland.cmds import Cmds
+from tlland.stackgate import StackGate
 from tltestkit import procsim
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory

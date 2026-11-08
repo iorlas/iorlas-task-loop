@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.memstores import fake_stores
 from support.tlmain import tl_main
 
-from taskloop.app.land.gate import Gate, Problem, ProblemKind
 from taskloop.app.run.stages import run_stages
 from taskloop.stores.runlog import RunLog
 from tlkernel import closeeffects as effects
@@ -30,6 +29,7 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.parks import Park, ParkStore
 from tlkernel.run import RunManifest, RunState
+from tlland.gate import Gate, Problem, ProblemKind
 from tlpipeline.api import Blocked, RecordRun, Steps, answer, parse_step
 from tltestkit.checks import typed
 from tltestkit.plans import PLAN

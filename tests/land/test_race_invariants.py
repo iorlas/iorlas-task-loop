@@ -60,7 +60,6 @@ from taskloop.adapters import (
 from taskloop.adapters import (
     git as git_adapter,
 )
-from taskloop.app.land.lander import lander_over
 from taskloop.app.run import (
     entry,
     running,
@@ -70,12 +69,14 @@ from taskloop.app.track import (
     verbs,
 )
 from taskloop.app.wire import slots as wslots
+from tlkernel.beadsport import BeadPatch
 from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome, LogRow
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.slots import Checkout, SlotGitError
+from tlland.lander import lander_over
 from tlrelease import push as release_push
 from tlslots import config as wslots_config
 from tlslots import engine_lock, marks, reset
@@ -310,9 +311,15 @@ class Invariants(test_loop.Base):
                 return ""
 
         def run(bead, slot, name):
-            return lambda: ((a_in.wait(GUARD) if name == "B" else None),
-                            entry.take_area(Args(id=bead, exclusive_area=True), self.repo_s, cfg, Lock(name), port_git(),
-                                            support_who.who(), sb=slot))[1]
+            def admit():
+                a_in.wait(GUARD) if name == "B" else None
+                host = running.areas_host(self.repo_s, cfg, port_git(), support_who.who())
+
+                def mark() -> None:
+                    beadtools.attempt(host.store.update, BeadId(slot), BeadPatch(set_metadata={"held_bead": bead}))
+
+                return entry.area_admission.hand(host, BeadId(bead), True, Lock(name).take, mark)
+            return admit
 
         real_hold = running.hold_path
 

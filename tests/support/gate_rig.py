@@ -7,10 +7,10 @@ from typing import Any
 from support.check_host import CheckHostCase, FakeCheckHost
 from support.memstores import fake_stores
 from support.who import who
-from taskloop.app.land.host import LandState
 from tlkernel.config import EngineConfig
 from tlkernel.paths import ConfigDir
 from tlkernel.ports import Clock
+from tlland.host import LandState
 from tlpipeline.api import Blocked, blocked_for
 from tltestkit.cfgs import cfg_with
 

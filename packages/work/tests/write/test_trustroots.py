@@ -1,0 +1,29 @@
+"""A skipped review cannot accept an unapproved trust-root change."""
+from unittest.mock import Mock
+
+import pytest
+from tlkernel.bead import Bead
+from tlkernel.gitfacts import DiffEntry
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlpipeline.api import Blocked, blocked_for
+from tltestkit.case import Case
+
+from tlwork.write.review_round import ReviewRound
+from tlwork.write.state import RoundStop
+
+
+class ReviewTrustRoots(Case):
+    def test_review_is_parked_before_review_off_or_mechanical_skip(self):
+        host = Mock(wt="/work", bead=BeadId("t-1"), blocked_for=blocked_for)
+        host.git.diff_entries.return_value = [DiffEntry(status="M", path="AGENTS.md")]
+        host.store.show.return_value = Bead(id=host.bead, title="t", status="open")
+        review = ReviewRound(host)
+        review.switched_off = Mock(return_value=True)
+        with pytest.raises(RoundStop) as caught:
+            review.run(Mock())
+        blocked = caught.value.cause
+        assert isinstance(blocked, Blocked)
+        assert blocked.kind == Kind.ASK_DECISION
+        assert blocked.spec is not None
+        review.switched_off.assert_not_called()

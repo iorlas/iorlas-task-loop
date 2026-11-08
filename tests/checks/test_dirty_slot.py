@@ -4,10 +4,10 @@ from unittest import mock
 
 import pytest
 
-from taskloop.app.land.gate import FAULTS
 from tlgate.clean import isolated
 from tlgate.host import CheckFault
 from tlkernel.checks import CheckFaultKind
+from tlland.gate import FAULTS
 from tltestkit.case import Case
 
 

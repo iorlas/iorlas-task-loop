@@ -10,11 +10,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.gate_rig import GateCase
 
-from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from tlgate.domain.specs import gate_items
 from tlkernel.envvars import EnvVar
 from tlkernel.procport import Ran
 from tlkernel.slots import SlotGitError
+from tlland.gate import Gate, GatePass, Problem, ProblemKind
 from tlpipeline.api import Blocked
 from tltestkit import procsim
 

@@ -25,14 +25,8 @@ from tltestkit.logs import records
 from support.memstores import fake_stores
 
 from taskloop.adapters import landlock, locks
-from taskloop.app.land.carry import Carry
-from taskloop.app.land.cmds import Cmds
-from taskloop.app.land.forge import Forge
-from taskloop.app.land.stack import MODE, Stack
-from taskloop.app.land.stackgate import StackGate
-from taskloop.app.track import runs
+from taskloop.app.track import closeguard, runs
 from taskloop.app.track.verbs import trace
-from taskloop.app.wire import closeguard
 from taskloop.app.wire.slotfx import FX
 from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.stores.real import real_stores
@@ -56,6 +50,11 @@ from tlkernel.locks import LockTimeout
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import Checkout, NotARepo, SlotGitError
+from tlland.carry import Carry
+from tlland.cmds import Cmds
+from tlland.forge import Forge
+from tlland.stack import MODE, Stack
+from tlland.stackgate import StackGate
 from tlpipeline.api import answer
 
 OID: dict[str, str] = {"task/a": "a" * 40, "task/b": "b" * 40}
@@ -781,7 +780,7 @@ class Verb(StackCase):
         store = self.bd("lifesim-fvit")
         self.sim.pr(294, "task/a", OID["task/a"])
         RunLocator(who.config).create(str(self.repo), "lifesim-fvit", 1.0)  # the bead has an engine run, and no land yet
-        guard = closeguard.guard_for(who, store, self.git, str(self.repo))
+        guard = closeguard.guard_for(who, store, self.git, str(self.repo), base_of=lambda repo, git: "origin/main")
         assert "no land on record" in guard(BeadId("lifesim-fvit"), "done")
         assert self.verb(["294"], ["294=lifesim-fvit"], who, store) == 0
         assert guard(BeadId("lifesim-fvit"), "done") == ""

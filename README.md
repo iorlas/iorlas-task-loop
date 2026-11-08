@@ -17,8 +17,8 @@ claude plugin install iorlas-task-loop@iorlas-marketplace
 Then in a repo that uses bd, say "task loop". Requirements: Python 3.15+, uv, git, bd 1.3+,
 Claude Code. macOS only.
 
-Workers come with the plugin: `src/delegate` is a library the engine calls ([delegate.api](docs/contracts/delegate-api.md)); it picks account
-and model from live plan limits. `tl accounts` shows which worker accounts are ready and how to fix the rest.
+Workers come with the plugin: `packages/delegate/src/delegate` is a library the engine calls ([delegate.api](packages/delegate/docs/contracts/delegate-api.md)); it picks account
+and model from live plan limits. Its tests live in `packages/delegate/tests` (`just test-delegate`). `tl accounts` shows which worker accounts are ready and how to fix the rest.
 
 ## What the loop does
 

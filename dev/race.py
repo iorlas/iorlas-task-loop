@@ -110,7 +110,7 @@ class Race:
         shim(h / "bin" / "bd", FIX / "fake_bd.py")
         (h / "delegate").mkdir()  # the engine reads contract.json beside the route.py it is told to use
         shutil.copy(
-            str(ROOT / "tests" / "fixtures" / "delegate3" / "skills" / "delegate" / "contract.json"), str(h / "delegate" / "contract.json")
+            str(ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json"), str(h / "delegate" / "contract.json")
         )
         shutil.copy(str(FIX / "fake_route.py"), str(h / "delegate" / "route.py"))
         # a real `plugin update` leaves the new version in the cache and release.py checks for it (tl-7y6.5.10); the two

@@ -5,14 +5,15 @@ from typing import Protocol
 
 from tlasks.closing import ClosingAsks
 from tlkernel.identity import Identity
+from tlland.closing import LandCleanups, LandFollowUps
+from tlland.record import FollowUpCheckpoints, FollowUpHost, file_follow_ups
 from tlpipeline import api
 from tlslots.config import profile_slots
 
 from taskloop.adapters import beadtools, closes
-from taskloop.app.land.closing import LandCleanups, LandFollowUps
-from taskloop.app.land.record import FollowUpCheckpoints, FollowUpHost, file_follow_ups
+from taskloop.app.track import closeguard
 from taskloop.app.track.closing import ClosingBeads
-from taskloop.app.wire import closeguard, slotfx
+from taskloop.app.wire import slotfx
 from taskloop.app.wire.slots import slot_of
 from taskloop.stores.runlog import RunLog
 

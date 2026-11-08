@@ -7,6 +7,7 @@ and says nothing for the facts only the engine holds."""
 import argparse
 import hashlib
 import importlib
+import ipaddress
 import itertools
 import json
 import os
@@ -85,6 +86,22 @@ def inet_addrs(listing: str) -> list[str]:
     words = listing.split()
     ips = [after.split("/")[0] for word, after in itertools.pairwise(words) if word == "inet"]
     return [ip for ip in ips if ip.count(".") == 3 and all(p.isdigit() for p in ip.split("."))]
+
+
+def tailscale_ip(exe: str | None, ask: Callable[[list[str]], tuple[int, str]]) -> str | None:
+    """Pick this machine's Tailscale IPv4 from the binary or interface listings."""
+    try:
+        if exe:
+            code, out = ask([exe, "ip", "-4"])
+            if code == 0 and out.strip():
+                return out.strip().splitlines()[0]
+        for cmd in (["ip", "-4", "-o", "addr"], ["ifconfig"]):
+            for ip in inet_addrs(ask(cmd)[1]):
+                if ipaddress.ip_address(ip) in dash_bind.CGNAT:
+                    return ip
+    except OSError:
+        pass
+    return None
 
 
 def default_binds(env: ProcessEnv, tailscale: Callable[[], str | None]) -> list[str]:

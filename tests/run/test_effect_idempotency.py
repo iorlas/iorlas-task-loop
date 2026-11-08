@@ -9,8 +9,8 @@ import pytest
 from support.narrow_hosts import FakeSettleHost
 
 from taskloop.adapters import beadtools
+from taskloop.app.track import closeguard
 from taskloop.app.track.closing import ClosingBeads
-from taskloop.app.wire import closeguard
 from tlkernel import askspecs
 from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc

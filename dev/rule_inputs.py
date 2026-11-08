@@ -48,6 +48,9 @@ ALWAYS_RULES = {
 
 # SELF helpers are named here for review; imports/mentions normally supply their edges.
 RULES_BY_PATH = {
+    "tests/rules/test_cpu_rerun.py": (
+        "tests/conftest.py",
+    ),
     # dev/affected.py, dev/importgraph.py
     "tests/rules/test_affected_closure.py": (
     ),
@@ -75,9 +78,9 @@ RULES_BY_PATH = {
     "tests/rules/test_delegate_scope.py": (
     ),
     "tests/rules/test_doc_contract_version.py": (
-        "src/delegate/contracts/wire.py",
+        "packages/delegate/src/delegate/contracts/wire.py",
         "docs/dev/integrations.md",
-        "docs/contracts/delegate-api.md",
+        "packages/delegate/docs/contracts/delegate-api.md",
         "README.md",
         "CLAUDE.md",
     ),
@@ -103,6 +106,7 @@ RULES_BY_PATH = {
         "src/taskloop/app/loop/ruff.toml",
         "src/taskloop/app/reconcile/**/*.py",
         "src/taskloop/app/reconcile/ruff.toml",
+        "packages/areas/**",
         "packages/release/src/**/*.py",
         "packages/release/ruff.toml",
     ),
@@ -110,7 +114,7 @@ RULES_BY_PATH = {
         "packages/kernel/src/tlkernel/**/*.py",
     ),
     "tests/rules/test_land_asserts_tree.py": (
-        "src/taskloop/app/land/stack.py",
+        "packages/land/src/tlland/stack.py",
     ),
     # tests/rules/layout_lock.py
     "tests/rules/test_layout_lock.py": (
@@ -147,8 +151,8 @@ RULES_BY_PATH = {
     "tests/rules/test_procsim.py": (
     ),
     "tests/rules/test_queue_terms.py": (
-        "src/taskloop/domain/land/queue*.py",
-        "src/taskloop/app/land/queue*.py",
+        "packages/land/src/tlland/domain/queue*.py",
+        "packages/land/src/tlland/queue*.py",
     ),
     # tests/rules/layer_ratchet.py, tests/rules/needs_ratchet.py, tests/rules/temp_ratchet.py, tests/rules/ratchet_change.py
     "tests/rules/test_ratchets.py": (

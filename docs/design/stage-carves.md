@@ -34,9 +34,9 @@ Columns: files/sloc of `app/<stage>`; tests (files; how many import `support.cas
 | artifacts (E1 part) | 7 / 365 | 5 (2) | run/ask_flow; look, write, cli/factory | none (a leaf) |
 | gate (.16, `checks`) | 23 / 1949 | 49 (37) | run/{context,field_ports,engine,preflight}; launch/{staged,check_host,check}; land 6, write 2, release 1, workers 2 | `domain.checks` 73 (moves with it), `stores.bundle` 10, `tlkernel.{check_files,profile_at}, app.checks.base_tree, tlkernel.childenv` 17, `stores.{runlog,api}` 4 |
 | release (.19; R1 code carve done) | 16 / 869 | 10 (8) | run/{run_once,reload_ports,parts_run,engine}; wire/{brief,doctor}; launch/{loop,loop_ops,loop_start} | `adapters.ident` 11 (kernel), `adapters.{suiteout,landlock,gitrepo,beadtools}, tlkernel.childenv` 10, `app.checks.{cache,authorization}` (gate api), `stores.real` 2 |
-| slots (.17) | 16 / 1202 | 20 (17) | run/{entry,run_once,running,shared,closer_ports,bead_env,reload_ports}; wire/{doctor,closeguard,slots,setup}; 7 launch files; land 2 | `domain.slot_liveness` 8 (moves), `adapters.{pidcheck,ident,agent,locks}, tlkernel.profile_at` 10, `domain.matchers` 2, `stores.api` 2 |
+| slots (.17) | 16 / 1202 | 20 (17) | run/{entry,run_once,running,shared,closer_ports,bead_env,reload_ports}; wire/{doctor,slots,setup}; track/closeguard; 7 launch files; land 2 | `domain.slot_liveness` 8 (moves), `adapters.{pidcheck,ident,agent,locks}, tlkernel.profile_at` 10, `domain.matchers` 2, `stores.api` 2 |
 | asks (.18) | 18 / 1273 | 28 (23) | run/{ask_flow,entry,parts_run,closer_ports}; wire/asks; launch/{loop,loop_ops,dash_ports}; land 2, plan 2, report, workers, write | `domain.asks` 15 (moves), `domain.lanes` 6 (port), `stores.real` 4, `domain.{plan,beads}` 4, `adapters.{ident,beadtools}` 2 |
-| land (.20) | 47 / 3918 | 72 (43) | run/{sections,run_once,parts_land,parts_run,fields,closer_ports}; wire/asks; launch/{check_host,push_judge} | `domain.land` 76 (moves), `stores.{runlog,bundle,api,real}` 54, `domain.{asks,checks,lanes,matchers}` 30, `app.checks` 9 and `app.slots.{reset,engine_lock}` 8 (their apis) |
+| land (.20; L2a code/test carve done) | 47 / 3918 | 72 (43) | run/{sections,run_once,parts_land,parts_run,fields,closer_ports}; wire/asks; launch/{check_host,push_judge} | `domain.land` 76 (moves), `stores.{runlog,bundle,api,real}` 54, `domain.{asks,checks,lanes,matchers}` 30, `app.checks` 9 and `app.slots.{reset,engine_lock}` 8 (their apis) |
 | work (E1): plan | 18 / 1253 | 22 (11) | run/{fields,sections,host} | `domain.{checks,plan,prompts,asks,work}` 55, `app.asks.intake` 4 |
 | work: write | 17 / 1472 | 12 (9) | run/{host,stages,parts_land,parts_plan,fields} | `domain.{prompts,work,checks,asks,review}` 54, `app.checks.evidence` 3, `app.asks.trustroots` 2, `app.artifacts` 2 |
 | work: review | 8 / 708 | 13 (9) | run/{fields,host} | `domain.{work,review,asks,matchers,checks}` 35 |
@@ -75,7 +75,7 @@ E1 rule from the bead: plan, write, review, look and artifacts are one package `
 | 5 | work: look, write | look after R4a, write after R4c | artifacts, gate, asks | write is the last piece of E1 |
 | 6 | release (.19; R1 code carve done) | after R4b | gate api (`checks.cache`, `authorization`), `adapters.ident` in kernel | 16 files, small |
 | 7 | slots (.17) | after R4b; rerun after R4d-f | `adapters.{pidcheck,agent,locks}` into slots or kernel | wire/ and launch/ importers are the long tail (11 files) |
-| 8 | land (.20) | after R4 and after 2, 7 | gate and slots api (`checks` 9, `slots.reset`/`engine_lock` 8), `stores.*` ports | 47 files, last by size and by collision |
+| 8 | land (.20; L2a code/test carve done) | after R4 and after 2, 7 | gate and slots api (`checks` 9, `slots.reset`/`engine_lock` 8), `stores.*` ports | 47 files, last by size and by collision |
 
 Can start before R4 lands: 1, 2, 3 (code moves; their `run/` importers are not R4 files). Hold until R4a: asks, look. Hold until R4b: release, slots. Hold until R4c: write. Hold until R4 and the others: land.
 
@@ -93,3 +93,5 @@ Outward imports: for every `.py` under `src/taskloop/app/<stage>`, the distinct 
 
 Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
 `ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.
+
+Areas S1: `packages/areas` (`tlareas.policy`) owns area membership, ancestor caching and busy-area exclusion; queue delegates preserve shell wiring.

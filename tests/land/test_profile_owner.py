@@ -18,13 +18,6 @@ from support.memstores import fake_stores
 from support.narrow_hosts import Stopped
 from support.narrow_land import FakePushHost
 
-from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.app.land.gate import mint, owner_refusal
-from taskloop.app.land.host import Land
-from taskloop.app.land.push import Pusher
-from taskloop.app.land.push_judge import PushStatus, judge_push
-from taskloop.app.land.stack import Stack
-from taskloop.app.land.stackgate import StackGate
 from taskloop.app.launch.check import run_check
 from taskloop.app.wire.slotfx import FX
 from taskloop.cli.land_stack import add_parser, cmd_land_stack
@@ -36,6 +29,13 @@ from tlkernel.gitfacts import TreeEntry
 from tlkernel.ids import TreeSha
 from tlkernel.profile_changes import ProfileChange
 from tlkernel.runkey import BaseSha
+from tlland.cmds import Cmds, Stop
+from tlland.gate import mint, owner_refusal
+from tlland.host import Land
+from tlland.push import Pusher
+from tlland.push_judge import PushStatus, judge_push
+from tlland.stack import Stack
+from tlland.stackgate import StackGate
 from tltestkit.fake_clock import FakeClock
 
 TEXT = 'Denis: "I approve this profile" 2026-11-02T12:00Z'
@@ -55,7 +55,7 @@ class OwnerText(Case):
             with self.subTest(text=text):
                 args = parser.parse_args(["land-stack", "topic", "--profile-change", text])
                 out = io.StringIO()
-                with redirect_stdout(out), mock.patch("taskloop.app.land.stack.RunLocator") as locator:
+                with redirect_stdout(out), mock.patch("tlland.stack.RunLocator") as locator:
                     rc = cmd_land_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ["tl"], env=Env())
                 assert rc == 2
                 assert len(out.getvalue().splitlines()) == 1
@@ -73,7 +73,7 @@ class OwnerText(Case):
     def test_cli_engine_context_refuses_before_any_write(self):
         args = argparse.Namespace(profile_change=TEXT)
         out = io.StringIO()
-        with redirect_stdout(out), mock.patch("taskloop.app.land.stack.RunLocator") as locator:
+        with redirect_stdout(out), mock.patch("tlland.stack.RunLocator") as locator:
             rc = cmd_land_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ["tl"],
                                 env=Env({EnvVar.TL_RUN_ID: "run"}))
         assert rc == 2
@@ -154,8 +154,8 @@ class OwnerGate(Case):
         with (mock.patch.object(stack, "resolve", return_value=("topic", "tip", pr)),
               mock.patch.object(self.git, "show", return_value="{}"),
               mock.patch.object(self.git, "profile_diff", return_value=PATCH) as diff,
-              mock.patch("taskloop.app.land.stack.time.time", return_value=1000),
-              mock.patch("taskloop.app.land.stack.os.getpid", return_value=42),
+              mock.patch("tlland.stack.time.time", return_value=1000),
+              mock.patch("tlland.stack.os.getpid", return_value=42),
               mock.patch.object(stack, "prepare", side_effect=prepared),
               mock.patch.object(stack, "merged", return_value="merged"), mock.patch.object(stack, "after")):
             stack.item(StackItem(branch="topic"))

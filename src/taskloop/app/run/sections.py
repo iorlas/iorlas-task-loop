@@ -2,9 +2,8 @@
 from collections.abc import Callable, Sequence
 
 from tlkernel.checkpoint import RunState
+from tlland import section as land
 from tlwork.api import restart as plan
-
-from taskloop.app.land import section as land
 
 
 class RestartSections(plan.Kept, land.Kept):

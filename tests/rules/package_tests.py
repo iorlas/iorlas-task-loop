@@ -6,7 +6,8 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-INTEGRATION = {
+INTEGRATION = {"land": ("tests/land",),
+    "areas": ("tests/slots",),
     "gate": ("tests/checks",), "asks": ("tests/asks",), "slots": ("tests/slots",), "release": ("tests/release",),
     "work": ("tests/review", "tests/plan", "tests/look", "tests/write"),
 }

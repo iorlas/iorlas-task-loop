@@ -365,7 +365,7 @@ class ReviewFixes(AreasBase):
     @NO_FCNTL
     def test_two_exclusive_hand_runs_in_one_area_let_the_first_in_win(self):
         self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
-        outs, real, gate, done = {}, entry.take_area, threading.Barrier(2, timeout=60), threading.Barrier(2, timeout=60)
+        outs, real, gate, done = {}, entry.area_admission.hand, threading.Barrier(2, timeout=60), threading.Barrier(2, timeout=60)
 
         def area(*a, **kw):  # both runs hold their slots before either decides, and neither lets go before both did
             gate.wait()
@@ -386,7 +386,7 @@ class ReviewFixes(AreasBase):
         made.return_value.log_path = Path(self.home, "e.jsonl")
         with mock.patch.object(admission, "admit", return_value=(True, "")), mock.patch.object(verbs, "claim", return_value=0), \
                 mock.patch.object(entry, "Engine", made), mock.patch.object(signal, "signal"), \
-                mock.patch.object(entry, "take_area", side_effect=area), redirect_stdout(io.StringIO()):
+                mock.patch.object(entry.area_admission, "hand", side_effect=area), redirect_stdout(io.StringIO()):
             ths = [threading.Thread(target=run, args=("x-1", "s1")), threading.Thread(target=run, args=("x-2", "s2"))]
             for t in ths:
                 t.start()

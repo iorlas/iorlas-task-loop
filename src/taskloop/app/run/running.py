@@ -1,39 +1,33 @@
 """Which beads run now, and the area lock a run-task takes before the engine lock (the loop's and run-task's shared view)."""
 import os
 import time
-from pathlib import Path
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
+from tlareas.policy import AreaLock, AreasHost, occupancy
 from tlkernel.beadsport import Beads
+from tlkernel.config import EngineConfig
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
-from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.ids import BeadId
 from tlkernel.lockenums import LockWhat
 from tlslots import engine_lock
 
 from taskloop.adapters import beadtools
 from taskloop.adapters.locks import hold_path
-from taskloop.app.loop.queue import QueueRule, area_busy_text
 from taskloop.app.track import console
 from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 
 
 def running(repo: str, git: Git, who: Identity, store: Beads | None = None) -> dict[BeadId, str]:
-    """{bead: where} of the beads running now: a slot bead held for one (held_bead), or a live engine lock naming one, in a slot
-    or any worktree of the repo."""
-    out: dict[BeadId, str] = {}
+    """Bind the shared occupancy policy to this repository's slots and engine locks."""
     slots = wslots.slot_beads(repo, who, store)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    for b in slots:
-        bid = b.metadata.get("held_bead")
-        if is_bead_id(bid) and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < stamp):
-            out[bid] = b.title.split()[-1]
-    for wt in wslots.worktrees(repo, git, who, slots):
-        lock = engine_lock.peek_engine_lock(who.config, wt)
-        if lock is not None and is_bead_id(lock.bead) and engine_lock.live(lock, fx=slotfx.FX):
-            out.setdefault(lock.bead, lock.slot or Path(wt).name)
-    return out
+    return occupancy(slots, wslots.worktrees(repo, git, who, slots),
+                     lambda wt: engine_lock.peek_engine_lock(who.config, wt),
+                     lambda lock: engine_lock.live(lock, fx=slotfx.FX), stamp)
 
 
 def area_lock(repo: Any, who: Identity) -> Any:
@@ -41,8 +35,19 @@ def area_lock(repo: Any, who: Identity) -> Any:
     return hold_path(record, f"pid {os.getpid()}", what=LockWhat.AREA)
 
 
-def area_busy(repo: Any, cfg: Any, bead: Any, git: Git, who: Identity, store: Any = None) -> tuple[str, str]:
-    """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "") for none (run-task's
-    check before it takes the engine lock)."""
-    store = store or beadtools.bd_store(who.actor, repo)
-    return area_busy_text(QueueRule(store, cfg, running(repo, git, who, store), lambda b: "", console.say), bead)
+@dataclass(frozen=True)
+class _AreasHost:
+    store: Beads
+    running: Callable[[], dict[BeadId, str]]
+    area_lock: Callable[[], AreaLock]
+    say: Callable[[str], None]
+    areas: Mapping[str, Sequence[str] | None]
+    area_label_prefix: str
+
+
+def areas_host(repo: str, cfg: EngineConfig, git: Git, who: Identity, store: Beads | None = None,
+               say: Callable[[str], None] = console.say) -> AreasHost:
+    """Bind admission to one store and the shared occupancy and area lock."""
+    store = store if store is not None else beadtools.bd_store(who.actor, repo)
+    return _AreasHost(store, lambda: running(repo, git, who, store), lambda: area_lock(repo, who), say,
+                     cfg.areas, cfg.area_label_prefix)

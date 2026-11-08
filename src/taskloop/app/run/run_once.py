@@ -3,12 +3,12 @@ from collections.abc import Callable
 from typing import Any
 
 from tlkernel.envvars import EnvVar
+from tlland.closing import LandHistory
 from tlpipeline.api import Lifecycle, RunBody
 from tlrelease.reexec import ReexecBook
 from tlslots.lease import Lease
 
 from taskloop.adapters import beadtools, deadline, ident
-from taskloop.app.land.closing import LandHistory
 
 
 class RunOnce:

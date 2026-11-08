@@ -18,8 +18,8 @@ from tltestkit.shellkit import EXIT_127, sh, without_shims
 from support.review_host import FakeReview
 from support.spawn import port_git
 
-from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import engine
+from tlland.checkout import Checkout
 from tlslots import config as wslots_config
 from tltestkit.cfgs import cfg_with
 from tltestkit.narrow import must

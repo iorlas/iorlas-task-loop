@@ -13,8 +13,6 @@ from unittest import mock
 
 import pytest
 
-from tltestkit.case import Case
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python3 -m unittest tests.test_areas, from the repo root
 import support.who as support_who
 from loop.test_loop import bead
@@ -33,7 +31,6 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from slots.test_slots import Slots
-from taskloop.app.loop.queue import QueueRule
 from taskloop.app.wire import slots as wslots
 from tlkernel import fence
 from tlkernel.bead import BdError
@@ -57,22 +54,6 @@ def tbead(*a, **k):
 
 
 NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
-
-
-def area_of(b, cfg, cache):
-    rule = QueueRule(mock.Mock(), cfg, {}, lambda _: "")
-    rule.parents = dict(cache)
-    return rule.area_of(b)
-
-
-class AreaOf(Case):
-    def test_the_areas_map_first_then_the_label_prefix_first_match_wins_and_none_is_unrestricted(self):
-        cache = {"e-core.1": "e-core", "e-core": None, "e-9": None}
-        assert area_of(tbead("x-1", parent="e-core.1", labels=["lane:live"]), AREAS, cache) == "core"
-        assert area_of(tbead("x-2", labels=["lane:live", "lane:sim"]), AREAS, cache) == "live"
-        assert area_of(tbead("x-3", labels=["build"]), AREAS, cache) == "build"
-        assert area_of(tbead("x-4", parent="e-9", labels=["auto"]), AREAS, cache) == ""
-        assert area_of(tbead("x-5", labels=["lane:live"]), cfg_with(), cache) == ""  # no area config: none
 
 
 class AreasBase(Slots):

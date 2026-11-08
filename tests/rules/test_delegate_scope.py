@@ -20,7 +20,8 @@ class TestDelegateScope:
         assert not wanted("tests")
 
     @pytest.mark.parametrize(
-        "path", ["src/delegate/app/run.py", "tests/delegate/test_route.py", "skills/task-loop/_vendor/stream_proc/runner.py"]
+        "path", ["packages/delegate/src/delegate/app/run.py", "packages/delegate/tests/test_route.py",
+                 "skills/task-loop/_vendor/stream_proc/runner.py"]
     )
     def test_a_delegate_change_runs_delegate(self, monkeypatch, path):
         monkeypatch.delenv("TL_DELEGATE_TESTS", raising=False)
@@ -35,7 +36,7 @@ class TestDelegateScope:
     def test_naming_the_folder_or_the_variable_runs_delegate(self, monkeypatch):
         monkeypatch.delenv("TL_DELEGATE_TESTS", raising=False)
         monkeypatch.setattr(scope, "changed_paths", set)
-        assert wanted("tests/delegate/test_route.py::T::test_x")
+        assert wanted("packages/delegate/tests/test_route.py::T::test_x")
         assert not wanted("tests/land")
         monkeypatch.setenv("TL_DELEGATE_TESTS", "1")
         assert wanted("tests/land")

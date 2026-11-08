@@ -1,0 +1,4 @@
+# The root config; delegate is one piece with its own package name, so the root's ban on importing it (TID251) does not apply inside it.
+extend = "../../../../ruff.toml"
+
+[lint.flake8-tidy-imports.banned-api]

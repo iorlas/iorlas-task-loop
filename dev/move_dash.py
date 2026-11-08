@@ -266,11 +266,9 @@ def member_files(root: Path, writes: dict[Path, str]) -> None:
         "Dashboard server, views and static assets.",
     )
     manifest = manifest.replace('dev = ["pytest", "tltestkit"]', 'dev = ["pytest", "tltestkit", "msgspec"]')
-    manifest = manifest.replace(
-        'pythonpath = ["../../skills/task-loop/_vendor"]',
-        '# delegate is the library in this repo (src/delegate): the console reader imports delegate.api, the one import of it\n'
-        'pythonpath = ["../../skills/task-loop/_vendor", "../../src"]',
-    )
+    manifest = manifest.replace('dependencies = ["tlkernel"]', 'dependencies = ["tlkernel", "tldelegate"]')
+    manifest = manifest.replace('tlkernel = { workspace = true }',
+                                'tlkernel = { workspace = true }\ntldelegate = { workspace = true }')
     ruff = ('# The dash serves HTTP and runs threads, so it extends the root config, not the kernel\'s contracts-only one.\n'
             'extend = "../../ruff.toml"\nsrc = ["src"]\n')
     for name, value in (("pyproject.toml", manifest), ("ruff.toml", ruff)):

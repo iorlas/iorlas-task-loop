@@ -12,7 +12,6 @@ from support.memstores import fake_stores
 from support.who import who
 from support.world import MARKERS, SlotWorld
 from taskloop.app.checks.shell import Shell
-from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import bead_env
 from taskloop.stores.bundle import Stores
 from tlgate.runner import Checker
@@ -23,6 +22,7 @@ from tlkernel.config import EngineConfig
 from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import StageData
 from tlkernel.ports import Clock
+from tlland.checkout import Checkout
 from tltestkit.cfgs import cfg_with
 
 

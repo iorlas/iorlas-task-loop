@@ -28,7 +28,9 @@ TOP = {"tldash": "dash", "delegate": "delegate", "hook": "hook", "cli": "cli", "
 def stage_of(path):
     """Map source folders to stages; carved plan, review, look and write all belong to the work package."""
     parts = path.split("/")
-    if len(parts) > 2 and parts[0] == "packages" and parts[2] == "src" and parts[1] in {"dash", "kernel", "slots", "work", "release"}:
+    if len(parts) > 2 and parts[0] == "packages" and parts[2] == "src" and parts[1] in {
+        "land", "dash", "kernel", "slots", "work", "release",
+    }:
         return parts[1]
     if parts[0] != "src":
         return None

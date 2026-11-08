@@ -16,9 +16,6 @@ from support.fakegit import FakeGit
 from support.memstores import fake_stores
 
 from taskloop.adapters.bd import BdRun, BdStore
-from taskloop.app.land.closing import LandFollowUps
-from taskloop.app.land.host import LandState
-from taskloop.app.land.record import file_follow_ups
 from taskloop.app.run.state import StateAttrs, carries_state
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -28,6 +25,9 @@ from tlkernel.checkpoint import RunState
 from tlkernel.enums import Outcome
 from tlkernel.followkeys import FollowKey
 from tlkernel.ids import BeadId
+from tlland.closing import LandFollowUps
+from tlland.host import LandState
+from tlland.record import file_follow_ups
 from tlpipeline.api import Checkpoints, FileNotes
 from tltestkit.narrow import must
 from tlwork.look.state import LookState

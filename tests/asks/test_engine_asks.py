@@ -15,9 +15,9 @@ from support.engine_case import EngineTest, ask_rec, stop
 from taskloop.adapters import (
     links,
 )
-from taskloop.app.land.checkout import Checkout
 from tlgate.domain import retry
 from tlkernel.ids import BeadId
+from tlland.checkout import Checkout
 from tltestkit.plans import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, review, verdict
 from tltestkit.runs import manifest
 

@@ -15,7 +15,6 @@ from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 
-from taskloop.app.land.host import LandState
 from taskloop.app.run.sections import checkpoint_hooks, restarted
 from taskloop.app.run.state import STATE_ONLY, StateAttrs, attr_names, carries_state, state_names
 from tlkernel import fence, wire
@@ -26,6 +25,7 @@ from tlkernel.review import (
     Unfiled,
 )
 from tlkernel.run import Round
+from tlland.host import LandState
 from tlpipeline.api import KEEP_FOR_ACTIVE, LATE, Checkpoints, Resume, ReviewGlue
 from tlpipeline.testing import FakeHeadHistory
 from tlwork.look.state import LOOK_FIELDS, LookState

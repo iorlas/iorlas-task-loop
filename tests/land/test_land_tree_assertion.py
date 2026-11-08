@@ -7,15 +7,15 @@ import pytest
 from support.memstores import fake_stores
 
 from taskloop.adapters import landlock
-from taskloop.app.land.cmds import Stop
-from taskloop.app.land.stack import Stack
-from taskloop.app.land.treecheck import Tested
 from taskloop.app.wire.slotfx import FX
 from tlkernel import check_files
 from tlkernel.forge import MERGED, OPEN, Pr, StackItem
 from tlkernel.gitport import Git
 from tlkernel.procport import Ran
 from tlkernel.queue_state import CORRUPT, RACED
+from tlland.cmds import Stop
+from tlland.stack import Stack
+from tlland.treecheck import Tested
 
 MAIN, HEAD, MERGE, THIRD = "m" * 40, "h" * 40, "s" * 40, "x" * 40
 TESTED = Tested(parent=MAIN, parent_tree="T0", tree="T1")
