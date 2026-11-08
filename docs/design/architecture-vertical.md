@@ -20,6 +20,10 @@ parsing the tree with `dev/affected.py`'s own graph (`Repo`, `select`, `closure`
    `tests/conftest.py`, `tests/live/conftest.py`, `tests/delegate/conftest.py` and `tl.py` edits selecting half the suite, not by package
    selection; the public-surface rule changes nothing until a package has an `api.py`.
 
+   Remeasured 2026-11-08 (`dev/reach.py --commits 40`, after the slots, asks, gate, release and work package surfaces): 39 commits, 714 tests, median **135**
+   (below the 150 target; was 225 before #639 and 268 on 2026-11-07), mean 180, p90 402, max 714; beyond the always-run tests/rules, median 93.
+   Files that alone select half: `skills/task-loop/tl.py` (3 commits), `tests/conftest.py`, `plancheck.py`, `gitfacts.py` (1 each).
+
 4. The stages are already nameable and mostly separable: `delegate` and `tldash` already are packages. Cutting two import edges
    (`adapters/delegate.py`, `adapters/runner.py` → `delegate.api`) drops `delegate.api`'s reach from 199 tests to 2. That is the proof of
    what a real package boundary does; it is also the proof that **one boundary alone does not move the median** (271 → 269): the hub is
