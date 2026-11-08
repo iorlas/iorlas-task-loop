@@ -13,6 +13,12 @@ dev = ["pytest", "pytest-xdist", "tltestkit"]
 [tool.uv]
 package = false
 
+# Shared SLOC caps, copied from the shelf linting preset
+[tool.shelf-size]
+code-file = 400
+function = 80
+test-file = 800
+
 [tool.uv.workspace]
 members = ["packages/*"]
 

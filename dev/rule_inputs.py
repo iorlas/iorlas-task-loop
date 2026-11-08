@@ -215,6 +215,10 @@ RULES_BY_PATH = {
         "src/taskloop/app/launch/*.py",
         "packages/pipeline/src/tlpipeline/*.py",
     ),
+    "tests/rules/test_shelf_size_agreement.py": (
+        "pyproject.toml",
+        "tests/rules/gate_rules.py",
+    ),
     # packages/kernel/src/tlkernel/scratch.py
     "tests/rules/test_temp_ratchet.py": (
     ),
