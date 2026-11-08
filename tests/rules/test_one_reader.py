@@ -1,6 +1,7 @@
-"""One reader per fact (tl-sqd3.30, RCA R-A): a fact (the repo profile, the delivery verdict) is read by a named set of modules. The set is
-the whole list, not a floor: a new reader fails here until it is named with its reason, and a reader removed must leave the list, so
-the list can only shrink toward the target (one reader). The repo key's single definition site is tests/rules/test_one_repo_key.py."""
+"""One reader per fact (tl-sqd3.30, RCA R-A): the repo profile and the delivery verdict each have one reader module
+(profile_at, authorization); a second reader fails here. The stop reason is still open (tl-sqd3.30.2). The accessors authorization
+offers (`red`, `verdict`) are answers, not the raw per-check mapping, so calling them is not reading the fact: do not widen the rule
+to them. The repo key's single definition site is tests/rules/test_one_repo_key.py."""
 import ast
 
 from rules.gate_rules import ROOT, parsed, py_files
@@ -21,9 +22,6 @@ FACTS = {
         {"authorization"},
         {
             "packages/gate/src/tlgate/authorization.py": "THE reader: a check result only counts under the executed key",
-            "packages/land/src/tlland/push_judge.py": "the pre-push judge",
-            "packages/land/src/tlland/stackgate.py": "the stack's gate",
-            "src/taskloop/cli/green.py": "`tl green`, the owner's view of the same verdict",
         },
     ),
 }
@@ -79,3 +77,8 @@ def test_profile_scan_distinguishes_typed_consumers_and_explicit_json_readers():
         assert readers(ast.parse(call), calls, owners)
     for call in ('profile_at.profile_at(git, repo, rev)', 'profile_at.typed_in(repo)', 'json.loads(other_text)'):
         assert not readers(ast.parse(call), calls, owners)
+
+
+def test_delivery_scan_sees_a_planted_raw_verdict_reader():
+    calls, owners, _ = FACTS["delivery verdict"]
+    assert readers(ast.parse("found = authorization.results(stores, git, wt, cfg, tree, base, env)"), calls, owners)

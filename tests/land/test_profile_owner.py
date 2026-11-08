@@ -206,10 +206,10 @@ class OwnerJudge(Case):
 
     def test_fresh_matching_row_allows_but_only_with_base_evidence(self):
         self.audit()
-        with mock.patch("tlgate.authorization.results", return_value={"base-check": mock.Mock()}) as results:
+        with mock.patch("tlgate.authorization.red", return_value=[]) as results:
             assert self.judge().status == PushStatus.ALLOWED
         assert [step.id for step in results.call_args.args[3].gate_checks] == ["base-check"]
-        with (mock.patch("tlgate.authorization.results", return_value={"base-check": None}),
+        with (mock.patch("tlgate.authorization.red", return_value=["base-check"]),
               mock.patch("tlgate.authorization.explain", return_value={"base-check": "env differs (expected a1 found b2)"})):
             decision = self.judge()
         assert decision.status == PushStatus.REFUSED
