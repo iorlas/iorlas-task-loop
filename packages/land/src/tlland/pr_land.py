@@ -1,5 +1,6 @@
 """The land in `land_mode: pr`: the gated, rebased task branch goes to the remote, a PR is opened for it (gh only), and the bead waits as
-an ask to the owner until the PR is merged. The engine NEVER merges: no `gh pr merge`, no auto-merge. A rerun reads the PR: merged ->
+an ask to the owner until the PR is merged. The engine merges only when `engine.merge` is `auto`, after the gate at the unchanged head.
+A rerun reads the PR: merged ->
 the land is the PR's own merge commit; open -> the ask again (or, when the work changed since, the PR is updated); closed without a merge
 -> a typed ask. The PR number lives in the bead's metadata for as long as the land is pending."""
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Protocol
 from tlkernel import askspecs, fence
 from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import BeadPatch, Beads
-from tlkernel.forge import CLOSED, MERGED, PR_NUMBER, PR_URL, Pr, pr_waited_on
+from tlkernel.forge import CLOSED, MERGED, OPEN, PR_NUMBER, PR_URL, Pr, pr_waited_on
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.landmatchers import Push
@@ -27,6 +28,8 @@ class PrConfig(Protocol):
     def base(self) -> str: ...
     @property
     def land(self) -> list[str]: ...
+    @property
+    def merge(self) -> str: ...
 
 
 class PrHost(Protocol):
@@ -138,13 +141,32 @@ class PrLand:
         if pr.state == MERGED:
             return self.merged(pr)
         e.store.update(e.bead, BeadPatch(set_metadata={PR_NUMBER: str(pr.number), PR_URL: pr.url}, if_assignee=fence.guard(e.claim)))
+        if e.cfg.merge == "auto" and pr.state == OPEN:
+            merged = self.auto_merge(forge, pr, sha)
+            if merged is not None:
+                return self.merged(merged)
         raise self.waiting(pr)
+
+    def auto_merge(self, forge: Forge, pr: Pr, sha: str) -> Pr | None:
+        """A refused or unfinished merge leaves the owner able to merge the pending PR."""
+        try:
+            forge.merge(pr, sha)
+            now = forge.view(pr.number)
+        except Stop as stop:
+            self.e.log.note(f"PR #{pr.number} auto merge deferred: {stop.why}")
+            return None
+        if now.state == MERGED:
+            return now
+        self.e.log.note(f"PR #{pr.number} auto merge deferred: forge reports {now.state}")
+        return None
 
     def title(self, sha: str) -> str:
         rows = self.e.git.log(self.e.wt, [sha], limit=1)
         return rows[0].subject if rows else self.e.task_branch
 
     def body(self) -> str:
+        if self.e.cfg.merge == "auto":
+            return f"Opened by task-loop for {self.e.bead}; merged by task-loop after the gate (engine.merge: auto)."
         return f"Opened by task-loop for {self.e.bead}. The engine does not merge it: the bead closes once you do."
 
     def forget(self) -> None:

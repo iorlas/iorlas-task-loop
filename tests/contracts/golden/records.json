@@ -1591,6 +1591,7 @@
     "**/.*cache*/**"
    ],
    "land_mode": "push",
+   "merge": "wait",
    "land_queue": "off",
    "land_queue_max_in_flight": 4,
    "base": "origin/main",

@@ -12,6 +12,16 @@ from tlkernel.config import ConfigError, RepoProfile, load
 
 
 class RepoProfileKeys(Case):
+    def test_merge_defaults_to_wait_and_auto_requires_pr_land(self):
+        assert load({}).engine.merge == "wait"
+        assert load({"engine": {"land_mode": "pr", "merge": "auto"}}).engine.merge == "auto"
+        with pytest.raises(ConfigError, match=r"the repo profile: engine\.merge: auto needs engine\.land_mode: pr"):
+            load({"engine": {"land_mode": "push", "merge": "auto"}})
+
+    def test_unknown_merge_value_is_refused_naming_the_key(self):
+        with pytest.raises(ConfigError, match=r"the repo profile: .*engine\.merge"):
+            load({"engine": {"merge": "sometimes"}})
+
     def test_wait_poll_defaults_and_override_are_independent_of_child_poll(self):
         assert load({}).loop.wait_poll == 30
         tune = load({"loop": {"wait_poll": 7.5}}).loop

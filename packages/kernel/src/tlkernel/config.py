@@ -191,7 +191,8 @@ class EngineConfig(Rec):
     gate_source_globs: list[str] = msgspec.field(default_factory=lambda: ["**/*.cs", "**/*.yaml", "**/*.py", "**/*.json"])
     gate_ignored_allow: list[str] = msgspec.field(default_factory=lambda: [
         ".venv/**", "node_modules/**", "**/__pycache__/**", "Library/**", "Temp/**", "obj/**", "bin/**", "**/.*cache*/**"])
-    land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR and waits for the owner to merge it; the engine never merges
+    land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR; engine.merge chooses who merges it
+    merge: Literal["wait", "auto"] = "wait"  # auto: the PR land merges after the gate with unchanged head; wait: the owner merges
     land_queue: Literal["off", "shadow", "on"] = "off"  # the speculative merge queue (merge-queue.md); off: as before
     # the queue cap: most gates in flight at once (floor 1); unread until the rollout wiring (tl-7s2f.13) reads it
     land_queue_max_in_flight: int = 4
@@ -387,6 +388,8 @@ def graph_problem(checks: list[CheckSpec]) -> str:
 
 def resource_problem(eng: EngineConfig) -> str:
     """Why engine.resources and the checks' `needs` do not fit ('' when they do): a limit under 1, or a need nobody declared."""
+    if eng.merge == "auto" and eng.land_mode != "pr":
+        return "engine.merge: auto needs engine.land_mode: pr"
     if eng.land_queue_max_in_flight < 1:
         return "engine.land_queue_max_in_flight must be at least 1"
     for name, r in eng.resources.items():
