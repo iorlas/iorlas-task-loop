@@ -7,7 +7,7 @@ from enum import Enum
 
 class Kind(Enum):
     FREE_BESIDE_WAITER = "free_beside_waiter"  # a slot anyone could take and a live waiter, for longer than a waiter's poll
-    READY_IDLE_FREE = "ready_idle_free"        # a ready bead, an idle lane and a free slot, together for too long
+    READY_IDLE_FREE = "ready_idle_free"        # a ready bead, an idle loop and a free slot, together for too long
     ASIDE_TOO_LONG = "aside_too_long"          # a slot out of use for failing setup, for too long
     ORPHAN_HELD = "orphan_held"                # a slot an automatic taker holds with no live engine lock on its worktree
 
@@ -47,10 +47,10 @@ class Violation:
     why: str
 
 
-def violations(slots: list[SlotFact], waiters: list[Waiter], now: float, *, ready_since: float | None = None, idle_lanes: int = 0,
+def violations(slots: list[SlotFact], waiters: list[Waiter], now: float, *, ready_since: float | None = None, idle_loops: int = 0,
                limits: Limits = LIMITS) -> list[Violation]:
     """Every invariant that does not hold at `now`. `ready_since`: when the oldest ready bead began to wait (None: none does);
-    `idle_lanes`: loops that run no bead and wait in no line."""
+    `idle_loops`: loops that run no bead and wait in no line."""
     out: list[Violation] = []
     live = sorted((w for w in waiters if w.live), key=lambda w: w.since)
     for s in slots:
@@ -60,10 +60,10 @@ def violations(slots: list[SlotFact], waiters: list[Waiter], now: float, *, read
                 if now - began > limits.grant_s:
                     out.append(Violation(Kind.FREE_BESIDE_WAITER, s.name, began, f"slot {s.name} is free and {len(live)} waiter(s) are "
                                          f"in line (first: #{live[0].seq}) for {now - began:.0f} s"))
-            if ready_since is not None and idle_lanes > 0 and now - max(s.free_since, ready_since) > limits.idle_s:
+            if ready_since is not None and idle_loops > 0 and now - max(s.free_since, ready_since) > limits.idle_s:
                 began = max(s.free_since, ready_since)
                 out.append(Violation(Kind.READY_IDLE_FREE, s.name, began,
-                                     f"a bead is ready, {idle_lanes} lane(s) are idle and slot {s.name} is free for {now - began:.0f} s"))
+                                     f"a bead is ready, {idle_loops} loop(s) are idle and slot {s.name} is free for {now - began:.0f} s"))
         if s.aside_since is not None and now - s.aside_since > limits.aside_s:
             out.append(Violation(Kind.ASIDE_TOO_LONG, s.name, s.aside_since,
                                  f"slot {s.name} has been set aside for {now - s.aside_since:.0f} s: its setup probe never passes"))

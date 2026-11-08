@@ -35,12 +35,12 @@ class Pure(Case):
         assert violations([SlotFact("s1", free_since=0)], [], 9999, limits=L) == []
         assert violations([SlotFact("s1", free_since=0)], [Waiter(1, 0, live=False)], 9999, limits=L) == []
 
-    def test_a_ready_bead_an_idle_lane_and_a_free_slot_for_too_long(self):
+    def test_a_ready_bead_an_idle_loop_and_a_free_slot_for_too_long(self):
         free = [SlotFact("s1", free_since=0)]
-        assert violations(free, [], 5000, ready_since=4500, idle_lanes=1, limits=L) == []
-        assert kinds(violations(free, [], 5000, ready_since=4000, idle_lanes=1, limits=L)) == [(Kind.READY_IDLE_FREE, "s1")]
-        assert violations(free, [], 5000, ready_since=4000, idle_lanes=0, limits=L) == []
-        assert violations(free, [], 5000, ready_since=None, idle_lanes=1, limits=L) == []
+        assert violations(free, [], 5000, ready_since=4500, idle_loops=1, limits=L) == []
+        assert kinds(violations(free, [], 5000, ready_since=4000, idle_loops=1, limits=L)) == [(Kind.READY_IDLE_FREE, "s1")]
+        assert violations(free, [], 5000, ready_since=4000, idle_loops=0, limits=L) == []
+        assert violations(free, [], 5000, ready_since=None, idle_loops=1, limits=L) == []
 
     def test_a_slot_set_aside_for_too_long(self):
         aside_ = [SlotFact("s2", aside_since=0)]

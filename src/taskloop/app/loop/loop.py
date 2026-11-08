@@ -265,7 +265,7 @@ class Loop(Core):
         cands = self.candidates(q)
         if self.prof.slots.count > 0:  # tl-bxk.10.33.12: the slot liveness invariants, once per EVERY s
             since = min((self.first_seen.get(b.id, self.env.now()) for b in cands), default=None)
-            self.env.slots.tick(ready_since=since, idle_lanes=1)
+            self.env.slots.tick(ready_since=since, idle_loops=1)
         if cands:
             self.area_wait[0] = 0.0
             return self.work(cands, rule)

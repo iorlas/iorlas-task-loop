@@ -63,8 +63,8 @@ class EngineSlots:
     def check_ready(self, name: str) -> None:
         SlotPool(self.slot_env()).named(name).check_ready()
 
-    def tick(self, *, ready_since: float | None, idle_lanes: int) -> None:
-        watchdog.tick(self.slot_env(), self.watch, ready_since=ready_since, idle_lanes=idle_lanes)
+    def tick(self, *, ready_since: float | None, idle_loops: int) -> None:
+        watchdog.tick(self.slot_env(), self.watch, ready_since=ready_since, idle_loops=idle_loops)
 
     def wait_slot(self, why: str, *, stop: Callable[[], bool], sleep: Callable[[float], object], poll: tuple[float, float],
                   on_wait: Callable[[int], None], prio: int) -> tuple[str, str, BeadId] | None:
