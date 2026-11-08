@@ -4,7 +4,7 @@ whether the engine ran a check is settled by the engine's own results; one that 
 import shlex
 from typing import Any, Final, NewType
 
-from tlgate.api import planref
+from tlgate.domain import planref
 from tlkernel.checks import CheckResult
 from tlkernel.gitport import Git
 from tlkernel.reviewmatchers import KNOWN_TOOLS, GateProof, Tools, word_in

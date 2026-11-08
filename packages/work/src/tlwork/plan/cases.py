@@ -4,7 +4,7 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from tlgate.api import planref
+from tlgate.domain import planref
 from tlkernel import plancheck
 from tlkernel.checks import CheckResult
 from tlkernel.plancheck import PlanCheck, PlanData
