@@ -31,7 +31,7 @@ source hashes and seven workflow traces. A fake-driven probe of actual settlemen
 that refused close is marked applied before cleanup callbacks. This assessment corrects the earlier inventory-only
 coverage; it is not source implementation or an exhaustive library/provider audit. Concrete findings were attached
 to existing agent/task/check/retry/STORE/settlement owners. Task-tracker maintenance ownership of durable backups
-is now agreed in the glossary; actual coverage/recovery still needs verification. Optional network isolation remains proposed. Git memo retirement is settled direction: remove redundant queries
+is now agreed in the glossary; actual coverage/recovery still needs verification. Owner accepted normal host networking for checks; factory-managed check isolation is retired. Git memo retirement is settled direction: remove redundant queries
 through operation data flow instead of substituting extra Git calls or another cache. The historical slot-lifecycle document is absent here and
 was not assumed verified. Each affected behavior must follow its reviewed owner before successor carry-over.
 
@@ -130,5 +130,5 @@ These are bounded gates, not reasons to delay the minimal foundation or all iden
 
 
 Owner wrap-up 2026-11-09: RAM-threshold admission is omitted initially; running-factory keep-awake and actual
-checkout binding are retained through their narrow owners. Planner probes and migrations remain retired. Optional
-check-level network isolation is still a proposed cut, not implicitly removed by those agreements.
+checkout binding are retained through their narrow owners. Planner probes and migrations remain retired. Owner subsequently accepted normal host networking for checks; factory-managed network isolation is removed
+from retained scope. Harness sandbox permissions are separate.

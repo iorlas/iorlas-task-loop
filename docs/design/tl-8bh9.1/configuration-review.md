@@ -130,3 +130,8 @@ and held review-mode/STORE/MQUEUE scopes. config.py is shared: plan one writer a
 Eventual tests cover identical source results across consumers, malformed committed JSON, nonobjects, absent files,
 removed-key refusal, snapshot provenance, ordinary profile delivery and explicit automation eligibility. Normal gates
 are just check and just test; no full/live suite is authorized by this design review.
+
+
+Owner decision 2026-11-09: checks use normal host networking. Remove check_net_isolate and
+per-check network bypass fields together with their sandbox-exec/unshare wrappers, discovery probes and
+isolation-specific errors. No replacement factory network policy or shelf extraction; harness permissions remain separate.

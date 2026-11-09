@@ -36,7 +36,7 @@ The [original audit](plan.md) supplies purpose/cost/callers; this supplement sup
 | `ident.py` | Configuration placement and actor/session attribution become ambiguous. | Minimal explicit roots and execution identity at composition; delete historical fallbacks/layout gates. |
 | `land_probe.py` | No current default protection is lost (GUARD_MAIN is false); future hook convenience is lost. | Exclude disabled feature; a lock observation never authorizes a push. |
 | `check_probe.py` | Early missing-command/recipe/path/order diagnostics disappear, along with base-check probes and planner rewrite overhead. | Accept loss with retired planner DSL; actual commands fail truthfully and semantic task acceptance remains reviewed. |
-| `check_net.py` | An enabled restriction disappears and checks may access external network. | Proposed product cut requiring explicit choice. Default-off is not deletion approval; if retained choose unsupported-host behavior. |
+| `check_net.py` | An enabled restriction disappears and checks may access external network. | Owner accepted normal host networking; remove factory-managed restriction, probes and per-check exceptions. Harness sandbox is a separate boundary. |
 | `links.py` | Automatic host-side URL reachability/filtering is lost. | Accepted feature removal. Repo/task-specific link validation can still be requested; no replacement service. |
 | `bd.py` | Task admission/context/claims/mutation/settlement disappear. | Thin replaceable task-tracker adapter; preserve typed failure/uncertainty and actual conditional semantics. |
 | `beadtools.py` | Construction/PATH/error-rendering convenience disappears. | Use composition/CLI directly; deleting failure-as-empty helpers improves truthfulness. |
@@ -76,7 +76,7 @@ The [original audit](plan.md) supplies purpose/cost/callers; this supplement sup
 
 These paths name baseline code retained at commit `731b7c76ef214ce35229f77814f98b6e1d6d5c0f` and in the original
 review worktree. The source foundation introduces none of these mechanisms. Concrete implementation tasks retain
-invariants; Git memo retirement/query consolidation is now settled direction. RAM-threshold removal and keep-awake retention are now accepted. Unresolved network/delivery convenience cuts stay proposed until selected. Do not turn this
+invariants; Git memo retirement/query consolidation is now settled direction. RAM-threshold removal and keep-awake retention are now accepted. Normal host networking for checks is now accepted. Unresolved delivery convenience cuts stay proposed until selected. Do not turn this
 analysis into a new runtime monitoring system or file one task per adapter.
 
 

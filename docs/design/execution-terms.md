@@ -773,3 +773,7 @@ Owner accepted 2026-11-09: remove proactive RAM-threshold admission initially, r
 keep-awake capability for an unattended running factory (including waits), and retain correct-checkout binding
 while removing redundant guard/probe machinery. Planner probe retirement, minimal plan completion checks and
 migration removal remain agreed. None of these features is implemented by the CLI-only foundation.
+
+
+Owner accepted 2026-11-09: repository checks use the host’s normal networking. Remove factory-managed
+check network isolation and its settings/exceptions/probes. Harness sandbox permissions are separate.
