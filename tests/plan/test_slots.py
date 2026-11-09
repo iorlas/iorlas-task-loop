@@ -158,7 +158,7 @@ def test_v1_factory_database_is_refused_loudly(tmp_path: Path) -> None:
     attempts = open_plan_attempts(path, tmp_path, lambda: ("/bin/codex", {}))
     collected = attempts.collect(AttemptKey("a", "t", 1))
     assert (collected.status, collected.reason) == ("unavailable", "collect")
-    executed = attempts.execute(AttemptKey("a", "t", 1))
+    executed = attempts.execute(AttemptKey("a", "t", 1), (7, "entry-start", "boot"))
     assert (executed.status, executed.reason) == ("unavailable", "store")
     store = Store(SCHEMA)
     repo = FakeRepo.init(tmp_path / "repo")

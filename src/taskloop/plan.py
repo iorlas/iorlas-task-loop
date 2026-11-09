@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import replace
+from typing import Final, Literal
 
 from any_agent import CodexHarness, DecodedAnswer, Harness, InvalidAnswer, LaunchInputs, LaunchSpec, RunHooks, RunOutcome, decode_answer
 
@@ -28,6 +29,32 @@ from taskloop.plan_types import (
 type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
 type Credentials = Callable[[], tuple[str, dict[str, str]]]
 ACCEPTED = ("accepted", "already_same")
+SANDBOX = "workspace-write"  # the only mode CODEX_ACCESS constrains
+# Baseline `decide.py` CODEX_ACCESS (731b7c76), verbatim: neither the user's config nor a repo file widens or narrows these.
+# The sandbox has no network and writes only the working directory; a command it blocks may ask to run outside it, and
+# Codex's automatic reviewer (a model, no human) approves or refuses that one command (accepted by codex-cli 0.162.1).
+CODEX_ACCESS: Final = (
+    "--ignore-user-config",
+    "--ignore-rules",
+    "-c",
+    "sandbox_workspace_write.network_access=false",
+    "-c",
+    "sandbox_workspace_write.writable_roots=[]",
+    "-c",
+    "approval_policy=on-request",
+    "-c",
+    "approvals_reviewer=auto_review",
+    "-c",
+    "tool_output_token_limit=3000",
+)
+
+
+class CredentialsUnavailable(Exception):
+    """The credential source has no usable login, executable or environment; `reason` is one fixed word."""
+
+    def __init__(self, reason: Literal["path", "codex", "home", "auth", "git_config"]) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 def report(stored: StoredExecution) -> AttemptResult:
@@ -50,9 +77,12 @@ class PlanAttempts:
         execution: Execution,
         clock: Callable[[], float],
         decoder: PlanDecoder = decode_plan_answer,
+        gate: PlanStore | None = None,
     ) -> None:
+        """`gate` serves only the harness registration write (composition bounds its busy wait); default `store`."""
         self.store, self.files, self.credentials = store, files, credentials
         self.execution, self.clock, self.decoder = execution, clock, decoder
+        self.gate = store if gate is None else gate
 
     def collect(self, key: AttemptKey) -> AttemptResult:
         """Read-only: stored facts need no reservation, input, credential or remaining deadline."""
@@ -67,7 +97,8 @@ class PlanAttempts:
             return AttemptResult("refused", "absent")
         return AttemptResult("conflict", "session") if state[1] else AttemptResult("pending", state[0])
 
-    def execute(self, key: AttemptKey) -> AttemptResult:
+    def execute(self, key: AttemptKey, me: tuple[int, str, str]) -> AttemptResult:
+        """`me` is the caller's own (pid, start, boot): an admitted attempt dispatches only for its registered entry."""
         try:
             stored = self.store.collect(key)
             if stored is not None:
@@ -77,7 +108,7 @@ class PlanAttempts:
                 return AttemptResult("refused", "absent")
             if record.phase != "admitted":
                 return AttemptResult("pending", record.phase)
-            return self._start(record)
+            return self._start(record, me)
         except StoreUnavailable:
             return AttemptResult("unavailable", "store")
         except StoreRefused as error:
@@ -122,23 +153,47 @@ class PlanAttempts:
         self.store.capture(record.admission, None, stored.facts, stored.evidence, publication)
         return self.store.collect(record.admission.key) or stored
 
-    def _start(self, record: AttemptRecord) -> AttemptResult:
-        admission = record.admission
+    def _refusal(self, admission: Admission, me: tuple[int, str, str]) -> str | None:
+        if admission.entry != me:
+            return "not_entry"
         if self.clock() >= admission.deadline:
-            return AttemptResult("refused", "expired")
+            return "expired"
         if not all(value.strip() for value in (admission.model, admission.effort, admission.sandbox)):
-            return AttemptResult("refused", "choices")
+            return "choices"
+        return "sandbox" if admission.sandbox != SANDBOX else None
+
+    def _start(self, record: AttemptRecord, me: tuple[int, str, str]) -> AttemptResult:
+        """Credentials, files and the launch spec resolve before dispatch: their failure leaves the attempt `admitted`."""
+        admission = record.admission
+        refusal = self._refusal(admission, me)
+        if refusal is not None:
+            return AttemptResult("refused", refusal)
         try:
             prompt = self.files.read(admission.input_ref)
         except EvidenceError:
             return AttemptResult("refused", "input")
-        if self.store.dispatch(record) == "conflict":
-            return AttemptResult("pending", "dispatching")
-        return self._run(admission, prompt)
+        launch = self._launch(admission, prompt)
+        if isinstance(launch, AttemptResult):
+            return launch
+        harness, spec = launch
+        running = False
+        try:
+            if self.clock() >= admission.deadline:  # crossed while resolving the launch: stays admitted
+                return AttemptResult("refused", "expired")
+            self.gate.warm()  # the first gated open runs here, never inside the harness registration window
+            if self.store.dispatch(record) == "conflict":
+                return AttemptResult("pending", "dispatching")
+            running = True
+            return self._run(admission, harness, spec)
+        finally:
+            if not running:
+                harness.cleanup()
 
     def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec] | AttemptResult:
         try:
             exe, env = self.credentials()
+        except CredentialsUnavailable as error:
+            return AttemptResult("unavailable", "credentials:" + error.reason)
         except Exception as error:  # the credential source is injected; its failure is typed, with its cause visible
             return AttemptResult("unavailable", "credentials:" + type(error).__name__)
         try:
@@ -156,17 +211,15 @@ class PlanAttempts:
             schema=schema,
             sandbox=admission.sandbox,
             out_file=out_file,
+            access=list(CODEX_ACCESS),
         )
         try:
             return harness, harness.launch_spec(inputs)
         except Exception as error:
+            harness.cleanup()
             return AttemptResult("unavailable", "launch:" + type(error).__name__)
 
-    def _run(self, admission: Admission, prompt: str) -> AttemptResult:
-        launch = self._launch(admission, prompt)
-        if isinstance(launch, AttemptResult):
-            return launch
-        harness, spec = launch
+    def _run(self, admission: Admission, harness: CodexHarness, spec: LaunchSpec) -> AttemptResult:
         remaining = admission.deadline - self.clock()
         if remaining <= 0:
             harness.cleanup()
@@ -184,7 +237,7 @@ class PlanAttempts:
         self, admission: Admission, harness: CodexHarness, spec: LaunchSpec, remaining: float
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
         latch = SessionLatch(self.store, admission)
-        hooks = RunHooks(started=registration_gate(self.store, admission, self.clock), ref=latch.observe, unattended=False)
+        hooks = RunHooks(started=registration_gate(self.gate, admission, self.clock), ref=latch.observe, unattended=False)
         try:
             return self.execution(harness, spec, remaining, hooks), latch.snapshot()
         except GateRefused as error:

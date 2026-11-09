@@ -1,7 +1,7 @@
 """Admit one plan attempt: the only writer of `reservation` and of the admitted `plan_attempt` row; it runs nothing.
 
-An admitted attempt stays unregistered (entry_* NULL): the body refuses it with `unregistered_entry` until a later
-slice registers its entry. One attempt per task; nothing here releases, retries or replaces one.
+An admitted attempt stays unregistered (entry_* NULL): the body refuses it with `unregistered_entry` until
+`PlanStore.register_entry` registers its entry. One attempt per task; nothing here releases, retries or replaces one.
 """
 
 import math

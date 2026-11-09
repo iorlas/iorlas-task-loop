@@ -44,6 +44,14 @@ class Admission:
 
 
 @dataclass(frozen=True)
+class Replaced:
+    """The launcher's observation that the stored entry process no longer runs; the store cannot verify it."""
+
+    identity: tuple[int, str, str]
+    seen: Literal["gone", "different_process"]
+
+
+@dataclass(frozen=True)
 class AttemptRecord:
     admission: Admission
     phase: str

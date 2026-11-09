@@ -27,6 +27,7 @@ from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
+ENTRY = (7, "entry-start", "boot")
 PLAN = {"disposition": "planned", "plan_path": "docs/design/tl-1/plan.md", "commit": "a" * 40, "explanation": "Plan committed"}
 TASKS = FakeTaskReadClient(
     [
@@ -122,11 +123,6 @@ def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun) -> PlanAttempts:
     return PlanAttempts(PlanStore(lambda: con), PlanFiles(tmp_path / "artifacts"), lambda: ("/bin/codex", {}), run, lambda: 10)
 
 
-def register_for_test_only(con: sqlite3.Connection, key: AttemptKey) -> None:
-    """TEST-ONLY registration. Delete when the registered-entry slice supplies the real `register_entry`."""
-    con.execute("UPDATE plan_attempt SET entry_pid=7,entry_start='entry-start',entry_boot='boot' WHERE attempt_id=?", (key.attempt_id,))
-
-
 def rows(con: sqlite3.Connection) -> tuple[int, int]:
     return con.execute("SELECT (SELECT count(*) FROM reservation),(SELECT count(*) FROM plan_attempt)").fetchone()
 
@@ -146,21 +142,24 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
     with pytest.raises(StoreRefused, match="unregistered_entry"):
         PlanStore(lambda: factory).load(key)
     run = FakeRun(RunOutcome(rc=0, worker=WORKER))
-    refused = body(factory, tmp_path, run).execute(key)
+    refused = body(factory, tmp_path, run).execute(key, ENTRY)
     assert (refused.status, refused.reason) == ("refused", "unregistered_entry") and run.calls == []
     pending = body(factory, tmp_path, run).collect(key)
     assert (pending.status, pending.reason) == ("pending", "admitted")
 
 
-def test_test_only_registration_proves_the_admitted_row_is_body_compatible(
+def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
 ) -> None:
     slots(factory, repo, root, 1)
     result = admit(factory, tmp_path, repo)
     assert isinstance(result, Admitted)
-    register_for_test_only(factory, result.key)
+    store = PlanStore(lambda: factory)
+    assert store.register_entry(result.key, ENTRY, time()) == "accepted"
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
-    collected = body(factory, tmp_path, run).execute(result.key)
+    other = body(factory, tmp_path, run).execute(result.key, (8, "entry-start", "boot"))
+    assert (other.status, other.reason) == ("refused", "not_entry") and run.calls == []
+    collected = body(factory, tmp_path, run).execute(result.key, ENTRY)
     assert collected.status == "collected" and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / repo.identity().key / "s1")
@@ -392,7 +391,7 @@ def test_two_repos_both_get_s1_and_the_fence_is_per_repo(factory: sqlite3.Connec
         tracker = Tracker(factory, tmp_path / "artifacts")
         result = admission(factory, tmp_path, tracker, each).admit(request(tmp_path, each, task_id=task_id))
         assert isinstance(result, Admitted) and result.slot == "s1"
-        register_for_test_only(factory, result.key)
+        assert PlanStore(lambda: factory).register_entry(result.key, ENTRY, time()) == "accepted"
         keys.append(result.key)
     store = PlanStore(lambda: factory)
     assert all(store.load(key) is not None for key in keys)

@@ -10,7 +10,17 @@ from any_agent.procs import Worker
 from sqlite_store import begin_immediate
 
 from taskloop.plan_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, current, prefixed
-from taskloop.plan_types import Admission, AnswerState, AttemptKey, AttemptRecord, Evidence, ExecutionFacts, FileRef, StoredExecution
+from taskloop.plan_types import (
+    Admission,
+    AnswerState,
+    AttemptKey,
+    AttemptRecord,
+    Evidence,
+    ExecutionFacts,
+    FileRef,
+    Replaced,
+    StoredExecution,
+)
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference, TaskScope
 
@@ -141,6 +151,39 @@ class PlanStore:
                 "SELECT phase,session_conflict FROM plan_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
             ).fetchone()
             return None if row is None else (_str(row[0]), bool(_int(row[1])))
+
+    def register_entry(
+        self, key: AttemptKey, entry: tuple[int, str, str], now: float, replacing: Replaced | None = None
+    ) -> Literal["accepted", "conflict", "refused"]:
+        """The only writer of entry_*: one winner while `admitted`; a replacement names the exact stored identity.
+
+        Refused when the key, the held reservation or the deadline does not match. `_load` cannot serve this read: it
+        refuses exactly the unregistered row.
+        """
+        with self._connection(write=True) as con:
+            row: tuple[object, ...] | None = con.execute(
+                """SELECT p.phase,p.deadline,p.entry_pid,p.entry_start,p.entry_boot FROM plan_attempt p
+                JOIN reservation r ON r.slot=p.slot AND r.repo_id=p.repo_id AND r.generation=p.generation AND r.attempt_id=p.attempt_id
+                WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
+                astuple(key),
+            ).fetchone()
+            if row is None or not isinstance(row[1], (int, float)) or now >= row[1]:
+                return "refused"
+            if row[0] != "admitted":
+                return "conflict"
+            stored = None if any(value is None for value in row[2:5]) else (_int(row[2]), _str(row[3]), _str(row[4]))
+            if entry == stored or stored != (None if replacing is None else replacing.identity):
+                return "conflict"  # replacing an identity with itself would only bump rev under a live dispatch read
+            # the row was read in this same immediate transaction, so no revision predicate is needed
+            con.execute(
+                "UPDATE plan_attempt SET entry_pid=?,entry_start=?,entry_boot=?,rev=rev+1 WHERE attempt_id=?", (*entry, key.attempt_id)
+            )
+            return "accepted"
+
+    def warm(self) -> None:
+        """Open (and on first use check) this store's connection now; StoreUnavailable when it cannot."""
+        with self._connection():
+            pass
 
     def dispatch(self, expected: AttemptRecord) -> Literal["accepted", "conflict"]:
         with self._connection(write=True) as con:

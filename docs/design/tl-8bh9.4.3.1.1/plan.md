@@ -261,5 +261,6 @@ Further accepted limits: `execute` on any stored non-terminal state (answer vali
 publication alike) needs the live reservation; a stored pending/fault publication is upgraded only on evidence (a
 recorded conflict, a reported session that publishes, or a session already accepted on the attempt), never emptily.
 A credentials failure, a files or `launch_spec` failure and a run exception after registration each return a typed
-result naming the cause, and leave the attempt `dispatching` or `registered` with the outcome lost; the agent is never
-rerun by this body.
+result naming the cause. Since tl-8bh9.4.3.1.4 credentials, files and `launch_spec` resolve before dispatch, and the
+deadline is re-checked right before it, so their failure or a deadline crossed meanwhile leaves the attempt `admitted`; a run exception after registration leaves it `registered` with the outcome lost.
+The agent is never rerun by this body.
