@@ -6,7 +6,8 @@ Implementation update: the isolated source foundation now passes focused gates/i
 smoke checks; see [provenance](../tl-8bh9.8.7/implementation.md). It is not task-factory functionality or product
 cutover. The [38-module removal challenge](../tl-8bh9.4.6/removal-challenge.md) now makes behavior losses explicit. This is the design coverage and scope map;
 task state, claims, priorities and dependencies remain authoritative in the tracker.
-Source implementation has not started in this review. Astra challenged both coverage and ordering.
+The original review preceded source construction. The successor now implements repository/task inspection;
+the full factory remains unimplemented. Astra challenged both coverage and ordering.
 
 ## What this review establishes
 
@@ -16,6 +17,12 @@ terminology, shared mechanisms and curated replacement have explicit contracts i
 This is enough to start bounded implementation. It is not an exhaustive audit of every file or all 251
 active task records returned by the final snapshot (224 open, 17 in progress, 10 deferred).
 The broad task scan supplied leads; the retirement decisions below used the relevant acceptance and source.
+
+The owner's subsequent [untouched-file gap analysis](../tl-8bh9.13/audit.md) compares all tracked paths at exact
+baseline/head revisions. Its inventory finds no unchanged surviving production runtime, but deletion is not
+behavior review. It records concrete additional dispositions for acceptance filtering, stray quarantine,
+provider/account policy, ADR governance, artifacts, environment shaping and developer acceptance tools.
+Those recommendations remain proposed where they exceed existing decisions; implementation uses existing owners.
 
 Owner approved removing automatic post-task AI reflection and daily digest/task filing on 2026-11-09.
 tl-8bh9.5.5 owns deletion of the model calls, scheduling, private state/config and automatic intake path.
