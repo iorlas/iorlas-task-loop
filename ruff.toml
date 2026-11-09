@@ -1,31 +1,16 @@
-# Lint (88 sec 6). `just check` runs `ruff check`; `ruff format` applies to src/ only (see justfile).
+# Retained lint policy, scoped to the successor's actual source roots.
 target-version = "py315"
-src = ["src", "packages/land/src", "packages/delegate/src", "packages/dash/src", "packages/kernel/src", "packages/testkit/src", "packages/artifacts/src", "packages/pipeline/src", "packages/gate/src", "packages/work/src", "packages/slots/src", "packages/areas/src", "packages/asks/src", "packages/release/src"]
+src = ["src"]
 line-length = 140
 output-format = "concise"
-exclude = [".worktrees", ".slots", ".task", "tests/fixtures", "src/*/_vendor", "skills/task-loop/_vendor"]
+exclude = [".worktrees", ".slots", ".task"]
 
 [lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4", "C90", "SIM", "RUF", "PL", "D100", "TID251"]
-ignore = [
-    "PLR0913",  # argument count: deep functions legitimately take many
-    "PLR2004",  # magic values
-    "PLR0917",  # positional-argument count, same reason as PLR0913
-]
-
-# No per-file ignores, none for tests, skills or dev either: tests/rules/gate_rules.py fails if one comes back. A genuine boundary gets one
-# `# noqa: RULE  reason` on its own line (E402 after a sys.path edit, F401 for an import kept for its side effect, PLC0415, SIM115).
-
-# Banned imports (TID251). The two plugins never import each other; src/taskloop/{contracts,stores}/ruff.toml add the modules those layers never import.
-# The other architecture rules (layers, app slices, `import re` placement) are the `.importlinter` contracts, run by `just rules`.
-[lint.flake8-tidy-imports.banned-api]
-"delegate.app".msg = "task-loop imports delegate.api and nothing else of delegate"
-"delegate.cli".msg = "task-loop imports delegate.api and nothing else of delegate"
-"delegate.adapters".msg = "task-loop imports delegate.api and nothing else of delegate"
-"delegate.domain".msg = "task-loop imports delegate.api and nothing else of delegate"
-"delegate.contracts".msg = "task-loop imports delegate.api and nothing else of delegate"
-"delegate.entry".msg = "task-loop imports delegate.api and nothing else of delegate"
+ignore = ["PLR0913", "PLR2004", "PLR0917"]
 
 [lint.mccabe]
 max-complexity = 12
 
+[lint.flake8-tidy-imports.banned-api]
+"subprocess".msg = "Process mechanisms belong to their owning shared library."

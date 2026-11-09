@@ -1,5 +1,14 @@
 # Roadmap: speed and less code (2026-11-06)
 
+> STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
+> [reconciled STORE slices](tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
+> Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.
+
+> Superseded as an execution ordering document, 2026-11-09. Follow the current
+> [architecture discussion roadmap](tl-8bh9/plan.md), owner decisions and task holds.
+> In particular, STORE remains held and the old layout-migration prescriptions are not authorization to implement.
+> The original text below is retained as historical context for task reconciliation.
+
 Rule: a bead that makes checks, tests or lands faster, or deletes code, goes first. Everything else waits.
 Bead ids are the source of truth; this file only orders them. Update it when a wave finishes.
 

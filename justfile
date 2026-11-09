@@ -1,85 +1,22 @@
-# The gate is `just gate` = `just check` (static: ruff, pyrefly, import-linter) then `just test` (the tests). The suite receipt (RunKey) is written only after both.
-# `uv run pytest <path>` is the inner loop while you edit, not a gate.
-# TL_TEST_FULL: the landing gate keeps the cores; a lane's plain `just test` runs at nice 10 (dev/runtests.py).
-gate: check
-    TL_TEST_FULL=1 uv run python dev/runtests.py
+# The foundation has one behavior slice; both test folders are affected by its build boundary.
+test: prepare
+    uv run --frozen --no-sync python -I -m pytest -q tests/cli tests/rules
 
-# The tests this change can break (dev/affected.py picks them from the diff against origin/main; tests/rules always; all kinds, one run). Each test runs once per tree.
-test: test-packages
-    uv run python dev/runtests.py
+# Rebuild the current project on every gate; never use an editable install or PYTHONPATH.
+prepare:
+    uv sync --frozen --no-editable --reinstall-package iorlas-task-loop
 
-# The workspace packages a change reaches (dev/packages.py), each one's tests alone in a fresh environment of its own declared dependencies (docs/design/stage-packages.md section 5).
-test-packages:
-    for p in $(python3 dev/packages.py); do [ -d "packages/$p/tests" ] || continue; echo "== $p: tests"; uv run --isolated --package "tl$p" --group dev pytest -q -c "packages/$p/pyproject.toml" --rootdir "packages/$p" "packages/$p" || exit 1; done
+check: prepare lint types rules
 
-# INNER LOOP ONLY, never the gate: pytest-testmon reruns what the code you edited reaches in the paths you name (docs/dev/test-inner-loop.md). It follows Python imports, not
-# config or data files, so a green run here proves nothing about those: `just test` (dev/affected.py) is the gate. First run per path builds .testmondata.
-test-inner +paths:
-    uv run --with pytest-testmon pytest --testmon -o addopts="-p no:cacheprovider" --ignore=tests/e2e --ignore=tests/live {{paths}}
-
-# INNER LOOP ONLY developer tool, never the gate: stage tests plus dependencies' contract tests. `just test` stays the gate.
-test-pkg stage:
-    if [ -f packages/{{stage}}/pyproject.toml ]; then [ -d packages/{{stage}}/tests ] || exit 0; uv run --isolated --package tl{{stage}} --group dev pytest -q -c packages/{{stage}}/pyproject.toml --rootdir packages/{{stage}} packages/{{stage}}; else uv run pytest -q $(python3 dev/test_pkg.py {{stage}}); fi
-
-# Every test of every kind, in 4 workers then the serial group. Started by a person, never by the gate, the release, a cron or a background job.
-test-full:
-    uv run pytest -m "not serial" -n 4
-    uv run pytest -m serial
-
-# just test-live [pytest args]: the explicit-only scenarios of tests/live (real git remote, real processes, real tl and dashboard); no default run collects them
-test-live *args:
-    uv run pytest -m live -s tests/live {{args}}
-
-# Vendored shelf packages: `just vendor sync NAME [--tag TAG]` copies one from the shelf tag, `just vendor check` proves no drift (shelf_vendor, itself vendored).
-vendor *args:
-    PYTHONPATH=skills/task-loop/_vendor python3 -m shelf_vendor --vendor-dir skills/task-loop/_vendor --manifest dev/vendor.json {{args}}
-
-# The delegate member tests (including real/). Selected only for delegate, vendor or testkit changes (dev/packages.py).
-test-delegate *args:
-    uv run --isolated --package tldelegate --group dev pytest -q -c packages/delegate/pyproject.toml --rootdir packages/delegate packages/delegate/tests {{args}}
-
-# Install the exact tool versions recorded in mise.lock.
-tools:
-    MISE_IGNORED_CONFIG_PATHS=$HOME/.config/mise mise install --locked
-
-# Static gate: ruff + pyrefly + import-linter contracts. Seconds. The structural rules (caps, placement, ratchets) are tests/rules, run by `just test`.
-check: lint types rules
-
-# lint looks only at the .py files this change touches (against origin/main, plus the working tree); lint-all reads the whole tree; types always does.
 lint:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    files=$(just changed)
-    [ -z "$files" ] || echo "$files" | xargs uv tool run "ruff@$(just pin ruff)" check
+    uv tool run "ruff@$(just pin ruff)" check src tests
 
-lint-all:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    uv tool run "ruff@$(just pin ruff)" check
-
-# The whole tree, not the changed files: a signature change breaks callers in files the change did not touch (tl-cbj4). About 1 s wall, 8 s CPU.
 types:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    unset VIRTUAL_ENV  # a caller under `uv run --script` (release.py) passes its script env, which has no dev group
-    uv sync --frozen -q  # pyrefly resolves pytest and the dev group from .venv; a fresh clone has none
     uv tool run "pyrefly@$(just pin pipx:pyrefly)" check
 
 rules:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # skills/task-loop/_vendor: .importlinter names stream_proc (the vendored process library) as a root package, so grimp must find it
-    # --with msgspec: .importlinter names msgspec as a root package (the hook contract), and grimp must find it
-    PYTHONPATH=src:$(ls -d packages/*/src | paste -sd: -):skills/task-loop/_vendor uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
+    uv run --frozen --no-sync --with "import-linter==$(just pin pipx:import-linter)" lint-imports --no-cache
 
-# The .py files this change touches: committed since origin/main, edited, or new; deleted ones, the vendored copy and fixtures left out.
-[private]
-changed:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    { git diff --name-only --diff-filter=d origin/main...HEAD; git diff --name-only --diff-filter=d HEAD; git ls-files --others --exclude-standard; } | sort -u | grep '\.py$' | grep -v '/_vendor/' | grep -v '^tests/fixtures/' || true
-
-# The version mise.toml pins for a tool (one source for the pins).
 [private]
 pin tool:
-    @python3 -c "import sys, tomllib; print(tomllib.load(open('mise.toml', 'rb'))['tools'][sys.argv[1]])" {{tool}}
+    @python3 -c "import pathlib, sys, tomllib; print(tomllib.loads(pathlib.Path('mise.toml').read_text())['tools'][sys.argv[1]])" {{tool}}

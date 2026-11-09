@@ -1,3 +1,0 @@
-# The dash serves HTTP and runs threads, so it extends the root config, not the kernel's contracts-only one.
-extend = "../../ruff.toml"
-src = ["src"]

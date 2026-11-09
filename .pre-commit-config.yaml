@@ -1,4 +1,4 @@
-# Repo-neutral lint only. The push gate is not here: tl's pre-push hook (tl hooks install) asks tl whether the pushed tip is green.
+# Repository lint hook. Delivery checks are introduced with their owning successor task.
 repos:
   - repo: local
     hooks:

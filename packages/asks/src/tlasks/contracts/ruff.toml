@@ -1,6 +1,0 @@
-extend = "../../../ruff.toml"
-
-[lint.flake8-tidy-imports.banned-api]
-"subprocess".msg = "contracts contain records and protocols only"
-"socket".msg = "contracts contain records and protocols only"
-"threading".msg = "contracts contain records and protocols only"
