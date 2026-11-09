@@ -3,7 +3,7 @@
 Task: tl-8bh9.4.3.1, scoped child of AGENT-CONTRACT tl-8bh9.4.3. Proposed implementation specification,
 2026-11-09, following read-only Astra consultation. This document records a mechanism recommendation, not new
 owner-agreed policy, implemented capability, or permission to implement the whole parent. Source construction
-requires review and release of this bounded portion. The [first plan consumer](../tl-8bh9.3.2.1/plan.md) depends on it.
+requires independent review of this bounded implementation scope. The [first plan consumer](../tl-8bh9.3.2.1/plan.md) depends on it.
 
 ## Required behavior and bounded scope
 
@@ -170,3 +170,11 @@ Acceptance requires demonstrated same-attempt/same-session continuation and coll
 single launch for a contended token, truthful uncertainty, and retained custody on every incomplete proof path.
 Run required focused gates in each affected owner after reading its instructions. Factory gates are just check and
 just test; no whole-suite/live run. This document itself changes no source, config, tests, task state or Git state.
+
+## First-stage review receipt, 2026-11-09
+
+An independent review read both scoped plans, the accepted lifecycle/delivery policy and the actual Supervisor,
+RunHooks, procs and signal-hold code. No blocking design issue was found for the first registered-start stage.
+Source is tracked in tl-8bh9.4.4.1 and owning shelf-4426. The later lifetime, observation, persistence and custody
+requirements remain prerequisites for the real plan command; approval of this stage does not mark them implemented
+or authorize publication of another library branch or release.
