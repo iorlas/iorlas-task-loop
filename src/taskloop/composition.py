@@ -3,6 +3,7 @@
 import os
 import shutil
 import sqlite3
+import sys
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -12,19 +13,20 @@ from any_agent import run
 from beads_client import Bd, Runner
 from git_porcelain import RealRepo
 from sqlite_store import Store
+from stream_proc import observe_owned, popen_registered
 
 from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
 from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
 from taskloop.plan_files import PlanFiles
+from taskloop.plan_launch import Launcher
 from taskloop.plan_schema import SCHEMA
-from taskloop.plan_store import PlanStore
+from taskloop.plan_store import REGISTRATION_BUSY_MS, PlanStore
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Adopted, NotAdopted, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import inspect_task
 
 ACTOR = "taskloop"
-GATE_BUSY_MS = 1500  # the harness registration write must finish well inside any_agent's fixed 5 s registration window
 # Baseline child_env.scrub defaults (731b7c76, skills/task-loop/_vendor/child_env), re-stated here, never imported.
 APP_PREFIXES = ("CLAUDE_", "ANTHROPIC_", "DELEGATE_", "MCP_", "OTEL_", "CODEX_COMPANION")
 APP_NAMES = frozenset(
@@ -132,7 +134,7 @@ def push_bar(env: Mapping[str, str]) -> dict[str, str]:
 def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> PlanAttempts:
     """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
 
-    The harness registration gate writes through its own store, whose connections wait at most GATE_BUSY_MS for the
+    The harness registration gate writes through its own store, whose connections wait at most REGISTRATION_BUSY_MS for the
     write lock; every other write keeps the library's 5 s.
     """
     store, gated = Store(SCHEMA), Store(SCHEMA)
@@ -140,7 +142,7 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
     def bounded() -> sqlite3.Connection | None:
         con = gated.shared_rw(database)
         if con is not None:
-            con.execute(f"PRAGMA busy_timeout={GATE_BUSY_MS}")
+            con.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
         return con
 
     return PlanAttempts(
@@ -151,6 +153,13 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
         time.time,
         gate=PlanStore(bounded, gated.begin_immediate),
     )
+
+
+def open_launcher(database: Path, artifacts: Path) -> Launcher:
+    """Real wiring: the released registered start and owned-process observation, this interpreter, wall-clock deadlines.
+
+    The database path is made absolute here: the entry refuses a relative one, after its registration would commit."""
+    return Launcher(database.absolute(), PlanFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable)
 
 
 def adopt_slots(database: Path, checkout: Path, root: Path, count: int) -> tuple[Adopted | NotAdopted, ...]:

@@ -51,6 +51,12 @@ class PlanFiles:
         encoded = json.dumps([key.attempt_id, key.dispatch_token, key.reservation_generation]).encode()
         return "attempts/" + hashlib.sha256(encoded).hexdigest()
 
+    def entry_log(self, key: AttemptKey) -> Path:
+        """The attempt's entry process log (`entry.log` in its key-derived directory), with that directory made."""
+        path = self._path(self.directory(key) + "/entry.log")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
     def put_input(self, key: AttemptKey, text: str) -> FileRef:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)

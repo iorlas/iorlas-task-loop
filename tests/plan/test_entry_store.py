@@ -129,3 +129,16 @@ def test_unavailable_store_registers_nothing(con: sqlite3.Connection) -> None:
     con.execute("PRAGMA user_version=1")
     with pytest.raises(StoreUnavailable):
         PlanStore(lambda: con).register_entry(KEY, FIRST, 10)
+
+
+def test_attempt_of_is_the_recovery_read_by_task(con: sqlite3.Connection) -> None:
+    store = PlanStore(lambda: con)
+    assert store.attempt_of("tasks", "tl-1") == (KEY, "admitted", None)
+    assert store.attempt_of("tasks", "tl-2") is None
+    assert store.attempt_of("other", "tl-1") is None
+    assert store.register_entry(KEY, FIRST, 10) == "accepted"
+    con.execute("UPDATE plan_attempt SET phase='dispatching'")
+    con.execute("DELETE FROM reservation")  # a recovery read needs no live reservation
+    assert store.attempt_of("tasks", "tl-1") == (KEY, "dispatching", FIRST)
+    with pytest.raises(StoreUnavailable):
+        PlanStore(lambda: None).attempt_of("tasks", "tl-1")

@@ -1,0 +1,251 @@
+"""The launcher on a real factory.db file and real files, with a start fake that honours popen_registered's contract."""
+
+import errno
+import os
+import sqlite3
+import stat
+import sys
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+
+import pytest
+from sqlite_store import Store
+from stream_proc import (
+    IdentityUnavailableError,
+    OwnedProcess,
+    ProcessObservation,
+    RegisteredStartUncertainError,
+    observe_owned,
+    popen_registered,
+)
+
+from taskloop.composition import open_launcher
+from taskloop.plan_files import PlanFiles
+from taskloop.plan_launch import AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
+from taskloop.plan_schema import SCHEMA
+from taskloop.plan_store import REGISTRATION_BUSY_MS, PlanStore, StoreUnavailable
+from taskloop.plan_types import AttemptKey
+
+KEY = AttemptKey("attempt", "dispatch", 1)
+NEW = OwnedProcess(9, 9, "new-start", "boot")
+OLD = (7, "old-start", "boot")
+
+
+class Pipe:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class Child:
+    def __init__(self) -> None:
+        self.stdin, self.stdout = Pipe(), Pipe()
+
+
+class FakeStart:
+    """popen_registered's contract without a process: failures before the callback register nothing, a raising callback
+    means no permit and no exec, an exec failure after the commit is a plain OSError, a failed permit is Uncertain."""
+
+    def __init__(self, mode: str = "exec", before: Callable[[], object] = lambda: None, identity: OwnedProcess = NEW) -> None:
+        self.mode, self.before, self.identity = mode, before, identity
+        self.calls: list[dict[str, object]] = []
+        self.permitted = False
+        self.child = Child()
+
+    def __call__(
+        self,
+        argv: Sequence[str],
+        *,
+        registered: Callable[[OwnedProcess], None],
+        cwd: str | os.PathLike[str] | None = None,
+        env: Mapping[str, str] | None = None,
+        stderr: int = -1,
+        start_new_session: bool = True,
+        registration_timeout: float = 5.0,
+    ) -> tuple[Child, OwnedProcess]:
+        os.fstat(stderr)  # the entry log is open while the child starts
+        self.calls.append(
+            {"argv": list(argv), "cwd": cwd, "env": env, "session": start_new_session, "timeout": registration_timeout, "fd": stderr}
+        )
+        failures: dict[str, BaseException] = {
+            "popen": OSError(errno.EMFILE, "Too many open files"),
+            "bootstrap": RuntimeError("Isolated process bootstrap failed before registration"),
+            "timeout": TimeoutError(),
+            "identity": IdentityUnavailableError("no identity"),
+        }
+        if self.mode in failures:
+            raise failures[self.mode]
+        self.before()
+        registered(self.identity)  # a raising callback propagates: the library cleans the child, which never execs
+        self.permitted = True
+        if self.mode == "exec_failed":
+            raise OSError(errno.ENOENT, "No such file or directory", argv[0])
+        if self.mode == "uncertain":
+            raise RegisteredStartUncertainError(self.identity, leader_reaped=True)
+        return self.child, self.identity
+
+
+class Observe:
+    def __init__(self, kind: str = "gone") -> None:
+        self.kind = kind
+        self.seen: list[OwnedProcess] = []
+
+    def __call__(self, identity: OwnedProcess) -> ProcessObservation:
+        self.seen.append(identity)
+        if self.kind == "gone":
+            return ProcessObservation("gone")
+        if self.kind == "unknown":
+            return ProcessObservation("unknown")
+        if self.kind == "different_process":
+            return ProcessObservation("different_process", OwnedProcess(identity.pid, 1, "other", identity.boot))
+        return ProcessObservation("matching", identity)
+
+
+def launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:
+    return Launcher(db, PlanFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python")
+
+
+def stored(db: Path) -> tuple[object, ...]:
+    con = sqlite3.connect(db)
+    try:
+        return con.execute("SELECT entry_pid,entry_start,entry_boot,phase FROM plan_attempt").fetchone()
+    finally:
+        con.close()
+
+
+def register(db: Path, entry: tuple[int, str, str]) -> None:
+    store = Store(SCHEMA)
+    con = store.open_rw(db)
+    assert con is not None
+    assert PlanStore(lambda: con, store.begin_immediate).register_entry(KEY, entry, 10) == "accepted"
+    con.close()
+
+
+def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted: Path) -> None:
+    seen: list[tuple[object, ...]] = []
+    start = FakeStart()
+    start.before = lambda: seen.append(stored(admitted))
+    result = launcher(admitted, start).launch("tasks", "tl-1")
+    assert result == Launched(KEY, (9, "new-start", "boot"))
+    assert seen == [(None, None, None, "admitted")] and stored(admitted) == (9, "new-start", "boot", "admitted")
+    call = start.calls[0]
+    root = str(admitted.parent)
+    assert call["argv"] == ["/venv/bin/python", "-I", "-m", "taskloop.attempt_entry", str(admitted), root, "tasks", "tl-1"]
+    assert KEY.dispatch_token not in str(call["argv"])  # the dispatch token is never in argv
+    assert (call["cwd"], call["env"], call["session"], call["timeout"]) == (root, None, True, 5.0)
+    assert start.child.stdin.closed and start.child.stdout.closed
+    log = admitted.parent / PlanFiles(admitted.parent).directory(KEY) / "entry.log"
+    assert stat.S_IMODE(log.stat().st_mode) == 0o600
+    fd = call["fd"]
+    assert isinstance(fd, int)
+    with pytest.raises(OSError):
+        os.fstat(fd)  # the coordinator's copy of the log descriptor is closed
+
+
+@pytest.mark.parametrize("mode", ["popen", "bootstrap", "timeout", "identity"])
+def test_a_start_failure_before_the_callback_registers_nothing(admitted: Path, mode: str) -> None:
+    assert launcher(admitted, FakeStart(mode)).launch("tasks", "tl-1") == LaunchUnavailable("start")
+    assert stored(admitted) == (None, None, None, "admitted")
+
+
+def test_a_refused_callback_never_permits_the_target(admitted: Path) -> None:
+    start = FakeStart(before=lambda: register(admitted, OLD))  # another launcher registered between read and callback
+    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchRefused("registration_conflict")
+    assert not start.permitted and stored(admitted)[:3] == OLD
+    expired = FakeStart()
+    other = launcher(admitted, expired, observe=Observe("gone"), now=100).launch("tasks", "tl-1")
+    assert other == LaunchRefused("registration_refused") and not expired.permitted and stored(admitted)[:3] == OLD
+
+
+def test_exec_failure_after_the_commit_leaves_a_dead_entry_that_the_next_launch_replaces(admitted: Path) -> None:
+    assert launcher(admitted, FakeStart("exec_failed")).launch("tasks", "tl-1") == LaunchUnavailable("exec_failed_after_commit")
+    assert stored(admitted)[:3] == (9, "new-start", "boot")
+    observe, later = Observe("gone"), OwnedProcess(11, 11, "later-start", "boot")
+    assert launcher(admitted, FakeStart(identity=later), observe).launch("tasks", "tl-1") == Launched(KEY, (11, "later-start", "boot"))
+    assert observe.seen == [NEW] and stored(admitted)[:3] == (11, "later-start", "boot")
+
+
+@pytest.mark.parametrize("kind", ["gone", "different_process"])
+def test_an_observed_dead_entry_is_replaced(admitted: Path, kind: str) -> None:
+    register(admitted, OLD)
+    observe = Observe(kind)
+    assert launcher(admitted, FakeStart(), observe).launch("tasks", "tl-1") == Launched(KEY, (9, "new-start", "boot"))
+    assert observe.seen == [OwnedProcess(7, 7, "old-start", "boot")] and stored(admitted)[:3] == (9, "new-start", "boot")
+
+
+@pytest.mark.parametrize(("kind", "expected"), [("matching", AlreadyRunning(KEY, OLD)), ("unknown", LaunchUnavailable("observe"))])
+def test_a_live_or_unobservable_entry_is_not_started_again(admitted: Path, kind: str, expected: object) -> None:
+    register(admitted, OLD)
+    start = FakeStart()
+    assert launcher(admitted, start, Observe(kind)).launch("tasks", "tl-1") == expected
+    assert start.calls == [] and stored(admitted)[:3] == OLD
+
+
+def test_uncertain_permit_names_the_registered_identity(admitted: Path) -> None:
+    assert launcher(admitted, FakeStart("uncertain")).launch("tasks", "tl-1") == LaunchUncertain(KEY, (9, "new-start", "boot"))
+    assert stored(admitted)[:3] == (9, "new-start", "boot")
+
+
+def test_only_an_admitted_attempt_of_a_known_task_launches(admitted: Path) -> None:
+    start = FakeStart()
+    assert launcher(admitted, start).launch("tasks", "tl-9") == LaunchRefused("absent")
+    con = sqlite3.connect(admitted)
+    con.execute("UPDATE plan_attempt SET phase='dispatching'")
+    con.commit()
+    con.close()
+    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchRefused("dispatched")
+    assert start.calls == []
+
+
+def test_a_missing_database_is_refused_and_never_created(tmp_path: Path) -> None:
+    db = tmp_path / "factory.db"
+    start = FakeStart()
+    assert launcher(db, start).launch("tasks", "tl-1") == LaunchRefused("database")
+    assert not db.exists() and start.calls == []
+
+
+def test_a_foreign_schema_version_is_unavailable(admitted: Path) -> None:
+    con = sqlite3.connect(admitted)
+    con.execute("PRAGMA user_version=9")
+    con.close()
+    start = FakeStart()
+    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchUnavailable("store")
+    assert start.calls == []
+
+
+def test_composition_starts_with_the_released_registered_start(tmp_path: Path) -> None:
+    built = open_launcher(tmp_path / "factory.db", tmp_path)
+    assert built.start is popen_registered and built.observe is observe_owned and built.executable == sys.executable
+    assert open_launcher(Path("factory.db"), tmp_path).database == Path.cwd() / "factory.db"
+
+
+def test_a_relative_database_is_refused_before_any_read_registration_or_start(admitted: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(admitted.parent)
+    start = FakeStart()
+    built = Launcher(Path(admitted.name), PlanFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python")
+    assert built.launch("tasks", "tl-1") == LaunchRefused("database")
+    assert start.calls == [] and stored(admitted) == (None, None, None, "admitted")
+
+
+def test_an_unopenable_entry_log_starts_nothing(admitted: Path) -> None:
+    (admitted.parent / "attempts").write_text("not a directory")
+    start = FakeStart()
+    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchUnavailable("log")
+    assert start.calls == [] and stored(admitted) == (None, None, None, "admitted")
+
+
+def test_the_registration_write_waits_briefly_and_a_busy_store_registers_nothing(admitted: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    waits: list[object] = []
+
+    def busy(store: PlanStore, *_args: object) -> str:
+        con = store.connect()
+        assert con is not None
+        waits.append(con.execute("PRAGMA busy_timeout").fetchone()[0])
+        raise StoreUnavailable("Factory database operation failed")  # what a write lock held past the wait raises
+
+    monkeypatch.setattr(PlanStore, "register_entry", busy)
+    start = FakeStart()
+    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchUnavailable("store")
+    assert waits == [REGISTRATION_BUSY_MS] and not start.permitted and stored(admitted) == (None, None, None, "admitted")

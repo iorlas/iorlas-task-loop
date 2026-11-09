@@ -24,6 +24,10 @@ from taskloop.plan_types import (
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference, TaskScope
 
+# A registration write (the entry's or the harness's) waits at most this for the write lock, so it finishes well inside
+# the registered start's fixed 5 s window; every other write keeps the library's 5 s.
+REGISTRATION_BUSY_MS = 1500
+
 
 class StoreUnavailable(Exception):
     """No progress was acknowledged by the store."""
@@ -179,6 +183,19 @@ class PlanStore:
                 "UPDATE plan_attempt SET entry_pid=?,entry_start=?,entry_boot=?,rev=rev+1 WHERE attempt_id=?", (*entry, key.attempt_id)
             )
             return "accepted"
+
+    def attempt_of(self, backlog: str, task_id: str) -> tuple[AttemptKey, str, tuple[int, str, str] | None] | None:
+        """The recovery read: a task's attempt key, phase and registered entry, with no reservation or deadline check."""
+        with self._connection() as con:
+            row: tuple[object, ...] | None = con.execute(
+                """SELECT attempt_id,dispatch_token,generation,phase,entry_pid,entry_start,entry_boot FROM plan_attempt
+                WHERE adapter='beads' AND backlog=? AND task_id=?""",
+                (backlog, task_id),
+            ).fetchone()
+        if row is None:
+            return None
+        entry = None if any(value is None for value in row[4:7]) else (_int(row[4]), _str(row[5]), _str(row[6]))
+        return AttemptKey(_str(row[0]), _str(row[1]), _int(row[2])), _str(row[3]), entry
 
     def warm(self) -> None:
         """Open (and on first use check) this store's connection now; StoreUnavailable when it cannot."""

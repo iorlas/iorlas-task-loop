@@ -12,9 +12,9 @@ shelf `process-lock-v0.2.1` (read-only, `git show`). Baseline env and Codex flag
 - **Slice A (now; no `stream_proc` import):** `PlanStore.register_entry`; the body dispatches only for its
   registered entry; credentials, files and `launch_spec` resolve before dispatch; the gate's register write is bounded;
   machine credential source; fixed Codex access constant; tests replace the test-only registration.
-- **Slice B (BLOCKED on a shelf release):** the launcher (`popen_registered`), its recovery read `attempt_of` (moved
+- **Slice B:** the launcher (`popen_registered`), its recovery read `attempt_of` (moved
   here from A: it has no caller before the launcher) and the entry process (`inspect_process`).
-  It stays blocked until stream-proc and any-agent are released from one shared commit. That release is a shelf task.
+  Unblocked by the owner's direct stream-proc pin at any-agent's commit (O1, section 2); no shelf release was needed.
 
 After A, the path to `execute` is complete apart from the real process start and the real self-identity read.
 
@@ -22,9 +22,10 @@ After A, the path to `execute` is complete apart from the real process start and
 
 - **Q3:** admission's `Bd.claim` is the successor's task claim; tl-8bh9.3.5 later adds readiness on top of it.
 - **Credentials:** an injected callable from composition, resolved before dispatch is consumed. Login v1 is file-based.
-- **O1:** shelf re-releases stream-proc and any-agent from one released commit. This repo adds no direct pin until then,
-  so everything that imports `stream_proc` (Slice B) is blocked. Today `uv.lock` takes stream-proc from
-  `tag=any-agent-v0.4.0` (5e4a4a2), while `stream-proc-v0.5.0` points to 8240407 with an identical tree.
+- **O1 (revised by the owner for Slice B):** a direct stream-proc pin at the same source `uv.lock` already resolved
+  through any-agent: `tag=any-agent-v0.4.0`, commit 5e4a4a2, `packages/stream-proc`; no shelf change. `test_isolation.py`
+  pins every shared dependency by a `{name: tag}` table and asserts stream-proc's locked commit equals any-agent's.
+  (`stream-proc-v0.5.0` points to 8240407 with an identical tree; it is not used.)
 - **O2:** a registration may be replaced only while the attempt is `admitted` and the old process is observed `gone` or
   `different_process`.
 - **O3:** baseline style: the whole entry environment minus credential-looking variables (section 5). File login v1.
@@ -123,22 +124,25 @@ capture, session and answer. That leaves the harness gate (1.5 s plus one short 
 - With `writable_roots=[]`, a `git commit` in a linked worktree (git dir under the main checkout) needs such an escalation.
 - These flags are accepted by the codex-cli baseline used (0.162.1 per `decide.py:26-30`). The installed codex version is unverified.
 
-## 6. Slice B (blocked): launcher and entry
+## 6. Slice B: launcher and entry
 
 **Exact stream_proc imports:** `popen_registered`, `RegisteredStartUncertainError`, `IdentityUnavailableError`, `OwnedProcess`,
-`ProcessObservation`, `inspect_process`, `observe_owned`. B also brings the `test_isolation.py` dependency-set and tag-rule
-changes, after the shelf release. The injected `start` is typed by a factory `Protocol`, as is its returned child (`stdin`
+`ProcessObservation`, `inspect_process`, `observe_owned`. B also brings the direct stream-proc pin (O1) and the `test_isolation.py`
+`{name: tag}` table. The injected `start` is typed by a factory `Protocol`, as is its returned child (`stdin`
 and `stdout` with `close()`), so neither source nor fakes import `subprocess`.
 
 **Launcher** (`plan_launch.py`, ~130 lines). `launch(backlog, task_id) -> Launched | AlreadyRunning | LaunchRefused |
 LaunchUnavailable | LaunchUncertain`:
+0. A relative `database` is refused (`database`) before any read: the entry refuses it only after the registration
+   committed. `open_launcher` makes the path absolute.
 1. `attempt_of`: if the phase is not `admitted`, refuse with `dispatched`. If an entry is set, observe it: `matching` ->
    `AlreadyRunning`, `unknown` -> `LaunchUnavailable("observe")`, `gone`/`different_process` -> `Replaced`.
 2. `open_ro(db)` must not be `None`; a missing DB refuses. Then open a dedicated `open_rw` connection with
-   `busy_timeout=1500`, before the spawn. A file removed between the two opens would still be created; this is accepted
+   `busy_timeout=plan_store.REGISTRATION_BUSY_MS` (1500, the one constant the harness gate also uses), before the spawn. A file removed between the two opens would still be created; this is accepted
    and not claimed impossible.
-3. Open `PlanFiles.entry_log(key)` (`<directory(key)>/entry.log`, append, 0600, cloexec). Call `start([sys.executable,
-   "-I", "-m", "taskloop.attempt_entry", db, artifacts, attempt_id], registered=cb, cwd=artifacts, env=None,
+3. Open `PlanFiles.entry_log(key)` (`<directory(key)>/entry.log`, append, 0600, cloexec); `EvidenceError` or `OSError`
+   -> `LaunchUnavailable("log")`, nothing started. Call `start([sys.executable,
+   "-I", "-m", "taskloop.attempt_entry", db, artifacts, backlog, task_id], registered=cb, cwd=artifacts, env=None,
    stderr=log_fd, start_new_session=True, registration_timeout=5.0)`. `cb` calls `register_entry(..., now=clock())` and
    raises on anything but `accepted`, recording in a closure flag that it committed.
 4. Close the log fd and the child's stdin and stdout pipes. Never write, wait, signal or kill.
@@ -149,21 +153,28 @@ justified, so it is dropped.
 
 Exception mapping: `ValueError` is a programming error and propagates. `SchemaError` or `sqlite3.Error` on open ->
 `LaunchUnavailable("store")`. The following happen before any commit and mean nothing was registered, so they map to
-`LaunchUnavailable("start")`: `OSError` from `Popen` or the log open; `IdentityUnavailableError`; `RuntimeError`
-("bootstrap failed"); `TimeoutError`; our own refusal raised from `cb` (-> `LaunchRefused`/`LaunchUnavailable` by reason).
-`OSError` after `cb` committed (exec failure) -> `LaunchUnavailable("exec")`: the row names a dead process, which the next
-launch replaces. `RegisteredStartUncertainError` -> `LaunchUncertain(identity)`.
+`LaunchUnavailable("start")`: `OSError` from `Popen`; `IdentityUnavailableError`; `RuntimeError`
+("bootstrap failed"); `TimeoutError`; our own refusal raised from `cb` (-> `LaunchRefused`, or `StoreUnavailable` ->
+`LaunchUnavailable("store")`). `OSError` after `cb` committed (the exec status reported a failure) ->
+`LaunchUnavailable("exec_failed_after_commit")`: the row names a process that never ran the entry, which the next launch
+replaces. `RegisteredStartUncertainError` -> `LaunchUncertain(identity)`. Not caught: an error from the library's own
+child cleanup (`_abort`, e.g. a `wait` timeout before the permit) propagates untyped; catching it would need a
+subprocess import. The failure table names it.
 
 **Entry** (`attempt_entry.py`, ~100 lines). `main(argv)` wraps a testable `enter(...)`:
 1. `os.dup2(2, 1)` so stdout goes to the log (F8). stdin is ignored. The entry is its own session leader.
 2. Paths must be absolute, and `open_ro(db)` must not be `None`. The entry never creates a DB (F13).
-3. Read the row by `attempt_id`. `me = inspect_process(os.getpid())` must be `matching`; otherwise exit `identity` with no
-   credentials or agent call.
-4. `execute(key, me)`. The body itself refuses `not_entry`. If the result is `pending` or `unavailable` with a
-   `PendingPlanResult`, retry `publish` only while it returns `unavailable`. Retries stop at 3 or when `clock() >= deadline`,
+3. `me = inspect_process(os.getpid())`, then the row by `attempt_of(backlog, task_id)` (the one recovery read; argv
+   carries the task, not the attempt id). `me` must be `matching` and equal the stored entry; otherwise exit `identity`
+   with no credentials or agent call.
+4. `execute(key, me)`. The body itself refuses `not_entry`. If the result is `unavailable` with a `PendingPlanResult`
+   (the body never returns one with `pending`; a `conflict` is not retried), retry `publish` only while it returns `unavailable`. Retries stop at 3 or when `clock() >= deadline`,
    whichever comes first, with an injected wait. The agent never runs again.
 5. Write one line to the log: `status` and `reason` only, never facts, env, argv or exception text. A top-level
-   `BaseException` is logged by type name only (Low6). The exit code is display only.
+   `BaseException` is logged by type name only (Low6). The exit code is display only. Limit: the module's imports
+   (sqlite_store, stream_proc, composition and its libraries) run before `main`, so a failing import (a broken install)
+   writes Python's traceback, with its text, to the log unbounded. Deferring them would need imports inside functions,
+   which lint forbids.
 
 **Token (Low7, not overclaimed):** the dispatch token is not in the entry's argv. It is still readable by any same-user
 process from factory.db, and the log directory name is derived from it. It is correlation, not authority. Authority is the
@@ -179,7 +190,10 @@ plus the registered entry. A person writing in the slot is not excluded, and the
 |---|---|---|---|
 | Coordinator dies before spawn | admitted, entry NULL | none | starts via `attempt_of` |
 | Bootstrap, identity, `TimeoutError` before `cb`; `cb` refused or busy | unchanged | none; the library cleans the child | starts, or `conflict` |
-| `cb` committed, then exec `OSError` / `TimeoutError` / coordinator death | admitted, entry = never-run pid | none once observed | `gone`/`different_process` -> replace |
+| `cb` committed, then exec `OSError` (`exec_failed_after_commit`) or coordinator death | admitted, entry = never-run pid | none once observed | `gone`/`different_process` -> replace |
+| Permit send or exec status fails after the commit (`LaunchUncertain`); the library waits 0.2 s, then SIGKILLs the leader (`leader_reaped`) | admitted, entry = that pid | the target may have exec'd and been killed mid-run; descendants not proven stopped | `gone` -> replace; `matching` -> `AlreadyRunning` |
+| Library child cleanup itself fails (`_abort` re-raises its error) | unchanged before the commit, else entry = that pid | untyped exception from `launch`; leader may survive | observe decides as above |
+| Relative database path, or `entry.log` cannot be opened | unchanged | none; nothing started | refused `database` / `LaunchUnavailable("log")` |
 | Observation `unknown` (process table unreadable) | unchanged | attempt waits | `LaunchUnavailable`, retried later |
 | Deadline passes while admitted | admitted | **unresolved** until a release slice | `register_entry` refuses `expired` |
 | Entry: DB missing, identity mismatch, `not_entry`, sandbox, credentials/files/`launch_spec` | admitted | entry exits | replace after the cause is fixed; no auto-loop |
@@ -216,7 +230,7 @@ scheduler, other harnesses, whole-tree stop proof, uv cache env. `taskloop.attem
 - Doc update in the same change: the .4.3.1.1 limits text (lines 263-265, "credentials failure ... leave `dispatching`")
   becomes `admitted` (Low14).
 
-**B (after the release):**
+**B:**
 - `test_launch.py` with a `Protocol` fake honouring the library contract: callback before permit; raise means no exec;
   exec `OSError` after commit; Uncertain; unknown observation; replace; missing DB never created.
 - `test_entry.py` with `FakeRun`. Real `inspect_process(os.getpid())` reads the process table without spawning, so it is
@@ -245,7 +259,7 @@ B: `plan_launch.py` ~130, `attempt_entry.py` ~100, `plan_files.py` +4, dependenc
 
 ## 11. Owner questions
 
-None open beyond the shelf release (O1), which unblocks Slice B.
+None open. O1 is resolved by the owner's direct stream-proc pin at `any-agent-v0.4.0` (5e4a4a2); no shelf release.
 
 ## 12. Review findings not applied as stated
 

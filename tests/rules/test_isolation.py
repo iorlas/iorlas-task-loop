@@ -37,15 +37,30 @@ def test_noneditable_install_matches_current_source() -> None:
     assert entries[0].load() is main
 
 
-@pytest.mark.parametrize("name", ["git-porcelain", "beads-client", "any-agent", "sqlite-store"])
+# Every shared dependency and the shelf tag it is pinned at. stream-proc has no release of its own that any-agent was
+# built from, so it is pinned at any-agent's tag: both must resolve to one shelf commit.
+SHARED = {
+    "git-porcelain": "git-porcelain-v0.13.0",
+    "beads-client": "beads-client-v0.1.0",
+    "any-agent": "any-agent-v0.4.0",
+    "sqlite-store": "sqlite-store-v0.1.0",
+    "stream-proc": "any-agent-v0.4.0",
+}
+
+
+def locked_source(name: str) -> str:
+    lock = tomllib.loads((ROOT / "uv.lock").read_text())
+    return next(package for package in lock["package"] if package["name"] == name)["source"]["git"]
+
+
+@pytest.mark.parametrize("name", sorted(SHARED))
 def test_portable_shared_dependency(name: str) -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     dependency = importlib.metadata.distribution(name)
-    expected_names = {"git-porcelain", "beads-client", "any-agent", "sqlite-store"}
-    assert set(project["project"]["dependencies"]) == {f"{package}=={importlib.metadata.version(package)}" for package in expected_names}
-    tag = f"{name}-v{dependency.version}"
+    assert set(project["project"]["dependencies"]) == {f"{package}=={importlib.metadata.version(package)}" for package in SHARED}
+    tag = SHARED[name]
     assert "workspace" not in project.get("tool", {}).get("uv", {})
-    assert set(project["tool"]["uv"]["sources"]) == expected_names
+    assert set(project["tool"]["uv"]["sources"]) == set(SHARED)
     assert project["tool"]["uv"]["sources"][name] == {
         "git": "https://github.com/yoselabs/shelf.git",
         "subdirectory": f"packages/{name}",
@@ -57,13 +72,15 @@ def test_portable_shared_dependency(name: str) -> None:
     assert dependency_origin["url"] == "https://github.com/yoselabs/shelf.git"
     assert dependency_origin["subdirectory"] == f"packages/{name}"
     assert dependency_origin["vcs_info"]["requested_revision"] == tag
-    lock = tomllib.loads((ROOT / "uv.lock").read_text())
-    git_package = next(package for package in lock["package"] if package["name"] == name)
-    locked_source = git_package["source"]["git"]
-    assert locked_source.startswith("https://github.com/yoselabs/shelf.git?")
-    assert f"subdirectory=packages%2F{name}" in locked_source or f"subdirectory=packages/{name}" in locked_source
-    assert f"tag={tag}" in locked_source
-    assert locked_source.rsplit("#", 1)[1] == dependency_origin["vcs_info"]["commit_id"]
+    source = locked_source(name)
+    assert source.startswith("https://github.com/yoselabs/shelf.git?")
+    assert f"subdirectory=packages%2F{name}" in source or f"subdirectory=packages/{name}" in source
+    assert f"tag={tag}" in source
+    assert source.rsplit("#", 1)[1] == dependency_origin["vcs_info"]["commit_id"]
+
+
+def test_stream_proc_comes_from_any_agents_commit() -> None:
+    assert locked_source("stream-proc").rsplit("#", 1)[1] == locked_source("any-agent").rsplit("#", 1)[1]
 
 
 def test_no_baseline_or_editable_dependencies() -> None:
