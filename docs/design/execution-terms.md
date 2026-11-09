@@ -767,3 +767,9 @@ Clarification 2026-11-09: derived task branch names and already established oper
 memory without a Git memo subsystem. Mutable Git observations do not become valid for the entire factory lifetime;
 required unfinished-operation references still survive normal restart in factory.db. Retired planner preflight
 probes are separate from the agreed minimal plan completion contract, implemented with the actual plan step.
+
+
+Owner accepted 2026-11-09: remove proactive RAM-threshold admission initially, retain a small lifetime-scoped
+keep-awake capability for an unattended running factory (including waits), and retain correct-checkout binding
+while removing redundant guard/probe machinery. Planner probe retirement, minimal plan completion checks and
+migration removal remain agreed. None of these features is implemented by the CLI-only foundation.

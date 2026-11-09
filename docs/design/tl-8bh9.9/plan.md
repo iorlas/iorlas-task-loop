@@ -154,3 +154,8 @@ for intact-DB continuation of an unfinished operation, not a shadow Git database
 A mutable tip, checkout or remote may change while the factory runs, especially after agent work or an external
 writer. Do not trust an observation for the entire factory lifetime. Observe once at the boundary requiring it,
 then use that value and expected-ref protection; use a confirmed mutation result where it supplies the new value.
+
+
+Here "ordinary memory" means normal Python variables/operation fields such as branch_name, checkout_path and
+candidate_oid. "Facts" refers to those specific values, not another architectural entity or storage layer.
+Use the glossary's ordinary input/result language; no named fact cache is introduced.

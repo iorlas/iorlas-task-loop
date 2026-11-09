@@ -127,3 +127,8 @@ LAND; that does not activate a speculative merge queue.
 Reduced release publication effects, final hook-retirement scope and numeric transient retry timing still need
 decisions before those particular changes. Current shelf API/recovery/fake guarantees require code evidence.
 These are bounded gates, not reasons to delay the minimal foundation or all identity/store work.
+
+
+Owner wrap-up 2026-11-09: RAM-threshold admission is omitted initially; running-factory keep-awake and actual
+checkout binding are retained through their narrow owners. Planner probes and migrations remain retired. Optional
+check-level network isolation is still a proposed cut, not implicitly removed by those agreements.

@@ -23,8 +23,8 @@ The [original audit](plan.md) supplies purpose/cost/callers; this supplement sup
 | `deadline.py` | Commands, nested retries or waits can exceed the admitted budget. | Keep explicit per-execution remaining time; remove process-global budget list. |
 | `locks.py` | All-exclusion removal permits competing writers; deleting holder hints only loses diagnostics. | Separate correctness-critical reservation/critical sections from optional display sidecars; test two threads as well as processes. |
 | `landlock.py` | Same-host delivery contenders may race/retry more; no distributed exclusion is lost because none existed. | Keep custody and safe conditional delivery; justify local serialization separately. Arbitrary-command launcher is not required. |
-| `ram.py` | Admission no longer waits below configured available RAM (default 1024 MB). | My recommendation: omit the proactive RAM threshold initially; accept loss of automatic low-memory throttling and use bounded slots plus actual failure evidence. Memory-pressure failures remain a real risk. Proposed, not approved. |
-| `factory.py` | Detached loops can sleep with an idle Mac, delaying unattended work. | My recommendation: retain keep-awake while the factory runs, including timed waits, so unattended work can resume. A small OS helper has a concrete purpose; no new framework/native binding solely for this. Proposed, not approved. |
+| `ram.py` | Admission no longer waits below configured available RAM (default 1024 MB). | Owner accepted: omit proactive RAM threshold initially; use bounded slots and actual failure evidence. Automatic low-memory throttling is deliberately lost; no new resource-prediction framework. |
+| `factory.py` | Detached loops can sleep with an idle Mac, delaying unattended work. | Owner accepted: retain lifetime-scoped keep-awake while the factory runs, including timed waits. Use a small justified OS capability; no new host framework or complex native binding solely for this. |
 | `git.py` | Checkout/ref/commit/worktree/delivery behavior disappears. | Shared Git owner supplies only required operations. Do not carry automatic cleanup/reset/commit-all solely because callers exist. |
 | `git_base.py` | Checkout pinning, failure-versus-absence and fsmonitor policy can disappear. | Retain justified semantics in Git owner; remove duplicate runner/classifier. |
 | `git_ops.py` | Diff/index/delivery observations disappear; deleting history rewriting also removes rebase/amend/lease-force workflows. | Keep required observation/conditional delivery; rejected task-history rewriting is deliberately lost. |
@@ -76,7 +76,7 @@ The [original audit](plan.md) supplies purpose/cost/callers; this supplement sup
 
 These paths name baseline code retained at commit `731b7c76ef214ce35229f77814f98b6e1d6d5c0f` and in the original
 review worktree. The source foundation introduces none of these mechanisms. Concrete implementation tasks retain
-invariants; Git memo retirement/query consolidation is now settled direction. Unresolved host/network/delivery convenience cuts stay proposed until selected. Do not turn this
+invariants; Git memo retirement/query consolidation is now settled direction. RAM-threshold removal and keep-awake retention are now accepted. Unresolved network/delivery convenience cuts stay proposed until selected. Do not turn this
 analysis into a new runtime monitoring system or file one task per adapter.
 
 
@@ -111,4 +111,13 @@ RAM admission is only a heuristic threshold before starting more work; it is not
 guarantee. My recommendation remains to omit it initially and use bounded slots/actual failure evidence, with the
 loss of proactive throttling explicitly acknowledged. Keep-awake prevents idle Mac sleep during unattended work,
 including capacity/owner waits; it does not change concurrency or task policy. My recommendation remains a small
-lifetime-scoped OS capability for a running unattended factory. Both host choices remain proposed for the owner.
+lifetime-scoped OS capability for a running unattended factory. Owner subsequently accepted both host choices, 2026-11-09. These are target contracts, not implemented source behavior.
+
+
+## Plain names for active values
+
+"Ordinary memory" means Python variables or fields on the current operation, for example branch_name (derived
+from task ID), checkout_path (the selected managed worktree) and candidate_oid (the exact commit being checked).
+"Facts" was shorthand for these specific values, not another entity, cache or storage system. Pass the values
+as function arguments rather than repeatedly asking Git for them. Persist required unfinished-operation references
+in factory.db for restart; refresh mutable observations only where the operation requires current state.
