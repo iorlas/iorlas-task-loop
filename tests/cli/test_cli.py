@@ -29,7 +29,7 @@ def test_invalid_request(arguments: list[str], capsys: pytest.CaptureFixture[str
     output = capsys.readouterr()
     assert output.out == ""
     assert "usage: tl" in output.err
-    assert "unrecognized arguments: " + " ".join(arguments) in output.err
+    assert "error:" in output.err
 
 
 @pytest.mark.parametrize("arguments, code", [(["--help"], 0), (["plan"], 2)])

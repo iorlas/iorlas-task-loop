@@ -21,6 +21,11 @@ wheels = [
 ]
 
 [[package]]
+name = "git-porcelain"
+version = "0.13.0"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.13.0#e71d37571192d4ad6a7e95d64ad46c3d9210e1e8" }
+
+[[package]]
 name = "iniconfig"
 version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -33,6 +38,9 @@ wheels = [
 name = "iorlas-task-loop"
 version = "0"
 source = { editable = "." }
+dependencies = [
+    { name = "git-porcelain" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -41,6 +49,7 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.13.0" }]
 
 [package.metadata.requires-dev]
 dev = [

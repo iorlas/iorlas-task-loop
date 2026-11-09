@@ -7,7 +7,10 @@ name = "iorlas-task-loop"
 version = "0"
 description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
-dependencies = []
+dependencies = ["git-porcelain==0.13.0"]
+
+[tool.uv.sources]
+git-porcelain = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/git-porcelain", tag = "git-porcelain-v0.13.0" }
 
 [project.scripts]
 tl = "taskloop.cli:main"

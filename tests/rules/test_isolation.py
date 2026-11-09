@@ -22,7 +22,8 @@ def test_noneditable_install_matches_current_source() -> None:
     origin = json.loads(origin_text)
     assert origin.get("dir_info", {}).get("editable", False) is False
     assert Path(unquote(urlparse(origin["url"]).path)).resolve() == ROOT
-    assert distribution.requires is None
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    assert distribution.requires == project["project"]["dependencies"]
     installed = Path(taskloop.__file__).resolve().parent
     assert installed.is_relative_to(Path(sys.prefix).resolve())
     source = ROOT / "src" / "taskloop"
@@ -34,11 +35,35 @@ def test_noneditable_install_matches_current_source() -> None:
     assert entries[0].load() is main
 
 
-def test_no_baseline_or_editable_dependencies() -> None:
+def test_portable_shared_git_dependency() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    assert project["project"]["dependencies"] == []
+    dependency = importlib.metadata.distribution("git-porcelain")
+    assert project["project"]["dependencies"] == [f"git-porcelain=={dependency.version}"]
+    tag = f"git-porcelain-v{dependency.version}"
     assert "workspace" not in project.get("tool", {}).get("uv", {})
-    assert "sources" not in project.get("tool", {}).get("uv", {})
+    assert project["tool"]["uv"]["sources"] == {
+        "git-porcelain": {
+            "git": "https://github.com/yoselabs/shelf.git",
+            "subdirectory": "packages/git-porcelain",
+            "tag": tag,
+        },
+    }
+    dependency_origin_text = dependency.read_text("direct_url.json")
+    assert dependency_origin_text is not None
+    dependency_origin = json.loads(dependency_origin_text)
+    assert dependency_origin["url"] == "https://github.com/yoselabs/shelf.git"
+    assert dependency_origin["subdirectory"] == "packages/git-porcelain"
+    assert dependency_origin["vcs_info"]["requested_revision"] == tag
+    lock = tomllib.loads((ROOT / "uv.lock").read_text())
+    git_package = next(package for package in lock["package"] if package["name"] == "git-porcelain")
+    locked_source = git_package["source"]["git"]
+    assert locked_source.startswith("https://github.com/yoselabs/shelf.git?")
+    assert "subdirectory=packages%2Fgit-porcelain" in locked_source or "subdirectory=packages/git-porcelain" in locked_source
+    assert f"tag={tag}" in locked_source
+    assert locked_source.rsplit("#", 1)[1] == dependency_origin["vcs_info"]["commit_id"]
+
+
+def test_no_baseline_or_editable_dependencies() -> None:
     assert str(ROOT / "src") not in sys.path
     baseline = (
         "tlkernel", "tltestkit", "delegate", "tlland", "tldash", "tlwork", "tlareas", "tlartifacts",
