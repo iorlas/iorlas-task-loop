@@ -41,13 +41,15 @@ Local checkpoints: fe41f2f (truthful identity/discovery failures) and 5b99aaa (e
 
 The shelf consumption contract requires portable Git URL + subdirectory + namespaced release tag, with uv.lock
 pinning its commit. Existing local tag is git-porcelain-v0.12.0; source metadata is 0.12.1 and the corrected code has
-not been published/tagged. A locally built candidate wheel is evidence, not a portable dependency release.
+been published as a review branch in [shelf PR #66](https://github.com/yoselabs/shelf/pull/66), but has not been
+merged/released/tagged. A locally built candidate wheel is evidence, not a portable dependency release.
 
 Do not commit an absolute path/editable override, pin a nonexistent tag, copy library source into factory or
 claim normal locked consumer gates passed with a substituted local package. Local co-development overrides
 are permitted by shelf for inner-loop work only and must not leak into committed dependency declarations.
 Normal source integration starts after the required corrected dependency can be pinned reproducibly. Current
-Git authority permits local checkpoints only; publication/release needs explicit authority and its required gate.
+Git authority covers local checkpoints and the authorized review branch/PR; merge, release and tagging need
+separate authority and their required gate.
 
 ## Source and verification after dependency is available
 
@@ -60,3 +62,8 @@ identity does not imply that the original path is the selected checkout. Real Gi
 shelf. Update the foundation isolation assertions to the exact declared shared dependency, retaining noneditable
 current-project provenance and no baseline imports. Required just check/just test and independent review remain
 mandatory before a source completion claim. An executable smoke is separate from task delivery/publication.
+
+
+Publication receipt, 2026-11-09: PR #66 is open and clean against main at reviewed head
+5b99aaa7a43f38b07eeebf2b7351468e55222cd2. User authorization covered branch push/PR only; merge, release
+and tagging remain separate. The PR is attached to the current task. No consumer dependency pin was changed.
