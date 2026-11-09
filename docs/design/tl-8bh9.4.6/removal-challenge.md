@@ -121,3 +121,24 @@ from task ID), checkout_path (the selected managed worktree) and candidate_oid (
 "Facts" was shorthand for these specific values, not another entity, cache or storage system. Pass the values
 as function arguments rather than repeatedly asking Git for them. Persist required unfinished-operation references
 in factory.db for restart; refresh mutable observations only where the operation requires current state.
+
+
+## Recommended final behavior cuts — proposed, 2026-11-09
+
+These are recommendations for owner review, not approved implementation scope. Existing accepted cuts stay settled.
+
+| Behavior | Recommendation | Lost behavior / tradeoff | Why I judge the loss acceptable |
+|---|---|---|---|
+| Separate online/offline probes and global offline gate | Remove socket-probe polling as a second network-state authority; actual typed agent/Git errors use the single bounded wait/retry owner. | Lose early confirmation of connectivity and global suppression of launches until a probe passes. A later admitted request may fail before connectivity recovers. | Probe success does not prove the needed endpoint works; probe failure should not stop unrelated work. Actual operation results are better evidence; bounded retries remain mandatory. This is unrelated to check sandbox removal. |
+| Factory whole-tree textual conflict-marker scan | Remove the dedicated factory scan; rely on unresolved-index refusal and configured repository validation. | Lose the extra scan that may find literal markers in otherwise merged files if repository checks do not catch them. | Factory should enforce completion/integration contracts while repository checks own source validation. A repo can include marker detection in its normal checks without another factory script/process hop. |
+| Human-readable lock-holder .holder JSON files | Remove diagnostic sidecar writes/reads; retain real shared locks and DB-owned reservations. Show an unknown external holder honestly. | Wait messages may lack a task/check label for holders not represented in factory.db. | A best-effort diagnostic hint does not justify another local state path. Existing runtime ownership records can explain known factory work; do not invent a new DB ledger solely to reproduce sidecar labels. |
+
+Evidence rechecked for these proposals: app/workers/account_acts.py:90–116 polls a network probe; loop/settle.py:89–104
+sets global NETWORK DOWN and suppresses claims; adapters/locks.py:1–6 calls holder records hints, with reads/writes
+at :35–44 and :99–104. Marker behavior and later full-check distinction are traced in the main audit. Removing
+pre-probes must preserve actual typed failure evidence and bounded waiting, not permit uncontrolled launch loops.
+
+Keep local checkout custody, identity-aware liveness, cancellation/time limits and conditional task/Git mutations.
+Local delivery serialization should stay narrow while the first complete flow is built; there is insufficient reason
+to remove a correctness-relevant critical section merely to reduce the number of adapters. Account status/limits
+remain required; separate account-management UI is not a prerequisite for the first CLI task flow.
