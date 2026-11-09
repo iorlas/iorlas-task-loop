@@ -142,3 +142,15 @@ repeated helper reads within the same observation phase are removed, receipts ar
 changes/uncertain effects still trigger the required fresh verification. Measure real Git-call counts at the
 owning library boundary before claiming a performance improvement. Normal operation must not depend on a
 memo cache for reasonable call volume or correctness.
+
+
+### Clarification: ordinary memory, not a factory-lifetime Git snapshot
+
+The deterministic task branch name is derived from the task ID; it does not require Git discovery or a stored
+branch-name record. Already established values belong in the active operation's ordinary in-memory inputs and
+are passed to consumers. This is not a generic memo lookup/cache subsystem. Persist only the references needed
+for intact-DB continuation of an unfinished operation, not a shadow Git database.
+
+A mutable tip, checkout or remote may change while the factory runs, especially after agent work or an external
+writer. Do not trust an observation for the entire factory lifetime. Observe once at the boundary requiring it,
+then use that value and expected-ref protection; use a confirmed mutation result where it supplies the new value.

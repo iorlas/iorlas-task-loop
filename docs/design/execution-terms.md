@@ -761,3 +761,9 @@ Owner direction 2026-11-09: remove factory Git memoization by simplifying operat
 repeated Git processes or relocating the cache to shelf. Pass already established identity, pinned inputs and
 mutation results; observe current state only where the operation requires it, with conditional mutation protection.
 Operation-level traces verify redundant reads are gone. See [Git strategy](tl-8bh9.9/plan.md).
+
+
+Clarification 2026-11-09: derived task branch names and already established operation values can remain in ordinary
+memory without a Git memo subsystem. Mutable Git observations do not become valid for the entire factory lifetime;
+required unfinished-operation references still survive normal restart in factory.db. Retired planner preflight
+probes are separate from the agreed minimal plan completion contract, implemented with the actual plan step.

@@ -89,3 +89,26 @@ already accepted cuts. "There are callers" and "we can move it to shelf" are not
 
 For Git memoization the chosen strategy removes unnecessary observations, rather than accepting extra Git
 processes as the inevitable cost of deletion. See ../tl-8bh9.9/plan.md for the exact operation-data-flow contract.
+
+
+## Owner clarification: purpose before implementation
+
+Git branch context can be held in normal operation memory and passed around; branch names are deterministic.
+That does not authorize a factory-lifetime snapshot of mutable HEAD/remote/config. Fresh verification occurs only
+at boundaries requiring it, and restart retains required unfinished-operation references through factory.db.
+
+Retiring planner probes does not remove the already agreed minimum completion contract when the plan step is
+implemented: valid structured completion and the required committed docs/design/<task-id>/plan.md. No new dynamic
+DoD framework or extracted-command preflight is needed. Further task-specific validation can be added only when
+its purpose is demonstrated. Passing a generic check is not proof that the requested behavior is delivered.
+
+Checkout guard's actual purpose is preventing an agent/check or Git operation from acting on another checkout
+(for example the person's main tree) when path/config/environment is redirected. Keep owned-checkout binding at
+actual execution boundaries; do not carry the standalone old guard, eleven repeated probes, or blanket rejection
+of every core.worktree setting. Factory Git pinning alone does not bind the harness's own Git tools.
+
+RAM admission is only a heuristic threshold before starting more work; it is not a memory reservation or an OOM
+guarantee. My recommendation remains to omit it initially and use bounded slots/actual failure evidence, with the
+loss of proactive throttling explicitly acknowledged. Keep-awake prevents idle Mac sleep during unattended work,
+including capacity/owner waits; it does not change concurrency or task policy. My recommendation remains a small
+lifetime-scoped OS capability for a running unattended factory. Both host choices remain proposed for the owner.
