@@ -37,11 +37,11 @@ def test_noneditable_install_matches_current_source() -> None:
     assert entries[0].load() is main
 
 
-@pytest.mark.parametrize("name", ["git-porcelain", "beads-client"])
+@pytest.mark.parametrize("name", ["git-porcelain", "beads-client", "any-agent", "sqlite-store"])
 def test_portable_shared_dependency(name: str) -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     dependency = importlib.metadata.distribution(name)
-    expected_names = {"git-porcelain", "beads-client"}
+    expected_names = {"git-porcelain", "beads-client", "any-agent", "sqlite-store"}
     assert set(project["project"]["dependencies"]) == {f"{package}=={importlib.metadata.version(package)}" for package in expected_names}
     tag = f"{name}-v{dependency.version}"
     assert "workspace" not in project.get("tool", {}).get("uv", {})

@@ -1,6 +1,6 @@
-# The foundation has one behavior slice; both test folders are affected by its build boundary.
+# Focused implemented CLI, admitted-plan body and successor isolation contracts.
 test: prepare
-    uv run --frozen --no-sync python -I -m pytest -q tests/cli tests/rules
+    uv run --frozen --no-sync python -I -m pytest -q tests/cli tests/plan tests/rules
 
 # Rebuild the current project on every gate; never use an editable install or PYTHONPATH.
 prepare:

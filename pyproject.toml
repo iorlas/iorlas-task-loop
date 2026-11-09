@@ -7,9 +7,11 @@ name = "iorlas-task-loop"
 version = "0"
 description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
-dependencies = ["beads-client==0.1.0", "git-porcelain==0.13.0"]
+dependencies = ["any-agent==0.4.0", "beads-client==0.1.0", "git-porcelain==0.13.0", "sqlite-store==0.1.0"]
 
 [tool.uv.sources]
+any-agent = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-agent", tag = "any-agent-v0.4.0" }
+sqlite-store = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/sqlite-store", tag = "sqlite-store-v0.1.0" }
 git-porcelain = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/git-porcelain", tag = "git-porcelain-v0.13.0" }
 beads-client = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/beads-client", tag = "beads-client-v0.1.0" }
 
@@ -31,5 +33,5 @@ function = 80
 test-file = 800
 
 [tool.pytest.ini_options]
-testpaths = ["tests/cli", "tests/rules"]
+testpaths = ["tests/cli", "tests/plan", "tests/rules"]
 addopts = "--import-mode=importlib -p no:cacheprovider"
