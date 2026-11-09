@@ -59,13 +59,17 @@ conditional mutation contract, rather than being smuggled into plan cleanup.
    Reject invalid/unavailable bindings and unauthorized or blocked work. Atomically reserve the managed worktree
    generation locally, then acquire the actual initial task claim outside the SQLite transaction. Persist the
    pending action before an external effect; release only this reservation on a proven failed acquisition.
-2. Establish exclusive worktree custody and verify prior workers are stopped before preparation. Use the deterministic
-   task branch. Continue existing committed/local task work rather than recreating it from the target. Never reset
-   the person's checkout, erase unexplained dirty work, overwrite an existing branch or adopt an unrecorded worktree
-   merely because its name looks managed. Run only the already-approved repeatable repository setup required here.
-3. Persist the plan attempt and admitted immutable request, including task/input provenance, deadline and reservation
-   generation. Start one Codex execution through .4.3.1. Its independently surviving supervisor publishes native
-   session and execution/result facts into factory.db; factory source/tests contain no subprocess mechanism.
+2. Persist the plan attempt and admitted immutable inputs, including task/input provenance, deadline and reservation
+   generation. Start its bounded process through the owning registered-launch API before preparation. The process
+   constructs the same factory application/store ports, validates its token/generation, and acquires existing
+   ProcessLock(reentrant=False) itself. The coordinator holds no worktree lock to transfer. No worktree mutation
+   occurs before acquisition and confirmation that prior workers are stopped.
+3. Under that same handle, perform factory-owned preparation using the deterministic task branch. Continue existing
+   committed/local task work rather than recreating it from the target. Never reset the person's checkout, erase
+   unexplained dirty work, overwrite an existing branch or adopt an unrecorded worktree merely because its name
+   looks managed. Run only already-approved repeatable setup required here. Then start one Codex execution through
+   .4.3.1 in this process's existing supervisor, which publishes native session and execution/result facts into
+   factory.db. Preparation and failure policy remain factory code; factory source/tests contain no subprocess mechanism.
 4. Give the planner the actual requirements/acceptance, existing plan and repository context. Its authorized work is
    the requested plan and necessary selected design artifacts; it writes and commits those intended files on the
    task branch. Instruct it to leave unrelated work intact and report unresolved work or decisions explicitly. Do
@@ -78,13 +82,20 @@ conditional mutation contract, rather than being smuggled into plan cleanup.
    Persist the pending publication with that pinned commit, configured destination and deterministic task ref. Carry
    out the ordinary non-force publication and confirm its result; an uncertain acknowledgment is observed before
    retry. Publication failure retries transport only, never the planner or its commit. After confirmed whole-workload
-   stop and a clean intended state, detach this managed worktree at its current HEAD and release only the matching
-   reservation generation. Unknown custody,
+   stop and a clean intended state, perform final factory-owned checks/detachment at current HEAD under the same
+   lock handle, then release only the matching reservation generation and that handle. Unknown custody,
    dirty/conflicted work or unresolved edits retain the reservation; completion does not override safety.
 
 No agent invocation, task-client request or Git operation occurs inside a SQLite transaction. Durable transitions
 are short and conditional. The caller's process lifetime does not own the harness's output collection or worktree
 lock. CLI formatting renders the shared result and cannot run a separate launch or cleanup engine.
+
+The attempt-process acquisition placement is a mechanism recommendation, source-checked 2026-11-09, not a new
+owner decision. Existing process-lock acquire/release supplies it; no new lock-transfer API is needed. Its separate
+pre-registry failure-cleanup defect is tracked as shelf-7c34 and is repaired in that library, never copied into the
+factory. A preparation failure records a typed failed/not-started agent result when established. Possible surviving
+preparation processes retain unresolved custody even though no agent session began. Fatal attempt-process death
+can free the kernel lock; that fact never clears an unresolved factory reservation or proves descendants stopped.
 
 ## Publication continuation
 
@@ -128,7 +139,8 @@ execution evidence referencing it, not a separately authoritative JSON plan stor
 
 | Interruption/failure | Required behavior |
 |---|---|
-| Preparation fails before agent launch | Record the failed/not-started attempt where applicable; preserve actual claim/worktree facts and release only proven safe local ownership. |
+| Preparation fails before agent launch | Record a typed failed attempt with agent-not-started/no session when proven; preserve actual claim/worktree facts and unresolved preparation descendants. Release only proven safe local ownership. |
+| Coordinator exits during preparation | The same factory attempt process retains its own lock and continues the operation; no transfer or second preparer is required. |
 | Dispatch acknowledgment is lost | Reconcile the same dispatch token; no blind replacement execution. |
 | Coordinator exits while Codex runs | Same surviving supervisor, harness, attempt, native session and reservation continue; restarting the command observes that operation. |
 | Native session arrives after restart | Record it on the same attempt through the owning lifecycle port; do not invent a session from PID/log path. |
@@ -152,7 +164,8 @@ automatic retry policy simply to avoid reporting an unresolved case.
 
 Factory tests use owning-library semantic agent/process/lock/Git/task fakes and in-memory SQLite. They exercise a
 meaningful committed plan, existing-plan reuse, initial claim contention/outage, lost dispatch acknowledgment,
-coordinator restart during execution, completion while absent, invalid structured output, missing/uncommitted/wrong
+coordinator restart during preparation/execution, preparation failures with known/unknown custody, completion while
+absent, invalid structured output, missing/uncommitted/wrong
 plan evidence, stale reservation release, unknown descendants, publication pending/retry, lost push acknowledgment
 and remote-ref divergence/unavailability. Tests assert observable transitions and retained work, not each private
 helper or copies of the implementation.

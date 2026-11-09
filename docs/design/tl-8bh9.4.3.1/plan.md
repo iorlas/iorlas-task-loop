@@ -41,7 +41,11 @@ and process-lock. This is source evidence, not a live harness or process-contrac
 | stream_proc.procfs.read/alive and tree.stop_tree | Unreadable versus absent observations and group-only stop proof need truthful distinctions. |
 | process_lock._lock | The descriptor is non-inheritable today; holder metadata is informational, not proof of custody. |
 
-No caller-token recovery contract or public semantic agent/process/lock fake was found in these inspected packages.
+The table records the initial assessment. A subsequent source check on 2026-11-09 found popen_registered and
+boot-aware OwnedProcess/observe_owned in stream-proc, now consumed by any_agent.procs.spawn; the first launch seam
+has advanced. This does not establish complete attempt-lifetime persistence or whole-workload stop proof.
+
+No caller-token recovery contract or public semantic agent/process/lock fake was found in the initial inspection.
 Recheck the actual public APIs before implementation; adopt newly delivered capabilities rather than duplicating them.
 Extend the necessary seam in its owner, without moving all delegate behavior or rewriting every harness.
 
@@ -54,10 +58,13 @@ the library must not know the factory schema or maintain its own durable control
 
 1. Factory commits the admitted attempt, immutable execution input reference/options, slot generation and pending
    dispatch before launch. Admission failure, unavailable DB, or an uncertain claim permits no harness execution.
-2. Start the bounded supervisor process through the owning process API. It conditionally registers its boot-aware
-   identity against that token and matching reservation before launching a harness. Only one registration wins.
+2. Start the bounded attempt process through the owning process API. Factory conditionally registers its boot-aware
+   identity against that token and matching reservation before permitting its entry to execute. Only one registration wins.
    Duplicate bootstrap processes may contend for the same token; a loser exits without launching an agent. Once
    registration has succeeded, another process cannot take it over merely because its acknowledgment was lost.
+   Its factory-owned entry validates the reservation, acquires the existing process-lock handle nonreentrantly, and
+   performs factory-owned preparation under that handle before invoking the library supervisor. There is no worktree
+   mutation before acquisition and no lock handoff from the coordinator.
 3. Launch the harness behind a pre-exec registration barrier. The supervisor obtains the child's identity, commits it
    through the factory port, then sends permission to execute. EOF, malformed permission or registration failure
    makes the child exit without executing the harness. Keep launch intent and registered identity distinct from a
@@ -78,8 +85,10 @@ the PID/start identity. Validate descriptor/argument handling and EOF behavior i
 This bootstrap is neither another lasting supervisor nor a shell wrapper. Choose an equivalent smaller native
 mechanism if demonstrated; do not use threaded Python preexec_fn or private factory subprocess code.
 
-The supervisor process composition constructs the factory-owned persistence implementation in that process and
-injects it into the library. This keeps one application owner/API even though two processes use it. No coordinator
+The attempt process composition constructs the same factory-owned application and persistence implementations in
+that process and injects the execution persistence port into the library. Preparation, Git policy and failure/release
+decisions remain factory-owned; they do not move into any_agent.Supervisor. This keeps one application owner/API
+even though two processes use it. No coordinator
 callback reachable only through an in-memory object can satisfy the restart contract. Necessary startup data is
 passed through the owning launch API; no separate startup-file authority is introduced.
 
@@ -95,7 +104,7 @@ the plan consumer; do not add a second synchronous facade alongside a competing 
 | Session/result publication | Matching execution identity and typed native session/result facts; idempotent acceptance or explicit conflict/unavailable. Final results cannot be rewritten by a stale writer. |
 | Execution observation/collection | Retained identity plus factory lifecycle record; running, pending start, completed with typed result, confirmed not started only with proof, or unresolved/unavailable with reason. |
 | Process observation/stop | Opaque identity including boot identity, PID and start identity; live, confirmed absent/different identity, or unknown. Stop reports complete proof, surviving identities, or limited/unavailable proof. |
-| Execution custody | Acquire/transfer/observe/release for this reservation; no unlocked handoff, no informational holder record treated as authoritative. |
+| Execution custody | Existing nonreentrant acquire/release in the attempt process for this reservation; keep its handle through preparation/execution and safe release. No informational holder record is authoritative. |
 
 The library owns structured-output validation and reports a malformed result as such. Factory owns the plan result
 schema and workflow decision. The first path performs one actual harness execution: no schema-correction launch,
@@ -105,16 +114,30 @@ ladder as a prerequisite for this first path.
 
 ## Custody and failure boundaries
 
-The supervisor must retain the worktree lock across coordinator death. Transfer/inheritance belongs in process-lock
-and stream-proc, with matching semantic fakes. A parent's release must not unlock a shared inherited open-file
-description still held by the execution. Add no factory lock polling registry or holder sidecar.
+Mechanism recommendation, source-checked 2026-11-09; this is not a new owner policy decision: acquire the worktree
+lock in the attempt process before preparation, using existing ProcessLock.acquire(reentrant=False). Keep that same
+handle through preparation, agent execution, result acceptance and factory-owned final worktree checks/safe release.
+The coordinator never owns this descriptor, so its death cannot release it. No new lock-transfer API, inheritance
+option or pass_fds extension is needed. Use a stable lock path outside the managed checkout and never unlink it as
+stale cleanup. Add no factory lock polling registry, holder hints or holder sidecar.
 
-An inherited descriptor in a harness is not proof that the harness keeps it, or that all descendants keep it. Do
-not claim whole-tree lifetime safety from pass_fds alone. Test the supported launch path and retain unknown custody
-when tree membership cannot be proven. A free kernel lock, a dead leader, a completed result and a clean worktree
+Preparation failure publishes a typed failed attempt with agent execution not started and no native session, when
+those facts are established. Preserve unresolved custody if preparation tools may have surviving descendants;
+agent-not-started does not mean workload-stopped. Library mechanisms report observations; the same factory operation
+decides whether result persistence, whole-workload stop and clean intended state permit normal release.
+
+Fatal attempt-process death normally releases its kernel lock. This proposal does not claim otherwise or transfer
+custody automatically to a harness. An inherited descriptor would not prove that every descendant retained it either.
+Test the supported launch path and retain unknown custody when tree membership cannot be proven.
+A free kernel lock, a dead leader, a completed result and a clean worktree
 are separate observations; none alone authorizes reuse. Factory reservations remain held while liveness/custody is
 unknown, even when an OS lock has disappeared. No stale-owner timeout, PID-name search, detach/reset or new writer
 can bypass that state. Full descendant containment is not silently claimed or replaced with a new monitor service.
+
+The source check also found pre-registry failure cleanup gaps in process-lock._lock, including holder-read failure
+after contention and metadata-write failure after successful flock. The existing API repair is tracked separately
+as shelf-7c34. It must close its unowned descriptor on every acquisition failure; successful ownership stays unchanged.
+That library fix and its real contender contracts do not belong in factory source or imply a new custody primitive.
 
 The guarantee here covers coordinator restart while the attempt process survives. If the result-collecting process
 also dies after the harness starts but before persisting its result, a replacement process cannot generally obtain
@@ -151,8 +174,10 @@ registration-before-exec, rejected registration/EOF, callback failure and deferr
 children. Do not expand that change into full tree observation, lock transfer or an execution-service framework.
 It does not by itself provide coordinator-restart continuity or eventual result collection.
 
-Subsequent bounded changes establish truthful process observation/proof and lock lifetime under .4.4/.4.5, then the
-one-execution lifecycle/result seam and surviving supervisor composition in any-agent. Introduce the semantic
+Subsequent bounded changes establish truthful process observation/proof under .4.4 and verify existing lock lifetime
+under .4.5, then the one-execution lifecycle/result seam and surviving supervisor composition in any-agent. The
+factory attempt entry acquires its own existing lock before preparation; no speculative transfer feature is a
+prerequisite. The independent shelf-7c34 acquisition cleanup repair stays with process-lock. Introduce the semantic
 execution fake at the agent boundary when that consumer contract exists; do not start with FakePopen or a generic
 process platform. Wire the factory's narrow STORE .26.3/.4/.5 consumers and the plan operation only after the needed
 real/fake APIs exist. Status reconciliation uses .4.2. These remain prerequisites before registering the plan CLI;
@@ -162,6 +187,7 @@ capabilities, account-routing changes or other harnesses.
 Owning-library contracts exercise real bootstrap/lock/process mechanics with harmless controlled children, not real
 model calls. Factory tests use those libraries' semantic fakes plus in-memory SQLite. Required cases are: duplicate
 dispatch token; death before registration; death before/after execution permission; coordinator death during output;
+coordinator death during preparation with the worker's lock still excluding an external contender;
 session arriving after restart; completion while coordinator is absent; lost result acknowledgment; worker death with
 surviving/unknown descendants; unavailable DB/process table; PID reuse/reboot; stale generation; malformed structured
 result; and a proven stopped clean execution allowing release. No unknown observation may become absence/success.
