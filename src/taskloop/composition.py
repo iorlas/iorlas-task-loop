@@ -1,10 +1,16 @@
 """Construct the real Git boundary for native command input."""
 
+import time
 from pathlib import Path
 
+from any_agent import run
 from beads_client import Bd
 from git_porcelain import RealRepo
+from sqlite_store import Store
 
+from taskloop.plan import Credentials, PlanAttempts
+from taskloop.plan_files import PlanFiles
+from taskloop.plan_store import SCHEMA, PlanStore
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import inspect_task
@@ -33,3 +39,11 @@ def inspect_tracker_task(task_id: str, backlog: str, tracker_root: str) -> TaskI
         raise TaskInspectionError("invalid_binding", f"Cannot resolve tracker root: {tracker_root}") from error
     binding = TaskBinding(scope, root)
     return inspect_task(binding, Bd("taskloop", cwd=str(root)), task_id)
+
+
+def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials) -> PlanAttempts:
+    """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines."""
+    store = Store(SCHEMA)
+    return PlanAttempts(
+        PlanStore(lambda: store.shared_rw(database), store.begin_immediate), PlanFiles(artifacts), credentials, run, time.time
+    )

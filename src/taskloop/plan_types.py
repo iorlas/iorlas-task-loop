@@ -75,6 +75,7 @@ class ExecutionFacts:
     tokens: tuple[int | None, int | None, int | None] | None
     cumulative: tuple[int | None, int | None, int | None] | None
     turns: int | None
+    session: str | None
     cost_usd: None = None
 
 
@@ -100,16 +101,22 @@ class StoredExecution:
 class SessionInput:
     first_ref: str | None = None
     conflict: bool = False
-    fault: bool = False
+    fault: str | None = None
 
 
 @dataclass(frozen=True)
 class PendingPlanResult:
     admission: Admission
     raw: RunOutcome
-    facts: ExecutionFacts
+    facts: ExecutionFacts | None
     sessions: SessionInput
     evidence: Evidence | None = None
+
+
+@dataclass(frozen=True)
+class PublicationResult:
+    status: Literal["accepted", "already_same", "conflict", "unavailable"]
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -135,28 +142,31 @@ def decode_plan_answer(value: object, expected_path: str) -> PlanAnswer:
     """Validate the factory's reported plan contract, without verifying Git effects."""
     if isinstance(value, dict) and set(value) == {"disposition", "plan_path", "commit", "explanation"}:
         disposition, path, commit, explanation = (value[key] for key in ("disposition", "plan_path", "commit", "explanation"))
-        valid_commit = commit is None or isinstance(commit, str) and len(commit) in (40, 64) and all(c in "0123456789abcdef" for c in commit)
-        if (disposition in ("planned", "incomplete", "needs_owner") and (path is None or path == expected_path)
-            and valid_commit and isinstance(explanation, str) and len(explanation) <= 2000
-            and (disposition != "planned" or path == expected_path and isinstance(commit, str))):
+        valid_commit = commit is None or (
+            isinstance(commit, str) and len(commit) in (40, 64) and all(c in "0123456789abcdef" for c in commit)
+        )
+        if (
+            disposition in ("planned", "incomplete", "needs_owner")
+            and (path is None or path == expected_path)
+            and valid_commit
+            and isinstance(explanation, str)
+            and len(explanation) <= 2000
+            and (disposition != "planned" or (path == expected_path and isinstance(commit, str)))
+        ):
             return PlanAnswer(disposition, path, commit, explanation)
     raise ValueError("Invalid plan answer")
 
 
 def optional_int(value: object) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-        return value
-    raise ValueError("Invalid reported usage")
+    """A reported nonnegative count, else unknown (never an invented zero)."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
 def _usage(value: object) -> tuple[int | None, int | None, int | None] | None:
-    if value is None:
-        return None
     if isinstance(value, dict):
-        return optional_int(value.get("in")), optional_int(value.get("cached")), optional_int(value.get("out"))
-    raise ValueError("Invalid reported usage")
+        counts = (optional_int(value.get("in")), optional_int(value.get("cached")), optional_int(value.get("out")))
+        return None if counts == (None, None, None) else counts
+    return None
 
 
 def execution_facts(raw: RunOutcome) -> ExecutionFacts:
@@ -171,7 +181,18 @@ def execution_facts(raw: RunOutcome) -> ExecutionFacts:
         measured["net_up"] = False
     outcome = classify(raw.rc, s.vendor, s.stderr, raw.timed_out, s.work, measured)
     answered = s.res.get("answered")
-    return ExecutionFacts(raw.rc, raw.timed_out, raw.stop, raw.watch.why, s.work, s.stands,
-                          answered if isinstance(answered, bool) else None, outcome.reason if outcome else None,
-                          optional_int(s.facts.get("http_status")), _usage(s.res.get("tokens")),
-                          _usage(s.res.get("cumulative")), optional_int(s.res.get("turns")))
+    return ExecutionFacts(
+        raw.rc,
+        raw.timed_out,
+        raw.stop,
+        raw.watch.why,
+        s.work,
+        s.stands,
+        answered if isinstance(answered, bool) else None,
+        outcome.reason if outcome else None,
+        optional_int(s.facts.get("http_status")),
+        _usage(s.res.get("tokens")),
+        _usage(s.res.get("cumulative")),
+        optional_int(s.res.get("turns")),
+        ref if isinstance(ref := s.res.get("ref"), str) and ref else None,
+    )

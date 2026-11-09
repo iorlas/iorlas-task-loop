@@ -251,3 +251,15 @@ cannot reconstruct execution control. Existing ref/pump/drain limitations remain
 return or a dead leader is not descendant-stop proof. Every path retains reservation.
 Approval of this proposal authorizes only its bounded source slice, not remote
 publication, factory release, another workflow or broad STORE construction.
+
+Known limits accepted after implementation review (not changed): finishing a pending answer validation in `execute`
+needs the live reservation, because every transition joins the held reservation generation; only `collect` is
+reservation-free. A registration-gate refusal (for example an expired deadline behind `started`) leaves the attempt
+in `dispatching`: a lost or refused dispatch is unresolved, never permission to run the agent again.
+
+Further accepted limits: `execute` on any stored non-terminal state (answer validation and a pending or fault session
+publication alike) needs the live reservation; a stored pending/fault publication is upgraded only on evidence (a
+recorded conflict, a reported session that publishes, or a session already accepted on the attempt), never emptily.
+A credentials failure, a files or `launch_spec` failure and a run exception after registration each return a typed
+result naming the cause, and leave the attempt `dispatching` or `registered` with the outcome lost; the agent is never
+rerun by this body.
