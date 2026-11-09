@@ -777,3 +777,10 @@ migration removal remain agreed. None of these features is implemented by the CL
 
 Owner accepted 2026-11-09: repository checks use the host’s normal networking. Remove factory-managed
 check network isolation and its settings/exceptions/probes. Harness sandbox permissions are separate.
+
+
+Owner accepted all three final adapter behavior cuts, 2026-11-09: remove separate network-connectivity probes
+and the global offline gate, handling actual typed agent/Git failures through the single bounded wait/retry policy;
+remove the dedicated factory textual conflict-marker scan in favor of repository validation while refusing unfinished
+Git conflicts; remove diagnostic lock-holder JSON sidecars while retaining real locks and DB-owned reservations.
+Unknown/external holders may have no friendly task label. No new health monitor or replacement hint ledger.

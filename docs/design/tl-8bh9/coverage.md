@@ -132,3 +132,8 @@ These are bounded gates, not reasons to delay the minimal foundation or all iden
 Owner wrap-up 2026-11-09: RAM-threshold admission is omitted initially; running-factory keep-awake and actual
 checkout binding are retained through their narrow owners. Planner probes and migrations remain retired. Owner subsequently accepted normal host networking for checks; factory-managed network isolation is removed
 from retained scope. Harness sandbox permissions are separate.
+
+
+Owner accepted final adapter cuts, 2026-11-09: no separate connectivity-probe/global offline gate, no dedicated
+factory textual-marker scan, and no diagnostic lock-holder JSON sidecars. Actual typed operation failures use the
+single bounded retry owner; unresolved Git conflicts and real lock/reservation safety remain required.

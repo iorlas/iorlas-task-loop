@@ -123,9 +123,10 @@ as function arguments rather than repeatedly asking Git for them. Persist requir
 in factory.db for restart; refresh mutable observations only where the operation requires current state.
 
 
-## Recommended final behavior cuts — proposed, 2026-11-09
+## Final behavior cuts — owner accepted, 2026-11-09
 
-These are recommendations for owner review, not approved implementation scope. Existing accepted cuts stay settled.
+The owner accepted all three recommendations, 2026-11-09. Their losses are deliberate; retained safety and
+bounded retries remain required. Source implementations enter only through their existing owning tasks.
 
 | Behavior | Recommendation | Lost behavior / tradeoff | Why I judge the loss acceptable |
 |---|---|---|---|
