@@ -97,6 +97,19 @@ passed through the owning launch API; no separate startup-file authority is intr
 Names below describe obligations, not a prescribed class hierarchy. Implement only the public operations needed by
 the plan consumer; do not add a second synchronous facade alongside a competing recovery path.
 
+Source mapping checked with Astra on 2026-11-09 against released any-agent 0.2.0: reuse RunHooks.started for the
+registered identity, RunHooks.ref for the native session and returned RunOutcome for terminal facts. The surviving
+factory attempt entry can persist that return value; no new finished callback or library execution-process framework
+is required. Current Codex output-schema forwarding does not validate returned answer text. The concrete missing
+library seam is strict structured-answer parsing/validation and an owning semantic fake of the same execution call.
+Factory supplies its result schema/decoder; answer validity and successful execution remain separate facts.
+
+A direct raising database callback is unsafe in RunHooks.ref: it runs in the output pump and its exception currently
+terminates that thread. Use bounded non-raising publication composition, or repair that existing hook's error contract
+if actual composition requires it. Never block stream consumption with unbounded persistence retries. Volatile pending
+session input is not an accepted DB fact or a durable fallback. Existing pump joins do not prove complete output drainage;
+worker return alone does not prove stopped descendants, and absent reported cost remains unknown rather than zero.
+
 | Seam | Required input/result |
 |---|---|
 | Factory admission | One actual execution request, attempt/token and reservation generation; accepted immutable request or explicit refusal/uncertainty. |
@@ -175,8 +188,9 @@ children. Do not expand that change into full tree observation, lock transfer or
 It does not by itself provide coordinator-restart continuity or eventual result collection.
 
 Subsequent bounded changes establish truthful process observation/proof under .4.4 and verify existing lock lifetime
-under .4.5, then the one-execution lifecycle/result seam and surviving supervisor composition in any-agent. The
-factory attempt entry acquires its own existing lock before preparation; no speculative transfer feature is a
+under .4.5, then supply the missing validated-result/semantic-fake contract in any-agent for this actual consumer.
+The surviving supervisor composition and terminal persistence belong to the factory attempt entry, reusing existing
+library calls. That entry acquires its own existing lock before preparation; no speculative transfer feature is a
 prerequisite. The independent shelf-7c34 acquisition cleanup repair stays with process-lock. Introduce the semantic
 execution fake at the agent boundary when that consumer contract exists; do not start with FakePopen or a generic
 process platform. Wire the factory's narrow STORE .26.3/.4/.5 consumers and the plan operation only after the needed
