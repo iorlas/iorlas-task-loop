@@ -1,7 +1,11 @@
 # Task-loop successor foundation
 
-This isolated successor provides CLI help and read-only inspection of an explicit Git checkout root.
+This isolated successor provides CLI help and read-only inspection of Git checkouts and scoped tasks.
 `tl repo inspect PATH [--json]` reports its local repository identity, common directory, selected checkout and origin.
+`tl task show TASK_ID --backlog BACKLOG --tracker-root PATH [--json]` reads the explicitly configured Beads tracker.
+It preserves requirements, acceptance and dependency relationships. The backlog key is supplied configuration;
+it is not inferred from Git and does not claim global tracker identity. Missing, malformed and unavailable reads
+are distinct nonzero results; JSON errors are written to stderr. Neither command changes the task tracker.
 Other commands are rejected until their behavior is implemented.
 It does not execute tasks. The previous implementation remains in Git history.
 
@@ -23,6 +27,8 @@ no old editable install, vendored runtime or baseline source path supplies impor
 `just test` selects the foundation's CLI and architecture checks. No historical test
 bootstrap or kernel is included. The Git boundary and its semantic test fakes come from the released
 `git-porcelain` library, pinned by Git tag and locked commit.
+The task read boundary and its semantic fake come from released `beads-client-v0.1.0`,
+also pinned by Git tag and locked commit. Both dependencies are checked for portable source provenance.
 
 [Design and acceptance](docs/design/tl-8bh9.8.7/plan.md) describe the boundary of this
 foundation. Preserved design and instruction documents may describe future behavior

@@ -135,3 +135,54 @@ Focused factory tests use the owning semantic fake and the real application/CLI 
 Run focused new scenarios first, then required `just check` and `just test` after reading the justfile. Obtain independent
 acceptance/code review and an executable smoke. Wire validation and semantic fake contracts remain in shelf. No full/live
 test run is authorized. This planning pass changed only this plan; it records no source implementation or completed gates.
+
+## Candidate implementation evidence, 2026-11-09
+
+The coordinator authorized co-development after independent approval of shelf-ryf2's frozen read API (85 focused
+library tests, zero type errors, no review blockers). REPO-INSPECT has its reviewed local checkpoint and released
+Git dependency. This supersedes the planning-only state above; it does not satisfy final dependency portability.
+
+The successor now implements the planned explicit `task show` route. `task.py` owns frozen scoped inspection data
+and typed refusals; `tracker.py` is the single read/projection operation over the shared `TaskReadClient`. Composition
+validates the nonempty explicit backlog/root, resolves the root and constructs `Bd` at that directory. It does not
+read Git, derive namespace, mutate tasks or add factory.db state. Backend records/errors stay in the tracker adapter
+and composition; CLI renders the application result and preserves the existing repo inspection route/contracts.
+
+Factory tests use `FakeTaskReadClient(records=..., faults=...)` from its owner, including its semantic read counter.
+New operation tests first failed because the operation did not exist; the task CLI scenario then failed on the absent
+route before implementation. The implemented focused task application/CLI tests passed: 29 scenarios. Existing source
+policy enforces no Any/cast/suppression/process escape. No factory fake, scripted backend protocol or new TaskPort exists.
+
+The temporary candidate is declared only for co-development:
+`/tmp/shelf-ryf2-wheel/beads_client-0.1.0-py3-none-any.whl`. The released `git-porcelain==0.13.0` Git pin is unchanged.
+Normal lock/sync rebuilt the noneditable successor. `just check` passed Ruff, Pyrefly (zero errors) and both import
+contracts. `just test` returned 87 passes and one deliberate blocker: `test_portable_shared_dependency[beads-client]`
+rejects the temporary wheel source. Installed-source provenance and the released Git dependency check passed.
+The portability assertion was extended to both dependencies, retaining exact URL/subdirectory/namespaced-tag and
+locked/installed commit matching; it was not skipped or weakened to allow the candidate.
+
+Final dependency publication/adoption, fresh required gates, independent review and executable smoke remain required.
+No source checkpoint, task completion or release readiness is claimed while the temporary wheel override remains.
+
+## Released dependency adoption evidence, 2026-11-09
+
+The owner authorized publication/merge of shelf PR 67 and the `beads-client-v0.1.0` release. The coordinator
+confirmed that the published annotated tag peels to merged commit
+`3afd60d8896de8496de8d8f9003510956d67f996` (tree `8f8fc52c29cb99b5c6d509a2c1b12393eec2c534`).
+This supersedes the temporary-wheel adoption state above while retaining its earlier validation history.
+
+`pyproject.toml` now declares `beads-client==0.1.0` from the normal HTTPS Git source
+`https://github.com/yoselabs/shelf.git`, subdirectory `packages/beads-client`, tag `beads-client-v0.1.0`.
+Normal `uv lock` resolved the exact released commit above; the existing `git-porcelain-v0.13.0` pin and locked
+commit are unchanged. Required preparation installed the declared successor and released dependency noneditably,
+replacing the temporary wheel through normal uv installation. No source/test or installed/cache files were hand edited.
+
+Fresh `just check` passed Ruff, Pyrefly (zero errors), and both import contracts. Fresh `just test` passed all
+88 focused CLI/rules tests, including both portable dependency checks and installed-source provenance. The installed
+`.venv/bin/tl --help` succeeded and truthfully lists only repo/task inspection. The installed command
+`tl task show tl-8bh9.6.2.1 --backlog task-loop --tracker-root /home/iorlas/Workspaces/iorlas-task-loop --json`
+succeeded, returning the configured scope, title, raw requirements/acceptance and the open parent task's parent-child
+dependency. Its first sandboxed attempt correctly returned `tracker_unavailable` because Beads could not acquire
+ordinary database locks on the read-only mount; the same authorized read succeeded with normal lock access.
+No task mutation or factory Git operation was performed. This records released dependency adoption and executable
+validation, not factory integration, task completion or delivery; independent review remains separately owned.
