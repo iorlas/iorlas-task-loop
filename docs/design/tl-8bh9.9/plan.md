@@ -62,7 +62,7 @@ may be required by a legitimate port boundary; many file names alone establish n
 | Git.remote_url using local read memo | RealRepo.remote_url | Use shared observation after checking required config/environment behavior. |
 | Git.branch using symbolic-ref | RealWorktree.branch | Adopt shared return semantics; do not add another alias solely to preserve an old name. |
 | git_base classifier plus git_pool conversion | git_porcelain.errors typed failures and classifier | One generic failure owner; factory retains workflow decisions, not a second generic parser. |
-| gitrepo discovery/pinning and gitmemo validation | real_env and real_cache | Assess semantic differences and need first; consolidate retained mechanism rather than blindly enable caching. |
+| gitrepo discovery/pinning and gitmemo validation | shared identity/pinning and operation results | Retain required binding; remove memo layer and repeated helper queries under the owner direction below. |
 
 These cover caller families in land, slots, reconciliation, worker stray checks, report inputs and task-close guards.
 Full raw-operation mapping still needs to separate required API gaps from obsolete or unused factory behavior.
@@ -84,7 +84,7 @@ Full raw-operation mapping still needs to separate required API gaps from obsole
 
 - tl-8bh9.9.1 maps and replaces local reads already covered by the public library, then removes superseded surface.
 - tl-8bh9.9.2 consolidates generic errors and strips redundant translation after actual consumers migrate.
-- tl-8bh9.9.3 reviews binding and caching, avoiding repeated queries before retaining extra memoization machinery.
+- tl-8bh9.9.3 owns binding and operation data flow without factory memoization; removes repeated queries and preserves required fresh boundaries.
 
 The existing shared-test work tl-z6np/shelf-69pz owns fake/contract consolidation. Current vendored stream_proc
 already provides capture/stream/spawn/stop/liveness used by adapters/procs.py, but no Fake implementation was found
@@ -116,3 +116,29 @@ PR waiting and failed task settlement. It proposes remote checkpoints at complet
 append-only task history and distinct published/landed/completed facts. The corrected strategy was accepted by the owner on 2026-11-09: merge plus target squash, ordinary task-branch
 pushes, completed-step publication and retry only unfinished required actions. Structured result contracts are required;
 PRs may intentionally await human review. Earlier broad opposition to final squash was withdrawn. No held implementation is admitted.
+
+
+## Git observations without memoization — owner direction, 2026-11-09
+
+Remove the handwritten factory Git memo layer and make repeated queries unnecessary through operation data flow.
+Do not preserve helper fan-out and replace every former cache hit with another Git process, or move that cache
+into shelf as a workaround. The owner explicitly challenged that false tradeoff.
+
+Resolve repository/worktree binding when the operation is admitted and pass the required typed identity/inputs
+through its callers. Observe a needed fact once for the relevant operation phase, pass that value to consumers,
+and use facts already confirmed by mutation results (for example a new commit ID) rather than asking again.
+Use an existing combined shared-library observation when it supplies the required facts in one query; do not add
+an omnibus snapshot or new query framework just to bundle unrelated reads. Dashboard rendering reads owned
+runtime records rather than rediscovering Git facts for every widget.
+
+Pinned inputs and fresh observations are distinct. Re-observe at a boundary that actually requires current
+state: checkout preparation, a mutation whose prerequisite may have changed, or reconciliation of an uncertain
+external effect. Expected-ref/conditional operations must reject concurrent changes atomically; an earlier
+observation is not authority to overwrite newer work. No generic TTL, signature/invalidation layer, process-global
+mutable fact cache or raw .git parsing in factory.
+
+Acceptance includes operation-level fake traces: each scenario names why every external observation is needed,
+repeated helper reads within the same observation phase are removed, receipts are consumed, and actual state
+changes/uncertain effects still trigger the required fresh verification. Measure real Git-call counts at the
+owning library boundary before claiming a performance improvement. Normal operation must not depend on a
+memo cache for reasonable call volume or correctness.

@@ -755,3 +755,9 @@ implementation/review findings without automatic retrospective task generation. 
 model calls, scheduler, private state/config and intake path, not replacement with another automatic summarizer.
 The [final coverage and implementation sequence](tl-8bh9/coverage.md) distinguishes superseded task scopes from
 delivered code, records unverified areas and orders bounded successor slices. Source implementation remains pending.
+
+
+Owner direction 2026-11-09: remove factory Git memoization by simplifying operation data flow, not by accepting
+repeated Git processes or relocating the cache to shelf. Pass already established identity, pinned inputs and
+mutation results; observe current state only where the operation requires it, with conditional mutation protection.
+Operation-level traces verify redundant reads are gone. See [Git strategy](tl-8bh9.9/plan.md).

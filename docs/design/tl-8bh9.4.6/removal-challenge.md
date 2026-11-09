@@ -23,14 +23,14 @@ The [original audit](plan.md) supplies purpose/cost/callers; this supplement sup
 | `deadline.py` | Commands, nested retries or waits can exceed the admitted budget. | Keep explicit per-execution remaining time; remove process-global budget list. |
 | `locks.py` | All-exclusion removal permits competing writers; deleting holder hints only loses diagnostics. | Separate correctness-critical reservation/critical sections from optional display sidecars; test two threads as well as processes. |
 | `landlock.py` | Same-host delivery contenders may race/retry more; no distributed exclusion is lost because none existed. | Keep custody and safe conditional delivery; justify local serialization separately. Arbitrary-command launcher is not required. |
-| `ram.py` | Admission no longer waits below configured available RAM (default 1024 MB). | Proposed product cut, not mere adapter relocation. Decide whether bounded concurrency alone suffices; unknown RAM is best effort. |
-| `factory.py` | Detached loops can sleep with an idle Mac, delaying unattended work. | Explicit product choice. If retained, lifetime-scoped host capability; do not invent a native binding solely to remove an eight-line helper. |
+| `ram.py` | Admission no longer waits below configured available RAM (default 1024 MB). | My recommendation: omit the proactive RAM threshold initially; accept loss of automatic low-memory throttling and use bounded slots plus actual failure evidence. Memory-pressure failures remain a real risk. Proposed, not approved. |
+| `factory.py` | Detached loops can sleep with an idle Mac, delaying unattended work. | My recommendation: retain keep-awake while the factory runs, including timed waits, so unattended work can resume. A small OS helper has a concrete purpose; no new framework/native binding solely for this. Proposed, not approved. |
 | `git.py` | Checkout/ref/commit/worktree/delivery behavior disappears. | Shared Git owner supplies only required operations. Do not carry automatic cleanup/reset/commit-all solely because callers exist. |
 | `git_base.py` | Checkout pinning, failure-versus-absence and fsmonitor policy can disappear. | Retain justified semantics in Git owner; remove duplicate runner/classifier. |
 | `git_ops.py` | Diff/index/delivery observations disappear; deleting history rewriting also removes rebase/amend/lease-force workflows. | Keep required observation/conditional delivery; rejected task-history rewriting is deliberately lost. |
 | `git_pool.py` | Library errors may lose domain distinctions/full diagnostics. | Consume shared typed failures; retain only necessary factory interpretation, not generic reclassification. |
 | `gitrepo.py` | Repository and checkout topology can bind work to the wrong place. | Shared Git API owns topology and pinning; no handwritten factory .git readers. |
-| `gitmemo.py` | Repeated Git observations may cost more; fresh reads do not inherently lose correctness. | Propose delete handwritten cache. Preserve immutable admitted inputs AND fresh observations of mutable checkout/remote/config where required. |
+| `gitmemo.py` | Repeated Git observations may cost more; fresh reads do not inherently lose correctness. | Settled direction: remove cache AND redundant caller queries. Pass operation inputs/results; fresh reads only at boundaries requiring current state. No relocation of the memo layer. |
 | `ignored.py` | Custom dirty-path suppression and factory-selected commit filtering disappear. | Challenge auto-staging policy itself. Agent resolves committed-step edits; shared ignore query only for a real retained consumer, with explicit failure. |
 | `slotcheck.py` | Worker/check Git may target a different checkout even if factory Git is pinned. | Retain actual checkout/custody invariant; preparation suffices only if later operations stay bound. Delete redundant probes/policy, not protection. |
 | `ident.py` | Configuration placement and actor/session attribution become ambiguous. | Minimal explicit roots and execution identity at composition; delete historical fallbacks/layout gates. |
@@ -76,5 +76,16 @@ The [original audit](plan.md) supplies purpose/cost/callers; this supplement sup
 
 These paths name baseline code retained at commit `731b7c76ef214ce35229f77814f98b6e1d6d5c0f` and in the original
 review worktree. The source foundation introduces none of these mechanisms. Concrete implementation tasks retain
-invariants; unresolved host/network/cache/delivery convenience cuts stay proposed until selected. Do not turn this
+invariants; Git memo retirement/query consolidation is now settled direction. Unresolved host/network/delivery convenience cuts stay proposed until selected. Do not turn this
 analysis into a new runtime monitoring system or file one task per adapter.
+
+
+## How recommendations are presented
+
+Owner clarification, 2026-11-09: prepare an engineering judgment before asking for approval. For each proposed
+behavior cut, state the user-visible loss, whether I judge that loss acceptable, the concrete reason/risk and the
+simpler retained behavior. Ask for a product choice only after that recommendation is concrete. Do not reopen
+already accepted cuts. "There are callers" and "we can move it to shelf" are not recommendations.
+
+For Git memoization the chosen strategy removes unnecessary observations, rather than accepting extra Git
+processes as the inevitable cost of deletion. See ../tl-8bh9.9/plan.md for the exact operation-data-flow contract.

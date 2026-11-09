@@ -31,8 +31,8 @@ source hashes and seven workflow traces. A fake-driven probe of actual settlemen
 that refused close is marked applied before cleanup callbacks. This assessment corrects the earlier inventory-only
 coverage; it is not source implementation or an exhaustive library/provider audit. Concrete findings were attached
 to existing agent/task/check/retry/STORE/settlement owners. Task-tracker maintenance ownership of durable backups
-is now agreed in the glossary; actual coverage/recovery still needs verification. Optional network isolation
-and handwritten Git memo retirement remain proposed. The historical slot-lifecycle document is absent here and
+is now agreed in the glossary; actual coverage/recovery still needs verification. Optional network isolation remains proposed. Git memo retirement is settled direction: remove redundant queries
+through operation data flow instead of substituting extra Git calls or another cache. The historical slot-lifecycle document is absent here and
 was not assumed verified. Each affected behavior must follow its reviewed owner before successor carry-over.
 
 | Concern | Established | Still needs verification |
