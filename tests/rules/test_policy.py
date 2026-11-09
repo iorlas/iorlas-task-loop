@@ -2,6 +2,7 @@
 
 import ast
 import io
+import re
 import tokenize
 import tomllib
 from pathlib import Path
@@ -56,3 +57,46 @@ def test_source_policy(path: Path) -> None:
 def test_caps_cannot_be_relaxed() -> None:
     limits = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["shelf-size"]
     assert limits == {"code-file": 400, "function": 80, "test-file": 800}
+
+
+
+# Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
+WRITERS = {
+    ("CREATE TABLE", "slot"): "plan_schema.py",
+    ("CREATE TABLE", "reservation"): "plan_schema.py",
+    ("CREATE TABLE", "plan_attempt"): "plan_schema.py",
+    ("CREATE TABLE", "plan_execution"): "plan_schema.py",
+    ("INSERT", "slot"): "slots.py",
+    ("INSERT", "reservation"): "plan_admit.py",
+    ("INSERT", "plan_attempt"): "plan_admit.py",
+    ("INSERT", "plan_execution"): "plan_store.py",
+    ("UPDATE", "plan_attempt"): "plan_store.py",
+    ("UPDATE", "plan_execution"): "plan_store.py",
+}
+WRITE = re.compile(
+    r"\b(CREATE\s+TABLE|(?:INSERT|REPLACE)(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(\w+)", re.IGNORECASE
+)
+
+
+def sql_writes() -> set[tuple[str, str, str]]:
+    found: set[tuple[str, str, str]] = set()
+    for path in (ROOT / "src" / "taskloop").glob("*.py"):
+        for match in WRITE.finditer(path.read_text()):
+            verb = " ".join(match.group(1).upper().split())
+            kind = "INSERT" if verb.startswith(("INSERT", "REPLACE")) else verb.split()[0] if verb.startswith("UPDATE") else verb
+            found.add((kind, match.group(2).lower(), path.name))
+    return found
+
+
+def test_every_sql_write_has_its_one_owner() -> None:
+    found = sql_writes()
+    assert {(kind, table): owner for kind, table, owner in found} == WRITERS
+    assert len(found) == len(WRITERS), sorted(found)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    ["INSERT INTO slot(a) VALUES (1)", "REPLACE INTO reservation VALUES (1)", "delete from plan_attempt", "UPDATE OR ABORT slot SET a=1"],
+)
+def test_write_pattern_catches_spelling_variants(statement: str) -> None:
+    assert WRITE.search(statement) is not None

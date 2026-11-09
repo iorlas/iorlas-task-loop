@@ -18,8 +18,9 @@ from sqlite_store import Store, begin_immediate
 from taskloop.composition import open_plan_attempts
 from taskloop.plan import Execution, PlanAttempts, report
 from taskloop.plan_files import PlanFiles
+from taskloop.plan_schema import SCHEMA
 from taskloop.plan_session import SessionLatch
-from taskloop.plan_store import SCHEMA, PlanStore, StoreRefused
+from taskloop.plan_store import PlanStore, StoreRefused
 from taskloop.plan_types import (
     Admission,
     AnswerState,
@@ -43,7 +44,7 @@ def database(tmp_path: Path) -> sqlite3.Connection:
         for statement in SCHEMA.ddl.split(";"):
             if statement.strip():
                 con.execute(statement)
-        con.execute("PRAGMA user_version=1")
+        con.execute(f"PRAGMA user_version={SCHEMA.version}")
     return seed(con, tmp_path)
 
 
@@ -140,7 +141,7 @@ def test_invalid_admission_never_executes(tmp_path: Path, change: str, status: s
     elif change == "input":
         (tmp_path / "input.txt").write_text("Changed")
     else:
-        con.execute("PRAGMA user_version=2")
+        con.execute(f"PRAGMA user_version={SCHEMA.version + 1}")
     execution = fake()
     result = app(con, tmp_path, execution).execute(KEY)
     assert (result.status, result.reason) == (status, reason)

@@ -7,53 +7,12 @@ from dataclasses import astuple
 from typing import Literal
 
 from any_agent.procs import Worker
-from sqlite_store import Schema, begin_immediate
+from sqlite_store import begin_immediate
 
+from taskloop.plan_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, current, prefixed
 from taskloop.plan_types import Admission, AnswerState, AttemptKey, AttemptRecord, Evidence, ExecutionFacts, FileRef, StoredExecution
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference, TaskScope
-
-SCHEMA = Schema(
-    version=1,
-    name="factory",
-    steps={},
-    ddl="""
-CREATE TABLE reservation (
- slot TEXT PRIMARY KEY, repo_id TEXT NOT NULL, cwd TEXT NOT NULL,
- generation INTEGER NOT NULL, attempt_id TEXT NOT NULL UNIQUE
-);
-CREATE TABLE plan_attempt (
- attempt_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE, generation INTEGER NOT NULL,
- adapter TEXT NOT NULL CHECK(adapter='beads'), backlog TEXT NOT NULL, task_id TEXT NOT NULL,
- repo_id TEXT NOT NULL, slot TEXT NOT NULL, input_path TEXT NOT NULL, input_digest TEXT NOT NULL,
- schema_version INTEGER NOT NULL CHECK(schema_version=1), model TEXT NOT NULL, effort TEXT NOT NULL,
- sandbox TEXT NOT NULL, deadline REAL NOT NULL, entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
- phase TEXT NOT NULL DEFAULT 'admitted' CHECK(phase IN ('admitted','dispatching','registered','captured')),
- rev INTEGER NOT NULL DEFAULT 0, worker_pid INTEGER, worker_pgid INTEGER, worker_start TEXT, worker_boot TEXT,
- session_ref TEXT, session_conflict INTEGER NOT NULL DEFAULT 0 CHECK(session_conflict IN (0,1))
-);
-CREATE TABLE plan_execution (
- attempt_id TEXT PRIMARY KEY REFERENCES plan_attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
- rc INTEGER, timed_out INTEGER NOT NULL, stop TEXT, watch TEXT, work INTEGER NOT NULL, stands INTEGER NOT NULL,
- answered INTEGER, reason TEXT, http_status INTEGER, tokens_known INTEGER NOT NULL, t_in INTEGER, t_cached INTEGER, t_out INTEGER,
- cumulative_known INTEGER NOT NULL, c_in INTEGER, c_cached INTEGER, c_out INTEGER, turns INTEGER, session TEXT,
- stdout_path TEXT NOT NULL, stdout_digest TEXT NOT NULL, stderr_path TEXT NOT NULL, stderr_digest TEXT NOT NULL,
- answer_path TEXT NOT NULL, answer_digest TEXT NOT NULL, diagnostic_path TEXT NOT NULL, diagnostic_digest TEXT NOT NULL,
- answer_kind TEXT NOT NULL DEFAULT 'validation_pending'
-  CHECK(answer_kind IN ('validation_pending','valid','missing','json_invalid','schema_invalid')),
- disposition TEXT, plan_path TEXT, reported_commit TEXT,
- publication TEXT NOT NULL CHECK(publication IN ('complete','pending','conflict','fault'))
-);
-""",
-)
-
-
-FACTS = (
-    "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,tokens_known,t_in,t_cached,t_out,"
-    "cumulative_known,c_in,c_cached,c_out,turns,session"
-)
-EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
-ANSWER = "answer_kind,disposition,plan_path,reported_commit,publication"
 
 
 class StoreUnavailable(Exception):
@@ -121,7 +80,7 @@ class PlanStore:
     def _connection(self, *, write: bool = False) -> Generator[sqlite3.Connection]:
         try:
             con = self.connect()
-            if con is None or con.execute("PRAGMA user_version").fetchone() != (1,):
+            if con is None or not current(con):
                 raise StoreUnavailable("Factory database unavailable or incompatible")
             if write:
                 with self.begin(con):
@@ -133,10 +92,8 @@ class PlanStore:
 
     def _load(self, con: sqlite3.Connection, key: AttemptKey) -> AttemptRecord | None:
         row: tuple[object, ...] | None = con.execute(
-            """SELECT p.backlog,p.task_id,p.repo_id,p.slot,p.input_path,p.input_digest,
-            p.model,p.effort,p.sandbox,p.deadline,p.entry_pid,p.entry_start,p.entry_boot,p.phase,p.rev,
-            p.worker_pid,p.worker_pgid,p.worker_start,p.worker_boot,p.session_ref,p.session_conflict,
-            (SELECT cwd FROM reservation WHERE slot=p.slot) FROM plan_attempt p
+            f"""SELECT {prefixed("p", ATTEMPT_LOADED)},
+            (SELECT cwd FROM reservation WHERE slot=p.slot AND repo_id=p.repo_id) FROM plan_attempt p
             WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
             astuple(key),
         ).fetchone()
@@ -144,7 +101,9 @@ class PlanStore:
             return None
         if any(value is None for value in row[10:13]):
             raise StoreRefused("unregistered_entry")
-        held = con.execute("SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=?", (row[3],)).fetchone()
+        held = con.execute(
+            "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
+        ).fetchone()
         if held != (row[2], key.reservation_generation, key.attempt_id) or row[21] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):

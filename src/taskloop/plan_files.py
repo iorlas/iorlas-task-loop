@@ -51,6 +51,10 @@ class PlanFiles:
         encoded = json.dumps([key.attempt_id, key.dispatch_token, key.reservation_generation]).encode()
         return "attempts/" + hashlib.sha256(encoded).hexdigest()
 
+    def put_input(self, key: AttemptKey, text: str) -> FileRef:
+        """The admitted input, written once under the attempt's key-derived directory before any external effect."""
+        return self._write(self.directory(key) + "/input.txt", text)
+
     def prepare(self, key: AttemptKey, expected_path: str) -> tuple[str, str]:
         """Return owned schema and native answer paths, without executing a harness."""
         path = {"anyOf": [{"type": "null"}, {"type": "string", "const": expected_path}]}

@@ -19,11 +19,11 @@ body from this slice, no CLI command is registered, and no "usable plan" is clai
 
 | File | Owns | Approx. lines |
 |---|---|---|
-| `plan_schema.py` (new, split out of `plan_store.py`) | `SCHEMA` (version 2), DDL, and the ONLY column lists for `reservation`/`plan_attempt`/`plan_execution` | 70 |
+| `plan_schema.py` (new, split out of `plan_store.py`) | `SCHEMA` (version 2), DDL, and the ONLY column lists for `slot`/`reservation`/`plan_attempt`/`plan_execution` | 75 |
+| `slots.py` (new, [.4.3.1.3](../tl-8bh9.4.3.1.3/plan.md)) | `adopt` (only `slot` writer) and `observe` (typed free/held/unknown views) | 100 |
 | `plan_admit.py` (new) | `PlanAdmission.admit(...) -> AdmitResult`: the only writer of `reservation` and the `plan_attempt` insert | 120 |
 | `plan_store.py` (edit) | imports the column constants instead of its own string lists; version check uses `SCHEMA.version` | -50 |
 | `plan_files.py` (edit) | `put_input(key, text) -> FileRef` on the existing `_write` | +6 |
-| `repo.py` (edit) | `RepoInspection` gains `is_main`, `dirty` (b below) | +6 |
 | `composition.py` (edit) | wires `PlanAdmission` with `Bd.claim`/`Bd.unclaim`, the clock and the store | +20 |
 
 `plan_store.py` is 310 lines and `SCHEMA` plus the constants move out of it, so one module (`plan_schema.py`) owns every
@@ -33,18 +33,16 @@ Reused unchanged: the body, `PlanFiles` read/capture/directory, `AttemptKey`, `A
 
 ## 3. Inputs and who decides them
 
-Explicit: task id, backlog, tracker root, slot checkout path, model, effort, sandbox, budget. Nothing is discovered. The
-slot is an operator-named linked worktree path (Q2). The task text is read with `inspect_task` and stored verbatim as the
+Explicit: task id, backlog, tracker root, repo checkout (any checkout, for identity), model, effort, sandbox, budget.
+Nothing is discovered. The slot is chosen by admission among adopted managed slots ([.4.3.1.3](../tl-8bh9.4.3.1.3/plan.md)); no slot path is an input. The task text is read with `inspect_task` and stored verbatim as the
 input file (no prompt template: a prompt contract is the next slice's, with the runner that consumes it).
 
 ## 4. Admission sequence
 
 1. `inspect_task` (existing) and the checkout inspection (existing `inspect_repo`, extended per b). Any failure refuses.
-2. **Refuse the checkout** unless it is a worktree that is not the main one and is clean: `RepoInspection.is_main` and
-   `.dirty` come from `git_porcelain.WorktreeInfo(path, head, branch, is_main, dirty)` (verified fields; `dirty` is filled
-   only by `Repo.worktrees(with_dirty=True)`, so `inspect_repo` must pass it; `dirty is None` means unknown and refuses).
-   This replaces a `path == RepoIdentity.root` guess. Side effect to accept or reject: `tl repo inspect --json` output and
-   its tests gain two fields (Q9).
+2. **Refuse when no slot is free**, before any file write or claim: `slots.observe` ([.4.3.1.3](../tl-8bh9.4.3.1.3/plan.md)) returns typed views; no
+   `free` view -> `Refused("no_free_slot", views)`. Free means adopted `slot` row, no reservation, listed non-main
+   worktree and `dirty().raw is False`. `RepoInspection` and `tl repo inspect` stay unchanged (owner's Q9).
 3. Ids: `attempt_id = uuid4().hex`, `dispatch_token = secrets.token_hex(16)`, `generation = 1`. The key is
    `AttemptKey(attempt_id, token, 1)`.
 4. **(a) `put_input(key, text)` first**, under `PlanFiles.directory(key)`; this is the only path scheme (e): the input,
@@ -54,8 +52,9 @@ input file (no prompt template: a prompt contract is the next slice's, with the 
    holds it, other failures raise). `False` -> `Refused("claimed_elsewhere")`, no compensation, nothing to undo.
    `BdError` -> `Unavailable("tracker")`: the claim outcome is unknown, so a compensating `unclaim` is attempted (below).
 6. **One `begin_immediate` block** (verified: commits on success, rolls back on any `BaseException`). Inside it:
-   `SELECT` for the slot in `reservation` -> `slot_held`; `SELECT` for the task in `plan_attempt` -> `task_attempted`;
-   then the two INSERTs. Under `BEGIN IMMEDIATE` the reads are authoritative, so the reason is decided by reads, not by
+   re-read `slot`/`reservation` for the observed-free names and take the lowest that still has a slot row and no
+   reservation (none left, a race -> `no_free_slot`); `SELECT` for the task in `plan_attempt` -> `task_attempted`; then
+   the two INSERTs, the reservation copying `slot.cwd` and naming its columns. Under `BEGIN IMMEDIATE` the reads are authoritative, so the reason is decided by reads, not by
    parsing an error string. **(c)** `sqlite3.IntegrityError` is caught in this block by the admission module itself and
    returned as `Refused("constraint")` after the rollback (it should be unreachable; it proves a schema mismatch). Other
    `sqlite3.Error` -> `Unavailable("store")`. `PlanStore._connection` is not reused: it wraps every `sqlite3.Error` as
@@ -63,7 +62,7 @@ input file (no prompt template: a prompt contract is the next slice's, with the 
    `connect/begin` callables and checks `PRAGMA user_version == SCHEMA.version`.
 7. Return `Admitted(key)`. No agent, tracker, Git or file IO inside the transaction.
 
-**Compensation (a).** After step 5 succeeds and before the commit in step 6 completes, every failure (`slot_held`,
+**Compensation (a).** After step 5 succeeds and before the commit in step 6 completes, every failure (`no_free_slot`,
 `task_attempted`, `constraint`, DB unavailable, a store exception) calls
 `Bd.unclaim(task_id, if_assignee="taskloop")` (verified signature: `unclaim(bead, *, force=False, if_assignee=None) -> bool`;
 the actor string `"taskloop"` is the one `composition.inspect_tracker_task` already builds `Bd` with). `if_assignee` fences it so
@@ -77,7 +76,8 @@ correctly held. The tracker claim and the SQL commit are not atomic, and this sl
 
 ## 5. Schema delta
 
-No new table. In `plan_attempt` add `UNIQUE(adapter, backlog, task_id)`. **(d) `Schema(version=2)`**, so a factory.db
+No new table here (the `slot` table and the `reservation` key `(repo_id, slot)` come from [.4.3.1.3](../tl-8bh9.4.3.1.3/plan.md), same version). In
+`plan_attempt` add `UNIQUE(adapter, backlog, task_id)`. **(d) `Schema(version=2)`**, so a factory.db
 created by the earlier v1 DDL (which lacks the constraint) is refused loudly by `sqlite_store`, not silently accepted;
 no `steps`, no quarantine, no migration (nothing real is stored; CLAUDE.md discards old data). `PlanStore._connection`
 currently hardcodes `user_version == (1,)` and must read `SCHEMA.version`; the existing `tests/plan` helper that sets
@@ -86,7 +86,7 @@ currently hardcodes `user_version == (1,)` and must read `SCHEMA.version`; the e
 **One attempt per task, permanently for now (Q4 = yes, owner-decided).** Consequences, not softened:
 - A refused, crashed or stuck attempt keeps its `plan_attempt` row and its held `reservation` and **stays unresolved**.
 - **Nothing in this slice or the next can resume, retry, release, replace or delete it.** No second admission for that task
-  is possible (`task_attempted`), and the slot stays `slot_held`, until a later *release slice* exists. That slice does not exist
+  is possible (`task_attempted`), and the slot stays held, until a later *release slice* exists. That slice does not exist
   yet and is not designed here.
 - Only a person editing `factory.db` by hand could free it; that is outside this design and not offered as a path.
 Generation is fixed at 1 (Q5 decided: acceptable because the body also fences on `attempt_id` and `dispatch_token`, and
@@ -104,7 +104,7 @@ task close, slot provisioning. No `process-lock` dependency is added. No subproc
 New files `tests/plan/test_admit.py` (~180 lines) and a few cases in the existing `test_repo*.py`; `tests/plan/test_attempt.py`
 (601 lines) loses its private DDL and gains one import change. Caps 400/80/800 hold. Real SQLite through the same
 `SCHEMA.ddl` (existing in-memory helper), real tmp files, injected `claim`, `unclaim`, `clock`. For worktree facts use the
-owning `git_porcelain` fake repo (Fake class exists in `git_porcelain`; I did not confirm that it supports `worktrees(with_dirty=True)`).
+owning `git_porcelain.testing.FakeRepo` (`worktrees`, `worktree(path).dirty()` and `add_worktree` exist; see .4.3.1.3).
 
 **What the tests can and cannot reach.** Admission is not an execution-ready state: it leaves `entry_*` NULL and the body
 refuses with `unregistered_entry`. So production admission cannot replace the seeded SQL in `tests/plan/test_attempt.py`
@@ -118,14 +118,16 @@ end to end. The honest replacement is partial:
   and is the only seeded-SQL remnant. The other body tests keep their direct seeding until then.
 
 Acceptance:
-1. `admit` is the only code that INSERTs `reservation`/`plan_attempt`; rows match section 5's schema; v1 DB refused.
+1. `admit` is the only code that INSERTs `reservation`/`plan_attempt` (`adopt` is the only `slot` writer, [.4.3.1.3](../tl-8bh9.4.3.1.3/plan.md));
+   rows match section 5's schema; v1 DB refused; no slot path is an admission input.
 2. `put_input` precedes `claim`; `claim` is outside any transaction (a spy asserts no open transaction on the connection).
 3. Every failure after a successful claim and before commit calls `unclaim(..., if_assignee="taskloop")` once; a failed
    `unclaim` yields `claim_leaked`, never a retry or `force`.
-4. `slot_held` and `task_attempted` are decided under the write lock and distinguished; `IntegrityError` is caught in the
+4. `no_free_slot` is returned before any effect when `observe` finds none, and again under the write lock on a race;
+   `task_attempted` is decided under the write lock and distinguished; `IntegrityError` is caught in the
    block; neither failure leaves a partial row.
-5. Main or dirty or unknown-dirty checkout refused using `is_main`/`dirty`.
-6. One column-list owner (`plan_schema.py`), grep-checkable; no new table, no Git write, no spawn, no CLI command.
+5. A slot that is not adopted, is held, main, not listed, dirty or unobservable is never reserved.
+6. One column-list owner (`plan_schema.py`, including `slot`), grep-checkable; no Git write, no spawn, no CLI command.
 7. `just check`, `just test` pass (not run by me: design only).
 
 ## 8. Next slice: registered entry (input from the review, not decided here)
@@ -147,8 +149,7 @@ source, and the first real CLI-free run. Recorded review findings as inputs:
 
 ## 9. Open owner questions
 
-- **Q2.** Slot identity: operator-named worktree path (proposal here) versus the glossary's `s1`-style managed slot. Slot
-  provisioning does not exist.
+- **Q2.** Answered by the slot-state design [.4.3.1.3](../tl-8bh9.4.3.1.3/plan.md): adopted `s1`-style managed slots, derived paths, provenance row.
 - **Q3.** Does `Bd.claim` satisfy tl-8bh9.3.5's atomic initial claim, or must this slice wait for it? (The actor part is answered:
   `"taskloop"`.)
 - **Q8.** Source of model, effort, sandbox and budget; required explicit parameters are the proposal, and `deadline` is
@@ -160,7 +161,7 @@ source, and the first real CLI-free run. Recorded review findings as inputs:
 
 ## 10. Not verified
 
-No test, lint or gate ran. `git_porcelain` fake support for `worktrees(with_dirty=True)`, the exact bd `claim`/`unclaim`
+No test, lint or gate ran. The exact bd `claim`/`unclaim`
 behavior against a real tracker, and whether `unclaim(if_assignee="taskloop")` matches how `claim` records the assignee were
 read from signatures and docstrings only. Line counts are estimates. The reviewer's F8/F9/F10/F13 contents were not available to me.
 
@@ -170,4 +171,38 @@ read from signatures and docstrings only. Line counts are estimates. The reviewe
 - Q2: **implementation is blocked on the slot-state design** (managed `s1`-style slots). No operator-named path as slot identity.
 - Q8: admission takes model, effort, sandbox and deadline as explicit required caller arguments; no defaults or config source.
 - Q9: admission calls `worktrees(with_dirty=True)` itself; `RepoInspection` and `tl repo inspect --json` stay unchanged.
+  (Applied through .4.3.1.3's `observe`: `worktrees()` plus a status read of the managed slot paths only, so the
+  person's checkout is not read; `RepoInspection` stays unchanged as decided.)
 - Q3 (does `Bd.claim` satisfy tl-8bh9.3.5) remains open.
+
+## As implemented (2026-11-09, after independent review)
+
+These records replace the corresponding rules in sections 4 and 7 where they differ.
+
+- **Read-only order before any effect:** first non-blank model, effort and sandbox (`choices`), then a finite deadline
+  (`deadline`: NaN or infinity is refused), then deadline after `clock()` (`expired`). Next the task read (`task`, or
+  tracker unavailable) and the checkout (`checkout`, or Git unavailable). Then the store version, then `task_attempted`
+  (checked before slots, so re-admitting an attempted task says so even when every slot is held), then `observe`. A
+  reservation table that cannot be read is `Unavailable("store")`, never `no_free_slot`. Last comes `no_free_slot`.
+- **Input:** `put_input` writes `<directory(key)>/input.txt` with the text `"{title}\n\n{requirements}\n\n{acceptance}\n"`
+  from `inspect_task`. This is the task's own prose with no template. A write or encoding failure (`EvidenceError`,
+  `UnicodeError`, `OSError`) is `Refused("input")` before the claim.
+- **Claim callables:** `Claim` and `Unclaim` are `Callable[[tracker_root, task_id], bool]`, because `Bd` is bound to a
+  tracker-root working directory. `composition.tracker_claims` binds `Bd("taskloop").claim` and
+  `Bd("taskloop").unclaim(task, if_assignee="taskloop")`, never `force`.
+- **Inside the single `begin_immediate`:** `task_attempted` comes first, then the lowest observed-free slot that still
+  has a row and no reservation, then both INSERTs. The values are bound by column name to the `plan_schema` lists.
+- **Compensation, which replaces "every failure calls unclaim":** `Bd.claim` is idempotent for the actor, so a claim
+  may belong to an attempt another admission already committed. After any failure that follows a claim
+  (`no_free_slot`, `constraint`, store error, any other exception, or an unknown claim outcome), admission first runs a
+  fresh read for a `plan_attempt` of the task:
+  - An attempt exists: no unclaim, `claim_leaked=False`. The claim is that attempt's.
+  - The read fails: no unclaim, `claim_leaked=True`.
+  - No attempt: one fenced `unclaim`. If it returns `False` or raises, the result has `claim_leaked=True`.
+  - `task_attempted` never unclaims.
+  - A claim `BdError` of kind `missing_binary`, `version`, `not_found` or `lint` means the claim certainly did not
+    happen: no unclaim and no leak. Other kinds are an unknown outcome and get the guarded compensation.
+  - Any other exception (including `BaseException`) is compensated the same way and then propagates.
+- **`IntegrityError`** is caught after the rollback as `Refused("constraint")`. Every constraint is pre-checked under
+  the write lock, so reaching it means a schema or check mismatch.
+- **Result details** carry `"<ExceptionType>: <message>"`, bounded to 300 characters.
