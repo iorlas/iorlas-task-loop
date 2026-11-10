@@ -4,6 +4,7 @@ nothing here prepares a task branch, publishes, or releases a reservation or cla
 every result; it never holds a dispatch token.
 """
 
+import re
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -33,6 +34,7 @@ from taskloop.plan_types import (
     VerifyResult,
     VerifyUnavailable,
 )
+from taskloop.plan_verify import shown
 from taskloop.slots import Adopted, NotAdopted, SlotView
 
 type Clock = Callable[[], float]
@@ -44,6 +46,9 @@ type Next = Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "d
 type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a stage still to settle
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
+ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
+ENTRY_WORDS: Final = 6
+WORD: Final = re.compile(r"(?:[a-z]+=)?[A-Za-z0-9_]{1,60}(?::[A-Za-z0-9_]{1,60}){0,2}")
 VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",
     NotApplicable: "not_applicable",
@@ -144,6 +149,7 @@ class AttemptStatus:
     previous_attempt_id: str | None = None  # the attempt this one repeats
     repeat_reason: str | None = None
     earlier: tuple[tuple[str, str], ...] = ()  # each superseded attempt, newest first, and why it was repeated: `repeated`
+    last_entry: str | None = None  # the entry log's last line of fixed words (`refused slot_staged ...`), read now
 
 
 @dataclass(frozen=True)
@@ -294,7 +300,18 @@ def status(reads: Reads, artifacts: Path, backlog: str, task_id: str) -> Shown |
         return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
     directory = files.root / files.directory(rows[0].key)
     earlier = tuple((older.key.attempt_id, newer.repeat_reason or "") for newer, older in pairwise(rows))
-    return Shown(replace(_status(reads, rows[0]), earlier=earlier), directory, directory / "entry.log")
+    last = last_entry(files.entry_tail(rows[0].key))
+    return Shown(replace(_status(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log")
+
+
+def last_entry(tail: str | None) -> str | None:
+    """The last line of the entry log made only of the entry's fixed words (its status word, then `reason`, `key=value`
+    or `a:b` words of letters, digits and `_`), at most ENTRY_WORDS words; anything else in the log is never printed."""
+    for line in reversed((tail or "").splitlines()[-20:]):
+        words = line.split(" ")
+        if words[0] in ENTRY_STATUS and len(words) <= ENTRY_WORDS and all(WORD.fullmatch(word) for word in words[1:]):
+            return shown(line)
+    return None
 
 
 def attempts_status(reads: Reads, *, stuck: bool = False) -> Listed | Failed:
@@ -322,8 +339,11 @@ def verify_task(reader: PlanStore, verifier: Verify, backlog: str, task_id: str)
 
 
 def verify_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable) -> Failed:
+    """An unsettled slot carries its listing (`bounded` where it was read) as the detail, as `tl plan show` prints it."""
     if isinstance(result, VerifyUnavailable) and result.reason == "inconsistent":  # same inputs, another verdict: a defect
         return Failed("defect", result.reason)
+    if isinstance(result, Unsettled):
+        return Failed("unsettled", result.reason, "\n".join(result.listing))
     return Failed(VERIFY_KINDS[type(result)], result.what if isinstance(result, NotApplicable) else result.reason)
 
 
@@ -352,6 +372,7 @@ def _status_data(each: AttemptStatus) -> dict[str, object]:
         "worker": None if each.worker is None else {"pid": each.worker[0], "pgid": each.worker[1]},
         "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
         "repeat_reason": each.repeat_reason, "earlier": [attempt_id for attempt_id, _reason in each.earlier],
+        "last_entry": each.last_entry,
     }
 
 

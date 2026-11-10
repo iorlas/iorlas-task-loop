@@ -52,6 +52,8 @@ for sql in sys.argv[2:]:
         print("|".join(str(v) for v in row))
 EOF
 ${EDITOR:-vi} env.sh && source env.sh
+# Every later append names "$SMOKE/env.sh" in full: never `echo ... >> env.sh` with the cwd in $REPO or a slot, which
+# leaves a stray env.sh there (an uncommitted leftover the next verify reports, or a file an agent may list).
 printf 'db = "%s"\nartifacts = "%s"\nslots_root = "%s"\nslot_count = 1\n' "$DB" "$ART" "$ROOT" > "$SMOKE/config.toml"
 T config show   # check first: every value under $SMOKE with source `file`, the file `exists`; nothing under ~/.config or ~/.local
 ```
@@ -131,7 +133,9 @@ sqlite3 -readonly -header "$DB" "select phase,rev,entry_pid,entry_start,entry_bo
  session_ref is not null as has_session,session_conflict,round(deadline-strftime('%s','now')) as left_s from plan_attempt;
  select rc,timed_out,stop,watch,reason,http_status,turns,answer_kind,disposition,plan_path,commit_paths,commit_message,publication
  from plan_execution; select plan_commit from plan_attempt;"
-T "${START[@]}"                             # second start: already_running or already_dispatched, never started/relaunched
+T "${START[@]}"                             # second start: already_dispatched while the agent runs (dispatching/registered,
+                                            # no entry pid); already_running only while the entry itself still runs before
+                                            # dispatch or after capture (verifying); never started/relaunched
 T plan show "$TASK" --backlog "$BACKLOG"    # on `Next: verify`: T plan verify "$TASK" --backlog "$BACKLOG" (exit 3 until settled);
                                             # `Next: repeat` lists what the stage left: remove it and verify, or
                                             # re-run the start to repeat the step (section 6c)
@@ -216,33 +220,46 @@ commit. Cleanup: `G -C "$REPO" worktree remove --force "$SMOKE/probe"; rm -f /tm
 
 ## 6c. Run D: a repeat (optional, owner-run; tl-8bh9.4.3.1.8)
 
-A bead whose first answer leaves a stray file, provoked without asking for any Git write: it asks for a scratch notes
-file next to the plan and says to list only the plan. The factory's closing words still say "remove any other file you
-created", so the agent may obey them instead (then Run D proves nothing: `Next: done` on attempt 1; try once more with
-a new bead, never edit rows). Move the previous run aside as in 6a (evidence kept), then:
+A bead that only MENTIONS scratch notes, so a first answer may leave a stray file without any Git write being asked for;
+it never tells the agent to keep the notes, so an agent that follows the repeat's feedback removes them. The factory's
+closing words already say "remove any other file you created": a compliant agent may leave nothing to repeat (then Run
+D proves nothing: `Next: done` on attempt 1; try once more with a new bead, never edit rows). Move the previous run
+aside as in 6a (evidence kept), then:
 
 ```bash
 mkdir "$SMOKE/runB" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runB/"; done
 mkdir "$SMOKE/markers"
 cd "$TRACKER" && TASK3=$(bd create "Smoke repeat" --silent) && echo "TASK3=$TASK3" >> "$SMOKE/env.sh"
-bd update "$TASK3" -d "Write docs/design/$TASK3/plan.md with one short paragraph. Also keep your working notes in docs/design/$TASK3/notes.md and leave that file in place. List only the plan in paths; answer planned."   --acceptance "The plan is committed; the notes file is reported back as left over."
-T slot adopt "$REPO"; S3=(plan start "$TASK3" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL"   --effort "$EFFORT" --minutes 30)
+bd update "$TASK3" -d "Write docs/design/$TASK3/plan.md with one short paragraph. You may jot scratch notes in \
+docs/design/$TASK3/notes.md while you work. Answer planned and list the plan in paths." \
+  --acceptance "The plan is committed on the slot."
+T slot adopt "$REPO"; S3=(plan start "$TASK3" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" \
+  --model "$MODEL" --effort "$EFFORT" --minutes 30)
 T "${S3[@]}"; T plan show "$TASK3" --backlog "$BACKLOG"   # repeat until Next: repeat (or done: see above)
+G -C "$SLOT" diff --cached --name-only    # must be empty: a staged file refuses the repeat (unsettled:staged, nothing spent)
 T "${S3[@]}" --json                         # status "repeated", number 2: attempt 1's choices stand
 T plan show "$TASK3" --backlog "$BACKLOG"   # Attempt: <id> (2 of at most 3; repeats <id1>, uncommitted); Earlier: <id1> repeated
 cat "$(T plan show "$TASK3" --backlog "$BACKLOG" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["directory"])')/input.txt"
-T plan show "$TASK3" --backlog "$BACKLOG"   # repeat until Next: done (or repeat / repeats_exhausted)
+T plan show "$TASK3" --backlog "$BACKLOG"   # repeat until Next: done (or repeat / repeats_exhausted); `Last entry result:`
+                                            # says why an admitted attempt's entry gave up (e.g. `refused slot_staged ...`)
 G -C "$SLOT" log --format='%H %s%n%b' -3; G -C "$SLOT" status --short; ls "$SMOKE/markers"
 ```
 
-Pass: the second start prints `repeated` with number 2; attempt 2's `input.txt` holds the fixed words, the notes file
-between `BEGIN SLOT STATUS <nonce>` and `END SLOT STATUS <nonce>`, the instructions and the task; attempt 2 removes (or
-lists) the notes and ends `collected verified`, not `reused`, `Succeeded: yes`; at most one factory commit per attempt,
-each with its own `Task-Loop-Attempt:` trailer, X2 (if any) on X1; `status --short` empty; no marker. Fail: a second
-start that relaunched attempt 1, a `started` attempt 2 from another slot, any commit without a trailer, attempt 2
-`rejected:nothing_written` (paste its answer: it listed nothing new), or `repeats_exhausted` after three attempts (paste
-each `input.txt` and `answer.txt`). The exit code of `tl plan start` is 0 for `already_dispatched` even when its
-`Result:` is `rejected:<rule>`: read the result word.
+| What the agent does on a repeat | Result | Meaning |
+|---|---|---|
+| removes the notes, answers `unchanged` (X1 committed) | `collected verified`, no new commit | pass: the step ends at X1 |
+| attempt 1 committed nothing (`unsafe`/`ignored`), lists every file again with `planned` | `collected verified`, one commit | pass |
+| lists the notes too, answers `planned` | `collected verified`, X2 on X1 | pass: two commits, each with its own trailer |
+| keeps the notes again | `Next: repeat`, then `repeats_exhausted` at attempt 3 | dead end by design: tidy the slot, `tl plan verify` |
+| answers `planned` with nothing new | `collected rejected:nothing_written` | terminal: paste its `answer.txt` |
+| the owner staged a file | the start refuses `unsettled:staged` (exit 3), nothing admitted | unstage, start again |
+
+Pass: the second start prints `repeated` with number 2 (`number` is null on `started`/`relaunched`/`already_*`);
+attempt 2's `input.txt` holds the fixed words, the notes file between `BEGIN SLOT STATUS <nonce>` and `END SLOT STATUS
+<nonce>`, the instructions and the task; at most one factory commit per attempt, each with its own `Task-Loop-Attempt:`
+trailer; `status --short` empty at the end; no marker. Fail: a second start that relaunched attempt 1, any commit
+without a trailer. The exit code of `tl plan start` is 0 for `already_dispatched` even when its `Result:` is
+`rejected:<rule>`: read the result word.
 
 ## 7. Paste back to the agent
 
@@ -256,10 +273,13 @@ Never paste `auth.json`, `env`, or the agent's environment.
 
 ## 8. Known wedges, reset and cleanup
 
+Moving a run's files aside (6a, 6c) keeps the slot; a slot or probe directory moved or deleted by hand leaves a stale
+`git worktree list` registration in `$REPO`: harmless (`G -C "$REPO" worktree prune` clears it; never prune a live slot).
+
 Nothing resumes, retries, releases or stops an attempt (`tl plan abandon TASK [--backlog B]` and `tl slot release`
 refuse `deferred` and print the manual steps); only Git leftovers are repeated, by re-running `tl plan start` (6c). Phase `dispatching` or `registered` with a dead entry stays so (start:
-`already_dispatched` forever; show: `stuck:entry_lost`); a live but hung entry gives `already_running` forever (`stuck:hung`
-past the deadline); a deadline passed while `admitted` refuses registration (`refused:registration_refused`;
+`already_dispatched` forever; show: `stuck:entry_lost`); a live but hung entry gives `already_dispatched` while the
+attempt is `dispatching`/`registered` and `already_running` once it is `captured` (`stuck:hung` past the deadline); a deadline passed while `admitted` refuses registration (`refused:registration_refused`;
 `stuck:expired_admitted`). The reservation and the bead claim stay held by design. Kill only by PID, after checking it:
 `ps -o command= -p "$E"` must show `taskloop.attempt_entry $DB`; for the worker, `lsof -a -p "$W" -d cwd` (Linux without
 lsof: `readlink /proc/$W/cwd`) must show `$SLOT`, then

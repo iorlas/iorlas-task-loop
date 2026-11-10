@@ -33,6 +33,7 @@ from taskloop.plan_ops import (
     Starting,
     StartRequest,
     attempts_status,
+    last_entry,
     next_step,
     start,
     status,
@@ -348,7 +349,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     reads = Reads(store, observe("gone", []), lambda: 10, verifier.leftovers)
     before = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.status.next, before.status.leftovers) == ("verify", ())  # nothing committed yet
-    assert verify_task(store, verifier, "tasks", "tl-1") == Failed("unsettled", "uncommitted")
+    assert verify_task(store, verifier, "tasks", "tl-1") == Failed("unsettled", "uncommitted", f"?? {stray}")  # as show lists it
     shown = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown) and shown.status.next == "repeat"
     assert (shown.status.result.status, shown.status.result.reason) == ("pending", "repeat")
@@ -422,3 +423,19 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(tmp_pat
     database = tmp_path / "state" / "factory.db"
     assert adopt(database, tmp_path, tmp_path / "slots", 1, checkouts) == Adoption((Adopted("s1", slot.path),))
     assert database.exists()
+
+
+@pytest.mark.parametrize(("tail", "expected"), [
+    (None, None),
+    ("", None),
+    ("refused slot_staged verify=refused:not_captured\n", "refused slot_staged verify=refused:not_captured"),
+    ("unavailable credentials:auth verify=refused:not_captured\nnoise\n", "unavailable credentials:auth verify=refused:not_captured"),
+    ("collected verified verify=verified\nrefused \x1b]0;owned\x07\n", "collected verified verify=verified"),
+    ("refused slot_staged\x9b31m\n", None),
+    ("Traceback (most recent call last):\n", None),
+    ("failed TypeError\n", "failed TypeError"),
+    ("refused " + "x" * 61 + "\n", None),
+    ("refused a b c d e f g\n", None),
+])
+def test_only_a_line_of_the_entrys_fixed_words_is_shown(tail: str | None, expected: str | None) -> None:
+    assert last_entry(tail) == expected

@@ -75,6 +75,17 @@ class PlanFiles:
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
+    def entry_tail(self, key: AttemptKey, cap: int = 4096) -> str | None:
+        """Read-only: the last `cap` bytes of the attempt's entry log, None when it does not exist or cannot be read;
+        creates nothing. Untrusted text: the caller keeps only lines of fixed words."""
+        try:
+            with self._path(self.directory(key) + "/entry.log").open("rb") as stream:
+                size = stream.seek(0, 2)
+                stream.seek(max(0, size - cap))
+                return stream.read(cap).decode("utf-8", "replace")
+        except (OSError, EvidenceError):
+            return None
+
     def put_input(self, key: AttemptKey, text: str) -> FileRef:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)

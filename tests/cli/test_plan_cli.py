@@ -44,7 +44,7 @@ STATUS = AttemptStatus("tasks", "tl-1", "attempt", "s1", "captured", "gone", Att
 ERROR = {"kind", "reason", "message", "claim_leaked", "admitted", "slots"}
 STATUS_KEYS = {
     "backlog", "task", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process", "worker",
-    "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier",
+    "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry",
 }
 REPEAT = AttemptStatus(
     "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),

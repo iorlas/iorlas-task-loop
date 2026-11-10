@@ -16,7 +16,8 @@ from taskloop.slots import Adopted
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
 ATTEMPT_ONLY = "attempt only: no task branch, publication or release"
 COMMANDS = ("config", "slot", "plan")
-HELD = "The tracker claim and the slot stay held; nothing releases them yet."
+HELD = ("The slot and the tracker claim stay held; nothing here releases them (the claim's bd lease is not renewed, so a "
+        "`bd reclaim` run on that tracker can revert it after 5 minutes).")
 GUIDE = {
     "start": "Re-run `tl plan start` to relaunch its entry.",
     "wait": "Its entry runs; wait, then `tl plan show` again.",
@@ -209,7 +210,8 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             steps = [GUIDE[each.next], *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
-            return [*_status_lines(each), *paths, *left, f"Next: {each.next}", *steps]
+            last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
+            return [*_status_lines(each), *paths, *last, *left, f"Next: {each.next}", *steps]
         case Listed(attempts=attempts):
             rows = [f"{a.task_id}\t{a.backlog}\t{a.number}/{ATTEMPTS}\t{a.slot}\t{a.phase}\t{a.entry}\t"
                     f"{a.result.status} {a.result.reason}\t{a.next}" for a in attempts]

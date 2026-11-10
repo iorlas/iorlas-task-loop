@@ -14,7 +14,7 @@ from taskloop.plan import judged
 from taskloop.plan_admit import AdmitRefused, Admitted, AdmitUnavailable, RepeatRequest
 from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_launch import Entry
-from taskloop.plan_ops import Clock, Failed, Launch, Observe, Started, Verify, deadline_after, launched, verify_failure
+from taskloop.plan_ops import Clock, Failed, Launch, Observe, Started, deadline_after, launched, verify_failure
 from taskloop.plan_store import PlanStore, StoreRefused, StoreUnavailable
 from taskloop.plan_types import (
     ATTEMPTS,
@@ -29,6 +29,7 @@ from taskloop.plan_types import (
     Unsettled,
     Verified,
     VerifyRefused,
+    VerifyResult,
     WorkerGone,
 )
 from taskloop.plan_verify import shown
@@ -40,6 +41,14 @@ OPENING: Final[dict[RepeatReason, str]] = {
     "ignored": "These paths are ignored by Git. Any ignored file under the plan folder, and any ignored attributes file, "
     "blocks the commit whether it is listed or not; a listed one can never be committed.",
 }
+
+
+class Settle(Protocol):
+    """The verifier as a repeat uses it: the step's own verify, then the slot's staged paths (None: unknown)."""
+
+    def verify(self, key: AttemptKey) -> VerifyResult: ...
+
+    def staged(self, key: AttemptKey) -> tuple[str, ...] | None: ...
 
 
 class AdmitRepeat(Protocol):
@@ -90,7 +99,7 @@ def _words(found: Verified | Rejected | NotApplicable) -> str:
 @dataclass(frozen=True)
 class PlanRepeat:
     store: PlanStore
-    verifier: Verify
+    verifier: Settle
     files: PlanFiles
     admission: AdmitRepeat
     launcher: Launch
@@ -109,6 +118,9 @@ class PlanRepeat:
             return found
         if stopped.admission.number >= ATTEMPTS:
             return Failed("refused", "repeats_exhausted")
+        held = self._index(current)
+        if held is not None:
+            return held
         text = self._input(current, found[0], stopped)
         if isinstance(text, Failed):
             return text
@@ -127,6 +139,14 @@ class PlanRepeat:
             return verify_failure(found)
         reason = next((each for each in REPEATABLE if each == found.reason), None)
         return verify_failure(found) if reason is None else (found, reason)
+
+    def _index(self, current: AttemptKey) -> Failed | None:
+        """A staged index is never repeated: `record` would commit it as the next attempt's, and its dispatch refuses it
+        (`slot_staged`). Refused here, before anything is admitted or written; the owner unstages it."""
+        held = self.verifier.staged(current)
+        if held is None:
+            return Failed("unavailable", "staged")
+        return Failed("unsettled", "staged", "\n".join(held)) if held else None
 
     def _input(self, current: AttemptKey, found: Unsettled, record: AttemptRecord) -> str | Failed:
         """The feedback over attempt 1's input, read through its digest."""

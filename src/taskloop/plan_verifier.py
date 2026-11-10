@@ -7,6 +7,7 @@ repeat took over is `superseded`, never a commit on the next attempt's slot.
 """
 
 from collections.abc import Callable
+from pathlib import Path
 
 from git_porcelain import GitUnavailable
 
@@ -28,7 +29,7 @@ from taskloop.plan_types import (
     VerifyUnavailable,
     WorkerGone,
 )
-from taskloop.plan_verify import Unreadable, judge
+from taskloop.plan_verify import Unreadable, bounded, judge, staged
 
 STAGED = ("planned", "unchanged")  # the answers whose stage the factory commits and checks
 
@@ -88,6 +89,18 @@ class PlanVerifier:
             admission = record.admission
             return leftovers(self.checkouts, self.files, admission, record.base_commit, stored.answer, record.plan_commit)
         except (StoreUnavailable, StoreRefused, NotSettled, GitUnavailable, Unreadable):
+            return None
+
+    def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
+        """Read-only: the paths staged in the attempt's slot now (`bounded`); None when unknown. A repeat refuses a staged
+        index before it takes the step over: the next attempt's dispatch would refuse it anyway, after spending a number."""
+        try:
+            record = self.store.load(key)
+            if record is None:
+                return None
+            path = Path(record.admission.cwd)
+            return bounded(staged(self.checkouts(path), path))
+        except (StoreUnavailable, StoreRefused, GitUnavailable):
             return None
 
     def _quiet(self, record: AttemptRecord) -> Unsettled | None:

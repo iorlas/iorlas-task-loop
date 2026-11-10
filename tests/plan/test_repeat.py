@@ -22,8 +22,8 @@ from taskloop.plan import Execution, PlanAttempts
 from taskloop.plan_admit import AdmitRefused, Admitted, PlanAdmission, RepeatRequest
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import Entry, Launched, LaunchResult
-from taskloop.plan_ops import Failed, Reads, Seen, Started, Starting, StartRequest, Verify, as_data, attempts_status, start, status
-from taskloop.plan_repeat import PlanRepeat, feedback
+from taskloop.plan_ops import Failed, Reads, Seen, Started, Starting, StartRequest, as_data, attempts_status, start, status
+from taskloop.plan_repeat import PlanRepeat, Settle, feedback
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore, StoreRefused
 from taskloop.plan_types import (
@@ -121,6 +121,9 @@ class Verifies:
         self.keys.append(key)
         return self.result
 
+    def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
+        return ()
+
 
 def seen(word: Seen) -> Callable[[Entry], Seen]:
     return lambda _entry: word
@@ -128,7 +131,7 @@ def seen(word: Seen) -> Callable[[Entry], Seen]:
 
 def repeater(
     con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, *,
-    verifier: Verify | None = None, observe: Seen = "gone", alive: bool = False, launcher: Launches | None = None,
+    verifier: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: Launches | None = None,
 ) -> PlanRepeat:
     store = PlanStore(lambda: con)
     check = verifier or PlanVerifier(store, checkouts, files, gone, lambda: 20)
@@ -402,6 +405,9 @@ def test_a_verdict_stored_between_the_verify_and_the_takeover_refuses_the_repeat
             found = real.verify(key)
             registered.execute(GATES[0][1])
             return found
+
+        def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
+            return real.staged(key)
 
     launcher = Launches(registered)
     late = repeater(registered, tmp_path, checkouts, slot_files, verifier=Late(), launcher=launcher)

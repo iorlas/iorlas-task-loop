@@ -429,6 +429,9 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
             taken.append(won.key)
             return step.verifier.verify(key)
 
+        def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
+            return step.verifier.staged(key)
+
     repeat = PlanRepeat(step.store, Racing(), PlanFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
                         lambda _entry: "gone", lambda: 10)
     assert repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Started("relaunched", "tasks", "tl-1", taken[0].attempt_id, True,
@@ -444,3 +447,35 @@ def test_judge_refuses_a_chain_whose_commit_does_not_sit_on_the_stored_one(repo:
     x2 = commit(slot, {P: "# Plan v2\n"})
     chain = (attempt(1, base, side, (P,)), attempt(2, side, None, (P,)))
     assert judge(repo, repo.path, x2, rules(), chain) == Rejected("not_descendant")
+
+
+def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step: Step, slot: FakeWorktree) -> None:
+    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.verifier.verify(KEY)
+    slot.stage([STRAY], literal=True)  # the owner's staged file must never become the agent's leftover
+    dirs = sorted(path.name for path in (step.tmp / "attempts").iterdir())
+    assert step.repeat(KEY) == Failed("unsettled", "staged", STRAY) and step.launcher.keys == []
+    assert step.con.execute("SELECT count(*) FROM plan_attempt").fetchone() == (1,)
+    assert step.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == ("attempt", 1)
+    assert sorted(path.name for path in (step.tmp / "attempts").iterdir()) == dirs  # no input written
+
+
+def test_a_file_staged_by_a_person_alone_is_staged_never_committed(step: Step, slot: FakeWorktree) -> None:
+    base = head(slot)
+    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n"}, PLAN))
+    slot.write_file(STRAY, "s")
+    slot.stage([STRAY], literal=True)
+    assert step.verifier.verify(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
+
+
+def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: FakeWorktree, tmp_path: Path) -> None:
+    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.verifier.verify(KEY)
+    key, _entry = step.next_attempt(KEY)
+    log = PlanFiles(tmp_path).entry_log(key)
+    log.write_text("refused slot_staged verify=refused:not_captured\nTraceback \x1b]0;owned\x07 (most recent call last)\n")
+    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers)
+    found = status(reads, tmp_path, "tasks", "tl-1")
+    assert not isinstance(found, Failed)
+    assert (found.status.phase, found.status.next, found.status.last_entry) == (
+        "admitted", "start", "refused slot_staged verify=refused:not_captured")

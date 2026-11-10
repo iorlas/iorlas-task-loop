@@ -296,3 +296,25 @@ Built at ab8309afb+; an independent review found no takeover or fence defect. Re
 - Tests: unit rows in `tests/plan/test_repeat.py` and `test_repeat_run.py`; one real-Git row
   `tests/plan/real/test_repeat_real.py` (X2 on X1 from a dirty linked worktree, real `relate`/`sha^`/`record`).
 - Not run: any live repeat (owner-run smoke step: `.4.3.1.4/live-smoke.md` section 6c).
+
+## 15. Revision 4: live smoke 5 repair (2026-11-10)
+
+Smoke 5 (real codex, three attempts) confirmed the takeover rows, fresh sessions, feedback, cap, `repeats_exhausted` and
+the chain verdict. Repaired here:
+
+- **A, staged slot.** The repeating start checked nothing staged: it said `repeated` (exit 0), took the reservation
+  over (generation 2) and spent attempt 2, whose detached entry then refused `slot_staged`; the owner's staged file was
+  also in attempt 2's feedback as the agent's leftover. Now `PlanRepeat`, after the verify and the cap and before any
+  input or row is written, asks `PlanVerifier.staged(C)` (the same porcelain parser as the dispatch check): staged paths
+  refuse `unsettled:staged` with the bounded listing (exit 3, nothing admitted, nothing written; the owner unstages),
+  unknown is `unavailable:staged`. Staged lines reaching a feedback is therefore moot: a staged index never repeats, and
+  one staged after this check is refused again at dispatch (`slot_staged`); the listing is not parsed to label lines
+  (it stays data). The dispatch check and the `unsettled:staged` check before `record` stay.
+- **A, why an entry gave up.** `tl plan show` prints `Last entry result: <line>`: the last of the entry log's final 20
+  lines (last 4 KiB, `PlanFiles.entry_tail`, read-only) that is made only of the entry's fixed words (status word from
+  `refused`/`unavailable`/`pending`/`collected`/`conflict`/`failed`, then at most five `word`, `a:b` or `key=value`
+  words of letters, digits and `_`), then `shown`; any other line is never printed. JSON `last_entry`.
+- **B.** `tl plan verify`'s `unsettled:<r>` now carries the same bounded listing as its detail (printed under the word,
+  JSON `message`) as `show` prints; the smaller change (`plan_ops.verify_failure`), used by the repeat too.
+- Smoke 5's standalone `unsettled:staged` was masked by `uncommitted` (X1 already stored, so the clean check ran); a
+  staged-only row is now a unit test.
