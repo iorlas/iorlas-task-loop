@@ -172,7 +172,8 @@ env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInstead
 | fd 2 inheritance | entry fd 1,2 = entry.log, fd 0 a pipe; worker fd 0-2 pipes; `lsof entry.log` lists only the entry | the worker or its children hold entry.log | paste the lsof output |
 | Codex accepts CODEX_ACCESS + file login | `rc` 0, `answer_kind` valid | `stderr.txt` names an unknown flag/config key: installed codex rejects CODEX_ACCESS; `http_status` 401: login refused; entry.log `unavailable credentials:<word>`: source refused (`codex` not on PATH, `auth`, `git_config`) | paste `codex --version`, first lines of `stderr.txt` (check them for secrets first) |
 | Push refused | owner probe fails; no `smoke` ref in `remote.git`; answer.txt says the push failed or was not approved | a `smoke` ref exists: the push bar does not hold | stop; paste `show-ref` and answer.txt |
-| Commit in a linked worktree | `disposition` planned, `reported_commit` = `git -C $SLOT rev-parse HEAD`, file in it | `incomplete` with a blocked commit: the known `writable_roots=[]` limit (plan section 5), not a launch failure | record it; paste answer.txt |
+| Commit in a linked worktree | `disposition` planned, `reported_commit` = `git -C $SLOT rev-parse HEAD`, file in it; `git -C $SLOT status --short` empty | `incomplete` with a blocked commit: the known `writable_roots=[]` limit (plan section 5), not a launch failure. Planned, but made through an approved escalation (see below): the sandbox did not bound the commit ([.4.3.1.5](../tl-8bh9.4.3.1.5/plan.md) sections 8-9) | record it; paste answer.txt and the escalation list |
+| Escalations approved | none, or each listed: the command Codex ran outside the sandbox, from the approval events in `stdout.txt` | any approved command touching `.git` (config, hooks, refs) or the push bar | paste the command lines only (check them for secrets) and `git -C "$REPO" config --list --local` |
 | collect from a fresh shell | tab B `status` prints `collect: collected` and the answer; second launch never `Launched` | `collect: unavailable`/`pending <phase>` long after codex exited | paste status output and the row |
 
 Exactly one Codex session: `pgrep -P "$E"` shows one child while running; `has_session` 1 and `session_conflict` 0 at the end.
@@ -181,7 +182,8 @@ Exactly one Codex session: `pgrep -P "$E"` shows one child while running; `has_s
 
 `codex --version`; outputs of `adopt`, `admit`, section 4, `launch.txt`, every `status`, the second launch; the `ps`, `pgrep`
 and `lsof` lines; `entry.log`; the two `sqlite3` result sets; `ls -la $ATT`; `answer.txt`; heads of `stderr.txt` and
-`diagnostics.txt` after checking them for secrets; slot `git log`/`status`; `show-ref`; the push probe's error line.
+`diagnostics.txt` after checking them for secrets; slot `git log`/`status`; `show-ref`; the push probe's error line;
+the approved-escalation commands (or "none") and `git -C "$REPO" config --list --local`.
 Never paste `auth.json`, `env`, or the agent's environment.
 
 ## 8. Known wedges, reset and cleanup
