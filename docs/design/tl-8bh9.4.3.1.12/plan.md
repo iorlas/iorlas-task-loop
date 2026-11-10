@@ -1,6 +1,6 @@
 # Publish the verified plan: push `task/<id>` to the remote
 
-Task: tl-8bh9.4.3.1.12 (proposed id). Design proposal, 2026-11-10, against HEAD e9be414e5. Nothing here is built. The
+Task: tl-8bh9.4.3.1.12 (proposed id). Design, 2026-11-10, against HEAD e9be414e5; built in 2f2c3b900 (`tl plan publish`). The
 commands run were source reads, the policy line counter over HEAD, and one scratch experiment with the installed
 git_porcelain 0.13.0 against a local bare remote under the session scratchpad (section 12), deleted afterwards. The
 shelf checkout `/home/iorlas/Workspaces/shelf` was read only; its `api.py` push signature and `real_remote.py` are

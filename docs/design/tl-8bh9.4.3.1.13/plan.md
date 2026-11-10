@@ -1,7 +1,7 @@
 # Scheduling: the factory takes ready tasks into free slots (`tl plan next`)
 
-Task: tl-8bh9.4.3.1.13 (proposed id; not in the tracker). Design proposal, 2026-11-10, against HEAD a2c7a47ed. Nothing
-here is built or run. Commands run: source reads, the policy line counter over HEAD, `bd ready --help` and one read-only
+Task: tl-8bh9.4.3.1.13 (proposed id; not in the tracker). Design, 2026-11-10, against HEAD a2c7a47ed; built in
+35bf31804 (`tl plan next`). Design-time commands run: source reads, the policy line counter over HEAD, `bd ready --help` and one read-only
 `bd ready --json -n 2` on this repository's tracker (to see the row shape: `priority`, `issue_type`, `labels`, `parent`
 are present), and a read of the shelf `beads-client` checkout (`ready` exists on `Bd`, no read fake for it).
 Revision 2 (same day) applies the owner's answers (section 15): one-shot rounds now, the trigger an open design for a
