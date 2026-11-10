@@ -16,6 +16,7 @@ from sqlite_store import Store
 from stream_proc import ProcessObservation, inspect_process
 
 from taskloop.attempt_entry import EntryArgs, arguments, enter, main
+from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.plan import PlanAttempts
 from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_schema import SCHEMA
@@ -48,9 +49,25 @@ class FlakyFiles(PlanFiles):
         return super().capture(key, raw)
 
 
+class Stop:
+    """The renewing thread's stop event, scripted: `wait` answers False (renew now) `rounds` times, then True (stopped).
+    `set` changes nothing, so the thread always makes its scripted beats before the join returns, however late it runs."""
+
+    def __init__(self, rounds: int) -> None:
+        self.rounds, self.waits, self.set_calls = rounds, 0, 0
+
+    def wait(self, timeout: float) -> bool:
+        self.waits += 1
+        return self.waits > self.rounds
+
+    def set(self) -> None:
+        self.set_calls += 1
+
+
 class Entry:
     """One entry's collaborators: the run fake (with `written`, the agent first writes those files in the slot and lists
-    the given paths), a counting credential source and Git view, the slot file port, a clock the wait advances, and the log."""
+    the given paths), a counting credential source and Git view, the slot file port, a clock the wait advances, the log,
+    and the claim's scripted beats (the first before the agent, then one per `rounds` of the renewing thread)."""
 
     def __init__(
         self,
@@ -63,8 +80,12 @@ class Entry:
         rc: int = 0,
         text: str = "",
         written: tuple[FakeWorktree, dict[str, str], list[str]] | None = None,
+        beats: tuple[Beat | Exception, ...] = ("held",),
+        rounds: int = 0,
     ) -> None:
         self.db, self.now, self.wait_to, self.git, self.written = db, 10.0, wait_to, checkouts, written
+        self.beats, self.stop = list(beats), Stop(rounds)
+        self.renewed: list[tuple[str, str]] = []
         self.slot_files = slot_files
         self.git_opens = 0
         if entry is not None:
@@ -117,9 +138,19 @@ class Entry:
         self.waits.append(seconds)
         self.now = self.wait_to
 
+    def heartbeat_for(self, tracker_root: str, task_id: str) -> Heartbeat:
+        def beat() -> Beat:
+            self.renewed.append((tracker_root, task_id))
+            answer = self.beats.pop(0) if len(self.beats) > 1 else self.beats[0]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        return beat
+
     def __call__(self, inspect: Callable[[int], ProcessObservation] = inspect_process, task_id: str = "tl-1") -> int:
         args = EntryArgs(self.db, self.db.parent, "tasks", task_id)
-        return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append, self.gone)
+        return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append, self.gone, self.heartbeat_for, self.stop)
 
 
 NOTE = "docs/design/tl-1/note.md"
@@ -128,10 +159,10 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified", 0, 9),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty", 1, 9),
-        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted", 1, 9),
-        ({}, "pending verification verify=unsettled:unsafe", 1, 5),
+        ({P: "# Plan\n"}, "collected verified verify=verified claim=held", 0, 9),
+        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held", 1, 9),
+        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 9),
+        ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 5),
     ],
     ids=["verified", "rejected", "uncommitted", "unsafe"],
 )
@@ -148,17 +179,17 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert entry.waits == [] and entry.git_opens == opens and entry.observed == ([] if files == {} else [WORKER, WORKER])
 
 
-INCOMPLETE = "collected incomplete verify=not_applicable"
+INCOMPLETE = "collected incomplete verify=not_applicable claim=held"
 
 
 @pytest.mark.parametrize(
     ("rc", "text", "line"),
     [
-        (1, "", "collected run:vendor_blip verify=not_applicable"),
-        (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable"),
-        (0, "not json", "collected answer:json_invalid verify=not_applicable"),
+        (1, "", "collected run:vendor_blip verify=not_applicable claim=held"),
+        (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable claim=held"),
+        (0, "not json", "collected answer:json_invalid verify=not_applicable claim=held"),
         (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
-        (0, json.dumps(PLAN | {"commit": "a" * 40}), "collected answer:schema_invalid verify=not_applicable"),
+        (0, json.dumps(PLAN | {"commit": "a" * 40}), "collected answer:schema_invalid verify=not_applicable claim=held"),
     ],
     ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete", "old_commit_key"],
 )
@@ -177,6 +208,7 @@ def test_a_process_that_is_not_the_registered_entry_reads_no_credentials(
     entry = Entry(admitted, checkouts, slot_files, stored)
     assert entry() == 1
     assert entry.lines == ["refused identity"] and entry.credential_calls == 0 and entry.run.calls == [] and entry.git_opens == 0
+    assert entry.renewed == []
 
 
 def test_an_unknown_own_identity_reads_no_credentials(admitted: Path, checkouts: Checkouts, slot_files: SlotFiles) -> None:
@@ -198,9 +230,9 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
 @pytest.mark.parametrize(
     ("failures", "wait_to", "line", "waits", "captures"),
     [
-        (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified", 1, 2),
-        (9, 10, "unavailable evidence publish=unavailable verify=refused:not_captured", 3, 4),
-        (9, 100, "unavailable evidence verify=refused:not_captured", 1, 1),
+        (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held", 1, 2),
+        (9, 10, "unavailable evidence publish=unavailable verify=refused:not_captured claim=held", 3, 4),
+        (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
     ],
     ids=["second_try_publishes", "three_retries_at_most", "never_past_the_deadline"],
 )
@@ -222,6 +254,36 @@ def test_publication_is_retried_only_while_unavailable_and_the_agent_never_again
     assert all("credential" not in text and "SECRET" not in text for text in entry.lines)
 
 
+def test_a_claim_found_lost_before_the_agent_refuses_and_runs_nothing(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
+) -> None:
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]), beats=("lost", "held"), rounds=3)
+    assert entry() == 1
+    assert entry.lines == ["refused claim_lost"] and entry.renewed == [("/tracker", "tl-1")]
+    assert entry.run.calls == [] and entry.credential_calls == 0 and entry.git_opens == 0 and entry.stop.waits == 0
+
+
+@pytest.mark.parametrize(
+    ("beats", "rounds", "word", "renewals"),
+    [
+        (("held", "lost"), 3, "lost", 2),
+        (("held", TypeError("bug")), 3, "fault", 2),
+        ((TypeError("bug"),), 3, "fault", 1),
+        (("unrenewed",), 2, "unrenewed", 3),
+        (("unrenewed", "held"), 2, "held", 3),
+    ],
+    ids=["lost_mid_run", "fault_mid_run", "fault_before_the_agent", "never_renewed", "renewed_after_a_failure"],
+)
+def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree,
+    beats: tuple[Beat | Exception, ...], rounds: int, word: str, renewals: int,
+) -> None:
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]), beats=beats, rounds=rounds)
+    assert entry() == 0  # the step completes, publishes and verifies; nothing is released or re-claimed
+    assert entry.lines == [f"collected verified verify=verified claim={word}"] and len(entry.run.calls) == 1
+    assert entry.renewed == [("/tracker", "tl-1")] * renewals and entry.stop.set_calls == 1
+
+
 @pytest.mark.parametrize(
     "argv",
     [[], ["db", "/a", "tasks", "tl-1"], ["/db", "a", "tasks", "tl-1"], ["/db", "/a", "", "tl-1"], ["/db", "/a", "tasks", "tl-1", "x"]],
@@ -234,7 +296,9 @@ def test_arguments_never_carry_the_dispatch_token() -> None:
     assert arguments(["/db", "/a", "tasks", "tl-1"]) == EntryArgs(Path("/db"), Path("/a"), "tasks", "tl-1")
 
 
-def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixture[str]) -> None:
+def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BEADS_DIR", "/elsewhere/.beads")
     assert main(["relative", "/a", "tasks", "tl-1"]) == 2
+    assert "BEADS_DIR" not in os.environ  # dropped first: no bd child of this entry can be pointed at another tracker
     out, err = capfd.readouterr()
     assert (out + err).strip() == "refused usage"

@@ -176,6 +176,9 @@ def unregistered(slot: FakeWorktree, files: FakeSlotFiles) -> None:
 
 
 LOST = "unavailable:git:MissingRevision"  # B no longer resolves: permanently unknown, never a verdict
+# B made unresolvable: its first hex digit always changes (fake commit ids hang on one counter shared by every repository
+# in the process, so a fixed replacement digit was a no-op whenever an earlier test left B starting with it)
+LOSE_BASE = "UPDATE plan_attempt SET base_commit=(CASE substr(base_commit,1,1) WHEN 'f' THEN 'e' ELSE 'f' END) || substr(base_commit,2)"
 OTHER_REPO = "UPDATE reservation SET repo_id='other'; UPDATE plan_attempt SET repo_id='other'"
 PLANNED = {P: "# Plan\n"}
 # id, files committed before dispatch (B), files the agent writes, its answer, a change after the run, SQL, expected, commits
@@ -210,7 +213,7 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("unchanged_never_adopts", PLANNED, {}, UNCHANGED, trailer_commit, None, "unsettled:head_moved", 1),
     ("branch", None, PLANNED, PLAN, lambda slot, _files: slot.checkout_new("task/tl-1"), None, "unsettled:branch", 0),
     ("index_locked", None, PLANNED, PLAN, lambda slot, _files: slot.lock_index(), None, "unavailable:git:IndexLocked", 0),
-    ("lost_base", None, PLANNED, PLAN, None, "UPDATE plan_attempt SET base_commit='f' || substr(base_commit, 2)", LOST, 0),
+    ("lost_base", None, PLANNED, PLAN, None, LOSE_BASE, LOST, 0),
     ("dropped", None, PLANNED, PLAN, lambda slot, _files: slot.repo.drop_checkout(slot.path), None, "unavailable:git:NotARepo", 0),
     ("not_listed", None, PLANNED, PLAN, unregistered, None, "unavailable:not_listed", 0),
     ("other_repo", None, PLANNED, PLAN, None, OTHER_REPO, "unavailable:repo", 0),

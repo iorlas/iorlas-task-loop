@@ -1,5 +1,6 @@
 """Exercise the real parser and module entry without launching a process."""
 
+import os
 import runpy
 
 import pytest
@@ -50,3 +51,10 @@ def test_module_entry(arguments: list[str], code: int, monkeypatch: pytest.Monke
     assert result.value.code == code
     output = capsys.readouterr()
     assert "usage: tl" in (output.out if code == 0 else output.err)
+
+
+def test_bd_location_overrides_are_dropped_before_any_command(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setenv("BEADS_DIR", "/elsewhere/.beads")
+    assert main([]) == 0
+    capsys.readouterr()
+    assert "BEADS_DIR" not in os.environ  # a claim, its unclaim and the entry it launches use the given tracker root

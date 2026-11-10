@@ -129,3 +129,21 @@ def git_writers() -> set[tuple[str, str]]:
 
 def test_only_the_stage_commit_module_stages_or_commits() -> None:
     assert git_writers() == {("stage", "plan_commit.py"), ("record", "plan_commit.py")}
+
+
+def bd_importers() -> set[str]:
+    """Every factory module that imports the tracker client `Bd` (from `beads_client` or a submodule, or the module itself
+    to reach `beads_client.Bd`)."""
+    found: set[str] = set()
+    for path in (ROOT / "src" / "taskloop").glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "beads_client":
+                found.update(path.name for alias in node.names if alias.name in {"Bd", "client", "*"})
+            if isinstance(node, ast.Import) and any(alias.name.split(".")[0] == "beads_client" for alias in node.names):
+                found.add(path.name)
+    return found
+
+
+def test_only_composition_constructs_the_tracker_client() -> None:
+    """The tracker's writes (claim, unclaim, heartbeat) have one wiring owner."""
+    assert bd_importers() == {"composition.py"}

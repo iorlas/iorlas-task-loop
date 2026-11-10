@@ -173,7 +173,9 @@ subprocess import. The failure table names it.
    (the body never returns one with `pending`; a `conflict` is not retried), retry `publish` only while it returns `unavailable`. Retries stop at 3 or when `clock() >= deadline`,
    whichever comes first, with an injected wait. The agent never runs again.
 5. Write one line to the log: `status` and `reason` only (fixed words; a retried publication adds `publish=<s>` and,
-   once accepted, the collected `then=<status>:<reason>`), never facts, env, argv or exception text. A top-level
+   once accepted, the collected `then=<status>:<reason>`; later `verify=<word>` and, last,
+   `claim=held|lost|unrenewed|fault` from the lease keep-alive of [.4.3.1.9](../tl-8bh9.4.3.1.9/plan.md), whose first
+   renewal finding the claim lost refuses before the agent as `refused claim_lost`), never facts, env, argv or exception text. A top-level
    `BaseException` is logged by type name only (Low6). The exit code is display only: 0 exactly when `plan.succeeded`
    (collected with a disposition reason: clean run, valid answer), 1 otherwise. `collected` alone is terminal, not
    success: a failed run logs `collected run:<reason>`, an unusable answer `collected answer:<kind>`. Limit: the module's imports

@@ -1,5 +1,5 @@
 """The plan store's connection and its status reads (SELECT only, no reservation or deadline check): a task's current
-attempt, every attempt, a dispatch phase, and the attempts of one step. `PlanStore` adds the fenced writes."""
+attempt, every attempt, a dispatch phase, an attempt's tracker root, and the attempts of one step. `PlanStore` adds the fenced writes."""
 
 import json
 import sqlite3
@@ -127,6 +127,14 @@ class PlanReads:
             return None
         entry = None if any(value is None for value in row[4:7]) else (as_int(row[4]), as_text(row[5]), as_text(row[6]))
         return AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), entry
+
+    def tracker_root(self, key: AttemptKey) -> str | None:
+        """The absolute tracker root the attempt's claim was taken at (stored by admission, copied by a repeat)."""
+        with self._connection() as con:
+            row = con.execute(
+                "SELECT tracker_root FROM plan_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
+            ).fetchone()
+        return None if row is None else as_text(row[0])
 
     def attempts(self, backlog: str | None = None, task_id: str | None = None) -> tuple[AttemptRow, ...]:
         """Every attempt (or one backlog's, or one task's), by backlog, task and number, the current attempt of each task

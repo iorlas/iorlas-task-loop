@@ -95,9 +95,9 @@ def seed(con: sqlite3.Connection, body: Body) -> sqlite3.Connection:
         digest = hashlib.sha256(b"Plan the actual task").hexdigest()
         con.execute(
             """INSERT INTO plan_attempt
-            (attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,input_digest,
+            (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
              schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number)
-            VALUES ('attempt','dispatch',1,'beads','tasks','tl-1',?,'s1','input.txt',?,1,'chosen','high',
+            VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
             'workspace-write',100,7,'entry-start','boot',1)""",
             (repo_id, digest),
         )

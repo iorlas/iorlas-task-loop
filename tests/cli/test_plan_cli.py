@@ -237,9 +237,9 @@ def admitted(path: Path) -> None:
     with begin_immediate(con):
         con.execute("INSERT INTO reservation VALUES ('s1','repo','/slots/s1',1,'attempt')")
         con.execute(
-            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,
+            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,number)
-            VALUES ('attempt',?,1,'beads','tasks','tl-1','repo','s1','input.txt',?,1,'m','high','workspace-write',100,1)""",
+            VALUES ('attempt',?,1,'beads','tasks','tl-1','/tracker','repo','s1','input.txt',?,1,'m','high','workspace-write',100,1)""",
             (KEY.dispatch_token, hashlib.sha256(b"x").hexdigest()),
         )
     con.close()

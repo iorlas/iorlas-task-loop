@@ -381,7 +381,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4, 6])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 7])
 def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
@@ -425,6 +425,10 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(tmp_pat
     assert database.exists()
 
 
+# the entry's longest line: a retried publication, its collected outcome, the verify word and the claim word
+LONGEST = "unavailable evidence publish=accepted then=collected:verified verify=unavailable:git claim=unrenewed"
+
+
 @pytest.mark.parametrize(("tail", "expected"), [
     (None, None),
     ("", None),
@@ -434,6 +438,9 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(tmp_pat
     ("refused slot_staged\x9b31m\n", None),
     ("Traceback (most recent call last):\n", None),
     ("failed TypeError\n", "failed TypeError"),
+    ("refused claim_lost\n", "refused claim_lost"),
+    (LONGEST + "\n", LONGEST),
+    (LONGEST + " x=y\n", None),
     ("refused " + "x" * 61 + "\n", None),
     ("refused a b c d e f g\n", None),
 ])

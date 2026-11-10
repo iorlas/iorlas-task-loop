@@ -10,12 +10,13 @@ import pytest
 from any_agent import RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from beads_client import BdError, Bead
+from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
 
-from taskloop.composition import adopt_slots, open_plan_admission, tracker_claims
+from taskloop.claim_lease import BD_TIMEOUT_S
+from taskloop.composition import BD_DISCOVERY, adopt_slots, open_plan_admission, tracker_claims, tracker_located
 from taskloop.plan import PlanAttempts
 from taskloop.plan_admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, PlanAdmission
 from taskloop.plan_files import PlanFiles
@@ -141,6 +142,7 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
     columns = "backlog,task_id,repo_id,slot,model,phase,entry_pid,entry_start,entry_boot"
     stored = factory.execute(f"SELECT {columns} FROM plan_attempt").fetchone()
     assert stored == ("tasks", "tl-1", repo_id, "s1", "chosen", "admitted", None, None, None)
+    assert PlanStore(lambda: factory).tracker_root(key) == str(tmp_path.resolve())  # the claimed root, renewed by the entry
     with pytest.raises(StoreRefused, match="unregistered_entry"):
         PlanStore(lambda: factory).load(key)
     run = FakeRun(RunOutcome(rc=0, worker=WORKER))
@@ -411,8 +413,60 @@ def test_two_repos_both_get_s1_and_the_fence_is_per_repo(factory: sqlite3.Connec
 
 def test_composition_claims_through_bd_and_unclaim_is_fenced_never_forced(tmp_path: Path) -> None:
     script = Script()
-    claim, unclaim = tracker_claims(script)
-    assert claim(str(tmp_path), "tl-1") and unclaim(str(tmp_path), "tl-1")
+    claims = tracker_claims(script)
+    assert claims.claim(str(tmp_path), "tl-1") and claims.unclaim(str(tmp_path), "tl-1")
     first, second = (argv[1:] for argv in script.calls)
     assert first == ["--actor", "taskloop", "update", "tl-1", "--claim", "--json"]
     assert second == ["--actor", "taskloop", "unclaim", "tl-1", "--if-assignee", "taskloop", "--json"]
+
+
+# bd 1.3.1's measured heartbeat replies (scratch tracker, 2026-11-10): JSON on stdout, exit 1, nothing on stderr.
+TAKEN = '{"error": "heartbeat tl-1: issue already claimed by someone", "schema_version": 1}'
+REVERTED = '{"error": "heartbeat tl-1: issue not claimable: tl-1 status open", "schema_version": 1}'
+CLOSED = '{"error": "heartbeat tl-1: issue not claimable: tl-1 status closed", "schema_version": 1}'
+DELETED = '{"error": "resolving tl-1: no issue found matching \\"tl-1\\"", "schema_version": 1}'
+
+
+@pytest.mark.parametrize(
+    ("out", "err", "code", "beat"),
+    [
+        ('{"id": "tl-1", "owner": "taskloop", "schema_version": 1, "status": "heartbeat"}', "", 0, "held"),
+        (TAKEN, "", 1, "lost"),
+        (REVERTED, "", 1, "lost"),
+        (CLOSED, "", 1, "lost"),
+        ("", "", 13, "lost"),
+        ("", "bd: no answer in 30.0s", 124, "unrenewed"),
+        ("", "bd: [Errno 2] No such file or directory", 127, "unrenewed"),
+        (DELETED, "", 1, "lost"),
+        ('{"error": "database is down", "schema_version": 1}', "", 1, "unrenewed"),
+    ],
+    ids=["renewed", "taken", "reverted", "closed", "precondition", "timeout", "missing_binary", "deleted", "other"],
+)
+def test_composition_heartbeats_through_bd_and_maps_its_words(tmp_path: Path, out: str, err: str, code: int, beat: str) -> None:
+    script = Script().say(out, err, code)
+    assert tracker_claims(script).heartbeat_for(str(tmp_path), "tl-1")() == beat
+    assert [argv[1:] for argv in script.calls] == [["--actor", "taskloop", "heartbeat", "tl-1", "--json"]]
+
+
+def test_composition_caps_each_heartbeat_at_one_bd_call_of_bd_timeout_and_claims_with_the_defaults(tmp_path: Path) -> None:
+    built: list[dict[str, object]] = []
+
+    class Recorded(Bd):
+        def __init__(self, actor: str, cwd: str | None = None, **options: object) -> None:
+            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key != "run"})
+            super().__init__(actor, cwd, run=Script())
+
+    claims = tracker_claims(Script(), client=Recorded)
+    claims.heartbeat_for(str(tmp_path / "x" / ".."), "tl-1")
+    claims.claim(str(tmp_path), "tl-1")
+    root = str(tmp_path.resolve())
+    assert built == [
+        {"actor": "taskloop", "cwd": root, "timeout": BD_TIMEOUT_S, "lock_retries": 0},
+        {"actor": "taskloop", "cwd": root},
+    ]
+
+
+def test_bd_location_overrides_are_dropped_so_the_tracker_root_decides() -> None:
+    environ = {"BEADS_DIR": "/elsewhere/.beads", "BEADS_DB": "/x", "BD_DB": "/y", "BEADS_ACTOR": "someone", "PATH": "/bin"}
+    tracker_located(environ)
+    assert environ == {"BEADS_ACTOR": "someone", "PATH": "/bin"} and set(BD_DISCOVERY) == {"BEADS_DIR", "BEADS_DB", "BD_DB"}

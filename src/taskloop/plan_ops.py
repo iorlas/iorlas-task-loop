@@ -47,7 +47,7 @@ type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and f
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
 ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
-ENTRY_WORDS: Final = 6
+ENTRY_WORDS: Final = 6  # at most: status, reason, publish=, then=, verify=, claim= (attempt_entry)
 WORD: Final = re.compile(r"(?:[a-z]+=)?[A-Za-z0-9_]{1,60}(?::[A-Za-z0-9_]{1,60}){0,2}")
 VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",

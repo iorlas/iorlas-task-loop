@@ -21,9 +21,10 @@ def seed(con: sqlite3.Connection) -> sqlite3.Connection:
     con.execute("INSERT INTO reservation VALUES ('slot','repo','/slots/repo/slot',1,'attempt')")
     con.execute(
         """INSERT INTO plan_attempt
-        (attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,input_digest,
+        (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
          schema_version,model,effort,sandbox,deadline,number)
-        VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','repo','slot','input.txt','0',1,'chosen','high','workspace-write',100,1)"""
+        VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker','repo','slot','input.txt','0',1,'chosen','high',
+        'workspace-write',100,1)"""
     )
     return con
 

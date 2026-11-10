@@ -6,17 +6,19 @@ import sqlite3
 import stat
 import sys
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from any_agent import run
 from any_agent.procs import Worker
-from beads_client import Bd, Runner
+from beads_client import Bd, BdError, Runner
 from git_porcelain import GitUnavailable, RealRepo, Repo
 from sqlite_store import Store
 from stream_proc import OwnedProcess, group_alive, observe_owned, popen_registered
 
+from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
 from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
 from taskloop.plan_files import PlanFiles
@@ -266,11 +268,45 @@ def adopt_slots(
         store.close_shared()
 
 
-def tracker_claims(run: Runner | None = None) -> tuple[Claim, Unclaim]:
-    """`Bd.claim` and the compensating `Bd.unclaim` fenced to this actor (never forced), bound per tracker root."""
+@dataclass(frozen=True)
+class TrackerClaims:
+    """The tracker's three write operations on a task's claim, each bound per tracker root."""
+
+    claim: Claim
+    unclaim: Unclaim
+    heartbeat_for: HeartbeatFor
+
+
+LOST = frozenset({"not_claimable", "precondition"})  # bd's words for a claim taken, reverted or closed
+GONE = "no issue found matching"  # bd 1.3.1 on a deleted bead (`resolving X: no issue found matching "X"`), classified `other`
+# bd's tracker-location overrides (bd 1.3.1 binary strings). BEADS_DIR measured: it beats cwd, so bd would talk to another
+# tracker than the stored root. BEADS_DB and BD_DB changed nothing in an embedded tracker (measured) and are dropped too.
+BD_DISCOVERY = ("BEADS_DIR", "BEADS_DB", "BD_DB")
+
+
+def tracker_located(environ: MutableMapping[str, str] = os.environ) -> None:
+    """Drop bd's location overrides from this process's environment, which every bd child inherits, so the tracker root
+    given as bd's cwd decides which tracker it talks to. Each process entry point (`tl`, the attempt entry) calls it first,
+    before any thread or bd call: beads_client's runner takes no environment of its own."""
+    for name in BD_DISCOVERY:
+        environ.pop(name, None)
+
+
+def beat_of(error: BdError) -> Beat:
+    """A failed heartbeat: `lost` when bd says the claim is gone (taken, reverted, closed, or the bead deleted)."""
+    return "lost" if error.kind in LOST or (error.kind == "other" and GONE in error.text) else "unrenewed"
+
+
+def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerClaims:
+    """`Bd.claim`, the compensating `Bd.unclaim` fenced to this actor (never forced), and `Bd.heartbeat` mapped to a `Beat`:
+    one bd call capped at BD_TIMEOUT_S, no lock retry (a refused beat is retried by the next interval). The one place a
+    `Bd` is constructed for a write; `client` is the seam a test checks the construction through."""
+
+    def located(tracker_root: str) -> str:
+        return str(Path(tracker_root).expanduser().resolve())
 
     def bd(tracker_root: str) -> Bd:
-        return Bd(ACTOR, cwd=str(Path(tracker_root).expanduser().resolve()), run=run)
+        return client(ACTOR, cwd=located(tracker_root), run=run)
 
     def claim(tracker_root: str, task_id: str) -> bool:
         return bd(tracker_root).claim(task_id)
@@ -278,20 +314,32 @@ def tracker_claims(run: Runner | None = None) -> tuple[Claim, Unclaim]:
     def unclaim(tracker_root: str, task_id: str) -> bool:
         return bd(tracker_root).unclaim(task_id, if_assignee=ACTOR)
 
-    return claim, unclaim
+    def heartbeat_for(tracker_root: str, task_id: str) -> Heartbeat:
+        renewing = client(ACTOR, cwd=located(tracker_root), run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
+
+        def beat() -> Beat:
+            try:
+                renewing.heartbeat(task_id)
+            except BdError as error:
+                return beat_of(error)
+            return "held"
+
+        return beat
+
+    return TrackerClaims(claim, unclaim, heartbeat_for)
 
 
 def open_plan_admission(database: Path, artifacts: Path) -> PlanAdmission:
     """Real wiring: per-thread shared writers on factory.db, the tracker claim, the real Git boundary, wall-clock deadlines."""
     store = Store(SCHEMA)
-    claim, unclaim = tracker_claims()
+    claims = tracker_claims()
     return PlanAdmission(
         lambda: store.shared_rw(database),
         store.begin_immediate,
         PlanFiles(artifacts),
         inspect_tracker_task,
         checkouts,
-        claim,
-        unclaim,
+        claims.claim,
+        claims.unclaim,
         time.time,
     )

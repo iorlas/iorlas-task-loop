@@ -3,7 +3,8 @@
 A task's first attempt takes a free slot and the tracker claim (`admit`); a repeat (`admit_repeat`) is the step's next
 attempt, which takes over the reservation its previous attempt holds in the same transaction, so the slot is never
 released between attempts. An admitted attempt stays unregistered (entry_* NULL): the body refuses it with
-`unregistered_entry` until `PlanStore.register_entry` registers its entry. Nothing here releases a slot or a claim.
+`unregistered_entry` until `PlanStore.register_entry` registers its entry. The tracker root, resolved, is stored with the
+attempt (a repeat copies it): the entry renews the claim there. Nothing here releases a slot or a claim.
 """
 
 import math
@@ -35,14 +36,16 @@ type Refusal = Literal[
 ]
 GENERATION = 1  # a fresh admission's; a repeat advances it on the held reservation (until a release slice moves it to `slot`)
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
-# clean completely published `planned`/`unchanged` answer (the gate of `plan_commit` and the verdict), and no verdict.
+# clean completely published `planned`/`unchanged` answer (the gate of `plan_commit` and the verdict), no verdict, and
+# the tracker root its claim was taken at (copied: a repeat claims nothing).
 PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
 EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id),
 p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
 AND EXISTS (SELECT 1 FROM plan_execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
  AND e.disposition IN ('planned','unchanged') AND e.publication='complete')
-AND NOT EXISTS (SELECT 1 FROM plan_verification v WHERE v.attempt_id=p.attempt_id)
+AND NOT EXISTS (SELECT 1 FROM plan_verification v WHERE v.attempt_id=p.attempt_id),
+p.tracker_root
 FROM plan_attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 NOT_CLAIMED = frozenset({"missing_binary", "version", "not_found", "lint"})  # BdError kinds where the claim certainly did not happen
 
@@ -166,6 +169,10 @@ class PlanAdmission:
         if not isinstance(task, TaskInspection):
             return task
         try:
+            tracker = Path(request.tracker_root).expanduser().resolve()
+        except (RuntimeError, OSError) as error:
+            return AdmitRefused("task", detail=why(error))
+        try:
             checkout = request.checkout.expanduser().resolve()
             repo = self.checkouts(checkout)
             inspection = inspect_repo(repo, checkout)
@@ -173,7 +180,8 @@ class PlanAdmission:
             return AdmitRefused("checkout", detail=why(error))
         except GitUnavailable as error:
             return AdmitUnavailable("git", detail=why(error))
-        return _Prepared(request, task_text(task), repo, inspection.repo_id)
+        # the root as resolved now is the one claimed, stored and renewed (.4.3.1.9)
+        return _Prepared(replace(request, tracker_root=str(tracker)), task_text(task), repo, inspection.repo_id)
 
     def _choices(self, request: AdmitRequest) -> AdmitRefused | None:
         if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
@@ -226,7 +234,7 @@ class PlanAdmission:
                 return refused
             attempt = {
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-                "adapter": row[2], "backlog": row[3], "task_id": row[4], "repo_id": row[5], "slot": row[6],
+                "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
                 "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": request.reason,
@@ -325,7 +333,8 @@ class PlanAdmission:
             con.execute(f"INSERT INTO reservation ({RESERVATION}) VALUES ({marks(RESERVATION)})", bound(RESERVATION, held))
             attempt = {
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-                "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "repo_id": repo_id, "slot": name,
+                "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "tracker_root": request.tracker_root,
+                "repo_id": repo_id, "slot": name,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None,

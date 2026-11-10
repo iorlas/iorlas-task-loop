@@ -16,10 +16,13 @@ from taskloop.slots import Adopted
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
 ATTEMPT_ONLY = "attempt only: no task branch, publication or release"
 COMMANDS = ("config", "slot", "plan")
-HELD = ("The slot and the tracker claim stay held; nothing here releases them (the claim's bd lease is not renewed, so a "
-        "`bd reclaim` run on that tracker can revert it after 5 minutes).")
+HELD = ("The slot and the tracker claim stay held; nothing here releases them. While a step runs its entry renews the claim's "
+        "bd lease every 100 s; between steps nothing does, so a `bd reclaim` run on that tracker can revert the claim once its "
+        "lease lapses: at the earliest about 5 minutes after a step ends (bd's default reclaim grace is 10 minutes, so about "
+        "15 minutes with a plain `bd reclaim`).")
 GUIDE = {
-    "start": "Re-run `tl plan start` to relaunch its entry.",
+    "start": "Re-run `tl plan start` to relaunch its entry. If the last entry says `claim_lost`, the tracker claim was taken "
+    "back: check `bd show <task>`; re-claim it by hand as `taskloop` before `tl plan start`, or leave it.",
     "wait": "Its entry runs; wait, then `tl plan show` again.",
     "verify": "Run `tl plan verify`.",
     "repeat": "Run `tl plan start` again to repeat it with this listing as feedback, or remove the files and `tl plan verify`.",

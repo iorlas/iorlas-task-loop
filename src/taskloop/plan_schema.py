@@ -5,7 +5,7 @@ import sqlite3
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=5,
+    version=6,
     name="factory",
     steps={},
     ddl="""
@@ -21,6 +21,7 @@ CREATE TABLE reservation (
 CREATE TABLE plan_attempt (
  attempt_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE, generation INTEGER NOT NULL,
  adapter TEXT NOT NULL CHECK(adapter='beads'), backlog TEXT NOT NULL, task_id TEXT NOT NULL,
+ tracker_root TEXT NOT NULL CHECK(substr(tracker_root,1,1)='/'),
  repo_id TEXT NOT NULL, slot TEXT NOT NULL, input_path TEXT NOT NULL, input_digest TEXT NOT NULL,
  schema_version INTEGER NOT NULL CHECK(schema_version=1), model TEXT NOT NULL, effort TEXT NOT NULL,
  sandbox TEXT NOT NULL, deadline REAL NOT NULL, entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
@@ -60,7 +61,7 @@ CREATE TABLE plan_verification (
 SLOT = "repo_id,name,cwd"
 RESERVATION = "slot,repo_id,cwd,generation,attempt_id"
 ATTEMPT_ADMITTED = (
-    "attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,input_digest,"
+    "attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
     "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason"
 )
 ATTEMPT_LOADED = (

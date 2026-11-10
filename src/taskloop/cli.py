@@ -9,7 +9,7 @@ from dataclasses import asdict
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
 from taskloop import cli_plan
-from taskloop.composition import inspect_checkout, inspect_tracker_task
+from taskloop.composition import inspect_checkout, inspect_tracker_task, tracker_located
 from taskloop.repo import UnsupportedCheckout
 from taskloop.task import TaskInspectionError
 
@@ -60,6 +60,7 @@ def show_task(arguments: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Present implemented commands and render truthful inspection failures."""
+    tracker_located()  # before any bd call: the given tracker root decides the tracker, never an inherited BEADS_DIR
     parser = argparse.ArgumentParser(
         prog="tl",
         description=f"Task-loop successor foundation. Plan commands run the {cli_plan.ATTEMPT_ONLY}.",

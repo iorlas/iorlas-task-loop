@@ -165,9 +165,9 @@ def renumber(con: sqlite3.Connection, number: int) -> None:
     previous = None
     for n in range(1, number):
         con.execute(
-            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,
+            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,base_commit)
-            VALUES (?,?,1,'beads','tasks','stand-in','r','s0','i','d',1,'m','e','s',1,?,?,?,?)""",
+            VALUES (?,?,1,'beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','s',1,?,?,?,?)""",
             (f"a{n}", f"d{n}", n, previous, None if previous is None else "uncommitted", "b" * 40),
         )
         previous = f"a{n}"
@@ -217,6 +217,7 @@ def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
     assert record is not None and record.phase == "admitted" and record.admission.number == 2
     assert (record.admission.model, record.admission.effort, record.admission.sandbox) == ("chosen", "high", "workspace-write")
     assert record.admission.deadline == 10 + 30 * 60 and record.admission.slot == "s1"
+    assert store.tracker_root(new) == "/tracker"  # copied: a repeat claims nothing, its entry renews the same claim
     assert record.start == (head(slot) if committed else base)
     with pytest.raises(StoreRefused, match="stale_reservation"):
         store.load(KEY)
@@ -309,9 +310,9 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     with begin_immediate(con):
         con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
         con.execute(
-            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,
+            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number)
-            VALUES ('attempt','dispatch',1,'beads','tasks','tl-1',?,'s1','input.txt',?,1,'chosen','high','workspace-write',100,
+            VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high','workspace-write',100,
             7,'entry-start','boot',1)""",
             (repo_id, hashlib.sha256(TASK.encode()).hexdigest()),
         )
@@ -447,9 +448,9 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 
 
 def test_the_schema_numbers_attempts_and_links_each_to_the_one_it_repeats(registered: sqlite3.Connection) -> None:
-    insert = """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,
+    insert = """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
     input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason)
-    VALUES (?,?,2,'beads','tasks','tl-1','r','s1','i','d',1,'m','e','s',1,?,?,?)"""
+    VALUES (?,?,2,'beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','s',1,?,?,?)"""
     for values, constraint in [
         (("n", "t", 2, None, "unsafe"), "previous_attempt_id IS NULL"),
         (("n", "t", 2, "attempt", None), "repeat_reason IS NULL"),
@@ -459,6 +460,8 @@ def test_the_schema_numbers_attempts_and_links_each_to_the_one_it_repeats(regist
     ]:
         with pytest.raises(sqlite3.IntegrityError, match=constraint):
             registered.execute(insert, values)
+    with pytest.raises(sqlite3.IntegrityError, match="tracker_root"):  # the stored root is absolute
+        registered.execute(insert.replace("'/tracker'", "'tracker'"), ("n", "t", 2, "attempt", "unsafe"))
     registered.execute(insert, ("n", "t", 2, "attempt", "unsafe"))
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
         registered.execute(insert, ("m", "u", 3, "attempt", "unsafe"))  # the chain is linear

@@ -91,17 +91,15 @@ currently hardcodes `user_version == (1,)` and must read `SCHEMA.version`; the e
   leftovers is repeated by the step's next attempt, which takes the held reservation over; nothing is released.)
 - Only a person editing `factory.db` by hand could free it; that is outside this design and not offered as a path.
 - **The tracker claim's lease (found by live smoke 5, checked 2026-11-10 against bd 1.3.1).** `bd update --claim` also
-  takes a lease with a 5-minute TTL, kept alive only by `bd heartbeat` (`Bd.heartbeat`); the factory never heartbeats,
-  so `bd show` reports `Lease: expires in ...` and then a lapsed lease. Measured in a scratch tracker: after the lease
+  takes a lease with a 5-minute TTL, kept alive only by `bd heartbeat` (`Bd.heartbeat`); at the time of this note the
+  factory never heartbeated, so `bd show` reported `Lease: expires in ...` and then a lapsed lease. Measured in a scratch tracker: after the lease
   lapsed the bead stayed `in_progress`, assigned to the holder, out of `bd ready`; another actor's plain `--claim` was
   still refused ("issue already claimed"), and the holder's `heartbeat` on the lapsed lease succeeded. So the claim is
   NOT freed by expiry alone; it is freed only by `bd reclaim` (a reaper: reverts in_progress beads whose lease lapsed to
   open, clears the assignee) or `bd update --force`, both run by someone else. Wherever a supervisor runs `bd reclaim`
-  on the tracker, a taskloop claim older than 5 minutes is reverted while its attempt still holds the slot; the
-  `HELD` banner says so. **Owner question (not built):** (a) heartbeat the claim from the attempt entry (and a repeating
-  start) while an attempt holds the slot, at well under the TTL, and treat a failed heartbeat as a lost claim; or
-  (b) mark factory claims as never reaped (a dedicated label excluded from the reaper's scope, or a pool/`hooked`
-  status bd never reclaims by age); or (c) accept it and document that no reaper may run on factory trackers.
+  on the tracker, a taskloop claim whose lease lapsed is reverted while its attempt still holds the slot; the `HELD`
+  banner says so. Decided in [.4.3.1.9](../tl-8bh9.4.3.1.9/plan.md): the entry renews the lease every 100 s while a step
+  runs; nothing renews it between steps.
 Generation is fixed at 1 (Q5 decided: acceptable because the body also fences on `attempt_id` and `dispatch_token`, and
 no release exists to reuse a slot). The release slice must introduce monotonic generations before it deletes any reservation.
 
