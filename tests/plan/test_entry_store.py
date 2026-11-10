@@ -1,5 +1,6 @@
 """The registered entry: one winner per admitted attempt, replacement only of an observed-dead identity, on real SQLite."""
 
+import math
 import sqlite3
 import threading
 from pathlib import Path
@@ -143,3 +144,59 @@ def test_attempt_of_is_the_recovery_read_by_task(con: sqlite3.Connection) -> Non
     assert store.attempt_of("tasks", "tl-1") == (KEY, "dispatching", FIRST)
     with pytest.raises(StoreUnavailable):
         PlanStore(lambda: None).attempt_of("tasks", "tl-1")
+
+
+REBOOTED = (9, "after-reboot", "new-boot")
+
+
+def deadline(con: sqlite3.Connection) -> object:
+    return con.execute("SELECT deadline FROM plan_attempt").fetchone()[0]
+
+
+def test_a_replacement_from_another_boot_renews_the_deadline_once_per_reboot(con: sqlite3.Connection) -> None:
+    store = PlanStore(lambda: con)
+    assert store.register_entry(KEY, FIRST, 10) == "accepted"
+    assert store.register_entry(KEY, REBOOTED, 200, Replaced(FIRST, "different_process"), renewed=2000) == "accepted"  # past 100
+    assert (entry(con), deadline(con)) == ((*REBOOTED, 2), 2000)
+    again = (10, "again", "new-boot")
+    assert store.register_entry(KEY, again, 300, Replaced(REBOOTED, "gone"), renewed=5000) == "accepted"  # same boot now
+    assert deadline(con) == 2000
+    assert store.register_entry(KEY, (11, "late", "new-boot"), 2500, Replaced(again, "gone"), renewed=9000) == "refused"
+    assert (entry(con), deadline(con)) == ((*again, 3), 2000)
+
+
+def test_a_first_registration_or_a_same_boot_replacement_never_renews(con: sqlite3.Connection) -> None:
+    store = PlanStore(lambda: con)
+    assert store.register_entry(KEY, REBOOTED, 200, renewed=2000) == "refused"  # never registered: nothing to compare
+    assert store.register_entry(KEY, FIRST, 10, renewed=2000) == "accepted"
+    assert deadline(con) == 100
+    assert store.register_entry(KEY, SECOND, 200, Replaced(FIRST, "gone"), renewed=2000) == "refused"
+    assert (entry(con), deadline(con)) == ((*FIRST, 1), 100)
+
+
+def test_the_renewal_is_fenced_by_key_phase_and_the_stored_identity(con: sqlite3.Connection) -> None:
+    store = PlanStore(lambda: con)
+    assert store.register_entry(KEY, FIRST, 10) == "accepted"
+    replacing = Replaced(FIRST, "different_process")
+    assert store.register_entry(AttemptKey("attempt", "other-token", 1), REBOOTED, 200, replacing, renewed=2000) == "refused"
+    assert store.register_entry(KEY, REBOOTED, 200, Replaced(SECOND, "different_process"), renewed=2000) == "conflict"
+    con.execute("UPDATE plan_attempt SET phase='dispatching',base_commit=?", ("d" * 40,))
+    assert store.register_entry(KEY, REBOOTED, 200, replacing, renewed=2000) == "conflict"
+    assert (entry(con), deadline(con)) == ((*FIRST, 1), 100)
+
+
+@pytest.mark.parametrize("renewed", [200, 150, math.inf, math.nan])
+def test_a_renewal_not_after_now_or_not_finite_is_refused_and_not_consumed(con: sqlite3.Connection, renewed: float) -> None:
+    store = PlanStore(lambda: con)
+    assert store.register_entry(KEY, FIRST, 10) == "accepted"
+    assert store.register_entry(KEY, REBOOTED, 200, Replaced(FIRST, "different_process"), renewed=renewed) == "refused"
+    assert (entry(con), deadline(con)) == ((*FIRST, 1), 100)
+    assert store.register_entry(KEY, REBOOTED, 200, Replaced(FIRST, "different_process"), renewed=2000) == "accepted"
+    assert deadline(con) == 2000
+
+
+def test_a_renewal_never_shortens_a_live_deadline(con: sqlite3.Connection) -> None:
+    store = PlanStore(lambda: con)
+    assert store.register_entry(KEY, FIRST, 10) == "accepted"
+    assert store.register_entry(KEY, REBOOTED, 20, Replaced(FIRST, "gone"), renewed=50) == "accepted"  # before the deadline 100
+    assert (entry(con), deadline(con)) == ((*REBOOTED, 2), 100)

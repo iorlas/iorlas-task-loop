@@ -114,10 +114,10 @@ class PlanRepeat:
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int) -> Started | Failed:
         """For the task's captured current attempt C: the stop proof (C's entry, then its worker and group) before any Git
         read; C's own verify (it may finish a crash or settle); only REPEATABLE leftovers below the cap are repeated."""
-        stopped = self._stopped(backlog, task_id, current, entry)
+        stopped = self._stopped(backlog, task_id, current, entry, minutes)
         if not isinstance(stopped, AttemptRecord):
             return stopped
-        found = self._leftovers(backlog, task_id, current)
+        found = self._leftovers(backlog, task_id, current, minutes)
         if not isinstance(found, tuple):
             return found
         if stopped.admission.number >= ATTEMPTS:
@@ -129,16 +129,18 @@ class PlanRepeat:
         if isinstance(text, Failed):
             return text
         admitted = self._takeover(RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1]), stopped.admission.cwd)
-        return self._launch(backlog, task_id, current, admitted, stopped.admission.number + 1)
+        return self._launch(backlog, task_id, current, admitted, stopped.admission.number + 1, minutes)
 
-    def _leftovers(self, backlog: str, task_id: str, current: AttemptKey) -> tuple[Unsettled, RepeatReason] | Started | Failed:
+    def _leftovers(
+        self, backlog: str, task_id: str, current: AttemptKey, minutes: int
+    ) -> tuple[Unsettled, RepeatReason] | Started | Failed:
         """C's own verify: a stored or new verdict, or no stage to verify, is `already_dispatched` with that result; any
         other unsettled reason or unknown is that failure, never a repeat."""
         found = self.verifier.verify(current)
         if isinstance(found, (Verified, Rejected, NotApplicable)):
             return Started("already_dispatched", backlog, task_id, current.attempt_id, True, result=_words(found))
         if isinstance(found, VerifyRefused) and found.reason == "stale_reservation":
-            return self._existing(backlog, task_id, current)  # another start took the step over after this one's read
+            return self._existing(backlog, task_id, current, minutes)  # another start took the step over after this one's read
         if not isinstance(found, Unsettled):
             return verify_failure(found)
         reason = next((each for each in REPEATABLE if each == found.reason), None)
@@ -165,7 +167,9 @@ class PlanRepeat:
         number = record.admission.number
         return feedback(found, record.admission.rules, number, task, secrets.token_hex(8), unrecorded=unrecorded)
 
-    def _stopped(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None) -> AttemptRecord | Started | Failed:
+    def _stopped(
+        self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int
+    ) -> AttemptRecord | Started | Failed:
         """The stop proof (`plan_release`'s one rule): C's registered entry does not run, then C's worker and its process
         group are gone (unknown counts as alive). A running entry is `already_running`."""
         running = entry_stopped(self.observe, None, entry)
@@ -178,7 +182,7 @@ class PlanRepeat:
             return Failed("unavailable", "store", str(error))
         except StoreRefused as error:
             stale = str(error) == "stale_reservation"  # another start took the step over after this one's read
-            return self._existing(backlog, task_id, current) if stale else Failed("refused", str(error))
+            return self._existing(backlog, task_id, current, minutes) if stale else Failed("refused", str(error))
         if record is None:
             return Failed("refused", "absent")
         alive = worker_stopped(self.gone, record.phase, record.worker)
@@ -196,7 +200,8 @@ class PlanRepeat:
             return Failed("unavailable", "lock")
 
     def _launch(
-        self, backlog: str, task_id: str, current: AttemptKey, admitted: Admitted | AdmitRefused | AdmitUnavailable | Failed, number: int
+        self, backlog: str, task_id: str, current: AttemptKey, admitted: Admitted | AdmitRefused | AdmitUnavailable | Failed,
+        number: int, minutes: int,
     ) -> Started | Failed:
         """The same launcher as attempt 1. A concurrent start that took the step over first (`task_attempted`): its
         attempt is launched as existing."""
@@ -206,13 +211,13 @@ class PlanRepeat:
             return Failed("unavailable", admitted.what, admitted.detail)
         if isinstance(admitted, AdmitRefused):
             refused = Failed("refused", admitted.reason, admitted.detail)
-            return self._existing(backlog, task_id, current) if admitted.reason == "task_attempted" else refused
-        result = launched(self.launcher.launch(backlog, task_id), backlog, task_id, admitted.key, existing=False)
+            return self._existing(backlog, task_id, current, minutes) if admitted.reason == "task_attempted" else refused
+        result = launched(self.launcher.launch(backlog, task_id, minutes), backlog, task_id, admitted.key, existing=False)
         if isinstance(result, Failed):
             return replace(result, admitted=True)
         return replace(result, status="repeated", number=number) if result.status == "started" else result
 
-    def _existing(self, backlog: str, task_id: str, current: AttemptKey) -> Started | Failed:
+    def _existing(self, backlog: str, task_id: str, current: AttemptKey, minutes: int) -> Started | Failed:
         """The attempt that took the step over from `current` (another start's), launched as existing."""
         try:
             found = self.store.attempt_of(backlog, task_id)
@@ -220,4 +225,4 @@ class PlanRepeat:
             return Failed("unavailable", "store", str(error))
         if found is None or found[0] == current:
             return Failed("unavailable", "store", "The winning attempt is not readable")
-        return launched(self.launcher.launch(backlog, task_id), backlog, task_id, found[0], existing=True)
+        return launched(self.launcher.launch(backlog, task_id, minutes), backlog, task_id, found[0], existing=True)

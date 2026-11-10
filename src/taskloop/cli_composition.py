@@ -17,6 +17,7 @@ from taskloop.composition import (
     RealSlotFiles,
     adopt_slots,
     checkouts,
+    current_boot,
     entry_seen,
     open_launcher,
     open_plan_admission,
@@ -88,7 +89,7 @@ def open_plan_reads(database: Path) -> Generator[Reads | Failed]:
         else:
             reader = _reader(con)
             verifier = PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused)  # never verifies
-            yield Reads(reader, entry_seen, time.time, verifier.leftovers)
+            yield Reads(reader, entry_seen, time.time, verifier.leftovers, current_boot)
 
 
 @contextmanager
@@ -130,8 +131,8 @@ def open_plan_next(database: Path, artifacts: Path, tracker_root: str) -> Genera
                 yield Failed("refused", "tracker_root", str(error))
                 return
             reader = _reader(con)
-            reads = Reads(reader, entry_seen, time.time, PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time,
-                                                                       refused).leftovers)
+            leftovers = PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused).leftovers
+            reads = Reads(reader, entry_seen, time.time, leftovers, current_boot)
             yield Advancing(reads, _starting(reader, database, artifacts, store), open_plan_verifier(database, store),
                             open_releaser(database, store), open_publisher(database, store), ready, PlanFiles(artifacts).log_round)
         finally:

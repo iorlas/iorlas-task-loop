@@ -452,7 +452,8 @@ ls "$SMOKE/markers"          # empty: no hook ran
 G6 stands in for a reboot or network loss mid-start: the entry is gone while the attempt is `admitted`, which is what the
 round decides on. Not covered live: a real reboot, `refused slot_busy` and `refused claim_lost` (tests cover the rule).
 An admitted attempt past its deadline (`stuck:expired_admitted`) is only reported by rounds: abandon it, then
-`tl plan start` (question 5 of the plan stays open). Exit codes: 0 for a round whose words are all settled (a per-task
+`tl plan start`. The exception is an entry registered before a reboot (.4.3.1.14 section 16): see the reboot check at the
+end of Run H. Exit codes: 0 for a round whose words are all settled (a per-task
 refusal included), 3 when admission stopped on, or a move says, `unavailable:*`, `uncertain:*`, `unsettled:*` or
 `unknown` (a verify's `branch=` word and `skip unavailable:ancestry` included; rerun), 1 for a refused round (`label`,
 `tracker_root`, `database`) or one stopped on its own refused inputs. A `report claim_leaked` move names a task whose
@@ -556,8 +557,19 @@ next `bd` call. Not observed: a real terminal press, and a SIGINT while a claim'
 
 Accepted residual: H5 can miss its wake when the 2 s check reads factory.db in the instant between an entry's
 reservation removal and its slot-lock release; the next regular round (at most one interval) fills the slot. Not covered
-live: a real reboot, that wake race, macOS. An admitted attempt that expired while the machine was off stays
-`stuck:expired_admitted` until the follow-up of the plan's section 16 lands.
+live: a real reboot, that wake race, macOS.
+
+**Reboot renewal (owner-run check, optional; plan section 16).** A reboot cannot be simulated here: the tests stand in
+for it with a stored `entry_boot` other than the current boot id (`tests/plan/test_entry_store.py`, `test_launch.py`,
+`test_ops.py`, `test_next.py`). What stays unobserved without a real reboot is the whole path on a real machine. If you
+choose to reboot the scratch machine mid-start: before it, `T plan show <task> --backlog "$BACKLOG" --json` for an attempt
+still `admitted` with an entry registered (e.g. G6's `unavailable credentials:auth` state), noting `deadline_passed` and
+the entry's identity; after the reboot, past the deadline, `cat /proc/sys/kernel/random/boot_id` differs from the stored
+`entry_boot` (`sqlite3 "$DB" "SELECT entry_boot, deadline FROM plan_attempt WHERE task_id='<task>'"`), `T plan show`
+says `Next: start` (not `stuck:expired_admitted`), and the next round (or `T plan start`) writes `relaunch relaunched`
+on the same attempt id, with `deadline` now the relaunch time plus `--minutes` and the new `entry_boot` the current one.
+A second relaunch in the same boot never moves the deadline again. Fail means: `stuck:expired_admitted` after a reboot, a
+new attempt row, or a deadline renewed by a relaunch without a reboot.
 
 ## 7. Paste back to the agent
 

@@ -38,6 +38,7 @@ from taskloop.plan_ops import (
     Verify,
     attempts_status,
     launched,
+    minutes_refused,
     publish_task,
     start,
     verify_task,
@@ -160,6 +161,9 @@ def advance(ports: Advancing, request: NextRequest) -> Round | Failed:
     label = request.label.strip()
     if not label:
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
+    refused = minutes_refused(request.minutes)
+    if refused is not None:
+        return refused
     request = replace(request, label=label)
     listed = attempts_status(ports.reads)
     if isinstance(listed, Failed):
@@ -224,7 +228,7 @@ def _resume(ports: Starting, backlog: str, minutes: int, each: AttemptStatus) ->
     key, _phase, entry = found
     if each.next == "repeat":
         return ports.repeat.repeat(backlog, each.task_id, key, entry, minutes)
-    return launched(ports.launcher.launch(backlog, each.task_id), backlog, each.task_id, key, existing=True)
+    return launched(ports.launcher.launch(backlog, each.task_id, minutes), backlog, each.task_id, key, existing=True)
 
 
 def _detail(result: Started | Failed) -> str:

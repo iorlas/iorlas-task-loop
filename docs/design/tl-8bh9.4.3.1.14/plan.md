@@ -363,6 +363,46 @@ trigger. This slice builds nothing of it; until it lands, an admitted attempt ex
   `tl plan start` passing minutes; tests: another boot renews once, the same boot never renews, the fence refuses a
   changed key or a non-`admitted` phase; GUIDE `stuck:expired_admitted` names the rule. About +40 SLOC.
 
+**As built (2026-11-10, uncommitted, on 283ae2271).** Differences from the text above, each the smaller correct form of
+what is built:
+
+- **The renewal is the registration's own write, not a separate UPDATE before it.** `PlanStore.register_entry` takes
+  `renewed` (the launcher passes its clock plus `minutes * 60`) and, when the stored entry it replaces carries another
+  boot id than the identity being registered, sets `deadline=renewed` in the same fenced UPDATE that writes `entry_*`
+  (same immediate transaction: key, held reservation, phase `admitted`, the exact replaced identity), past deadline or
+  not. The renewed deadline is `max(stored, renewed)`, so a renewal never shortens a live deadline; a renewal that is
+  not finite or not after `now` is refused (`registration_refused`) and writes nothing, so it is not consumed (the
+  launcher turns minutes no float holds into an infinite renewal, which the store refuses). A separate write before registration would renew again on every relaunch whose start failed before it registered
+  (`start`, `log`, `store`), which removes the bound; in one write the new entry is this boot's, so a second relaunch in
+  the same boot never renews. The current boot is the registered child's identity (`popen_registered`), so the launcher
+  needs no boot read. `WRITERS` gains no row: `UPDATE plan_attempt` is already `plan_store`'s (the row now says so).
+- **The status had to change too.** `next_step` answered `stuck:expired_admitted` for any expired admitted attempt, so a
+  round would never have reached `_resume`. `Reads` gains a `boot` port (`composition.current_boot`: this process's own
+  identity through `stream_proc.inspect_process`, because `boot_id` is not public in the shelf library), and an expired
+  admitted attempt whose stored `entry_boot` differs from a known boot is `start` (`next_step(..., rebooted=True)`); an
+  unknown boot never counts as a reboot. `dispatching`/`registered` stay `stuck:entry_lost`.
+- **Minutes pass through every launch**: `Launch.launch(backlog, task_id, minutes)`; `tl plan start`, `plan_next._resume`
+  and `PlanRepeat` (its own and `_existing` launches) pass the request's `--minutes`. `--minutes` is now bounded from 1
+  to `plan_ops.MAX_MINUTES` (a week) by one check, `plan_ops.minutes_refused` (`refused:choices`), in `tl plan start`,
+  `tl plan next` (after the label check, before any read) and `tl plan rounds`' input checks (which before checked >= 1
+  only); admission had no upper bound.
+- GUIDE `start` and `stuck:expired_admitted` name the rule (the latter: the deadline passed with no relaunchable entry
+  from before a reboot: none registered, one from this boot, or the boot unknown); the live smoke gains an optional owner-run reboot check
+  after Run H (a reboot is only faked in tests by a stored boot id).
+- Tests: `test_entry_store` (another boot renews once, the same boot and a first registration never renew, the fence
+  refuses a changed key, a wrong replaced identity and a non-`admitted` phase; a renewal at or before now, infinite or
+  NaN is refused and a later valid one still renews; a renewal never shortens a live deadline), `test_launch` (a
+  relaunch over an other-boot entry at t=200 stores deadline 200 + 30 min; minutes no float holds refuse and keep the
+  stored entry; `current_boot` is this process's native boot, None when unknown), `test_ops` (the next-step row, `tl
+  plan show` with another, the same and an unknown boot, minutes reaching the launch, out-of-range minutes refused
+  before any read), `test_repeat` (both `PlanRepeat` launches pass the request's minutes), `test_next` (a round
+  relaunches an expired other-boot attempt with the request's minutes; `dispatching` stays `stuck:entry_lost`; minutes
+  out of range refused before any read), `test_rounds` (the upper bound).
+- **Residual:** after a reboot, until one relaunch registers, the attempt shows `start` past its deadline, so a start
+  that keeps failing before its registration (`unavailable:start`, `log`, `store`) is retried every round without the
+  deadline's bound; the first registration (also an exec failure after it) renews and the bound returns. Not observed
+  live: a real reboot (runbook, after Run H).
+
 ## 17. Modules and caps
 
 SLOC by the policy counter today -> estimate; caps 400 file, 80 function, 800 test file.

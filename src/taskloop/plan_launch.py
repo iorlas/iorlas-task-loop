@@ -5,6 +5,7 @@ with the child's boot-aware identity, and the target runs only after `PlanStore.
 launcher never writes to, waits on, signals or kills the child; it closes its pipes and leaves it in its own session.
 """
 
+import math
 import os
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
@@ -116,10 +117,12 @@ class Launcher:
         self.database, self.files, self.clock = database, files, clock
         self.start, self.observe, self.executable = start, observe, executable
 
-    def launch(self, backlog: str, task_id: str) -> LaunchResult:
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         """Start the task's admitted attempt unless its registered entry still runs; never creates factory.db.
 
-        A relative database path is refused before anything is read: the entry would refuse it after registration."""
+        A relative database path is refused before anything is read: the entry would refuse it after registration.
+        `minutes`: a replacement of an entry registered in another boot renews the deadline to now plus these minutes in
+        the registration's own write (`PlanStore.register_entry`), so a reboot mid-start continues with its full time."""
         if not self.database.is_absolute():
             return LaunchRefused("database")
         store = Store(SCHEMA)
@@ -135,7 +138,7 @@ class Launcher:
             if writer is None:
                 return LaunchUnavailable("store")
             writer.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
-            return self._start(target[0], (backlog, task_id), PlanStore(lambda: writer, store.begin_immediate), target[1])
+            return self._start(target[0], (backlog, task_id), PlanStore(lambda: writer, store.begin_immediate), target[1], minutes)
         except (sqlite3.Error, StoreUnavailable):
             return LaunchUnavailable("store")
         finally:
@@ -160,13 +163,20 @@ class Launcher:
             return LaunchUnavailable("observe")
         return key, Replaced(stored, seen.kind)
 
-    def _start(self, key: AttemptKey, task: tuple[str, str], writer: PlanStore, replacing: Replaced | None) -> LaunchResult:
+    def _start(
+        self, key: AttemptKey, task: tuple[str, str], writer: PlanStore, replacing: Replaced | None, minutes: int
+    ) -> LaunchResult:
         """`task` (backlog, task id) names the attempt to the entry; the dispatch token never enters argv."""
         committed = False
 
         def registered(identity: OwnedProcess) -> None:
             nonlocal committed
-            answer = writer.register_entry(key, _entry(identity), self.clock(), replacing)
+            now = self.clock()
+            try:
+                renewed = float(now + minutes * 60)
+            except OverflowError:  # no float holds it: the store refuses a non-finite renewal
+                renewed = math.inf
+            answer = writer.register_entry(key, _entry(identity), now, replacing, renewed=renewed)
             if answer != "accepted":
                 raise _CallbackRefused("registration_conflict" if answer == "conflict" else "registration_refused")
             committed = True

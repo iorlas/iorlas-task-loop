@@ -80,7 +80,7 @@ WRITERS = {
     ("INSERT", "published_branch"): "plan_publish.py",
     ("INSERT", "plan_execution"): "plan_store.py",
     ("INSERT", "plan_verification"): "plan_store.py",
-    ("UPDATE", "plan_attempt"): "plan_store.py",
+    ("UPDATE", "plan_attempt"): "plan_store.py",  # also the deadline renewal after a reboot, in the entry registration's write
     ("UPDATE", "plan_execution"): "plan_store.py",
 }
 WRITE = re.compile(

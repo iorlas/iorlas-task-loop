@@ -16,7 +16,7 @@ from any_agent.procs import Worker
 from beads_client import Bd, BdError, Runner
 from git_porcelain import GitUnavailable, RealRepo, Repo
 from sqlite_store import Store
-from stream_proc import OwnedProcess, group_alive, observe_owned, popen_registered
+from stream_proc import OwnedProcess, group_alive, inspect_process, observe_owned, popen_registered
 
 from taskloop import slot_lock
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
@@ -194,6 +194,13 @@ def worker_gone(worker: Worker) -> bool:
 def entry_seen(entry: Entry) -> Seen:
     """A native process-table read of the registered entry, by the launcher's identity rule; no spawn or signal."""
     return observe_owned(entry_process(entry)).kind
+
+
+def current_boot() -> str | None:
+    """This machine's boot id, as a registered entry's identity carries it: this process's own native identity read
+    through the library's public inspection (no spawn or signal); None when unknown."""
+    seen = inspect_process(os.getpid()).identity
+    return None if seen is None else seen.boot
 
 
 def checkouts(path: Path) -> Repo:

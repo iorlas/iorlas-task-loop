@@ -150,7 +150,10 @@ a few; with `tl plan rounds` ([.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md)) a regula
 attempt's own log and one round-log line (section 7a), both traceable to the attempt. No detector is added. A truly lost
 claim then needs a person: `tl plan release --abandon` (the abandon's fenced unclaim answers `not_held`) and, to plan the
 task again, `tl plan start`. Consequence of the same fence: **an outage longer than the deadline is not continued
-automatically**; the attempt is `stuck:expired_admitted` (new owner question 5).
+automatically**; the attempt is `stuck:expired_admitted` (new owner question 5). Since the follow-up of
+[.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md) section 16, a reboot is the exception: an attempt whose registered entry is from
+another boot is relaunched past its deadline, and that registration renews the deadline from the request's `--minutes`
+once per reboot; a same-boot expiry stays reported, so the bound above holds.
 
 **Publication retry.** A verified plan not on `origin` is pushed again every round (non-force, idempotent; .12). Only
 success is stored, so after `refused:diverged`, `remote_moved` or `remote_ahead` every round repeats the push and the
@@ -208,7 +211,7 @@ action it takes is an existing fenced, idempotent operation. So a rerun after an
 | after admission, before or during the launch | `admitted`, no entry registered, slot and claim held | relaunches (section 4) |
 | after the launch registered the entry | the entry runs on its own | `report running` |
 | during a verify, release or publish | that operation's own crash table (.8, .11, .12) | runs it again |
-| machine restart or network loss, attempt `admitted` (entry registered, gone before the agent) | entry gone | relaunches while the deadline holds; after it, `report stuck:expired_admitted` (question 5) |
+| machine restart or network loss, attempt `admitted` (entry registered, gone before the agent) | entry gone | relaunches while the deadline holds; after it, `report stuck:expired_admitted`, except an entry from before a reboot: relaunched with the deadline renewed once (question 5, .4.3.1.14 section 16) |
 | machine restart, attempt `dispatching`/`registered` | agent gone | `report stuck:entry_lost`: continuing it is session resume, out of scope |
 | machine restart, attempt `captured` | step ended | verify or repeat |
 | machine restart, verified and unpublished | | publish |
@@ -491,7 +494,7 @@ Answered (owner, 2026-11-10):
 Open:
 
 5. **Decided in [.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md) section 16** (continue it automatically after a reboot, by
-   a renewed deadline; a separate follow-up task, not built). The question as asked:
+   a renewed deadline; built as that section's follow-up, see its as-built note). The question as asked:
    **After an outage longer than the attempt's deadline, should the factory start the task over by itself?** Each
    attempt gets a deadline when it is admitted (`--minutes`, 30 in the runbook). If the machine is off or offline past
    it, the admitted attempt is expired: the existing registration fence refuses it, `tl plan show` says

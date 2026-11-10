@@ -15,11 +15,12 @@ from stream_proc import (
     OwnedProcess,
     ProcessObservation,
     RegisteredStartUncertainError,
+    inspect_process,
     observe_owned,
     popen_registered,
 )
 
-from taskloop.composition import open_launcher
+from taskloop.composition import current_boot, open_launcher
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
 from taskloop.plan_schema import SCHEMA
@@ -127,7 +128,7 @@ def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted:
     seen: list[tuple[object, ...]] = []
     start = FakeStart()
     start.before = lambda: seen.append(stored(admitted))
-    result = launcher(admitted, start).launch("tasks", "tl-1")
+    result = launcher(admitted, start).launch("tasks", "tl-1", 30)
     assert result == Launched(KEY, (9, "new-start", "boot"))
     assert seen == [(None, None, None, "admitted")] and stored(admitted) == (9, "new-start", "boot", "admitted")
     call = start.calls[0]
@@ -146,24 +147,24 @@ def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted:
 
 @pytest.mark.parametrize("mode", ["popen", "bootstrap", "timeout", "identity"])
 def test_a_start_failure_before_the_callback_registers_nothing(admitted: Path, mode: str) -> None:
-    assert launcher(admitted, FakeStart(mode)).launch("tasks", "tl-1") == LaunchUnavailable("start")
+    assert launcher(admitted, FakeStart(mode)).launch("tasks", "tl-1", 30) == LaunchUnavailable("start")
     assert stored(admitted) == (None, None, None, "admitted")
 
 
 def test_a_refused_callback_never_permits_the_target(admitted: Path) -> None:
     start = FakeStart(before=lambda: register(admitted, OLD))  # another launcher registered between read and callback
-    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchRefused("registration_conflict")
+    assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchRefused("registration_conflict")
     assert not start.permitted and stored(admitted)[:3] == OLD
     expired = FakeStart()
-    other = launcher(admitted, expired, observe=Observe("gone"), now=100).launch("tasks", "tl-1")
+    other = launcher(admitted, expired, observe=Observe("gone"), now=100).launch("tasks", "tl-1", 30)
     assert other == LaunchRefused("registration_refused") and not expired.permitted and stored(admitted)[:3] == OLD
 
 
 def test_exec_failure_after_the_commit_leaves_a_dead_entry_that_the_next_launch_replaces(admitted: Path) -> None:
-    assert launcher(admitted, FakeStart("exec_failed")).launch("tasks", "tl-1") == LaunchUnavailable("exec_failed_after_commit")
+    assert launcher(admitted, FakeStart("exec_failed")).launch("tasks", "tl-1", 30) == LaunchUnavailable("exec_failed_after_commit")
     assert stored(admitted)[:3] == (9, "new-start", "boot")
     observe, later = Observe("gone"), OwnedProcess(11, 11, "later-start", "boot")
-    assert launcher(admitted, FakeStart(identity=later), observe).launch("tasks", "tl-1") == Launched(KEY, (11, "later-start", "boot"))
+    assert launcher(admitted, FakeStart(identity=later), observe).launch("tasks", "tl-1", 30) == Launched(KEY, (11, "later-start", "boot"))
     assert observe.seen == [NEW] and stored(admitted)[:3] == (11, "later-start", "boot")
 
 
@@ -171,38 +172,59 @@ def test_exec_failure_after_the_commit_leaves_a_dead_entry_that_the_next_launch_
 def test_an_observed_dead_entry_is_replaced(admitted: Path, kind: str) -> None:
     register(admitted, OLD)
     observe = Observe(kind)
-    assert launcher(admitted, FakeStart(), observe).launch("tasks", "tl-1") == Launched(KEY, (9, "new-start", "boot"))
+    assert launcher(admitted, FakeStart(), observe).launch("tasks", "tl-1", 30) == Launched(KEY, (9, "new-start", "boot"))
     assert observe.seen == [OwnedProcess(7, 7, "old-start", "boot")] and stored(admitted)[:3] == (9, "new-start", "boot")
+
+
+def test_a_relaunch_after_a_reboot_renews_the_deadline_from_its_minutes(admitted: Path) -> None:
+    """A reboot cannot be run here: the stored entry carries another boot id than the started child's ("boot")."""
+    register(admitted, (7, "old-start", "old-boot"))
+    start = FakeStart()
+    found = launcher(admitted, start, Observe("different_process"), now=200).launch("tasks", "tl-1", 30)
+    assert found == Launched(KEY, (9, "new-start", "boot")) and start.permitted
+    con = sqlite3.connect(admitted)
+    try:
+        assert con.execute("SELECT deadline FROM plan_attempt").fetchone() == (200 + 30 * 60,)
+    finally:
+        con.close()
+
+
+def test_minutes_no_float_holds_refuse_the_renewal_and_keep_the_stored_entry(admitted: Path) -> None:
+    register(admitted, (7, "old-start", "old-boot"))
+    start = FakeStart()
+    found = launcher(admitted, start, Observe("different_process"), now=200).launch("tasks", "tl-1", 10**400)
+    assert found == LaunchRefused("registration_refused") and not start.permitted
+    assert stored(admitted)[:3] == (7, "old-start", "old-boot")
 
 
 @pytest.mark.parametrize(("kind", "expected"), [("matching", AlreadyRunning(KEY, OLD)), ("unknown", LaunchUnavailable("observe"))])
 def test_a_live_or_unobservable_entry_is_not_started_again(admitted: Path, kind: str, expected: object) -> None:
     register(admitted, OLD)
     start = FakeStart()
-    assert launcher(admitted, start, Observe(kind)).launch("tasks", "tl-1") == expected
+    assert launcher(admitted, start, Observe(kind)).launch("tasks", "tl-1", 30) == expected
     assert start.calls == [] and stored(admitted)[:3] == OLD
 
 
 def test_uncertain_permit_names_the_registered_identity(admitted: Path) -> None:
-    assert launcher(admitted, FakeStart("uncertain")).launch("tasks", "tl-1") == LaunchUncertain(KEY, (9, "new-start", "boot"))
+    assert launcher(admitted, FakeStart("uncertain")).launch("tasks", "tl-1", 30) == LaunchUncertain(KEY, (9, "new-start", "boot"))
     assert stored(admitted)[:3] == (9, "new-start", "boot")
 
 
 def test_only_an_admitted_attempt_of_a_known_task_launches(admitted: Path) -> None:
     start = FakeStart()
-    assert launcher(admitted, start).launch("tasks", "tl-9") == LaunchRefused("absent")
+    assert launcher(admitted, start).launch("tasks", "tl-9", 30) == LaunchRefused("absent")
     con = sqlite3.connect(admitted)
     con.execute("UPDATE plan_attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
     con.commit()
     con.close()
-    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchRefused("dispatched")
+    assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchRefused("dispatched")
     assert start.calls == []
 
 
 def test_a_missing_database_is_refused_and_never_created(tmp_path: Path) -> None:
     db = tmp_path / "factory.db"
     start = FakeStart()
-    assert launcher(db, start).launch("tasks", "tl-1") == LaunchRefused("database")
+    assert launcher(db, start).launch("tasks", "tl-1", 30) == LaunchRefused("database")
     assert not db.exists() and start.calls == []
 
 
@@ -211,7 +233,7 @@ def test_a_foreign_schema_version_is_unavailable(admitted: Path) -> None:
     con.execute("PRAGMA user_version=9")
     con.close()
     start = FakeStart()
-    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchUnavailable("store")
+    assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchUnavailable("store")
     assert start.calls == []
 
 
@@ -221,25 +243,31 @@ def test_composition_starts_with_the_released_registered_start(tmp_path: Path) -
     assert open_launcher(Path("factory.db"), tmp_path).database == Path.cwd() / "factory.db"
 
 
+def test_the_current_boot_is_this_process_s_native_boot() -> None:
+    """A real read, no spawn; where the native identity is unknown, so is the boot (never a substitute)."""
+    me = inspect_process(os.getpid()).identity
+    assert current_boot() == (None if me is None else me.boot)
+
+
 def test_a_relative_database_is_refused_before_any_read_registration_or_start(admitted: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(admitted.parent)
     start = FakeStart()
     built = Launcher(Path(admitted.name), PlanFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python")
-    assert built.launch("tasks", "tl-1") == LaunchRefused("database")
+    assert built.launch("tasks", "tl-1", 30) == LaunchRefused("database")
     assert start.calls == [] and stored(admitted) == (None, None, None, "admitted")
 
 
 def test_an_unopenable_entry_log_starts_nothing(admitted: Path) -> None:
     (admitted.parent / "attempts").write_text("not a directory")
     start = FakeStart()
-    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchUnavailable("log")
+    assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchUnavailable("log")
     assert start.calls == [] and stored(admitted) == (None, None, None, "admitted")
 
 
 def test_the_registration_write_waits_briefly_and_a_busy_store_registers_nothing(admitted: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     waits: list[object] = []
 
-    def busy(store: PlanStore, *_args: object) -> str:
+    def busy(store: PlanStore, *_args: object, **_named: object) -> str:
         con = store.connect()
         assert con is not None
         waits.append(con.execute("PRAGMA busy_timeout").fetchone()[0])
@@ -247,5 +275,5 @@ def test_the_registration_write_waits_briefly_and_a_busy_store_registers_nothing
 
     monkeypatch.setattr(PlanStore, "register_entry", busy)
     start = FakeStart()
-    assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchUnavailable("store")
+    assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchUnavailable("store")
     assert waits == [REGISTRATION_BUSY_MS] and not start.permitted and stored(admitted) == (None, None, None, "admitted")

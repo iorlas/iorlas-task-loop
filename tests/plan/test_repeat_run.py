@@ -92,7 +92,7 @@ class Launches:
     def __init__(self, con: sqlite3.Connection) -> None:
         self.store, self.keys = PlanStore(lambda: con), list[AttemptKey]()
 
-    def launch(self, backlog: str, task_id: str) -> LaunchResult:
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         found = self.store.attempt_of(backlog, task_id)
         assert found is not None
         entry = (8 + len(self.keys), "start", "boot")
@@ -213,7 +213,7 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     step.verifier.verify(KEY)
     second, entry = step.next_attempt(KEY)
     step.run(second, entry, Agent(slot, {}, UNCHANGED))
-    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers)
+    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
     shown_two = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_two, Failed) and (shown_two.status.number, shown_two.status.next) == (2, "repeat")
     third, entry = step.next_attempt(second)
@@ -355,7 +355,7 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
     else:
         step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", EVIL: "x"}, PLAN | {"paths": [P, EVIL]}))
         slot_files.entries[slot.path / EVIL] = FileEntry("file", 1, True)
-    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers)
+    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
     shown_now = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_now, Failed)
     left = shown_now.status.leftovers
@@ -478,7 +478,7 @@ def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: Fake
     key, _entry = step.next_attempt(KEY)
     log = PlanFiles(tmp_path).entry_log(key)
     log.write_text("refused slot_staged verify=refused:not_captured\nTraceback \x1b]0;owned\x07 (most recent call last)\n")
-    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers)
+    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
     found = status(reads, tmp_path, "tasks", "tl-1")
     assert not isinstance(found, Failed)
     assert (found.status.phase, found.status.next, found.status.last_entry) == (

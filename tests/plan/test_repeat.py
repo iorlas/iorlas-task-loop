@@ -105,12 +105,13 @@ class Launches:
     """The launcher: registers the task's current attempt's entry as the real one does, then reports it launched."""
 
     def __init__(self, con: sqlite3.Connection) -> None:
-        self.store, self.calls = PlanStore(lambda: con), list[AttemptKey]()
+        self.store, self.calls, self.minutes = PlanStore(lambda: con), list[AttemptKey](), list[int]()
 
-    def launch(self, backlog: str, task_id: str) -> LaunchResult:
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         found = self.store.attempt_of(backlog, task_id)
         assert found is not None
         self.calls.append(found[0])
+        self.minutes.append(minutes)
         assert self.store.register_entry(found[0], SECOND, 10) == "accepted"
         return Launched(found[0], SECOND)
 
@@ -247,7 +248,7 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
         probed.append(key)
         return None
 
-    reads = Reads(PlanStore(lambda: registered), seen("gone"), lambda: 10, leftovers)
+    reads = Reads(PlanStore(lambda: registered), seen("gone"), lambda: 10, leftovers, lambda: "boot")
     shown = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown, Failed)
     each, new = shown.status, launcher.calls[0]
@@ -290,6 +291,20 @@ def test_each_failed_gate_of_admit_repeat_admits_nothing(
     found = admission(registered, tmp_path).admit_repeat(RepeatRequest(KEY, "feedback", deadline, "unsafe"))
     assert isinstance(found, AdmitRefused) and found.reason == reason
     assert rows(registered) == before and held(registered) == reserved
+
+
+def test_both_repeat_launches_pass_the_request_minutes(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
+) -> None:
+    """The repeat's own launch, then a later repeat of the same read that finds the step taken over (`_existing`)."""
+    unsafe(registered, tmp_path, slot, checkouts, slot_files)
+    launcher = Launches(registered)
+    first = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 45)
+    assert isinstance(first, Started) and first.status == "repeated"
+    registered.execute("UPDATE plan_attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL WHERE attempt_id=?", (first.attempt_id,))
+    again = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 50)
+    assert again == Started("relaunched", "tasks", "tl-1", first.attempt_id, True, SECOND)
+    assert launcher.minutes == [45, 50] and len(rows(registered)) == 2
 
 
 def test_a_second_repeat_of_the_same_attempt_is_task_attempted(
@@ -425,7 +440,7 @@ class Launching:
     def __init__(self) -> None:
         self.calls = list[tuple[str, str]]()
 
-    def launch(self, backlog: str, task_id: str) -> LaunchResult:
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         self.calls.append((backlog, task_id))
         return Launched(KEY, ENTRY)
 

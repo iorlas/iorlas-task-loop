@@ -1,6 +1,7 @@
 """Conditional SQL owner for admitted plan execution; no admission or release writer."""
 
 import json
+import math
 import sqlite3
 from dataclasses import astuple
 from typing import Literal
@@ -141,12 +142,16 @@ class PlanStore(PlanReads):
         return record
 
     def register_entry(
-        self, key: AttemptKey, entry: tuple[int, str, str], now: float, replacing: Replaced | None = None
+        self, key: AttemptKey, entry: tuple[int, str, str], now: float, replacing: Replaced | None = None,
+        renewed: float | None = None,
     ) -> Literal["accepted", "conflict", "refused"]:
         """The only writer of entry_*: one winner while `admitted`; a replacement names the exact stored identity.
 
         Refused when the key, the held reservation or the deadline does not match. `_load` cannot serve this read: it
-        refuses exactly the unregistered row.
+        refuses exactly the unregistered row. A replacement of a stored entry from another boot than the registering
+        one also renews the deadline in the same write, past or not, to the later of the stored one and `renewed` (at
+        most once per reboot: the new entry is this boot's); a renewed deadline that is not finite or not after `now`
+        is refused and writes nothing. A same-boot replacement or a first registration never renews.
         """
         with self._connection(write=True) as con:
             row: tuple[object, ...] | None = con.execute(
@@ -155,16 +160,21 @@ class PlanStore(PlanReads):
                 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
                 astuple(key),
             ).fetchone()
-            if row is None or not isinstance(row[1], (int, float)) or now >= row[1]:
+            if row is None or not isinstance(deadline := row[1], (int, float)):
+                return "refused"
+            stored = None if None in row[2:5] else (as_int(row[2]), as_text(row[3]), as_text(row[4]))
+            if renewed is not None and stored is not None and stored[2] != entry[2]:  # the stored entry is another boot's
+                deadline = max(deadline, renewed) if math.isfinite(renewed) else now
+            if now >= deadline:
                 return "refused"
             if row[0] != "admitted":
                 return "conflict"
-            stored = None if any(value is None for value in row[2:5]) else (as_int(row[2]), as_text(row[3]), as_text(row[4]))
             if entry == stored or stored != (None if replacing is None else replacing.identity):
                 return "conflict"  # replacing an identity with itself would only bump rev under a live dispatch read
             # the row was read in this same immediate transaction, so no revision predicate is needed
             con.execute(
-                "UPDATE plan_attempt SET entry_pid=?,entry_start=?,entry_boot=?,rev=rev+1 WHERE attempt_id=?", (*entry, key.attempt_id)
+                "UPDATE plan_attempt SET entry_pid=?,entry_start=?,entry_boot=?,deadline=?,rev=rev+1 WHERE attempt_id=?",
+                (*entry, deadline, key.attempt_id),
             )
             return "accepted"
 

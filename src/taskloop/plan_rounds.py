@@ -19,7 +19,7 @@ from typing import Final
 
 from taskloop.plan_files import EvidenceError
 from taskloop.plan_next import IDENT, INTERRUPTED, UNKNOWN, NextRequest, fixed, stamped
-from taskloop.plan_ops import Ended, Failed, Quiet, Round
+from taskloop.plan_ops import Ended, Failed, Quiet, Round, minutes_refused
 from taskloop.plan_reads import SlotUse
 
 CHECK: Final = 2.0  # seconds between two reads of the reservation rows
@@ -51,14 +51,14 @@ class Pacing:
 
 def inputs(request: NextRequest) -> Failed | None:
     """The round's choices, checked once before the lock or any read: a plain-word backlog (it names the lock file), a
-    non-blank label, model and effort, at least one minute."""
+    non-blank label, model and effort, minutes in range."""
     if not IDENT.fullmatch(request.backlog) or "/" in request.backlog:
         return Failed("refused", "backlog", "The backlog must be one word of letters, digits and ._:@+-")
     if not request.label.strip():
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    if not request.model.strip() or not request.effort.strip() or request.minutes < 1:
-        return Failed("refused", "choices", "--model and --effort must not be blank and --minutes must be at least 1")
-    return None
+    if not request.model.strip() or not request.effort.strip():
+        return Failed("refused", "choices", "--model and --effort must not be blank")
+    return minutes_refused(request.minutes)
 
 
 class _Log:

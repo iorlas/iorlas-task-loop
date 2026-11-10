@@ -53,7 +53,8 @@ ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then e
           "in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
           "no candidate is tried, so a wrong --checkout is refused only once a slot frees.")
 GUIDE = {
-    "start": "Re-run `tl plan start` to relaunch its entry (each `tl plan next` round relaunches it until its deadline). "
+    "start": "Re-run `tl plan start` to relaunch its entry (each `tl plan next` round relaunches it until its deadline; an "
+    "entry registered before a reboot is relaunched with its deadline renewed from --minutes, once per reboot). "
     "If the last entry says `claim_lost`, the tracker claim is gone (reverted, taken by another actor, or the task closed): "
     "check `bd show <task>`; relaunching cannot help and nothing retakes the claim. `tl plan release --abandon` (its claim "
     "answers `not_held`), then `tl plan start` to plan the task again.",
@@ -70,7 +71,8 @@ GUIDE = {
     "done": "Collected: `succeeded` tells whether the plan was verified.",
     "unknown": "The entry or the store could not be read; run `tl plan show` again.",
     "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl plan start` plans it "
-    "again.",
+    "again. Its deadline passed with no relaunchable entry from before a reboot (none registered, one from this boot, or "
+    "the boot unknown); such an entry would instead be relaunched with the deadline renewed once from --minutes.",
     "failed": "The step ended without a verified plan; the claim stays held, so rounds never retry it. Read `tl plan show`; "
     "to plan it again, `tl plan release --abandon` then `tl plan start`.",
     "running": "Its entry runs; the round leaves it alone.",

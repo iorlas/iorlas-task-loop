@@ -106,7 +106,7 @@ class Admission:
 
 
 class Launcher:
-    def launch(self, backlog: str, task_id: str) -> LaunchResult:
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         return Launched(KEY, ENTRY)
 
 

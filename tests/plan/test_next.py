@@ -32,6 +32,7 @@ from taskloop.slot_lock import custody, hold
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
+BEFORE_REBOOT = (7, "entry-start", "old-boot")  # registered in another boot than the bench's "boot"
 HEAD, X = "d" * 40, "x" * 40
 REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "effort-e", 30)
 LINE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks (\S+ )?(start|relaunch|repeat|verify|publish|report|skip|round)( \S+)+")
@@ -61,10 +62,12 @@ class Launcher:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.minutes: list[int] = []
         self.results: dict[str, LaunchResult] = {}
 
-    def launch(self, backlog: str, task_id: str) -> LaunchResult:
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         self.calls.append(task_id)
+        self.minutes.append(minutes)
         return self.results.get(task_id, Launched(KEY, ENTRY))
 
 
@@ -131,7 +134,7 @@ class Bench:
         return self.left
 
     def ports(self) -> Advancing:
-        reads = Reads(self.store, self.observe, lambda: self.now, self.leftovers)
+        reads = Reads(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
         starting = Starting(self.store, self.admission, self.launcher, lambda: self.now, self.repeats)
         return Advancing(reads, starting, self.verifier, self.releaser, self.publisher, self.ready, self.log, self.stopping)
 
@@ -165,6 +168,8 @@ def moves(found: Round) -> list[tuple[str, str, str]]:
     ("admitted", ENTRY, "different_process", 10, None, ("relaunch", "relaunched"), 1),
     ("admitted", ENTRY, "matching", 10, None, ("report", "running"), 0),
     ("admitted", ENTRY, "gone", 200, None, ("report", "stuck:expired_admitted"), 0),
+    ("admitted", BEFORE_REBOOT, "different_process", 200, None, ("relaunch", "relaunched"), 1),
+    ("dispatching", BEFORE_REBOOT, "different_process", 200, None, ("report", "stuck:entry_lost"), 0),
     ("admitted", ENTRY, "unknown", 10, None, ("report", "unknown"), 0),
     ("dispatching", ENTRY, "gone", 10, None, ("report", "stuck:entry_lost"), 0),
     ("registered", ENTRY, "matching", 200, None, ("report", "stuck:hung"), 0),
@@ -182,7 +187,7 @@ def test_each_existing_attempt_by_its_next_word(
     bench.seen, bench.now = seen, now
     found = bench.round()
     assert moves(found) == ([] if expected is None else [("tl-1", *expected)])
-    assert bench.launcher.calls == ["tl-1"] * launched
+    assert (bench.launcher.calls, bench.launcher.minutes) == (["tl-1"] * launched, [30] * launched)
     assert bench.admission.requests == bench.repeats.calls == bench.recorded.calls == []
     assert exit_code(found) == (3 if expected == ("report", "unknown") else 0)
 
@@ -326,12 +331,16 @@ def test_a_failed_ready_read_stops_admission_but_settling_still_ran(
     assert bench.lines[-1].endswith(f" tasks round moves=1 stopped={stopped}")
 
 
-def test_an_empty_label_is_refused_before_any_read(factory: sqlite3.Connection) -> None:
+@pytest.mark.parametrize("label, minutes, reason", [(" ", 30, "label"), ("auto", 0, "choices"), ("auto", 7 * 24 * 60 + 1, "choices")])
+def test_an_empty_label_or_minutes_out_of_range_are_refused_before_any_read(
+    factory: sqlite3.Connection, label: str, minutes: int, reason: str
+) -> None:
+    seed(factory, "tl-1", "attempt", entry=ENTRY)
     ready = FakeTaskReadClient([bead("t-1")], ready=["t-1"])
     bench = Bench(factory, ready)
-    found = advance(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), " ", "m", "e", 30))
-    assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", "label") and exit_code(found) == 1
-    assert ready.ready_reads == [] and bench.lines == []
+    found = advance(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, "m", "e", minutes))
+    assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", reason) and exit_code(found) == 1
+    assert ready.ready_reads == [] and bench.lines == [] and bench.launcher.calls == []
 
 
 def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admits_nothing_new(factory: sqlite3.Connection) -> None:

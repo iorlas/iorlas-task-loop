@@ -67,7 +67,7 @@ class Admit(Protocol):
 
 
 class Launch(Protocol):
-    def launch(self, backlog: str, task_id: str) -> LaunchResult: ...
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult: ...
 
 
 class Verify(Protocol):
@@ -105,6 +105,7 @@ class Reads:
     observe: Observe
     clock: Clock
     leftovers: Leftovers
+    boot: Callable[[], str | None]  # this machine's boot id, None when unknown (then no attempt counts as rebooted)
 
 
 @dataclass(frozen=True)
@@ -295,10 +296,23 @@ def deadline_after(minutes: int, clock: Clock) -> float:
     return clock() + minutes * 60
 
 
+MAX_MINUTES = 7 * 24 * 60  # a week: an attempt's deadline (and a renewal after a reboot) from now, at most
+
+
+def minutes_refused(minutes: int) -> Failed | None:
+    """`--minutes` of `tl plan start`, `next` and `rounds`: from 1 to MAX_MINUTES, checked before any
+    store, tracker or launch call."""
+    ok = 1 <= minutes <= MAX_MINUTES
+    return None if ok else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
+
+
 def start(ports: Starting, request: StartRequest) -> Started | Failed:
     """An existing attempt is launched as admitted (no tracker read), a captured one repeated, a released one answered
     with its result; otherwise (none, or the current one abandoned) admit first. A refusal or unknown stops before the
     launch; a concurrent start that won (`task_attempted`) is launched as existing."""
+    refused = minutes_refused(request.minutes)
+    if refused is not None:
+        return refused
     try:
         found = _current(ports, request)
         if isinstance(found, (Started, Failed)):
@@ -311,7 +325,8 @@ def start(ports: Starting, request: StartRequest) -> Started | Failed:
     key, existing = target
     if found is not None and found[1] == "captured":  # the step ran: repeat it when its leftovers are repeatable
         return ports.repeat.repeat(request.backlog, request.task_id, key, found[2], request.minutes)
-    result = launched(ports.launcher.launch(request.backlog, request.task_id), request.backlog, request.task_id, key, existing=existing)
+    outcome = ports.launcher.launch(request.backlog, request.task_id, request.minutes)
+    result = launched(outcome, request.backlog, request.task_id, key, existing=existing)
     return replace(result, admitted=True) if isinstance(result, Failed) and not existing else result
 
 
@@ -360,15 +375,16 @@ def launched(result: LaunchResult, backlog: str, task_id: str, key: AttemptKey, 
             return Failed("uncertain", "launch", "The registered entry may run; `tl plan show` observes it")
 
 
-def next_step(phase: str, entry: EntryState, result: AttemptResult, passed: bool) -> Next:
-    """What a person does next, from the phase, the entry observation, the collected result and the deadline."""
+def next_step(phase: str, entry: EntryState, result: AttemptResult, passed: bool, *, rebooted: bool = False) -> Next:
+    """What a person does next, from the phase, the entry observation, the collected result and the deadline.
+    `rebooted`: the registered entry is from another boot, so its relaunch renews the deadline (`register_entry`)."""
     if entry == "unknown" or result.status in ("unavailable", "refused"):
         return "unknown"
     if result.status == "collected":
         return "done"
     if entry == "running":
         return "stuck:hung" if passed else "wait"
-    return _stopped(phase, result, passed)
+    return _stopped(phase, result, passed and not rebooted)
 
 
 def _stopped(phase: str, result: AttemptResult, passed: bool) -> Next:
@@ -391,7 +407,8 @@ def _status(reads: Reads, row: AttemptRow, *, probe: bool = True) -> AttemptStat
         entry = "running" if seen == "matching" else seen
     result = collect(reads.store, row.key)
     passed = reads.clock() >= row.deadline
-    step = _released(row, next_step(row.phase, entry, result, passed), succeeded(result))
+    rebooted = row.entry is not None and reads.boot() not in (None, row.entry[2])
+    step = _released(row, next_step(row.phase, entry, result, passed, rebooted=rebooted), succeeded(result))
     found = (row.backlog, row.task_id, row.key.attempt_id, row.slot, row.phase)
     left = reads.leftovers(row.key) if probe and step == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)

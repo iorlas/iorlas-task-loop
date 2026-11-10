@@ -61,7 +61,7 @@ class Launches:
     def __init__(self, store: PlanStore) -> None:
         self.store = store
 
-    def launch(self, backlog: str, task_id: str) -> LaunchResult:
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         found = self.store.attempt_of(backlog, task_id)
         assert found is not None and self.store.register_entry(found[0], SECOND, 10) == "accepted"
         return Launched(found[0], SECOND)

@@ -133,7 +133,7 @@ class Admits:
 
 
 class NoLaunch:
-    def launch(self, backlog: str, task_id: str) -> NoReturn:
+    def launch(self, backlog: str, task_id: str, minutes: int) -> NoReturn:
         raise AssertionError(f"nothing launches for {backlog}/{task_id}")
 
 
