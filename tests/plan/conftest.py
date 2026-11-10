@@ -140,6 +140,13 @@ def slot_files(repo: FakeRepo) -> FakeSlotFiles:
     return FakeSlotFiles(repo)
 
 
+def head(slot: FakeWorktree) -> str:
+    """The slot's HEAD as Git lists it: for a freshly added slot, its admission base D."""
+    found = next(worktree.head for worktree in slot.repo.worktrees() if worktree.path == slot.path)
+    assert found is not None
+    return found
+
+
 @pytest.fixture
 def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
     """`<tmp>/factory.db` holding one admitted, unregistered attempt (deadline 100) on `slot` and its held reservation;
@@ -154,10 +161,10 @@ def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
         con.execute(
             """INSERT INTO plan_attempt
             (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,sandbox,deadline,number)
+             schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,1)""",
-            (repo_id, hashlib.sha256(text.encode()).hexdigest()),
+            'workspace-write',100,1,1,?)""",
+            (repo_id, hashlib.sha256(text.encode()).hexdigest(), head(slot)),
         )
     con.close()
     (tmp_path / "input.txt").write_text(text)
@@ -174,10 +181,10 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
         factory.execute(
             """INSERT INTO plan_attempt
             (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number)
+             schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,7,'entry-start','boot',1)""",
-            (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest()),
+            'workspace-write',100,7,'entry-start','boot',1,1,?)""",
+            (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text("Plan the actual task")
     return factory

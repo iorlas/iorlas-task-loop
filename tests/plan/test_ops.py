@@ -20,14 +20,15 @@ from taskloop.plan_admit import AdmitRefused, AdmitRequest, AdmitResult, Admitte
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import AlreadyRunning, Entry, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.plan_ops import (
+    UNCLAIMING,
     Adoption,
+    AttemptStatus,
     Checked,
     EntryState,
     Failed,
     Listed,
     Next,
     Reads,
-    Seen,
     Shown,
     Started,
     Starting,
@@ -39,6 +40,7 @@ from taskloop.plan_ops import (
     status,
     verify_task,
 )
+from taskloop.plan_release import NotReleased, PlanRelease, Released, ReleaseResult
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import (
@@ -47,6 +49,7 @@ from taskloop.plan_types import (
     Checkouts,
     NotApplicable,
     Rejected,
+    Seen,
     SlotFiles,
     Unsettled,
     Verified,
@@ -55,7 +58,7 @@ from taskloop.plan_types import (
     VerifyUnavailable,
 )
 from taskloop.plan_verifier import PlanVerifier
-from taskloop.slot_lock import hold
+from taskloop.slot_lock import custody, hold
 from taskloop.slots import Adopted, SlotView
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -95,6 +98,25 @@ class Repeats:
         self.calls.append((backlog, task_id, current, entry, minutes))
         assert self.result is not None, "only a captured attempt repeats"
         return self.result
+
+
+PARKED = Released("s1", "d" * 40, True, "kept", False)
+
+
+class Releases:
+    """The release port: records each call."""
+
+    def __init__(self, result: ReleaseResult = PARKED) -> None:
+        self.result, self.calls = result, list[tuple[AttemptKey, bool]]()
+
+    def release(self, key: AttemptKey, abandon: bool, me: Entry | None = None) -> ReleaseResult:
+        self.calls.append((key, abandon))
+        return self.result
+
+
+def releaser(store: PlanStore, checkouts: Checkouts, slot_files: SlotFiles) -> PlanRelease:
+    """The real release over the fakes: the entry gone, the agent gone, the real slot lock, a claim that returns."""
+    return PlanRelease(store, checkouts, slot_files, lambda _entry: "gone", gone, custody, lambda _root, _task: True, lambda: 30)
 
 
 class Verifier:
@@ -286,9 +308,9 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: PlanStore, now: flo
 
 
 @pytest.mark.parametrize("verdict, expected", [
-    (Verified("blob"), Checked("verified", "tasks", "tl-1", "attempt")),
-    (Verified("blob", reused=True), Checked("reused", "tasks", "tl-1", "attempt")),
-    (Rejected("paths"), Failed("rejected", "paths")),
+    (Verified("blob"), Checked("verified", "tasks", "tl-1", "attempt", "released")),
+    (Verified("blob", reused=True), Checked("reused", "tasks", "tl-1", "attempt", "released")),
+    (Rejected("paths"), Failed("rejected", "paths", "Release: released")),
     (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
     (VerifyRefused("session"), Failed("refused", "session")),
     (Unsettled("dirty"), Failed("unsettled", "dirty")),
@@ -296,11 +318,12 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: PlanStore, now: flo
     (VerifyUnavailable("inconsistent"), Failed("defect", "inconsistent")),
 ])
 def test_verify_maps_every_verdict(reader: PlanStore, verdict: VerifyResult, expected: Checked | Failed) -> None:
-    verifier = Verifier(verdict)
-    assert verify_task(reader, verifier, "tasks", "tl-1") == expected
+    verifier, releases = Verifier(verdict), Releases()
+    assert verify_task(reader, verifier, releases, "tasks", "tl-1") == expected
     assert verifier.keys == [KEY]
+    assert releases.calls == ([(KEY, False)] if isinstance(verdict, (Verified, Rejected)) else [])  # only after a verdict, settled
     absent = Verifier(verdict)
-    assert verify_task(reader, absent, "tasks", "tl-9") == Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
+    assert verify_task(reader, absent, releases, "tasks", "tl-9") == Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
     assert absent.keys == []
 
 
@@ -318,8 +341,9 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     store = PlanStore(lambda: registered)
     attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, gone, lambda: 20, hold), "tasks", "tl-1")
-    assert first == Checked("verified", "tasks", "tl-1", "attempt")
+    releasing = releaser(store, checkouts, slot_files)
+    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, gone, lambda: 20, hold), releasing, "tasks", "tl-1")
+    assert first == Checked("verified", "tasks", "tl-1", "attempt", "released") and slot.branch() is None
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
 
@@ -327,7 +351,8 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         opened.append(where)
         return checkouts(where)
 
-    assert verify_task(store, PlanVerifier(store, counted, slot_files, gone, lambda: 20, hold), "tasks", "tl-1") == first
+    again = releaser(store, counted, slot_files)  # already released: nothing pending, no Git
+    assert verify_task(store, PlanVerifier(store, counted, slot_files, gone, lambda: 20, hold), again, "tasks", "tl-1") == first
     assert opened == []
 
 
@@ -350,7 +375,8 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     reads = Reads(store, observe("gone", []), lambda: 10, verifier.leftovers)
     before = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.status.next, before.status.leftovers) == ("verify", ())  # nothing committed yet
-    assert verify_task(store, verifier, "tasks", "tl-1") == Failed("unsettled", "uncommitted", f"?? {stray}")  # as show lists it
+    left = Failed("unsettled", "uncommitted", f"?? {stray}")  # as show lists it
+    assert verify_task(store, verifier, Releases(), "tasks", "tl-1") == left
     shown = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown) and shown.status.next == "repeat"
     assert (shown.status.result.status, shown.status.result.reason) == ("pending", "repeat")
@@ -395,7 +421,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     assert verifier.leftovers(KEY) == Unsettled("branch")
     off = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(off, Shown) and (off.status.next, off.status.leftovers) == ("verify", ())
-    assert verify_task(store, verifier, "tasks", "tl-1") == Failed("unsettled", "branch")
+    assert verify_task(store, verifier, Releases(), "tasks", "tl-1") == Failed("unsettled", "branch")
 
 
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
@@ -410,7 +436,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 7])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 8])
 def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
@@ -454,8 +480,8 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(tmp_pat
     assert database.exists()
 
 
-# the entry's longest line: a retried publication, its collected outcome, the verify word and the claim word
-LONGEST = "unavailable evidence publish=accepted then=collected:verified verify=unavailable:git claim=unrenewed"
+# the entry's longest line: a retried publication, its collected outcome, the verify, claim and release words
+LONGEST = "unavailable evidence publish=accepted then=collected:verified verify=unavailable:git claim=unrenewed release=held:slot_dirty"
 
 
 @pytest.mark.parametrize(("tail", "expected"), [
@@ -475,3 +501,76 @@ LONGEST = "unavailable evidence publish=accepted then=collected:verified verify=
 ])
 def test_only_a_line_of_the_entrys_fixed_words_is_shown(tail: str | None, expected: str | None) -> None:
     assert last_entry(tail) == expected
+
+
+def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_after_an_abandon(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    """A failed run's leftovers keep the slot held (`release`); once tidied and released it is `done`, and `start` answers
+    with its result without a launch or a repeat; abandoned, it is `start` again, and `start` admits a fresh attempt."""
+
+    def failed(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
+        slot.write_file("docs/design/tl-1/x.md", "x")
+        worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
+        return FakeRun(RunOutcome(rc=1, worker=worker, summary=Summary(text="", rc=1, stands=True)))(harness, spec, timeout, hooks)
+
+    store = PlanStore(lambda: registered)
+    attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), failed, lambda: 10, checkouts, slot_files)
+    assert attempts.execute(KEY, ENTRY).status == "collected"
+    reads = Reads(store, observe("gone", []), lambda: 10, nothing_left)
+
+    def shown() -> AttemptStatus:
+        found = status(reads, tmp_path / "art", "tasks", "tl-1")
+        assert isinstance(found, Shown)
+        return found.status
+
+    assert shown().next == "release"
+    held = releaser(store, checkouts, slot_files).release(KEY, False)
+    assert isinstance(held, NotReleased) and held.reason == "slot_dirty" and shown().next == "release"
+    slot.remove_file("docs/design/tl-1/x.md")
+    assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
+    assert (shown().next, shown().release is not None) == ("done", True)
+    launcher, repeats = Launcher(Launched(KEY, ENTRY)), Repeats()
+    ports = Starting(store, Admission(AdmitRefused("task")), launcher, lambda: 10, repeats)
+    answered = start(ports, REQUEST)
+    assert answered == Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="run:worker_failed")
+    assert (launcher.calls, repeats.calls) == ([], [])
+    assert isinstance(releaser(store, checkouts, slot_files).release(KEY, True), Released)
+    abandoned = shown()
+    assert abandoned.next == "start" and abandoned.release is not None and abandoned.release.abandoned
+    fresh = AttemptKey("fresh", "token", 2)
+    admission = Admission(Admitted(fresh, "s1"))
+    assert start(Starting(store, admission, Launcher(Launched(fresh, ENTRY)), lambda: 10, repeats), REQUEST) == Started(
+        "started", "tasks", "tl-1", "fresh", False, ENTRY
+    )
+    assert len(admission.requests) == 1
+
+
+def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_abandoned_one(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree
+) -> None:
+    registered.execute("INSERT INTO plan_release SELECT attempt_id,dispatch_token,generation,slot_head,5,1,'unclaimed' FROM plan_attempt")
+    registered.execute("UPDATE reservation SET attempt_id='fresh',generation=2")
+    registered.execute(
+        """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
+        input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+        SELECT 'fresh','token',2,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,
+        sandbox,deadline,1,2,slot_head FROM plan_attempt WHERE attempt_id='attempt'"""
+    )
+    reads = Reads(PlanStore(lambda: registered), observe("gone", []), lambda: 10, nothing_left)
+    listed = attempts_status(reads)
+    assert isinstance(listed, Listed) and [(each.attempt_id, each.seq, each.next) for each in listed.attempts] == [("fresh", 2, "start")]
+    found = status(reads, tmp_path / "art", "tasks", "tl-1")
+    assert isinstance(found, Shown) and (found.status.attempt_id, found.status.earlier) == ("fresh", (("attempt", "abandoned"),))
+    assert found.status.release is None and found.status.number == 1
+
+
+def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refuses(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    registered.execute("DELETE FROM reservation")
+    registered.execute("INSERT INTO plan_release SELECT attempt_id,dispatch_token,generation,slot_head,5,1,'unclaiming' FROM plan_attempt")
+    store = PlanStore(lambda: registered)
+    found = status(Reads(store, observe("gone", []), lambda: 10, nothing_left), tmp_path / "art", "tasks", "tl-1")
+    assert isinstance(found, Shown) and found.status.next == "release"
+    admission, launcher = Admission(Admitted(AttemptKey("fresh", "token", 2), "s1")), Launcher(Launched(KEY, ENTRY))
+    assert start(Starting(store, admission, launcher, lambda: 10, Repeats()), REQUEST) == Failed("refused", "release", UNCLAIMING)
+    assert (admission.requests, launcher.calls) == ([], [])

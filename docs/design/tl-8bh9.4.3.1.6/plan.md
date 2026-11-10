@@ -213,6 +213,18 @@ registered now as placeholders that refuse `deferred` (exit 1) and print the ste
    "taskloop")` outside it; a failed unclaim is reported and retried, never forced.
 5. **Slot state**: dirty, branched or unknown slots stay held (quarantined) for the owner; release never resets work.
 
+**Built by [.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md) (2026-11-10).** The placeholders are gone (hard cut, no alias:
+both now exit 2). One verb replaces them: `tl plan release TASK --backlog B [--abandon]`. Settled (the step's result
+collected) parks the slot at its admission base D and keeps the claim; the entry and `tl plan verify` run it themselves
+after a final result. `--abandon` works in any phase once the stop proof holds and returns the claim (fenced unclaim);
+`tl plan start` then admits a fresh attempt. Points 1 to 5 as built: (1) the stop proof is the registered entry's
+identity plus `worker_gone` (owner Q2: no descendant concept; `dispatching` with no agent recorded refuses
+`worker_unknown`); (2) the slot's lock is taken after the proof, never as the proof; (3) schema v7 adds `plan_release`
+(the ending, with `abandoned` and the claim's state), `seq` (task order; the key is `(adapter, backlog, task_id, seq)`),
+`slot_head` (D) and the monotonic `slot.generation`; `reservation` gets its one DELETE writer, `plan_release.py`;
+(4) the order is as stated; (5) dirty, staged, other-branch, redirected and unborn slots are refused and stay held. Each
+`stuck:*` guide now ends with `tl plan release --abandon`; the whole-DB discard is retitled "Last resort".
+
 ## 9. Failure table
 
 | Situation | Stored | Result | Next |

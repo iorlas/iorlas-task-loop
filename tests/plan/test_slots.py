@@ -13,7 +13,7 @@ from taskloop.composition import open_plan_attempts
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_types import AttemptKey
 from taskloop.repo import RepoId
-from taskloop.slots import Adopted, NotAdopted, SlotsUnavailable, SlotView, Unknown, adopt, observe, slot_names
+from taskloop.slots import Adopted, NotAdopted, SlotsUnavailable, SlotView, Unclean, adopt, observe, slot_names
 
 
 def derived(repo: FakeRepo, root: Path, name: str) -> Path:
@@ -36,6 +36,11 @@ def rid(repo: FakeRepo) -> RepoId:
 
 def unavailable(*, with_dirty: bool = False) -> tuple[WorktreeInfo, ...]:
     raise GitUnavailable("git exited 128")
+
+
+def unlocked(_cwd: str) -> bool:
+    """The free rule's lock probe: no other holder."""
+    return True
 
 
 def test_slot_names_are_s1_to_sn_and_need_one() -> None:
@@ -67,7 +72,7 @@ def test_listed_clean_linked_worktree_is_adopted_once(factory: sqlite3.Connectio
     ],
 )
 def test_unusable_worktree_is_refused_with_its_reason(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, monkeypatch: pytest.MonkeyPatch, reason: str, expected: Unknown
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, monkeypatch: pytest.MonkeyPatch, reason: str, expected: Unclean
 ) -> None:
     path = derived(repo, root, "s1")
     if reason == "elsewhere":
@@ -101,7 +106,7 @@ def test_adopt_refuses_without_a_current_store(factory: sqlite3.Connection, repo
 
 def test_without_a_slot_row_a_clean_derived_worktree_is_no_slot(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
     add(repo, root, "s1")  # after a DB discard: the worktree is there, its provenance is not
-    assert observe(factory, repo, rid(repo)) == ()
+    assert observe(factory, repo, rid(repo), unlocked) == ()
 
 
 def test_observe_reports_free_held_and_unknown_lowest_first(
@@ -115,13 +120,13 @@ def test_observe_reports_free_held_and_unknown_lowest_first(
     repo.worktree(derived(repo, root, "s3")).write_file("scratch", "x")
     repo.drop_worktree(derived(repo, root, "s4"))
     repo.drop_checkout(derived(repo, root, "s5"))
-    views = observe(factory, repo, rid(repo))
+    views = observe(factory, repo, rid(repo), unlocked)
     assert [view.name for view in views] == list(names)
     assert views[0] == SlotView("s1", derived(repo, root, "s1"), "free")
     assert views[1] == SlotView("s2", derived(repo, root, "s2"), "held", attempt_id="a")
     assert [(v.state, v.reason) for v in views[2:5]] == [("unknown", "dirty"), ("unknown", "not_listed"), ("unknown", "git_unavailable")]
     monkeypatch.setattr(repo, "worktrees", unavailable)
-    after = observe(factory, repo, rid(repo))
+    after = observe(factory, repo, rid(repo), unlocked)
     assert after[1].state == "held" and {(v.state, v.reason) for v in after if v.name != "s2"} == {("unknown", "git_unavailable")}
 
 
@@ -132,17 +137,17 @@ def test_main_checkout_at_a_slot_path_is_never_free(
     adopted(factory, repo, root, 1)
     path = derived(repo, root, "s1")
     monkeypatch.setattr(repo, "worktrees", lambda *, with_dirty=False: (WorktreeInfo(path, None, "main", True, None),))
-    assert observe(factory, repo, rid(repo)) == (SlotView("s1", path, "unknown", "main"),)
+    assert observe(factory, repo, rid(repo), unlocked) == (SlotView("s1", path, "unknown", "main"),)
 
 
 def test_store_failure_never_shows_a_free_slot(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
     add(repo, root, "s1")
     adopted(factory, repo, root, 1)
     factory.execute("DROP TABLE reservation")
-    assert observe(factory, repo, rid(repo)) == (SlotView("s1", derived(repo, root, "s1"), "unknown", "store_unavailable"),)
+    assert observe(factory, repo, rid(repo), unlocked) == (SlotView("s1", derived(repo, root, "s1"), "unknown", "store_unavailable"),)
     factory.execute("DROP TABLE slot")
     with pytest.raises(SlotsUnavailable):
-        observe(factory, repo, rid(repo))
+        observe(factory, repo, rid(repo), unlocked)
 
 
 def test_two_repos_each_have_their_own_s1(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
@@ -153,8 +158,8 @@ def test_two_repos_each_have_their_own_s1(factory: sqlite3.Connection, repo: Fak
         add(each, root, "s1")
         assert adopted(factory, each, root, 1) == (Adopted("s1", derived(each, root, "s1")),)
     factory.execute("INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES ('s1',?,?,1,'a')", (rid(repo), "x"))
-    assert observe(factory, repo, rid(repo))[0].state == "held"
-    assert observe(factory, other, rid(other))[0].state == "free"
+    assert observe(factory, repo, rid(repo), unlocked)[0].state == "held"
+    assert observe(factory, other, rid(other), unlocked)[0].state == "free"
 
 
 def test_v1_factory_database_is_refused_loudly(tmp_path: Path) -> None:
@@ -208,3 +213,34 @@ def test_nothing_pending_takes_no_write_lock(factory: sqlite3.Connection, repo: 
     assert adopt(lambda: factory, begin, repo, root, 2) == (Adopted("s1", s1), NotAdopted("s2", "not_listed", s2))
     assert taken == []
 
+
+
+@pytest.mark.parametrize(("lock", "reason"), [(False, "locked"), (None, "lock_unavailable")])
+def test_a_free_looking_slot_whose_lock_is_held_or_unknown_is_never_free(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, lock: bool | None, reason: str
+) -> None:
+    """A release still parking it holds the lock: admission must not reserve it. Held slots are never probed."""
+    add(repo, root, "s1", "s2")
+    adopted(factory, repo, root, 2)
+    factory.execute("INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES ('s2',?,?,1,'a')", (rid(repo), "x"))
+    probed: list[str] = []
+
+    def probe(cwd: str) -> bool | None:
+        probed.append(cwd)
+        return lock
+
+    views = observe(factory, repo, rid(repo), probe)
+    assert [(view.state, view.reason) for view in views] == [("unknown", reason), ("held", None)]
+    assert probed == [str(derived(repo, root, "s1"))]
+
+
+def test_a_slot_reserved_while_it_was_probed_is_held_not_free(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
+    """The reservation is read again after the probe: a concurrent admission that reserved the slot meanwhile wins."""
+    add(repo, root, "s1")
+    adopted(factory, repo, root, 1)
+
+    def probe(_cwd: str) -> bool:
+        factory.execute("INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES ('s1',?,?,1,'won')", (rid(repo), "x"))
+        return True
+
+    assert observe(factory, repo, rid(repo), probe) == (SlotView("s1", derived(repo, root, "s1"), "held", attempt_id="won"),)

@@ -17,6 +17,8 @@ DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
 type Checkouts = Callable[[Path], Repo]  # a fresh Git view from one checkout path
 # The registered worker and its process group observed gone (True), or alive/unknown (False); never descendant proof.
 type WorkerGone = Callable[[Worker], bool]
+type Seen = Literal["matching", "gone", "different_process", "unknown"]
+type Observe = Callable[[tuple[int, str, str]], Seen]  # a native process-table read of a registered entry; no spawn or signal
 TRAILER: Final = "Task-Loop-Attempt"  # the factory's commit trailer; an agent's message may never carry it
 PLAN_NAME: Final = "plan.md"
 MiB: Final = 1 << 20

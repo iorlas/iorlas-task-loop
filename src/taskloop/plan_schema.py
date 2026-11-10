@@ -5,12 +5,13 @@ import sqlite3
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=6,
+    version=7,
     name="factory",
     steps={},
     ddl="""
 CREATE TABLE slot (
  repo_id TEXT NOT NULL, name TEXT NOT NULL, cwd TEXT NOT NULL,
+ generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
  PRIMARY KEY (repo_id, name)
 );
 CREATE TABLE reservation (
@@ -30,12 +31,13 @@ CREATE TABLE plan_attempt (
  session_ref TEXT, session_conflict INTEGER NOT NULL DEFAULT 0 CHECK(session_conflict IN (0,1)),
  base_commit TEXT CHECK(base_commit IS NULL OR length(base_commit) IN (40,64)),
  plan_commit TEXT CHECK(plan_commit IS NULL OR length(plan_commit) IN (40,64)),
- number INTEGER NOT NULL CHECK(number >= 1),
+ number INTEGER NOT NULL CHECK(number >= 1), seq INTEGER NOT NULL CHECK(seq >= 1),
+ slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),
  previous_attempt_id TEXT UNIQUE REFERENCES plan_attempt(attempt_id),
  repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored')),
  CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(plan_commit IS NULL OR phase='captured'),
- UNIQUE(adapter, backlog, task_id, number)
+ UNIQUE(adapter, backlog, task_id, seq)
 );
 CREATE TABLE plan_execution (
  attempt_id TEXT PRIMARY KEY REFERENCES plan_attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
@@ -55,6 +57,13 @@ CREATE TABLE plan_verification (
  reused INTEGER NOT NULL DEFAULT 0 CHECK(reused IN (0,1)), CHECK(reused=0 OR verdict='verified'),
  CHECK((verdict='verified') = (reason IS NULL)), CHECK((verdict='verified') = (plan_blob IS NOT NULL))
 );
+CREATE TABLE plan_release (
+ attempt_id TEXT PRIMARY KEY REFERENCES plan_attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
+ head TEXT NOT NULL CHECK(length(head) IN (40,64)), released_at REAL NOT NULL,
+ abandoned INTEGER NOT NULL DEFAULT 0 CHECK(abandoned IN (0,1)),
+ claim TEXT NOT NULL CHECK(claim IN ('kept','unclaiming','unclaimed','not_held')),
+ CHECK((abandoned = 0) = (claim = 'kept'))
+);
 """,
 )
 
@@ -62,7 +71,7 @@ SLOT = "repo_id,name,cwd"
 RESERVATION = "slot,repo_id,cwd,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason"
+    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
@@ -76,6 +85,7 @@ FACTS = (
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
 ANSWER = "answer_kind,disposition,plan_path,commit_paths,commit_message,publication"
 VERDICT = "verdict,reason,plan_blob,reused"
+RELEASE = "attempt_id,dispatch_token,generation,head,released_at,abandoned,claim"
 
 
 def marks(columns: str) -> str:

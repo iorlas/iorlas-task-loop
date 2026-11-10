@@ -28,7 +28,7 @@ from taskloop.plan_repeat import PlanRepeat
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import AttemptKey, Unsettled, Verified
 from taskloop.plan_verifier import PlanVerifier
-from taskloop.slot_lock import hold
+from taskloop.slot_lock import hold, repeating
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -84,10 +84,10 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
         factory.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (checkouts(main).identity().key, str(slot)))
         factory.execute(
             """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number)
+            input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high','workspace-write',100,
-            7,'entry-start','boot',1)""",
-            (checkouts(main).identity().key, hashlib.sha256(TASK.encode()).hexdigest()),
+            7,'entry-start','boot',1,1,?)""",
+            (checkouts(main).identity().key, hashlib.sha256(TASK.encode()).hexdigest(), base),
         )
     art.mkdir()
     (art / "input.txt").write_text(TASK)
@@ -100,8 +100,9 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     assert attempts(agent(slot, {P: "# Plan\n", "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
-    admission = PlanAdmission(lambda: factory, begin_immediate, PlanFiles(art), never, never, never, never, lambda: 10)
-    repeat = PlanRepeat(store, verifier, PlanFiles(art), admission, Launches(store), lambda _w: True, lambda _e: "gone", lambda: 10)
+    admission = PlanAdmission(lambda: factory, begin_immediate, PlanFiles(art), never, never, never, never, lambda: 10, never)
+    repeat = PlanRepeat(store, verifier, PlanFiles(art), admission, Launches(store), lambda _w: True, lambda _e: "gone", lambda: 10,
+                        repeating)
     started = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(started, Started) and started.status == "repeated"
     found = store.attempt_of("tasks", "tl-1")

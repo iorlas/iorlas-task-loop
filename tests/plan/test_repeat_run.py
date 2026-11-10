@@ -41,7 +41,7 @@ from taskloop.plan_types import (
 )
 from taskloop.plan_verifier import PlanVerifier
 from taskloop.plan_verify import judge
-from taskloop.slot_lock import hold
+from taskloop.slot_lock import hold, repeating
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -118,13 +118,13 @@ class Step:
         def never(*_args: object) -> NoReturn:
             raise AssertionError("a repeat reads no tracker and claims nothing")
 
-        return PlanAdmission(lambda: self.con, begin_immediate, PlanFiles(self.tmp), never, never, never, never, lambda: 10)
+        return PlanAdmission(lambda: self.con, begin_immediate, PlanFiles(self.tmp), never, never, never, never, lambda: 10, never)
 
     def repeat(self, current: AttemptKey) -> Started | Failed:
         found = self.store.attempt_of("tasks", "tl-1")
         assert found is not None and found[0] == current
         repeat = PlanRepeat(self.store, self.verifier, PlanFiles(self.tmp), self.admission(), self.launcher, lambda _worker: True,
-                            lambda _entry: "gone", lambda: 10)
+                            lambda _entry: "gone", lambda: 10, repeating)
         return repeat.repeat("tasks", "tl-1", current, found[2], 30)
 
     def next_attempt(self, current: AttemptKey) -> tuple[AttemptKey, tuple[int, str, str]]:
@@ -416,7 +416,7 @@ def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: Fa
     taken = step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted"))
     assert isinstance(taken, Admitted)
     repeat = PlanRepeat(step.store, step.verifier, PlanFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10)
+                        lambda _entry: "gone", lambda: 10, repeating)
     found = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)  # its read of the current attempt predates the takeover
     assert found == Started("relaunched", "tasks", "tl-1", taken.key.attempt_id, True, (8, "start", "boot"))
     assert step.con.execute("SELECT count(*) FROM plan_attempt").fetchone() == (2,)
@@ -437,7 +437,7 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
             return step.verifier.staged(key)
 
     repeat = PlanRepeat(step.store, Racing(), PlanFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10)
+                        lambda _entry: "gone", lambda: 10, repeating)
     assert repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Started("relaunched", "tasks", "tl-1", taken[0].attempt_id, True,
                                                                       (8, "start", "boot"))
 

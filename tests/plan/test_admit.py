@@ -20,9 +20,11 @@ from taskloop.composition import BD_DISCOVERY, adopt_slots, open_plan_admission,
 from taskloop.plan import PlanAttempts
 from taskloop.plan_admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, PlanAdmission
 from taskloop.plan_files import PlanFiles
+from taskloop.plan_release import NotReleased, PlanRelease, Released
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore, StoreRefused
 from taskloop.plan_types import AttemptKey, Checkouts, FileRef, SlotFiles
+from taskloop.slot_lock import custody
 from taskloop.slots import adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
@@ -98,10 +100,15 @@ def time() -> float:
     return 10
 
 
+def unlocked(_cwd: str) -> bool:
+    """The free rule's lock probe: no other holder."""
+    return True
+
+
 def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, *repos: FakeRepo) -> PlanAdmission:
     by_path = {repo.path: repo for repo in repos}
     return PlanAdmission(
-        lambda: con, begin_immediate, tracker.files, tasks, by_path.__getitem__, tracker.claim, tracker.unclaim, time
+        lambda: con, begin_immediate, tracker.files, tasks, by_path.__getitem__, tracker.claim, tracker.unclaim, time, unlocked
     )
 
 
@@ -470,3 +477,81 @@ def test_bd_location_overrides_are_dropped_so_the_tracker_root_decides() -> None
     environ = {"BEADS_DIR": "/elsewhere/.beads", "BEADS_DB": "/x", "BD_DB": "/y", "BEADS_ACTOR": "someone", "PATH": "/bin"}
     tracker_located(environ)
     assert environ == {"BEADS_ACTOR": "someone", "PATH": "/bin"} and set(BD_DISCOVERY) == {"BEADS_DIR", "BEADS_DB", "BD_DB"}
+
+
+def generations(con: sqlite3.Connection) -> list[tuple[object, ...]]:
+    return con.execute("SELECT name,generation FROM slot ORDER BY name").fetchall()
+
+
+def test_after_an_abandon_the_task_is_admitted_afresh_on_its_existing_branch_with_a_new_generation(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    slots(factory, repo, root, 2)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    first = admit(factory, tmp_path, repo, tracker)
+    assert isinstance(first, Admitted) and first.key.reservation_generation == 1 and generations(factory) == [("s1", 1), ("s2", 0)]
+    path = root.resolve() / repo.identity().key / "s1"
+    d = factory.execute("SELECT slot_head FROM plan_attempt").fetchone()[0]
+    repo.worktree(path).take_branch("task/tl-1", "HEAD", mode="resume")  # as its entry prepared it
+    release = PlanRelease(PlanStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody,
+                          tracker.unclaim, time)
+    assert release.release(first.key, True) == Released("s1", d, True, "unclaimed", True)
+    again = admit(factory, tmp_path, repo, tracker)
+    assert isinstance(again, Admitted) and again.slot == "s1" and again.key.reservation_generation == 2  # never reused
+    rows = factory.execute("SELECT attempt_id,number,seq,previous_attempt_id,slot_head FROM plan_attempt ORDER BY seq").fetchall()
+    assert rows == [(first.key.attempt_id, 1, 1, None, d), (again.key.attempt_id, 1, 2, None, d)]
+    assert generations(factory) == [("s1", 2), ("s2", 0)] and tracker.calls == ["claim:tl-1", "unclaim:tl-1", "claim:tl-1"]
+    assert factory.execute("SELECT generation,attempt_id FROM reservation").fetchall() == [(2, again.key.attempt_id)]
+    assert PlanStore(lambda: factory).attempt_of("tasks", "tl-1") == (again.key, "admitted", None)
+
+
+def test_a_settled_release_still_answers_the_task(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
+    slots(factory, repo, root, 2)
+    first = admit(factory, tmp_path, repo)
+    assert isinstance(first, Admitted)
+    factory.execute("DELETE FROM reservation")
+    factory.execute("INSERT INTO plan_release SELECT attempt_id,dispatch_token,generation,slot_head,1,0,'kept' FROM plan_attempt")
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    assert admit(factory, tmp_path, repo, tracker) == AdmitRefused("task_attempted") and tracker.calls == []
+    factory.execute("UPDATE plan_release SET abandoned=1,claim='unclaimed'")
+    assert isinstance(admit(factory, tmp_path, repo, tracker), Admitted)
+
+
+def test_a_slot_whose_counter_reached_the_new_generation_is_skipped(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+) -> None:
+    """Issued above every observed-free slot's counter; under the write lock a slot whose counter moved up meanwhile is
+    passed over for the next, so no generation is issued twice for a slot."""
+    slots(factory, repo, root, 2)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    tracker.during = lambda: factory.execute("UPDATE slot SET generation=1 WHERE name='s1'")
+    result = admit(factory, tmp_path, repo, tracker)
+    assert isinstance(result, Admitted) and (result.slot, result.key.reservation_generation) == ("s2", 1)
+    assert generations(factory) == [("s1", 1), ("s2", 1)]
+
+
+def test_an_abandon_still_returning_its_claim_keeps_the_task_attempted(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    """While the claim is `unclaiming`, a fresh admission would claim the task only for the abandon's own unclaim (now, or
+    on its retry) to take it back: it is refused `task_attempted` before any claim, during the unclaim and after a
+    failed one; once the claim is returned, the task is admitted afresh."""
+    slots(factory, repo, root, 1)
+    first = admit(factory, tmp_path, repo)
+    assert isinstance(first, Admitted)
+    raced: list[AdmitResult] = []
+    contender = Tracker(factory, tmp_path / "artifacts")
+
+    def unclaim(_root: str, _task: str) -> bool:  # a concurrent start admits while bd returns the claim
+        raced.append(admit(factory, tmp_path, repo, contender))
+        if len(raced) == 1:
+            raise BdError("timeout", "slow")
+        return True
+
+    release = PlanRelease(PlanStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody, unclaim, time)
+    failed = release.release(first.key, True)
+    assert isinstance(failed, NotReleased) and failed.detail.endswith("The reservation was removed, no Git write.")
+    assert admit(factory, tmp_path, repo, contender) == AdmitRefused("task_attempted")
+    assert release.release(first.key, True) == Released("s1", None, False, "unclaimed", True)
+    assert raced == [AdmitRefused("task_attempted")] * 2 and contender.calls == []
+    assert isinstance(admit(factory, tmp_path, repo, contender), Admitted) and contender.calls == ["claim:tl-1"]

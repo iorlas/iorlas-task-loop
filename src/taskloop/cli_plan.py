@@ -4,64 +4,71 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from taskloop import cli_composition, plan_ops
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.plan import succeeded
-from taskloop.plan_ops import Adoption, AttemptStatus, Checked, Failed, Listed, Result, Shown, Started, StartRequest
+from taskloop.plan_ops import UNCLAIMING, Adoption, AttemptStatus, Checked, Failed, Freed, Listed, Result, Shown, Started, StartRequest
+from taskloop.plan_release import Released
 from taskloop.plan_types import ATTEMPTS
 from taskloop.slots import Adopted
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
-ATTEMPT_ONLY = "attempt only: no publication or release"
+ATTEMPT_ONLY = "attempt only: no publication"
 COMMANDS = ("config", "slot", "plan")
-HELD = ("The slot and the tracker claim stay held; nothing here releases them. While a step runs its entry renews the claim's "
-        "bd lease every 100 s; between steps nothing does, so a `bd reclaim` run on that tracker can revert the claim once its "
-        "lease lapses: at the earliest about 5 minutes after a step ends (bd's default reclaim grace is 10 minutes, so about "
-        "15 minutes with a plain `bd reclaim`).")
+HELD = ("The tracker claim stays held, and the slot until the step ends on a clean slot (`tl plan release` frees a slot left "
+        "held; `--abandon` also returns the claim). While a step runs its entry renews the claim's bd lease every 100 s; between "
+        "steps nothing does, so a `bd reclaim` run on that tracker can revert the claim once its lease lapses: at the earliest "
+        "about 5 minutes after a step ends (bd's default reclaim grace is 10 minutes, so about 15 minutes with a plain `bd reclaim`).")
+ABANDON = "`tl plan release --abandon` frees the slot and gives the task back."
 GUIDE = {
     "start": "Re-run `tl plan start` to relaunch its entry. If the last entry says `claim_lost`, the tracker claim was taken "
     "back: check `bd show <task>`; re-claim it by hand as `taskloop` before `tl plan start`, or leave it.",
     "wait": "Its entry runs; wait, then `tl plan show` again.",
     "verify": "Run `tl plan verify`.",
     "repeat": "Run `tl plan start` again to repeat it with this listing as feedback, or remove the files and `tl plan verify`.",
-    "repeats_exhausted": "Repeated twice and still unsettled: inspect the slot, tidy it, then `tl plan verify`.",
+    "repeats_exhausted": "Repeated twice and still unsettled: inspect the slot, tidy it, then `tl plan verify` (which releases "
+    "the slot), or `tl plan release --abandon`.",
+    "release": "The step ended; its slot is still held. Remove the listed files if any, then `tl plan release`; `--abandon` also "
+    "gives the task back.",
+    "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl plan start` admits a fresh "
+    "attempt.",
     "done": "Collected: `succeeded` tells whether the plan was verified.",
     "unknown": "The entry or the store could not be read; run `tl plan show` again.",
-    "stuck:expired_admitted": "Nothing in the factory can release it. Leave it, or discard the whole factory.db.",
+    "stuck:expired_admitted": f"Nothing ran. {ABANDON}",
     "stuck:entry_lost": "The agent may still run: if `Worker` names a pid, check its cwd is the slot (`lsof -a -p <pid> -d cwd`) "
-    "and stop only its group (`kill -TERM -<pgid>`); then leave it, or discard the whole factory.db.",
+    f"and stop only its group (`kill -TERM -<pgid>`); then {ABANDON} With no `Worker` recorded it cannot be shown stopped: "
+    "only the whole-DB discard remains.",
     "stuck:hung": "Stop the worker first, the agent may keep editing the slot: check the `Worker` pid's cwd is the slot "
     "(`lsof -a -p <pid> -d cwd`), then `kill -TERM -<pgid>`. Then the entry: `ps -o command= -p <entry pid>` must show "
-    "taskloop.attempt_entry, then `kill -TERM <entry pid>`. Then `tl plan show` again.",
-    "stuck:unpublished": "The result is incomplete; keep the evidence; leave it, or discard the whole factory.db.",
-    "stuck:conflict": "The owner inspects the evidence; leave it, or discard the whole factory.db.",
+    f"taskloop.attempt_entry, then `kill -TERM <entry pid>`. Then {ABANDON}",
+    "stuck:unpublished": f"The result is incomplete; keep the evidence. {ABANDON}",
+    "stuck:conflict": f"The owner inspects the evidence; then {ABANDON}",
     "unsettled": "The slot has files the stage did not commit (listed), or the slot pointer or HEAD changed. Remove the "
     "listed files and `tl plan verify`, or run `tl plan start` again to repeat the step; for `redirected` or `head_moved` "
     "inspect first; for `worker_alive` stop the worker first; for `staged` unstage the listed paths first.",
     "registration_conflict": "Another start registered its entry first; `tl plan show` follows that attempt.",
     "slot_busy": "Another entry or verify holds the slot: wait and run it again; if nothing ends, see the `stuck:hung` guide.",
     "lock": "The slot's lock file under `<slots root>/<repo id>/.locks` cannot be created: fix that folder's permissions.",
+    "not_terminal": "The step has not ended: wait for it, `tl plan start` to repeat it, or `tl plan release --abandon`.",
+    "entry_running": "Its entry runs: wait, or stop it by verified pid (the `stuck:hung` guide), then run it again.",
+    "worker_unknown": "Dispatched with no agent recorded, so it cannot be shown stopped: the whole-DB discard is the only way out.",
+    "slot_dirty": "The slot stays held: remove the listed files (nothing is reset for you), then run it again.",
 }
 
 
 def discard(db: Path) -> str:
-    """The only release that exists, naming this machine config's resolved factory.db, never another factory's."""
+    """The last resort, naming this machine config's resolved factory.db, never another factory's."""
     return "\n".join([
-        "Whole-DB discard is the only release:",
+        "Last resort, when `tl plan release --abandon` cannot prove the attempt stopped (`worker_unknown`): the whole-DB discard:",
         "  1. stop every entry and worker by verified pid (`tl plan show` names them);",
         f"  2. delete {db} and its -wal/-shm (this machine config's factory.db, never another factory's);",
         "  3. in the tracker, `bd unclaim <task-id> --if-assignee taskloop` for each claimed task;",
         "  4. inspect each slot worktree, then `tl slot adopt` again.",
         "Never edit rows by hand: a deleted reservation silently fences out a still-running worker.",
     ])
-
-
-def deferred(_arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    steps = [f"{kind}: {text}" for kind, text in GUIDE.items() if kind.startswith("stuck:")]
-    text = "\n".join(["Force-release is deferred to its own slice. Do by hand now:", *steps, discard(loaded.settings.db.value)])
-    return Failed("refused", "deferred", text)
 
 
 def _common(parser: argparse.ArgumentParser, *flags: str) -> None:
@@ -89,9 +96,6 @@ def register(commands: Parsers) -> None:
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
     adopt.add_argument("--count", type=int, help="Slots s1..sN (overrides the machine config's slot_count)")
     _common(adopt, "--root", "--db")
-    release = _add(slot, "release", "Deferred: refuses `deferred` and prints the manual steps")
-    release.add_argument("slot_name", metavar="SLOT")
-    _common(release)
     plan = _add(commands, "plan", f"Plan attempts ({ATTEMPT_ONLY})").add_subparsers(dest="operation", required=True)
     start = _add(plan, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim); {ATTEMPT_ONLY}. {HELD}")
     start.add_argument("task_id", metavar="TASK")
@@ -106,14 +110,17 @@ def register(commands: Parsers) -> None:
     listing = _add(plan, "list", f"Every task's current attempt with its next step (read-only; {ATTEMPT_ONLY})")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next step is stuck:* or unknown")
     _common(listing, "--db")
-    verify = _add(plan, "verify", f"Commit the stage's listed files and verify them ({ATTEMPT_ONLY})")
+    verify = _add(plan, "verify", f"Commit the stage's listed files and verify them, then release a clean slot ({ATTEMPT_ONLY})")
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
     _common(verify, "--db")
-    abandon = _add(plan, "abandon", "Deferred: refuses `deferred` and prints the manual steps")
-    abandon.add_argument("task_id", metavar="TASK")
-    abandon.add_argument("--backlog", help="The task's backlog (accepted; the command is deferred)")
-    _common(abandon)
+    release = _add(plan, "release", "Release the slot of a step that ended (parked at its base, the claim kept); with --abandon, "
+                   f"of any step whose entry and agent are stopped, and return the tracker claim ({ATTEMPT_ONLY})")
+    release.add_argument("task_id", metavar="TASK")
+    release.add_argument("--backlog", required=True)
+    release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl plan start` "
+                         "then admits a fresh attempt")
+    _common(release, "--db")
 
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -140,6 +147,13 @@ def _verify(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return opened if isinstance(opened, Failed) else plan_ops.verify_task(*opened, arguments.backlog, arguments.task_id)
 
 
+def _release(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    with cli_composition.open_plan_release(loaded.settings.db.value) as opened:
+        if isinstance(opened, Failed):
+            return opened
+        return plan_ops.release_task(*opened, arguments.backlog, arguments.task_id, abandon=arguments.abandon)
+
+
 def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings = loaded.settings
     return cli_composition.adopt(settings.db.value, Path(arguments.checkout), settings.slots_root.value, settings.slot_count.value)
@@ -148,12 +162,11 @@ def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]] = {
     ("config", "show"): lambda _arguments, loaded: loaded,
     ("slot", "adopt"): _adopt,
-    ("slot", "release"): deferred,
     ("plan", "start"): _start,
     ("plan", "show"): _show,
     ("plan", "list"): _list,
     ("plan", "verify"): _verify,
-    ("plan", "abandon"): deferred,
+    ("plan", "release"): _release,
 }
 
 
@@ -183,12 +196,18 @@ def _status_lines(each: AttemptStatus) -> list[str]:
     # the stored registration only: the agent may have exited long ago, so it is never shown as running
     worker = "none" if each.worker is None else f"last known pid {each.worker[0]}, process group {each.worker[1]} (not checked)"
     repeats = "" if each.previous_attempt_id is None else f"; repeats {each.previous_attempt_id}, {each.repeat_reason}"
+    ended = each.release
+    released = [] if ended is None else [
+        f"Released: {datetime.fromtimestamp(ended.released_at, UTC):%Y-%m-%d %H:%M:%S} UTC, slot parked at {ended.head}; "
+        f"claim {ended.claim}{'; abandoned' if ended.abandoned else ''}"
+    ]
     return [
         f"Task: {each.task_id} (backlog {each.backlog})", f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})",
-        *(f"Earlier: {attempt_id} repeated ({reason})" for attempt_id, reason in each.earlier),
+        *(f"Earlier: {attempt_id} " + ("abandoned" if why == "abandoned" else f"repeated ({why})") for attempt_id, why in each.earlier),
         f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}", f"Result: {each.result.status} {each.result.reason}".rstrip(),
         f"Succeeded: {'yes' if succeeded(each.result) else 'no'}", f"Deadline passed: {'yes' if each.deadline_passed else 'no'}",
+        *released,
     ]
 
 
@@ -213,7 +232,9 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
             return [*lines, f"This is an {ATTEMPT_ONLY}. Follow it with `tl plan show {result.task_id} --backlog {result.backlog}`."]
         case Shown(status=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
-            steps = [GUIDE[each.next], *(stuck if each.next.startswith("stuck:") else [])]
+            ended = each.release
+            guide = GUIDE[each.next] if ended is None or not ended.abandoned else GUIDE["abandoned"] if each.next == "start" else UNCLAIMING
+            steps = [guide, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
             return [*_status_lines(each), *paths, *last, *left, f"Next: {each.next}", *steps]
@@ -223,10 +244,28 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
             kinds = dict.fromkeys(a.next for a in attempts if a.next.startswith("stuck:"))
             steps = [f"{kind}: {GUIDE[kind]}" for kind in kinds] + (stuck if kinds else [])
             return ["task\tbacklog\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
-        case Checked():
-            return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})"]
+        case Checked() | Freed():
+            return _freed_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
+
+
+def _freed_lines(result: Checked | Freed) -> list[str]:
+    """A verdict with the release that followed it; a release with each change on its own line."""
+    if isinstance(result, Checked):
+        held = [f"Release: {result.release}"] + ([] if result.release == "released" else [GUIDE["release"]])
+        return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
+    found, task = result.outcome, result.task_id
+    if not isinstance(found, Released):
+        return [f"already_released: attempt {result.attempt_id} for {task} (backlog {result.backlog}); nothing changed",
+                f"Claim: {found.claim}{'; abandoned' if found.abandoned else ''}"]
+    lines = [f"released: attempt {result.attempt_id} for {task} (backlog {result.backlog})"]
+    lines += [f"Slot {found.slot} parked at {found.parked}" if found.parked else f"Slot {found.slot}: no Git write"]
+    lines += [f"Reservation of {found.slot} removed"] if found.reservation_removed else []
+    claims = {"kept": "Claim kept", "unclaimed": "Claim returned to the tracker",
+              "not_held": f"Claim not held by taskloop (reverted, or another actor's): check `bd show {task}`"}
+    lines += [claims[found.claim]]
+    return lines + ([f"Abandoned: `tl plan start {task}` admits a fresh attempt"] if found.abandoned else [])
 
 
 def _setup_lines(result: Adoption | Loaded) -> list[str]:

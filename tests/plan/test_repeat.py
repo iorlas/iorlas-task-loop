@@ -7,6 +7,7 @@ import json
 import sqlite3
 import threading
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import NoReturn, Protocol
 
@@ -22,7 +23,7 @@ from taskloop.plan import Execution, PlanAttempts
 from taskloop.plan_admit import AdmitRefused, Admitted, PlanAdmission, RepeatRequest
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import Entry, Launched, LaunchResult
-from taskloop.plan_ops import Failed, Reads, Seen, Started, Starting, StartRequest, as_data, attempts_status, start, status
+from taskloop.plan_ops import Failed, Reads, Started, Starting, StartRequest, as_data, attempts_status, start, status
 from taskloop.plan_repeat import PlanRepeat, Settle, feedback
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore, StoreRefused
@@ -33,6 +34,7 @@ from taskloop.plan_types import (
     FileRef,
     NotApplicable,
     Rejected,
+    Seen,
     SlotFiles,
     Unsettled,
     Verified,
@@ -43,7 +45,7 @@ from taskloop.plan_types import (
 )
 from taskloop.plan_verifier import PlanVerifier
 from taskloop.plan_verify import bounded
-from taskloop.slot_lock import hold
+from taskloop.slot_lock import hold, lock_path, repeating
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -85,7 +87,7 @@ def never(*_args: object) -> NoReturn:
 
 
 def admission(con: sqlite3.Connection, tmp_path: Path, clock: Callable[[], float] = lambda: 10) -> PlanAdmission:
-    return PlanAdmission(lambda: con, begin_immediate, PlanFiles(tmp_path), never, never, never, never, clock)
+    return PlanAdmission(lambda: con, begin_immediate, PlanFiles(tmp_path), never, never, never, never, clock, never)
 
 
 def gone(_worker: Worker) -> bool:
@@ -137,7 +139,7 @@ def repeater(
     store = PlanStore(lambda: con)
     check = verifier or PlanVerifier(store, checkouts, files, gone, lambda: 20, hold)
     return PlanRepeat(store, check, PlanFiles(tmp_path), admission(con, tmp_path), launcher or Launches(con),
-                      lambda _worker: not alive, seen(observe), lambda: 10)
+                      lambda _worker: not alive, seen(observe), lambda: 10, repeating)
 
 
 def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles, written: Files) -> None:
@@ -167,9 +169,9 @@ def renumber(con: sqlite3.Connection, number: int) -> None:
     for n in range(1, number):
         con.execute(
             """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,base_commit)
-            VALUES (?,?,1,'beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','s',1,?,?,?,?)""",
-            (f"a{n}", f"d{n}", n, previous, None if previous is None else "uncommitted", "b" * 40),
+            input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,base_commit,seq,slot_head)
+            VALUES (?,?,1,'beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','s',1,?,?,?,?,?,?)""",
+            (f"a{n}", f"d{n}", n, previous, None if previous is None else "uncommitted", "b" * 40, n, "b" * 40),
         )
         previous = f"a{n}"
     con.execute("UPDATE plan_attempt SET number=?,previous_attempt_id=?,repeat_reason='unsafe' WHERE attempt_id='attempt'",
@@ -312,10 +314,10 @@ def test_two_starts_on_two_connections_admit_exactly_one(
         con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
         con.execute(
             """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number)
+            input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high','workspace-write',100,
-            7,'entry-start','boot',1)""",
-            (repo_id, hashlib.sha256(TASK.encode()).hexdigest()),
+            7,'entry-start','boot',1,1,?)""",
+            (repo_id, hashlib.sha256(TASK.encode()).hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text(TASK)
     unsafe(con, tmp_path, slot, checkouts, slot_files)
@@ -330,7 +332,7 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     def contender() -> None:
         store = Store(SCHEMA)
         mine = store.open_rw(path)
-        admit = PlanAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), never, never, never, never, lambda: 10)
+        admit = PlanAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), never, never, never, never, lambda: 10, never)
         outcomes.append(admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")))
 
     threads = [threading.Thread(target=contender) for _ in range(2)]
@@ -450,24 +452,27 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 
 def test_the_schema_numbers_attempts_and_links_each_to_the_one_it_repeats(registered: sqlite3.Connection) -> None:
     insert = """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-    input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason)
-    VALUES (?,?,2,'beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','s',1,?,?,?)"""
+    input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head)
+    VALUES (?,?,2,'beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','s',1,?,?,?,?,'""" + "d" * 40 + "')"
     for values, constraint in [
-        (("n", "t", 2, None, "unsafe"), "previous_attempt_id IS NULL"),
-        (("n", "t", 2, "attempt", None), "repeat_reason IS NULL"),
-        (("n", "t", 1, "attempt", "unsafe"), "previous_attempt_id IS NULL"),
-        (("n", "t", 2, "attempt", "dirty"), "repeat_reason IN"),
-        (("n", "t", 2, "missing", "unsafe"), "FOREIGN KEY"),
+        (("n", "t", 2, None, "unsafe", 2), "previous_attempt_id IS NULL"),
+        (("n", "t", 2, "attempt", None, 2), "repeat_reason IS NULL"),
+        (("n", "t", 1, "attempt", "unsafe", 2), "previous_attempt_id IS NULL"),
+        (("n", "t", 2, "attempt", "dirty", 2), "repeat_reason IN"),
+        (("n", "t", 2, "missing", "unsafe", 2), "FOREIGN KEY"),
+        (("n", "t", 2, "attempt", "unsafe", 0), "seq >= 1"),
     ]:
         with pytest.raises(sqlite3.IntegrityError, match=constraint):
             registered.execute(insert, values)
     with pytest.raises(sqlite3.IntegrityError, match="tracker_root"):  # the stored root is absolute
-        registered.execute(insert.replace("'/tracker'", "'tracker'"), ("n", "t", 2, "attempt", "unsafe"))
-    registered.execute(insert, ("n", "t", 2, "attempt", "unsafe"))
+        registered.execute(insert.replace("'/tracker'", "'tracker'"), ("n", "t", 2, "attempt", "unsafe", 2))
+    with pytest.raises(sqlite3.IntegrityError, match="slot_head"):  # D is a full commit id
+        registered.execute(insert.replace("'" + "d" * 40 + "'", "'d'"), ("n", "t", 2, "attempt", "unsafe", 2))
+    registered.execute(insert, ("n", "t", 2, "attempt", "unsafe", 2))
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
-        registered.execute(insert, ("m", "u", 3, "attempt", "unsafe"))  # the chain is linear
+        registered.execute(insert, ("m", "u", 3, "attempt", "unsafe", 3))  # the chain is linear
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
-        registered.execute(insert, ("m", "u", 2, "n", "unsafe"))  # one attempt per number
+        registered.execute(insert, ("m", "u", 2, "n", "unsafe", 2))  # one attempt per place in the task's order
 
 
 NONCE = "0123456789abcdef"
@@ -512,3 +517,16 @@ def test_the_listing_is_bounded_once_with_the_true_count() -> None:
     text = feedback(Unsettled("uncommitted", listing), plan_stage("tl-1"), 1, TASK, NONCE, unrecorded=False)
     block = text.split(f"BEGIN SLOT STATUS {NONCE}\n")[1].split(f"\nEND SLOT STATUS {NONCE}")[0].split("\n")
     assert tuple(block) == listing  # never cut twice
+
+
+def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    occupy: Callable[[Path], AbstractContextManager[None]],
+) -> None:
+    """`admit_repeat` runs under the slot's lock, so an abandon parking the slot (or anyone else holding it) refuses it."""
+    unsafe(registered, tmp_path, slot, checkouts, slot_files)
+    launcher = Launches(registered)
+    found = repeater(registered, tmp_path, checkouts, slot_files, verifier=Verifies(Unsettled("unsafe", (P,))), launcher=launcher)
+    with occupy(lock_path(str(slot.path))):
+        assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Failed("unavailable", "slot_busy")
+    assert len(rows(registered)) == 1 and held(registered) == ("attempt", 1) and launcher.calls == []

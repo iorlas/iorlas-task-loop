@@ -2,7 +2,8 @@
 
 The attempt entry holds its slot's lock around its whole body (preparation, the agent run, the publish retries, the
 factory commit, the clean-tree check and the verdict). `tl plan verify` and a repeating `tl plan start` take the same
-lock around their Git writes (`hold`). A second taker, in this process or another, is refused at once (`SlotBusy`):
+lock around their Git writes (`hold`), a release around its park and its transaction (`custody`), and admission probes it
+before it counts a slot free (`probe`). A second taker, in this process or another, is refused at once (`SlotBusy`):
 nonreentrant, `timeout=0`. The lock file sits beside the slots (`<slots_root>/<repo_id>/.locks/sN.lock`), outside the
 slot, where the agent's sandbox cannot write; nothing ever deletes it. The kernel frees the lock when its holder exits,
 so a free lock is never a stop proof for a worker. The holder record (the attempt and the taker's role; the library adds
@@ -19,7 +20,7 @@ from process_lock import LockHeldError, ProcessLock
 from taskloop.plan_types import Admission
 
 LABEL: Final = "taskloop-slot"
-type Role = Literal["entry", "verify"]
+type Role = Literal["entry", "verify", "release", "repeat", "probe"]
 
 
 class SlotBusy(Exception):
@@ -53,13 +54,39 @@ def acquire(cwd: str, attempt_id: str, role: Role) -> ProcessLock:
 
 
 @contextmanager
-def hold(admission: Admission) -> Generator[None]:
-    """A verifier's Git writes for `admission`, under its slot's lock; released when the block ends, raised or not."""
-    lock = acquire(admission.cwd, admission.key.attempt_id, "verify")
+def _held(cwd: str, attempt_id: str, role: Role) -> Generator[None]:
+    lock = acquire(cwd, attempt_id, role)
     try:
         yield
     finally:
         lock.release()
+
+
+def hold(admission: Admission) -> AbstractContextManager[None]:
+    """A verifier's Git writes for `admission`, under its slot's lock; released when the block ends, raised or not."""
+    return _held(admission.cwd, admission.key.attempt_id, "verify")
+
+
+def custody(cwd: str, attempt_id: str) -> AbstractContextManager[None]:
+    """A release's park and transaction for the attempt on the slot at `cwd`, under the slot's lock."""
+    return _held(cwd, attempt_id, "release")
+
+
+def repeating(cwd: str, attempt_id: str) -> AbstractContextManager[None]:
+    """A repeat's takeover of the reservation (`admit_repeat`), under the slot's lock: no release parks the slot under it."""
+    return _held(cwd, attempt_id, "repeat")
+
+
+def probe(cwd: str) -> bool | None:
+    """Admission's free rule: True when the slot's lock is free now (taken and released at once), False when another
+    holder (an entry, a verify, a release still parking) owns it, None when the lock file cannot be opened."""
+    try:
+        acquire(cwd, "", "probe").release()
+    except SlotBusy:
+        return False
+    except SlotLockUnavailable:
+        return None
+    return True
 
 
 def refused(_admission: Admission) -> AbstractContextManager[None]:

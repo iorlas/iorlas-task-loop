@@ -96,9 +96,9 @@ def seed(con: sqlite3.Connection, body: Body) -> sqlite3.Connection:
         con.execute(
             """INSERT INTO plan_attempt
             (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number)
+             schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,7,'entry-start','boot',1)""",
+            'workspace-write',100,7,'entry-start','boot',1,1,'dddddddddddddddddddddddddddddddddddddddd')""",
             (repo_id, digest),
         )
     (body.tmp / "input.txt").write_text("Plan the actual task")

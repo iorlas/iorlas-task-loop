@@ -24,6 +24,7 @@ from taskloop.plan_ops import (
     EntryState,
     Failed,
     FailureKind,
+    Freed,
     Listed,
     Next,
     Result,
@@ -31,6 +32,8 @@ from taskloop.plan_ops import (
     Started,
     Starting,
 )
+from taskloop.plan_reads import ReleaseRow
+from taskloop.plan_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import AttemptKey, AttemptResult
@@ -44,12 +47,19 @@ STATUS = AttemptStatus("tasks", "tl-1", "attempt", "s1", "captured", "gone", Att
 ERROR = {"kind", "reason", "message", "claim_leaked", "admitted", "slots"}
 STATUS_KEYS = {
     "backlog", "task", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process", "worker",
-    "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry",
+    "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release",
 }
 REPEAT = AttemptStatus(
     "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
     ("uncommitted", "?? docs/design/tl-1/note.md", "+3 more"), 2, "first", "uncommitted", (("first", "uncommitted"),),
 )
+D = "d" * 40
+ABANDONED = AttemptStatus(
+    "tasks", "tl-1", "second", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, "start",
+    earlier=(("first", "abandoned"),), seq=2, release=ReleaseRow(D, 30.0, True, "unclaimed"),
+)
+RELEASE = ["plan", "release", "tl-1", "--backlog", "tasks"]
+FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned"}
 
 
 @pytest.fixture(autouse=True)
@@ -152,8 +162,27 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["task\tbacklog\tattempt\tslot", "tl-1\ttasks\t1/3\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log"}),
-    (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("reused", "tasks", "tl-1", "attempt"), 0, ["reused: attempt attempt"],
-     {"status", "backlog", "task", "attempt_id"}),
+    (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("reused", "tasks", "tl-1", "attempt", "released"), 0,
+     ["reused: attempt attempt", "Release: released"], {"status", "backlog", "task", "attempt_id", "release"}),
+    (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("verified", "tasks", "tl-1", "attempt", "held:slot_dirty"), 0,
+     ["Release: held:slot_dirty", cli_plan.GUIDE["release"]], {"status", "backlog", "task", "attempt_id", "release"}),
+    (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(ABANDONED, Path("/a/d"), Path("/a/d/entry.log")), 0,
+     ["Earlier: first abandoned", f"Released: 1970-01-01 00:00:30 UTC, slot parked at {D}; claim unclaimed; abandoned",
+      f"Next: start\n{cli_plan.GUIDE['abandoned']}"],
+     STATUS_KEYS | {"directory", "entry_log"}),
+    (RELEASE, Freed("tasks", "tl-1", "attempt", Released("s1", D, True, "kept", False)), 0,
+     ["released: attempt attempt for tl-1 (backlog tasks)\n", f"Slot s1 parked at {D}\nReservation of s1 removed\nClaim kept"], FREED),
+    ([*RELEASE, "--abandon"], Freed("tasks", "tl-1", "attempt", Released("s1", None, True, "not_held", True)), 0,
+     ["Slot s1: no Git write", "Claim not held by taskloop (reverted, or another actor's): check `bd show tl-1`",
+      "Abandoned: `tl plan start tl-1` admits a fresh attempt"], FREED),
+    (RELEASE, Freed("tasks", "tl-1", "attempt", AlreadyReleased("s1", "unclaimed", True)), 0,
+     ["already_released: attempt attempt for tl-1 (backlog tasks); nothing changed", "Claim: unclaimed; abandoned"], FREED),
+    (RELEASE, Failed("refused", "slot_dirty", "?? x\nRemove the listed files. Nothing changed."), 1,
+     ["tl plan release: refused:slot_dirty\n?? x\nRemove the listed files. Nothing changed.", cli_plan.GUIDE["slot_dirty"]], ERROR),
+    (RELEASE, Failed("refused", "not_terminal"), 1, [cli_plan.GUIDE["not_terminal"]], ERROR),
+    (RELEASE, Failed("unsettled", "worker_unknown"), 3, [cli_plan.GUIDE["worker_unknown"]], ERROR),
+    (RELEASE, Failed("unavailable", "tracker", "Released; the tracker claim is still to be returned (other): rerun"), 3,
+     ["unavailable:tracker\nReleased; the tracker claim is still to be returned"], ERROR),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("rejected", "paths"), 1, ["tl plan verify: rejected:paths"], ERROR),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("not_applicable", "incomplete"), 1, ["not_applicable:incomplete"], ERROR),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("unsettled", "dirty"), 3, ["unsettled:dirty", cli_plan.GUIDE["unsettled"]],
@@ -215,23 +244,42 @@ def test_every_failure_kind_has_its_exit_code(
     assert capsys.readouterr().err.startswith("tl plan list: ")
 
 
-ABANDON = ["plan", "abandon", "tl-1"]
+@pytest.mark.parametrize("argv", [["plan", "abandon", "tl-1", "--backlog", "tasks"], ["slot", "release", "s1"], RELEASE[:3]])
+def test_the_placeholders_are_gone_and_release_needs_its_backlog(argv: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    """A hard cut: `tl plan release [--abandon]` replaces both placeholders, with no alias."""
+    with pytest.raises(SystemExit) as result:
+        main(argv)
+    assert result.value.code == 2 and "usage: tl" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("argv", [ABANDON, [*ABANDON, "--backlog", "tasks"], ["slot", "release", "s1"]])
-def test_the_placeholders_refuse_deferred_with_the_manual_steps(
-    argv: list[str], tmp_path: Path, home: Path, capsys: pytest.CaptureFixture[str]
+class Releases:
+    def __init__(self) -> None:
+        self.calls: list[tuple[AttemptKey, bool]] = []
+
+    def release(self, key: AttemptKey, abandon: bool, me: Entry | None = None) -> ReleaseResult:
+        self.calls.append((key, abandon))
+        return Released("s1", None, True, "unclaimed", abandon)
+
+
+@pytest.mark.parametrize("abandon", [False, True])
+def test_release_flags_reach_the_operation_through_the_opener(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], abandon: bool
 ) -> None:
-    assert main([*argv, "--json"]) == 1
-    error = json.loads(capsys.readouterr().err)["error"]
-    assert (error["kind"], error["reason"]) == ("refused", "deferred")
-    assert "stuck:entry_lost" in error["message"] and "bd unclaim <task-id> --if-assignee taskloop" in error["message"]
-    assert f"delete {home / '.local/state/task-loop/factory.db'} and its -wal/-shm" in error["message"]
-    config = tmp_path / "scratch.toml"
-    config.write_text(f'db = "{tmp_path / "chosen.db"}"\n')
-    assert main(["--config", str(config), *argv]) == 1
-    text = capsys.readouterr().err
-    assert f"delete {tmp_path / 'chosen.db'} and its -wal/-shm" in text and max(len(line) for line in text.splitlines()) < 400
+    db, releases, opened = tmp_path / "factory.db", Releases(), list[Path]()
+    admitted(db)
+    con = Store(SCHEMA).open_ro(db)
+    assert con is not None
+
+    @contextmanager
+    def opener(database: Path) -> Generator[tuple[PlanStore, Releases]]:
+        opened.append(database)
+        yield PlanStore(lambda: con), releases
+
+    monkeypatch.setattr(cli_composition, "open_plan_release", opener)
+    assert main([*RELEASE, *(["--abandon"] if abandon else []), "--db", str(db), "--json"]) == 0
+    con.close()
+    assert opened == [db] and releases.calls == [(KEY, abandon)]
+    assert json.loads(capsys.readouterr().out)["abandoned"] is abandon
 
 
 def admitted(path: Path) -> None:
@@ -242,8 +290,9 @@ def admitted(path: Path) -> None:
         con.execute("INSERT INTO reservation VALUES ('s1','repo','/slots/s1',1,'attempt')")
         con.execute(
             """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline,number)
-            VALUES ('attempt',?,1,'beads','tasks','tl-1','/tracker','repo','s1','input.txt',?,1,'m','high','workspace-write',100,1)""",
+            input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+            VALUES ('attempt',?,1,'beads','tasks','tl-1','/tracker','repo','s1','input.txt',?,1,'m','high','workspace-write',100,1,1,
+            'dddddddddddddddddddddddddddddddddddddddd')""",
             (KEY.dispatch_token, hashlib.sha256(b"x").hexdigest()),
         )
     con.close()
@@ -258,7 +307,7 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert set(shown) == STATUS_KEYS | {"directory", "entry_log"} and (shown["entry_process"], shown["worker"]) == (None, None)
     assert main(["plan", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
-    assert "stuck:expired_admitted: Nothing in the factory can release it." in listed and f"delete {db} and its" in listed
+    assert "stuck:expired_admitted: Nothing ran. `tl plan release --abandon`" in listed and f"delete {db} and its" in listed
     assert main(["plan", "verify", "tl-1", "--backlog", "tasks", "--db", str(db), "--json"]) == 1
     output = capsys.readouterr()
     assert json.loads(output.err)["error"]["reason"] == "not_captured"

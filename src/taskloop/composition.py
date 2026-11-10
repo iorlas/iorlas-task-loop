@@ -23,10 +23,11 @@ from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
 from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
 from taskloop.plan_files import PlanFiles
-from taskloop.plan_launch import Launcher
+from taskloop.plan_launch import Entry, Launcher, entry_process
+from taskloop.plan_release import PlanRelease
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import REGISTRATION_BUSY_MS, PlanStore
-from taskloop.plan_types import Checkouts, FileEntry
+from taskloop.plan_types import Checkouts, FileEntry, Seen
 from taskloop.plan_verifier import PlanVerifier
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Adopted, NotAdopted, adopt
@@ -178,6 +179,11 @@ def worker_gone(worker: Worker) -> bool:
     return seen in ("gone", "different_process") and not group_alive(worker.pgid)
 
 
+def entry_seen(entry: Entry) -> Seen:
+    """A native process-table read of the registered entry, by the launcher's identity rule; no spawn or signal."""
+    return observe_owned(entry_process(entry)).kind
+
+
 def checkouts(path: Path) -> Repo:
     """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment, its discovery ceiling
     at that path: calls that run on a slot open their view from the slot itself."""
@@ -248,6 +254,14 @@ def open_plan_verifier(database: Path, store: Store) -> PlanVerifier:
     closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
     writer = PlanStore(lambda: store.shared_rw(database), store.begin_immediate)
     return PlanVerifier(writer, checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold)
+
+
+def open_releaser(database: Path, store: Store) -> PlanRelease:
+    """Real wiring for `tl plan release` and the release after `tl plan verify`: a shared writer of `store` (the caller
+    closes it) on factory.db, real Git, the entry and worker observations, the park under the slot's custody lock, the
+    tracker's fenced unclaim, wall clock."""
+    writer = PlanStore(lambda: store.shared_rw(database), store.begin_immediate)
+    return PlanRelease(writer, checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim, time.time)
 
 
 def open_launcher(database: Path, artifacts: Path) -> Launcher:
@@ -343,4 +357,5 @@ def open_plan_admission(database: Path, artifacts: Path) -> PlanAdmission:
         claims.claim,
         claims.unclaim,
         time.time,
+        slot_lock.probe,
     )

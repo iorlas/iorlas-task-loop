@@ -14,7 +14,8 @@ from taskloop.plan import judged
 from taskloop.plan_admit import AdmitRefused, Admitted, AdmitUnavailable, RepeatRequest
 from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_launch import Entry
-from taskloop.plan_ops import Clock, Failed, Launch, Observe, Started, deadline_after, launched, verify_failure
+from taskloop.plan_ops import Clock, Failed, Launch, Started, deadline_after, launched, verify_failure
+from taskloop.plan_release import Hold, entry_stopped, worker_stopped
 from taskloop.plan_store import PlanStore, StoreRefused, StoreUnavailable
 from taskloop.plan_types import (
     ATTEMPTS,
@@ -23,6 +24,7 @@ from taskloop.plan_types import (
     AttemptKey,
     AttemptRecord,
     NotApplicable,
+    Observe,
     Rejected,
     RepeatReason,
     StageRules,
@@ -33,6 +35,7 @@ from taskloop.plan_types import (
     WorkerGone,
 )
 from taskloop.plan_verify import shown
+from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
@@ -106,6 +109,7 @@ class PlanRepeat:
     gone: WorkerGone
     observe: Observe
     clock: Clock
+    hold: Hold  # the slot's lock around the takeover (`slot_lock.repeating`), so a concurrent abandon cannot park under it
 
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int) -> Started | Failed:
         """For the task's captured current attempt C: the stop proof (C's entry, then its worker and group) before any Git
@@ -124,7 +128,7 @@ class PlanRepeat:
         text = self._input(current, found[0], stopped)
         if isinstance(text, Failed):
             return text
-        admitted = self.admission.admit_repeat(RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1]))
+        admitted = self._takeover(RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1]), stopped.admission.cwd)
         return self._launch(backlog, task_id, current, admitted, stopped.admission.number + 1)
 
     def _leftovers(self, backlog: str, task_id: str, current: AttemptKey) -> tuple[Unsettled, RepeatReason] | Started | Failed:
@@ -162,12 +166,12 @@ class PlanRepeat:
         return feedback(found, record.admission.rules, number, task, secrets.token_hex(8), unrecorded=unrecorded)
 
     def _stopped(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None) -> AttemptRecord | Started | Failed:
-        """The stop proof: C's registered entry does not run, then C's worker and its process group are gone (unknown
-        counts as alive). No stop proof for descendants that left the group (.4.4)."""
-        seen = "gone" if entry is None else self.observe(entry)
-        if seen in ("matching", "unknown"):
-            running = Started("already_running", backlog, task_id, current.attempt_id, True, entry)
-            return running if seen == "matching" else Failed("unavailable", "observe")
+        """The stop proof (`plan_release`'s one rule): C's registered entry does not run, then C's worker and its process
+        group are gone (unknown counts as alive). A running entry is `already_running`."""
+        running = entry_stopped(self.observe, None, entry)
+        if running is not None:
+            found = Started("already_running", backlog, task_id, current.attempt_id, True, entry)
+            return found if running.reason == "entry_running" else Failed("unavailable", "observe")
         try:
             record = self.store.load(current)
         except StoreUnavailable as error:
@@ -177,13 +181,27 @@ class PlanRepeat:
             return self._existing(backlog, task_id, current) if stale else Failed("refused", str(error))
         if record is None:
             return Failed("refused", "absent")
-        return record if record.worker is not None and self.gone(record.worker) else Failed("unsettled", "worker_alive")
+        alive = worker_stopped(self.gone, record.phase, record.worker)
+        return record if alive is None else Failed("unsettled", alive.reason)
+
+    def _takeover(self, request: RepeatRequest, cwd: str) -> Admitted | AdmitRefused | AdmitUnavailable | Failed:
+        """`admit_repeat` under the slot's lock (a release parks only under it); released before the launch, since the
+        new attempt's entry takes it."""
+        try:
+            with self.hold(cwd, request.previous.attempt_id):
+                return self.admission.admit_repeat(request)
+        except SlotBusy:
+            return Failed("unavailable", "slot_busy")
+        except SlotLockUnavailable:
+            return Failed("unavailable", "lock")
 
     def _launch(
-        self, backlog: str, task_id: str, current: AttemptKey, admitted: Admitted | AdmitRefused | AdmitUnavailable, number: int
+        self, backlog: str, task_id: str, current: AttemptKey, admitted: Admitted | AdmitRefused | AdmitUnavailable | Failed, number: int
     ) -> Started | Failed:
         """The same launcher as attempt 1. A concurrent start that took the step over first (`task_attempted`): its
         attempt is launched as existing."""
+        if isinstance(admitted, Failed):
+            return admitted
         if isinstance(admitted, AdmitUnavailable):
             return Failed("unavailable", admitted.what, admitted.detail)
         if isinstance(admitted, AdmitRefused):

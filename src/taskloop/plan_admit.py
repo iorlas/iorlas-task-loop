@@ -5,7 +5,14 @@ slot's HEAD (`plan_prepare.branch_refusal`, read-only, before anything is writte
 attempt, which takes over the reservation its previous attempt holds in the same transaction, so the slot is never
 released between attempts. An admitted attempt stays unregistered (entry_* NULL): the body refuses it with
 `unregistered_entry` until `PlanStore.register_entry` registers its entry. The tracker root, resolved, is stored with the
-attempt (a repeat copies it): the entry renews the claim there. Nothing here releases a slot or a claim.
+attempt (a repeat copies it): the entry renews the claim there, an abandon returns it there. The slot's HEAD the attempt
+starts from (D) is stored as `slot_head` (a repeat copies it): a release parks the slot back there.
+
+Each slot's `generation` is the last reservation generation issued for it, so a generation is never reused after a
+release: a fresh admission takes one above every observed-free slot's counter, a repeat the next one. `seq` orders a
+task's attempts (a repeat or a fresh attempt after an abandon takes the next); `number` is the attempt's place in its
+step. A task whose current attempt was abandoned (`plan_release`) is admitted again as a fresh attempt 1. Nothing here
+releases a slot; the claim is returned only to compensate a failed admission.
 """
 
 import math
@@ -26,7 +33,7 @@ from taskloop.plan_prepare import DIVERGED, branch_refusal
 from taskloop.plan_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
 from taskloop.plan_types import ATTEMPTS, PLAN_NAME, AttemptKey, Checkouts, FileRef, RepeatReason, plan_stage
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
-from taskloop.slots import SlotsUnavailable, SlotView, observe
+from taskloop.slots import Probe, SlotsUnavailable, SlotView, observe
 from taskloop.task import TaskInspection, TaskInspectionError
 
 type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, False held elsewhere, BdError unknown
@@ -36,10 +43,9 @@ type Refusal = Literal[
     "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged",
 ]
-GENERATION = 1  # a fresh admission's; a repeat advances it on the held reservation (until a release slice moves it to `slot`)
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
-# clean completely published `planned`/`unchanged` answer (the gate of `plan_commit` and the verdict), no verdict, and
-# the tracker root its claim was taken at (copied: a repeat claims nothing).
+# clean completely published `planned`/`unchanged` answer (the gate of `plan_commit` and the verdict), no verdict, the
+# tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order and D (both carried on).
 PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
 EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id),
 p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
@@ -47,7 +53,7 @@ p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.rep
 AND EXISTS (SELECT 1 FROM plan_execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
  AND e.disposition IN ('planned','unchanged') AND e.publication='complete')
 AND NOT EXISTS (SELECT 1 FROM plan_verification v WHERE v.attempt_id=p.attempt_id),
-p.tracker_root
+p.tracker_root,p.seq,p.slot_head
 FROM plan_attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 NOT_CLAIMED = frozenset({"missing_binary", "version", "not_found", "lint"})  # BdError kinds where the claim certainly did not happen
 
@@ -105,6 +111,14 @@ class _Lost(Exception):
 
 
 @dataclass(frozen=True)
+class _Free:
+    """An observed-free slot whose HEAD (D) passed the branch rule."""
+
+    name: str
+    head: str
+
+
+@dataclass(frozen=True)
 class _Prepared:
     request: AdmitRequest
     text: str
@@ -143,9 +157,11 @@ class PlanAdmission:
         claim: Claim,
         unclaim: Unclaim,
         clock: Callable[[], float],
+        probe: Probe,
     ) -> None:
+        """`probe` reads a free-looking slot's lock (`slot_lock.probe`): a slot a release is still parking is not free."""
         self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
-        self.claim, self.unclaim, self.clock = claim, unclaim, clock
+        self.claim, self.unclaim, self.clock, self.probe = claim, unclaim, clock, probe
 
     def admit(self, request: AdmitRequest) -> AdmitResult:
         prepared = self._prepare(request)
@@ -158,7 +174,11 @@ class PlanAdmission:
         free = self._branched(prepared, views)
         if not isinstance(free, tuple):
             return free
-        key = AttemptKey(uuid4().hex, secrets.token_hex(16), GENERATION)
+        try:
+            generation = _issued(con, prepared.repo_id, tuple(each.name for each in free)) + 1
+        except sqlite3.Error as error:
+            return AdmitUnavailable("store", detail=why(error))
+        key = AttemptKey(uuid4().hex, secrets.token_hex(16), generation)  # the key names the evidence directory
         try:
             ref = self.files.put_input(key, prepared.text)
         except (EvidenceError, UnicodeError, OSError) as error:
@@ -242,7 +262,7 @@ class PlanAdmission:
                 "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
                 "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
-                "repeat_reason": request.reason,
+                "repeat_reason": request.reason, "seq": as_count(row[13]) + 1, "slot_head": row[14],
             }
             values = bound(ATTEMPT_ADMITTED, attempt)
             con.execute(f"INSERT INTO plan_attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
@@ -253,6 +273,7 @@ class PlanAdmission:
             )
             if moved.rowcount != 1:
                 raise _Lost
+            con.execute("UPDATE slot SET generation=? WHERE repo_id=? AND name=?", (key.reservation_generation, row[5], row[6]))
         return Admitted(key, str(row[6]))
 
     def _task(self, request: AdmitRequest) -> TaskInspection | AdmitRefused | AdmitUnavailable:
@@ -275,7 +296,7 @@ class PlanAdmission:
             con = self._open()
             if _attempted(con, prepared.request):
                 return AdmitRefused("task_attempted")
-            views = observe(con, prepared.repo, prepared.repo_id)
+            views = observe(con, prepared.repo, prepared.repo_id, self.probe)
         except (sqlite3.Error, SlotsUnavailable) as error:
             return AdmitUnavailable("store", detail=why(error))
         if any(view.reason == "store_unavailable" for view in views):
@@ -283,7 +304,7 @@ class PlanAdmission:
         free = tuple(view for view in views if view.state == "free")
         return (con, free) if free else AdmitRefused("no_free_slot", views)
 
-    def _branched(self, prepared: _Prepared, free: tuple[SlotView, ...]) -> tuple[str, ...] | AdmitRefused | AdmitUnavailable:
+    def _branched(self, prepared: _Prepared, free: tuple[SlotView, ...]) -> tuple[_Free, ...] | AdmitRefused | AdmitUnavailable:
         """The task branch rule, read-only, before any file, claim or row: the free slots whose HEAD (D) it passes. The
         entry checks it again before it creates the branch (`plan_prepare`)."""
         task_id = prepared.request.task_id
@@ -294,10 +315,10 @@ class PlanAdmission:
             return AdmitUnavailable("git", detail=why(error))
         if isinstance(found, str):
             return AdmitRefused(found, detail=DIVERGED.format(task=task_id) if found == "branch_diverged" else "")
-        names = tuple(view.name for view in free if heads.get(view.path) in found.passing)
-        return names or AdmitRefused("no_free_slot")
+        passing = tuple(_Free(view.name, head) for view in free if (head := heads.get(view.path)) is not None and head in found.passing)
+        return passing or AdmitRefused("no_free_slot")
 
-    def _claimed(self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[str, ...], key: AttemptKey, ref: FileRef) -> AdmitResult:
+    def _claimed(self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[_Free, ...], key: AttemptKey, ref: FileRef) -> AdmitResult:
         """Claim outside any transaction, then commit; a pre-commit failure after a claim is compensated by `_compensate`."""
         request = prepared.request
         try:
@@ -337,26 +358,28 @@ class PlanAdmission:
             return True
 
     def _commit(
-        self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[str, ...], key: AttemptKey, ref: FileRef
+        self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[_Free, ...], key: AttemptKey, ref: FileRef
     ) -> Admitted | AdmitRefused:
-        """Under the write lock the reads are authoritative: the task first, then the observed-free slots, then both rows."""
-        request, repo_id = prepared.request, prepared.repo_id
+        """Under the write lock the reads are authoritative: the task first, then the observed-free slots (the lowest one
+        still unheld whose counter is below the key's generation), then both rows and the slot's counter."""
+        request, repo_id, generation = prepared.request, prepared.repo_id, key.reservation_generation
         with self.begin(con):
             if _attempted(con, request):
                 return AdmitRefused("task_attempted")
-            chosen = next((slot for name in free if (slot := _unheld(con, repo_id, name)) is not None), None)
+            chosen = next((slot for each in free if (slot := _unheld(con, repo_id, each, generation)) is not None), None)
             if chosen is None:
                 return AdmitRefused("no_free_slot")
-            name, cwd = chosen
-            held = {"slot": name, "repo_id": repo_id, "cwd": cwd, "generation": GENERATION, "attempt_id": key.attempt_id}
+            (name, cwd), head = chosen
+            held = {"slot": name, "repo_id": repo_id, "cwd": cwd, "generation": generation, "attempt_id": key.attempt_id}
             con.execute(f"INSERT INTO reservation ({RESERVATION}) VALUES ({marks(RESERVATION)})", bound(RESERVATION, held))
+            con.execute("UPDATE slot SET generation=? WHERE repo_id=? AND name=?", (generation, repo_id, name))
             attempt = {
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
                 "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "tracker_root": request.tracker_root,
                 "repo_id": repo_id, "slot": name,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
-                "previous_attempt_id": None, "repeat_reason": None,
+                "previous_attempt_id": None, "repeat_reason": None, "seq": _next_seq(con, request), "slot_head": head,
             }
             values = bound(ATTEMPT_ADMITTED, attempt)
             con.execute(f"INSERT INTO plan_attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
@@ -371,21 +394,50 @@ def bound(columns: str, values: Mapping[str, object]) -> tuple[object, ...]:
     return tuple(values[name] for name in names)
 
 
-def _unheld(con: sqlite3.Connection, repo_id: RepoId, name: str) -> tuple[str, str] | None:
+def as_count(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    raise sqlite3.DatabaseError("Malformed stored integer")
+
+
+def _unheld(con: sqlite3.Connection, repo_id: RepoId, free: _Free, generation: int) -> tuple[tuple[str, str], str] | None:
+    """The slot's name and cwd with its D, when it is unreserved and its counter is below `generation`."""
     row: tuple[object, ...] | None = con.execute(
-        "SELECT name,cwd FROM slot s WHERE repo_id=? AND name=? AND NOT EXISTS "
+        "SELECT name,cwd FROM slot s WHERE repo_id=? AND name=? AND generation<? AND NOT EXISTS "
         "(SELECT 1 FROM reservation r WHERE r.repo_id=s.repo_id AND r.slot=s.name)",
-        (repo_id, name),
+        (repo_id, free.name, generation),
     ).fetchone()
     if row is None:
         return None
     if not isinstance(row[0], str) or not isinstance(row[1], str):
         raise sqlite3.DatabaseError("Malformed slot row")
-    return row[0], row[1]
+    return (row[0], row[1]), free.head
+
+
+def _issued(con: sqlite3.Connection, repo_id: RepoId, names: tuple[str, ...]) -> int:
+    """The highest generation issued for any of the named slots (0 when none was)."""
+    marked = ",".join("?" * len(names))
+    found = f"SELECT coalesce(max(generation),0) FROM slot WHERE repo_id=? AND name IN ({marked})"
+    row = con.execute(found, (repo_id, *names)).fetchone()
+    return as_count(None if row is None else row[0])
+
+
+def _next_seq(con: sqlite3.Connection, request: AdmitRequest) -> int:
+    row = con.execute(
+        "SELECT coalesce(max(seq),0)+1 FROM plan_attempt WHERE adapter='beads' AND backlog=? AND task_id=?",
+        (request.backlog, request.task_id),
+    ).fetchone()
+    return as_count(None if row is None else row[0])
 
 
 def _attempted(con: sqlite3.Connection, request: AdmitRequest) -> bool:
+    """The task's current attempt (its highest `seq`) exists and its abandon is not finished: only an abandoned attempt
+    whose claim was returned (`unclaimed`, or found `not_held`) starts the task again. While the claim is `unclaiming`,
+    a fresh claim could be undone by the abandon's own unclaim, so the task still counts as attempted."""
     found = con.execute(
-        "SELECT 1 FROM plan_attempt WHERE adapter='beads' AND backlog=? AND task_id=?", (request.backlog, request.task_id)
+        """SELECT EXISTS (SELECT 1 FROM plan_release r WHERE r.attempt_id=p.attempt_id AND r.abandoned=1
+        AND r.claim IN ('unclaimed','not_held')) FROM plan_attempt p
+        WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1""",
+        (request.backlog, request.task_id),
     ).fetchone()
-    return found is not None
+    return found is not None and not found[0]

@@ -105,6 +105,7 @@ class Entry:
         self.lines: list[str] = []
         self.opened: list[tuple[Path, Path]] = []
         self.observed: list[Worker] = []
+        self.unclaimed: list[tuple[str, str]] = []
 
     def credentials(self) -> tuple[str, dict[str, str]]:
         self.credential_calls += 1
@@ -150,9 +151,14 @@ class Entry:
 
         return beat
 
+    def unclaim(self, tracker_root: str, task_id: str) -> bool:
+        self.unclaimed.append((tracker_root, task_id))
+        return True
+
     def __call__(self, inspect: Callable[[int], ProcessObservation] = inspect_process, task_id: str = "tl-1") -> int:
         args = EntryArgs(self.db, self.db.parent, "tasks", task_id)
-        return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append, self.gone, self.heartbeat_for, self.stop)
+        return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append, self.gone, self.heartbeat_for, self.stop,
+                     self.unclaim)
 
 
 NOTE = "docs/design/tl-1/note.md"
@@ -161,8 +167,8 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified claim=held", 0, 13),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held", 1, 13),
+        ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released", 0, 16),
+        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 16),
         ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
         ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 9),
     ],
@@ -178,21 +184,24 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     # six Git opens before dispatch (the slot read: root, slot; the branch rule: root; take_branch: slot; the slot read
     # again: root, slot); the one verification: four to commit (the staged set read before the
     # record), two for the clean check, one
-    # to judge or list; the worker is observed right before each Git write (stage, record), never when the paths are unsafe
-    assert entry.waits == [] and entry.git_opens == opens and entry.observed == ([] if files == {} else [WORKER, WORKER])
+    # to judge or list; a collected step's release: the slot read (root, slot) and the park (slot). The worker is observed
+    # right before each Git write (stage, record), never when the paths are unsafe, and once more by the release's stop proof
+    collected = line.startswith("collected")
+    assert entry.waits == [] and entry.git_opens == opens and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
+    assert (slot.branch(), entry.unclaimed) == (None if collected else "task/tl-1", [])  # parked at D; the claim kept
 
 
-INCOMPLETE = "collected incomplete verify=not_applicable claim=held"
+INCOMPLETE = "collected incomplete verify=not_applicable claim=held release=released"
 
 
 @pytest.mark.parametrize(
     ("rc", "text", "line"),
     [
-        (1, "", "collected run:vendor_blip verify=not_applicable claim=held"),
-        (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable claim=held"),
-        (0, "not json", "collected answer:json_invalid verify=not_applicable claim=held"),
+        (1, "", "collected run:vendor_blip verify=not_applicable claim=held release=released"),
+        (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable claim=held release=released"),
+        (0, "not json", "collected answer:json_invalid verify=not_applicable claim=held release=released"),
         (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
-        (0, json.dumps(PLAN | {"commit": "a" * 40}), "collected answer:schema_invalid verify=not_applicable claim=held"),
+        (0, json.dumps(PLAN | {"commit": "a" * 40}), "collected answer:schema_invalid verify=not_applicable claim=held release=released"),
     ],
     ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete", "old_commit_key"],
 )
@@ -233,7 +242,7 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
 @pytest.mark.parametrize(
     ("failures", "wait_to", "line", "waits", "captures"),
     [
-        (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held", 1, 2),
+        (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released", 1, 2),
         (9, 10, "unavailable evidence publish=unavailable verify=refused:not_captured claim=held", 3, 4),
         (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
     ],
@@ -287,10 +296,19 @@ def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_
 def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_raises(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    """The verify inside the entry settles under the lock the entry holds (its own hold is a no-op)."""
+    """The verify and the release inside the entry run under the lock the entry holds (their holds are no-ops)."""
     seen: list[bool] = []
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
-    gone = entry.gone
+    gone, heartbeat_for = entry.gone, entry.heartbeat_for
+
+    def broken(tracker_root: str, task_id: str) -> Heartbeat:
+        raise RuntimeError(f"bug at {tracker_root} for {task_id}")
+
+    entry.heartbeat_for = broken
+    with pytest.raises(RuntimeError):
+        entry()
+    acquire(str(slot.path), "after", "verify").release()
+    entry.heartbeat_for = heartbeat_for
 
     def observed(worker: Worker) -> bool:
         with pytest.raises(SlotBusy):
@@ -299,15 +317,7 @@ def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_rai
         return gone(worker)
 
     entry.gone = observed
-    assert entry() == 0 and entry.lines == ["collected verified verify=verified claim=held"] and seen == [True, True]
-    acquire(str(slot.path), "after", "verify").release()
-
-    def broken(tracker_root: str, task_id: str) -> Heartbeat:
-        raise RuntimeError(f"bug at {tracker_root} for {task_id}")
-
-    entry.heartbeat_for = broken
-    with pytest.raises(RuntimeError):
-        entry()
+    assert entry() == 0 and entry.lines == ["collected verified verify=verified claim=held release=released"] and seen == [True] * 3
     acquire(str(slot.path), "after", "verify").release()
 
 
@@ -328,8 +338,23 @@ def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]), beats=beats, rounds=rounds)
     assert entry() == 0  # the step completes, publishes and verifies; nothing is released or re-claimed
-    assert entry.lines == [f"collected verified verify=verified claim={word}"] and len(entry.run.calls) == 1
+    assert entry.lines == [f"collected verified verify=verified claim={word} release=released"] and len(entry.run.calls) == 1
     assert entry.renewed == [("/tracker", "tl-1")] * renewals and entry.stop.set_calls == 1
+
+
+def test_a_failed_run_that_left_files_keeps_its_slot_held_and_the_claim(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
+) -> None:
+    """Release never resets work: the run's leftovers keep the slot reserved (`Next: release` once the person tidies)."""
+    entry = Entry(admitted, checkouts, slot_files, me(), rc=1, written=(slot, {P: "# Plan\n"}, [P]))
+    assert entry() == 1
+    assert entry.lines == ["collected run:vendor_blip verify=not_applicable claim=held release=held:slot_dirty"]
+    con = Store(SCHEMA).open_ro(admitted)
+    assert con is not None
+    assert con.execute("SELECT attempt_id FROM reservation").fetchall() == [("attempt",)]
+    assert con.execute("SELECT count(*) FROM plan_release").fetchone() == (0,)
+    con.close()
+    assert slot.branch() == "task/tl-1" and entry.unclaimed == []
 
 
 @pytest.mark.parametrize(

@@ -26,7 +26,7 @@ from taskloop.plan_repeat import PlanRepeat
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import Admission, AnswerState, AttemptKey, Checkouts, SlotFiles, Unsettled, Verified, VerifyUnavailable, WorkerGone
 from taskloop.plan_verifier import PlanVerifier
-from taskloop.slot_lock import LABEL, acquire, hold, lock_path, refused
+from taskloop.slot_lock import LABEL, acquire, hold, lock_path, refused, repeating
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -144,7 +144,7 @@ def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n", "stray.txt": "s"})
     store, admits = PlanStore(lambda: registered), Admits()
     repeat = PlanRepeat(store, verifier(registered, checkouts, slot_files), PlanFiles(tmp_path), admits, NoLaunch(), lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10)
+                        lambda _entry: "gone", lambda: 10, repeating)
     with occupy(lock_path(str(slot.path))):
         found = repeat.repeat("tasks", "tl-1", KEY, None, 30)
     assert found == Failed("unavailable", "slot_busy") and admits.calls == [] and writes == []

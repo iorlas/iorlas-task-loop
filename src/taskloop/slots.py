@@ -1,4 +1,5 @@
-"""Managed slots: adoption (the only `slot` writer) and typed free/held/unknown observation; no reservation writer."""
+"""Managed slots: adoption (the only inserter of `slot` rows; admission advances their `generation`, the last issued) and
+typed free/held/unknown observation; no reservation writer."""
 
 import sqlite3
 from collections.abc import Callable
@@ -12,8 +13,10 @@ from git_porcelain import GitUnavailable, Repo, WorktreeInfo
 from taskloop.plan_schema import SLOT, current, marks
 from taskloop.repo import RepoId
 
-type Unknown = Literal["not_listed", "main", "unborn", "attached", "dirty", "git_unavailable", "store_unavailable"]
-type Unadoptable = Unknown | Literal["other_root", "inside_checkout"]
+type Unclean = Literal["not_listed", "main", "unborn", "attached", "dirty", "git_unavailable"]
+type Unknown = Unclean | Literal["store_unavailable", "locked", "lock_unavailable"]
+type Unadoptable = Unclean | Literal["store_unavailable", "other_root", "inside_checkout"]
+type Probe = Callable[[str], bool | None]  # the slot's lock (by its stored cwd): True free now, False held, None unknown
 
 
 @dataclass(frozen=True)
@@ -56,7 +59,7 @@ def _order(name: str) -> tuple[int, str]:
     return len(name), name
 
 
-def _clean(repo: Repo, listed: tuple[WorktreeInfo, ...], path: Path) -> Unknown | None:
+def _clean(repo: Repo, listed: tuple[WorktreeInfo, ...], path: Path) -> Unclean | None:
     """None when Git lists a non-main, born, detached worktree at exactly `path` and its one status read is clean."""
     info = next((worktree for worktree in listed if worktree.path == path), None)
     if info is None:
@@ -136,8 +139,26 @@ def _result(name: str, base: Path, known: dict[str, str], refused: dict[str, Una
     return Adopted(name, base / name) if Path(known[name]) == base / name else NotAdopted(name, "other_root", base / name)
 
 
-def observe(con: sqlite3.Connection, repo: Repo, repo_id: RepoId) -> tuple[SlotView, ...]:
-    """Every adopted slot of the repo, lowest name first; store or Git failure never yields `free`."""
+def _free(repo: Repo, listed: tuple[WorktreeInfo, ...] | None, cwd: str, probe: Probe) -> Unknown | None:
+    """An unreserved slot is free when Git lists it clean and detached and its lock is free now: a held lock (`locked`:
+    a release still parking it) or an unknown one (`lock_unavailable`) is never free."""
+    if listed is None:
+        return "git_unavailable"
+    found = _clean(repo, listed, Path(cwd))
+    if found is not None:
+        return found
+    lock = probe(cwd)
+    return None if lock else "locked" if lock is False else "lock_unavailable"
+
+
+def observe(con: sqlite3.Connection, repo: Repo, repo_id: RepoId, probe: Probe) -> tuple[SlotView, ...]:
+    """Every adopted slot of the repo, lowest name first; store or Git failure never yields `free`. Only an unreserved,
+    clean, detached slot is probed (`probe`), and its reservation is read again after the probe: a slot reserved meanwhile
+    is `held`, never `free`. A held slot is never probed, but a probe can race a slot reserved just after the first read:
+    if that attempt's entry tries the lock in the instant the probe holds it, the entry refuses `slot_busy` with nothing
+    read or written, and `tl plan start` relaunches it. The probe writes the lock file's holder record only when nobody
+    held the lock, so it never overwrites a live holder's record; it leaves a stale `probe` record until the next taker
+    (the record is informational: who wrote last)."""
     try:
         slots = sorted(_adopted(con, repo_id).items(), key=lambda item: _order(item[0]))
     except sqlite3.Error as error:
@@ -159,6 +180,18 @@ def observe(con: sqlite3.Connection, repo: Repo, repo_id: RepoId) -> tuple[SlotV
         if name in held:
             views.append(SlotView(name, path, "held", attempt_id=held[name]))
             continue
-        reason: Unknown | None = "git_unavailable" if listed is None else _clean(repo, listed, path)
+        reason = _free(repo, listed, cwd, probe)
         views.append(SlotView(name, path, "free") if reason is None else SlotView(name, path, "unknown", reason))
+        if reason is None:  # reserved meanwhile: the probe raced another admission, so the slot is not free
+            views[-1] = _again(con, repo_id, name, path)
     return tuple(views)
+
+
+def _again(con: sqlite3.Connection, repo_id: RepoId, name: str, path: Path) -> SlotView:
+    """The reservation read again after the probe: `free` only while still unreserved."""
+    try:
+        found = "SELECT attempt_id FROM reservation WHERE repo_id=? AND slot=?"
+        row: tuple[object, ...] | None = con.execute(found, (repo_id, name)).fetchone()
+    except sqlite3.Error:
+        return SlotView(name, path, "unknown", "store_unavailable")
+    return SlotView(name, path, "free") if row is None else SlotView(name, path, "held", attempt_id=str(row[0]))

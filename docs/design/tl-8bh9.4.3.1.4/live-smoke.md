@@ -6,7 +6,8 @@ an agent's own initiative. Scratch repo, scratch tracker and scratch `factory.db
 `entry.log`, fd inheritance, Codex flags/auth/push bar, and `collect` from a fresh shell; and, since
 [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md), that the factory commits the paths the agent lists (no hook runs), that a
 still-valid plan is reused on the agent's `unchanged`, and (Run C, owner-run) that the sandbox refuses a Git write and a
-`/tmp` write.
+`/tmp` write; and, since [.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md), that a step's slot is released and an abandoned task
+starts again (Run E, owner-run, not yet run).
 
 **Status (2026-11-10).** Smoke runs 3 and 4 passed on Linux (OrbStack, aarch64, codex-cli 0.167.0). Not observed yet: the `worker_alive` and `uncommitted` verify states (they appear only when
 the worker outlives the run or the agent leaves files; both runs were fast and tidy); the sandbox actually refusing a
@@ -154,7 +155,7 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInsteadOf G
 | Start/boot identity survives exec | phase leaves `admitted`; no `refused identity` | `refused identity`: macOS start (or boot) changes across exec, or the read was `unknown` | stop; paste `ps lstart` and the row; do not relaunch (a replace fails the same way) |
 | Entry survives coordinator exit | after tab A closed: entry alive, PPID 1, `s`, `??`; run reaches `captured` | entry gone with phase `admitted`/`dispatching`: SIGHUP or session not detached | paste `ps`, `entry.log`, row; reset (section 8) |
 | Gate and registration timing, busy | launch < 5 s; section 4 gives `store` at ~1.5 s; `worker_pid` set, phase `registered` then `captured` | `registration_*` or `unavailable register` in entry.log: harness gate write too slow; ~5 s in section 4 | paste both timings and entry.log |
-| entry.log contents | one line per entry run (O_APPEND): first section 4's `unavailable credentials:auth verify=refused:not_captured`, then exactly one line `<status> <reason>[ publish=... then=...] verify=<v>`; success (exit 0) is only `collected verified verify=verified` or `collected reused verify=reused`; `pending verification verify=unsettled:<r>` (`worker_alive` when the agent or its group still ran at the commit: re-run `tl plan verify` once it is gone; `uncommitted` when the stage left files: `T plan show` then says `Next: repeat` with the listing, section 6c)/`unavailable:<r>`, `collected rejected:<rule>`, `collected run:<r>`, `collected answer:<kind>` or `collected incomplete` are not success (exit 1). A pending verification is re-run by hand with `tl plan verify` (exit 3 until it settles) | a traceback: import failure (broken install); env/argv text: a leak | `just prepare`, reset; paste the log |
+| entry.log contents | one line per entry run (O_APPEND): first section 4's `unavailable credentials:auth verify=refused:not_captured`, then exactly one line `<status> <reason>[ publish=... then=...] verify=<v> claim=<w>[ release=<w>]` (`release=` only once the result is collected: `released` when the slot was clean, else `held:<reason>`); success (exit 0) is only `collected verified verify=verified ...` or `collected reused verify=reused ...`; `pending verification verify=unsettled:<r>` (`worker_alive` when the agent or its group still ran at the commit: re-run `tl plan verify` once it is gone; `uncommitted` when the stage left files: `T plan show` then says `Next: repeat` with the listing, section 6c)/`unavailable:<r>`, `collected rejected:<rule>`, `collected run:<r>`, `collected answer:<kind>` or `collected incomplete` are not success (exit 1). A pending verification is re-run by hand with `tl plan verify` (exit 3 until it settles) | a traceback: import failure (broken install); env/argv text: a leak | `just prepare`, reset; paste the log |
 | fd 2 inheritance | entry fd 1,2 = entry.log, fd 0 a pipe; worker fd 0-2 pipes; `lsof entry.log` lists only the entry | the worker or its children hold entry.log | paste the lsof output |
 | Codex accepts CODEX_ACCESS + file login | `rc` 0, `answer_kind` valid | `stderr.txt` names an unknown flag/config key: installed codex rejects CODEX_ACCESS; `http_status` 401: login refused; entry.log `unavailable credentials:<word>`: source refused (`codex` not on PATH, `auth`, `git_config`) | paste `codex --version`, first lines of `stderr.txt` (check them for secrets first) |
 | Push refused | owner probe fails; no `smoke` or `probe` ref in `remote.git` | a ref exists: the push bar does not hold | stop; paste `show-ref` |
@@ -175,7 +176,7 @@ for a new bead on the slot by hand, and run it:
 ```bash
 mkdir "$SMOKE/runA" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runA/"; done
 mkdir "$SMOKE/markers"
-G -C "$SLOT" switch -q --detach   # Run A left the slot on task/$TASK (kept); a free slot is detached
+G -C "$SLOT" rev-parse --abbrev-ref HEAD   # HEAD: Run A's entry released the slot, parked at D (task/$TASK keeps X)
 cd "$TRACKER" && TASK2=$(bd create "Smoke reuse" --silent) && echo "TASK2=$TASK2" >> "$SMOKE/env.sh"
 bd update "$TASK2" -d "Read docs/design/$TASK2/plan.md. It is a valid plan for this task: change nothing and answer unchanged." \
   --acceptance "The existing plan is reused; nothing is committed."
@@ -231,7 +232,7 @@ aside as in 6a (evidence kept), then:
 ```bash
 mkdir "$SMOKE/runB" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runB/"; done
 mkdir "$SMOKE/markers"
-G -C "$SLOT" switch -q --detach   # the previous run left the slot on its task branch (kept)
+G -C "$SLOT" rev-parse --abbrev-ref HEAD   # HEAD (released, parked at D); a slot left held: tidy, then `T plan release`
 cd "$TRACKER" && TASK3=$(bd create "Smoke repeat" --silent) && echo "TASK3=$TASK3" >> "$SMOKE/env.sh"
 bd update "$TASK3" -d "Write docs/design/$TASK3/plan.md with one short paragraph. You may jot scratch notes in \
 docs/design/$TASK3/notes.md while you work. Answer planned and list the plan in paths." \
@@ -264,6 +265,49 @@ trailer; `status --short` empty at the end; no marker. Fail: a second start that
 without a trailer. The exit code of `tl plan start` is 0 for `already_dispatched` even when its `Result:` is
 `rejected:<rule>`: read the result word.
 
+## 6d. Run E: release and abandon, then start again (optional, owner-run; tl-8bh9.4.3.1.11)
+
+Release is automatic when a step ends on a clean slot: the entry parks the slot back at its admission base D (detached)
+and keeps the tracker claim (`release=released`). `tl plan release` frees a slot left held once the person tidied it;
+`--abandon` also returns the claim and lets `tl plan start` admit a fresh attempt. Move the previous run aside as in 6a
+(evidence kept; a factory.db from before schema v7 is refused `schema` and must be moved aside), then:
+
+```bash
+mkdir "$SMOKE/runD" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runD/"; done
+mkdir "$SMOKE/markers"
+G -C "$SLOT" rev-parse --abbrev-ref HEAD   # must print HEAD (detached); `G -C "$SLOT" switch -q --detach` if a v6 run left it on a branch
+cd "$TRACKER" && TASK4=$(bd create "Smoke release" --silent) && echo "TASK4=$TASK4" >> "$SMOKE/env.sh"
+bd update "$TASK4" -d "Write docs/design/$TASK4/plan.md with one short paragraph. Answer planned and list the plan in paths." \
+  --acceptance "The plan is committed on the task branch."
+T slot adopt "$REPO"; S4=(plan start "$TASK4" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" \
+  --model "$MODEL" --effort "$EFFORT" --minutes 30)
+T "${S4[@]}"; T plan show "$TASK4" --backlog "$BACKLOG"   # repeat until Next: done; `Last entry result:` ends release=released
+T plan show "$TASK4" --backlog "$BACKLOG"   # Released: <time>, slot parked at <D>; claim kept
+G -C "$SLOT" rev-parse --abbrev-ref HEAD; G -C "$SLOT" rev-parse HEAD; G -C "$REPO" rev-parse "task/$TASK4"   # HEAD, D, X
+T plan release "$TASK4" --backlog "$BACKLOG" --json   # already_released, nothing changed (exit 0)
+T "${S4[@]}"                                          # already_dispatched, Result: verified; nothing launched
+(cd "$TRACKER" && bd show "$TASK4")   # still claimed: assignee taskloop, in_progress
+T plan release "$TASK4" --backlog "$BACKLOG" --abandon --json   # released, claim "unclaimed", abandoned (no Git write)
+(cd "$TRACKER" && bd show "$TASK4")   # the claim returned: no longer assigned to taskloop
+T plan show "$TASK4" --backlog "$BACKLOG"   # Next: start; Released: ...; claim unclaimed; abandoned
+T "${S4[@]}"; T plan show "$TASK4" --backlog "$BACKLOG"   # started: a fresh attempt (1 of at most 3); Earlier: <id> abandoned
+# the fresh attempt resumes task/$TASK4 at X: the agent reads the committed plan and should answer unchanged (`reused`)
+T plan list                                 # one row for $TASK4: the fresh attempt
+G -C "$SLOT" status --short; ls "$SMOKE/markers"
+```
+
+Optional, the held case: after a step ends, write a stray file in the slot before the entry finishes (or let a failed
+run leave one): entry.log ends `release=held:slot_dirty`, `T plan show` says `Next: release`, `T plan release` refuses
+`slot_dirty` with the listing (exit 1, nothing changed); remove the file and `T plan release` parks it.
+
+| Check | Pass | Fail means |
+|---|---|---|
+| automatic release | entry.log `... claim=held release=released`; slot detached at D; `task/$TASK4` at X; `bd show` still `taskloop` | `release=held:<w>` on a clean slot, or the claim returned |
+| second release | `already_released`, exit 0, no Git or bd call | anything changed |
+| abandon | `"claim": "unclaimed"`, `"abandoned": true`; bd assignee cleared | `unavailable:tracker` (bd failed; rerun), `not_held` (reverted or another actor's: check `bd show`) |
+| start while the claim is still returning | after an `unavailable:tracker` abandon, `T "${S4[@]}"` refuses `release` and show says `Next: release` | a fresh attempt admitted before the claim was returned |
+| start again | `started` with a new attempt id; `Earlier: <id> abandoned`; the agent starts on `task/$TASK4` at X | `already_dispatched`, `task_attempted`, or `refused:branch_diverged` (see `.11` section 5) |
+
 ## 7. Paste back to the agent
 
 `codex --version`; the `--json` outputs of `T config show`, both `T slot adopt`, section 4's starts (with `time`) and shows,
@@ -279,15 +323,20 @@ Never paste `auth.json`, `env`, or the agent's environment.
 Moving a run's files aside (6a, 6c) keeps the slot; a slot or probe directory moved or deleted by hand leaves a stale
 `git worktree list` registration in `$REPO`: harmless (`G -C "$REPO" worktree prune` clears it; never prune a live slot).
 
-Nothing resumes, retries, releases or stops an attempt (`tl plan abandon TASK [--backlog B]` and `tl slot release`
-refuse `deferred` and print the manual steps); only Git leftovers are repeated, by re-running `tl plan start` (6c). Phase `dispatching` or `registered` with a dead entry stays so (start:
-`already_dispatched` forever; show: `stuck:entry_lost`); a live but hung entry gives `already_dispatched` while the
+Nothing resumes, retries or stops an attempt; only Git leftovers are repeated, by re-running `tl plan start` (6c). A
+step that ended on a clean slot releases it itself (claim kept); every stuck attempt whose entry and agent are shown
+stopped ends with `tl plan release TASK --backlog B --abandon` (6d), which also returns the claim. Phase `dispatching`
+with no agent recorded cannot be shown stopped (`unsettled:worker_unknown`): only the reset below remains. Phase
+`dispatching` or `registered` with a dead entry otherwise stays so until abandoned (start: `already_dispatched`; show:
+`stuck:entry_lost`); a live but hung entry gives `already_dispatched` while the
 attempt is `dispatching`/`registered` and `already_running` once it is `captured` (`stuck:hung` past the deadline); a deadline passed while `admitted` refuses registration (`refused:registration_refused`;
-`stuck:expired_admitted`). The reservation and the bead claim stay held by design. Kill only by PID, after checking it:
+`stuck:expired_admitted`). Until released or abandoned, the reservation and the bead claim stay held by design. Kill only by PID, after checking it:
 `ps -o command= -p "$E"` must show `taskloop.attempt_entry $DB`; for the worker, `lsof -a -p "$W" -d cwd` (Linux without
 lsof: `readlink /proc/$W/cwd`) must show `$SLOT`, then
 `kill -TERM -"$(ps -o pgid= -p "$W" | tr -d ' ')"` (its own group); `plan show` names the worker only as `last known`, so
-check it is alive first. Reset for a rerun (also the reset after any schema change: a v3 `factory.db` is deleted, never migrated):
+check it is alive first. Reset for a rerun (also the reset after any schema change: an older `factory.db` is moved aside or
+deleted, never migrated; a slot an older run left on a task branch is detached by hand, `G -C "$SLOT" switch -q --detach`,
+before `T slot adopt`):
 
 ```bash
 rm -f "$DB" "$DB-wal" "$DB-shm"; rm -rf "$ART"   # or move them aside as in section 6a when the run is evidence

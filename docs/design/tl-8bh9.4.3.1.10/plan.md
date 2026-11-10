@@ -240,6 +240,13 @@ Size estimates: `plan_prepare.py` about 170, `slot_lock.py` about 50, `plan.py` 
 - The heartbeat (.9) and descendant stop proof (.4.4).
 - Created/resumed and the branch in `tl plan show`; the dashboard.
 
+**Release delivered by [.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md).** Park/detach (`park` at the stored admission base D,
+under the slot's lock; `plan_release.py` is its second writer after `plan_prepare.py`), a monotonic per-slot
+generation (`slot.generation`) and the free-rule lock probe (`slot_lock.probe`: a free-looking slot whose lock is held
+is `unknown(locked)`) are built. The typed not-started failure was not: an attempt refused before dispatch (a branch
+changed between admission and the entry, for example) is abandoned (`tl plan release --abandon`) instead of being left
+for the whole-DB discard. Force-unlock stays never.
+
 ## 8. Dependency (checked)
 
 - **Pin.** `pyproject.toml` gains `process-lock==0.2.1` and the source `{ git = ".../shelf.git", subdirectory =

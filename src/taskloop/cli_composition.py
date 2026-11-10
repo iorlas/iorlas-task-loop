@@ -9,27 +9,28 @@ from pathlib import Path
 
 from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import Store
-from stream_proc import observe_owned
 
 from taskloop.composition import (
     RealSlotFiles,
     adopt_slots,
     checkouts,
+    entry_seen,
     open_launcher,
     open_plan_admission,
     open_plan_verifier,
+    open_releaser,
     worker_gone,
 )
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.plan_files import PlanFiles
-from taskloop.plan_launch import Entry, entry_process
-from taskloop.plan_ops import Adoption, Failed, Reads, Seen, Starting, require_database
+from taskloop.plan_ops import Adoption, Failed, Reads, Starting, require_database
+from taskloop.plan_release import PlanRelease
 from taskloop.plan_repeat import PlanRepeat
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import Checkouts
 from taskloop.plan_verifier import PlanVerifier
-from taskloop.slot_lock import refused
+from taskloop.slot_lock import refused, repeating
 
 
 def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Path.home) -> Loaded | ConfigRefused:
@@ -49,11 +50,6 @@ def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Pat
         return ConfigRefused("unreadable", detail=f"{type(error).__name__}: {path}")
     settings = resolve(text, flags, base)
     return settings if isinstance(settings, ConfigRefused) else Loaded(path, text is not None, settings)
-
-
-def entry_seen(entry: Entry) -> Seen:
-    """A native process-table read of the registered entry, by the launcher's identity rule; no spawn or signal."""
-    return observe_owned(entry_process(entry)).kind
 
 
 @contextmanager
@@ -95,19 +91,31 @@ def open_plan_start(database: Path, artifacts: Path) -> Generator[Starting | Fai
             else:
                 reader, admission, launcher = _reader(con), open_plan_admission(database, artifacts), open_launcher(database, artifacts)
                 verifier = open_plan_verifier(database, store)
-                repeat = PlanRepeat(reader, verifier, PlanFiles(artifacts), admission, launcher, worker_gone, entry_seen, time.time)
+                repeat = PlanRepeat(reader, verifier, PlanFiles(artifacts), admission, launcher, worker_gone, entry_seen, time.time,
+                                    repeating)
                 yield Starting(reader, admission, launcher, time.time, repeat)
         finally:
             store.close_shared()
 
 
 @contextmanager
-def open_plan_verify(database: Path) -> Generator[tuple[PlanStore, PlanVerifier] | Failed]:
-    """The database guard first, then the verifier's shared writer: no empty factory.db is ever created."""
+def open_plan_verify(database: Path) -> Generator[tuple[PlanStore, PlanVerifier, PlanRelease] | Failed]:
+    """The database guard first, then the verifier's and the releaser's shared writer: no empty factory.db is ever created."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
-            yield con if isinstance(con, Failed) else (_reader(con), open_plan_verifier(database, store))
+            yield con if isinstance(con, Failed) else (_reader(con), open_plan_verifier(database, store), open_releaser(database, store))
+        finally:
+            store.close_shared()
+
+
+@contextmanager
+def open_plan_release(database: Path) -> Generator[tuple[PlanStore, PlanRelease] | Failed]:
+    """The database guard first, then the releaser's shared writer (`tl plan release`)."""
+    store = Store(SCHEMA)
+    with _read_only(database) as con:
+        try:
+            yield con if isinstance(con, Failed) else (_reader(con), open_releaser(database, store))
         finally:
             store.close_shared()
 

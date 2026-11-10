@@ -67,10 +67,15 @@ WRITERS = {
     ("CREATE TABLE", "plan_attempt"): "plan_schema.py",
     ("CREATE TABLE", "plan_execution"): "plan_schema.py",
     ("CREATE TABLE", "plan_verification"): "plan_schema.py",
+    ("CREATE TABLE", "plan_release"): "plan_schema.py",
     ("INSERT", "slot"): "slots.py",
     ("INSERT", "reservation"): "plan_admit.py",
     ("INSERT", "plan_attempt"): "plan_admit.py",
     ("UPDATE", "reservation"): "plan_admit.py",
+    ("UPDATE", "slot"): "plan_admit.py",
+    ("INSERT", "plan_release"): "plan_release.py",
+    ("UPDATE", "plan_release"): "plan_release.py",
+    ("DELETE FROM", "reservation"): "plan_release.py",
     ("INSERT", "plan_execution"): "plan_store.py",
     ("INSERT", "plan_verification"): "plan_store.py",
     ("UPDATE", "plan_attempt"): "plan_store.py",
@@ -127,8 +132,11 @@ def git_writers() -> set[tuple[str, str]]:
     return found
 
 
-def test_only_the_commit_and_prepare_modules_write_git() -> None:
-    expected = {("stage", "plan_commit.py"), ("record", "plan_commit.py"), ("take_branch", "plan_prepare.py"), ("park", "plan_prepare.py")}
+def test_only_the_commit_prepare_and_release_modules_write_git() -> None:
+    expected = {
+        ("stage", "plan_commit.py"), ("record", "plan_commit.py"), ("take_branch", "plan_prepare.py"), ("park", "plan_prepare.py"),
+        ("park", "plan_release.py"),
+    }
     assert git_writers() == expected
 
 

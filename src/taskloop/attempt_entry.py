@@ -7,9 +7,11 @@ runs the agent at most once (through `PlanAttempts.execute`), retries only an un
 once (`PlanVerifier.verify`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
 line of fixed words: status and reason, read back after a stored verdict (a published retry instead keeps the run's
 own words and adds `publish=` and the collected `then=`), always `verify=`, then `claim=` (the tracker claim's lease,
-renewed by `claim_lease` while the step runs), never facts, environment, argv or exception text. A claim found lost
-before the agent starts refuses (`refused claim_lost`); one lost later is only recorded. It exits 0 only for a verified
-plan, new or reused (`plan.succeeded`). Its stdout and stderr are the attempt's `entry.log`.
+renewed by `claim_lease` while the step runs), then, once the result read back is collected, `release=` (the settled
+release of its own slot, still under its lock: `released`, or why the slot stays held), never facts, environment, argv
+or exception text. A claim found lost before the agent starts refuses (`refused claim_lost`); one lost later is only
+recorded. It exits 0 only for a verified plan, new or reused (`plan.succeeded`). Its stdout and stderr are the attempt's
+`entry.log`.
 """
 
 import os
@@ -27,8 +29,10 @@ from stream_proc import ProcessObservation, inspect_process
 
 from taskloop import slot_lock
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
-from taskloop.composition import open_plan_attempts, tracker_claims, tracker_located, worker_gone
+from taskloop.composition import entry_seen, open_plan_attempts, tracker_claims, tracker_located, worker_gone
 from taskloop.plan import ACCEPTED, PlanAttempts, judged, succeeded
+from taskloop.plan_admit import Unclaim
+from taskloop.plan_release import PlanRelease, word
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import StoreRefused, StoreUnavailable
 from taskloop.plan_types import (
@@ -160,8 +164,14 @@ def _held(_admission: Admission) -> AbstractContextManager[None]:
     return nullcontext()
 
 
-def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float], None], gone: WorkerGone) -> tuple[str, bool]:
-    """Execute once, retry an unavailable publication, verify once: the log words and whether the plan succeeded."""
+def _unheld(_cwd: str, _attempt_id: str) -> AbstractContextManager[None]:
+    """The entry's release runs inside the slot lock the entry already holds."""
+    return nullcontext()
+
+
+def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float], None], gone: WorkerGone) -> tuple[str, bool, bool]:
+    """Execute once, retry an unavailable publication, verify once: the log words, whether the plan succeeded and whether
+    the result read back is collected (terminal)."""
     app, key = found.app, found.key
     result = app.execute(key, found.me)
     published = _publish(app, result, clock, wait)
@@ -173,7 +183,7 @@ def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float]
     if published is not None:
         then = f" then={latest.status}:{latest.reason}" if accepted else ""
         line = f"{result.status} {result.reason} publish={published.status}{then}"
-    return f"{line} verify={shown(verified)}", succeeded(latest)
+    return f"{line} verify={shown(verified)}", succeeded(latest), latest.status == "collected"
 
 
 def enter(
@@ -186,13 +196,15 @@ def enter(
     gone: WorkerGone,
     heartbeat_for: HeartbeatFor,
     stop: Stop,
+    unclaim: Unclaim,
 ) -> int:
     """Run the attempt as its registered entry; the return code is display only. After the identity check the entry
     takes its slot's custody lock (`slot_lock`, never waiting: `refused slot_busy`, or `refused lock`) and holds it
     around everything else: preparation, the agent, the publish retries and the verify, whose own hold is a no-op.
     `gone` observes the worker before the verification's Git write. The claim is renewed once before the agent (a lost
     claim refuses: never re-claimed), then by a thread until the step ends (`stop` ends it); a later loss or fault is
-    only the log line's `claim=` word."""
+    only the log line's `claim=` word. A collected step then releases its own slot, settled (`unclaim` is the release's
+    port; a settled release never calls it)."""
     found = _registered(args, attempts, inspect)
     if isinstance(found, str):
         log(found)
@@ -206,7 +218,8 @@ def enter(
         log("refused lock")
         return 1
     try:  # the lock is outermost: the claim's keep-alive starts and stops inside it
-        return _claimed(found, clock, wait, log, gone, KeepAlive(heartbeat_for(found.tracker_root, args.task_id), stop, clock))
+        alive = KeepAlive(heartbeat_for(found.tracker_root, args.task_id), stop, clock)
+        return _claimed(found, clock, wait, log, gone, alive, unclaim)
     finally:
         lock.release()
 
@@ -218,15 +231,22 @@ def _claimed(
     log: Callable[[str], None],
     gone: WorkerGone,
     alive: KeepAlive,
+    unclaim: Unclaim,
 ) -> int:
-    """The step under the slot's lock, with the claim renewed before the agent and kept alive while it runs."""
+    """The step under the slot's lock, with the claim renewed before the agent and kept alive while it runs; a collected
+    step's slot is then released (settled: parked when clean, the claim kept), still under the lock."""
     alive.renew()
     if alive.word() == "lost":
         log("refused claim_lost")
         return 1
     with keeping(alive):
-        line, ok = _step(found, clock, wait, gone)
-    log(f"{line} claim={alive.word()}")
+        line, ok, collected = _step(found, clock, wait, gone)
+    line = f"{line} claim={alive.word()}"
+    if collected:
+        app = found.app
+        releaser = PlanRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock)
+        line += " release=" + word(releaser.release(found.key, False, found.me))
+    log(line)
     return 0 if ok else 1
 
 
@@ -242,8 +262,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args is None:
             log("refused usage")
             return 2
-        heartbeat_for = tracker_claims().heartbeat_for
-        return enter(args, open_plan_attempts, inspect_process, time.time, time.sleep, log, worker_gone, heartbeat_for, threading.Event())
+        claims = tracker_claims()
+        return enter(args, open_plan_attempts, inspect_process, time.time, time.sleep, log, worker_gone, claims.heartbeat_for,
+                     threading.Event(), claims.unclaim)
     except BaseException as error:  # the type name only, never its text
         log("failed " + type(error).__name__)
         return 1

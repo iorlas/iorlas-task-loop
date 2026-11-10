@@ -25,7 +25,7 @@ from taskloop.plan_files import PlanFiles
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import Verified
 from taskloop.plan_verifier import PlanVerifier
-from taskloop.slot_lock import hold, lock_path
+from taskloop.slot_lock import hold, lock_path, probe
 from taskloop.slots import adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
@@ -60,7 +60,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     adopt(lambda: factory, begin_immediate, checkouts(main), slots, 1)
-    admission = PlanAdmission(lambda: factory, begin_immediate, PlanFiles(art), tasks, checkouts, claimed, claimed, lambda: 10)
+    admission = PlanAdmission(lambda: factory, begin_immediate, PlanFiles(art), tasks, checkouts, claimed, claimed, lambda: 10, probe)
     admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), main, "m", "high", "workspace-write", 100))
     assert isinstance(admitted, Admitted) and admitted.slot == "s1"
     store, files = PlanStore(lambda: factory), RealSlotFiles()

@@ -51,6 +51,13 @@ first of the task) and lists the earlier ones; `attempts_status` judges only row
 row (one with a successor) gets the derived state `repeated` and no `collect`/`next_step`/leftover read: it is fenced
 (section 3) and none of its next steps applies. `collect(key)` stays per attempt.
 
+**Changed by [.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md) (schema v7).** `number` is the attempt's place in its step
+(1..`ATTEMPTS`), no longer its place among the task's attempts: after an abandon, a fresh attempt is number 1 again, with
+no `previous_attempt_id` and the full repeat budget. The task-wide order is the new column `seq` (a repeat takes its
+previous attempt's `seq + 1`); the key is `UNIQUE(adapter, backlog, task_id, seq)`, and `attempt_of` and `attempts()`
+order by `seq DESC`. `tl plan list` shows one row per task (its highest `seq`); `tl plan show` lists each earlier
+attempt as `repeated (<reason>)` or `abandoned`.
+
 ## 3. The reservation handoff (decided)
 
 The slot is never released between attempts: the next attempt **takes over the held reservation** in the transaction
