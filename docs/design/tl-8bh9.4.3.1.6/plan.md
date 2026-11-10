@@ -22,7 +22,9 @@ owner's answers. Nothing has been run, implemented or reviewed. Read: CLAUDE.md,
 Since built from "Next": preparation and lock ([.4.3.1.10](../tl-8bh9.4.3.1.10/plan.md)), release
 ([.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md)) and publication of the verified plan to `origin` ([.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md); push only,
 `tl plan publish`). Scheduling built in [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md) (one-shot rounds, `tl plan next`);
-pause = no rounds (or the approval label removed). Real force-unlock stays never; the dashboard remains next.
+pause = no rounds (or the approval label removed). Rounds by themselves in [.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md)
+(`tl plan rounds`); pause = stop `tl plan rounds` (or remove the label). Real force-unlock stays never; the dashboard
+remains next.
 
 ## 1. Words, plainly
 

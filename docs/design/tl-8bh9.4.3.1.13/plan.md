@@ -145,7 +145,8 @@ happens each round when the cause persists:
 **The deadline is the bound.** The attempt's deadline was fixed at admission (`--minutes`). The launcher's registration
 fence refuses an expired admitted attempt (`registration_refused`), and its status becomes `stuck:expired_admitted`, which
 a round only reports. So a persistent cause costs at most one relaunch per round until the deadline: with rounds by hand,
-a few; with a future loop every N minutes, at most `minutes / N`. Noise: one `entry.log` line per relaunch in the
+a few; with `tl plan rounds` ([.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md)) a regular round every 60 s by default, at most
+`minutes` relaunches per deadline (the slot-freed wake adds at most one round per step that ends). Noise: one `entry.log` line per relaunch in the
 attempt's own log and one round-log line (section 7a), both traceable to the attempt. No detector is added. A truly lost
 claim then needs a person: `tl plan release --abandon` (the abandon's fenced unclaim answers `not_held`) and, to plan the
 task again, `tl plan start`. Consequence of the same fence: **an outage longer than the deadline is not continued
@@ -167,6 +168,10 @@ slot is filled by the next round. Pause is: stop running rounds (or remove the a
 the owner's Pause/Continue decision says. Nothing in factory.db records rounds.
 
 One-shot is also the debugging tool (owner, Q1): one command, one round, every move printed and logged.
+
+**The trigger is decided in [.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md) (`tl plan rounds`: a foreground process started by
+hand, a regular round every 60 s, a round seconds after a reservation row is removed, the tracker read only when a slot
+is free; no tracker events).** The exploration below is kept as it was written.
 
 **Open design: the trigger (a later slice; nothing here is built).** The owner's ideal is event-driven: a tracker change
 notifies the scheduler, no polling; he is between that and a periodic resident loop, and a new approved task must not wait
@@ -297,6 +302,10 @@ the `log` port; tests pass a list's `append`.
 - **Size and retention:** about 100 bytes per move, unbounded, never rotated or deleted by the factory (no age-based
   deletion of evidence). A person may move it aside; the next round creates it again.
 - **Not state:** factory.db stays the only local execution state; the log is a file behind its owner, like `entry.log`.
+- **Repeated rounds** ([.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md) section 9): `tl plan rounds` passes the previous round's
+  moves and stopped word as `quiet`; a move identical to one in the previous round (task, action, word, attempt) is not
+  written again, and the closing line only when a move line was written or the stopped word changed, so an idle factory
+  writes nothing. Its own lines: `rounds started|wait|stopped ...`. `tl plan next` writes every move as before.
 
 ## 8. Tracker read port
 
@@ -481,7 +490,9 @@ Answered (owner, 2026-11-10):
 
 Open:
 
-5. **After an outage longer than the attempt's deadline, should the factory start the task over by itself?** Each
+5. **Decided in [.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md) section 16** (continue it automatically after a reboot, by
+   a renewed deadline; a separate follow-up task, not built). The question as asked:
+   **After an outage longer than the attempt's deadline, should the factory start the task over by itself?** Each
    attempt gets a deadline when it is admitted (`--minutes`, 30 in the runbook). If the machine is off or offline past
    it, the admitted attempt is expired: the existing registration fence refuses it, `tl plan show` says
    `stuck:expired_admitted`, and a round only reports it; you abandon it and run `tl plan start`. No agent ran, so nothing

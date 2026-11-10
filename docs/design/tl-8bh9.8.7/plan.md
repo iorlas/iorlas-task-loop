@@ -49,6 +49,8 @@ start/show/list/verify` (and the `abandon` placeholder) are registered before th
 [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md) the wording is "plan step only: publishes task/<id>; no merge or land".
 `tl plan next` ([.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md), one scheduling round for the plan step) joins the registered
 plan surface under the same exception and wording.
+`tl plan rounds` ([.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md), rounds one after another in a foreground process until
+Ctrl-C) joins it under the same exception and wording.
 The foundation is explicitly the exception that establishes build/executable boundaries before the first full slice.
 
 Retain Python 3.15 and existing tool pins/policies. Add no runtime dependency or semantic fake before an actual

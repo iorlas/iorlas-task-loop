@@ -12,7 +12,7 @@ from typing import get_args
 import pytest
 from sqlite_store import Store, begin_immediate
 
-from taskloop import cli_composition, cli_plan
+from taskloop import cli_composition, cli_plan, rounds_lock
 from taskloop.cli import main
 from taskloop.plan import SANDBOX
 from taskloop.plan_admit import AdmitRequest, AdmitResult, Admitted
@@ -21,6 +21,7 @@ from taskloop.plan_ops import (
     Adoption,
     AttemptStatus,
     Checked,
+    Ended,
     EntryState,
     Failed,
     FailureKind,
@@ -482,3 +483,126 @@ def test_next_refuses_an_unusable_tracker_root_and_a_missing_database(tmp_path: 
     admitted(db)
     assert main([*NEXT[:5], str(tmp_path / "absent"), *NEXT[6:], "--db", str(db), "--json"]) == 1
     assert json.loads(capsys.readouterr().err)["error"]["reason"] == "tracker_root"
+
+
+ROUNDS = ["plan", "rounds", *NEXT[2:]]
+
+
+class Run:
+    """The stubbed rounds: the opener's value passed through, the requests recorded, `ended` returned or raised."""
+
+    def __init__(self, ended: Ended | BaseException) -> None:
+        self.ended, self.opened, self.requests = ended, list[tuple[Path, Path, object]](), list[object]()
+
+    @contextmanager
+    def opener(self, database: Path, artifacts: Path, request: object) -> Generator[object]:
+        self.opened.append((database, artifacts, request))
+        yield self
+
+    def run(self, given: object, request: object) -> Ended:
+        assert given is self
+        self.requests.append(request)
+        if isinstance(self.ended, BaseException):
+            raise self.ended
+        return self.ended
+
+
+def stubbed(monkeypatch: pytest.MonkeyPatch, ended: Ended | BaseException) -> Run:
+    run = Run(ended)
+    monkeypatch.setattr(cli_composition, "open_plan_rounds", run.opener)
+    monkeypatch.setattr(cli_plan, "run_rounds", run.run)
+    return run
+
+
+def test_rounds_flags_reach_the_opener_and_print_a_start_and_an_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run, art = stubbed(monkeypatch, Ended("tasks", "interrupted")), tmp_path / "art"
+    assert main([*ROUNDS, "--db", str(tmp_path / "f.db"), "--artifacts", str(art)]) == 0
+    request = cli_plan.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)
+    assert run.opened == [(tmp_path / "f.db", art, request)] and run.requests == [cli_plan.RoundsRequest("tasks", 60)]
+    output = capsys.readouterr()
+    assert output.out.splitlines() == [
+        f"Rounds for backlog tasks every 60 s; log: {art / 'rounds.log'}; stop with Ctrl-C",
+        "Rounds stopped: interrupted. Launched steps keep running; `tl plan rounds` again continues them.",
+    ] and output.err == ""
+    config = tmp_path / "scratch.toml"
+    config.write_text("round_seconds = 90\n")
+    assert main(["--config", str(config), *ROUNDS, "--every", "30", "--artifacts", str(art), "--json"]) == 0
+    assert run.requests[-1] == cli_plan.RoundsRequest("tasks", 30)
+    assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [
+        {"status": "rounds", "backlog": "tasks", "every": 30, "log": str(art / "rounds.log")},
+        {"status": "ended", "backlog": "tasks", "reason": "interrupted", "detail": ""},
+    ]
+
+
+def test_a_whole_round_refusal_ends_the_rounds_with_exit_1(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    stubbed(monkeypatch, Ended("tasks", "refused:database", "No readable factory.db"))
+    assert main(ROUNDS) == 1
+    output = capsys.readouterr()
+    assert output.out.startswith("Rounds for backlog tasks every 60 s")
+    assert output.err.splitlines() == ["tl plan rounds: refused:database", "No readable factory.db"]
+
+
+@pytest.mark.parametrize("structured", [False, True])
+def test_a_second_ctrl_c_exits_130(structured: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    stubbed(monkeypatch, KeyboardInterrupt())
+    assert main([*ROUNDS, *(["--json"] if structured else [])]) == 130
+    err = capsys.readouterr().err
+    assert json.loads(err) == {"status": "ended", "backlog": "tasks", "reason": "abrupt", "detail": ""} if structured else (
+        err == "Stopped at once.\n")
+
+
+def test_a_factory_db_that_exists_but_cannot_be_opened_backs_off_while_an_absent_one_ends(tmp_path: Path) -> None:
+    db = tmp_path / "factory.db"
+    request = cli_plan.NextRequest("tasks", str(tmp_path), Path("/checkout"), "auto", "m", "high", 30)
+    once = cli_composition.one_round(db, tmp_path / "art", request, lambda: False)
+    absent = once(frozenset())
+    assert isinstance(absent, Failed) and (absent.kind, absent.reason) == ("refused", "database")
+    db.write_bytes(b"not a database, or one locked past the busy timeout")
+    unopened = once(frozenset())
+    assert isinstance(unopened, Failed) and (unopened.kind, unopened.reason) == ("unavailable", "store")
+
+
+def test_rounds_refuse_a_short_interval_before_opening_anything(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run = stubbed(monkeypatch, Ended("tasks", "interrupted"))
+    assert main([*ROUNDS, "--every", "4", "--json"]) == 1
+    error = json.loads(capsys.readouterr().err)["error"]
+    assert (error["kind"], error["reason"]) == ("refused", "interval") and run.opened == []
+    assert main([*ROUNDS, "--every", "4"]) == 1
+    assert cli_plan.GUIDE["interval"] in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--model", "--effort", "--minutes"])
+def test_rounds_require_every_choice_and_the_help_names_the_stop(missing: str, capsys: pytest.CaptureFixture[str]) -> None:
+    at = ROUNDS.index(missing)
+    with pytest.raises(SystemExit) as result:
+        main([*ROUNDS[:at], *ROUNDS[at + 2:]])
+    assert result.value.code == 2 and missing in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        main(["plan", "rounds", "--help"])
+    shown = " ".join(capsys.readouterr().out.split())
+    assert "Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot" in shown
+    assert "Ctrl-C once stops after the current move, twice exits at once; launched steps keep running." in shown
+
+
+def test_the_real_opener_refuses_inputs_a_missing_database_and_a_second_rounds_process_before_any_round(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Every refusal comes before the lock (except `rounds_running`) and before the SIGINT handler: no handler installed."""
+    db = tmp_path / "factory.db"
+    at = ROUNDS.index("--label") + 1
+    assert main([*ROUNDS[:at], " ", *ROUNDS[at + 1:], "--db", str(db), "--json"]) == 1
+    assert json.loads(capsys.readouterr().err)["error"]["reason"] == "label"
+    assert main([*ROUNDS, "--db", str(db), "--json"]) == 1
+    assert json.loads(capsys.readouterr().err)["error"]["reason"] == "database" and list(tmp_path.iterdir()) == []
+    admitted(db)
+    held = rounds_lock.hold(db, "tasks")
+    try:
+        assert main([*ROUNDS, "--db", str(db)]) == 1
+    finally:
+        held.release()
+    output = capsys.readouterr()
+    assert output.out == "" and "tl plan rounds: refused:rounds_running" in output.err and cli_plan.GUIDE["rounds_running"] in output.err

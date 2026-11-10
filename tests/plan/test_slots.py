@@ -10,7 +10,9 @@ from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
 
 from taskloop.composition import open_plan_attempts
+from taskloop.plan_reads import SlotUse, StoreUnavailable
 from taskloop.plan_schema import SCHEMA
+from taskloop.plan_store import PlanStore
 from taskloop.plan_types import AttemptKey
 from taskloop.repo import RepoId
 from taskloop.slots import Adopted, NotAdopted, SlotsUnavailable, SlotView, Unclean, adopt, observe, slot_names
@@ -244,3 +246,15 @@ def test_a_slot_reserved_while_it_was_probed_is_held_not_free(factory: sqlite3.C
         return True
 
     assert observe(factory, repo, rid(repo), probe) == (SlotView("s1", derived(repo, root, "s1"), "held", attempt_id="won"),)
+
+
+def test_slot_use_counts_the_adopted_slots_without_a_reservation_row_and_lists_every_row(factory: sqlite3.Connection) -> None:
+    store = PlanStore(lambda: factory)
+    assert store.slot_use() == SlotUse(0, frozenset())
+    factory.execute("INSERT INTO slot (repo_id,name,cwd) VALUES ('r','s1','/r/s1'),('r','s2','/r/s2'),('q','s1','/q/s1')")
+    factory.execute("INSERT INTO reservation VALUES ('s1','r','/r/s1',1,'a1')")
+    assert store.slot_use() == SlotUse(2, frozenset({("r", "s1")}))  # across repos: q's s1 is not r's
+    factory.execute("INSERT INTO reservation VALUES ('s2','r','/r/s2',1,'a2'),('s1','q','/q/s1',3,'a3')")
+    assert store.slot_use() == SlotUse(0, frozenset({("r", "s1"), ("r", "s2"), ("q", "s1")}))
+    with pytest.raises(StoreUnavailable):
+        PlanStore(lambda: None).slot_use()

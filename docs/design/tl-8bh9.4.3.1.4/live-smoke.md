@@ -11,7 +11,10 @@ starts again (Run E, owner-run, not yet run); and, since [.4.3.1.12](../tl-8bh9.
 is published to `origin` (the scratch `remote.git` only), retried by `tl plan publish`, and never forced (Run F,
 owner-run); and, since [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md), that a scheduling round (`tl plan next`) takes approved
 ready tasks into the free slot in priority order, never re-admits an abandoned task, and relaunches an entry that exited
-before the agent ran (Run G, owner-run, not yet run).
+before the agent ran (Run G, owner-run); and, since [.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md), that `tl plan rounds` takes
+a new task within one interval, fills a freed slot within seconds, stays silent while idle, refuses a second rounds
+process for the backlog, and stops gracefully on one Ctrl-C and at once on two without stopping a launched step (Run H,
+owner-run, not yet run).
 
 **Status (2026-11-10).** Smoke runs 3 and 4 passed on Linux (OrbStack, aarch64, codex-cli 0.167.0). Not observed yet: the `worker_alive` and `uncommitted` verify states (they appear only when
 the worker outlives the run or the agent leaves files; both runs were fast and tidy); the sandbox actually refusing a
@@ -466,6 +469,81 @@ retried by a round, two concurrent rounds, macOS.
 
 **Not run yet.**
 
+## 6g. Run H: rounds by themselves, `tl plan rounds` (optional, owner-run; tl-8bh9.4.3.1.14)
+
+`tl plan rounds` runs rounds one after another in the foreground of the terminal it was started in until Ctrl-C: a round
+at once, then a regular round every `--every` seconds (machine config `round_seconds`, default 60, at least 5) and a
+round within about 2 s of a slot's reservation row being removed. Admission reads the tracker only when factory.db has an
+adopted slot without a reservation row. It writes only `$ART/rounds.log` (a move identical to the previous round's is not
+written again; an idle round writes nothing) and one start line and one end line in its terminal. First Ctrl-C: no further
+move, `rounds stopped interrupted`, exit 0. Second Ctrl-C: `Stopped at once.`, exit 130. Launched steps keep running
+either way (their own session). Start it from the shell where `bd`, `git push` and `codex` work: entries inherit its
+environment. It keeps the code it started with: after reinstalling, restart it; never run the gates in `$TL` while it
+runs from there. `slot_count = 1`; move the previous run aside as Run G does, then tab B runs the rounds and tab A the rest:
+
+```bash
+ASIDE="$SMOKE/before-runH-$(date +%Y%m%d%H%M%S)" && mkdir "$ASIDE" \
+  && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$ASIDE/"; done
+mkdir "$SMOKE/markers"
+T slot adopt "$REPO"
+ROUNDS=(plan rounds --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" \
+  --effort "$EFFORT" --minutes 30)
+# tab B: a long interval, so a start seconds after a slot frees can only be the wake
+T "${ROUNDS[@]}" --every 120          # H1: start line; rounds.log: rounds started every=120, then the first round
+# tab A
+H_ONE=$(cd "$TRACKER" && bd create "Smoke rounds one" -p 1 -l auto --silent)
+H_TWO=$(cd "$TRACKER" && bd create "Smoke rounds two" -p 2 -l auto --silent)
+printf 'H_ONE=%s\nH_TWO=%s\n' "$H_ONE" "$H_TWO" >> "$SMOKE/env.sh"
+for t in "$H_ONE" "$H_TWO"; do (cd "$TRACKER" && bd update "$t" -d "Write docs/design/$t/plan.md with one short paragraph. \
+Answer planned and list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."); done
+tail -f "$ART/rounds.log"            # H2: within 120 s `start started` for $H_ONE; then nothing while it runs
+T "${ROUNDS[@]}" --every 120; echo "exit $?"   # H3 (tab C): refused:rounds_running naming tab B's pid, exit 1
+T plan next --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" \
+  --effort "$EFFORT" --minutes 30 --json     # H4: works beside it: report running, stopped no_free_slot
+T plan show "$H_ONE" --backlog "$BACKLOG"    # until Released; note its Released time
+# H5: $H_TWO's `start started` line within ~5 s of $H_ONE's Released time (the interval is 120 s)
+wc -l < "$ART/rounds.log"; sleep 300; wc -l < "$ART/rounds.log"   # H6, once both are done: no new line while idle
+# H7, graceful: Ctrl-C ONCE in tab B while $H_TWO runs (the process is between rounds): the terminal says
+#   "Stopping after the current move; Ctrl-C again to exit at once.", within 2 s `rounds stopped interrupted`; echo $? -> 0;
+#   `ps` still shows $H_TWO's entry
+T "${ROUNDS[@]}" --every 120          # H8, tab B again: the first round writes `report running` for $H_TWO once
+# H9, abrupt: Ctrl-C TWICE quickly in tab B: `Stopped at once.`; echo $? -> 130; rounds.log ends `rounds stopped abrupt`
+#   (best effort); `ps` still shows $H_TWO's entry if it still runs
+T "${ROUNDS[@]}" --every 120          # H10: starts normally, no second entry; then Ctrl-C once to end the run
+cd "$TRACKER" && bd list --status in_progress --assignee taskloop; T plan list   # every claimed task has its attempt
+ls "$SMOKE/markers"                   # empty: no hook ran
+```
+
+Optional **H11, backoff:** with nothing running and tab B's rounds running, move `$TRACKER/.beads` aside for 5 minutes:
+`rounds wait seconds=240 after=unavailable:tracker` (and longer) lines appear; after moving it back, a
+`rounds wait seconds=120` line and the next round succeed. With every slot held the tracker is never read, so run H11
+with the slot free.
+
+| Check | Pass | Fail means |
+|---|---|---|
+| H2 new task | `$H_ONE` started within one interval | the trigger missed a ready task |
+| H3 singleton | exit 1, `rounds_running` with a pid | two rounds processes for one backlog |
+| H5 wake | `$H_TWO` started seconds after the release, not up to 120 s later | the slot-freed wake does not work |
+| H6 quiet | no new line over 5 idle minutes | idle rounds write lines |
+| H7 graceful | the notice, `rounds stopped interrupted` within 2 s, exit 0, the entry still running | the stop killed the step, or waited for a full interval |
+| H8 restart | one `report running` line; no second entry, no new attempt row | a restart launched again |
+| H9 abrupt | exit 130, `Stopped at once.`, the entry still running | a second press waited, or the step died |
+| H10 after abrupt | a normal first round, no second entry or attempt row; `bd list` and `tl plan list` agree | the abrupt stop left something a round could not continue |
+
+Notes. A first Ctrl-C while a move runs waits for that move: a verify finishes its release and publish push first, up to
+Git's timeout. While every slot is held no candidate is tried, so a wrong `--checkout` is refused (`refused:checkout`)
+only once a slot frees. The wake follows reserved `(repo, slot)` pairs of every backlog, read just before each round:
+a release during a round wakes the next round within 2 s; a repeat taking over its slot does not wake; another backlog's
+release wakes one round that finds nothing to do. A factory.db that exists but cannot be opened now backs off
+(`rounds wait ... after=unavailable:store`); a missing one ends the rounds `refused:database`, exit 1. Started with
+SIGINT ignored (a background job), Ctrl-C stays ignored; run it in the foreground.
+
+Accepted residual: H5 can miss its wake when the 2 s check reads factory.db in the instant between an entry's
+reservation removal and its slot-lock release; the next regular round (at most one interval) fills the slot. Not covered
+live: a real reboot, that wake race, the reaping of exited entries (they stay zombies of the rounds process until its next
+`bd` or Git call), a first Ctrl-C landing mid-round (the tests cover the safe points), macOS. An admitted attempt that
+expired while the machine was off stays `stuck:expired_admitted` until the follow-up of the plan's section 16 lands.
+
 ## 7. Paste back to the agent
 
 `codex --version`; the `--json` outputs of `T config show`, both `T slot adopt`, section 4's starts (with `time`) and shows,
@@ -475,7 +553,9 @@ and `lsof` lines; `entry.log`; the two `sqlite3` result sets; `ls -la $ATT`; `an
 the approved-escalation commands (or "none") and `G -C "$REPO" config --list --local`; for Run C, the `ACCESS`
 listing, the command lines and exit codes from `runC.jsonl` (checked for secrets) and its `ls`/`log`/`show-ref` output;
 for Run F, every `T plan publish --json` and `T plan show` output, the entry.log lines, and the `show-ref`/`rev-parse` lines;
-for Run G, every `T plan next --json` output, `rounds.log`, and `bd show` of each `G_*` task.
+for Run G, every `T plan next --json` output, `rounds.log`, and `bd show` of each `G_*` task; for Run H, tab B's start and
+end lines with their exit codes, `rounds.log`, `T plan show` of `$H_ONE` and `$H_TWO`, H3's and H4's output, and the
+`bd list --status in_progress --assignee taskloop` and `T plan list` pair.
 Never paste `auth.json`, `env`, or the agent's environment.
 
 ## 8. Known wedges, reset and cleanup
@@ -504,6 +584,11 @@ G -C "$REPO" worktree remove --force "$SLOT"; G -C "$REPO" worktree add --detach
 # then a NEW bead (section 2, from `TASK=`), `T slot adopt "$REPO"` and start again; the old bead stays claimed by `taskloop`
 ```
 
+After an abrupt stop (`tl plan rounds` pressed twice, a closed terminal) or a crash, compare
+`bd list --status in_progress --assignee taskloop` in `$TRACKER` with `T plan list`: a stop between a tracker claim's commit
+and factory.db's leaves a claim with no attempt; return it with `bd unclaim <task> --if-assignee taskloop`. Stop
+`tl plan rounds` (Ctrl-C in its terminal) before any reset or discard.
+
 Cleanup after the smoke: check `ps -ax -o pid,command | grep -F "$SMOKE"` shows nothing of ours running (kill as above), then
 `G -C "$REPO" worktree remove --force "$SLOT"; rm -rf ~/tl-smoke`. This removes only scratch paths.
 
@@ -514,5 +599,7 @@ Cleanup after the smoke: check `ps -ax -o pid,command | grep -F "$SMOKE"` shows 
 - Kill by name (`pkill codex`, `killall python`): only verified PIDs (section 8).
 - Edit `factory.db` rows by hand, or rerun `start` in a loop; one launch per admitted attempt plus one check.
 - Run `tl plan next` against the real tracker, or a backlog whose tasks carry the `auto` label outside this scratch tracker.
+- Run `tl plan rounds` against the real tracker or with real paths, under a service manager (systemd's default kills the
+  entries in its cgroup), or at boot; never run the gates (`just check`, `just test`) in `$TL` while it runs from there.
 - Run a bare `tl` or omit `--config`: always `T`, so every path stays under `$SMOKE` (the defaults are `~/.local/...`).
 - Let an agent run this without Denis's authorization for that run; otherwise agents read the pasted output.

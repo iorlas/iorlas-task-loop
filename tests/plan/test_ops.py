@@ -24,6 +24,7 @@ from taskloop.plan_ops import (
     Adoption,
     AttemptStatus,
     Checked,
+    Ended,
     EntryState,
     Failed,
     Listed,
@@ -670,3 +671,8 @@ def test_a_verified_plan_is_release_first_then_publish_then_done(
 ])
 def test_a_rounds_exit_code(stopped: str, word: str, code: int) -> None:
     assert exit_code(Round("tasks", (Move("tl-1", "start", word),), stopped)) == code
+
+
+@pytest.mark.parametrize("reason, code", [("interrupted", 0), ("abrupt", 130), ("refused:database", 1), ("refused:schema", 1)])
+def test_a_rounds_end_exit_code(reason: str, code: int) -> None:
+    assert exit_code(Ended("tasks", reason)) == code

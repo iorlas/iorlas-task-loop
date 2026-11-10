@@ -1,10 +1,13 @@
 """Construct the command surface's boundaries: the machine config file, the read-only factory.db guard, and the plan and
 slot openers over `composition`'s real wiring. The attempt entry process never imports this module (.importlinter)."""
 
+import os
 import sqlite3
+import sys
 import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 from git_porcelain import GitUnavailable, NotARepo
@@ -23,17 +26,21 @@ from taskloop.composition import (
     tracker_reads,
     worker_gone,
 )
+from taskloop.interrupts import installed
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.plan_files import PlanFiles
-from taskloop.plan_next import Advancing
-from taskloop.plan_ops import Adoption, Failed, Reads, Starting, require_database
+from taskloop.plan_next import Advancing, NextRequest, advance
+from taskloop.plan_ops import Adoption, Failed, Quiet, Reads, Round, Starting, require_database
 from taskloop.plan_publish import PlanPublish
+from taskloop.plan_reads import SlotUse
 from taskloop.plan_release import PlanRelease
 from taskloop.plan_repeat import PlanRepeat
+from taskloop.plan_rounds import Pacing, inputs
 from taskloop.plan_schema import SCHEMA
-from taskloop.plan_store import PlanStore
+from taskloop.plan_store import PlanStore, StoreUnavailable
 from taskloop.plan_types import Checkouts
 from taskloop.plan_verifier import PlanVerifier
+from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
 from taskloop.slot_lock import refused, repeating
 from taskloop.task import TaskInspectionError
 
@@ -129,6 +136,85 @@ def open_plan_next(database: Path, artifacts: Path, tracker_root: str) -> Genera
                             open_releaser(database, store), open_publisher(database, store), ready, PlanFiles(artifacts).log_round)
         finally:
             store.close_shared()
+
+
+def one_round(database: Path, artifacts: Path, request: NextRequest, stopping: Callable[[], bool]) -> Callable[[Quiet], Round | Failed]:
+    """One `tl plan rounds` round: `open_plan_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
+    that exists but cannot be opened now (locked, busy) is `unavailable:store`, so the rounds back off; an absent one stays
+    `refused:database` (a deliberate discard ends the rounds)."""
+
+    def once(quiet: Quiet) -> Round | Failed:
+        with open_plan_next(database, artifacts, request.tracker_root) as ports:
+            if isinstance(ports, Failed):
+                return _transient(ports, database)
+            return advance(replace(ports, stopping=stopping), replace(request, quiet=quiet))
+
+    return once
+
+
+def _transient(refused: Failed, database: Path) -> Failed:
+    if refused.reason == "database" and database.exists():
+        return Failed("unavailable", "store", "factory.db exists but could not be opened now")
+    return refused
+
+
+def _slot_use(database: Path) -> Callable[[], SlotUse | None]:
+    """The check between rounds: a read-only open per call, None when factory.db or the read fails."""
+
+    def read() -> SlotUse | None:
+        with _read_only(database) as con:
+            if isinstance(con, Failed):
+                return None
+            try:
+                return _reader(con).slot_use()
+            except StoreUnavailable:
+                return None
+
+    return read
+
+
+def _unlogged(artifacts: Path) -> Callable[[], None]:
+    def warn() -> None:
+        print(f"Log: not written ({artifacts / 'rounds.log'})", file=sys.stderr)
+
+    return warn
+
+
+def _say(text: str) -> None:
+    os.write(2, (text + "\n").encode())  # unbuffered: the SIGINT handler may say it while the process writes stderr
+
+
+def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | Failed:
+    """The inputs, the database guard, then the backlog's rounds lock (its release), in that order."""
+    found = inputs(request)
+    if found is None:
+        with _read_only(database) as con:
+            found = con if isinstance(con, Failed) else None
+    if found is not None:
+        return found
+    try:
+        return hold(database, request.backlog).release
+    except RoundsRunning as error:
+        return Failed("refused", "rounds_running", str(error))
+    except RoundsLockUnavailable as error:
+        return Failed("refused", "rounds_lock", f"{error}: the rounds lock beside {database}")
+
+
+@contextmanager
+def open_plan_rounds(database: Path, artifacts: Path, request: NextRequest) -> Generator[Pacing | Failed]:
+    """`tl plan rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock and
+    the SIGINT handler (`interrupts`) for the block's life, per-round `open_plan_next` ports, the wall and monotonic clocks,
+    `time.sleep`, the round log and the `Log: not written` warning on stderr."""
+    release = _rounds_lock(database, request)
+    if isinstance(release, Failed):
+        yield release
+        return
+    try:
+        with installed(_say) as interrupts:
+            yield Pacing(one_round(database, artifacts, request, interrupts.stopping), _slot_use(database), time.time, time.monotonic,
+                         time.sleep, PlanFiles(artifacts).log_round, _unlogged(artifacts), interrupts.stopping, os.getpid())
+    finally:
+        release()
 
 
 @contextmanager

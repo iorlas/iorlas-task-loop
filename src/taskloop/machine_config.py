@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Final, Literal
 
 type Source = Literal["flag", "file", "default"]
-type Refusal = Literal["missing", "unreadable", "toml", "unknown_key", "type", "relative_path", "count"]
+MIN_SECONDS: Final = 5
+type Refusal = Literal["missing", "unreadable", "toml", "unknown_key", "type", "relative_path", "count", "interval"]
 
 
 @dataclass(frozen=True)
@@ -27,10 +28,12 @@ class Effective:
     artifacts: Setting[Path]
     slots_root: Setting[Path]
     slot_count: Setting[int]
+    round_seconds: Setting[int]  # `tl plan rounds`: seconds from the end of one regular round to the next
 
     def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int]], ...]:
         """Every key with its setting, in key order."""
-        return ("db", self.db), ("artifacts", self.artifacts), ("slots_root", self.slots_root), ("slot_count", self.slot_count)
+        return (("db", self.db), ("artifacts", self.artifacts), ("slots_root", self.slots_root), ("slot_count", self.slot_count),
+                ("round_seconds", self.round_seconds))
 
 
 KEYS: Final = tuple(field.name for field in fields(Effective))  # the file's only keys
@@ -44,6 +47,7 @@ class Flags:
     artifacts: str | None = None
     slots_root: str | None = None
     slot_count: int | None = None
+    round_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -73,6 +77,7 @@ def defaults(home: Path) -> Effective:
         Setting(state / "artifacts", "default"),
         Setting(home / ".local" / "share" / "task-loop" / "slots", "default"),
         Setting(1, "default"),
+        Setting(60, "default"),
     )
 
 
@@ -94,12 +99,23 @@ def _path(home: Path) -> Callable[[str, object], Path]:
     return checked
 
 
-def _count(key: str, value: object) -> int:
+def _integer(key: str, value: object) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise _Refusal(ConfigRefused("type", key, f"{key} must be an integer"))
-    if value < 1:
-        raise _Refusal(ConfigRefused("count", key, f"{key} must be at least 1"))
     return value
+
+
+def _count(key: str, value: object) -> int:
+    if _integer(key, value) < 1:
+        raise _Refusal(ConfigRefused("count", key, f"{key} must be at least 1"))
+    return _integer(key, value)
+
+
+def _seconds(key: str, value: object) -> int:
+    """A rounds interval: whole seconds, at least 5 (the local check runs every 2 s between rounds)."""
+    if _integer(key, value) < MIN_SECONDS:
+        raise _Refusal(ConfigRefused("interval", key, f"{key} must be at least {MIN_SECONDS} seconds"))
+    return _integer(key, value)
 
 
 def _chosen[T](key: str, table: dict[str, object], flag: object, default: Setting[T], check: Callable[[str, object], T]) -> Setting[T]:
@@ -127,6 +143,7 @@ def resolve(text: str | None, flags: Flags, home: Path) -> Effective | ConfigRef
             _chosen("artifacts", table, flags.artifacts, built.artifacts, path),
             _chosen("slots_root", table, flags.slots_root, built.slots_root, path),
             _chosen("slot_count", table, flags.slot_count, built.slot_count, _count),
+            _chosen("round_seconds", table, flags.round_seconds, built.round_seconds, _seconds),
         )
     except _Refusal as refusal:
         return refusal.refused

@@ -16,6 +16,7 @@ from taskloop.plan_ops import (
     Adoption,
     AttemptStatus,
     Checked,
+    Ended,
     Failed,
     Freed,
     Listed,
@@ -28,6 +29,7 @@ from taskloop.plan_ops import (
 )
 from taskloop.plan_publish import BranchPublished
 from taskloop.plan_release import Released
+from taskloop.plan_rounds import RoundsRequest, run_rounds
 from taskloop.plan_types import ATTEMPTS
 from taskloop.slots import Adopted
 
@@ -45,6 +47,11 @@ HELD = ("The tracker claim stays held, and the slot until the step ends on a cle
         "A round (`tl plan next`) never renews or retakes a claim: a task whose claim lapsed is open again while factory.db holds "
         "its attempt, and rounds skip it (`attempted`).")
 ABANDON = "`tl plan release --abandon` frees the slot and gives the task back."
+ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot frees; "
+          f"the tracker is read only when a slot is free; writes `<artifacts>/rounds.log`; {PLAN_ONLY}. Runs in this terminal "
+          "until stopped: Ctrl-C once stops after the current move, twice exits at once; launched steps keep running. A move "
+          "in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
+          "no candidate is tried, so a wrong --checkout is refused only once a slot frees.")
 GUIDE = {
     "start": "Re-run `tl plan start` to relaunch its entry (each `tl plan next` round relaunches it until its deadline). "
     "If the last entry says `claim_lost`, the tracker claim is gone (reverted, taken by another actor, or the task closed): "
@@ -70,7 +77,12 @@ GUIDE = {
     "attempted": "Open in the tracker while factory.db holds its attempt: the claim was returned or lapsed. `tl plan show` it; "
     "rounds never take it again.",
     "abandoned_skip": "Abandoned here: rounds never re-admit it; `tl plan start` admits a fresh attempt.",
-    "no_free_slot": "Every slot is held: the next round after a step ends fills it.",
+    "no_free_slot": "Every slot is held: `tl plan rounds` fills it seconds after a slot frees; by hand, the next `tl plan next` "
+    "after a step ends.",
+    "rounds_running": "Another `tl plan rounds` runs for this backlog (the pid is its lock record's, informational): use its "
+    "terminal, or stop it there with Ctrl-C first. `tl plan next` runs beside it.",
+    "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5.",
+    "rounds_lock": "The rounds lock file beside factory.db cannot be created: fix that folder's permissions.",
     "claim_leaked": "A start's compensation could not return the tracker claim: the task stays in progress for taskloop and is "
     "not ready again until a person checks `bd show <task>` and runs `bd unclaim <task> --if-assignee taskloop`.",
     "stuck:entry_lost": "The agent may still run: if `Worker` names a pid, check its cwd is the slot (`lsof -a -p <pid> -d cwd`) "
@@ -115,7 +127,7 @@ def discard(db: Path) -> str:
     """The last resort, naming this machine config's resolved factory.db, never another factory's."""
     return "\n".join([
         "Last resort, when `tl plan release --abandon` cannot prove the attempt stopped (`worker_unknown`): the whole-DB discard:",
-        "  1. stop every entry and worker by verified pid (`tl plan show` names them);",
+        "  1. stop `tl plan rounds` (Ctrl-C in its terminal), then every entry and worker by verified pid (`tl plan show` names them);",
         f"  2. delete {db} and its -wal/-shm (this machine config's factory.db, never another factory's);",
         "  3. in the tracker, `bd unclaim <task-id> --if-assignee taskloop` for each claimed task;",
         "  4. inspect each slot worktree, then `tl slot adopt` again.",
@@ -174,17 +186,24 @@ def register(commands: Parsers) -> None:
     release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl plan start` "
                          "then admits a fresh attempt")
     _common(release, "--db")
-    rounds = _add(plan, "next", "Run one scheduling round for the plan step: settle existing attempts, start approved ready tasks in "
-                  f"free slots, publish verified plans; {PLAN_ONLY}. {HELD}")
-    for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
-        rounds.add_argument(flag, required=True)
-    rounds.add_argument("--label", required=True, help="The tracker label approving autonomous execution (`auto`)")
-    rounds.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt this round admits, from now")
-    _common(rounds, "--db", "--artifacts")
+    _round_flags(_add(plan, "next", "Run one scheduling round for the plan step: settle existing attempts, start approved ready tasks "
+                      f"in free slots, publish verified plans; {PLAN_ONLY}. {HELD}"))
+    rounds = _add(plan, "rounds", ROUNDS)
+    rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
+                        "machine config's round_seconds)")
+    _round_flags(rounds)
     publish = _add(plan, "publish", "Push the verified plan commit to origin's task/<id> as you, never forced; nothing merges or lands")
     publish.add_argument("task_id", metavar="TASK")
     publish.add_argument("--backlog", required=True)
     _common(publish, "--db")
+
+
+def _round_flags(parser: argparse.ArgumentParser) -> None:
+    for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
+        parser.add_argument(flag, required=True)
+    parser.add_argument("--label", required=True, help="The tracker label approving autonomous execution (`auto`)")
+    parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
+    _common(parser, "--db", "--artifacts")
 
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -194,11 +213,31 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return ports if isinstance(ports, Failed) else plan_ops.start(ports, request)
 
 
+def _next_request(arguments: argparse.Namespace) -> NextRequest:
+    return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
+                       arguments.effort, arguments.minutes)
+
+
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    request = NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
-                          arguments.effort, arguments.minutes)
     with cli_composition.open_plan_next(loaded.settings.db.value, loaded.settings.artifacts.value, arguments.tracker_root) as ports:
-        return ports if isinstance(ports, Failed) else advance(ports, request)
+        return ports if isinstance(ports, Failed) else advance(ports, _next_request(arguments))
+
+
+def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    """The start line once the rounds are set up, then the rounds; a `KeyboardInterrupt` anywhere (the second Ctrl-C) is
+    the abrupt stop, exit 130 (the operation writes its `rounds stopped abrupt` line once its rounds started)."""
+    settings, request = loaded.settings, RoundsRequest(arguments.backlog, loaded.settings.round_seconds.value)
+    log = settings.artifacts.value / "rounds.log"
+    try:
+        with cli_composition.open_plan_rounds(settings.db.value, settings.artifacts.value, _next_request(arguments)) as ports:
+            if isinstance(ports, Failed):
+                return ports
+            started = (json.dumps(plan_data.rounds_data(request.backlog, request.every, str(log))) if arguments.json_output else
+                       f"Rounds for backlog {request.backlog} every {request.every} s; log: {log}; stop with Ctrl-C")
+            print(started, flush=True)
+            return run_rounds(ports, request)
+    except KeyboardInterrupt:
+        return Ended(request.backlog, "abrupt")
 
 
 def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -240,6 +279,7 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
     ("slot", "adopt"): _adopt,
     ("plan", "start"): _start,
     ("plan", "next"): _next,
+    ("plan", "rounds"): _rounds,
     ("plan", "show"): _show,
     ("plan", "list"): _list,
     ("plan", "verify"): _verify,
@@ -251,13 +291,14 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
 def run(arguments: argparse.Namespace) -> int:
     """Resolve the machine config (every command refuses a bad one), run the one operation, render it."""
     flags = Flags(getattr(arguments, "db", None), getattr(arguments, "artifacts", None), getattr(arguments, "root", None),
-                  getattr(arguments, "count", None))
+                  getattr(arguments, "count", None), getattr(arguments, "every", None))
     loaded = cli_composition.load_config(arguments.config, flags)
     if isinstance(loaded, ConfigRefused):
         result: Result = plan_ops.refused_config(loaded)
     else:
         result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
-    stream = sys.stderr if isinstance(result, Failed) else sys.stdout
+    failed = isinstance(result, Failed) or (isinstance(result, Ended) and result.reason != "interrupted")
+    stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:
         admission = (arguments.command, arguments.operation) == ("plan", "start")  # the one command whose refusals carry slots
         print(json.dumps(plan_data.as_data(result, admission=admission)), file=stream)
@@ -325,17 +366,24 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
             return [*_status_lines(each), *paths, *last, *left, f"Next: {each.next}", *steps]
-        case Listed() | Round():
-            return _rows_lines(result, stuck)
+        case Listed() | Round() | Ended():
+            return _rows_lines(command, result, stuck)
         case Checked() | Freed() | PublishedTask():
             return _freed_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
 
 
-def _rows_lines(result: Listed | Round, stuck: list[str]) -> list[str]:
+def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) -> list[str]:
     """`tl plan list`: one row per task. `tl plan next`: one line per move as performed, `Stopped:` when admission ended
-    early, then the guide of each distinct reported, skipped or stopping word once."""
+    early, then the guide of each distinct reported, skipped or stopping word once. `tl plan rounds`: why it ended."""
+    if isinstance(result, Ended):
+        ended = {"interrupted": "Rounds stopped: interrupted. Launched steps keep running; `tl plan rounds` again continues them.",
+                 "abrupt": "Stopped at once."}
+        if result.reason in ended:
+            return [ended[result.reason]]
+        return [f"{command}: {result.reason}", *([result.detail] if result.detail else []),
+                *(GUIDE[each] for each in result.reason.split(":") if each in GUIDE)]
     if isinstance(result, Listed):
         attempts = result.attempts
         rows = [f"{a.task_id}\t{a.backlog}\t{a.number}/{ATTEMPTS}\t{a.slot}\t{a.phase}\t{a.entry}\t"

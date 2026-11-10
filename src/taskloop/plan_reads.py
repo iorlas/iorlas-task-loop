@@ -1,6 +1,6 @@
 """The plan store's connection and its status reads (SELECT only, no reservation or deadline check): a task's current
 attempt (its highest `seq`), every attempt (with its release and its published task branch), a dispatch phase, an
-attempt's tracker root, its release, and the attempts of one step. `PlanStore` adds the fenced writes."""
+attempt's tracker root, its release, the attempts of one step, and the slots' use. `PlanStore` adds the fenced writes."""
 
 import json
 import sqlite3
@@ -56,6 +56,17 @@ class AttemptRow:
     held: bool = False  # it still holds its reservation
     release: ReleaseRow | None = None
     published: PublishedRow | None = None
+
+
+@dataclass(frozen=True)
+class SlotUse:
+    """Every adopted slot of factory.db against the reservation rows, across repos: `free`, the adopted slots with no
+    reservation row (not proof a slot is free: it may be dirty or locked); `held`, each reserved (repo_id, slot), every
+    backlog's: a repeat's takeover rewrites the row's attempt but keeps the slot reserved. The release (`plan_release`)
+    is the one owner of a row's removal."""
+
+    free: int
+    held: frozenset[tuple[str, str]]
 
 
 class StoreUnavailable(Exception):
@@ -218,6 +229,17 @@ class PlanReads:
                            as_int(row[17]), bool(as_int(row[18])), _released(row[19:23]), _published(row[23:26]))
             )
         return tuple(found)
+
+    def slot_use(self) -> SlotUse:
+        """The free-slot gate's and the slot-freed check's read: two SELECTs, no write."""
+        with self._connection() as con:
+            free = con.execute(
+                """SELECT count(*) FROM slot s
+                WHERE NOT EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=s.repo_id AND r.slot=s.name)"""
+            ).fetchone()
+            rows: list[tuple[object, ...]] = con.execute("SELECT repo_id,slot FROM reservation").fetchall()
+        held = frozenset((as_text(row[0]), as_text(row[1])) for row in rows)
+        return SlotUse(as_int(free[0]), held)
 
     def chain(self, key: AttemptKey) -> tuple[StepAttempt, ...]:
         """Attempts 1..n of the key's dispatched step, oldest first, followed through `previous_attempt_id` (at most

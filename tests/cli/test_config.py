@@ -19,6 +19,7 @@ def test_no_file_and_no_flags_is_every_built_in_default() -> None:
         Setting(HOME / ".local/state/task-loop/artifacts", "default"),
         Setting(HOME / ".local/share/task-loop/slots", "default"),
         Setting(1, "default"),
+        Setting(60, "default"),
     )
     assert config_file(HOME) == HOME / ".config/task-loop/config.toml"
 
@@ -34,16 +35,17 @@ def test_no_default_lives_in_the_baseline_factorys_home() -> None:
     ("artifacts", Flags(artifacts="/flag/art"), Path("/flag/art")),
     ("slots_root", Flags(slots_root="/flag/slots"), Path("/flag/slots")),
     ("slot_count", Flags(slot_count=3), 3),
+    ("round_seconds", Flags(round_seconds=30), 30),
 ])
 def test_flag_beats_file_beats_default_per_key(key: str, flags: Flags, value: Path | int) -> None:
-    text = 'db = "/file/f.db"\nartifacts = "/file/art"\nslots_root = "/file/slots"\nslot_count = 2\n'
+    text = 'db = "/file/f.db"\nartifacts = "/file/art"\nslots_root = "/file/slots"\nslot_count = 2\nround_seconds = 90\n'
     from_file = resolve(text, Flags(), HOME)
     assert isinstance(from_file, Effective)
     assert getattr(from_file, key).source == "file"
     flagged = resolve(text, flags, HOME)
     assert isinstance(flagged, Effective)
     assert getattr(flagged, key) == Setting(value, "flag")
-    others = [name for name in ("db", "artifacts", "slots_root", "slot_count") if name != key]
+    others = [name for name in ("db", "artifacts", "slots_root", "slot_count", "round_seconds") if name != key]
     assert all(getattr(flagged, name).source == "file" for name in others)
     only_flag = resolve(None, flags, HOME)
     assert isinstance(only_flag, Effective)
@@ -73,6 +75,11 @@ def test_tilde_is_expanded_against_the_given_home_only(monkeypatch: pytest.Monke
     ('db = "relative.db"', Flags(db="/flag.db"), "relative_path", "db"),
     ("slot_count = 0", Flags(), "count", "slot_count"),
     (None, Flags(slot_count=-1), "count", "slot_count"),
+    ("round_seconds = 4", Flags(), "interval", "round_seconds"),
+    (None, Flags(round_seconds=4), "interval", "round_seconds"),
+    ("round_seconds = 60", Flags(round_seconds=0), "interval", "round_seconds"),
+    ("round_seconds = true", Flags(), "type", "round_seconds"),
+    ("round_seconds = 60.0", Flags(), "type", "round_seconds"),
 ])
 def test_every_refusal_has_its_fixed_word(text: str | None, flags: Flags, reason: str, key: str) -> None:
     refused = resolve(text, flags, HOME)
@@ -117,6 +124,7 @@ def test_config_show_prints_values_sources_and_the_file(
             "artifacts": {"value": str(tmp_path / "art"), "source": "flag"},
             "slots_root": {"value": str(tmp_path / ".local/share/task-loop/slots"), "source": "default"},
             "slot_count": {"value": 2, "source": "file"},
+            "round_seconds": {"value": 60, "source": "default"},
         },
     }
     assert main(["config", "show"]) == 0

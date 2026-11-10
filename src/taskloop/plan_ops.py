@@ -233,18 +233,35 @@ class Move:
     detail: str = ""
 
 
+type Quiet = frozenset[tuple[str, str, str, str]]  # (task, action, word, attempt) keys already in the round log
+
+
 @dataclass(frozen=True)
 class Round:
     """`tl plan next`: the moves in the order performed; `stopped`, the word that ended admission early; `logged`, False
-    when a round-log line could not be written."""
+    when a round-log line could not be written; `written`, the keys of its moves and of its stopped word
+    (`("", "stopped", word, "")`) now in the round log (written now, or before and unchanged): the next round's `quiet`,
+    empty when any write failed so that the next round writes the state again."""
 
     backlog: str
     moves: tuple[Move, ...]
     stopped: str = ""
     logged: bool = True
+    written: Quiet = frozenset()
+
+
+@dataclass(frozen=True)
+class Ended:
+    """`tl plan rounds` stopped: `interrupted` (the first Ctrl-C), `abrupt` (a second Ctrl-C, the surface's) or the
+    whole-round refusal that ended it (`<kind>:<reason>`); launched steps keep running in every case."""
+
+    backlog: str
+    reason: str
+    detail: str = ""
 
 
 UNKNOWN_WORDS: Final = ("unavailable:", "uncertain:", "unsettled:")
+ABRUPT: Final = 130  # 128 + SIGINT: the shell's convention for an interrupted command
 
 
 def _round_exit(result: Round) -> int:
@@ -257,7 +274,7 @@ def _round_exit(result: Round) -> int:
     return 1 if result.stopped.startswith("refused:") else 0
 
 
-type Result = Started | Shown | Listed | Checked | Freed | PublishedTask | Adoption | Loaded | Round | Failed
+type Result = Started | Shown | Listed | Checked | Freed | PublishedTask | Adoption | Loaded | Round | Ended | Failed
 
 
 def require_database(open_ro: Callable[[], sqlite3.Connection | None]) -> sqlite3.Connection | Failed:
@@ -498,7 +515,8 @@ def verify_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled 
 
 
 def exit_code(result: Result) -> int:
-    """0 done or already so; 1 refused; 3 unknown, re-running is safe (2, usage, is argparse's)."""
+    """0 done or already so (a graceful rounds stop too); 1 refused; 3 unknown, re-running is safe; 130 an abrupt rounds
+    stop (2, usage, is argparse's). Rounds never end 3: they rerun by themselves."""
     match result:
         case Failed(kind=kind):
             return 3 if kind in UNKNOWN_KINDS else 1
@@ -507,5 +525,7 @@ def exit_code(result: Result) -> int:
             return 3 if reasons & {"git_unavailable", "store_unavailable"} else 1 if reasons else 0
         case Round():
             return _round_exit(result)
+        case Ended(reason=reason):
+            return 0 if reason == "interrupted" else ABRUPT if reason == "abrupt" else 1
         case _:
             return 0

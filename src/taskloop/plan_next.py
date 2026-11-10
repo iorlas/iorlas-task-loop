@@ -4,6 +4,10 @@ Settle each existing attempt of the backlog by its `Next` word (relaunch an admi
 verify, repeat; report the rest), admit eligible ready tasks in priority order into free slots, then publish the verified,
 released, unpublished plans read at the start. It adds no state, lock, Git write, tracker write or process of its own: its
 only other output is one append-only round-log line per move, never read back. Plan step only: nothing merges or lands.
+
+Admission reads the tracker only when factory.db has an adopted slot without a reservation row. Repeated rounds
+(`plan_rounds`) pass the previous round's `Round.written` keys as `quiet` (an identical move is not written again) and a
+`stopping` port asked before each move (the graceful stop: no further move, `stopped=interrupted`).
 """
 
 import re
@@ -24,6 +28,7 @@ from taskloop.plan_ops import (
     Move,
     Publish,
     PublishedTask,
+    Quiet,
     Reads,
     Release,
     Round,
@@ -38,10 +43,10 @@ from taskloop.plan_ops import (
     verify_task,
 )
 from taskloop.plan_publish import BranchPublished
-from taskloop.plan_store import StoreUnavailable
+from taskloop.plan_store import PlanStore, StoreUnavailable
 from taskloop.selection import order
 from taskloop.task import TaskInspectionError
-from taskloop.tracker import ACTOR, ReadyRows, ancestry, ready_rows
+from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, ready_rows
 
 # A refusal that stops admission for the round: no slot is free, or the round's own inputs or the store are wrong. Any
 # other refusal (a claim elsewhere, a branch rule, a race that found an attempt another start made) is about one task.
@@ -51,10 +56,18 @@ STOPS: Final = frozenset({
 UNKNOWN: Final = frozenset({"unavailable", "uncertain"})  # stops admission: rerunning the round is safe
 LEAKED: Final = "the tracker claim may still be held by taskloop: check `bd show {task}`; `bd unclaim {task} --if-assignee taskloop`"
 IDENT: Final = re.compile(r"[A-Za-z0-9._:@+/-]{1,128}")  # a backlog, task or attempt id as a log word
+INTERRUPTED: Final = "interrupted"  # the round's stopped word after a graceful stop; replaces any admission word
+
+
+def never() -> bool:
+    """The one-shot round's `stopping` port: nothing asks it to stop (Python's own Ctrl-C applies)."""
+    return False
 
 
 @dataclass(frozen=True)
 class NextRequest:
+    """`quiet`: the previous round's `Round.written` keys, not written to the round log again (None: every move is)."""
+
     backlog: str
     tracker_root: str
     checkout: Path
@@ -62,11 +75,13 @@ class NextRequest:
     model: str
     effort: str
     minutes: int
+    quiet: Quiet | None = None
 
 
 @dataclass(frozen=True)
 class Advancing:
-    """Every port is an existing one, plus the tracker's ready read and the round log (one line per move)."""
+    """Every port is an existing one, plus the tracker's ready read, the round log (one line per move) and `stopping`,
+    asked before each move."""
 
     reads: Reads
     starting: Starting
@@ -75,33 +90,57 @@ class Advancing:
     publisher: Publish
     ready: ReadyRows
     log: Callable[[str], None]
+    stopping: Callable[[], bool] = never
+
+
+def stamped(now: float, backlog: str, *words: str) -> str:
+    """One round-log line (`rounds.log`): the UTC time, the backlog and fixed words; `plan_rounds` writes the same."""
+    return " ".join([datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), _ident(backlog), *words])
+
+
+def fixed(word: str) -> str:
+    return word if WORD.fullmatch(word) else "invalid"
+
+
+def _key(move: Move) -> tuple[str, str, str, str]:
+    return move.task_id, move.action, move.word, move.attempt_id
 
 
 class _Trail:
-    """The round's moves in the order performed, each also appended to the round log as fixed words only; a failed write
-    never changes the round, it only clears `logged`."""
+    """The round's moves in the order performed, each also appended to the round log as fixed words only, unless it is
+    in `quiet`; a failed write never changes the round, it only clears `logged`."""
 
-    def __init__(self, ports: Advancing, backlog: str) -> None:
-        self.ports, self.backlog = ports, backlog
+    def __init__(self, ports: Advancing, backlog: str, quiet: Quiet | None) -> None:
+        self.ports, self.backlog, self.quiet = ports, backlog, quiet
         self.moves: list[Move] = []
-        self.logged = True
+        self.written: set[tuple[str, str, str, str]] = set()
+        self.logged, self.wrote = True, False
 
-    def _write(self, *words: str) -> None:
-        now = datetime.fromtimestamp(self.ports.reads.clock(), UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    def _write(self, key: tuple[str, str, str, str], *words: str) -> None:
+        if self.quiet is not None and key in self.quiet:
+            self.written.add(key)
+            return
+        self.wrote = True
         try:
-            self.ports.log(" ".join([now, _ident(self.backlog), *words]))
+            self.ports.log(stamped(self.ports.reads.clock(), self.backlog, *words))
         except (OSError, EvidenceError):
             self.logged = False
+            return
+        self.written.add(key)
 
     def add(self, move: Move) -> None:
         self.moves.append(move)
-        fixed = [each if WORD.fullmatch(each) else "invalid" for each in move.word.split(" ")]
-        self._write(_ident(move.task_id), move.action, *fixed, *([_ident(move.attempt_id)] if move.attempt_id else []))
+        words = [fixed(each) for each in move.word.split(" ")]
+        self._write(_key(move), _ident(move.task_id), move.action, *words, *([_ident(move.attempt_id)] if move.attempt_id else []))
 
     def close(self, stopped: str) -> Round:
-        self._write("round", f"moves={len(self.moves)}", *([f"stopped={stopped}" if WORD.fullmatch(stopped) else "stopped=invalid"]
-                                                            if stopped else []))
-        return Round(self.backlog, tuple(self.moves), stopped, self.logged)
+        """The closing line, unless quiet: no move line written and the same stopped word as the previous round."""
+        key = ("", "stopped", stopped, "")
+        if self.wrote and self.quiet is not None and key in self.quiet:
+            self.quiet = self.quiet - {key}  # a round that wrote a move line always closes it
+        self._write(key, "round", f"moves={len(self.moves)}", *([f"stopped={fixed(stopped)}"] if stopped else []))
+        written = frozenset(self.written) if self.logged else frozenset()
+        return Round(self.backlog, tuple(self.moves), stopped, self.logged, written)
 
 
 def _ident(value: str) -> str:
@@ -126,12 +165,15 @@ def advance(ports: Advancing, request: NextRequest) -> Round | Failed:
     if isinstance(listed, Failed):
         return listed
     current = _backlog(listed, request.backlog)
-    trail = _Trail(ports, request.backlog)
+    trail = _Trail(ports, request.backlog, request.quiet)
     for each in current:
+        if ports.stopping():
+            return trail.close(INTERRUPTED)
         _settle(ports, request, each, trail)
     stopped = _admit(ports, request, current, trail)
-    _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail)
-    return trail.close(stopped)
+    if stopped != INTERRUPTED:
+        stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
+    return trail.close(INTERRUPTED if ports.stopping() else stopped)
 
 
 def _backlog(listed: Listed, backlog: str) -> tuple[AttemptStatus, ...]:
@@ -197,9 +239,22 @@ def _verified(ports: Advancing, backlog: str, each: AttemptStatus) -> Move:
     return Move(each.task_id, "verify", f"{checked.kind}:{checked.reason}", each.attempt_id, checked.detail)
 
 
+def _full(store: PlanStore) -> bool:
+    """The free-slot gate: True when every adopted slot in factory.db (any repo) has a reservation row, so no slot can be
+    free and the tracker is not read. A failed read falls through: admission meets the store itself."""
+    try:
+        return store.slot_use().free == 0
+    except StoreUnavailable:
+        return False
+
+
 def _admit(ports: Advancing, request: NextRequest, current: tuple[AttemptStatus, ...], trail: _Trail) -> str:
     """Eligible ready tasks in priority order, one start each, until a slot or the round's inputs run out; the word that
-    stopped admission early ("" when the candidates ran out)."""
+    stopped admission early ("" when the candidates ran out). With every slot reserved: `no_free_slot`, no tracker call."""
+    if ports.stopping():
+        return INTERRUPTED
+    if _full(ports.reads.store):
+        return "no_free_slot"
     try:
         rows = ready_rows(ports.ready, request.label)
     except TaskInspectionError as error:
@@ -209,7 +264,13 @@ def _admit(ports: Advancing, request: NextRequest, current: tuple[AttemptStatus,
     ids = {each.task_id: each.attempt_id for each in current}
     for task_id, reason in skipped:
         trail.add(Move(task_id, "skip", reason, ids.get(task_id, "")))  # attempted/abandoned: the attempt that holds it
+    return _start_each(ports, request, ordered, trail)
+
+
+def _start_each(ports: Advancing, request: NextRequest, ordered: tuple[TaskRow, ...], trail: _Trail) -> str:
     for row in ordered:
+        if ports.stopping():
+            return INTERRUPTED
         result = start(ports.starting, _request(request, row.task_id))
         if isinstance(result, Started):
             trail.add(Move(row.task_id, "start", result.status, result.attempt_id))
@@ -224,12 +285,18 @@ def _admit(ports: Advancing, request: NextRequest, current: tuple[AttemptStatus,
     return ""
 
 
-def _publish(ports: Advancing, backlog: str, verified: Iterable[AttemptStatus], trail: _Trail) -> None:
-    """The verified, released, unpublished plans read before settling: pushed again every round until one succeeds."""
+def _publish(ports: Advancing, backlog: str, verified: Iterable[AttemptStatus], trail: _Trail) -> str:
+    """The verified, released, unpublished plans read before settling: pushed again every round until one succeeds. One
+    whose entry still runs is left to that entry, which publishes right after its release; `interrupted` on a stop."""
     for each in verified:
+        if ports.stopping():
+            return INTERRUPTED
+        if each.entry == "running":
+            continue
         found = publish_task(ports.reads.store, ports.publisher, backlog, each.task_id)
         if isinstance(found, PublishedTask):
             done = "published" if isinstance(found.outcome, BranchPublished) else "already_published"
             trail.add(Move(each.task_id, "publish", done, found.attempt_id))
         else:
             trail.add(Move(each.task_id, "publish", f"{found.kind}:{found.reason}", each.attempt_id, found.detail))
+    return ""

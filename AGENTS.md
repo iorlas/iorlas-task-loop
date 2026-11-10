@@ -42,7 +42,9 @@ Retain caps: 400 source lines per file, 80 per function and 800 per test file. N
   from logs. Tracker maintenance owns durable task-data protection; preserve exports until recovery is verified.
 - One owner per fact and one application operation shared by CLI, dashboard and agent consumers.
 - State/time/IO enter through narrow explicit ports. Use owning shelf Git/process/agent/lock APIs and semantic
-  fakes. Factory source and tests have no subprocess imports/usage or direct spawn/signal/wait escape hatch.
+  fakes. Factory source and tests have no subprocess imports/usage or direct spawn/signal/wait escape hatch. The only
+  signal use is `interrupts.py`'s SIGINT handler while `tl plan rounds` runs (sets a flag, signals no process), enforced
+  by the import-linter contract `one-signal-owner` and the policy AST test.
 - Prefer native Python even in libraries. A subprocess needs a concrete external-tool or lifecycle reason;
   moving a wrapper to shelf does not justify it. Retain safety behavior, not every existing mechanism.
 - Typed inputs/results in process; validated structured interchange where needed across boundaries. No regex

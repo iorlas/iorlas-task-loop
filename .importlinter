@@ -28,6 +28,9 @@ source_modules =
     taskloop.selection
     taskloop.plan_data
     taskloop.machine_config
+    taskloop.plan_rounds
+    taskloop.rounds_lock
+    taskloop.interrupts
 forbidden_modules =
     taskloop.attempt_entry
 
@@ -45,6 +48,8 @@ forbidden_modules =
     taskloop.plan_next
     taskloop.plan_data
     taskloop.machine_config
+    taskloop.plan_rounds
+    taskloop.interrupts
 
 [importlinter:contract:no-runtime-mechanisms]
 name = The foundation has no direct network or process mechanisms
@@ -56,10 +61,19 @@ forbidden_modules =
     multiprocessing
 allow_indirect_imports = True
 
-[importlinter:contract:one-slot-lock-owner]
-name = Only the slot custody module imports the process lock library
+[importlinter:contract:process-lock-owners]
+name = Only slot custody and the rounds lock import the process lock library
 type = forbidden
 source_modules = taskloop
 forbidden_modules = process_lock
 ignore_imports =
     taskloop.slot_lock -> process_lock
+    taskloop.rounds_lock -> process_lock
+
+[importlinter:contract:one-signal-owner]
+name = Only the rounds process's SIGINT handler imports signal
+type = forbidden
+source_modules = taskloop
+forbidden_modules = signal
+ignore_imports =
+    taskloop.interrupts -> signal

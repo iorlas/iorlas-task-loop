@@ -162,3 +162,48 @@ def bd_importers() -> set[str]:
 def test_only_composition_constructs_the_tracker_client() -> None:
     """The tracker's writes (claim, unclaim, heartbeat) have one wiring owner."""
     assert bd_importers() == {"composition.py"}
+
+
+SIGNAL_USES = frozenset({"signal", "SIGINT", "SIG_IGN", "default_int_handler", "getsignal"})
+# Sending or timing signals, under any receiver (`os.kill`, `signal.alarm`, `proc.kill`): no factory source or test uses one.
+SIGNALLING = frozenset({
+    "kill", "killpg", "alarm", "setitimer", "pthread_kill", "pthread_sigmask", "set_wakeup_fd", "pidfd_send_signal",
+    "raise_signal", "siginterrupt", "sigwait", "sigtimedwait",
+})
+
+
+def signal_uses(path: Path) -> tuple[set[str], set[str], set[str]]:
+    """In one file: how `signal` or `_signal` is imported (`import`, `alias`, `from`), every dynamic import
+    (`import_module`, `__import__`), and every signalling name used as an attribute or a bare name."""
+    imports: set[str] = set()
+    dynamic: set[str] = set()
+    signalling: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.split(".")[0] in {"signal", "_signal"}:
+                    imports.add("import" if alias.name == "signal" and alias.asname is None else "alias")
+        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in {"signal", "_signal"}:
+            imports.add("from")
+        name = node.attr if isinstance(node, ast.Attribute) else node.id if isinstance(node, ast.Name) else None
+        if name in {"import_module", "__import__"}:
+            dynamic.add(name)
+        if name in SIGNALLING:
+            signalling.add(name)
+    return imports, dynamic, signalling
+
+
+def test_the_one_signal_owner_installs_only_a_sigint_handler_and_nothing_sends_a_signal() -> None:
+    """CLAUDE.md's one exception: only `interrupts.py` imports `signal`, plainly (no alias, no `from`, no `_signal`, no
+    dynamic import anywhere), and uses only what installs and restores a SIGINT handler; no factory source or test sends
+    or times a signal (`SIGNALLING`), and tests never import `signal` (so never install a handler)."""
+    owner = ROOT / "src" / "taskloop" / "interrupts.py"
+    for path in FILES:
+        imports, dynamic, signalling = signal_uses(path)
+        assert imports == ({"import"} if path == owner else set()), path
+        assert dynamic == signalling == set(), path
+    tree = ast.parse(owner.read_text())
+    used = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+            and node.value.id == "signal"}
+    assert used == SIGNAL_USES
+    assert not any(isinstance(node, ast.Import) and any(alias.name == "os" for alias in node.names) for node in ast.walk(tree))
