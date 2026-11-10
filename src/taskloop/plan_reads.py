@@ -1,6 +1,6 @@
 """The plan store's connection and its status reads (SELECT only, no reservation or deadline check): a task's current
-attempt (its highest `seq`), every attempt, a dispatch phase, an attempt's tracker root, its release, and the attempts of
-one step. `PlanStore` adds the fenced writes."""
+attempt (its highest `seq`), every attempt (with its release and its published task branch), a dispatch phase, an
+attempt's tracker root, its release, and the attempts of one step. `PlanStore` adds the fenced writes."""
 
 import json
 import sqlite3
@@ -26,6 +26,16 @@ class ReleaseRow:
 
 
 @dataclass(frozen=True)
+class PublishedRow:
+    """The attempt's verified commit on origin's `task/<id>` (`published_branch`): X pushed, the remote tip confirmed (X,
+    or a later commit that contains X), and when."""
+
+    commit: str
+    remote_head: str
+    published_at: float
+
+
+@dataclass(frozen=True)
 class AttemptRow:
     """One attempt as the status reads see it; the key is for further reads only, never for display. `successor`: a
     later attempt of the step names this one (it was repeated, so it is fenced and superseded)."""
@@ -45,6 +55,7 @@ class AttemptRow:
     seq: int = 1  # the attempt's order among its task's attempts
     held: bool = False  # it still holds its reservation
     release: ReleaseRow | None = None
+    published: PublishedRow | None = None
 
 
 class StoreUnavailable(Exception):
@@ -102,6 +113,15 @@ def _released(row: tuple[object, ...]) -> ReleaseRow | None:
     if not isinstance(row[1], (int, float)):
         raise StoreUnavailable("Malformed release time")
     return ReleaseRow(as_text(row[0]), float(row[1]), bool(as_int(row[2])), as_text(row[3]))
+
+
+def _published(row: tuple[object, ...]) -> PublishedRow | None:
+    """A published row (commit_sha, remote_head, published_at), None for the all-NULL row of a LEFT JOIN without one."""
+    if row[0] is None:
+        return None
+    if not isinstance(row[2], (int, float)):
+        raise StoreUnavailable("Malformed publication time")
+    return PublishedRow(as_text(row[0]), as_text(row[1]), float(row[2]))
 
 
 def _step(row: tuple[object, ...]) -> StepAttempt:
@@ -178,8 +198,9 @@ class PlanReads:
                 p.entry_boot,p.deadline,p.worker_pid,p.worker_pgid,p.number,p.previous_attempt_id,p.repeat_reason,
                 EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id),p.seq,
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
-                 AND r.generation=p.generation),x.head,x.released_at,x.abandoned,x.claim
+                 AND r.generation=p.generation),x.head,x.released_at,x.abandoned,x.claim,b.commit_sha,b.remote_head,b.published_at
                 FROM plan_attempt p LEFT JOIN plan_release x ON x.attempt_id=p.attempt_id
+                LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
                 WHERE p.adapter='beads' AND (?1 IS NULL OR p.backlog=?1) AND (?2 IS NULL OR p.task_id=?2)
                 ORDER BY p.backlog,p.task_id,p.seq DESC""",
                 (backlog, task_id),
@@ -194,7 +215,7 @@ class PlanReads:
             found.append(
                 AttemptRow(key, as_text(row[3]), as_text(row[4]), as_text(row[5]), as_text(row[6]), entry, float(row[10]), worker,
                            as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])),
-                           as_int(row[17]), bool(as_int(row[18])), _released(row[19:23]))
+                           as_int(row[17]), bool(as_int(row[18])), _released(row[19:23]), _published(row[23:26]))
             )
         return tuple(found)
 

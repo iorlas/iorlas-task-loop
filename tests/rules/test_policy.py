@@ -68,6 +68,7 @@ WRITERS = {
     ("CREATE TABLE", "plan_execution"): "plan_schema.py",
     ("CREATE TABLE", "plan_verification"): "plan_schema.py",
     ("CREATE TABLE", "plan_release"): "plan_schema.py",
+    ("CREATE TABLE", "published_branch"): "plan_schema.py",
     ("INSERT", "slot"): "slots.py",
     ("INSERT", "reservation"): "plan_admit.py",
     ("INSERT", "plan_attempt"): "plan_admit.py",
@@ -76,6 +77,7 @@ WRITERS = {
     ("INSERT", "plan_release"): "plan_release.py",
     ("UPDATE", "plan_release"): "plan_release.py",
     ("DELETE FROM", "reservation"): "plan_release.py",
+    ("INSERT", "published_branch"): "plan_publish.py",
     ("INSERT", "plan_execution"): "plan_store.py",
     ("INSERT", "plan_verification"): "plan_store.py",
     ("UPDATE", "plan_attempt"): "plan_store.py",
@@ -110,7 +112,11 @@ def test_write_pattern_catches_spelling_variants(statement: str) -> None:
     assert WRITE.search(statement) is not None
 
 
-GIT_WRITES = frozenset({"stage", "stage_tracked", "record", "take_branch", "park"})
+# The remote and ref writes below (fetch, sync, the other pushes, branch and remote-ref deletion) have no owner: unused.
+GIT_WRITES = frozenset({
+    "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
+    "push_request", "push_lease", "delete_branch",
+})
 
 
 def git_writers() -> set[tuple[str, str]]:
@@ -132,10 +138,10 @@ def git_writers() -> set[tuple[str, str]]:
     return found
 
 
-def test_only_the_commit_prepare_and_release_modules_write_git() -> None:
+def test_only_the_commit_prepare_release_and_publish_modules_write_git() -> None:
     expected = {
         ("stage", "plan_commit.py"), ("record", "plan_commit.py"), ("take_branch", "plan_prepare.py"), ("park", "plan_prepare.py"),
-        ("park", "plan_release.py"),
+        ("park", "plan_release.py"), ("push", "plan_publish.py"),
     }
     assert git_writers() == expected
 

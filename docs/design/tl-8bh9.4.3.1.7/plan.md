@@ -178,7 +178,8 @@ order: `captured` -> answer `valid` `planned` or `unchanged`, run clean (`rc=0`,
 like `.husky` points into files the agent wrote. fsmonitor runs a program on every status read. Signing can prompt
 (pinentry) in a detached process with no timeout. Auto-maintenance after a commit can start a long `gc`. **Scope:** the
 same `checkouts` will serve the later publication push, so `pre-push` hooks will not run either; slice 3 must accept
-that or build its own repo. **Signed-commit repositories are unsupported in v1:** X is stored once and is what gets
+that or build its own repo. *Accepted (owner, 2026-11-10, [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md)): the publication's `remotes` view is these
+hardened `checkouts` plus a 120 s transport timeout, so factory pushes skip `pre-push`; server-side rules still apply.* **Signed-commit repositories are unsupported in v1:** X is stored once and is what gets
 pushed, so re-signing would make a different commit.
 
 **Residual (named, not closed).** A clean/textconv driver in the person's own Git config whose command is a script in

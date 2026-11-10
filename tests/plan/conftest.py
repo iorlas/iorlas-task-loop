@@ -149,7 +149,7 @@ def head(slot: FakeWorktree) -> str:
 
 @pytest.fixture
 def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
-    """`<tmp>/factory.db` holding one admitted, unregistered attempt (deadline 100) on `slot` and its held reservation;
+    """`<tmp>/factory.db` holding one admitted, unregistered attempt (deadline 100) on the adopted `slot` and its held reservation;
     the artifacts root is `tmp_path`, with the admitted input written."""
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)
@@ -157,6 +157,7 @@ def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
     text = "Plan the actual task"
     repo_id = slot.repo.identity().key
     with begin_immediate(con):
+        con.execute("INSERT INTO slot (repo_id,name,cwd) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
         con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
         con.execute(
             """INSERT INTO plan_attempt
@@ -173,10 +174,11 @@ def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
 
 @pytest.fixture
 def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) -> sqlite3.Connection:
-    """In memory: one admitted, entry-registered attempt (entry (7, entry-start, boot), deadline 100) on `slot`, its held
+    """In memory: one admitted, entry-registered attempt (entry (7, entry-start, boot), deadline 100) on the adopted `slot`, its held
     reservation, and its input in the artifacts root `tmp_path`."""
     repo_id = slot.repo.identity().key
     with begin_immediate(factory):
+        factory.execute("INSERT INTO slot (repo_id,name,cwd) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
         factory.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
         factory.execute(
             """INSERT INTO plan_attempt

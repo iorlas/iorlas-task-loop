@@ -7,16 +7,32 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from taskloop import cli_composition, plan_ops
+from taskloop import cli_composition, plan_data, plan_ops
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.plan import succeeded
-from taskloop.plan_ops import UNCLAIMING, Adoption, AttemptStatus, Checked, Failed, Freed, Listed, Result, Shown, Started, StartRequest
+from taskloop.plan_ops import (
+    UNCLAIMING,
+    Adoption,
+    AttemptStatus,
+    Checked,
+    Failed,
+    Freed,
+    Listed,
+    PublishedTask,
+    Result,
+    Shown,
+    Started,
+    StartRequest,
+)
+from taskloop.plan_publish import BranchPublished
 from taskloop.plan_release import Released
 from taskloop.plan_types import ATTEMPTS
 from taskloop.slots import Adopted
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
-ATTEMPT_ONLY = "attempt only: no publication"
+PLAN_ONLY = "plan step only: publishes task/<id>; no merge or land"
+PUBLISH = ("The plan is verified but not on `origin` yet: `tl plan publish`. A `refused` word names what to fix; "
+           "`unavailable:remote` is often credentials: check that `git push` works from this shell.")
 COMMANDS = ("config", "slot", "plan")
 HELD = ("The tracker claim stays held, and the slot until the step ends on a clean slot (`tl plan release` frees a slot left "
         "held; `--abandon` also returns the claim). While a step runs its entry renews the claim's bd lease every 100 s; between "
@@ -35,6 +51,7 @@ GUIDE = {
     "gives the task back.",
     "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl plan start` admits a fresh "
     "attempt.",
+    "publish": PUBLISH,
     "done": "Collected: `succeeded` tells whether the plan was verified.",
     "unknown": "The entry or the store could not be read; run `tl plan show` again.",
     "stuck:expired_admitted": f"Nothing ran. {ABANDON}",
@@ -56,6 +73,23 @@ GUIDE = {
     "entry_running": "Its entry runs: wait, or stop it by verified pid (the `stuck:hung` guide), then run it again.",
     "worker_unknown": "Dispatched with no agent recorded, so it cannot be shown stopped: the whole-DB discard is the only way out.",
     "slot_dirty": "The slot stays held: remove the listed files (nothing is reset for you), then run it again.",
+    "remote": "`origin` could not be reached: often credentials; check that `git push` works from this shell, then rerun. The "
+    "factory's Git sets `GIT_SSH_COMMAND` (no prompt), which overrides a `core.sshCommand` in your Git config: use ssh-agent or "
+    "`~/.ssh/config` for the key.",
+    "git": "Git could not run or answer (for a publish, an HTTPS login refused looks like this too): check that `git` and, for a "
+    "publish, `git push` work from this shell, then rerun.",
+    "repository": "The slot's `.git` pointer or repository is not the attempt's: inspect the slot (`git -C <slot> rev-parse "
+    "--git-common-dir`); nothing was pushed.",
+    "not_verified": "Only a verified plan is published: `tl plan verify` first; a rejected plan has nothing to publish.",
+    "remote_ahead": "The remote task/<id> already holds the verified commit plus later commits: compare them; the factory does "
+    "not record it as its publication and never forces.",
+    "no_remote": "Add the remote (`git remote add origin <url>`) in the person's checkout, then rerun `tl plan publish`.",
+    "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl plan release --abandon`.",
+    "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl plan publish`.",
+    "diverged": "The remote task/<id> does not contain the verified commit: compare them, then merge or move the remote branch "
+    "aside yourself; the factory never forces.",
+    "remote_rejected": "The remote's policy refused it: push the verified commit by hand (`git push origin <commit>:refs/heads/"
+    "task/<id>`, never `--force`) to see why.",
 }
 
 
@@ -96,31 +130,36 @@ def register(commands: Parsers) -> None:
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
     adopt.add_argument("--count", type=int, help="Slots s1..sN (overrides the machine config's slot_count)")
     _common(adopt, "--root", "--db")
-    plan = _add(commands, "plan", f"Plan attempts ({ATTEMPT_ONLY})").add_subparsers(dest="operation", required=True)
-    start = _add(plan, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim); {ATTEMPT_ONLY}. {HELD}")
+    plan = _add(commands, "plan", f"Plan attempts ({PLAN_ONLY})").add_subparsers(dest="operation", required=True)
+    start = _add(plan, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim); {PLAN_ONLY}. {HELD}")
     start.add_argument("task_id", metavar="TASK")
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _common(start, "--db", "--artifacts")
-    status = _add(plan, "show", f"The task's attempt, its entry, result and next step (read-only; {ATTEMPT_ONLY})")
+    status = _add(plan, "show", f"The task's attempt, its entry, result and next step (read-only; {PLAN_ONLY})")
     status.add_argument("task_id", metavar="TASK")
     status.add_argument("--backlog", required=True)
     _common(status, "--db", "--artifacts")
-    listing = _add(plan, "list", f"Every task's current attempt with its next step (read-only; {ATTEMPT_ONLY})")
+    listing = _add(plan, "list", f"Every task's current attempt with its next step (read-only; {PLAN_ONLY})")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next step is stuck:* or unknown")
     _common(listing, "--db")
-    verify = _add(plan, "verify", f"Commit the stage's listed files and verify them, then release a clean slot ({ATTEMPT_ONLY})")
+    verify = _add(plan, "verify", f"Commit the stage's listed files and verify them, then release a clean slot and publish a verified "
+                  f"plan ({PLAN_ONLY})")
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
     _common(verify, "--db")
     release = _add(plan, "release", "Release the slot of a step that ended (parked at its base, the claim kept); with --abandon, "
-                   f"of any step whose entry and agent are stopped, and return the tracker claim ({ATTEMPT_ONLY})")
+                   f"of any step whose entry and agent are stopped, and return the tracker claim ({PLAN_ONLY})")
     release.add_argument("task_id", metavar="TASK")
     release.add_argument("--backlog", required=True)
     release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl plan start` "
                          "then admits a fresh attempt")
     _common(release, "--db")
+    publish = _add(plan, "publish", "Push the verified plan commit to origin's task/<id> as you, never forced; nothing merges or lands")
+    publish.add_argument("task_id", metavar="TASK")
+    publish.add_argument("--backlog", required=True)
+    _common(publish, "--db")
 
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -154,6 +193,11 @@ def _release(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return plan_ops.release_task(*opened, arguments.backlog, arguments.task_id, abandon=arguments.abandon)
 
 
+def _publish(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    with cli_composition.open_plan_publish(loaded.settings.db.value) as opened:
+        return opened if isinstance(opened, Failed) else plan_ops.publish_task(*opened, arguments.backlog, arguments.task_id)
+
+
 def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings = loaded.settings
     return cli_composition.adopt(settings.db.value, Path(arguments.checkout), settings.slots_root.value, settings.slot_count.value)
@@ -167,6 +211,7 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
     ("plan", "list"): _list,
     ("plan", "verify"): _verify,
     ("plan", "release"): _release,
+    ("plan", "publish"): _publish,
 }
 
 
@@ -181,7 +226,7 @@ def run(arguments: argparse.Namespace) -> int:
         result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
     stream = sys.stderr if isinstance(result, Failed) else sys.stdout
     if arguments.json_output:
-        print(json.dumps(plan_ops.as_data(result)), file=stream)
+        print(json.dumps(plan_data.as_data(result)), file=stream)
     else:
         if isinstance(result, Failed) and result.claim_leaked:
             task = arguments.task_id
@@ -201,13 +246,18 @@ def _status_lines(each: AttemptStatus) -> list[str]:
         f"Released: {datetime.fromtimestamp(ended.released_at, UTC):%Y-%m-%d %H:%M:%S} UTC, slot parked at {ended.head}; "
         f"claim {ended.claim}{'; abandoned' if ended.abandoned else ''}"
     ]
+    found = each.published
+    published = [] if found is None else [
+        f"Published: task/{each.task_id} at {found.commit} on origin, {datetime.fromtimestamp(found.published_at, UTC):%Y-%m-%d %H:%M:%S}"
+        " UTC"
+    ]
     return [
         f"Task: {each.task_id} (backlog {each.backlog})", f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})",
         *(f"Earlier: {attempt_id} " + ("abandoned" if why == "abandoned" else f"repeated ({why})") for attempt_id, why in each.earlier),
         f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}", f"Result: {each.result.status} {each.result.reason}".rstrip(),
         f"Succeeded: {'yes' if succeeded(each.result) else 'no'}", f"Deadline passed: {'yes' if each.deadline_passed else 'no'}",
-        *released,
+        *released, *published,
     ]
 
 
@@ -229,7 +279,7 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
                 stand = f"attempt {result.number - 1}'s choices stand; deadline from --minutes"
                 lines += [f"attempt {result.number} of at most {ATTEMPTS}; {stand}"]
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
-            return [*lines, f"This is an {ATTEMPT_ONLY}. Follow it with `tl plan show {result.task_id} --backlog {result.backlog}`."]
+            return [*lines, f"This runs the {PLAN_ONLY}. Follow it with `tl plan show {result.task_id} --backlog {result.backlog}`."]
         case Shown(status=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             ended = each.release
@@ -244,16 +294,23 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
             kinds = dict.fromkeys(a.next for a in attempts if a.next.startswith("stuck:"))
             steps = [f"{kind}: {GUIDE[kind]}" for kind in kinds] + (stuck if kinds else [])
             return ["task\tbacklog\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
-        case Checked() | Freed():
+        case Checked() | Freed() | PublishedTask():
             return _freed_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
 
 
-def _freed_lines(result: Checked | Freed) -> list[str]:
-    """A verdict with the release that followed it; a release with each change on its own line."""
+def _freed_lines(result: Checked | Freed | PublishedTask) -> list[str]:
+    """A verdict with the release and the publication that followed it; a release with each change on its own line; a
+    publication."""
+    if isinstance(result, PublishedTask):
+        found = result.outcome
+        done = "published" if isinstance(found, BranchPublished) else "already_published"
+        return [f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
+                *(["Nothing changed: it was published before."] if done == "already_published" else [])]
     if isinstance(result, Checked):
         held = [f"Release: {result.release}"] + ([] if result.release == "released" else [GUIDE["release"]])
+        held += [f"Publish: {result.published}"] + ([] if result.published == "published" else [PUBLISH])
         return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
     found, task = result.outcome, result.task_id
     if not isinstance(found, Released):

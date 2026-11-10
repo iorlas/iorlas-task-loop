@@ -247,6 +247,10 @@ is `unknown(locked)`) are built. The typed not-started failure was not: an attem
 changed between admission and the entry, for example) is abandoned (`tl plan release --abandon`) instead of being left
 for the whole-DB discard. Force-unlock stays never.
 
+**Publication delivered by [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md).** A verified plan's X is pushed to `origin`'s `task/<id>` (never forced, no
+fetch, no remote deletion) after the release, outside the slot lock; a successful push also moves
+`refs/remotes/origin/task/<id>` to X, so this slice's branch rule keeps passing. Fetch and merge stay deferred.
+
 ## 8. Dependency (checked)
 
 - **Pin.** `pyproject.toml` gains `process-lock==0.2.1` and the source `{ git = ".../shelf.git", subdirectory =

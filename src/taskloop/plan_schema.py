@@ -5,7 +5,7 @@ import sqlite3
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=7,
+    version=8,
     name="factory",
     steps={},
     ddl="""
@@ -64,6 +64,12 @@ CREATE TABLE plan_release (
  claim TEXT NOT NULL CHECK(claim IN ('kept','unclaiming','unclaimed','not_held')),
  CHECK((abandoned = 0) = (claim = 'kept'))
 );
+CREATE TABLE published_branch (
+ attempt_id TEXT PRIMARY KEY REFERENCES plan_verification(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
+ commit_sha TEXT NOT NULL CHECK(length(commit_sha) IN (40,64)),
+ remote_head TEXT NOT NULL CHECK(length(remote_head) IN (40,64)),
+ published_at REAL NOT NULL
+);
 """,
 )
 
@@ -86,6 +92,7 @@ EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answ
 ANSWER = "answer_kind,disposition,plan_path,commit_paths,commit_message,publication"
 VERDICT = "verdict,reason,plan_blob,reused"
 RELEASE = "attempt_id,dispatch_token,generation,head,released_at,abandoned,claim"
+PUBLISHED = "attempt_id,dispatch_token,generation,commit_sha,remote_head,published_at"  # X pushed; the remote tip confirmed
 
 
 def marks(columns: str) -> str:

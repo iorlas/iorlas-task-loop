@@ -17,13 +17,14 @@ layers =
     taskloop.cli_composition
 
 [importlinter:contract:cli-never-imports-the-attempt-entry]
-name = The command surface, its operations and the machine config never import the attempt entry process
+name = The command surface, its operations, their JSON shape and the machine config never import the attempt entry process
 type = forbidden
 source_modules =
     taskloop.cli
     taskloop.cli_plan
     taskloop.cli_composition
     taskloop.plan_ops
+    taskloop.plan_data
     taskloop.machine_config
 forbidden_modules =
     taskloop.attempt_entry
@@ -39,6 +40,7 @@ forbidden_modules =
     taskloop.cli_plan
     taskloop.cli_composition
     taskloop.plan_ops
+    taskloop.plan_data
     taskloop.machine_config
 
 [importlinter:contract:no-runtime-mechanisms]

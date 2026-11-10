@@ -101,11 +101,9 @@ def pointer(files: SlotFiles, slot: Path) -> Pointer | None:
     return Pointer(gitdir, shared) if back is not None and files.resolve(gitdir / back) == dotgit else None
 
 
-def observe_slot(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str) -> SlotState | Literal["repo", "not_listed", "redirected"]:
+def _repository(checkouts: Checkouts, files: SlotFiles, path: Path, repo_id: str) -> tuple[Repo, Path] | Literal["repo", "redirected"]:
     """The pointer check first (`redirected`, no Git call); then, from the root it names, `repo` when the repository is
-    not `repo_id`, `redirected` when Git's common directory is not the one the pointer names, and `not_listed` when Git
-    does not list the slot."""
-    path = Path(cwd)
+    not `repo_id`, `redirected` when Git's common directory is not the one the pointer names. The view and its root."""
     found = pointer(files, path)
     if found is None:
         return "redirected"
@@ -113,12 +111,27 @@ def observe_slot(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str)
     identity = repo.identity()
     if identity.key != repo_id:
         return "repo"
-    if identity.common_dir != found.common:
-        return "redirected"
+    return (repo, found.root) if identity.common_dir == found.common else "redirected"
+
+
+def repository(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str) -> Path | Literal["repo", "redirected"]:
+    """The person's checkout (the root a verified slot pointer names) of the repository `repo_id`: the first half of
+    `observe_slot`, for a caller that then works on the repository, never on the slot."""
+    found = _repository(checkouts, files, Path(cwd), repo_id)
+    return found if isinstance(found, str) else found[1]
+
+
+def observe_slot(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str) -> SlotState | Literal["repo", "not_listed", "redirected"]:
+    """`repository`'s checks, then `not_listed` when Git does not list the slot."""
+    path = Path(cwd)
+    found = _repository(checkouts, files, path, repo_id)
+    if isinstance(found, str):
+        return found
+    repo, root = found
     info = next((worktree for worktree in repo.worktrees() if worktree.path == path), None)
     if info is None:
         return "not_listed"
-    return SlotState(found.root, info.head, info.branch, checkouts(path).worktree(path).dirty().raw)
+    return SlotState(root, info.head, info.branch, checkouts(path).worktree(path).dirty().raw)
 
 
 def _status(repo: Repo, slot: Path) -> tuple[tuple[str, str], ...] | None:

@@ -266,6 +266,10 @@ Publication, push, fetch, merge, landing and task completion; any tracker write 
 processes; repeating on `rejected`, `run:*`, `answer:*`; moving free slots to the integration target; slot creation,
 deletion or un-adoption; a dashboard; breaking a held kernel lock (process_lock never does).
 
+**Publication delivered by [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md).** Release stays independent of it: the entry releases first (inside the lock),
+then publishes (outside it); a held release does not stop publication, and `tl plan release` never publishes. `Next:
+publish` follows a settled release of a verified plan that is not yet on `origin`.
+
 ## 11. Owner decisions (2026-11-10)
 
 1. Automatic release when a step's result is final: **yes**, a clean slot is parked, the claim kept; only abandon unclaims.

@@ -28,18 +28,23 @@ from taskloop.plan_ops import (
     Failed,
     Listed,
     Next,
+    PublishedTask,
     Reads,
     Shown,
     Started,
     Starting,
     StartRequest,
     attempts_status,
+    exit_code,
     last_entry,
     next_step,
+    publish_task,
     start,
     status,
     verify_task,
 )
+from taskloop.plan_publish import BranchPublished, NotPublished, PlanPublish, PublishResult
+from taskloop.plan_reads import PublishedRow
 from taskloop.plan_release import NotReleased, PlanRelease, Released, ReleaseResult
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
@@ -111,6 +116,20 @@ class Releases:
 
     def release(self, key: AttemptKey, abandon: bool, me: Entry | None = None) -> ReleaseResult:
         self.calls.append((key, abandon))
+        return self.result
+
+
+PUSHED = BranchPublished("x" * 40, "x" * 40)
+
+
+class Publishes:
+    """The publish port: records each call."""
+
+    def __init__(self, result: PublishResult = PUSHED) -> None:
+        self.result, self.keys = result, list[AttemptKey]()
+
+    def publish(self, key: AttemptKey) -> PublishResult:
+        self.keys.append(key)
         return self.result
 
 
@@ -308,8 +327,8 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: PlanStore, now: flo
 
 
 @pytest.mark.parametrize("verdict, expected", [
-    (Verified("blob"), Checked("verified", "tasks", "tl-1", "attempt", "released")),
-    (Verified("blob", reused=True), Checked("reused", "tasks", "tl-1", "attempt", "released")),
+    (Verified("blob"), Checked("verified", "tasks", "tl-1", "attempt", "released", "published")),
+    (Verified("blob", reused=True), Checked("reused", "tasks", "tl-1", "attempt", "released", "published")),
     (Rejected("paths"), Failed("rejected", "paths", "Release: released")),
     (NotApplicable("incomplete"), Failed("not_applicable", "incomplete")),
     (VerifyRefused("session"), Failed("refused", "session")),
@@ -318,12 +337,14 @@ def test_list_keeps_only_stuck_or_unknown_when_asked(reader: PlanStore, now: flo
     (VerifyUnavailable("inconsistent"), Failed("defect", "inconsistent")),
 ])
 def test_verify_maps_every_verdict(reader: PlanStore, verdict: VerifyResult, expected: Checked | Failed) -> None:
-    verifier, releases = Verifier(verdict), Releases()
-    assert verify_task(reader, verifier, releases, "tasks", "tl-1") == expected
+    verifier, releases, publishes = Verifier(verdict), Releases(), Publishes()
+    assert verify_task(reader, verifier, releases, publishes, "tasks", "tl-1") == expected
     assert verifier.keys == [KEY]
     assert releases.calls == ([(KEY, False)] if isinstance(verdict, (Verified, Rejected)) else [])  # only after a verdict, settled
+    assert publishes.keys == ([KEY] if isinstance(verdict, Verified) else [])  # only a verified plan, after its release
     absent = Verifier(verdict)
-    assert verify_task(reader, absent, releases, "tasks", "tl-9") == Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
+    missing = Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
+    assert verify_task(reader, absent, releases, publishes, "tasks", "tl-9") == missing
     assert absent.keys == []
 
 
@@ -341,9 +362,9 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     store = PlanStore(lambda: registered)
     attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    releasing = releaser(store, checkouts, slot_files)
-    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, gone, lambda: 20, hold), releasing, "tasks", "tl-1")
-    assert first == Checked("verified", "tasks", "tl-1", "attempt", "released") and slot.branch() is None
+    releasing, publishing = releaser(store, checkouts, slot_files), PlanPublish(store, checkouts, slot_files, lambda: 40)
+    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, gone, lambda: 20, hold), releasing, publishing, "tasks", "tl-1")
+    assert first == Checked("verified", "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
 
@@ -351,8 +372,9 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         opened.append(where)
         return checkouts(where)
 
-    again = releaser(store, counted, slot_files)  # already released: nothing pending, no Git
-    assert verify_task(store, PlanVerifier(store, counted, slot_files, gone, lambda: 20, hold), again, "tasks", "tl-1") == first
+    again = releaser(store, counted, slot_files)  # already released and published: nothing pending, no Git
+    verifier = PlanVerifier(store, counted, slot_files, gone, lambda: 20, hold)
+    assert verify_task(store, verifier, again, PlanPublish(store, counted, slot_files, lambda: 50), "tasks", "tl-1") == first
     assert opened == []
 
 
@@ -376,7 +398,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     before = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.status.next, before.status.leftovers) == ("verify", ())  # nothing committed yet
     left = Failed("unsettled", "uncommitted", f"?? {stray}")  # as show lists it
-    assert verify_task(store, verifier, Releases(), "tasks", "tl-1") == left
+    assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == left
     shown = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown) and shown.status.next == "repeat"
     assert (shown.status.result.status, shown.status.result.reason) == ("pending", "repeat")
@@ -421,7 +443,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     assert verifier.leftovers(KEY) == Unsettled("branch")
     off = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(off, Shown) and (off.status.next, off.status.leftovers) == ("verify", ())
-    assert verify_task(store, verifier, Releases(), "tasks", "tl-1") == Failed("unsettled", "branch")
+    assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == Failed("unsettled", "branch")
 
 
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
@@ -436,7 +458,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 8])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 9])
 def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
@@ -481,7 +503,8 @@ def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(tmp_pat
 
 
 # the entry's longest line: a retried publication, its collected outcome, the verify, claim and release words
-LONGEST = "unavailable evidence publish=accepted then=collected:verified verify=unavailable:git claim=unrenewed release=held:slot_dirty"
+LONGEST = ("unavailable evidence publish=accepted then=collected:verified verify=unavailable:git claim=unrenewed release=held:slot_dirty "
+           "branch=unavailable:remote")
 
 
 @pytest.mark.parametrize(("tail", "expected"), [
@@ -497,7 +520,7 @@ LONGEST = "unavailable evidence publish=accepted then=collected:verified verify=
     (LONGEST + "\n", LONGEST),
     (LONGEST + " x=y\n", None),
     ("refused " + "x" * 61 + "\n", None),
-    ("refused a b c d e f g\n", None),
+    ("refused a b c d e f g h\n", None),
 ])
 def test_only_a_line_of_the_entrys_fixed_words_is_shown(tail: str | None, expected: str | None) -> None:
     assert last_entry(tail) == expected
@@ -574,3 +597,57 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
     admission, launcher = Admission(Admitted(AttemptKey("fresh", "token", 2), "s1")), Launcher(Launched(KEY, ENTRY))
     assert start(Starting(store, admission, launcher, lambda: 10, Repeats()), REQUEST) == Failed("refused", "release", UNCLAIMING)
     assert (admission.requests, launcher.calls) == ([], [])
+
+
+def test_verify_reports_a_failed_publication_without_changing_its_result(reader: PlanStore) -> None:
+    publishes = Publishes(NotPublished("unavailable", "remote"))
+    checked = verify_task(reader, Verifier(Verified("blob")), Releases(), publishes, "tasks", "tl-1")
+    assert checked == Checked("verified", "tasks", "tl-1", "attempt", "released", "unavailable:remote") and exit_code(checked) == 0
+
+
+@pytest.mark.parametrize("result, expected, code", [
+    (BranchPublished("x" * 40, "y" * 40), PublishedTask("tasks", "tl-1", "attempt", BranchPublished("x" * 40, "y" * 40)), 0),
+    (NotPublished("refused", "diverged", "d"), Failed("refused", "diverged", "d"), 1),
+    (NotPublished("unavailable", "remote", "r"), Failed("unavailable", "remote", "r"), 3),
+])
+def test_publish_task_maps_every_result_and_its_exit_code(
+    reader: PlanStore, result: PublishResult, expected: PublishedTask | Failed, code: int
+) -> None:
+    publishes = Publishes(result)
+    found = publish_task(reader, publishes, "tasks", "tl-1")
+    assert (found, exit_code(found), publishes.keys) == (expected, code, [KEY])
+    assert publish_task(reader, publishes, "tasks", "tl-9") == Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
+
+
+def test_a_verified_plan_is_release_first_then_publish_then_done(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    path = "docs/design/tl-1/plan.md"
+
+    def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
+        slot.write_file(path, "# Plan\n")
+        text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
+        worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
+        return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
+
+    store = PlanStore(lambda: registered)
+    attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    verifier = PlanVerifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    reads = Reads(store, observe("gone", []), lambda: 10, nothing_left)
+
+    def shown() -> AttemptStatus:
+        found = status(reads, tmp_path / "art", "tasks", "tl-1")
+        assert isinstance(found, Shown)
+        return found.status
+
+    held = NotReleased("unavailable", "slot_busy")
+    assert verify_task(store, verifier, Releases(held), Publishes(), "tasks", "tl-1") == Checked(
+        "verified", "tasks", "tl-1", "attempt", "unavailable:slot_busy", "published")  # the stub publishes nothing
+    assert shown().next == "release"  # freeing the slot comes first
+    assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
+    assert (shown().next, shown().published) == ("publish", None)
+    x = next(ref.sha for ref in slot.repo.refs(["refs/heads/task/"]) if ref.name == "refs/heads/task/tl-1")
+    found = publish_task(store, PlanPublish(store, checkouts, slot_files, lambda: 40), "tasks", "tl-1")
+    assert found == PublishedTask("tasks", "tl-1", "attempt", BranchPublished(x, x))
+    assert (shown().next, shown().published) == ("done", PublishedRow(x, x, 40.0))

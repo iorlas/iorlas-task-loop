@@ -7,7 +7,9 @@ an agent's own initiative. Scratch repo, scratch tracker and scratch `factory.db
 [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md), that the factory commits the paths the agent lists (no hook runs), that a
 still-valid plan is reused on the agent's `unchanged`, and (Run C, owner-run) that the sandbox refuses a Git write and a
 `/tmp` write; and, since [.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md), that a step's slot is released and an abandoned task
-starts again (Run E, owner-run, not yet run).
+starts again (Run E, owner-run, not yet run); and, since [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md), that a verified plan
+is published to `origin` (the scratch `remote.git` only), retried by `tl plan publish`, and never forced (Run F,
+owner-run, not yet run).
 
 **Status (2026-11-10).** Smoke runs 3 and 4 passed on Linux (OrbStack, aarch64, codex-cli 0.167.0). Not observed yet: the `worker_alive` and `uncommitted` verify states (they appear only when
 the worker outlives the run or the agent leaves files; both runs were fast and tidy); the sandbox actually refusing a
@@ -69,7 +71,7 @@ mkdir "$TRACKER" && cd "$TRACKER" && git init -q && bd init --non-interactive --
 TASK=$(bd create "Smoke plan" --silent) && echo "TASK=$TASK" >> "$SMOKE/env.sh"
 bd update "$TASK" -d "Write docs/design/$TASK/plan.md with one short paragraph saying this is a live smoke plan. \
 Answer planned, list the plan in paths, and give a one-line message." \
-  --acceptance "The factory commits docs/design/$TASK/plan.md on task/$TASK; nothing is pushed."
+  --acceptance "The factory commits docs/design/$TASK/plan.md on task/$TASK and publishes task/$TASK to origin (the scratch remote.git)."
 T task show "$TASK" --backlog "$BACKLOG" --tracker-root "$TRACKER"
 ```
 
@@ -155,10 +157,10 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInsteadOf G
 | Start/boot identity survives exec | phase leaves `admitted`; no `refused identity` | `refused identity`: macOS start (or boot) changes across exec, or the read was `unknown` | stop; paste `ps lstart` and the row; do not relaunch (a replace fails the same way) |
 | Entry survives coordinator exit | after tab A closed: entry alive, PPID 1, `s`, `??`; run reaches `captured` | entry gone with phase `admitted`/`dispatching`: SIGHUP or session not detached | paste `ps`, `entry.log`, row; reset (section 8) |
 | Gate and registration timing, busy | launch < 5 s; section 4 gives `store` at ~1.5 s; `worker_pid` set, phase `registered` then `captured` | `registration_*` or `unavailable register` in entry.log: harness gate write too slow; ~5 s in section 4 | paste both timings and entry.log |
-| entry.log contents | one line per entry run (O_APPEND): first section 4's `unavailable credentials:auth verify=refused:not_captured`, then exactly one line `<status> <reason>[ publish=... then=...] verify=<v> claim=<w>[ release=<w>]` (`release=` only once the result is collected: `released` when the slot was clean, else `held:<reason>`); success (exit 0) is only `collected verified verify=verified ...` or `collected reused verify=reused ...`; `pending verification verify=unsettled:<r>` (`worker_alive` when the agent or its group still ran at the commit: re-run `tl plan verify` once it is gone; `uncommitted` when the stage left files: `T plan show` then says `Next: repeat` with the listing, section 6c)/`unavailable:<r>`, `collected rejected:<rule>`, `collected run:<r>`, `collected answer:<kind>` or `collected incomplete` are not success (exit 1). A pending verification is re-run by hand with `tl plan verify` (exit 3 until it settles) | a traceback: import failure (broken install); env/argv text: a leak | `just prepare`, reset; paste the log |
+| entry.log contents | one line per entry run (O_APPEND): first section 4's `unavailable credentials:auth verify=refused:not_captured`, then exactly one line `<status> <reason>[ publish=... then=...] verify=<v> claim=<w>[ release=<w>][ branch=<w>]` (`release=` only once the result is collected: `released` when the slot was clean, else `held:<reason>`; `branch=` only for a verified plan, after the slot lock is released: `published`, or `refused:<r>`/`unavailable:<r>`, then `T plan publish` retries; `publish=` is a different fact, the DB acceptance of the session result); success (exit 0) is only `collected verified verify=verified ...` or `collected reused verify=reused ...`; `pending verification verify=unsettled:<r>` (`worker_alive` when the agent or its group still ran at the commit: re-run `tl plan verify` once it is gone; `uncommitted` when the stage left files: `T plan show` then says `Next: repeat` with the listing, section 6c)/`unavailable:<r>`, `collected rejected:<rule>`, `collected run:<r>`, `collected answer:<kind>` or `collected incomplete` are not success (exit 1). A pending verification is re-run by hand with `tl plan verify` (exit 3 until it settles) | a traceback: import failure (broken install); env/argv text: a leak | `just prepare`, reset; paste the log |
 | fd 2 inheritance | entry fd 1,2 = entry.log, fd 0 a pipe; worker fd 0-2 pipes; `lsof entry.log` lists only the entry | the worker or its children hold entry.log | paste the lsof output |
 | Codex accepts CODEX_ACCESS + file login | `rc` 0, `answer_kind` valid | `stderr.txt` names an unknown flag/config key: installed codex rejects CODEX_ACCESS; `http_status` 401: login refused; entry.log `unavailable credentials:<word>`: source refused (`codex` not on PATH, `auth`, `git_config`) | paste `codex --version`, first lines of `stderr.txt` (check them for secrets first) |
-| Push refused | owner probe fails; no `smoke` or `probe` ref in `remote.git` | a ref exists: the push bar does not hold | stop; paste `show-ref` |
+| Push refused | owner probe fails; no `smoke` or `probe` ref in `remote.git` (since .12 the `refs/heads/task/*` refs there are the factory's own publication, not the agent's) | a `smoke` or `probe` ref exists: the push bar does not hold | stop; paste `show-ref` |
 | Plan file written | `$SLOT/docs/design/$TASK/plan.md` exists in the factory's commit; `answer_kind` valid, `disposition` planned | `incomplete` saying the write was blocked: `approval_policy=never` fell back to read-only (the binary says it may when requirements forbid `danger-full-access`); codex or a tool failing on `/tmp`/`$TMPDIR` (now excluded from the sandbox) | paste answer.txt and the first lines of `stderr.txt` |
 | Commit in a linked worktree | the slot, on `task/$TASK` (`G -C $SLOT branch --show-current`), shows exactly one new commit, by the person's identity, whose message ends `Task-Loop-Attempt: <attempt_id>`; its sha = `plan_commit`; `commit_paths` names the plan; `G -C $SLOT status --short` empty | the agent's commit succeeded (a commit without the trailer, `unsettled:head_moved`): the sandbox did not bound it; leftovers (`unsettled:uncommitted`) | record it; paste answer.txt, the log lines and the row |
 | No hook marker | `ls "$SMOKE/markers"` empty (it was empty before the launch, section 3) | a marker that appeared after the launch: a hook ran under the factory's Git (or the agent's) | paste the marker names and `G -C "$REPO" config --list --local` |
@@ -282,7 +284,7 @@ bd update "$TASK4" -d "Write docs/design/$TASK4/plan.md with one short paragraph
   --acceptance "The plan is committed on the task branch."
 T slot adopt "$REPO"; S4=(plan start "$TASK4" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" \
   --model "$MODEL" --effort "$EFFORT" --minutes 30)
-T "${S4[@]}"; T plan show "$TASK4" --backlog "$BACKLOG"   # repeat until Next: done; `Last entry result:` ends release=released
+T "${S4[@]}"; T plan show "$TASK4" --backlog "$BACKLOG"   # repeat until Next: done; `Last entry result:` ends release=released branch=published
 T plan show "$TASK4" --backlog "$BACKLOG"   # Released: <time>, slot parked at <D>; claim kept
 G -C "$SLOT" rev-parse --abbrev-ref HEAD; G -C "$SLOT" rev-parse HEAD; G -C "$REPO" rev-parse "task/$TASK4"   # HEAD, D, X
 T plan release "$TASK4" --backlog "$BACKLOG" --json   # already_released, nothing changed (exit 0)
@@ -313,6 +315,54 @@ Note: `s1.lock` keeps the last holder's record (dead pid) after release; it is i
 | start while the claim is still returning | after an `unavailable:tracker` abandon, `T "${S4[@]}"` refuses `release` and show says `Next: release` | a fresh attempt admitted before the claim was returned |
 | start again | `started` with a new attempt id; `Earlier: <id> abandoned`; the agent starts on `task/$TASK4` at X | `already_dispatched`, `task_attempted`, or `refused:branch_diverged` (see `.11` section 5) |
 
+## 6e. Run F: publication, a failed publish and its retry, a diverged remote (optional, owner-run; tl-8bh9.4.3.1.12)
+
+A verified plan is pushed to `origin`'s `task/<id>` by the entry once, after its release and outside the slot lock,
+never forced, as the person (the shell that ran `tl plan start` supplies the credentials; `remote.git` needs none).
+`tl plan publish` is the retry. Pushes run with hooks off, so no `pre-push` hook runs (git-lfs's neither). The push
+uploads every ancestor of X that `remote.git` lacks: `$REPO`'s unpushed `main` commit (section 2 never pushes it) goes
+to `remote.git` under `task/<id>`; that is expected here, and is why a real repository's base should hold no unpublished
+work. Only a `Pushed` result is recorded: a remote that already holds X plus later commits is `refused:remote_ahead`.
+Move the previous run aside (a v7 factory.db is refused `schema`), then:
+
+```bash
+mkdir "$SMOKE/runE" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runE/"; done
+mkdir "$SMOKE/markers"
+cd "$TRACKER" && TASK5=$(bd create "Smoke publish" --silent) && TASK6=$(bd create "Smoke diverged" --silent) \
+  && printf 'TASK5=%s\nTASK6=%s\n' "$TASK5" "$TASK6" >> "$SMOKE/env.sh"
+for t in "$TASK5" "$TASK6"; do bd update "$t" -d "Write docs/design/$t/plan.md with one short paragraph. Answer planned and \
+list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."; done
+T slot adopt "$REPO"
+# F1, a publish that fails, then the retry: origin pointed at a missing path for the run
+G -C "$REPO" remote set-url origin "file://$SMOKE/missing.git"
+S5=(plan start "$TASK5" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30)
+T "${S5[@]}"; T plan show "$TASK5" --backlog "$BACKLOG"   # repeat until the entry ends: ... release=released branch=unavailable:remote; Next: publish
+G -C "$REPO" remote set-url origin "file://$SMOKE/remote.git"
+T plan publish "$TASK5" --backlog "$BACKLOG" --json      # published; commit == remote_head
+G -C "$SMOKE/remote.git" show-ref; G -C "$REPO" rev-parse "task/$TASK5" "refs/remotes/origin/task/$TASK5"   # all X
+G -C "$REPO" remote set-url origin "file://$SMOKE/missing.git"
+T plan publish "$TASK5" --backlog "$BACKLOG" --json      # already_published, exit 0: no network was needed
+G -C "$REPO" remote set-url origin "file://$SMOKE/remote.git"
+# F2, a remote branch someone else made: a scratch clone pushes an unrelated task/$TASK6 first
+git clone -q "$SMOKE/remote.git" "$SMOKE/other" && cd "$SMOKE/other" && git switch -q --orphan "task/$TASK6" \
+  && git -c user.name=o -c user.email=o@example.invalid commit -q --allow-empty -m other && git push -q origin "task/$TASK6" && cd "$SMOKE"
+S6=(plan start "$TASK6" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30)
+T "${S6[@]}"; T plan show "$TASK6" --backlog "$BACKLOG"   # until: ... branch=refused:remote_moved; Next: publish
+G -C "$SMOKE/remote.git" rev-parse "task/$TASK6"           # still the other clone's commit: nothing forced
+G -C "$REPO" fetch -q origin "task/$TASK6"; T plan publish "$TASK6" --backlog "$BACKLOG"   # refused diverged, exit 1
+ls "$SMOKE/markers"   # empty: no hook ran
+```
+
+| Check | Pass | Fail means |
+|---|---|---|
+| F1 failure | `branch=unavailable:remote`, `Next: publish`, the slot released, no `task/$TASK5` in `remote.git` | `branch=published` against a missing path; the release waited on the push |
+| F1 retry | `published`; `remote.git`, local branch and tracking ref all at X | a different sha anywhere; a `+` (forced) update |
+| already published | `already_published` with origin unreachable | any Git error (it touched the network) |
+| F2 | `remote_moved`, then `diverged` after the fetch; `remote.git` keeps the other commit | the remote ref changed |
+| agent push | still no `smoke`/`probe` ref | the push bar does not hold |
+
+Cleanup: `rm -rf "$SMOKE/other"` with the rest of `~/tl-smoke`. Section 9 is unchanged: push nowhere but `remote.git`.
+
 ## 7. Paste back to the agent
 
 `codex --version`; the `--json` outputs of `T config show`, both `T slot adopt`, section 4's starts (with `time`) and shows,
@@ -320,7 +370,8 @@ Note: `s1.lock` keeps the last holder's record (dead pid) after release; it is i
 and `lsof` lines; `entry.log`; the two `sqlite3` result sets; `ls -la $ATT`; `answer.txt`; heads of `stderr.txt` and
 `diagnostics.txt` after checking them for secrets; slot `git log`/`status`; `show-ref`; the push probe's error line;
 the approved-escalation commands (or "none") and `G -C "$REPO" config --list --local`; for Run C, the `ACCESS`
-listing, the command lines and exit codes from `runC.jsonl` (checked for secrets) and its `ls`/`log`/`show-ref` output.
+listing, the command lines and exit codes from `runC.jsonl` (checked for secrets) and its `ls`/`log`/`show-ref` output;
+for Run F, every `T plan publish --json` and `T plan show` output, the entry.log lines, and the `show-ref`/`rev-parse` lines.
 Never paste `auth.json`, `env`, or the agent's environment.
 
 ## 8. Known wedges, reset and cleanup

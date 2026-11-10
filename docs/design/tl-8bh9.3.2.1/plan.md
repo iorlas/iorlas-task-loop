@@ -5,7 +5,8 @@ This is a bounded consumer of the [agent execution contract](../tl-8bh9.4.3.1/pl
 or a claim that the successor already executes tasks. Only repo/task inspection is implemented in the inspected
 successor. Do not register a plan CLI command until the application operation has the real behavior below.
 Exception (owner, 2026-11-10, [.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 2), for that surface only: `tl plan
-start/show/list/verify` are registered for the attempt alone, labelled "attempt only: no task branch, publication or release".
+start/show/list/verify` are registered for the attempt alone, labelled "attempt only: no task branch, publication or release"
+(since [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md): "plan step only: publishes task/<id>; no merge or land", with `tl plan publish` added).
 
 ## Result and limits
 

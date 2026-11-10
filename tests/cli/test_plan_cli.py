@@ -27,12 +27,14 @@ from taskloop.plan_ops import (
     Freed,
     Listed,
     Next,
+    PublishedTask,
     Result,
     Shown,
     Started,
     Starting,
 )
-from taskloop.plan_reads import ReleaseRow
+from taskloop.plan_publish import AlreadyPublished, BranchPublished, PublishResult
+from taskloop.plan_reads import PublishedRow, ReleaseRow
 from taskloop.plan_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
@@ -47,7 +49,7 @@ STATUS = AttemptStatus("tasks", "tl-1", "attempt", "s1", "captured", "gone", Att
 ERROR = {"kind", "reason", "message", "claim_leaked", "admitted", "slots"}
 STATUS_KEYS = {
     "backlog", "task", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process", "worker",
-    "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release",
+    "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release", "published",
 }
 REPEAT = AttemptStatus(
     "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
@@ -60,6 +62,14 @@ ABANDONED = AttemptStatus(
 )
 RELEASE = ["plan", "release", "tl-1", "--backlog", "tasks"]
 FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned"}
+X, T = "a" * 40, "b" * 40
+PUBLISH = ["plan", "publish", "tl-1", "--backlog", "tasks"]
+PUBLISHED = {"status", "backlog", "task", "attempt_id", "commit", "remote_head"}
+CHECKED = {"status", "backlog", "task", "attempt_id", "release", "published"}
+DONE = AttemptStatus(
+    "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("collected", "verified"), False, "done",
+    release=ReleaseRow(D, 30.0, False, "kept"), published=PublishedRow(X, X, 40.0),
+)
 
 
 @pytest.fixture(autouse=True)
@@ -162,10 +172,27 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["task\tbacklog\tattempt\tslot", "tl-1\ttasks\t1/3\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log"}),
-    (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("reused", "tasks", "tl-1", "attempt", "released"), 0,
-     ["reused: attempt attempt", "Release: released"], {"status", "backlog", "task", "attempt_id", "release"}),
-    (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("verified", "tasks", "tl-1", "attempt", "held:slot_dirty"), 0,
-     ["Release: held:slot_dirty", cli_plan.GUIDE["release"]], {"status", "backlog", "task", "attempt_id", "release"}),
+    (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
+     ["reused: attempt attempt", "Release: released\nPublish: published"], CHECKED),
+    (["plan", "verify", "tl-1", "--backlog", "tasks"],
+     Checked("verified", "tasks", "tl-1", "attempt", "held:slot_dirty", "unavailable:remote"), 0,
+     ["Release: held:slot_dirty", cli_plan.GUIDE["release"], f"Publish: unavailable:remote\n{cli_plan.PUBLISH}"], CHECKED),
+    (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", BranchPublished(X, X)), 0,
+     [f"published: task/tl-1 at {X} on origin (attempt attempt, backlog tasks)\n"], PUBLISHED),
+    (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", AlreadyPublished(X, X, 40.0)), 0,
+     [f"already_published: task/tl-1 at {X} on origin (attempt attempt, backlog tasks)\nNothing changed: it was published before."],
+     PUBLISHED),
+    (PUBLISH, Failed("refused", "diverged", f"origin's task/tl-1 is at {T}"), 1,
+     ["tl plan publish: refused:diverged", cli_plan.GUIDE["diverged"]], ERROR),
+    (PUBLISH, Failed("refused", "remote_ahead"), 1, [cli_plan.GUIDE["remote_ahead"]], ERROR),
+    (PUBLISH, Failed("refused", "no_remote"), 1, [cli_plan.GUIDE["no_remote"]], ERROR),
+    (PUBLISH, Failed("refused", "repository"), 1, [cli_plan.GUIDE["repository"]], ERROR),
+    (PUBLISH, Failed("refused", "not_verified"), 1, [cli_plan.GUIDE["not_verified"]], ERROR),
+    (PUBLISH, Failed("unavailable", "git"), 3, [cli_plan.GUIDE["git"]], ERROR),
+    (PUBLISH, Failed("unavailable", "remote"), 3, ["tl plan publish: unavailable:remote", cli_plan.GUIDE["remote"]], ERROR),
+    (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(DONE, Path("/a/d"), Path("/a/d/entry.log")), 0,
+     [f"Published: task/tl-1 at {X} on origin, 1970-01-01 00:00:40 UTC\n", "Next: done"],
+     STATUS_KEYS | {"directory", "entry_log"}),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(ABANDONED, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Earlier: first abandoned", f"Released: 1970-01-01 00:00:30 UTC, slot parked at {D}; claim unclaimed; abandoned",
       f"Next: start\n{cli_plan.GUIDE['abandoned']}"],
@@ -282,6 +309,37 @@ def test_release_flags_reach_the_operation_through_the_opener(
     assert json.loads(capsys.readouterr().out)["abandoned"] is abandon
 
 
+class Publishes:
+    def __init__(self) -> None:
+        self.keys: list[AttemptKey] = []
+
+    def publish(self, key: AttemptKey) -> PublishResult:
+        self.keys.append(key)
+        return BranchPublished(X, X)
+
+
+def test_publish_reaches_the_operation_through_the_opener_and_its_json_is_exact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db, publishes, opened = tmp_path / "factory.db", Publishes(), list[Path]()
+    admitted(db)
+    con = Store(SCHEMA).open_ro(db)
+    assert con is not None
+
+    @contextmanager
+    def opener(database: Path) -> Generator[tuple[PlanStore, Publishes]]:
+        opened.append(database)
+        yield PlanStore(lambda: con), publishes
+
+    monkeypatch.setattr(cli_composition, "open_plan_publish", opener)
+    assert main([*PUBLISH, "--db", str(db), "--json"]) == 0
+    con.close()
+    assert opened == [db] and publishes.keys == [KEY]
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "published", "backlog": "tasks", "task": "tl-1", "attempt_id": "attempt", "commit": X, "remote_head": X,
+    }
+
+
 def admitted(path: Path) -> None:
     """One admitted, unregistered attempt (tasks/tl-1, deadline 100) and its reservation, as the conftest of tests/plan."""
     con = Store(SCHEMA).open_rw(path)
@@ -319,7 +377,7 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
 
 
 @pytest.mark.parametrize(
-    "argv", [["plan", "show", "tl-1", "--backlog", "tasks"], ["plan", "list"], ["plan", "verify", "tl-1", "--backlog", "b"], START]
+    "argv", [["plan", "show", "tl-1", "--backlog", "tasks"], ["plan", "list"], ["plan", "verify", "tl-1", "--backlog", "b"], START, PUBLISH]
 )
 def test_without_a_factory_database_every_plan_command_refuses_and_creates_none(
     argv: list[str], tmp_path: Path, home: Path, capsys: pytest.CaptureFixture[str]

@@ -23,6 +23,9 @@ Today `execute` returns a validated `PlanAnswer`. That is a well-formed claim, n
    cleanup, and the lock check joins the slot `free` rule (O4 of .4.3.1.4).
 3. **Publication.** A non-force `Worktree.push("task/<id>", head=X)` (the refspec has no `+`; `real_write.py:403-430`),
    observed through `Repo.ls_remote`. It needs the configured remote and owner push authority.
+   *Built by [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md) (2026-11-10): the pinned X (B for `reused`) pushed to `origin` only, never forced,
+   automatically after a verified plan and by `tl plan publish`; a rejected push is classified with one `ls_remote`;
+   hooks off (no `pre-push`); recorded in `published_branch`.*
 4. **Cleanup and release.** These need whole-workload stop proof (.4.4). The final "slot is at X and clean" checks are
    made here and in publication, under the lock.
 

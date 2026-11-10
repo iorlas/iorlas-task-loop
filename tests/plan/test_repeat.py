@@ -21,9 +21,10 @@ from sqlite_store import Store, begin_immediate
 
 from taskloop.plan import Execution, PlanAttempts
 from taskloop.plan_admit import AdmitRefused, Admitted, PlanAdmission, RepeatRequest
+from taskloop.plan_data import as_data
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import Entry, Launched, LaunchResult
-from taskloop.plan_ops import Failed, Reads, Started, Starting, StartRequest, as_data, attempts_status, start, status
+from taskloop.plan_ops import Failed, Reads, Started, Starting, StartRequest, attempts_status, start, status
 from taskloop.plan_repeat import PlanRepeat, Settle, feedback
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore, StoreRefused

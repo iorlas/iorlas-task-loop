@@ -18,12 +18,14 @@ from taskloop.composition import (
     open_launcher,
     open_plan_admission,
     open_plan_verifier,
+    open_publisher,
     open_releaser,
     worker_gone,
 )
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_ops import Adoption, Failed, Reads, Starting, require_database
+from taskloop.plan_publish import PlanPublish
 from taskloop.plan_release import PlanRelease
 from taskloop.plan_repeat import PlanRepeat
 from taskloop.plan_schema import SCHEMA
@@ -99,12 +101,27 @@ def open_plan_start(database: Path, artifacts: Path) -> Generator[Starting | Fai
 
 
 @contextmanager
-def open_plan_verify(database: Path) -> Generator[tuple[PlanStore, PlanVerifier, PlanRelease] | Failed]:
-    """The database guard first, then the verifier's and the releaser's shared writer: no empty factory.db is ever created."""
+def open_plan_verify(database: Path) -> Generator[tuple[PlanStore, PlanVerifier, PlanRelease, PlanPublish] | Failed]:
+    """The database guard first, then the verifier's, the releaser's and the publisher's shared writer: no empty factory.db
+    is ever created."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
-            yield con if isinstance(con, Failed) else (_reader(con), open_plan_verifier(database, store), open_releaser(database, store))
+            if isinstance(con, Failed):
+                yield con
+            else:
+                yield _reader(con), open_plan_verifier(database, store), open_releaser(database, store), open_publisher(database, store)
+        finally:
+            store.close_shared()
+
+
+@contextmanager
+def open_plan_publish(database: Path) -> Generator[tuple[PlanStore, PlanPublish] | Failed]:
+    """The database guard first, then the publisher's shared writer (`tl plan publish`)."""
+    store = Store(SCHEMA)
+    with _read_only(database) as con:
+        try:
+            yield con if isinstance(con, Failed) else (_reader(con), open_publisher(database, store))
         finally:
             store.close_shared()
 

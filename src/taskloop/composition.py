@@ -24,6 +24,7 @@ from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
 from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import Entry, Launcher, entry_process
+from taskloop.plan_publish import PlanPublish
 from taskloop.plan_release import PlanRelease
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import REGISTRATION_BUSY_MS, PlanStore
@@ -56,6 +57,7 @@ CREDENTIAL_MARKERS = ("TOKEN", "SECRET", "PASSW", "CREDENTIAL", "API_KEY", "APIK
 VENV_NAMES = frozenset({"VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "PYTHONHOME", "__PYVENV_LAUNCHER__", "PYTHONEXECUTABLE"})
 PUSH_REFUSED = "delegate-push-refused://"  # baseline delegate env.push_bar: no such remote helper, so git aborts any push
 HARDENED = (("core.hooksPath", "/dev/null"), ("core.fsmonitor", "false"), ("commit.gpgSign", "false"), ("maintenance.auto", "false"))
+PUSH_TIMEOUT = 120.0  # seconds a publication's push or ls-remote may take (the library's default is 600)
 
 
 class Which(Protocol):
@@ -190,6 +192,13 @@ def checkouts(path: Path) -> Repo:
     return RealRepo(path, memoize=False, env=hardened(os.environ) | ceiling(path, os.environ))
 
 
+def remotes(path: Path) -> Repo:
+    """`checkouts` with a bounded transport (PUSH_TIMEOUT): the publication's view of the person's checkout. Hooks stay
+    off (no `pre-push`), no push bar is added, and the person's own Git config and credentials apply; git_porcelain's base
+    environment never prompts, so a locked key fails instead of hanging."""
+    return RealRepo(path, memoize=False, env=hardened(os.environ) | ceiling(path, os.environ), remote_timeout=PUSH_TIMEOUT)
+
+
 class RealSlotFiles:
     """The slot file port over the real file system: `lstat` never follows a symlink, and a read opens only what `lstat`
     just saw as a regular file within the cap (`O_NOFOLLOW`, non-blocking), so a FIFO or symlink is never opened."""
@@ -262,6 +271,12 @@ def open_releaser(database: Path, store: Store) -> PlanRelease:
     tracker's fenced unclaim, wall clock."""
     writer = PlanStore(lambda: store.shared_rw(database), store.begin_immediate)
     return PlanRelease(writer, checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim, time.time)
+
+
+def open_publisher(database: Path, store: Store) -> PlanPublish:
+    """Real wiring for `tl plan publish` and the publication after `tl plan verify`: a shared writer of `store` (the caller
+    closes it) on factory.db, the remote-capable Git view, the real slot file port, wall clock."""
+    return PlanPublish(PlanStore(lambda: store.shared_rw(database), store.begin_immediate), remotes, RealSlotFiles(), time.time)
 
 
 def open_launcher(database: Path, artifacts: Path) -> Launcher:

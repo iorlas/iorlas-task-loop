@@ -19,6 +19,10 @@ owner's answers. Nothing has been run, implemented or reviewed. Read: CLAUDE.md,
 | Next | Preparation and lock (`task/<id>` branch in the slot), publication (push), release and cleanup (including real force-unlock), scheduling and pause, dashboard |
 | Later / pending | Machine-wide doctor, `tl slot list`. Pending: the owner's macOS live smoke (section 11) |
 
+Since built from "Next": preparation and lock ([.4.3.1.10](../tl-8bh9.4.3.1.10/plan.md)), release
+([.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md)) and publication of the verified plan to `origin` ([.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md); push only,
+`tl plan publish`). Real force-unlock stays never; scheduling, pause and the dashboard remain next.
+
 ## 1. Words, plainly
 
 - **Slot**: a separate checkout of the repo (a Git worktree) that the factory may use, so two tasks never edit the same files.

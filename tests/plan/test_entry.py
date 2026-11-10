@@ -1,4 +1,5 @@
-"""The entry process body on a real factory.db file, its own real process identity, the owning agent fake and the fake slot."""
+"""The entry process body on a real factory.db file, its own real process identity, the owning agent fake, the fake slot and
+the fake clone's `origin` (the publication after a verified step)."""
 
 import dataclasses
 import json
@@ -12,7 +13,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from git_porcelain import Repo
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import Store
 from stream_proc import ProcessObservation, inspect_process
 
@@ -69,7 +70,8 @@ class Stop:
 class Entry:
     """One entry's collaborators: the run fake (with `written`, the agent first writes those files in the slot and lists
     the given paths), a counting credential source and Git view, the slot file port, a clock the wait advances, the log,
-    and the claim's scripted beats (the first before the agent, then one per `rounds` of the renewing thread)."""
+    the claim's scripted beats (the first before the agent, then one per `rounds` of the renewing thread), and the
+    publication's own Git views (`pushing` runs at each open: the lock and keep-alive state while it publishes)."""
 
     def __init__(
         self,
@@ -89,7 +91,8 @@ class Entry:
         self.beats, self.stop = list(beats), Stop(rounds)
         self.renewed: list[tuple[str, str]] = []
         self.slot_files = slot_files
-        self.git_opens = 0
+        self.git_opens, self.remote_opens = 0, 0
+        self.pushing: Callable[[], object] = lambda: None
         if entry is not None:
             store = Store(SCHEMA)
             con = store.open_rw(db)
@@ -113,6 +116,11 @@ class Entry:
 
     def checkouts(self, path: Path) -> Repo:
         self.git_opens += 1
+        return self.git(path)
+
+    def remotes(self, path: Path) -> Repo:
+        self.remote_opens += 1
+        self.pushing()
         return self.git(path)
 
     def execution(self, harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
@@ -158,7 +166,7 @@ class Entry:
     def __call__(self, inspect: Callable[[int], ProcessObservation] = inspect_process, task_id: str = "tl-1") -> int:
         args = EntryArgs(self.db, self.db.parent, "tasks", task_id)
         return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append, self.gone, self.heartbeat_for, self.stop,
-                     self.unclaim)
+                     self.unclaim, self.remotes)
 
 
 NOTE = "docs/design/tl-1/note.md"
@@ -167,7 +175,7 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released", 0, 16),
+        ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released branch=published", 0, 16),
         ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 16),
         ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
         ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 9),
@@ -189,6 +197,7 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     collected = line.startswith("collected")
     assert entry.waits == [] and entry.git_opens == opens and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
     assert (slot.branch(), entry.unclaimed) == (None if collected else "task/tl-1", [])  # parked at D; the claim kept
+    assert (entry.remote_opens > 0) == (code == 0)  # only a verified plan is published; its Git views are the publication's
 
 
 INCOMPLETE = "collected incomplete verify=not_applicable claim=held release=released"
@@ -242,7 +251,8 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
 @pytest.mark.parametrize(
     ("failures", "wait_to", "line", "waits", "captures"),
     [
-        (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released", 1, 2),
+        (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
+         "branch=published", 1, 2),
         (9, 10, "unavailable evidence publish=unavailable verify=refused:not_captured claim=held", 3, 4),
         (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
     ],
@@ -317,8 +327,48 @@ def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_rai
         return gone(worker)
 
     entry.gone = observed
-    assert entry() == 0 and entry.lines == ["collected verified verify=verified claim=held release=released"] and seen == [True] * 3
+    assert entry() == 0 and entry.lines == ["collected verified verify=verified claim=held release=released branch=published"]
+    assert seen == [True] * 3
     acquire(str(slot.path), "after", "verify").release()
+
+
+def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_alive_stopped(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
+) -> None:
+    """Another entry, verify or release may take the slot while the push runs: the publication pins no slot."""
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    seen: list[int] = []
+
+    def free() -> None:
+        acquire(str(slot.path), "other", "verify").release()
+        seen.append(entry.stop.set_calls)
+
+    entry.pushing = free
+    assert entry() == 0 and entry.lines[0].endswith(" release=released branch=published") and seen and set(seen) == {1}
+    x = next(ref.sha for ref in slot.repo.refs(["refs/heads/task/"]) if ref.name == "refs/heads/task/tl-1")
+    assert slot.repo.ls_remote("origin", ["refs/heads/task/tl-1"])[0].oid == x
+
+
+def test_a_publication_that_raises_keeps_the_log_line_and_the_verified_exit_0(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
+) -> None:
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+
+    def broken() -> None:
+        raise OSError("cannot open the checkout")
+
+    entry.pushing = broken
+    assert entry() == 0
+    assert entry.lines == ["collected verified verify=verified claim=held release=released branch=unavailable:git"]
+
+
+def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_still_exits_0(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree, repo: FakeRepo
+) -> None:
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    repo.set_remote_url("origin", "https://example.invalid/moved.git")
+    assert entry() == 0
+    assert entry.lines == ["collected verified verify=verified claim=held release=released branch=unavailable:remote"]
 
 
 @pytest.mark.parametrize(
@@ -338,7 +388,8 @@ def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]), beats=beats, rounds=rounds)
     assert entry() == 0  # the step completes, publishes and verifies; nothing is released or re-claimed
-    assert entry.lines == [f"collected verified verify=verified claim={word} release=released"] and len(entry.run.calls) == 1
+    assert entry.lines == [f"collected verified verify=verified claim={word} release=released branch=published"]
+    assert len(entry.run.calls) == 1
     assert entry.renewed == [("/tracker", "tl-1")] * renewals and entry.stop.set_calls == 1
 
 

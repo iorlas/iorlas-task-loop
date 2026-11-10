@@ -49,6 +49,7 @@ actual task-service update/sync semantics still require verification through the
 
 1. Planning produces a usable `docs/design/<task-id>/plan.md`, commits it on the deterministic task branch and publishes
    that commit before the workflow advances to implementation. A local JSON plan is not its portable replacement.
+   Built for the plan step in [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md) (push only; land not built).
 2. Every completed implementation/repair step commits intended changes and publishes its new tip before advancing
    through the workflow. Publish unvalidated task work: green checks/review gate target integration, not branch backup.
    Agent feedback about uncommitted files remains same-step continuation, not automatic blind stage_all by the factory.

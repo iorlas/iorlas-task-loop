@@ -1,8 +1,8 @@
 """The plan commands' operations over the existing ports: start (admit, launch, or repeat a captured step through the
 `Repeat` port; a released attempt is answered, an abandoned one admitted afresh), status, list, verify (which then releases
-the slot, settled) and release (`Release`: settled or abandon), each following a task's current attempt; values in,
-values out. Attempt only: nothing here prepares a task branch or publishes. `as_data` is the one JSON shape of every
-result; it never holds a dispatch token.
+the slot, settled, and publishes a verified plan), release (`Release`: settled or abandon) and publish (`Publish`: push the
+verified plan commit to origin's `task/<id>`), each following a task's current attempt; values in, values out. Plan step
+only: nothing here merges or lands. `plan_data.as_data` is the one JSON shape of every result.
 """
 
 import re
@@ -20,7 +20,9 @@ from taskloop.plan import SANDBOX, collect, succeeded
 from taskloop.plan_admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import AlreadyRunning, Entry, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
-from taskloop.plan_reads import AttemptRow, ReleaseRow
+from taskloop.plan_publish import AlreadyPublished, BranchPublished, NotPublished, PublishResult
+from taskloop.plan_publish import word as published_word
+from taskloop.plan_reads import AttemptRow, PublishedRow, ReleaseRow
 from taskloop.plan_release import AlreadyReleased, NotReleased, Released, ReleaseResult, word
 from taskloop.plan_store import PlanStore, StoreUnavailable
 from taskloop.plan_types import (
@@ -43,12 +45,12 @@ from taskloop.slots import Adopted, NotAdopted, SlotView
 type Clock = Callable[[], float]
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
 type Stuck = Literal["stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:unpublished", "stuck:conflict"]
-type Next = Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "done", "unknown"] | Stuck
+type Next = Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "done", "unknown"] | Stuck
 type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a stage still to settle
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
 ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
-ENTRY_WORDS: Final = 7  # at most: status, reason, publish=, then=, verify=, claim=, release= (attempt_entry)
+ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
 WORD: Final = re.compile(r"(?:[a-z]+=)?[A-Za-z0-9_]{1,60}(?::[A-Za-z0-9_]{1,60}){0,2}")
 UNCLAIMING: Final = "Abandoned, but the tracker claim is still to be returned: run `tl plan release --abandon` again."
 VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
@@ -74,6 +76,10 @@ class Verify(Protocol):
 
 class Release(Protocol):
     def release(self, key: AttemptKey, abandon: bool, me: Entry | None = None) -> ReleaseResult: ...
+
+
+class Publish(Protocol):
+    def publish(self, key: AttemptKey) -> PublishResult: ...
 
 
 @dataclass(frozen=True)
@@ -158,6 +164,7 @@ class AttemptStatus:
     last_entry: str | None = None  # the entry log's last line of fixed words (`refused slot_staged ...`), read now
     seq: int = 1  # the attempt's order among its task's attempts
     release: ReleaseRow | None = None  # how it ended its reservation, once released
+    published: PublishedRow | None = None  # its verified commit on origin's task/<id>, once published
 
 
 @dataclass(frozen=True)
@@ -174,13 +181,15 @@ class Listed:
 
 @dataclass(frozen=True)
 class Checked:
-    """`release`: the settled release that followed the verdict (`released`, `held:<word>`, `unavailable:<word>`)."""
+    """`release`: the settled release that followed the verdict (`released`, `held:<word>`, `unavailable:<word>`);
+    `published`: the publication that followed it (`published`, `refused:<word>`, `unavailable:<word>`)."""
 
     status: Literal["verified", "reused"]
     backlog: str
     task_id: str
     attempt_id: str
     release: str = ""
+    published: str = ""
 
 
 @dataclass(frozen=True)
@@ -194,11 +203,21 @@ class Freed:
 
 
 @dataclass(frozen=True)
+class PublishedTask:
+    """`tl plan publish`: recorded by this call, or before (`AlreadyPublished`: no Git, no network)."""
+
+    backlog: str
+    task_id: str
+    attempt_id: str
+    outcome: BranchPublished | AlreadyPublished
+
+
+@dataclass(frozen=True)
 class Adoption:
     slots: tuple[Adopted | NotAdopted, ...]
 
 
-type Result = Started | Shown | Listed | Checked | Freed | Adoption | Loaded | Failed
+type Result = Started | Shown | Listed | Checked | Freed | PublishedTask | Adoption | Loaded | Failed
 
 
 def require_database(open_ro: Callable[[], sqlite3.Connection | None]) -> sqlite3.Connection | Failed:
@@ -315,11 +334,11 @@ def _status(reads: Reads, row: AttemptRow, *, probe: bool = True) -> AttemptStat
         entry = "running" if seen == "matching" else seen
     result = collect(reads.store, row.key)
     passed = reads.clock() >= row.deadline
-    step = _released(row, next_step(row.phase, entry, result, passed))
+    step = _released(row, next_step(row.phase, entry, result, passed), succeeded(result))
     found = (row.backlog, row.task_id, row.key.attempt_id, row.slot, row.phase)
     left = reads.leftovers(row.key) if probe and step == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
-    ended = {"seq": row.seq, "release": row.release}
+    ended = {"seq": row.seq, "release": row.release, "published": row.published}
     if left is None or left.reason not in REPEATABLE:
         return AttemptStatus(*found, entry, result, passed, step, row.entry, row.worker, (), *chain, **ended)
     step = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
@@ -327,13 +346,13 @@ def _status(reads: Reads, row: AttemptRow, *, probe: bool = True) -> AttemptStat
     return AttemptStatus(*found, entry, held, passed, step, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
 
 
-def _released(row: AttemptRow, step: Next) -> Next:
-    """A released attempt is `done` (settled) or `start` again (abandoned); a collected one still holding its slot is
-    `release` (the entry or a verify left it held: the slot was not clean)."""
+def _released(row: AttemptRow, step: Next, verified: bool) -> Next:
+    """A released attempt is `start` again (abandoned), `publish` (settled, verified, not yet on origin) or `done`; a
+    collected one still holding its slot is `release` first (the entry or a verify left it held: the slot was not clean)."""
     if row.release is not None and row.release.claim == "unclaiming":
         return "release"  # the abandon's claim is still to be returned
     if row.release is not None:
-        return "start" if row.release.abandoned else "done"
+        return "start" if row.release.abandoned else "publish" if verified and row.published is None else "done"
     return "release" if step == "done" and row.held else step
 
 
@@ -381,9 +400,10 @@ def attempts_status(reads: Reads, *, stuck: bool = False) -> Listed | Failed:
     return Listed(tuple(each for each in found if not stuck or each.next == "unknown" or each.next.startswith("stuck:")))
 
 
-def verify_task(reader: PlanStore, verifier: Verify, releaser: Release, backlog: str, task_id: str) -> Checked | Failed:
+def verify_task(reader: PlanStore, verifier: Verify, releaser: Release, publisher: Publish, backlog: str, task_id: str) -> Checked | Failed:
     """A stored verdict returns with no Git read; otherwise one verification, stored once when it settles. After a
-    verdict (new or stored) the slot is released, settled: a held release does not change the result, its word says so."""
+    verdict (new or stored) the slot is released, settled, and a verified plan published: a held release or a failed
+    publication does not change the result, its word says so."""
     try:
         found = reader.attempt_of(backlog, task_id)
     except StoreUnavailable as error:
@@ -396,7 +416,8 @@ def verify_task(reader: PlanStore, verifier: Verify, releaser: Release, backlog:
     released = word(releaser.release(found[0], False))
     if isinstance(result, Rejected):
         return replace(verify_failure(result), detail=f"Release: {released}")
-    return Checked("reused" if result.reused else "verified", backlog, task_id, found[0].attempt_id, released)
+    published = published_word(publisher.publish(found[0]))
+    return Checked("reused" if result.reused else "verified", backlog, task_id, found[0].attempt_id, released, published)
 
 
 def release_task(reader: PlanStore, releaser: Release, backlog: str, task_id: str, *, abandon: bool) -> Freed | Failed:
@@ -411,6 +432,20 @@ def release_task(reader: PlanStore, releaser: Release, backlog: str, task_id: st
     if isinstance(result, NotReleased):
         return Failed(result.kind, result.reason, result.detail)
     return Freed(backlog, task_id, found[0].attempt_id, result)
+
+
+def publish_task(reader: PlanStore, publisher: Publish, backlog: str, task_id: str) -> PublishedTask | Failed:
+    """`tl plan publish`: the task's current attempt's verified commit pushed to origin's `task/<id>` (first try or retry)."""
+    try:
+        found = reader.attempt_of(backlog, task_id)
+    except StoreUnavailable as error:
+        return Failed("unavailable", "store", str(error))
+    if found is None:
+        return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
+    result = publisher.publish(found[0])
+    if isinstance(result, NotPublished):
+        return Failed(result.kind, result.reason, result.detail)
+    return PublishedTask(backlog, task_id, found[0].attempt_id, result)
 
 
 def verify_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable) -> Failed:
@@ -432,77 +467,3 @@ def exit_code(result: Result) -> int:
             return 3 if reasons & {"git_unavailable", "store_unavailable"} else 1 if reasons else 0
         case _:
             return 0
-
-
-def _entry_data(entry: Entry | None) -> dict[str, object] | None:
-    return None if entry is None else {"pid": entry[0], "start": entry[1], "boot": entry[2]}
-
-
-def _status_data(each: AttemptStatus) -> dict[str, object]:
-    return {
-        "backlog": each.backlog, "task": each.task_id, "attempt_id": each.attempt_id, "slot": each.slot, "phase": each.phase,
-        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
-        "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
-        "entry_process": _entry_data(each.entry_process),
-        "worker": None if each.worker is None else {"pid": each.worker[0], "pgid": each.worker[1]},
-        "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
-        "repeat_reason": each.repeat_reason, "earlier": [attempt_id for attempt_id, _reason in each.earlier],
-        "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
-    }
-
-
-def _release_data(release: ReleaseRow | None) -> dict[str, object] | None:
-    if release is None:
-        return None
-    return {"head": release.head, "released_at": release.released_at, "abandoned": release.abandoned, "claim": release.claim}
-
-
-def _freed_data(result: Checked | Freed) -> dict[str, object]:
-    if isinstance(result, Checked):
-        return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
-                "release": result.release}
-    found = result.outcome
-    changed = (found.parked, found.reservation_removed) if isinstance(found, Released) else (None, False)
-    status = "released" if isinstance(found, Released) else "already_released"
-    return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id, "slot": found.slot,
-            "parked": changed[0], "reservation_removed": changed[1], "claim": found.claim, "abandoned": found.abandoned}
-
-
-def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
-    match each:
-        case SlotView():
-            return {"name": each.name, "path": str(each.path), "state": each.state, "reason": each.reason, "attempt_id": each.attempt_id}
-        case Adopted():
-            return {"name": each.name, "adopted": True, "reason": None, "path": str(each.path)}
-        case NotAdopted():
-            return {"name": each.name, "adopted": False, "reason": each.reason, "path": None if each.path is None else str(each.path)}
-
-
-def as_data(result: Result) -> dict[str, object]:
-    """The one JSON shape per result (a refusal or unknown is `{"error": ...}`); no dispatch token, no version field."""
-    match result:
-        case Failed():
-            slots = [_slot_data(each) for each in result.slots]
-            error = {"kind": result.kind, "reason": result.reason, "message": result.detail, "claim_leaked": result.claim_leaked}
-            return {"error": error | {"admitted": result.admitted, "slots": slots}}
-        case Started():
-            return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
-                    "existing": result.existing, "entry": _entry_data(result.entry), "number": result.number, "result": result.result}
-        case Shown():
-            return _status_data(result.status) | {"directory": str(result.directory), "entry_log": str(result.entry_log)}
-        case Listed():
-            return {"attempts": [_status_data(each) for each in result.attempts]}
-        case Checked() | Freed():
-            return _freed_data(result)
-        case Adoption() | Loaded():
-            return _setup_data(result)
-
-
-def _setup_data(result: Adoption | Loaded) -> dict[str, object]:
-    if isinstance(result, Adoption):
-        return {"slots": [_slot_data(each) for each in result.slots]}
-    settings = {
-        key: {"value": each.value if isinstance(each.value, int) else str(each.value), "source": each.source}
-        for key, each in result.settings.pairs()
-    }
-    return {"file": {"path": str(result.path), "exists": result.exists}, "settings": settings}
