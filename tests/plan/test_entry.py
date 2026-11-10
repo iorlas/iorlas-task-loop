@@ -47,7 +47,9 @@ class FlakyFiles(PlanFiles):
 class Entry:
     """One entry's collaborators: the run fake, a counting credential source, a clock the wait advances, and the log."""
 
-    def __init__(self, db: Path, entry: tuple[int, str, str] | None = None, failures: int = 0, wait_to: float = 10) -> None:
+    def __init__(
+        self, db: Path, entry: tuple[int, str, str] | None = None, failures: int = 0, wait_to: float = 10, rc: int = 0, text: str = ""
+    ) -> None:
         self.db, self.now, self.wait_to = db, 10.0, wait_to
         if entry is not None:
             store = Store(SCHEMA)
@@ -56,8 +58,8 @@ class Entry:
             assert PlanStore(lambda: con, store.begin_immediate).register_entry(KEY, entry, 10) == "accepted"
             con.close()
         self.files = FlakyFiles(db.parent, failures)
-        summary = Summary(text=json.dumps(PLAN), rc=0, stands=True)
-        self.run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=summary, out="agent says SECRET=credential"))
+        summary = Summary(text=text or json.dumps(PLAN), rc=rc, stands=True, vendor="request failed SECRET=credential" if rc else "")
+        self.run = FakeRun(RunOutcome(rc=rc, worker=WORKER, summary=summary, out="agent says SECRET=credential"))
         self.credential_calls = 0
         self.waits: list[float] = []
         self.lines: list[str] = []
@@ -89,8 +91,23 @@ class Entry:
 def test_the_registered_entry_executes_and_logs_only_status_and_reason(admitted: Path) -> None:
     entry = Entry(admitted, me())
     assert entry() == 0
-    assert entry.lines == ["collected"] and len(entry.run.calls) == 1 and entry.credential_calls == 1
+    assert entry.lines == ["collected planned"] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
+
+
+@pytest.mark.parametrize(
+    ("rc", "text", "line"),
+    [
+        (1, "", "collected run:vendor_blip"),
+        (1, json.dumps(PLAN), "collected run:vendor_blip"),
+        (0, "not json", "collected answer:json_invalid"),
+    ],
+    ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer"],
+)
+def test_a_terminal_failure_is_collected_with_its_reason_and_exits_1(admitted: Path, rc: int, text: str, line: str) -> None:
+    entry = Entry(admitted, me(), rc=rc, text=text)
+    assert entry() == 1
+    assert entry.lines == [line] and all("SECRET" not in logged and "credential" not in logged for logged in entry.lines)
 
 
 @pytest.mark.parametrize("stored", [None, (1, "someone-else", "boot")])
@@ -117,7 +134,7 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(admitted: Path, tmp_p
 @pytest.mark.parametrize(
     ("failures", "wait_to", "line", "waits", "captures"),
     [
-        (1, 10, "unavailable evidence publish=accepted", 1, 2),
+        (1, 10, "unavailable evidence publish=accepted then=collected:planned", 1, 2),
         (9, 10, "unavailable evidence publish=unavailable", 3, 4),
         (9, 100, "unavailable evidence", 1, 1),
     ],
@@ -127,7 +144,7 @@ def test_publication_is_retried_only_while_unavailable_and_the_agent_never_again
     admitted: Path, failures: int, wait_to: float, line: str, waits: int, captures: int
 ) -> None:
     entry = Entry(admitted, me(), failures, wait_to)
-    entry()
+    assert entry() == (0 if failures == 1 else 1)
     assert entry.lines == [line] and len(entry.waits) == waits and entry.files.captures == captures
     assert len(entry.run.calls) == 1
     assert all("credential" not in text and "SECRET" not in text for text in entry.lines)

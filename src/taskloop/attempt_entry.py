@@ -2,8 +2,9 @@
 
 It runs only as the identity the launcher registered: its own boot-aware identity is read and compared with the stored
 entry before the attempt key is used or any credential is read. It never creates factory.db, runs the agent at most once
-(through `PlanAttempts.execute`), retries only an unavailable publication, and writes one log line: status and reason,
-never facts, environment, argv or exception text. Its stdout and stderr are the attempt's `entry.log`.
+(through `PlanAttempts.execute`), retries only an unavailable publication, and writes one log line of fixed words: status and
+reason (a published retry adds `publish=` and the collected `then=`), never facts, environment, argv or exception text. It exits 0
+only for a clean run with a valid answer (`plan.succeeded`). Its stdout and stderr are the attempt's `entry.log`.
 """
 
 import os
@@ -18,7 +19,7 @@ from sqlite_store import open_ro
 from stream_proc import ProcessObservation, inspect_process
 
 from taskloop.composition import open_plan_attempts
-from taskloop.plan import PlanAttempts
+from taskloop.plan import ACCEPTED, PlanAttempts, succeeded
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import StoreUnavailable
 from taskloop.plan_types import AttemptResult, PublicationResult
@@ -100,9 +101,14 @@ def enter(
         return 1
     result = app.execute(key, me)
     published = _publish(app, result, clock, wait)
-    line = f"{result.status} {result.reason}".rstrip()
-    log(line if published is None else f"{line} publish={published.status}")
-    return 0 if result.status == "collected" or (published is not None and published.status in ("accepted", "already_same")) else 1
+    line = f"{result.status} {result.reason}"
+    if published is not None:
+        line += f" publish={published.status}"
+        if published.status in ACCEPTED:  # the published facts are now stored: read their terminal outcome back
+            result = app.collect(key)
+            line += f" then={result.status}:{result.reason}"
+    log(line)
+    return 0 if succeeded(result) else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:

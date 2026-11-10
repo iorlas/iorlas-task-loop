@@ -3,10 +3,26 @@
 import hashlib
 import json
 from pathlib import Path
+from typing import Final
 
 from any_agent import RunOutcome
 
-from taskloop.plan_types import AttemptKey, Evidence, FileRef
+from taskloop.plan_types import DISPOSITIONS, AttemptKey, Evidence, FileRef
+
+# The structural answer contract Codex forwards as an OpenAI strict response format: a plain object at the top level (no
+# allOf/anyOf/oneOf/not/enum/if there), every property required, nullable by type list, no composition keywords at all.
+# The cross-field rule (planned needs the expected path and a commit) and value bounds belong to decode_plan_answer alone.
+ANSWER_SCHEMA: Final = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["disposition", "plan_path", "commit", "explanation"],
+    "properties": {
+        "disposition": {"type": "string", "enum": list(DISPOSITIONS)},
+        "plan_path": {"type": ["string", "null"]},
+        "commit": {"type": ["string", "null"], "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"},
+        "explanation": {"type": "string"},
+    },
+}
 
 
 class EvidenceError(Exception):
@@ -61,20 +77,10 @@ class PlanFiles:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
 
-    def prepare(self, key: AttemptKey, expected_path: str) -> tuple[str, str]:
+    def prepare(self, key: AttemptKey) -> tuple[str, str]:
         """Return owned schema and native answer paths, without executing a harness."""
-        path = {"anyOf": [{"type": "null"}, {"type": "string", "const": expected_path}]}
-        commit = {"anyOf": [{"type": "null"}, {"type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"}]}
-        schema = {
-            "type": "object", "additionalProperties": False,
-            "required": ["disposition", "plan_path", "commit", "explanation"],
-            "properties": {"disposition": {"enum": ["planned", "incomplete", "needs_owner"]}, "plan_path": path,
-                           "commit": commit, "explanation": {"type": "string", "maxLength": 2000}},
-            "allOf": [{"if": {"properties": {"disposition": {"const": "planned"}}},
-                       "then": {"properties": {"plan_path": {"const": expected_path}, "commit": {"type": "string"}}}}],
-        }
         directory = self.directory(key)
-        ref = self._write(directory + "/schema.json", json.dumps(schema, sort_keys=True))
+        ref = self._write(directory + "/schema.json", json.dumps(ANSWER_SCHEMA, sort_keys=True))
         return str(self._path(ref.path)), str(self._path(directory + "/native-answer.txt"))
 
     def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:

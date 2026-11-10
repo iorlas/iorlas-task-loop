@@ -70,7 +70,10 @@ that fixture is not a production path to manufacture authority.
 
 AttemptResult/CollectionResult are explicit typed variants: Refused(reason),
 Pending(phase, accepted_facts), Collected(stored_result), Conflict(reason), and
-Unavailable(operation). Execute can additionally return PendingPlanResult with its
+Unavailable(operation). Collected means terminal, never success: its reason is always
+set, in fixed words: `run:<classified reason>` for a failed or timed-out run (rc != 0),
+`answer:<kind>` for a missing or invalid answer, else the valid answer's disposition.
+Only a disposition reason (`plan.succeeded`) is success; consumers read the reason. Execute can additionally return PendingPlanResult with its
 specific unaccepted result/session input. That value is volatile, not a DB fact or
 restart fallback. PublicationResult distinguishes accepted, already_same, conflict
 and unavailable; only an accepted transaction acknowledges progress. Expected DB
@@ -201,8 +204,12 @@ files. It does not infer completion. The pure PlanAnswer decoder accepts exactly
 factory-schema fields: disposition (planned/incomplete/needs_owner), expected plan
 path or null, reported full commit reference or null, and bounded explanation.
 Planned requires the expected task plan path and a reported commit; Git verification
-is deliberately later. Reject extra/wrongly typed fields with ValueError. The same
-schema contract is forwarded via LaunchInputs.schema. Explanation is returned as
+is deliberately later. Reject extra/wrongly typed fields with ValueError. Its structural
+part is forwarded via LaunchInputs.schema as an OpenAI strict response format: a plain
+object root (no allOf/anyOf/oneOf/not/enum/if at the root, and none of them anywhere),
+every property required, nullable by type list. The cross-field rule (planned needs the
+expected path and a commit) and the explanation bound live only in the decoder: the API
+refuses a root `allOf` with HTTP 400 `invalid_json_schema` (live smoke, 2026-11-10). Explanation is returned as
 transient typed data/evidence, not a DB transcript or a stored authoritative plan.
 
 ## SQLite mechanics and focused acceptance

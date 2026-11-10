@@ -146,7 +146,7 @@ Tab A: `D launch "$DB" "$ART" "$BACKLOG" "$TASK" | tee "$SMOKE/launch.txt"; exit
 session). Expect `Launched(key=..., entry=(pid, 'start', 'boot')) in <s>`. Everything below runs in tab B, a fresh shell:
 
 ```bash
-source ~/tl-smoke/env.sh; cat "$SMOKE/launch.txt"; D status "$DB" "$ART" "$BACKLOG" "$TASK"   # repeat until collect: collected
+source ~/tl-smoke/env.sh; cat "$SMOKE/launch.txt"; D status "$DB" "$ART" "$BACKLOG" "$TASK"   # repeat until collect: collected <reason>
 ATT=$(D status "$DB" "$ART" "$BACKLOG" "$TASK" | sed -n 's/^attempt dir: //p'); E=$(sqlite3 -readonly "$DB" "select entry_pid from plan_attempt")
 W=$(sqlite3 -readonly "$DB" "select worker_pid from plan_attempt")   # set once phase is registered
 ps -o pid,ppid,pgid,stat,tt,lstart,command -p "$E"        # entry: PPID 1, PGID = PID, STAT has s, TT ??
@@ -168,13 +168,13 @@ env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInstead
 | Start/boot identity survives exec | phase leaves `admitted`; no `refused identity` | `refused identity`: macOS start (or boot) changes across exec, or the read was `unknown` | stop; paste `ps lstart` and the row; do not relaunch (a replace fails the same way) |
 | Entry survives coordinator exit | after tab A closed: entry alive, PPID 1, `s`, `??`; run reaches `captured` | entry gone with phase `admitted`/`dispatching`: SIGHUP or session not detached | paste `ps`, `entry.log`, row; reset (section 8) |
 | Gate and registration timing, busy | launch < 5 s; section 4 gives `store` at ~1.5 s; `worker_pid` set, phase `registered` then `captured` | `registration_*` or `unavailable register` in entry.log: harness gate write too slow; ~5 s in section 4 | paste both timings and entry.log |
-| entry.log contents | exactly one line `<status> <reason>` (maybe ` publish=...`) | a traceback: import failure (broken install); env/argv text: a leak | `just prepare`, reset; paste the log |
+| entry.log contents | exactly one line `<status> <reason>` (maybe ` publish=... then=...`), e.g. `collected planned`; `collected run:<r>` or `collected answer:<kind>` is a terminal failure (exit 1), not success | a traceback: import failure (broken install); env/argv text: a leak | `just prepare`, reset; paste the log |
 | fd 2 inheritance | entry fd 1,2 = entry.log, fd 0 a pipe; worker fd 0-2 pipes; `lsof entry.log` lists only the entry | the worker or its children hold entry.log | paste the lsof output |
 | Codex accepts CODEX_ACCESS + file login | `rc` 0, `answer_kind` valid | `stderr.txt` names an unknown flag/config key: installed codex rejects CODEX_ACCESS; `http_status` 401: login refused; entry.log `unavailable credentials:<word>`: source refused (`codex` not on PATH, `auth`, `git_config`) | paste `codex --version`, first lines of `stderr.txt` (check them for secrets first) |
 | Push refused | owner probe fails; no `smoke` ref in `remote.git`; answer.txt says the push failed or was not approved | a `smoke` ref exists: the push bar does not hold | stop; paste `show-ref` and answer.txt |
 | Commit in a linked worktree | `disposition` planned, `reported_commit` = `git -C $SLOT rev-parse HEAD`, file in it; `git -C $SLOT status --short` empty | `incomplete` with a blocked commit: the known `writable_roots=[]` limit (plan section 5), not a launch failure. Planned, but made through an approved escalation (see below): the sandbox did not bound the commit ([.4.3.1.5](../tl-8bh9.4.3.1.5/plan.md) sections 8-9) | record it; paste answer.txt and the escalation list |
 | Escalations approved | none, or each listed: the command Codex ran outside the sandbox, from the approval events in `stdout.txt` | any approved command touching `.git` (config, hooks, refs) or the push bar | paste the command lines only (check them for secrets) and `git -C "$REPO" config --list --local` |
-| collect from a fresh shell | tab B `status` prints `collect: collected` and the answer; second launch never `Launched` | `collect: unavailable`/`pending <phase>` long after codex exited | paste status output and the row |
+| collect from a fresh shell | tab B `status` prints `collect: collected planned` (a `run:`/`answer:` reason is a failure) and the answer; second launch never `Launched` | `collect: unavailable`/`pending <phase>` long after codex exited | paste status output and the row |
 
 Exactly one Codex session: `pgrep -P "$E"` shows one child while running; `has_session` 1 and `session_conflict` 0 at the end.
 

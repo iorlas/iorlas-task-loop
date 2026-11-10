@@ -11,6 +11,7 @@ from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_session import GateRefused, SessionLatch, reconcile, registration_gate
 from taskloop.plan_store import PlanStore, StoreRefused, StoreUnavailable
 from taskloop.plan_types import (
+    DISPOSITIONS,
     Admission,
     AnswerState,
     AttemptKey,
@@ -57,15 +58,31 @@ class CredentialsUnavailable(Exception):
         self.reason = reason
 
 
+def outcome(stored: StoredExecution) -> str:
+    """The terminal reason, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
+    for an unusable answer, else the valid answer's disposition (the only reasons `succeeded` accepts)."""
+    facts, answer = stored.facts, stored.answer
+    if facts.timed_out or facts.rc != 0:
+        return "run:" + (facts.reason or ("timeout" if facts.timed_out else "exit"))
+    if answer.kind != "valid" or answer.disposition is None:
+        return "answer:" + answer.kind
+    return answer.disposition
+
+
 def report(stored: StoredExecution) -> AttemptResult:
-    """Stored terminal data is collected; a pending validation or session publication is never reported as complete."""
+    """Stored terminal data is collected with its outcome; a pending validation or session publication is never complete."""
     if stored.answer.kind == "validation_pending":
         return AttemptResult("pending", "validation_pending", stored)
     if stored.publication == "conflict":
         return AttemptResult("conflict", "session", stored)
     if stored.publication != "complete":
         return AttemptResult("pending", "session_" + stored.publication, stored)
-    return AttemptResult("collected", execution=stored)
+    return AttemptResult("collected", outcome(stored), stored)
+
+
+def succeeded(result: AttemptResult) -> bool:
+    """`collected` means terminal, never success: success is a clean run with a valid answer (any disposition)."""
+    return result.status == "collected" and result.reason in DISPOSITIONS
 
 
 class PlanAttempts:
@@ -197,7 +214,7 @@ class PlanAttempts:
         except Exception as error:  # the credential source is injected; its failure is typed, with its cause visible
             return AttemptResult("unavailable", "credentials:" + type(error).__name__)
         try:
-            schema, out_file = self.files.prepare(admission.key, admission.plan_path)
+            schema, out_file = self.files.prepare(admission.key)
         except EvidenceError:
             return AttemptResult("unavailable", "files")
         harness = CodexHarness()

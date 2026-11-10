@@ -478,7 +478,7 @@ class Spy(CodexHarness):
         ("raced", "pending", "dispatching", "admitted"),
         ("store", "unavailable", "store", "admitted"),
         ("expired", "refused", "expired", "admitted"),  # crossed while resolving the launch: never dispatched
-        ("run", "collected", "", "captured"),
+        ("run", "collected", "planned", "captured"),
     ],
 )
 def test_the_harness_is_cleaned_up_once_on_every_exit(

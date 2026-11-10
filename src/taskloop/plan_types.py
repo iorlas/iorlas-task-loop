@@ -2,13 +2,15 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Final, Literal
 
 from any_agent import RunOutcome, classify
 from any_agent.procs import Worker
 
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference
+
+DISPOSITIONS: Final = ("planned", "incomplete", "needs_owner")
 
 
 @dataclass(frozen=True)
@@ -147,14 +149,14 @@ type PlanDecoder = Callable[[object, str], PlanAnswer]
 
 
 def decode_plan_answer(value: object, expected_path: str) -> PlanAnswer:
-    """Validate the factory's reported plan contract, without verifying Git effects."""
+    """Validate the factory's reported plan contract, without verifying Git effects; the single owner of its cross-field rule."""
     if isinstance(value, dict) and set(value) == {"disposition", "plan_path", "commit", "explanation"}:
         disposition, path, commit, explanation = (value[key] for key in ("disposition", "plan_path", "commit", "explanation"))
         valid_commit = commit is None or (
             isinstance(commit, str) and len(commit) in (40, 64) and all(c in "0123456789abcdef" for c in commit)
         )
         if (
-            disposition in ("planned", "incomplete", "needs_owner")
+            disposition in DISPOSITIONS
             and (path is None or path == expected_path)
             and valid_commit
             and isinstance(explanation, str)

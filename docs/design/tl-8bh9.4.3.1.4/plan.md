@@ -170,8 +170,11 @@ subprocess import. The failure table names it.
 4. `execute(key, me)`. The body itself refuses `not_entry`. If the result is `unavailable` with a `PendingPlanResult`
    (the body never returns one with `pending`; a `conflict` is not retried), retry `publish` only while it returns `unavailable`. Retries stop at 3 or when `clock() >= deadline`,
    whichever comes first, with an injected wait. The agent never runs again.
-5. Write one line to the log: `status` and `reason` only, never facts, env, argv or exception text. A top-level
-   `BaseException` is logged by type name only (Low6). The exit code is display only. Limit: the module's imports
+5. Write one line to the log: `status` and `reason` only (fixed words; a retried publication adds `publish=<s>` and,
+   once accepted, the collected `then=<status>:<reason>`), never facts, env, argv or exception text. A top-level
+   `BaseException` is logged by type name only (Low6). The exit code is display only: 0 exactly when `plan.succeeded`
+   (collected with a disposition reason: clean run, valid answer), 1 otherwise. `collected` alone is terminal, not
+   success: a failed run logs `collected run:<reason>`, an unusable answer `collected answer:<kind>`. Limit: the module's imports
    (sqlite_store, stream_proc, composition and its libraries) run before `main`, so a failing import (a broken install)
    writes Python's traceback, with its text, to the log unbounded. Deferring them would need imports inside functions,
    which lint forbids.
@@ -224,7 +227,7 @@ scheduler, other harnesses, whole-tree stop proof, uv cache env. `taskloop.attem
   gate connection opens before dispatch (its fault leaves `admitted`), an entry replaced between load and dispatch is
   refused `changed_admission` with nothing run.
 - `tests/plan/test_admit.py`: `register_for_test_only` (`:125`) is deleted. Its call sites `:161` and `:395` use production
-  `register_entry`, and `:161` now proves `admit -> register_entry -> execute(key, me) -> collected`.
+  `register_entry`, and `:161` now proves `admit -> register_entry -> execute(key, me) -> collected planned`.
 - `tests/plan/test_credentials.py` (~90): scrub table (parametrized), venv strip, missing exe or `auth.json`, keyring case
   refuses, push bar appended after existing `GIT_CONFIG_*`, with injected `environ`, `which` and `exists`.
 - Doc update in the same change: the .4.3.1.1 limits text (lines 263-265, "credentials failure ... leave `dispatching`")
