@@ -29,6 +29,7 @@ from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import Checkouts
 from taskloop.plan_verifier import PlanVerifier
+from taskloop.slot_lock import refused
 
 
 def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Path.home) -> Loaded | ConfigRefused:
@@ -78,7 +79,8 @@ def open_plan_reads(database: Path) -> Generator[Reads | Failed]:
             yield con
         else:
             reader = _reader(con)
-            yield Reads(reader, entry_seen, time.time, PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time).leftovers)
+            verifier = PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused)  # never verifies
+            yield Reads(reader, entry_seen, time.time, verifier.leftovers)
 
 
 @contextmanager

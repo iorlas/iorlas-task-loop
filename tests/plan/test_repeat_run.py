@@ -41,6 +41,7 @@ from taskloop.plan_types import (
 )
 from taskloop.plan_verifier import PlanVerifier
 from taskloop.plan_verify import judge
+from taskloop.slot_lock import hold
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -106,7 +107,7 @@ class Step:
     def __init__(self, con: sqlite3.Connection, tmp: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> None:
         self.con, self.tmp, self.slot, self.checkouts, self.files = con, tmp, slot, checkouts, files
         self.store, self.launcher = PlanStore(lambda: con), Launches(con)
-        self.verifier = PlanVerifier(self.store, checkouts, files, lambda _worker: True, lambda: 20)
+        self.verifier = PlanVerifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold)
 
     def run(self, key: AttemptKey, entry: tuple[int, str, str], agent: Agent) -> str:
         attempts = PlanAttempts(self.store, PlanFiles(self.tmp), lambda: ("/bin/codex", {}), agent, lambda: 10, self.checkouts, self.files)
@@ -188,17 +189,20 @@ def test_planned_with_nothing_new_in_a_later_attempt_is_rejected_for_good(step: 
     assert step.verifier.verify(key) == Rejected("nothing_written")
 
 
-@pytest.mark.parametrize("move", ["commit", "branch"])
-def test_a_slot_not_at_e_refuses_dispatch_and_the_attempt_stays_admitted(step: Step, slot: FakeWorktree, move: str) -> None:
+@pytest.mark.parametrize(("move", "word"), [("commit", "head_moved"), ("branch", "branch"), ("detached", "detached")])
+def test_a_slot_not_at_e_refuses_dispatch_and_the_attempt_stays_admitted(step: Step, slot: FakeWorktree, move: str, word: str) -> None:
+    """A repeat dispatches only on its task branch at E: never a commit elsewhere, another branch or a detached HEAD."""
     step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
     step.verifier.verify(KEY)
     key, entry = step.next_attempt(KEY)
     if move == "commit":
         commit(slot, {"README": "two"}, "someone else")
+    elif move == "branch":
+        slot.checkout_new("other")
     else:
-        slot.checkout_new("task/tl-1")
+        slot.park("HEAD")
     agent = Agent(slot, {}, UNCHANGED)
-    assert step.run(key, entry, agent) == f"refused slot_{'head_moved' if move == 'commit' else 'branch'}"
+    assert step.run(key, entry, agent) == f"refused slot_{word}"
     assert agent.specs == [] and step.store.attempt_of("tasks", "tl-1") == (key, "admitted", entry)
 
 

@@ -6,6 +6,7 @@ import dataclasses
 import json
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Literal, Protocol, get_args
 
@@ -26,6 +27,7 @@ from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore, StoreRefused
 from taskloop.plan_types import (
     RULES,
+    Admission,
     AttemptKey,
     Checkouts,
     FileEntry,
@@ -43,8 +45,9 @@ from taskloop.plan_types import (
     VerifyResult,
     VerifyUnavailable,
 )
-from taskloop.plan_verifier import PlanVerifier
+from taskloop.plan_verifier import Hold, PlanVerifier
 from taskloop.plan_verify import judge
+from taskloop.slot_lock import hold
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -122,8 +125,12 @@ def captured(
     assert body(con, tmp_path, checkouts, files, agent(slot, written, answer)).execute(KEY, ENTRY).reason == "verification"
 
 
-def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles) -> PlanVerifier:
-    return PlanVerifier(PlanStore(lambda: con), checkouts, files, gone, lambda: 20)
+def unheld(_admission: Admission) -> AbstractContextManager[None]:
+    return nullcontext()
+
+
+def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles, custody: Hold = hold) -> PlanVerifier:
+    return PlanVerifier(PlanStore(lambda: con), checkouts, files, gone, lambda: 20, custody)
 
 
 def stored(con: sqlite3.Connection) -> list[tuple[object, ...]]:
@@ -211,7 +218,8 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("foreign_commit", None, PLANNED, PLAN, foreign, None, "unsettled:head_moved", 1),
     ("unchanged_head_moved", PLANNED, {}, UNCHANGED, lambda slot, _files: commit(slot, {"README": "two"}), None, "unsettled:head_moved", 1),
     ("unchanged_never_adopts", PLANNED, {}, UNCHANGED, trailer_commit, None, "unsettled:head_moved", 1),
-    ("branch", None, PLANNED, PLAN, lambda slot, _files: slot.checkout_new("task/tl-1"), None, "unsettled:branch", 0),
+    ("another_branch", None, PLANNED, PLAN, lambda slot, _files: slot.checkout_new("other"), None, "unsettled:branch", 0),
+    ("detached", None, PLANNED, PLAN, lambda slot, _files: slot.park("HEAD"), None, "unsettled:branch", 0),
     ("index_locked", None, PLANNED, PLAN, lambda slot, _files: slot.lock_index(), None, "unavailable:git:IndexLocked", 0),
     ("lost_base", None, PLANNED, PLAN, None, LOSE_BASE, LOST, 0),
     ("dropped", None, PLANNED, PLAN, lambda slot, _files: slot.repo.drop_checkout(slot.path), None, "unavailable:git:NotARepo", 0),
@@ -477,7 +485,7 @@ def test_refusals_and_unknowns_before_any_git_read(
         "UPDATE plan_execution SET answer_kind='validation_pending',disposition=NULL,plan_path=NULL,commit_paths=NULL,commit_message=NULL"
     )
     assert verifier(registered, counted, slot_files).verify(KEY) == VerifyUnavailable("validation_pending")
-    assert PlanVerifier(PlanStore(lambda: None), counted, slot_files, gone, lambda: 20).verify(KEY) == VerifyUnavailable("store")
+    assert PlanVerifier(PlanStore(lambda: None), counted, slot_files, gone, lambda: 20, hold).verify(KEY) == VerifyUnavailable("store")
     assert counted.opens == 0 and stored(registered) == []
 
 
@@ -535,7 +543,8 @@ def test_another_verifier_storing_first_is_inconsistent(
             found = super().collect(key)
             return None if found is None else dataclasses.replace(found, verification=None)
 
-    assert PlanVerifier(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3).verify(KEY) == VerifyUnavailable("inconsistent")
+    racing = PlanVerifier(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3, hold)
+    assert racing.verify(KEY) == VerifyUnavailable("inconsistent")
 
 
 def test_the_real_composition_opens_the_factory_database(tmp_path: Path) -> None:
@@ -614,7 +623,9 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The other verifier commits, records X and stores its verdict between this one's `stage` and `record`, so this
-    `record` finds nothing to commit: HEAD is no longer B, and the trailer commit is adopted, not `nothing_written`."""
+    `record` finds nothing to commit: HEAD is no longer B, and the trailer commit is adopted, not `nothing_written`.
+    The slot lock refuses that second verifier (`slot_busy`); this keeps the adopt rule for a race the lock does not see
+    (a deleted lock file), so both verifiers here hold nothing."""
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     recorded, raced = FakeWorktree.record, list[VerifyResult]()
@@ -622,11 +633,11 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
     def record(self: FakeWorktree, message: str, **options: Literal["staged"] | bool) -> RecordResult:
         if not raced:
             raced.append(Unsettled("racing"))
-            raced[0] = verifier(registered, checkouts, slot_files).verify(KEY)
+            raced[0] = verifier(registered, checkouts, slot_files, unheld).verify(KEY)
         return recorded(self, message, paths="staged", hooks=False)
 
     monkeypatch.setattr(FakeWorktree, "record", record)
-    found = verifier(registered, checkouts, slot_files).verify(KEY)
+    found = verifier(registered, checkouts, slot_files, unheld).verify(KEY)
     assert isinstance(found, Verified) and raced == [found]
     assert made(slot, base) == [("Plan tl-1", TRAILER)] and plan_commit(registered) == head(slot)
     assert stored(registered) == [("verified", None, 0, 20.0)]
@@ -666,7 +677,7 @@ def test_no_git_write_while_the_worker_may_still_run(
         seen.append(worker)
         return False
 
-    found = PlanVerifier(PlanStore(lambda: registered), checkouts, slot_files, alive, lambda: 20).verify(KEY)
+    found = PlanVerifier(PlanStore(lambda: registered), checkouts, slot_files, alive, lambda: 20, hold).verify(KEY)
     assert found == Unsettled("worker_alive") and seen == [WORKER]
     assert slot.state().index == index and made(slot, base) == [] and plan_commit(registered) is None
     assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)  # once it is gone

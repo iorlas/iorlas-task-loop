@@ -28,6 +28,7 @@ from taskloop.plan_repeat import PlanRepeat
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import AttemptKey, Unsettled, Verified
 from taskloop.plan_verifier import PlanVerifier
+from taskloop.slot_lock import hold
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -77,7 +78,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     (main / "README").write_text("one\n")
     git(main, "add", "README")
     git(main, "commit", "-q", "-m", "base")
-    git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
+    git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     base = git(slot, "rev-parse", "HEAD").strip()
     with begin_immediate(factory):
         factory.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (checkouts(main).identity().key, str(slot)))
@@ -95,7 +96,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     def attempts(run: Execution) -> PlanAttempts:
         return PlanAttempts(store, PlanFiles(art), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
 
-    verifier = PlanVerifier(store, checkouts, files, lambda _worker: True, lambda: 20)
+    verifier = PlanVerifier(store, checkouts, files, lambda _worker: True, lambda: 20, hold)
     assert attempts(agent(slot, {P: "# Plan\n", "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()

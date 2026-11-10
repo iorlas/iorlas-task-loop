@@ -55,6 +55,7 @@ dependencies = [
     { name = "any-agent" },
     { name = "beads-client" },
     { name = "git-porcelain" },
+    { name = "process-lock" },
     { name = "sqlite-store" },
     { name = "stream-proc" },
 ]
@@ -70,6 +71,7 @@ requires-dist = [
     { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.4.0" },
     { name = "beads-client", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.1.0" },
     { name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.13.0" },
+    { name = "process-lock", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=process-lock-v0.2.1" },
     { name = "sqlite-store", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fsqlite-store&tag=sqlite-store-v0.1.0" },
     { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.4.0" },
 ]
@@ -97,6 +99,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/bf/db/7fc19e6f2dc92a966
 wheels = [
     { url = "https://files.pythonhosted.org/packages/40/9e/2b38731e0fc536806f16490e1a12d7f0dc2a1235aa8cc07bcc75416a7daa/pluggy-1.7.0-py3-none-any.whl", hash = "sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec", size = 27082, upload-time = "2026-10-15T09:50:56.808Z" },
 ]
+
+[[package]]
+name = "process-lock"
+version = "0.2.1"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=process-lock-v0.2.1#d3d611ca15e07bacbf39727d14174f06bdc59e2a" }
 
 [[package]]
 name = "pygments"

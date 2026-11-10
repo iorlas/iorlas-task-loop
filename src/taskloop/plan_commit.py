@@ -13,6 +13,7 @@ from pathlib import Path
 
 from git_porcelain import NothingToRecord, Recorded, Repo, Worktree
 
+from taskloop.plan_prepare import task_branch
 from taskloop.plan_types import TRAILER, Admission, AnswerState, Checkouts, Rejected, SlotFiles, StageRules, Unsettled, dot_git
 from taskloop.plan_verify import SlotState, bounded, listing, observe_slot, pointer, staged
 
@@ -66,7 +67,7 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     if isinstance(state, Unsettled):
         return state
     head = state.head
-    if head is None or state.branch is not None:
+    if head is None or state.branch != task_branch(admission.task.task_id):
         return Unsettled("unborn" if head is None else "branch")
     if answer.disposition == "unchanged":  # X is B: an `unchanged` stage never adopts a commit
         return Committed(base) if head == base else Unsettled("head_moved")
@@ -134,7 +135,7 @@ def _unwritten(checkouts: Checkouts, files: SlotFiles, admission: Admission, bas
     if isinstance(state, Unsettled):
         return state
     head = state.head
-    if head is None or state.branch is not None:
+    if head is None or state.branch != task_branch(admission.task.task_id):
         return Unsettled("unborn" if head is None else "branch")
     if head == base:
         return Rejected("nothing_written")
@@ -176,12 +177,12 @@ def unsafe_path(files: SlotFiles, slot: Path, rules: StageRules, paths: tuple[st
 
 
 def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commit: str) -> Path | Unsettled:
-    """Step 6: the slot is detached at X with nothing tracked or untracked left over (ignored files are not counted),
+    """Step 6: the slot is on its task branch at X with nothing tracked or untracked left over (ignored files are not counted),
     returning the root its pointer names; leftovers are `uncommitted` with their listing, read fresh and never stored."""
     state = _observed(checkouts, files, admission)
     if isinstance(state, Unsettled):
         return state
-    problem = state.problem(commit)
+    problem = state.problem(task_branch(admission.task.task_id), commit)
     if problem is None:
         return state.root
     if problem != "dirty":
@@ -197,7 +198,11 @@ def leftovers(
     check."""
     if answer.disposition == "planned" and plan_commit is None:
         state = _observed(checkouts, files, admission)
-        if isinstance(state, Unsettled) or state.head != base:
+        if isinstance(state, Unsettled):
+            return None
+        if state.head is None or state.branch != task_branch(admission.task.task_id):  # as `settle` reports it
+            return Unsettled("unborn" if state.head is None else "branch")
+        if state.head != base:
             return None
         return refusal(checkouts(Path(admission.cwd)).worktree(Path(admission.cwd)), files, admission, base, answer)
     found = clean_at(checkouts, files, admission, plan_commit or base)

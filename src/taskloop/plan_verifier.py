@@ -2,11 +2,13 @@
 
 The entry (once, after the run), `tl plan verify` and a repeating `tl plan start` run the same operation; running it
 again finishes a crash at any step. A stored verdict is returned with no Git read; slot state and every unknown store
-nothing. Right before each factory Git write the attempt must still hold the reservation: a verify of an attempt that a
-repeat took over is `superseded`, never a commit on the next attempt's slot.
+nothing. The commit through the verdict runs under the slot's custody lock (`hold`); a stored verdict, a refusal, the
+leftovers and the staged read take none. Right before each factory Git write the attempt must still hold the
+reservation: a verify of an attempt that a repeat took over is `superseded`, never a commit on the next attempt's slot.
 """
 
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 from git_porcelain import GitUnavailable
@@ -15,6 +17,7 @@ from taskloop.plan import outcome
 from taskloop.plan_commit import NotSettled, clean_at, leftovers, settle
 from taskloop.plan_store import PlanStore, StoreRefused, StoreUnavailable
 from taskloop.plan_types import (
+    Admission,
     AttemptKey,
     AttemptRecord,
     Checkouts,
@@ -30,8 +33,15 @@ from taskloop.plan_types import (
     WorkerGone,
 )
 from taskloop.plan_verify import Unreadable, bounded, judge, staged
+from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
 
+type Hold = Callable[[Admission], AbstractContextManager[None]]
 STAGED = ("planned", "unchanged")  # the answers whose stage the factory commits and checks
+LOCK_WORDS: dict[type[Exception], str] = {
+    SlotBusy: "slot_busy",
+    SlotLockUnavailable: "lock",
+    ReadOnly: "read_only",
+}  # the slot lock's refusals, as `unavailable:<word>`
 
 
 def applicable(stored: StoredExecution | None) -> StoredExecution | VerifyResult:
@@ -53,9 +63,15 @@ class PlanVerifier:
     """Git evidence for a stored valid `planned` or `unchanged` answer: the factory's commit of the listed paths, the
     clean tree at it, then one verdict over immutable facts, stored once and then returned with no Git read."""
 
-    def __init__(self, store: PlanStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone, clock: Callable[[], float]) -> None:
-        """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise)."""
-        self.store, self.checkouts, self.files, self.gone, self.clock = store, checkouts, files, gone, clock
+    def __init__(
+        self, store: PlanStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone, clock: Callable[[], float], hold: Hold
+    ) -> None:
+        """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise).
+        `hold` is the slot's custody around the commit through the verdict: the entry already holds it (a no-op here),
+        `tl plan verify` and a repeat take it (`slot_lock.hold`), a read-only verifier refuses it (`slot_lock.refused`).
+        A held slot is `unavailable:slot_busy`, an unopenable lock file `unavailable:lock`, a write asked of a read-only
+        verifier `unavailable:read_only`."""
+        self.store, self.checkouts, self.files, self.gone, self.clock, self.hold = store, checkouts, files, gone, clock, hold
 
     def verify(self, key: AttemptKey) -> VerifyResult:
         try:
@@ -66,17 +82,29 @@ class PlanVerifier:
             return VerifyRefused(str(error))
         except NotSettled as error:
             return VerifyUnavailable(error.reason)
+        except (SlotBusy, SlotLockUnavailable, ReadOnly) as error:
+            return VerifyUnavailable(LOCK_WORDS[type(error)])
         except (GitUnavailable, Unreadable) as error:
             return VerifyUnavailable("git:" + type(error).__name__)
 
     def _verify(self, key: AttemptKey) -> VerifyResult:
+        """A stored verdict or a refusal takes no lock; otherwise everything is read again under the slot's lock, so the
+        commit through the verdict never acts on a record read before it."""
+        found = self._ready(key)
+        if not isinstance(found, tuple):
+            return found
+        with self.hold(found[0].admission):
+            again = self._ready(key)
+            return again if not isinstance(again, tuple) else self._settle(*again)
+
+    def _ready(self, key: AttemptKey) -> tuple[AttemptRecord, str, StoredExecution] | VerifyResult:
         stored = applicable(self.store.collect(key))
         if not isinstance(stored, StoredExecution):
             return stored
         record = self.store.load(key)
         if record is None or record.base_commit is None:
             return VerifyRefused("absent" if record is None else "no_base")
-        return self._settle(record, record.base_commit, stored)
+        return record, record.base_commit, stored
 
     def leftovers(self, key: AttemptKey) -> Unsettled | None:
         """Read-only: the leftovers a verify would report for a stage still to settle, read now; None when there is

@@ -1,5 +1,6 @@
-"""The body's slot check just before dispatch: B is the slot HEAD it reads, and only a born, detached, clean slot of the
-admitted repository dispatches; real SQLite, the owning agent fake and the semantic Git fake."""
+"""The body's slot check just before dispatch: B is the slot HEAD it reads, and only a born, clean slot of the admitted
+repository, on its task branch (taken from a detached slot), dispatches; real SQLite, the owning agent fake and the
+semantic Git fake."""
 
 import json
 import sqlite3
@@ -91,6 +92,7 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
     [
         ("unborn", "refused", "slot_unborn"),
         ("branch", "refused", "slot_branch"),
+        ("taken_elsewhere", "refused", "branch_held"),
         ("dirty", "refused", "slot_dirty"),
         ("untracked", "refused", "slot_dirty"),
         ("missing", "unavailable", "git"),
@@ -114,7 +116,9 @@ def test_an_unusable_slot_never_dispatches_and_the_attempt_stays_admitted(
         listed = (WorktreeInfo(repo.path, head(repo, repo.path), "main", True, None), WorktreeInfo(slot.path, None, "orphan", False, None))
         monkeypatch.setattr(repo, "worktrees", lambda *, with_dirty=False: listed)
     elif case == "branch":
-        slot.checkout_new("task/tl-1")
+        slot.checkout_new("other")
+    elif case == "taken_elsewhere":
+        repo.add_worktree(slot.path.parent / "elsewhere", "HEAD").checkout_new("task/tl-1")
     elif case == "dirty":
         slot.write_file("README", "changed")
     elif case == "untracked":

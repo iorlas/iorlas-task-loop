@@ -268,3 +268,63 @@ Nothing was run against Git. These were read from source, not exercised:
 - whether `PLR0911`/C90 hold for the sketched split.
 
 Line counts are estimates.
+
+## 11. As built (2026-11-10, on 4a4ab31a9)
+
+Implemented as designed; uncommitted at the time of writing. Gates: `just check` (ruff, pyrefly, import-linter 5
+contracts) and `just test` (898 passed after the review repairs below). Differences from the sketch above:
+
+- **Rule shape.** `branch_refusal(repo, task_id, heads)` returns a word or `Branch(passing, local, remote)`: admission
+  keeps the free slots whose D is in `passing`; the entry takes `remote` as the new branch's start when there is no local
+  branch. A plain sequence of checks (five returns) satisfied `PLR0911` and C90, so no `(check, word)` fold. With no
+  heads at all it never says `branch_diverged`. Admission reads the worktree listing twice (the heads, then the
+  holders inside the rule).
+- **Entry flow.** `plan_prepare.base` replaces `plan.py`'s `_base`/`_problem` and is split into `_observed`,
+  `_prepared`, `_take` and `_state_refusal`. `attempt_entry` loads the attempt once (`_record`, fenced) after the
+  identity check for `cwd`; a stale reservation there logs `refused <word>`. Then `slot_lock.acquire(..., "entry")`
+  (`refused slot_busy` / `refused lock`), then `_claimed` (the claim renewal and keep-alive) inside `try/finally:
+  release`. The entry's verifier hold is `nullcontext()` behind a typed function (`_held`).
+- **Verifier.** `PlanVerifier(..., hold)` wraps only `_settle`; `SlotBusy` and `SlotLockUnavailable` map to
+  `unavailable:slot_busy` and `unavailable:lock`. The holder record is not printed by `tl plan verify` (the design allowed it; nothing needed it).
+- **Words and help.** `Refusal` gains `branch_name`, `branch_held`, `branch_diverged`; only admission's
+  `branch_diverged` carries the rename detail, the entry logs the word. `ATTEMPT_ONLY` reads "attempt only: no
+  publication or release"; `tl slot adopt` prints the `git switch --detach` hint when a slot is `attached`. The live
+  smoke runbook (`tl-8bh9.4.3.1.4/live-smoke.md`) now says "on task/$TASK" and detaches the slot before Runs B and C.
+- **Tests.** New: `tests/plan/test_prepare.py` (name rule with no Git read, ref collisions, created at D / local tip /
+  remote-tracking tip, already on the branch with zero `take_branch`, local or remote `branch_diverged` twice with
+  nothing run, an unreadable refs read `unavailable:git`, admission's three `branch_*` refusals before input, claim or
+  rows, and a free slot skipped for one that passes); `tests/plan/test_slot_lock.py` (lock path, verify `slot_busy`
+  with zero `stage`/`record` then settling, a stored verdict under a held lock, `worker_alive` with a free lock, the
+  holder record, `unavailable:lock`, a repeat that admits nothing); `tests/plan/real/test_prepare_real.py` (the real
+  row). The entry's lock cases live in `test_entry.py` (busy before anything is read; held during the run, released
+  after a normal end and after a raise), since test modules do not import each other. The `prepared` conftest fixture
+  was not needed: `test_repeat.py`'s and `test_ops.py`'s seeded attempts dispatch through `execute`, which now
+  prepares the slot. The racing-verifier test in `test_verify.py` runs both verifiers with a no-op hold (the lock
+  refuses the second; the adopt rule stays for a deleted lock file). `test_entry.py`'s Git-open counts grow by four
+  (the rule, `take_branch`, the second slot read).
+- **Section 10, now exercised on Linux:** real `take_branch`, `refs` and `is_ancestor` (the real row), the fake's
+  `refs` prefix behaviour and a `FakeRepo.clone` fetch carrying `refs/remotes/origin/*`, and the lint limits. Still not
+  verified: macOS lock-path resolution and ref case-folding.
+
+**Review repairs (same day).**
+
+- `plan_commit.leftovers` (what `tl plan show` reads before the factory's commit) now requires the slot on its task
+  branch and otherwise returns what `settle` returns (`branch`, or `unborn`), so show and verify agree
+  (`test_ops.py`).
+- `plan_prepare._take`: after `take_branch` returns, the taken head must still contain D (a branch made between the
+  rule and the take is checked out as it is by `resume`). Otherwise the slot is `park`ed back at D, detached, and the
+  entry refuses `branch_diverged`. The park exists so a relaunch refuses again rather than dispatching from that tip
+  (a slot already on its branch is never history-checked). `park` joins `test_policy.GIT_WRITES`, with
+  `plan_prepare.py` its only writer.
+- `PlanVerifier.verify`: a stored verdict or refusal takes no lock. Otherwise the collect and load run again inside the
+  hold, so `_settle` never acts on a record read before the lock (`_ready`).
+- `slot_lock.refused` raises `ReadOnly`, which maps to `unavailable:read_only` (a wiring defect, not contention).
+- `tl plan` guide lines for `slot_busy` (wait and rerun, else the `stuck:hung` guide) and `lock` (the `.locks` folder's
+  permissions). Admission's `branch_diverged` detail separates the local branch (rename or delete) from origin's
+  remote-tracking ref (`git push origin --delete task/<id>`, or `git update-ref -d refs/remotes/origin/task/<id>` and
+  no fetch of it).
+- Tests: the take path's races (pointer rewritten after the rule: `slot_redirected` with no take; `BranchHeld`; a
+  branch without D made during the take: parked back, refused again on relaunch); the entry's `refused lock`;
+  `read_only`; a verify that finds another's verdict once it holds the lock (one `settle` in all); a CLI hint row. The
+  lock-holder helper is the conftest fixture `occupy`. The test that restated `lock_path`'s formula is gone (the
+  holder-record test checks that the file lies outside the slot).

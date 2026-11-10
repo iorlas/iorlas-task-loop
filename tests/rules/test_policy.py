@@ -105,12 +105,12 @@ def test_write_pattern_catches_spelling_variants(statement: str) -> None:
     assert WRITE.search(statement) is not None
 
 
-GIT_WRITES = frozenset({"stage", "stage_tracked", "record"})
+GIT_WRITES = frozenset({"stage", "stage_tracked", "record", "take_branch", "park"})
 
 
 def git_writers() -> set[tuple[str, str]]:
-    """Every use of a Git write on a checkout (`stage`, `stage_tracked`, `record`) in the factory source, by module: a call
-    or reference of that attribute on any receiver, a bare call of that name, or the name as a string (`getattr(slot, "record")`). Its
+    """Every use of a Git write on a checkout (`GIT_WRITES`) in the factory source, by module: a call or reference of
+    that attribute on any receiver, a bare call of that name, or the name as a string (`getattr(slot, "record")`). Its
     limit: a name built at runtime (`getattr(slot, "re" + "cord")`) or a write through another library API is not seen."""
     found: set[tuple[str, str]] = set()
     for path in (ROOT / "src" / "taskloop").glob("*.py"):
@@ -127,8 +127,9 @@ def git_writers() -> set[tuple[str, str]]:
     return found
 
 
-def test_only_the_stage_commit_module_stages_or_commits() -> None:
-    assert git_writers() == {("stage", "plan_commit.py"), ("record", "plan_commit.py")}
+def test_only_the_commit_and_prepare_modules_write_git() -> None:
+    expected = {("stage", "plan_commit.py"), ("record", "plan_commit.py"), ("take_branch", "plan_prepare.py"), ("park", "plan_prepare.py")}
+    assert git_writers() == expected
 
 
 def bd_importers() -> set[str]:

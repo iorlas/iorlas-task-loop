@@ -18,7 +18,7 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
         assert main(arguments) == 0
     output = capsys.readouterr()
     assert "usage: tl" in output.out
-    assert "attempt only: no task branch, publication or release" in " ".join(output.out.split())
+    assert "attempt only: no publication or release" in " ".join(output.out.split())
     assert output.err == ""
 
 
@@ -27,7 +27,7 @@ def test_plan_help_says_attempt_only(arguments: list[str], capsys: pytest.Captur
     with pytest.raises(SystemExit) as result:
         main(arguments)
     assert result.value.code == 0
-    assert "attempt only: no task branch, publication or release" in " ".join(capsys.readouterr().out.split())
+    assert "attempt only: no publication or release" in " ".join(capsys.readouterr().out.split())
 
 
 @pytest.mark.parametrize(

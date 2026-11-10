@@ -158,9 +158,13 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("not_applicable", "incomplete"), 1, ["not_applicable:incomplete"], ERROR),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("unsettled", "dirty"), 3, ["unsettled:dirty", cli_plan.GUIDE["unsettled"]],
      ERROR),
+    (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("unavailable", "slot_busy"), 3,
+     ["unavailable:slot_busy", cli_plan.GUIDE["slot_busy"]], ERROR),
     (["slot", "adopt", "/repo"], Adoption((Adopted("s1", Path("/s/s1")),)), 0, ["s1 adopted /s/s1"], {"slots"}),
     (["slot", "adopt", "/repo"], Adoption((NotAdopted("s1", "not_listed", Path("/s/s1")),)), 1,
      ["s1 not_listed /s/s1", "git worktree add --detach"], {"slots"}),
+    (["slot", "adopt", "/repo"], Adoption((NotAdopted("s1", "attached", Path("/s/s1")),)), 1,
+     ["s1 attached /s/s1", "`git switch --detach` in a slot left on a task branch"], {"slots"}),
     (["slot", "adopt", "/repo"], Adoption((NotAdopted("s1", "store_unavailable", Path("/s/s1")),)), 3, ["s1 store_unavailable"], {"slots"}),
 ]
 

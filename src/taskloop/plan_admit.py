@@ -1,6 +1,7 @@
 """Admit a plan attempt: the only writer of `reservation` and of the admitted `plan_attempt` row; it runs nothing.
 
-A task's first attempt takes a free slot and the tracker claim (`admit`); a repeat (`admit_repeat`) is the step's next
+A task's first attempt takes a free slot and the tracker claim (`admit`), after the task branch rule passed for that
+slot's HEAD (`plan_prepare.branch_refusal`, read-only, before anything is written or claimed); a repeat (`admit_repeat`) is the step's next
 attempt, which takes over the reservation its previous attempt holds in the same transaction, so the slot is never
 released between attempts. An admitted attempt stays unregistered (entry_* NULL): the body refuses it with
 `unregistered_entry` until `PlanStore.register_entry` registers its entry. The tracker root, resolved, is stored with the
@@ -21,6 +22,7 @@ from beads_client import BdError
 from git_porcelain import GitUnavailable, Repo
 
 from taskloop.plan_files import EvidenceError, PlanFiles
+from taskloop.plan_prepare import DIVERGED, branch_refusal
 from taskloop.plan_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
 from taskloop.plan_types import ATTEMPTS, PLAN_NAME, AttemptKey, Checkouts, FileRef, RepeatReason, plan_stage
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
@@ -32,7 +34,7 @@ type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; F
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
 type Refusal = Literal[
     "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
-    "not_repeatable", "repeat_cap",
+    "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged",
 ]
 GENERATION = 1  # a fresh admission's; a repeat advances it on the held reservation (until a release slice moves it to `slot`)
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
@@ -152,7 +154,10 @@ class PlanAdmission:
         observed = self._observe(prepared)
         if not isinstance(observed, tuple):
             return observed
-        con, free = observed
+        con, views = observed
+        free = self._branched(prepared, views)
+        if not isinstance(free, tuple):
+            return free
         key = AttemptKey(uuid4().hex, secrets.token_hex(16), GENERATION)
         try:
             ref = self.files.put_input(key, prepared.text)
@@ -264,7 +269,7 @@ class PlanAdmission:
             raise sqlite3.DatabaseError("Factory database unavailable or incompatible")
         return con
 
-    def _observe(self, prepared: _Prepared) -> tuple[sqlite3.Connection, tuple[str, ...]] | AdmitRefused | AdmitUnavailable:
+    def _observe(self, prepared: _Prepared) -> tuple[sqlite3.Connection, tuple[SlotView, ...]] | AdmitRefused | AdmitUnavailable:
         """An attempted task, then no free slot, refuse before any effect; store failure never counts as free."""
         try:
             con = self._open()
@@ -275,8 +280,22 @@ class PlanAdmission:
             return AdmitUnavailable("store", detail=why(error))
         if any(view.reason == "store_unavailable" for view in views):
             return AdmitUnavailable("store", detail="Reservations unreadable")
-        free = tuple(view.name for view in views if view.state == "free")
+        free = tuple(view for view in views if view.state == "free")
         return (con, free) if free else AdmitRefused("no_free_slot", views)
+
+    def _branched(self, prepared: _Prepared, free: tuple[SlotView, ...]) -> tuple[str, ...] | AdmitRefused | AdmitUnavailable:
+        """The task branch rule, read-only, before any file, claim or row: the free slots whose HEAD (D) it passes. The
+        entry checks it again before it creates the branch (`plan_prepare`)."""
+        task_id = prepared.request.task_id
+        try:
+            heads = {info.path: info.head for info in prepared.repo.worktrees()}
+            found = branch_refusal(prepared.repo, task_id, tuple(head for view in free if (head := heads.get(view.path)) is not None))
+        except GitUnavailable as error:
+            return AdmitUnavailable("git", detail=why(error))
+        if isinstance(found, str):
+            return AdmitRefused(found, detail=DIVERGED.format(task=task_id) if found == "branch_diverged" else "")
+        names = tuple(view.name for view in free if heads.get(view.path) in found.passing)
+        return names or AdmitRefused("no_free_slot")
 
     def _claimed(self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[str, ...], key: AttemptKey, ref: FileRef) -> AdmitResult:
         """Claim outside any transaction, then commit; a pre-commit failure after a claim is compensated by `_compensate`."""

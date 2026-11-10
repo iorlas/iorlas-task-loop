@@ -1,6 +1,7 @@
 [importlinter]
 root_packages =
     taskloop
+    process_lock
     urllib
     http
     multiprocessing
@@ -49,3 +50,11 @@ forbidden_modules =
     http
     multiprocessing
 allow_indirect_imports = True
+
+[importlinter:contract:one-slot-lock-owner]
+name = Only the slot custody module imports the process lock library
+type = forbidden
+source_modules = taskloop
+forbidden_modules = process_lock
+ignore_imports =
+    taskloop.slot_lock -> process_lock

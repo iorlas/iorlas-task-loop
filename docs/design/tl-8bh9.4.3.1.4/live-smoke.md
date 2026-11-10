@@ -68,7 +68,7 @@ mkdir "$TRACKER" && cd "$TRACKER" && git init -q && bd init --non-interactive --
 TASK=$(bd create "Smoke plan" --silent) && echo "TASK=$TASK" >> "$SMOKE/env.sh"
 bd update "$TASK" -d "Write docs/design/$TASK/plan.md with one short paragraph saying this is a live smoke plan. \
 Answer planned, list the plan in paths, and give a one-line message." \
-  --acceptance "The factory commits docs/design/$TASK/plan.md on the slot's HEAD; nothing is pushed."
+  --acceptance "The factory commits docs/design/$TASK/plan.md on task/$TASK; nothing is pushed."
 T task show "$TASK" --backlog "$BACKLOG" --tracker-root "$TRACKER"
 ```
 
@@ -159,7 +159,7 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInsteadOf G
 | Codex accepts CODEX_ACCESS + file login | `rc` 0, `answer_kind` valid | `stderr.txt` names an unknown flag/config key: installed codex rejects CODEX_ACCESS; `http_status` 401: login refused; entry.log `unavailable credentials:<word>`: source refused (`codex` not on PATH, `auth`, `git_config`) | paste `codex --version`, first lines of `stderr.txt` (check them for secrets first) |
 | Push refused | owner probe fails; no `smoke` or `probe` ref in `remote.git` | a ref exists: the push bar does not hold | stop; paste `show-ref` |
 | Plan file written | `$SLOT/docs/design/$TASK/plan.md` exists in the factory's commit; `answer_kind` valid, `disposition` planned | `incomplete` saying the write was blocked: `approval_policy=never` fell back to read-only (the binary says it may when requirements forbid `danger-full-access`); codex or a tool failing on `/tmp`/`$TMPDIR` (now excluded from the sandbox) | paste answer.txt and the first lines of `stderr.txt` |
-| Commit in a linked worktree | the slot shows exactly one new commit, by the person's identity, whose message ends `Task-Loop-Attempt: <attempt_id>`; its sha = `plan_commit`; `commit_paths` names the plan; `G -C $SLOT status --short` empty | the agent's commit succeeded (a commit without the trailer, `unsettled:head_moved`): the sandbox did not bound it; leftovers (`unsettled:uncommitted`) | record it; paste answer.txt, the log lines and the row |
+| Commit in a linked worktree | the slot, on `task/$TASK` (`G -C $SLOT branch --show-current`), shows exactly one new commit, by the person's identity, whose message ends `Task-Loop-Attempt: <attempt_id>`; its sha = `plan_commit`; `commit_paths` names the plan; `G -C $SLOT status --short` empty | the agent's commit succeeded (a commit without the trailer, `unsettled:head_moved`): the sandbox did not bound it; leftovers (`unsettled:uncommitted`) | record it; paste answer.txt, the log lines and the row |
 | No hook marker | `ls "$SMOKE/markers"` empty (it was empty before the launch, section 3) | a marker that appeared after the launch: a hook ran under the factory's Git (or the agent's) | paste the marker names and `G -C "$REPO" config --list --local` |
 | Escalations approved | none (`approval_policy=never`: a blocked command fails back to the model) | any approval event in `stdout.txt` | paste the command lines only (check them for secrets) and `G -C "$REPO" config --list --local` |
 | collect from a fresh shell | tab B `T plan show` prints `Result: collected verified` (or `reused`) and `Succeeded: yes`, `Next: done`, the worker as `last known pid` (never as running); `pending verification` with `Next: verify` when the entry's verification was unsettled or unavailable (then `T plan verify`); a `run:`/`answer:`/`rejected:` reason is a failure; the second start is never `started`/`relaunched`; `T plan list --stuck` lists nothing | `Result: unavailable ...`/`pending <phase>` long after codex exited; any `stuck:<kind>` | paste the show and list output and the row |
@@ -175,6 +175,7 @@ for a new bead on the slot by hand, and run it:
 ```bash
 mkdir "$SMOKE/runA" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runA/"; done
 mkdir "$SMOKE/markers"
+G -C "$SLOT" switch -q --detach   # Run A left the slot on task/$TASK (kept); a free slot is detached
 cd "$TRACKER" && TASK2=$(bd create "Smoke reuse" --silent) && echo "TASK2=$TASK2" >> "$SMOKE/env.sh"
 bd update "$TASK2" -d "Read docs/design/$TASK2/plan.md. It is a valid plan for this task: change nothing and answer unchanged." \
   --acceptance "The existing plan is reused; nothing is committed."
@@ -187,7 +188,8 @@ T plan show "$TASK2" --backlog "$BACKLOG"   # repeat until Next: done
 ```
 
 Pass: `Result: collected reused`, `Succeeded: yes`; entry.log `collected reused verify=reused`; `plan_commit` = the seed
-commit (`G -C "$SLOT" rev-parse HEAD`), no new commit, `status --short` empty, `ls "$SMOKE/markers"` empty. Fail:
+commit (`G -C "$SLOT" rev-parse HEAD`), no new commit, the slot on `task/$TASK2` at it, `status --short` empty,
+`ls "$SMOKE/markers"` empty. Fail:
 `collected rejected:<rule>` (paste it), `unsettled:uncommitted` (the agent changed or left a file while saying `unchanged`),
 or a `planned` answer (`rejected:nothing_written` when it listed the unchanged plan).
 
@@ -229,6 +231,7 @@ aside as in 6a (evidence kept), then:
 ```bash
 mkdir "$SMOKE/runB" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runB/"; done
 mkdir "$SMOKE/markers"
+G -C "$SLOT" switch -q --detach   # the previous run left the slot on its task branch (kept)
 cd "$TRACKER" && TASK3=$(bd create "Smoke repeat" --silent) && echo "TASK3=$TASK3" >> "$SMOKE/env.sh"
 bd update "$TASK3" -d "Write docs/design/$TASK3/plan.md with one short paragraph. You may jot scratch notes in \
 docs/design/$TASK3/notes.md while you work. Answer planned and list the plan in paths." \

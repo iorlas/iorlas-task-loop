@@ -18,6 +18,7 @@ from git_porcelain import GitUnavailable, RealRepo, Repo
 from sqlite_store import Store
 from stream_proc import OwnedProcess, group_alive, observe_owned, popen_registered
 
+from taskloop import slot_lock
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
 from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
@@ -243,10 +244,10 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
 
 
 def open_plan_verifier(database: Path, store: Store) -> PlanVerifier:
-    """Real wiring for on-demand verification: a shared writer of `store` (the caller closes it) on factory.db, real Git,
-    wall clock."""
+    """Real wiring for on-demand verification (`tl plan verify`, a repeat's verify): a shared writer of `store` (the caller
+    closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
     writer = PlanStore(lambda: store.shared_rw(database), store.begin_immediate)
-    return PlanVerifier(writer, checkouts, RealSlotFiles(), worker_gone, time.time)
+    return PlanVerifier(writer, checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold)
 
 
 def open_launcher(database: Path, artifacts: Path) -> Launcher:

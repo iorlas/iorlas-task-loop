@@ -43,6 +43,7 @@ from taskloop.plan_types import (
 )
 from taskloop.plan_verifier import PlanVerifier
 from taskloop.plan_verify import bounded
+from taskloop.slot_lock import hold
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -134,7 +135,7 @@ def repeater(
     verifier: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: Launches | None = None,
 ) -> PlanRepeat:
     store = PlanStore(lambda: con)
-    check = verifier or PlanVerifier(store, checkouts, files, gone, lambda: 20)
+    check = verifier or PlanVerifier(store, checkouts, files, gone, lambda: 20, hold)
     return PlanRepeat(store, check, PlanFiles(tmp_path), admission(con, tmp_path), launcher or Launches(con),
                       lambda _worker: not alive, seen(observe), lambda: 10)
 
@@ -397,7 +398,7 @@ def test_a_verdict_stored_between_the_verify_and_the_takeover_refuses_the_repeat
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    real = PlanVerifier(PlanStore(lambda: registered), checkouts, slot_files, gone, lambda: 20)
+    real = PlanVerifier(PlanStore(lambda: registered), checkouts, slot_files, gone, lambda: 20, hold)
 
     class Late:
         """Another verifier stores its verdict right after this verify returned."""

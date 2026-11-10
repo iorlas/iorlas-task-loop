@@ -4,6 +4,7 @@ import dataclasses
 import json
 import os
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,7 @@ from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import AttemptKey, Checkouts, Evidence, SlotFiles
+from taskloop.slot_lock import SlotBusy, acquire, lock_path
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -159,10 +161,10 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified claim=held", 0, 9),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held", 1, 9),
-        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 9),
-        ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 5),
+        ({P: "# Plan\n"}, "collected verified verify=verified claim=held", 0, 13),
+        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held", 1, 13),
+        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
+        ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 9),
     ],
     ids=["verified", "rejected", "uncommitted", "unsafe"],
 )
@@ -173,7 +175,8 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert entry() == code
     assert entry.lines == [line] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
-    # two Git opens (root, slot) before dispatch; the one verification: four to commit (the staged set read before the
+    # six Git opens before dispatch (the slot read: root, slot; the branch rule: root; take_branch: slot; the slot read
+    # again: root, slot); the one verification: four to commit (the staged set read before the
     # record), two for the clean check, one
     # to judge or list; the worker is observed right before each Git write (stage, record), never when the paths are unsafe
     assert entry.waits == [] and entry.git_opens == opens and entry.observed == ([] if files == {} else [WORKER, WORKER])
@@ -261,6 +264,51 @@ def test_a_claim_found_lost_before_the_agent_refuses_and_runs_nothing(
     assert entry() == 1
     assert entry.lines == ["refused claim_lost"] and entry.renewed == [("/tracker", "tl-1")]
     assert entry.run.calls == [] and entry.credential_calls == 0 and entry.git_opens == 0 and entry.stop.waits == 0
+
+
+@pytest.mark.parametrize("held", [True, False], ids=["slot_busy", "lock"])
+def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_run(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree,
+    occupy: Callable[[Path], AbstractContextManager[None]], held: bool,
+) -> None:
+    """Held by another entry or verify: `refused slot_busy`. A lock file that cannot be made (here `.locks` is a file):
+    `refused lock`."""
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    path = lock_path(str(slot.path))
+    if not held:
+        path.parent.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.write_text("not a folder")
+    with occupy(path) if held else nullcontext():
+        assert entry() == 1
+    assert entry.lines == ["refused slot_busy" if held else "refused lock"] and entry.renewed == [] and entry.run.calls == []
+    assert entry.credential_calls == 0 and entry.git_opens == 0 and slot.branch() is None
+
+
+def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_raises(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
+) -> None:
+    """The verify inside the entry settles under the lock the entry holds (its own hold is a no-op)."""
+    seen: list[bool] = []
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    gone = entry.gone
+
+    def observed(worker: Worker) -> bool:
+        with pytest.raises(SlotBusy):
+            acquire(str(slot.path), "other", "verify")
+        seen.append(True)
+        return gone(worker)
+
+    entry.gone = observed
+    assert entry() == 0 and entry.lines == ["collected verified verify=verified claim=held"] and seen == [True, True]
+    acquire(str(slot.path), "after", "verify").release()
+
+    def broken(tracker_root: str, task_id: str) -> Heartbeat:
+        raise RuntimeError(f"bug at {tracker_root} for {task_id}")
+
+    entry.heartbeat_for = broken
+    with pytest.raises(RuntimeError):
+        entry()
+    acquire(str(slot.path), "after", "verify").release()
 
 
 @pytest.mark.parametrize(

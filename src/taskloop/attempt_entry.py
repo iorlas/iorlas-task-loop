@@ -1,14 +1,15 @@
 """The registered entry process of one admitted plan attempt: `python -I -m taskloop.attempt_entry DB ARTIFACTS BACKLOG TASK`.
 
 It runs only as the identity the launcher registered: its own boot-aware identity is read and compared with the stored
-entry before the attempt key is used or any credential is read. It never creates factory.db, runs the agent at most once
-(through `PlanAttempts.execute`), retries only an unavailable publication, then verifies once (`PlanVerifier.verify`:
-commit the listed paths, check the tree is clean, judge; never retried), and writes one log line of fixed words: status
-and reason, read back after a stored verdict (a published retry instead keeps the run's own words and adds `publish=` and
-the collected `then=`), always `verify=`, then `claim=` (the tracker claim's lease, renewed by `claim_lease` while the
-step runs), never facts, environment, argv or exception text. A claim found lost before the agent starts refuses
-(`refused claim_lost`); one lost later is only recorded. It exits 0 only for a verified plan, new or reused
-(`plan.succeeded`). Its stdout and stderr are the attempt's `entry.log`.
+entry before the attempt key is used or any credential is read. It then holds its slot's custody lock (`slot_lock`)
+until it exits; a held lock refuses (`refused slot_busy`) with nothing read or written. It never creates factory.db,
+runs the agent at most once (through `PlanAttempts.execute`), retries only an unavailable publication, then verifies
+once (`PlanVerifier.verify`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
+line of fixed words: status and reason, read back after a stored verdict (a published retry instead keeps the run's
+own words and adds `publish=` and the collected `then=`), always `verify=`, then `claim=` (the tracker claim's lease,
+renewed by `claim_lease` while the step runs), never facts, environment, argv or exception text. A claim found lost
+before the agent starts refuses (`refused claim_lost`); one lost later is only recorded. It exits 0 only for a verified
+plan, new or reused (`plan.succeeded`). Its stdout and stderr are the attempt's `entry.log`.
 """
 
 import os
@@ -17,19 +18,23 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
 from sqlite_store import open_ro
 from stream_proc import ProcessObservation, inspect_process
 
+from taskloop import slot_lock
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
 from taskloop.composition import open_plan_attempts, tracker_claims, tracker_located, worker_gone
 from taskloop.plan import ACCEPTED, PlanAttempts, judged, succeeded
 from taskloop.plan_schema import SCHEMA
-from taskloop.plan_store import StoreUnavailable
+from taskloop.plan_store import StoreRefused, StoreUnavailable
 from taskloop.plan_types import (
+    Admission,
     AttemptKey,
+    AttemptRecord,
     AttemptResult,
     NotApplicable,
     PublicationResult,
@@ -53,6 +58,7 @@ class _Registered:
     key: AttemptKey
     me: tuple[int, str, str]
     tracker_root: str
+    cwd: str  # the slot, from the stored reservation: its custody lock is beside it
 
 
 @dataclass(frozen=True)
@@ -133,7 +139,25 @@ def _registered(
     me = None if seen.kind != "matching" or seen.identity is None else (seen.identity.pid, seen.identity.start, seen.identity.boot)
     if me is None or me != entry:
         return "refused identity"
-    return _Registered(app, key, me, tracker)
+    record = _record(app, key)
+    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.cwd)
+
+
+def _record(app: PlanAttempts, key: AttemptKey) -> AttemptRecord | str:
+    """One fenced load (the held reservation) for the attempt's slot path, else the refusal's log words."""
+    try:
+        record = app.store.load(key)
+    except (sqlite3.Error, StoreUnavailable):
+        return "unavailable store"
+    except StoreRefused as error:
+        return f"refused {error}"
+    return "refused absent" if record is None else record
+
+
+def _held(_admission: Admission) -> AbstractContextManager[None]:
+    """The entry's verify runs inside the slot lock the entry already holds: the library's nonreentrant lock would refuse
+    a second acquire in this process."""
+    return nullcontext()
 
 
 def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float], None], gone: WorkerGone) -> tuple[str, bool]:
@@ -142,7 +166,7 @@ def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float]
     result = app.execute(key, found.me)
     published = _publish(app, result, clock, wait)
     accepted = published is not None and published.status in ACCEPTED
-    verified = PlanVerifier(app.store, app.checkouts, app.slot_files, gone, app.clock).verify(key)
+    verified = PlanVerifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
     # newly stored facts or a stored verdict: read the terminal outcome back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
@@ -163,14 +187,39 @@ def enter(
     heartbeat_for: HeartbeatFor,
     stop: Stop,
 ) -> int:
-    """Run the attempt as its registered entry; the return code is display only. `gone` observes the worker before the
-    verification's Git write. The claim is renewed once before the agent (a lost claim refuses: never re-claimed), then
-    by a thread until the step ends (`stop` ends it); a later loss or fault is only the log line's `claim=` word."""
+    """Run the attempt as its registered entry; the return code is display only. After the identity check the entry
+    takes its slot's custody lock (`slot_lock`, never waiting: `refused slot_busy`, or `refused lock`) and holds it
+    around everything else: preparation, the agent, the publish retries and the verify, whose own hold is a no-op.
+    `gone` observes the worker before the verification's Git write. The claim is renewed once before the agent (a lost
+    claim refuses: never re-claimed), then by a thread until the step ends (`stop` ends it); a later loss or fault is
+    only the log line's `claim=` word."""
     found = _registered(args, attempts, inspect)
     if isinstance(found, str):
         log(found)
         return 1
-    alive = KeepAlive(heartbeat_for(found.tracker_root, args.task_id), stop, clock)
+    try:
+        lock = slot_lock.acquire(found.cwd, found.key.attempt_id, "entry")
+    except slot_lock.SlotBusy:
+        log("refused slot_busy")
+        return 1
+    except slot_lock.SlotLockUnavailable:
+        log("refused lock")
+        return 1
+    try:  # the lock is outermost: the claim's keep-alive starts and stops inside it
+        return _claimed(found, clock, wait, log, gone, KeepAlive(heartbeat_for(found.tracker_root, args.task_id), stop, clock))
+    finally:
+        lock.release()
+
+
+def _claimed(
+    found: _Registered,
+    clock: Callable[[], float],
+    wait: Callable[[float], None],
+    log: Callable[[str], None],
+    gone: WorkerGone,
+    alive: KeepAlive,
+) -> int:
+    """The step under the slot's lock, with the claim renewed before the agent and kept alive while it runs."""
     alive.renew()
     if alive.word() == "lost":
         log("refused claim_lost")

@@ -39,11 +39,12 @@ class SlotState:
     branch: str | None
     dirty: bool
 
-    def problem(self, at: str | None = None) -> Problem | None:
-        """None when the slot is born, detached, clean and (given `at`) at that commit."""
+    def problem(self, branch: str, at: str | None = None) -> Problem | None:
+        """None when the slot is born, on exactly `branch` (its task branch), clean and (given `at`) at that commit;
+        `branch` when it is detached or on any other branch."""
         if self.head is None:
             return "unborn"
-        if self.branch is not None:
+        if self.branch != branch:
             return "branch"
         if at is not None and self.head != at:
             return "head_moved"

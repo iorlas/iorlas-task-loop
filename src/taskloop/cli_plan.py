@@ -14,7 +14,7 @@ from taskloop.plan_types import ATTEMPTS
 from taskloop.slots import Adopted
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
-ATTEMPT_ONLY = "attempt only: no task branch, publication or release"
+ATTEMPT_ONLY = "attempt only: no publication or release"
 COMMANDS = ("config", "slot", "plan")
 HELD = ("The slot and the tracker claim stay held; nothing here releases them. While a step runs its entry renews the claim's "
         "bd lease every 100 s; between steps nothing does, so a `bd reclaim` run on that tracker can revert the claim once its "
@@ -41,6 +41,8 @@ GUIDE = {
     "listed files and `tl plan verify`, or run `tl plan start` again to repeat the step; for `redirected` or `head_moved` "
     "inspect first; for `worker_alive` stop the worker first; for `staged` unstage the listed paths first.",
     "registration_conflict": "Another start registered its entry first; `tl plan show` follows that attempt.",
+    "slot_busy": "Another entry or verify holds the slot: wait and run it again; if nothing ends, see the `stuck:hung` guide.",
+    "lock": "The slot's lock file under `<slots root>/<repo id>/.locks` cannot be created: fix that folder's permissions.",
 }
 
 
@@ -232,6 +234,8 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         slots = result.slots
         lines = [f"{each.name} {'adopted' if isinstance(each, Adopted) else each.reason} {each.path or ''}".rstrip() for each in slots]
         missing = any(not isinstance(each, Adopted) and each.reason == "not_listed" for each in slots)
-        return lines + (["Make each not_listed slot with `git worktree add --detach <path>`, then adopt again."] if missing else [])
+        attached = any(not isinstance(each, Adopted) and each.reason == "attached" for each in slots)
+        hints = ["Make each not_listed slot with `git worktree add --detach <path>`, then adopt again."] if missing else []
+        return lines + hints + (["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else [])
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
     return lines + [f"{key} = {each.value} ({each.source})" for key, each in result.settings.pairs()]

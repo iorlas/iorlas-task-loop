@@ -31,7 +31,7 @@ def quiet() -> Unsettled | None:
 
 
 def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) -> tuple[Path, Path, Path]:
-    """A repository whose `core.hooksPath` holds hooks that write markers (proved live), and a detached slot on it
+    """A repository whose `core.hooksPath` holds hooks that write markers (proved live), and a slot on it on `task/tl-1`
     (`relative`: extra `git worktree add` flags, e.g. `--relative-paths`)."""
     apply_hermetic_env(monkeypatch, identity=Identity("Person", "person@example.invalid"), config={})
     main, hooks, markers = tmp_path / "repo", tmp_path / "hooks", tmp_path / "markers"
@@ -51,7 +51,7 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) 
     for path in markers.iterdir():
         path.unlink()
     slot = tmp_path / "slots" / "s1"
-    git(main, "worktree", "add", "-q", *relative, "--detach", str(slot), "HEAD")
+    git(main, "worktree", "add", "-q", *relative, "-b", "task/tl-1", str(slot), "HEAD")
     for path in markers.iterdir():
         path.unlink()
     return main, slot, markers

@@ -1,11 +1,13 @@
 """Shared plan fixtures: an empty current-schema factory.db in memory, one admitted attempt in a factory.db file, a semantic
-Git fake clone, a slot root, a clean detached slot, the Git view the body opens, the slot file port over the fake, and an
-entry-registered attempt on it."""
+Git fake clone, a slot root, a clean detached slot, the Git view the body opens, the slot file port over the fake, an
+entry-registered attempt on it, and another holder of a slot's lock."""
 
+import fcntl
 import hashlib
 import os
 import sqlite3
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
@@ -179,3 +181,21 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
         )
     (tmp_path / "input.txt").write_text("Plan the actual task")
     return factory
+
+
+@contextmanager
+def _occupied(path: Path) -> Generator[None]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    finally:
+        os.close(fd)
+
+
+@pytest.fixture
+def occupy() -> Callable[[Path], AbstractContextManager[None]]:
+    """Another holder of a slot's lock file: its own open file description holding the exclusive `flock`, as another
+    process would hold it."""
+    return _occupied

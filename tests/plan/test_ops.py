@@ -55,6 +55,7 @@ from taskloop.plan_types import (
     VerifyUnavailable,
 )
 from taskloop.plan_verifier import PlanVerifier
+from taskloop.slot_lock import hold
 from taskloop.slots import Adopted, SlotView
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -317,7 +318,7 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     store = PlanStore(lambda: registered)
     attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, gone, lambda: 20), "tasks", "tl-1")
+    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, gone, lambda: 20, hold), "tasks", "tl-1")
     assert first == Checked("verified", "tasks", "tl-1", "attempt")
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
@@ -326,7 +327,7 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         opened.append(where)
         return checkouts(where)
 
-    assert verify_task(store, PlanVerifier(store, counted, slot_files, gone, lambda: 20), "tasks", "tl-1") == first
+    assert verify_task(store, PlanVerifier(store, counted, slot_files, gone, lambda: 20, hold), "tasks", "tl-1") == first
     assert opened == []
 
 
@@ -345,7 +346,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     store = PlanStore(lambda: registered)
     attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = PlanVerifier(store, checkouts, slot_files, gone, lambda: 20)
+    verifier = PlanVerifier(store, checkouts, slot_files, gone, lambda: 20, hold)
     reads = Reads(store, observe("gone", []), lambda: 10, verifier.leftovers)
     before = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.status.next, before.status.leftovers) == ("verify", ())  # nothing committed yet
@@ -367,6 +368,34 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     slot.remove_file(stray)
     tidied = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(tidied, Shown) and (tidied.status.next, tidied.status.leftovers) == ("verify", ())
+
+
+def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    """Before the factory's commit, `show` reads the leftovers only on the task branch: off it, as `verify` says,
+    `branch` (not repeatable), never a repeat of leftovers the commit would not reach."""
+    path, near = "docs/design/tl-1/plan.md", "docs/design/tl-1/.gitignore"
+
+    def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
+        slot.write_file(path, "# Plan\n")
+        slot.write_file(near, "x")
+        text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
+        worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
+        return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
+
+    store = PlanStore(lambda: registered)
+    attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    verifier = PlanVerifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    reads = Reads(store, observe("gone", []), lambda: 10, verifier.leftovers)
+    on = status(reads, tmp_path / "art", "tasks", "tl-1")
+    assert isinstance(on, Shown) and (on.status.next, on.status.leftovers) == ("repeat", ("unsafe", near))
+    slot.checkout_new("other")
+    assert verifier.leftovers(KEY) == Unsettled("branch")
+    off = status(reads, tmp_path / "art", "tasks", "tl-1")
+    assert isinstance(off, Shown) and (off.status.next, off.status.leftovers) == ("verify", ())
+    assert verify_task(store, verifier, "tasks", "tl-1") == Failed("unsettled", "branch")
 
 
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
