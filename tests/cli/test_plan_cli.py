@@ -46,7 +46,8 @@ ENTRY = (7, "entry-start", "boot")
 START = ["plan", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/tracker", "--checkout", "/checkout", "--model", "m",
          "--effort", "high", "--minutes", "30"]
 STATUS = AttemptStatus("tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "verification"), False, "verify")
-ERROR = {"kind", "reason", "message", "claim_leaked", "admitted", "slots"}
+ERROR = {"kind", "reason", "message"}  # every refusal or unknown but an admission's
+ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl plan start`
 STATUS_KEYS = {
     "backlog", "task", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process", "worker",
     "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release", "published",
@@ -148,18 +149,20 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (START, Started("repeated", "tasks", "tl-1", "next", False, ENTRY, number=2), 0,
      ["repeated: attempt next for tl-1", "attempt 2 of at most 3; attempt 1's choices stand; deadline from --minutes", cli_plan.HELD],
      STARTED),
-    (START, Failed("refused", "repeats_exhausted"), 1, ["refused:repeats_exhausted", cli_plan.GUIDE["repeats_exhausted"]], ERROR),
-    (START, Failed("refused", "repeat_cap"), 1, ["tl plan start: refused:repeat_cap"], ERROR),
-    (START, Failed("refused", "not_repeatable"), 1, ["tl plan start: refused:not_repeatable"], ERROR),
-    (START, Failed("unsettled", "worker_alive"), 3, ["tl plan start: unsettled:worker_alive", cli_plan.GUIDE["unsettled"]], ERROR),
-    (START, Failed("unsettled", "superseded"), 3, ["tl plan start: unsettled:superseded"], ERROR),
+    (START, Failed("refused", "repeats_exhausted"), 1, ["refused:repeats_exhausted", cli_plan.GUIDE["repeats_exhausted"]], ADMISSION_ERROR),
+    (START, Failed("refused", "repeat_cap"), 1, ["tl plan start: refused:repeat_cap"], ADMISSION_ERROR),
+    (START, Failed("refused", "not_repeatable"), 1, ["tl plan start: refused:not_repeatable"], ADMISSION_ERROR),
+    (START, Failed("unsettled", "worker_alive"), 3, ["tl plan start: unsettled:worker_alive", cli_plan.GUIDE["unsettled"]],
+     ADMISSION_ERROR),
+    (START, Failed("unsettled", "superseded"), 3, ["tl plan start: unsettled:superseded"], ADMISSION_ERROR),
     (START, Failed("refused", "no_free_slot", slots=(VIEW,)), 1, ["tl plan start: refused:no_free_slot", "s2 unknown dirty /slots/s2"],
-     ERROR),
-    (START, Failed("refused", "registration_refused"), 1, ["refused:registration_refused"], ERROR),
-    (START, Failed("refused", "registration_conflict"), 1, [cli_plan.GUIDE["registration_conflict"]], ERROR),
-    (START, Failed("unavailable", "start", admitted=True), 3, [f"Admitted: {cli_plan.HELD} Re-run `tl plan start` to retry"], ERROR),
-    (START, Failed("unavailable", "tracker", claim_leaked=True), 3, ["unavailable:tracker"], ERROR),
-    (START, Failed("uncertain", "launch"), 3, ["tl plan start: uncertain"], ERROR),
+     ADMISSION_ERROR),
+    (START, Failed("refused", "registration_refused"), 1, ["refused:registration_refused"], ADMISSION_ERROR),
+    (START, Failed("refused", "registration_conflict"), 1, [cli_plan.GUIDE["registration_conflict"]], ADMISSION_ERROR),
+    (START, Failed("unavailable", "start", admitted=True), 3, [f"Admitted: {cli_plan.HELD} Re-run `tl plan start` to retry"],
+     ADMISSION_ERROR),
+    (START, Failed("unavailable", "tracker", claim_leaked=True), 3, ["unavailable:tracker"], ADMISSION_ERROR),
+    (START, Failed("uncertain", "launch"), 3, ["tl plan start: uncertain"], ADMISSION_ERROR),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Phase: captured", "Result: pending verification", "Entry log: /a/d/entry.log", "Next: verify", "Run `tl plan verify`."],
      STATUS_KEYS | {"directory", "entry_log"}),

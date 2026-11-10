@@ -138,9 +138,7 @@ def test_a_bad_config_refuses_every_command_with_exit_1(
     output = capsys.readouterr()
     assert output.out == ""
     if structured:
-        assert json.loads(output.err)["error"] | {"message": ""} == {
-            "kind": "refused", "reason": "unknown_key", "message": "", "claim_leaked": False, "admitted": False, "slots": []
-        }
+        assert json.loads(output.err)["error"] | {"message": ""} == {"kind": "refused", "reason": "unknown_key", "message": ""}
     else:
         assert output.err.startswith(f"tl {argv[0]} {argv[1]}: refused:unknown_key")
     assert not (tmp_path / ".local").exists()

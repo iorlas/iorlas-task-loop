@@ -443,8 +443,8 @@ help, `ENTRY_WORDS = 8`, the `WRITERS` and `GIT_WRITES` rows, `plan_data` in bot
 (section 6e of the live smoke) and the doc notes of section 15. SLOC by the policy counter: `plan_publish` 179,
 `plan_data` 79, `plan_ops` 338, `plan_reads` 171, `plan_verify` 188, `attempt_entry` 208, `composition` 246,
 `cli_composition` 122, `cli_plan` 285; tests `test_publish` 237, `real/test_publish_real` 145, `test_ops` 521,
-`test_entry` 324, `test_plan_cli` 345 (before the review repair). Gates before the repair: `just check` clean; `just test`
-1013 passed. The review repair below was not yet run through the gates (the host's /tmp ran out of space).
+`test_entry` 324, `test_plan_cli` 345 (before the review repair). Gates after the review repair and the smoke 6
+fixes: `just check` clean (ruff, pyrefly 0 errors, import-linter 5 kept); `just test` 1029 passed.
 
 Decided while building (open to veto):
 
@@ -479,6 +479,19 @@ Decided while building (open to veto):
   `push_lease` and `delete_branch` with no expected owner, so any use in factory source fails the policy test.
 - **Runbook.** Run F also moves `$SMOKE/markers` aside and recreates it, as Runs B-E do, so its final `ls` is meaningful.
   The .4.3.1.6 note sits after its section 0 roadmap table, where the "Next" list is.
+
+After smoke 6 (Run F passed on real Codex):
+
+- **JSON refusals.** `as_data(result, admission=...)`: a refusal or unknown is `{"error": {kind, reason, message}}`;
+  only `tl plan start` (admission) adds `claim_leaked`, `admitted` and `slots`. `cli_plan` passes `admission` for
+  `plan start` only.
+- **`Next: publish` after a refusal.** The last publish word is not stored (only success is; the entry log's `branch=`
+  is display, never a control input), so `Next` stays `publish`. The publish guide now says that after
+  `refused:diverged`, `remote_moved` or `remote_ahead` rerunning does not help: fetch, compare, then merge or move one
+  branch aside by hand. Runbook 6e says the same.
+- **Runbook 6e.** Moves the previous run into a new timestamped directory, uses new variable names (`PUB_BASE`,
+  `PUB_RETRY`, `PUB_DIVERGED`), adds the F0 baseline row (`branch=published`, the `Published:` line, the remote ref ==
+  `plan_commit`), and records what smoke 6 observed and what is still unobserved.
 
 Documented after review (no code): the push uploads every unpushed ancestor of X (section 7, Q1); hooks off also
 skips git-lfs's `pre-push` (Q2); `GIT_SSH_COMMAND` overrides `core.sshCommand` (section 7, shelf follow-up); transport

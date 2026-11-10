@@ -32,7 +32,9 @@ from taskloop.slots import Adopted
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
 PLAN_ONLY = "plan step only: publishes task/<id>; no merge or land"
 PUBLISH = ("The plan is verified but not on `origin` yet: `tl plan publish`. A `refused` word names what to fix; "
-           "`unavailable:remote` is often credentials: check that `git push` works from this shell.")
+           "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
+           "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl plan publish`), rerunning does not "
+           "help: fetch `task/<id>`, compare it with the verified commit, then merge or move one branch aside yourself.")
 COMMANDS = ("config", "slot", "plan")
 HELD = ("The tracker claim stays held, and the slot until the step ends on a clean slot (`tl plan release` frees a slot left "
         "held; `--abandon` also returns the claim). While a step runs its entry renews the claim's bd lease every 100 s; between "
@@ -226,7 +228,8 @@ def run(arguments: argparse.Namespace) -> int:
         result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
     stream = sys.stderr if isinstance(result, Failed) else sys.stdout
     if arguments.json_output:
-        print(json.dumps(plan_data.as_data(result)), file=stream)
+        admission = (arguments.command, arguments.operation) == ("plan", "start")  # the one command whose refusals carry slots
+        print(json.dumps(plan_data.as_data(result, admission=admission)), file=stream)
     else:
         if isinstance(result, Failed) and result.claim_leaked:
             task = arguments.task_id

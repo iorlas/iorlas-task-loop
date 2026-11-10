@@ -323,43 +323,64 @@ never forced, as the person (the shell that ran `tl plan start` supplies the cre
 uploads every ancestor of X that `remote.git` lacks: `$REPO`'s unpushed `main` commit (section 2 never pushes it) goes
 to `remote.git` under `task/<id>`; that is expected here, and is why a real repository's base should hold no unpublished
 work. Only a `Pushed` result is recorded: a remote that already holds X plus later commits is `refused:remote_ahead`.
-Move the previous run aside (a v7 factory.db is refused `schema`), then:
+Move the previous run's files aside into a new directory (a v7 factory.db is refused `schema`; a reused scratch home
+may already hold `runE` or older task variables, so the directory and the variables below are new names), then:
 
 ```bash
-mkdir "$SMOKE/runE" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runE/"; done
+ASIDE="$SMOKE/before-runF-$(date +%Y%m%d%H%M%S)" && mkdir "$ASIDE" \
+  && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$ASIDE/"; done
 mkdir "$SMOKE/markers"
-cd "$TRACKER" && TASK5=$(bd create "Smoke publish" --silent) && TASK6=$(bd create "Smoke diverged" --silent) \
-  && printf 'TASK5=%s\nTASK6=%s\n' "$TASK5" "$TASK6" >> "$SMOKE/env.sh"
-for t in "$TASK5" "$TASK6"; do bd update "$t" -d "Write docs/design/$t/plan.md with one short paragraph. Answer planned and \
-list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."; done
+cd "$TRACKER" && PUB_BASE=$(bd create "Smoke publish baseline" --silent) && PUB_RETRY=$(bd create "Smoke publish retry" --silent) \
+  && PUB_DIVERGED=$(bd create "Smoke publish diverged" --silent) \
+  && printf 'PUB_BASE=%s\nPUB_RETRY=%s\nPUB_DIVERGED=%s\n' "$PUB_BASE" "$PUB_RETRY" "$PUB_DIVERGED" >> "$SMOKE/env.sh"
+for t in "$PUB_BASE" "$PUB_RETRY" "$PUB_DIVERGED"; do bd update "$t" -d "Write docs/design/$t/plan.md with one short paragraph. \
+Answer planned and list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."; done
 T slot adopt "$REPO"
+start() { T plan start "$1" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30; }
+# F0, the baseline: the entry publishes on its own
+start "$PUB_BASE"; T plan show "$PUB_BASE" --backlog "$BACKLOG"   # repeat until: ... release=released branch=published; Next: done
+sqlite3 -readonly "$DB" "SELECT plan_commit FROM plan_attempt WHERE task_id='$PUB_BASE'"   # X
+G -C "$SMOKE/remote.git" rev-parse "task/$PUB_BASE"        # the same X
 # F1, a publish that fails, then the retry: origin pointed at a missing path for the run
 G -C "$REPO" remote set-url origin "file://$SMOKE/missing.git"
-S5=(plan start "$TASK5" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30)
-T "${S5[@]}"; T plan show "$TASK5" --backlog "$BACKLOG"   # repeat until the entry ends: ... release=released branch=unavailable:remote; Next: publish
+start "$PUB_RETRY"; T plan show "$PUB_RETRY" --backlog "$BACKLOG"   # until: ... release=released branch=unavailable:remote; Next: publish
 G -C "$REPO" remote set-url origin "file://$SMOKE/remote.git"
-T plan publish "$TASK5" --backlog "$BACKLOG" --json      # published; commit == remote_head
-G -C "$SMOKE/remote.git" show-ref; G -C "$REPO" rev-parse "task/$TASK5" "refs/remotes/origin/task/$TASK5"   # all X
+T plan publish "$PUB_RETRY" --backlog "$BACKLOG" --json      # published; commit == remote_head
+G -C "$SMOKE/remote.git" show-ref; G -C "$REPO" rev-parse "task/$PUB_RETRY" "refs/remotes/origin/task/$PUB_RETRY"   # all X
 G -C "$REPO" remote set-url origin "file://$SMOKE/missing.git"
-T plan publish "$TASK5" --backlog "$BACKLOG" --json      # already_published, exit 0: no network was needed
+T plan publish "$PUB_RETRY" --backlog "$BACKLOG" --json      # already_published, exit 0: no network was needed
 G -C "$REPO" remote set-url origin "file://$SMOKE/remote.git"
-# F2, a remote branch someone else made: a scratch clone pushes an unrelated task/$TASK6 first
-git clone -q "$SMOKE/remote.git" "$SMOKE/other" && cd "$SMOKE/other" && git switch -q --orphan "task/$TASK6" \
-  && git -c user.name=o -c user.email=o@example.invalid commit -q --allow-empty -m other && git push -q origin "task/$TASK6" && cd "$SMOKE"
-S6=(plan start "$TASK6" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30)
-T "${S6[@]}"; T plan show "$TASK6" --backlog "$BACKLOG"   # until: ... branch=refused:remote_moved; Next: publish
-G -C "$SMOKE/remote.git" rev-parse "task/$TASK6"           # still the other clone's commit: nothing forced
-G -C "$REPO" fetch -q origin "task/$TASK6"; T plan publish "$TASK6" --backlog "$BACKLOG"   # refused diverged, exit 1
+# F2, a remote branch someone else made: a scratch clone pushes an unrelated task/$PUB_DIVERGED first
+git clone -q "$SMOKE/remote.git" "$SMOKE/other" && cd "$SMOKE/other" && git switch -q --orphan "task/$PUB_DIVERGED" \
+  && git -c user.name=o -c user.email=o@example.invalid commit -q --allow-empty -m other && git push -q origin "task/$PUB_DIVERGED" \
+  && cd "$SMOKE"
+start "$PUB_DIVERGED"; T plan show "$PUB_DIVERGED" --backlog "$BACKLOG"   # until: ... branch=refused:remote_moved; Next: publish
+G -C "$SMOKE/remote.git" rev-parse "task/$PUB_DIVERGED"    # still the other clone's commit: nothing forced
+G -C "$REPO" fetch -q origin "task/$PUB_DIVERGED"; T plan publish "$PUB_DIVERGED" --backlog "$BACKLOG"   # refused diverged, exit 1
 ls "$SMOKE/markers"   # empty: no hook ran
 ```
 
 | Check | Pass | Fail means |
 |---|---|---|
-| F1 failure | `branch=unavailable:remote`, `Next: publish`, the slot released, no `task/$TASK5` in `remote.git` | `branch=published` against a missing path; the release waited on the push |
+| F0 baseline | entry.log `... release=released branch=published`; `T plan show` has `Published: task/$PUB_BASE at X on origin, <UTC>` and `Next: done`; `remote.git`'s `task/$PUB_BASE` == the attempt's `plan_commit` | another word; a different sha on the remote |
+| F1 failure | `branch=unavailable:remote`, `Next: publish`, the slot released, no `task/$PUB_RETRY` in `remote.git` | `branch=published` against a missing path; the release waited on the push |
 | F1 retry | `published`; `remote.git`, local branch and tracking ref all at X | a different sha anywhere; a `+` (forced) update |
 | already published | `already_published` with origin unreachable | any Git error (it touched the network) |
 | F2 | `remote_moved`, then `diverged` after the fetch; `remote.git` keeps the other commit | the remote ref changed |
 | agent push | still no `smoke`/`probe` ref | the push bar does not hold |
+
+`Next: publish` after a refusal. The factory stores only a successful publication, so after `refused:remote_moved`,
+`refused:diverged` or `refused:remote_ahead` `tl plan show` still says `Next: publish` with the generic guide (the last
+word is only in the entry log's `branch=` and in the last `tl plan publish` output, neither a control input). The guide
+says that after those three words rerunning does not help: fetch `task/<id>`, compare it with the verified commit, then
+merge or move one branch aside by hand; then `tl plan publish` again.
+
+**Observed (smoke 6, Linux/OrbStack, real Codex, 2026-11-10).** F0 baseline: `branch=published`, the `Published:` line,
+the remote ref at `plan_commit`; F1: `branch=unavailable:remote`, then `published`, then `already_published` with origin
+unreachable; F2: `branch=refused:remote_moved`, then `refused:diverged` after the fetch, `remote.git` unchanged; no
+marker. Not observed yet: `tl plan verify`'s `Publish:` line; `refused:remote_ahead`, `unavailable:changed`,
+`refused:no_remote`, `refused:branch_moved`, `refused:remote_rejected`, `unavailable:git`; a real SSH/HTTPS
+authentication failure; an abandon after a publication; macOS.
 
 Cleanup: `rm -rf "$SMOKE/other"` with the rest of `~/tl-smoke`. Section 9 is unchanged: push nowhere but `remote.git`.
 

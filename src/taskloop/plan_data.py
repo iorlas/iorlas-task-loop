@@ -71,13 +71,16 @@ def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
             return {"name": each.name, "adopted": False, "reason": each.reason, "path": None if each.path is None else str(each.path)}
 
 
-def as_data(result: Result) -> dict[str, object]:
-    """The one JSON shape per result (a refusal or unknown is `{"error": ...}`); no dispatch token, no version field."""
+def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
+    """The one JSON shape per result (a refusal or unknown is `{"error": {kind, reason, message}}`, plus `claim_leaked`,
+    `admitted` and `slots` for an admission's, `tl plan start`); no dispatch token, no version field."""
     match result:
         case Failed():
-            slots = [_slot_data(each) for each in result.slots]
-            error = {"kind": result.kind, "reason": result.reason, "message": result.detail, "claim_leaked": result.claim_leaked}
-            return {"error": error | {"admitted": result.admitted, "slots": slots}}
+            error: dict[str, object] = {"kind": result.kind, "reason": result.reason, "message": result.detail}
+            if admission:
+                slots = [_slot_data(each) for each in result.slots]
+                error |= {"claim_leaked": result.claim_leaked, "admitted": result.admitted, "slots": slots}
+            return {"error": error}
         case Started():
             return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
                     "existing": result.existing, "entry": _entry_data(result.entry), "number": result.number, "result": result.result}
