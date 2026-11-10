@@ -10,7 +10,7 @@ from typing import Literal
 
 from git_porcelain import GitUnavailable, Repo, WorktreeInfo
 
-from taskloop.plan_schema import SLOT, current, marks
+from taskloop.factory_schema import SLOT, current, marks
 from taskloop.repo import RepoId
 
 type Unclean = Literal["not_listed", "main", "unborn", "attached", "dirty", "git_unavailable"]

@@ -13,11 +13,15 @@ import pytest
 from sqlite_store import Store, begin_immediate
 
 from taskloop import cli_composition, cli_plan, rounds_lock
+from taskloop.admit import AdmitRequest, AdmitResult, Admitted
+from taskloop.attempt import SANDBOX
+from taskloop.attempt_reads import PublishedRow, ReleaseRow
+from taskloop.attempt_store import AttemptStore
+from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.cli import main
-from taskloop.plan import SANDBOX
-from taskloop.plan_admit import AdmitRequest, AdmitResult, Admitted
-from taskloop.plan_launch import Entry, Launched, LaunchResult
-from taskloop.plan_ops import (
+from taskloop.factory_schema import SCHEMA
+from taskloop.launch import Entry, Launched, LaunchResult
+from taskloop.operations import (
     Adoption,
     AttemptStatus,
     Checked,
@@ -36,12 +40,8 @@ from taskloop.plan_ops import (
     Started,
     Starting,
 )
-from taskloop.plan_publish import AlreadyPublished, BranchPublished, PublishResult
-from taskloop.plan_reads import PublishedRow, ReleaseRow
-from taskloop.plan_release import AlreadyReleased, Released, ReleaseResult
-from taskloop.plan_schema import SCHEMA
-from taskloop.plan_store import PlanStore
-from taskloop.plan_types import AttemptKey, AttemptResult
+from taskloop.publish import AlreadyPublished, BranchPublished, PublishResult
+from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.slots import Adopted, NotAdopted, SlotView
 
 KEY = AttemptKey("attempt", "dispatch-token-never-shown", 1)
@@ -125,9 +125,9 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     @contextmanager
     def opener(database: Path, artifacts: Path) -> Generator[Starting | Failed]:
         opened.append((database, artifacts))
-        yield Starting(PlanStore(lambda: con), admission, Launcher(), lambda: 1000, NoRepeat())
+        yield Starting(AttemptStore(lambda: con), admission, Launcher(), lambda: 1000, NoRepeat())
 
-    monkeypatch.setattr(cli_composition, "open_plan_start", opener)
+    monkeypatch.setattr(cli_composition, "open_start", opener)
     config = tmp_path / "scratch.toml"
     config.write_text(f'db = "{tmp_path / "file.db"}"\nartifacts = "{tmp_path / "file-art"}"\n')
     assert main(["--config", str(config), *START, "--artifacts", str(tmp_path / "flag-art"), "--json"]) == 0
@@ -317,11 +317,11 @@ def test_release_flags_reach_the_operation_through_the_opener(
     assert con is not None
 
     @contextmanager
-    def opener(database: Path) -> Generator[tuple[PlanStore, Releases]]:
+    def opener(database: Path) -> Generator[tuple[AttemptStore, Releases]]:
         opened.append(database)
-        yield PlanStore(lambda: con), releases
+        yield AttemptStore(lambda: con), releases
 
-    monkeypatch.setattr(cli_composition, "open_plan_release", opener)
+    monkeypatch.setattr(cli_composition, "open_release", opener)
     assert main([*RELEASE, *(["--abandon"] if abandon else []), "--db", str(db), "--json"]) == 0
     con.close()
     assert opened == [db] and releases.calls == [(KEY, abandon)]
@@ -346,11 +346,11 @@ def test_publish_reaches_the_operation_through_the_opener_and_its_json_is_exact(
     assert con is not None
 
     @contextmanager
-    def opener(database: Path) -> Generator[tuple[PlanStore, Publishes]]:
+    def opener(database: Path) -> Generator[tuple[AttemptStore, Publishes]]:
         opened.append(database)
-        yield PlanStore(lambda: con), publishes
+        yield AttemptStore(lambda: con), publishes
 
-    monkeypatch.setattr(cli_composition, "open_plan_publish", opener)
+    monkeypatch.setattr(cli_composition, "open_publish", opener)
     assert main([*PUBLISH, "--db", str(db), "--json"]) == 0
     con.close()
     assert opened == [db] and publishes.keys == [KEY]
@@ -360,7 +360,7 @@ def test_publish_reaches_the_operation_through_the_opener_and_its_json_is_exact(
 
 
 def admitted(path: Path) -> None:
-    """One admitted, unregistered attempt (tasks/tl-1, deadline 100) and its reservation, as the conftest of tests/plan."""
+    """One admitted, unregistered attempt (tasks/tl-1, deadline 100) and its reservation, as the conftest of tests/steps."""
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
     with begin_immediate(con):
@@ -450,7 +450,7 @@ def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
         requests.append(request)
         return Round("tasks", (MOVES[0],), logged=False)
 
-    monkeypatch.setattr(cli_composition, "open_plan_next", opener)
+    monkeypatch.setattr(cli_composition, "open_next", opener)
     monkeypatch.setattr(cli_plan, "advance", advanced)
     assert main([*NEXT, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art"), "--json"]) == 0
     assert opened == [(tmp_path / "f.db", tmp_path / "art", "/tracker")]
@@ -509,7 +509,7 @@ class Run:
 
 def stubbed(monkeypatch: pytest.MonkeyPatch, ended: Ended | BaseException) -> Run:
     run = Run(ended)
-    monkeypatch.setattr(cli_composition, "open_plan_rounds", run.opener)
+    monkeypatch.setattr(cli_composition, "open_rounds", run.opener)
     monkeypatch.setattr(cli_plan, "run_rounds", run.run)
     return run
 

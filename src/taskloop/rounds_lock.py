@@ -28,7 +28,7 @@ class RoundsLockUnavailable(Exception):
 
 
 def lock_path(db: Path, backlog: str) -> Path:
-    """`<factory.db>.rounds-<backlog>.lock`; the backlog is one plain word (`plan_rounds.inputs`)."""
+    """`<factory.db>.rounds-<backlog>.lock`; the backlog is one plain word (`rounds.inputs`)."""
     return db.with_name(f"{db.name}.rounds-{backlog}.lock")
 
 

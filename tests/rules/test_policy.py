@@ -62,26 +62,26 @@ def test_caps_cannot_be_relaxed() -> None:
 
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
-    ("CREATE TABLE", "slot"): "plan_schema.py",
-    ("CREATE TABLE", "reservation"): "plan_schema.py",
-    ("CREATE TABLE", "plan_attempt"): "plan_schema.py",
-    ("CREATE TABLE", "plan_execution"): "plan_schema.py",
-    ("CREATE TABLE", "plan_verification"): "plan_schema.py",
-    ("CREATE TABLE", "plan_release"): "plan_schema.py",
-    ("CREATE TABLE", "published_branch"): "plan_schema.py",
+    ("CREATE TABLE", "slot"): "factory_schema.py",
+    ("CREATE TABLE", "reservation"): "factory_schema.py",
+    ("CREATE TABLE", "plan_attempt"): "factory_schema.py",
+    ("CREATE TABLE", "plan_execution"): "factory_schema.py",
+    ("CREATE TABLE", "plan_verification"): "factory_schema.py",
+    ("CREATE TABLE", "plan_release"): "factory_schema.py",
+    ("CREATE TABLE", "published_branch"): "factory_schema.py",
     ("INSERT", "slot"): "slots.py",
-    ("INSERT", "reservation"): "plan_admit.py",
-    ("INSERT", "plan_attempt"): "plan_admit.py",
-    ("UPDATE", "reservation"): "plan_admit.py",
-    ("UPDATE", "slot"): "plan_admit.py",
-    ("INSERT", "plan_release"): "plan_release.py",
-    ("UPDATE", "plan_release"): "plan_release.py",
-    ("DELETE FROM", "reservation"): "plan_release.py",
-    ("INSERT", "published_branch"): "plan_publish.py",
-    ("INSERT", "plan_execution"): "plan_store.py",
-    ("INSERT", "plan_verification"): "plan_store.py",
-    ("UPDATE", "plan_attempt"): "plan_store.py",  # also the deadline renewal after a reboot, in the entry registration's write
-    ("UPDATE", "plan_execution"): "plan_store.py",
+    ("INSERT", "reservation"): "admit.py",
+    ("INSERT", "plan_attempt"): "admit.py",
+    ("UPDATE", "reservation"): "admit.py",
+    ("UPDATE", "slot"): "admit.py",
+    ("INSERT", "plan_release"): "slot_release.py",
+    ("UPDATE", "plan_release"): "slot_release.py",
+    ("DELETE FROM", "reservation"): "slot_release.py",
+    ("INSERT", "published_branch"): "publish.py",
+    ("INSERT", "plan_execution"): "attempt_store.py",
+    ("INSERT", "plan_verification"): "attempt_store.py",
+    ("UPDATE", "plan_attempt"): "attempt_store.py",  # also the deadline renewal after a reboot, in the entry registration's write
+    ("UPDATE", "plan_execution"): "attempt_store.py",
 }
 WRITE = re.compile(
     r"\b(CREATE\s+TABLE|(?:INSERT|REPLACE)(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(\w+)", re.IGNORECASE
@@ -140,8 +140,8 @@ def git_writers() -> set[tuple[str, str]]:
 
 def test_only_the_commit_prepare_release_and_publish_modules_write_git() -> None:
     expected = {
-        ("stage", "plan_commit.py"), ("record", "plan_commit.py"), ("take_branch", "plan_prepare.py"), ("park", "plan_prepare.py"),
-        ("park", "plan_release.py"), ("push", "plan_publish.py"),
+        ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
+        ("park", "slot_release.py"), ("push", "publish.py"),
     }
     assert git_writers() == expected
 

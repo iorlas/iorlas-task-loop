@@ -13,37 +13,37 @@ from pathlib import Path
 from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import Store
 
+from taskloop.attempt_reads import SlotUse
+from taskloop.attempt_store import AttemptStore, StoreUnavailable
+from taskloop.attempt_types import Checkouts
 from taskloop.composition import (
     RealSlotFiles,
     adopt_slots,
     checkouts,
     current_boot,
     entry_seen,
+    open_admission,
     open_launcher,
-    open_plan_admission,
-    open_plan_verifier,
     open_publisher,
     open_releaser,
+    open_verifier,
     tracker_reads,
     worker_gone,
 )
+from taskloop.evidence_files import EvidenceFiles
+from taskloop.factory_schema import SCHEMA
 from taskloop.interrupts import installed
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
-from taskloop.plan_files import PlanFiles
-from taskloop.plan_next import Advancing, NextRequest, advance
-from taskloop.plan_ops import Adoption, Failed, Quiet, Reads, Round, Starting, require_database
-from taskloop.plan_publish import PlanPublish
-from taskloop.plan_reads import SlotUse
-from taskloop.plan_release import PlanRelease
-from taskloop.plan_repeat import PlanRepeat
-from taskloop.plan_rounds import Pacing, inputs
-from taskloop.plan_schema import SCHEMA
-from taskloop.plan_store import PlanStore, StoreUnavailable
-from taskloop.plan_types import Checkouts
-from taskloop.plan_verifier import PlanVerifier
+from taskloop.operations import Adoption, Failed, Quiet, Reads, Round, Starting, require_database
+from taskloop.publish import BranchPublish
+from taskloop.repeat import StepRepeat
+from taskloop.round import Advancing, NextRequest, advance
+from taskloop.rounds import Pacing, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
 from taskloop.slot_lock import refused, repeating
+from taskloop.slot_release import SlotRelease
 from taskloop.task import TaskInspectionError
+from taskloop.verifier import Verifier
 
 
 def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Path.home) -> Loaded | ConfigRefused:
@@ -75,12 +75,12 @@ def _read_only(database: Path) -> Generator[sqlite3.Connection | Failed]:
             found.close()
 
 
-def _reader(con: sqlite3.Connection) -> PlanStore:
-    return PlanStore(lambda: con)
+def _reader(con: sqlite3.Connection) -> AttemptStore:
+    return AttemptStore(lambda: con)
 
 
 @contextmanager
-def open_plan_reads(database: Path) -> Generator[Reads | Failed]:
+def open_reads(database: Path) -> Generator[Reads | Failed]:
     """Read-only factory.db, the native process-table observation, the wall clock and the read-only leftovers of a stage
     still to settle (Git and slot reads); writes and creates nothing."""
     with _read_only(database) as con:
@@ -88,12 +88,12 @@ def open_plan_reads(database: Path) -> Generator[Reads | Failed]:
             yield con
         else:
             reader = _reader(con)
-            verifier = PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused)  # never verifies
+            verifier = Verifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused)  # never verifies
             yield Reads(reader, entry_seen, time.time, verifier.leftovers, current_boot)
 
 
 @contextmanager
-def open_plan_start(database: Path, artifacts: Path) -> Generator[Starting | Failed]:
+def open_start(database: Path, artifacts: Path) -> Generator[Starting | Failed]:
     """The database guard first, then the admission, the launcher and the repeat (with the verifier's shared writer, which
     this closes) on the same paths."""
     store = Store(SCHEMA)
@@ -107,15 +107,15 @@ def open_plan_start(database: Path, artifacts: Path) -> Generator[Starting | Fai
             store.close_shared()
 
 
-def _starting(reader: PlanStore, database: Path, artifacts: Path, store: Store) -> Starting:
-    admission, launcher = open_plan_admission(database, artifacts), open_launcher(database, artifacts)
-    repeat = PlanRepeat(reader, open_plan_verifier(database, store), PlanFiles(artifacts), admission, launcher, worker_gone, entry_seen,
+def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Store) -> Starting:
+    admission, launcher = open_admission(database, artifacts), open_launcher(database, artifacts)
+    repeat = StepRepeat(reader, open_verifier(database, store), EvidenceFiles(artifacts), admission, launcher, worker_gone, entry_seen,
                         time.time, repeating)
     return Starting(reader, admission, launcher, time.time, repeat)
 
 
 @contextmanager
-def open_plan_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[Advancing | Failed]:
+def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[Advancing | Failed]:
     """`tl plan next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
     refuses `tracker_root`), the start, verify, release and publish ports on one shared writer (closed here), the reads
     and the round log appended under the artifacts root."""
@@ -131,21 +131,21 @@ def open_plan_next(database: Path, artifacts: Path, tracker_root: str) -> Genera
                 yield Failed("refused", "tracker_root", str(error))
                 return
             reader = _reader(con)
-            leftovers = PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused).leftovers
+            leftovers = Verifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused).leftovers
             reads = Reads(reader, entry_seen, time.time, leftovers, current_boot)
-            yield Advancing(reads, _starting(reader, database, artifacts, store), open_plan_verifier(database, store),
-                            open_releaser(database, store), open_publisher(database, store), ready, PlanFiles(artifacts).log_round)
+            yield Advancing(reads, _starting(reader, database, artifacts, store), open_verifier(database, store),
+                            open_releaser(database, store), open_publisher(database, store), ready, EvidenceFiles(artifacts).log_round)
         finally:
             store.close_shared()
 
 
 def one_round(database: Path, artifacts: Path, request: NextRequest, stopping: Callable[[], bool]) -> Callable[[Quiet], Round | Failed]:
-    """One `tl plan rounds` round: `open_plan_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
+    """One `tl plan rounds` round: `open_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
     that exists but cannot be opened now (locked, busy) is `unavailable:store`, so the rounds back off; an absent one stays
     `refused:database` (a deliberate discard ends the rounds)."""
 
     def once(quiet: Quiet) -> Round | Failed:
-        with open_plan_next(database, artifacts, request.tracker_root) as ports:
+        with open_next(database, artifacts, request.tracker_root) as ports:
             if isinstance(ports, Failed):
                 return _transient(ports, database)
             return advance(replace(ports, stopping=stopping), replace(request, quiet=quiet))
@@ -202,9 +202,9 @@ def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | F
 
 
 @contextmanager
-def open_plan_rounds(database: Path, artifacts: Path, request: NextRequest) -> Generator[Pacing | Failed]:
+def open_rounds(database: Path, artifacts: Path, request: NextRequest) -> Generator[Pacing | Failed]:
     """`tl plan rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock and
-    the SIGINT handler (`interrupts`) for the block's life, per-round `open_plan_next` ports, the wall and monotonic clocks,
+    the SIGINT handler (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
     `time.sleep`, the round log and the `Log: not written` warning on stderr."""
     release = _rounds_lock(database, request)
     if isinstance(release, Failed):
@@ -213,13 +213,13 @@ def open_plan_rounds(database: Path, artifacts: Path, request: NextRequest) -> G
     try:
         with installed(_say) as interrupts:
             yield Pacing(one_round(database, artifacts, request, interrupts.stopping), _slot_use(database), time.time, time.monotonic,
-                         time.sleep, PlanFiles(artifacts).log_round, _unlogged(artifacts), interrupts.stopping, os.getpid())
+                         time.sleep, EvidenceFiles(artifacts).log_round, _unlogged(artifacts), interrupts.stopping, os.getpid())
     finally:
         release()
 
 
 @contextmanager
-def open_plan_verify(database: Path) -> Generator[tuple[PlanStore, PlanVerifier, PlanRelease, PlanPublish] | Failed]:
+def open_verify(database: Path) -> Generator[tuple[AttemptStore, Verifier, SlotRelease, BranchPublish] | Failed]:
     """The database guard first, then the verifier's, the releaser's and the publisher's shared writer: no empty factory.db
     is ever created."""
     store = Store(SCHEMA)
@@ -228,13 +228,13 @@ def open_plan_verify(database: Path) -> Generator[tuple[PlanStore, PlanVerifier,
             if isinstance(con, Failed):
                 yield con
             else:
-                yield _reader(con), open_plan_verifier(database, store), open_releaser(database, store), open_publisher(database, store)
+                yield _reader(con), open_verifier(database, store), open_releaser(database, store), open_publisher(database, store)
         finally:
             store.close_shared()
 
 
 @contextmanager
-def open_plan_publish(database: Path) -> Generator[tuple[PlanStore, PlanPublish] | Failed]:
+def open_publish(database: Path) -> Generator[tuple[AttemptStore, BranchPublish] | Failed]:
     """The database guard first, then the publisher's shared writer (`tl plan publish`)."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
@@ -245,7 +245,7 @@ def open_plan_publish(database: Path) -> Generator[tuple[PlanStore, PlanPublish]
 
 
 @contextmanager
-def open_plan_release(database: Path) -> Generator[tuple[PlanStore, PlanRelease] | Failed]:
+def open_release(database: Path) -> Generator[tuple[AttemptStore, SlotRelease] | Failed]:
     """The database guard first, then the releaser's shared writer (`tl plan release`)."""
     store = Store(SCHEMA)
     with _read_only(database) as con:

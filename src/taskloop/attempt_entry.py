@@ -3,8 +3,8 @@
 It runs only as the identity the launcher registered: its own boot-aware identity is read and compared with the stored
 entry before the attempt key is used or any credential is read. It then holds its slot's custody lock (`slot_lock`)
 until it exits; a held lock refuses (`refused slot_busy`) with nothing read or written. It never creates factory.db,
-runs the agent at most once (through `PlanAttempts.execute`), retries only an unavailable publication, then verifies
-once (`PlanVerifier.verify`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
+runs the agent at most once (through `Attempts.execute`), retries only an unavailable publication, then verifies
+once (`Verifier.verify`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
 line of fixed words: status and reason, read back after a stored verdict (a published retry instead keeps the run's
 own words and adds `publish=` and the collected `then=`), always `verify=`, then `claim=` (the tracker claim's lease,
 renewed by `claim_lease` while the step runs), then, once the result read back is collected, `release=` (the settled
@@ -30,16 +30,10 @@ from sqlite_store import open_ro
 from stream_proc import ProcessObservation, inspect_process
 
 from taskloop import slot_lock
-from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
-from taskloop.composition import entry_seen, open_plan_attempts, remotes, tracker_claims, tracker_located, worker_gone
-from taskloop.plan import ACCEPTED, PlanAttempts, judged, succeeded
-from taskloop.plan_admit import Unclaim
-from taskloop.plan_publish import PlanPublish
-from taskloop.plan_publish import word as branch_word
-from taskloop.plan_release import PlanRelease, word
-from taskloop.plan_schema import SCHEMA
-from taskloop.plan_store import StoreRefused, StoreUnavailable
-from taskloop.plan_types import (
+from taskloop.admit import Unclaim
+from taskloop.attempt import ACCEPTED, Attempts, judged, succeeded
+from taskloop.attempt_store import StoreRefused, StoreUnavailable
+from taskloop.attempt_types import (
     Admission,
     AttemptKey,
     AttemptRecord,
@@ -55,7 +49,13 @@ from taskloop.plan_types import (
     VerifyUnavailable,
     WorkerGone,
 )
-from taskloop.plan_verifier import PlanVerifier
+from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
+from taskloop.composition import entry_seen, open_attempts, remotes, tracker_claims, tracker_located, worker_gone
+from taskloop.factory_schema import SCHEMA
+from taskloop.publish import BranchPublish
+from taskloop.publish import word as branch_word
+from taskloop.slot_release import SlotRelease, word
+from taskloop.verifier import Verifier
 
 PUBLISH_RETRIES = 3
 RETRY_WAIT = 2.0
@@ -63,7 +63,7 @@ RETRY_WAIT = 2.0
 
 @dataclass(frozen=True)
 class _Registered:
-    app: PlanAttempts
+    app: Attempts
     key: AttemptKey
     me: tuple[int, str, str]
     tracker_root: str
@@ -98,7 +98,7 @@ def _exists(database: Path) -> bool:
 
 
 def _publish(
-    app: PlanAttempts, result: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]
+    app: Attempts, result: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]
 ) -> PublicationResult | None:
     """Retry an unfinished publication only while it is unavailable: at most PUBLISH_RETRIES, never past the deadline."""
     pending, published = result.pending, None
@@ -130,7 +130,7 @@ def shown(result: VerifyResult) -> str:
 
 
 def _registered(
-    args: EntryArgs, attempts: Callable[[Path, Path], PlanAttempts], inspect: Callable[[int], ProcessObservation]
+    args: EntryArgs, attempts: Callable[[Path, Path], Attempts], inspect: Callable[[int], ProcessObservation]
 ) -> _Registered | str:
     """The attempt this process is the registered entry of, with its tracker root; otherwise the refusal's log words."""
     try:
@@ -152,7 +152,7 @@ def _registered(
     return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.cwd)
 
 
-def _record(app: PlanAttempts, key: AttemptKey) -> AttemptRecord | str:
+def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
     """One fenced load (the held reservation) for the attempt's slot path, else the refusal's log words."""
     try:
         record = app.store.load(key)
@@ -181,7 +181,7 @@ def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float]
     result = app.execute(key, found.me)
     published = _publish(app, result, clock, wait)
     accepted = published is not None and published.status in ACCEPTED
-    verified = PlanVerifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
+    verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
     # newly stored facts or a stored verdict: read the terminal outcome back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
@@ -193,7 +193,7 @@ def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float]
 
 def enter(
     args: EntryArgs,
-    attempts: Callable[[Path, Path], PlanAttempts],
+    attempts: Callable[[Path, Path], Attempts],
     inspect: Callable[[int], ProcessObservation],
     clock: Callable[[], float],
     wait: Callable[[float], None],
@@ -240,7 +240,7 @@ def _branch(found: _Registered, publishing: Checkouts) -> str:
     read) is `unavailable:git` or `unavailable:store`: it never loses the step's log line or a verified plan's exit 0."""
     app = found.app
     try:
-        return branch_word(PlanPublish(app.store, publishing, app.slot_files, app.clock).publish(found.key))
+        return branch_word(BranchPublish(app.store, publishing, app.slot_files, app.clock).publish(found.key))
     except (GitUnavailable, ValueError, OSError):
         return "unavailable:git"
     except (sqlite3.Error, StoreUnavailable):
@@ -266,7 +266,7 @@ def _claimed(
     line = f"{line} claim={alive.word()}"
     if collected:
         app = found.app
-        releaser = PlanRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock)
+        releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock)
         line += " release=" + word(releaser.release(found.key, False, found.me))
     return line, ok
 
@@ -284,7 +284,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             log("refused usage")
             return 2
         claims = tracker_claims()
-        return enter(args, open_plan_attempts, inspect_process, time.time, time.sleep, log, worker_gone, claims.heartbeat_for,
+        return enter(args, open_attempts, inspect_process, time.time, time.sleep, log, worker_gone, claims.heartbeat_for,
                      threading.Event(), claims.unclaim, remotes)
     except BaseException as error:  # the type name only, never its text
         log("failed " + type(error).__name__)

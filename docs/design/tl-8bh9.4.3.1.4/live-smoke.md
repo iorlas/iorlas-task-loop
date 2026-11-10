@@ -28,7 +28,7 @@ It runs with `tl` commands only ([.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 
 
 macOS, a plain Terminal (two tabs, A and B), `git`, `bd` 1.3.1, `python3`; optionally `sqlite3` and `lsof`; and in this checkout (`$TL`, the
 commit with tl-8bh9.4.3.1.7 (schema v4), or later): `just prepare` (non-editable install), then
-`uv run --frozen --no-sync python -I -c "import taskloop.attempt_entry, taskloop.plan_launch"` and `.venv/bin/tl plan -h`.
+`uv run --frozen --no-sync python -I -c "import taskloop.attempt_entry, taskloop.launch"` and `.venv/bin/tl plan -h`.
 Codex: `command -v codex; codex --version` (paste both); file login: `test -f "${CODEX_HOME:-$HOME/.codex}/auth.json" && echo ok`
 (stat only; never open or paste it). Run every step from a shell where `codex` is on `PATH`: the entry inherits it.
 Portability: `sqlite3` and `lsof` are optional (macOS ships both; run 4's Linux host had neither). Without `sqlite3`,
@@ -81,7 +81,7 @@ T task show "$TASK" --backlog "$BACKLOG" --tracker-root "$TRACKER"
 ```
 
 The bead asks for no Git write: the factory appends fixed closing words to every admitted input
-(`plan_admit.task_text`) that forbid `git add`/`commit`/`push`, so a bead asking for them contradicts the prompt and
+(`admit.task_text`) that forbid `git add`/`commit`/`push`, so a bead asking for them contradicts the prompt and
 its result proves nothing. Whether the sandbox refuses a Git write is Run C (section 6b), an owner-run probe.
 
 ## 3. Slot (made by hand, then adopted)
@@ -204,15 +204,15 @@ or a `planned` answer (`rejected:nothing_written` when it listed the unchanged p
 
 ## 6b. Run C: sandbox probe (optional, owner-run)
 
-No bead can ask the agent to try a Git write or a `/tmp` write: `plan_admit.task_text` always appends the closing words
+No bead can ask the agent to try a Git write or a `/tmp` write: `admit.task_text` always appends the closing words
 that forbid Git writes, and there is no prompt override in the factory. So the sandbox is probed by the owner running the
-same codex with the exact access flags the factory passes (`plan.CODEX_ACCESS`, after `-s workspace-write`, as
+same codex with the exact access flags the factory passes (`attempt.CODEX_ACCESS`, after `-s workspace-write`, as
 any_agent's Codex harness builds the argv), in a throwaway worktree (never `$SLOT`), with the push bar's environment:
 
 ```bash
 G -C "$REPO" worktree add --detach "$SMOKE/probe" && cd "$SMOKE/probe" && rm -f "$SMOKE/markers"/*
-eval "ACCESS=($("$TL/.venv/bin/python" -I -c 'import shlex; from taskloop.plan import CODEX_ACCESS; print(shlex.join(CODEX_ACCESS))'))"
-printf '%s\n' "${ACCESS[@]}"   # paste: must match plan.py
+eval "ACCESS=($("$TL/.venv/bin/python" -I -c 'import shlex; from taskloop.attempt import CODEX_ACCESS; print(shlex.join(CODEX_ACCESS))'))"
+printf '%s\n' "${ACCESS[@]}"   # paste: must match attempt.py
 echo "Run each once and report every command's exit code and first error line: echo x > probe.txt; git add probe.txt; \
 git commit -m probe; touch /tmp/tl-smoke-probe; touch \"\${TMPDIR:-/tmp}/tl-smoke-probe2\"; git push origin HEAD:refs/heads/runc" |
   env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInsteadOf GIT_CONFIG_VALUE_0= \
@@ -560,7 +560,7 @@ reservation removal and its slot-lock release; the next regular round (at most o
 live: a real reboot, that wake race, macOS.
 
 **Reboot renewal (owner-run check, optional; plan section 16).** A reboot cannot be simulated here: the tests stand in
-for it with a stored `entry_boot` other than the current boot id (`tests/plan/test_entry_store.py`, `test_launch.py`,
+for it with a stored `entry_boot` other than the current boot id (`tests/steps/test_entry_store.py`, `test_launch.py`,
 `test_ops.py`, `test_next.py`). What stays unobserved without a real reboot is the whole path on a real machine. If you
 choose to reboot the scratch machine mid-start: before it, `T plan show <task> --backlog "$BACKLOG" --json` for an attempt
 still `admitted` with an entry registered (e.g. G6's `unavailable credentials:auth` state), noting `deadline_passed` and

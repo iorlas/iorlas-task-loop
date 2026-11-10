@@ -23,12 +23,12 @@ source_modules =
     taskloop.cli
     taskloop.cli_plan
     taskloop.cli_composition
-    taskloop.plan_ops
-    taskloop.plan_next
+    taskloop.operations
+    taskloop.round
     taskloop.selection
-    taskloop.plan_data
+    taskloop.result_data
     taskloop.machine_config
-    taskloop.plan_rounds
+    taskloop.rounds
     taskloop.rounds_lock
     taskloop.interrupts
 forbidden_modules =
@@ -44,11 +44,11 @@ forbidden_modules =
     taskloop.cli
     taskloop.cli_plan
     taskloop.cli_composition
-    taskloop.plan_ops
-    taskloop.plan_next
-    taskloop.plan_data
+    taskloop.operations
+    taskloop.round
+    taskloop.result_data
     taskloop.machine_config
-    taskloop.plan_rounds
+    taskloop.rounds
     taskloop.interrupts
 
 [importlinter:contract:no-runtime-mechanisms]

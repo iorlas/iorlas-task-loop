@@ -1,0 +1,121 @@
+"""The one JSON shape of every plan command result (`as_data`): what the CLI prints with `--json` and a dashboard renders.
+It never holds a dispatch token, a remote URL or Git output."""
+
+from taskloop.attempt import succeeded
+from taskloop.attempt_reads import PublishedRow, ReleaseRow
+from taskloop.launch import Entry
+from taskloop.machine_config import Loaded
+from taskloop.operations import Adoption, AttemptStatus, Checked, Ended, Failed, Freed, Listed, PublishedTask, Result, Round, Shown, Started
+from taskloop.publish import BranchPublished
+from taskloop.slot_release import Released
+from taskloop.slots import Adopted, NotAdopted, SlotView
+
+
+def _entry_data(entry: Entry | None) -> dict[str, object] | None:
+    return None if entry is None else {"pid": entry[0], "start": entry[1], "boot": entry[2]}
+
+
+def _status_data(each: AttemptStatus) -> dict[str, object]:
+    return {
+        "backlog": each.backlog, "task": each.task_id, "attempt_id": each.attempt_id, "slot": each.slot, "phase": each.phase,
+        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
+        "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
+        "entry_process": _entry_data(each.entry_process),
+        "worker": None if each.worker is None else {"pid": each.worker[0], "pgid": each.worker[1]},
+        "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
+        "repeat_reason": each.repeat_reason, "earlier": [attempt_id for attempt_id, _reason in each.earlier],
+        "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
+        "published": _published_data(each.published),
+    }
+
+
+def _release_data(release: ReleaseRow | None) -> dict[str, object] | None:
+    if release is None:
+        return None
+    return {"head": release.head, "released_at": release.released_at, "abandoned": release.abandoned, "claim": release.claim}
+
+
+def _published_data(published: PublishedRow | None) -> dict[str, object] | None:
+    if published is None:
+        return None
+    return {"commit": published.commit, "remote_head": published.remote_head, "published_at": published.published_at}
+
+
+def _freed_data(result: Checked | Freed | PublishedTask) -> dict[str, object]:
+    if isinstance(result, PublishedTask):
+        return _publish_data(result)
+    if isinstance(result, Checked):
+        return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
+                "release": result.release, "published": result.published}
+    found = result.outcome
+    changed = (found.parked, found.reservation_removed) if isinstance(found, Released) else (None, False)
+    status = "released" if isinstance(found, Released) else "already_released"
+    return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id, "slot": found.slot,
+            "parked": changed[0], "reservation_removed": changed[1], "claim": found.claim, "abandoned": found.abandoned}
+
+
+def _publish_data(result: PublishedTask) -> dict[str, object]:
+    found = result.outcome
+    status = "published" if isinstance(found, BranchPublished) else "already_published"
+    return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
+            "commit": found.commit, "remote_head": found.remote_head}
+
+
+def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
+    match each:
+        case SlotView():
+            return {"name": each.name, "path": str(each.path), "state": each.state, "reason": each.reason, "attempt_id": each.attempt_id}
+        case Adopted():
+            return {"name": each.name, "adopted": True, "reason": None, "path": str(each.path)}
+        case NotAdopted():
+            return {"name": each.name, "adopted": False, "reason": each.reason, "path": None if each.path is None else str(each.path)}
+
+
+def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
+    """The one JSON shape per result (a refusal or unknown is `{"error": {kind, reason, message}}`, plus `claim_leaked`,
+    `admitted` and `slots` for an admission's, `tl plan start`); no dispatch token, no version field."""
+    match result:
+        case Failed():
+            error: dict[str, object] = {"kind": result.kind, "reason": result.reason, "message": result.detail}
+            if admission:
+                slots = [_slot_data(each) for each in result.slots]
+                error |= {"claim_leaked": result.claim_leaked, "admitted": result.admitted, "slots": slots}
+            return {"error": error}
+        case Started():
+            return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
+                    "existing": result.existing, "entry": _entry_data(result.entry), "number": result.number, "result": result.result}
+        case Shown():
+            return _status_data(result.status) | {"directory": str(result.directory), "entry_log": str(result.entry_log)}
+        case Listed() | Round() | Ended():
+            return _rows_data(result)
+        case Checked() | Freed() | PublishedTask():
+            return _freed_data(result)
+        case Adoption() | Loaded():
+            return _setup_data(result)
+
+
+def rounds_data(backlog: str, every: int, log: str) -> dict[str, object]:
+    """`tl plan rounds`'s start, printed before the first round; its end is `as_data(Ended)`."""
+    return {"status": "rounds", "backlog": backlog, "every": every, "log": log}
+
+
+def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
+    """`tl plan list`: every current attempt; `tl plan next`: each move in the order performed and `stopped`, the word that
+    ended admission early, or null; `tl plan rounds`: why the rounds ended."""
+    if isinstance(result, Listed):
+        return {"attempts": [_status_data(each) for each in result.attempts]}
+    if isinstance(result, Ended):
+        return {"status": "ended", "backlog": result.backlog, "reason": result.reason, "detail": result.detail}
+    moves = [{"task": each.task_id, "action": each.action, "word": each.word, "attempt_id": each.attempt_id, "detail": each.detail}
+             for each in result.moves]
+    return {"status": "round", "backlog": result.backlog, "moves": moves, "stopped": result.stopped or None, "logged": result.logged}
+
+
+def _setup_data(result: Adoption | Loaded) -> dict[str, object]:
+    if isinstance(result, Adoption):
+        return {"slots": [_slot_data(each) for each in result.slots]}
+    settings = {
+        key: {"value": each.value if isinstance(each.value, int) else str(each.value), "source": each.source}
+        for key, each in result.settings.pairs()
+    }
+    return {"file": {"path": str(result.path), "exists": result.exists}, "settings": settings}

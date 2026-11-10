@@ -17,7 +17,7 @@ from typing import Final, Literal
 
 from process_lock import LockHeldError, ProcessLock
 
-from taskloop.plan_types import Admission
+from taskloop.attempt_types import Admission
 
 LABEL: Final = "taskloop-slot"
 type Role = Literal["entry", "verify", "release", "repeat", "probe"]

@@ -7,11 +7,11 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from taskloop import cli_composition, plan_data, plan_ops
+from taskloop import cli_composition, operations, result_data
+from taskloop.attempt import succeeded
+from taskloop.attempt_types import ATTEMPTS
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
-from taskloop.plan import succeeded
-from taskloop.plan_next import NextRequest, advance
-from taskloop.plan_ops import (
+from taskloop.operations import (
     UNCLAIMING,
     Adoption,
     AttemptStatus,
@@ -27,10 +27,10 @@ from taskloop.plan_ops import (
     Started,
     StartRequest,
 )
-from taskloop.plan_publish import BranchPublished
-from taskloop.plan_release import Released
-from taskloop.plan_rounds import RoundsRequest, run_rounds
-from taskloop.plan_types import ATTEMPTS
+from taskloop.publish import BranchPublished
+from taskloop.round import NextRequest, advance
+from taskloop.rounds import RoundsRequest, run_rounds
+from taskloop.slot_release import Released
 from taskloop.slots import Adopted
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
@@ -211,8 +211,8 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.model,
                            arguments.effort, arguments.minutes)
-    with cli_composition.open_plan_start(loaded.settings.db.value, loaded.settings.artifacts.value) as ports:
-        return ports if isinstance(ports, Failed) else plan_ops.start(ports, request)
+    with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value) as ports:
+        return ports if isinstance(ports, Failed) else operations.start(ports, request)
 
 
 def _next_request(arguments: argparse.Namespace) -> NextRequest:
@@ -221,7 +221,7 @@ def _next_request(arguments: argparse.Namespace) -> NextRequest:
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_plan_next(loaded.settings.db.value, loaded.settings.artifacts.value, arguments.tracker_root) as ports:
+    with cli_composition.open_next(loaded.settings.db.value, loaded.settings.artifacts.value, arguments.tracker_root) as ports:
         return ports if isinstance(ports, Failed) else advance(ports, _next_request(arguments))
 
 
@@ -231,10 +231,10 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings, request = loaded.settings, RoundsRequest(arguments.backlog, loaded.settings.round_seconds.value)
     log = settings.artifacts.value / "rounds.log"
     try:
-        with cli_composition.open_plan_rounds(settings.db.value, settings.artifacts.value, _next_request(arguments)) as ports:
+        with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, _next_request(arguments)) as ports:
             if isinstance(ports, Failed):
                 return ports
-            started = (json.dumps(plan_data.rounds_data(request.backlog, request.every, str(log))) if arguments.json_output else
+            started = (json.dumps(result_data.rounds_data(request.backlog, request.every, str(log))) if arguments.json_output else
                        f"Rounds for backlog {request.backlog} every {request.every} s; log: {log}; stop with Ctrl-C")
             print(started, flush=True)
             return run_rounds(ports, request)
@@ -243,32 +243,32 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_plan_reads(loaded.settings.db.value) as reads:
+    with cli_composition.open_reads(loaded.settings.db.value) as reads:
         if isinstance(reads, Failed):
             return reads
-        return plan_ops.status(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
+        return operations.status(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
 
 
 def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_plan_reads(loaded.settings.db.value) as reads:
-        return reads if isinstance(reads, Failed) else plan_ops.attempts_status(reads, stuck=arguments.stuck)
+    with cli_composition.open_reads(loaded.settings.db.value) as reads:
+        return reads if isinstance(reads, Failed) else operations.attempts_status(reads, stuck=arguments.stuck)
 
 
 def _verify(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_plan_verify(loaded.settings.db.value) as opened:
-        return opened if isinstance(opened, Failed) else plan_ops.verify_task(*opened, arguments.backlog, arguments.task_id)
+    with cli_composition.open_verify(loaded.settings.db.value) as opened:
+        return opened if isinstance(opened, Failed) else operations.verify_task(*opened, arguments.backlog, arguments.task_id)
 
 
 def _release(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_plan_release(loaded.settings.db.value) as opened:
+    with cli_composition.open_release(loaded.settings.db.value) as opened:
         if isinstance(opened, Failed):
             return opened
-        return plan_ops.release_task(*opened, arguments.backlog, arguments.task_id, abandon=arguments.abandon)
+        return operations.release_task(*opened, arguments.backlog, arguments.task_id, abandon=arguments.abandon)
 
 
 def _publish(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_plan_publish(loaded.settings.db.value) as opened:
-        return opened if isinstance(opened, Failed) else plan_ops.publish_task(*opened, arguments.backlog, arguments.task_id)
+    with cli_composition.open_publish(loaded.settings.db.value) as opened:
+        return opened if isinstance(opened, Failed) else operations.publish_task(*opened, arguments.backlog, arguments.task_id)
 
 
 def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -296,14 +296,14 @@ def run(arguments: argparse.Namespace) -> int:
                   getattr(arguments, "count", None), getattr(arguments, "every", None))
     loaded = cli_composition.load_config(arguments.config, flags)
     if isinstance(loaded, ConfigRefused):
-        result: Result = plan_ops.refused_config(loaded)
+        result: Result = operations.refused_config(loaded)
     else:
         result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
     failed = isinstance(result, Failed) or (isinstance(result, Ended) and result.reason != "interrupted")
     stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:
         admission = (arguments.command, arguments.operation) == ("plan", "start")  # the one command whose refusals carry slots
-        print(json.dumps(plan_data.as_data(result, admission=admission)), file=stream)
+        print(json.dumps(result_data.as_data(result, admission=admission)), file=stream)
     else:
         if isinstance(result, Failed) and result.claim_leaked:
             task = arguments.task_id
@@ -313,7 +313,7 @@ def run(arguments: argparse.Namespace) -> int:
         if isinstance(result, Round) and not result.logged and not isinstance(loaded, ConfigRefused):
             lines.append(f"Log: not written ({loaded.settings.artifacts.value / 'rounds.log'})")
         print("\n".join(lines), file=stream)
-    return plan_ops.exit_code(result)
+    return operations.exit_code(result)
 
 
 def _status_lines(each: AttemptStatus) -> list[str]:

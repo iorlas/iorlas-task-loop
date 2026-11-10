@@ -19,21 +19,21 @@ from sqlite_store import Store
 from stream_proc import OwnedProcess, group_alive, inspect_process, observe_owned, popen_registered
 
 from taskloop import slot_lock
+from taskloop.admit import AttemptAdmission, Claim, Unclaim
+from taskloop.attempt import Attempts, Credentials, CredentialsUnavailable
+from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
+from taskloop.attempt_types import Checkouts, FileEntry, Seen
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
-from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
-from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
-from taskloop.plan_files import PlanFiles
-from taskloop.plan_launch import Entry, Launcher, entry_process
-from taskloop.plan_publish import PlanPublish
-from taskloop.plan_release import PlanRelease
-from taskloop.plan_schema import SCHEMA
-from taskloop.plan_store import REGISTRATION_BUSY_MS, PlanStore
-from taskloop.plan_types import Checkouts, FileEntry, Seen
-from taskloop.plan_verifier import PlanVerifier
+from taskloop.evidence_files import EvidenceFiles
+from taskloop.factory_schema import SCHEMA
+from taskloop.launch import Entry, Launcher, entry_process
+from taskloop.publish import BranchPublish
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
+from taskloop.slot_release import SlotRelease
 from taskloop.slots import Adopted, NotAdopted, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import ACTOR, ReadyRows, inspect_task
+from taskloop.verifier import Verifier
 
 # Baseline child_env.scrub defaults (731b7c76, skills/task-loop/_vendor/child_env), re-stated here, never imported.
 APP_PREFIXES = ("CLAUDE_", "ANTHROPIC_", "DELEGATE_", "MCP_", "OTEL_", "CODEX_COMPANION")
@@ -249,7 +249,7 @@ class RealSlotFiles:
             return None
 
 
-def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> PlanAttempts:
+def open_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> Attempts:
     """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
 
     The harness registration gate writes through its own store, whose connections wait at most REGISTRATION_BUSY_MS for the
@@ -263,44 +263,44 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
             con.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
         return con
 
-    return PlanAttempts(
-        PlanStore(lambda: store.shared_rw(database), store.begin_immediate),
-        PlanFiles(artifacts),
+    return Attempts(
+        AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
+        EvidenceFiles(artifacts),
         credentials,
         run,
         time.time,
         checkouts,
         RealSlotFiles(),
-        gate=PlanStore(bounded, gated.begin_immediate),
+        gate=AttemptStore(bounded, gated.begin_immediate),
     )
 
 
-def open_plan_verifier(database: Path, store: Store) -> PlanVerifier:
+def open_verifier(database: Path, store: Store) -> Verifier:
     """Real wiring for on-demand verification (`tl plan verify`, a repeat's verify): a shared writer of `store` (the caller
     closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
-    writer = PlanStore(lambda: store.shared_rw(database), store.begin_immediate)
-    return PlanVerifier(writer, checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold)
+    writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
+    return Verifier(writer, checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold)
 
 
-def open_releaser(database: Path, store: Store) -> PlanRelease:
+def open_releaser(database: Path, store: Store) -> SlotRelease:
     """Real wiring for `tl plan release` and the release after `tl plan verify`: a shared writer of `store` (the caller
     closes it) on factory.db, real Git, the entry and worker observations, the park under the slot's custody lock, the
     tracker's fenced unclaim, wall clock."""
-    writer = PlanStore(lambda: store.shared_rw(database), store.begin_immediate)
-    return PlanRelease(writer, checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim, time.time)
+    writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
+    return SlotRelease(writer, checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim, time.time)
 
 
-def open_publisher(database: Path, store: Store) -> PlanPublish:
+def open_publisher(database: Path, store: Store) -> BranchPublish:
     """Real wiring for `tl plan publish` and the publication after `tl plan verify`: a shared writer of `store` (the caller
     closes it) on factory.db, the remote-capable Git view, the real slot file port, wall clock."""
-    return PlanPublish(PlanStore(lambda: store.shared_rw(database), store.begin_immediate), remotes, RealSlotFiles(), time.time)
+    return BranchPublish(AttemptStore(lambda: store.shared_rw(database), store.begin_immediate), remotes, RealSlotFiles(), time.time)
 
 
 def open_launcher(database: Path, artifacts: Path) -> Launcher:
     """Real wiring: the released registered start and owned-process observation, this interpreter, wall-clock deadlines.
 
     The database path is made absolute here: the entry refuses a relative one, after its registration would commit."""
-    return Launcher(database.absolute(), PlanFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable)
+    return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable)
 
 
 def adopt_slots(
@@ -376,14 +376,14 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
     return TrackerClaims(claim, unclaim, heartbeat_for)
 
 
-def open_plan_admission(database: Path, artifacts: Path) -> PlanAdmission:
+def open_admission(database: Path, artifacts: Path) -> AttemptAdmission:
     """Real wiring: per-thread shared writers on factory.db, the tracker claim, the real Git boundary, wall-clock deadlines."""
     store = Store(SCHEMA)
     claims = tracker_claims()
-    return PlanAdmission(
+    return AttemptAdmission(
         lambda: store.shared_rw(database),
         store.begin_immediate,
-        PlanFiles(artifacts),
+        EvidenceFiles(artifacts),
         inspect_tracker_task,
         checkouts,
         claims.claim,

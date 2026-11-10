@@ -1,6 +1,6 @@
 # Focused implemented CLI, admitted-plan body and successor isolation contracts.
 test: prepare
-    uv run --frozen --no-sync python -I -m pytest -q tests/cli tests/plan tests/rules
+    uv run --frozen --no-sync python -I -m pytest -q tests/cli tests/steps tests/rules
 
 # Rebuild the current project on every gate; never use an editable install or PYTHONPATH.
 prepare:

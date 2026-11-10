@@ -19,6 +19,14 @@ and generalize once, rather than copy the machinery per step. The next step is i
 follow ([coverage](../tl-8bh9/coverage.md), sequence item 2). This document does not design the implement step: only
 what the machinery must offer it.
 
+**Owner answers to section 8 (2026-11-10), all four as recommended:**
+
+1. `tl step` replaces `tl plan` in one cut, no alias; the cut is slice S4, not earlier.
+2. A task moves to its next step automatically, after one `bd show` confirms it is still `in_progress`, claimed by
+   taskloop and labelled `auto`; the claim is never retaken.
+3. Tasks waiting for their next step go before new ready tasks, oldest first.
+4. One `--model`/`--effort` pair for every step, for now.
+
 - **step** (glossary): plan, implement, check, review, land. **attempt**: one try at a step. **step run** below is
   plain prose for attempts 1..3 of one step linked by repeats (`previous_attempt_id`); it is not a new entity.
 - **step kind** (code name `StepKind`): the few values and functions that make a step the plan step and not the
@@ -267,7 +275,7 @@ No generic module keeps a `plan_` prefix; only `plan_step.py` means the plan ste
 
 ### 3.7 CLI shape
 
-**Recommended (Q1): `tl step <verb>` replaces `tl plan <verb>` in one cut, no alias.** The verbs and flags stay:
+**Decided (Q1, owner): `tl step <verb>` replaces `tl plan <verb>` in one cut, no alias.** The verbs and flags stay:
 `start show list verify release publish next rounds`. The person never names the step: `tl step start TASK` relaunches,
 repeats, advances or freshly admits whatever the task's current attempt and `steps.next_step` call for; `show` and
 `list` print a `Step:` line and a `step` column; `--json` rows gain `"step"`. The help scope string replaces
@@ -402,6 +410,8 @@ about 30.
 
 ## 8. Owner questions
 
+**Answered 2026-11-10: yes to all four, as recommended** (recorded in section 1). Q1's cut is S4; Q2 to Q4 are S5.
+
 1. **The command noun: `tl step` instead of `tl plan`, in one cut, no alias?** Today every verb is `tl plan ...`. With
    implement added, `tl plan start` would also start implementation steps, which reads wrong; a second noun per step
    (`tl implement start`) would duplicate every verb. With `tl step`, the factory picks the task's next step from its
@@ -429,3 +439,55 @@ about 30.
   `reused` path relies on today; not re-measured here.
 - The implement step's rules, prompt, answer contract and access are not designed here; section 5 lists what its design
   must decide before S5.
+
+## 10. As built
+
+### S1 renames and moves (2026-11-10)
+
+Names and imports only: no schema, CLI, word or behavior change, no new behavior test. Files moved with `git mv`.
+Earlier slice documents keep the old names as their history; this table maps them.
+
+| Old | New |
+|---|---|
+| `plan_schema.py` | `factory_schema.py` |
+| `plan_types.py` | `attempt_types.py`; plan content to `plan_step.py` (below) |
+| `plan_reads.py`, `plan_store.py` | `attempt_reads.py`, `attempt_store.py` |
+| `plan_admit.py` | `admit.py` |
+| `plan.py` | `attempt.py` |
+| `plan_launch.py`, `plan_session.py`, `plan_prepare.py` | `launch.py`, `session.py`, `prepare.py` |
+| `plan_files.py` | `evidence_files.py` (`ANSWER_SCHEMA` to `plan_step.py`) |
+| `plan_commit.py` | `factory_commit.py` |
+| `plan_verify.py` | `slot_state.py` (pointer, observation, listing, staged) + `verdict.py` (`judge`, the chain); the plan.md rule to `plan_step.py` |
+| `plan_verifier.py` | `verifier.py` |
+| `plan_release.py`, `plan_publish.py`, `plan_repeat.py` | `slot_release.py`, `publish.py`, `repeat.py` |
+| `plan_ops.py` | `operations.py` |
+| `plan_next.py`, `plan_rounds.py`, `plan_data.py` | `round.py`, `rounds.py`, `result_data.py` |
+| `tests/plan/` | `tests/steps/` (`justfile` and `pyproject.toml` `testpaths` follow) |
+| `StageRules`, `StepAttempt`, `PendingPlanResult`, `PlanDecoder` | `StepRules`, `ChainLink`, `PendingResult`, `Decoder` |
+| `PlanReads`, `PlanStore`, `PlanAdmission`, `PlanAttempts`, `PlanFiles` | `AttemptReads`, `AttemptStore`, `AttemptAdmission`, `Attempts`, `EvidenceFiles` |
+| `PlanVerifier`, `PlanRelease`, `PlanPublish`, `PlanRepeat` | `Verifier`, `SlotRelease`, `BranchPublish`, `StepRepeat` |
+| `open_plan_*` (`admission`, `attempts`, `next`, `publish`, `reads`, `release`, `rounds`, `start`, `verifier`, `verify`) | `open_*` |
+
+`plan_step.py` holds, moved verbatim: `DISPOSITIONS`, `PLAN_NAME`, `ANSWER_KEYS`, `plan_stage`, the decoder
+(`decode_plan_answer` with `_message`, `_paths`), `ANSWER_SCHEMA` and its comment, the input's closing words
+(`closing_words(rules)`, called by `admit.task_text`), the repeat's `OPENING` and instructions (`repeat_instructions`,
+called by `repeat.feedback`), and the plan.md rule (`plan_rule`, was `plan_verify._plan`/`_content`, now computing the
+plan path from the rules itself; called by `verdict.judge`).
+
+Deviations from section 3.6 and S1, each to avoid an import cycle (`plan_step` imports `attempt_types`):
+
+- `PlanAnswer` and `Decoder` stay in `attempt_types` (the generic consumers read the answer; S3 replaces `PlanAnswer`
+  with `Answer` there).
+- `Admission.rules` (it called `plan_stage`) is removed; its six call sites in `attempt`, `factory_commit` (3),
+  `verifier` and `repeat` call `plan_stage(admission.task.task_id)`, the same value. S3 turns them into
+  `kind(admission.step).rules(...)`.
+- `MODE` and `Unreadable` (used by both the chain and the plan.md rule) move to `attempt_types`.
+- The test fake `Verifier` in `tests/steps/test_ops.py` is now `StubVerifier`; `tests/steps/test_slot_lock.py` imports
+  the `verifier` module as `verifier_module` (its helper function is named `verifier`).
+- `plan_stage` keeps its name (not in the 3.6 table). Table and column names (`plan_attempt`, `plan_commit`,
+  `plan_release`, ...) and their mentions in prose wait for S2.
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 6 contracts kept); `just test` 1229 passed. The two
+more than 1227 are `test_source_policy`'s parametrized cases for the two new source files (`plan_step.py`,
+`verdict.py`); no behavior test was added or removed. Code lines after: `attempt_types` 223, `plan_step` 109,
+`slot_state` 116, `verdict` 52, `evidence_files` 72, `admit` 331, `repeat` 158, `operations` 382.
