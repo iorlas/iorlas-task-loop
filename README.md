@@ -6,8 +6,11 @@ This isolated successor provides CLI help and read-only inspection of Git checko
 It preserves requirements, acceptance and dependency relationships. The backlog key is supplied configuration;
 it is not inferred from Git and does not claim global tracker identity. Missing, malformed and unavailable reads
 are distinct nonzero results; JSON errors are written to stderr. Neither command changes the task tracker.
-Other commands are rejected until their behavior is implemented.
-It does not execute tasks. The previous implementation remains in Git history.
+`tl config show`, `tl slot adopt` and `tl plan start|show|list|verify` run one plan attempt only: no task branch,
+publication or release ([plan CLI](docs/design/tl-8bh9.4.3.1.6/plan.md)). `tl plan start` claims the task in the tracker
+and holds a slot; nothing releases them yet (`tl plan abandon` and `tl slot release` refuse `deferred`). The machine
+config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to `~/.local/state/task-loop`.
+Other commands are rejected until their behavior is implemented. The previous implementation remains in Git history.
 
 Python 3.15 and the tool versions in `mise.toml` are required. Run `mise install` after
 trusting the repository configuration through normal mise setup.

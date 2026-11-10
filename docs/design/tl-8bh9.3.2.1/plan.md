@@ -4,6 +4,8 @@ Task: tl-8bh9.3.2.1, scoped child of PLAN-FILE tl-8bh9.3.2. Proposed implementat
 This is a bounded consumer of the [agent execution contract](../tl-8bh9.4.3.1/plan.md), not new owner-agreed policy
 or a claim that the successor already executes tasks. Only repo/task inspection is implemented in the inspected
 successor. Do not register a plan CLI command until the application operation has the real behavior below.
+Exception (owner, 2026-11-10, [.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 2), for that surface only: `tl plan
+start/show/list/verify` are registered for the attempt alone, labelled "attempt only: no task branch, publication or release".
 
 ## Result and limits
 

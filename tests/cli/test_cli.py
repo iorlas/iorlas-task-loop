@@ -17,11 +17,21 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
         assert main(arguments) == 0
     output = capsys.readouterr()
     assert "usage: tl" in output.out
-    assert "Task execution commands are not available yet." in output.out
+    assert "attempt only: no task branch, publication or release" in " ".join(output.out.split())
     assert output.err == ""
 
 
-@pytest.mark.parametrize("arguments", [["plan"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"]])
+@pytest.mark.parametrize("arguments", [["plan", "-h"], ["plan", "start", "-h"], ["plan", "show", "-h"], ["plan", "verify", "-h"]])
+def test_plan_help_says_attempt_only(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as result:
+        main(arguments)
+    assert result.value.code == 0
+    assert "attempt only: no task branch, publication or release" in " ".join(capsys.readouterr().out.split())
+
+
+@pytest.mark.parametrize(
+    "arguments", [["plan"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["plan", "prepare"], ["slot"], ["config"]]
+)
 def test_invalid_request(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:
         main(arguments)

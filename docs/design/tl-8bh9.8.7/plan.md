@@ -43,6 +43,9 @@ No new kernel, generic operation interface, plugin registry, scheduler, STORE sc
 
 Provide real CLI help and deterministic nonzero rejection of invalid/unsupported commands with useful stderr.
 Do not register plan/implement/check/review/land commands until each has real behavior and completion criteria.
+Exception (owner, 2026-11-10, [.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 2), for that surface only: `tl plan
+start/show/list/verify` (and the `abandon` placeholder) are registered before the plan step is complete; root and
+`tl plan` help say "attempt only: no task branch, publication or release"; `tl plan` alone still exits 2.
 The foundation is explicitly the exception that establishes build/executable boundaries before the first full slice.
 
 Retain Python 3.15 and existing tool pins/policies. Add no runtime dependency or semantic fake before an actual

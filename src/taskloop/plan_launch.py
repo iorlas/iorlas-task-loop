@@ -100,6 +100,11 @@ class _CallbackRefused(Exception):
         self.reason: Literal["registration_conflict", "registration_refused"] = reason
 
 
+def entry_process(entry: Entry) -> OwnedProcess:
+    """The one identity rule for a registered entry: a new session makes it its own group leader, so its pgid is its pid."""
+    return OwnedProcess(entry[0], entry[0], entry[1], entry[2])
+
+
 def _entry(identity: OwnedProcess) -> Entry:
     return identity.pid, identity.start, identity.boot
 
@@ -148,8 +153,7 @@ class Launcher:
             return LaunchRefused("dispatched")
         if stored is None:
             return key, None
-        # a new session makes the entry its own group leader, so its pgid is its pid; pgid is not compared
-        seen = self.observe(OwnedProcess(stored[0], stored[0], stored[1], stored[2]))
+        seen = self.observe(entry_process(stored))  # pgid is not compared
         if seen.kind == "matching":
             return AlreadyRunning(key, stored)
         if seen.kind == "unknown":

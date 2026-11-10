@@ -21,6 +21,7 @@ from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import Launcher
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import REGISTRATION_BUSY_MS, PlanStore
+from taskloop.plan_types import Checkouts
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Adopted, NotAdopted, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
@@ -161,9 +162,9 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
     )
 
 
-def open_plan_verifier(database: Path) -> PlanVerifier:
-    """Real wiring for the coordinator's on-demand verification: a shared writer on factory.db, real Git, wall clock."""
-    store = Store(SCHEMA)
+def open_plan_verifier(database: Path, store: Store) -> PlanVerifier:
+    """Real wiring for on-demand verification: a shared writer of `store` (the caller closes it) on factory.db, real Git,
+    wall clock."""
     return PlanVerifier(PlanStore(lambda: store.shared_rw(database), store.begin_immediate), checkouts, time.time)
 
 
@@ -174,11 +175,13 @@ def open_launcher(database: Path, artifacts: Path) -> Launcher:
     return Launcher(database.absolute(), PlanFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable)
 
 
-def adopt_slots(database: Path, checkout: Path, root: Path, count: int) -> tuple[Adopted | NotAdopted, ...]:
+def adopt_slots(
+    database: Path, checkout: Path, root: Path, count: int, repos: Checkouts = checkouts
+) -> tuple[Adopted | NotAdopted, ...]:
     """Adopt worktrees a person already made with `git worktree add --detach <root>/<repo_id>/sN`; creates none."""
     store = Store(SCHEMA)
     try:
-        repo = RealRepo(checkout.expanduser().resolve(), memoize=False)
+        repo = repos(checkout.expanduser().resolve())
         return adopt(lambda: store.shared_rw(database), store.begin_immediate, repo, root, count)
     finally:
         store.close_shared()

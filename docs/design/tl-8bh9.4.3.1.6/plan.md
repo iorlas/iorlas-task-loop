@@ -72,9 +72,11 @@ Sandbox is not a flag or key: the operation passes `plan.SANDBOX`, the only valu
 
 **Reader**: `src/taskloop/machine_config.py` (~70 SLOC), the only module that knows keys and defaults. `DEFAULTS`
 (one table), `Setting(value, source: Literal["flag","file","default"])`, `resolve(text: str | None, flags, home) ->
-Effective | ConfigRefused`. Composition reads the file (missing file = all defaults; unreadable = refused). Refusals
-(fixed words, exit 1, every command): `toml` (malformed), `unknown_key`, `type`, `relative_path`, `count`. The entry
-never reads config: it receives absolute db and artifacts paths in argv, as today.
+Effective | ConfigRefused`. `cli_composition.load_config` reads the file: the fixed file may be absent (all defaults);
+an explicit `--config FILE` that does not exist is refused `missing` (a typo must never fall back to the real
+defaults); unreadable is refused `unreadable`. Refusals (fixed words, exit 1, every command): `missing`, `unreadable`,
+`toml` (malformed or not UTF-8), `unknown_key`, `type`, `relative_path` (file values and path flags alike), `count`.
+The entry never reads config: it receives absolute db and artifacts paths in argv, as today.
 
 `tl config show` prints, per key, the effective value and its source, plus the file path and whether it exists.
 JSON: `{"file": {"path", "exists"}, "settings": {"db": {"value", "source"}, ...}}`.
@@ -134,7 +136,8 @@ path (computed; `PlanFiles.entry_log` would mkdir, so `show` uses `directory(key
 `stuck:*`/`unknown`. It needs one new read, `PlanStore.attempts()` (SELECT only; `WRITERS` unchanged). This is the
 "doctor-style" listing; a machine-wide `tl doctor` (install, DB, prerequisites) is later.
 `tl plan verify`: `attempt_of` -> `PlanVerifier.verify(key)`, the first production caller of `open_plan_verifier`.
-Exit 0 `verified`/`reused`; 1 `rejected:<rule>`, `not_applicable`, refused; 3 `unsettled:<r>`, `unavailable:<r>`.
+Exit 0 `verified`/`reused`; 1 `rejected:<rule>`, `not_applicable`, refused, `defect:inconsistent` (the same inputs and
+rules gave another verdict: a defect, not retry-safe); 3 `unsettled:<r>`, `unavailable:<r>`.
 A stored verdict returns with no Git read; running it while the entry verifies is safe (same inputs, insert-once).
 
 ## 6. Output, exit codes, `--json`
@@ -144,7 +147,15 @@ human text. Control fields are fixed words from the existing `Literal` types; `d
 `dispatch_token` is never printed. Convention kept from `repo inspect`/`task show`: data on stdout; refusal/unknown as
 `{"error": {"kind", "reason", "message", ...}}` on stderr. Exit: 0 done or already so; 1 refused; 2 usage; 3 unknown,
 re-run is safe (`repo`/`task` keep 1). No version field, no compatibility promise: one exact-keys test per command pins
-the shape, and a test renders every value of each `Literal`.
+the shape, and a test renders every value of each `Literal`. Every error carries `kind`, `reason`, `message`,
+`claim_leaked`, `admitted` (this start admitted the attempt before its launch failed: claim and slot are held, re-run
+`start`) and `slots`; human `claim_leaked`/`admitted` banners print in human mode only. `refused:registration_conflict`
+on a first start means a concurrent start registered first. **`slot adopt` is per-slot data**: its `{"slots": [...]}`
+(or `sN <reason> <path>` lines) always goes to stdout, with exit 0 all adopted, 1 any refused, 3 any `git_unavailable`/
+`store_unavailable`; a bad checkout (missing or not a repository: `refused:checkout`) or an existing factory.db of
+another schema (`refused:schema`) refuses before anything is created, as an `{"error": ...}` on stderr.
+`plan show`/`list` also print `entry_process` (`pid`, `start`, `boot`) and `worker` (`pid`, `pgid`): not secret, and
+the manual steps need them.
 
 ## 7. Where the code goes (no logic in `cli*.py`)
 
@@ -155,11 +166,15 @@ the shape, and a test renders every value of each `Literal`.
 - `plan_store.py` (318 SLOC): one `attempts(backlog=None, task=None)` read (key, slot, phase, entry, deadline) serving
   `show` and `list` (~+15); `attempt_of` and its launcher/entry callers stay unchanged.
 - `slots.py`: `NotAdopted.path: Path | None`, so a refused adopt shows where to run `git worktree add --detach`.
-- `composition.py` (153 -> ~200): config file read, read-only opener, the database guard, `open_plan_start`.
+- `composition.py` keeps the real wiring shared with the entry process (`open_plan_verifier` takes the caller's
+  `Store`; `adopt_slots` takes the repo opener). `cli_composition.py` (new): config file read, read-only opener, the
+  database guard, `open_plan_reads/start/verify`, `adopt`, so the entry's import closure has no config or ops.
+  `plan_launch.entry_process` is the one owner of the entry identity rule (pgid = pid) and of `Entry`.
 - `cli.py` (92; `main` 45/80) keeps root parser, `repo`, `task`; `cli_plan.py` (new, ~220) registers config/slot/plan
   parsers and renders. If it nears 400, `cli_slot.py` splits off.
-- `.importlinter`: layers `__main__ > cli > cli_plan`; new forbidden contract: `cli`, `cli_plan`, `plan_ops`,
-  `machine_config` may not import `attempt_entry`. No-`subprocess` and no-network rules stand; processes start only via
+- `.importlinter`: layers `__main__ > cli > cli_plan > cli_composition`; forbidden: `cli`, `cli_plan`,
+  `cli_composition`, `plan_ops`, `machine_config` may not import `attempt_entry`, and `attempt_entry` and `composition`
+  may not import any of them. No-`subprocess` and no-network rules stand; processes start only via
   the launcher's injected `popen_registered`. No hook or dashboard code exists in the successor, so no hook/dash rule applies.
 
 Re-run: `slot adopt` is idempotent (another root is `other_root`, never moved); `start` per section 4; `verify` until
@@ -172,15 +187,17 @@ settled. Nothing here releases a reservation or claim, retries an agent, or make
 | `stuck:<kind>` | What a person does by hand now |
 |---|---|
 | `expired_admitted` | Nothing in the factory can release it. Leave it, or discard the whole factory.db (below). |
-| `entry_lost` (`dispatching`/`registered`, entry gone) | The agent may still run: check `worker_pid` as live-smoke section 8 (cwd = slot), kill only that verified group; then as above. |
-| `hung` (entry running past its deadline) | Kill the entry by verified PID (live-smoke section 8); then `show` again. |
+| `entry_lost` (`dispatching`/`registered`, entry gone) | The agent may still run: if `show` names a worker, check its cwd is the slot (`lsof -a -p <pid> -d cwd`) and stop only its group (`kill -TERM -<pgid>`); then as above. |
+| `hung` (entry running past its deadline) | Stop the worker first (the agent may keep editing the slot), as above; then the entry by its verified pid (`ps -o command=` shows `taskloop.attempt_entry`); then `show` again. |
 | `unpublished` (captured, session/validation pending, entry gone) | Result incomplete; keep evidence; as above. |
 | `conflict` | Owner inspects evidence; as above. |
 | verify `unsettled:<r>` | Inspect the slot; if HEAD is the reported commit and only stray files make it dirty, remove them, then `tl plan verify`. |
 
 **Whole-DB discard** is the only release that exists (AGENTS.md: deliberate discard permits reevaluation): stop all
-entries and workers first (verified PIDs), delete factory.db and its `-wal`/`-shm`, then by hand `bd update TASK
---assignee ""` (or `bd unclaim`) for each claimed task, inspect each slot worktree, and adopt again. It drops every
+entries and workers first (verified PIDs), delete factory.db and its `-wal`/`-shm` (the text names the resolved path
+from the machine config, so nobody deletes the baseline's `~/.config/task-loop/factory.db`), then in the tracker
+`bd unclaim <task-id> --if-assignee taskloop` (fenced, as the admission's compensation) for each claimed task, inspect
+each slot worktree, and adopt again. It drops every
 slot and attempt. Never edit rows by hand: a deleted reservation silently fences out a still-running worker.
 
 **Deferred: force-release (its own slice, after preparation and lock).** `tl plan abandon` / `tl slot release` are
@@ -200,7 +217,7 @@ registered now as placeholders that refuse `deferred` (exit 1) and print the ste
 
 | Situation | Stored | Result | Next |
 |---|---|---|---|
-| Config malformed / unknown key | nothing | refused `toml`/`unknown_key`, 1 | fix the file (`tl config show`) |
+| Config malformed / unknown key / explicit file missing | nothing | refused `toml`/`unknown_key`/`missing`, 1 | fix the file (`tl config show`) |
 | DB absent or other schema | nothing, no file made | refused `database`/`schema`, 1 | `tl slot adopt` creates it |
 | Tracker down (first start) | nothing (claim compensated when proven) | `unavailable:tracker`, 3 | re-run start |
 | No free slot | nothing | `refused:no_free_slot` + slot states, 1 | adopt more or wait |
@@ -230,8 +247,8 @@ Driver (`driver.py`, `D()`) removed; env.sh writes a scratch `config.toml` (db, 
 `slot_count = 1`) and `T() { "$TL/.venv/bin/tl" --config "$SMOKE/config.toml" "$@"; }`; `T config show` is checked first.
 - Section 3: `T slot adopt "$REPO"` prints `s1 not_listed <path>`; `git worktree add --detach <path>`; adopt again.
 - Section 4 (launcher busy probe, needs an admitted attempt with no live entry): first
-  `env PATH=/usr/bin:/bin T plan start ...` (no `codex`: the entry exits `unavailable credentials:codex`, attempt stays
-  admitted), then `(echo 'BEGIN IMMEDIATE;'; sleep 4; echo 'ROLLBACK;') | sqlite3 "$DB"` in tab B and
+  `CODEX_HOME="$SMOKE/no-codex-login" T plan start ...` (no login: the entry exits `unavailable credentials:auth`, attempt
+  stays admitted; `env PATH=/usr/bin:/bin T` cannot call a shell function and would hide `bd` from the admission), then `(echo 'BEGIN IMMEDIATE;'; sleep 4; echo 'ROLLBACK;') | sqlite3 "$DB"` in tab B and
   `time T plan start ...` in tab A: expect exit 3 `unavailable:store` in ~1.5 s, then `T plan show` `next=start`.
 - Section 5: `T plan start ... --json | tee launch.txt` (expect `relaunched`); `D status` -> `T plan show`; second start
   -> `already_running` or `already_dispatched`; on `next=verify` run `T plan verify`. Section 6's "nothing re-runs a pending
@@ -265,6 +282,6 @@ force-release deferred with section 8's conditions.
 Nothing was run. Read from source: the operations and their results, `shared_rw` creating a DB, `open_ro` returning
 None or raising `SchemaError`, `observe_owned` reading the process table natively, no import contract forbidding
 cli -> attempt_entry. Observed: `~/.config/task-loop/` holds the baseline's `factory.db`. Not verified: the sqlite3 CLI
-holding `BEGIN IMMEDIATE` across a piped `sleep` on macOS; that `PATH=/usr/bin:/bin` makes `which("codex")` miss on the
+holding `BEGIN IMMEDIATE` across a piped `sleep` on macOS; that an empty `CODEX_HOME` gives `credentials:auth` on the
 owner's Mac; Ctrl-C inside the bd claim; `bd unclaim` behaviour against a real tracker; whether the smoke has run.
 All line counts are estimates.

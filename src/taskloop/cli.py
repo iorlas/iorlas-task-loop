@@ -8,6 +8,7 @@ from dataclasses import asdict
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
+from taskloop import cli_plan
 from taskloop.composition import inspect_checkout, inspect_tracker_task
 from taskloop.repo import UnsupportedCheckout
 from taskloop.task import TaskInspectionError
@@ -61,9 +62,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Present implemented commands and render truthful inspection failures."""
     parser = argparse.ArgumentParser(
         prog="tl",
-        description="Task-loop successor foundation. Task execution commands are not available yet.",
+        description=f"Task-loop successor foundation. Plan commands run the {cli_plan.ATTEMPT_ONLY}.",
         allow_abbrev=False,
     )
+    parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")
     commands = parser.add_subparsers(dest="command")
     repo = commands.add_parser("repo", help="Inspect a local repository", allow_abbrev=False)
     operations = repo.add_subparsers(dest="operation", required=True)
@@ -77,10 +79,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     show.add_argument("--backlog", required=True, help="Explicit logical backlog key; no identity is inferred")
     show.add_argument("--tracker-root", required=True, help="Explicit directory for the configured tracker")
     show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
+    cli_plan.register(commands)
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
         return 0
+    if arguments.command in cli_plan.COMMANDS:
+        return cli_plan.run(arguments)
     if arguments.command == "task":
         return show_task(arguments)
     try:

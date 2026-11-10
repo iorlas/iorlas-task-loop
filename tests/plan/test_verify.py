@@ -14,11 +14,13 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from git_porcelain import Recorded, Repo, Tree
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from sqlite_store import Store
 
 from taskloop.attempt_entry import shown
 from taskloop.composition import open_plan_verifier
 from taskloop.plan import Execution, PlanAttempts, PlanVerifier
 from taskloop.plan_files import PlanFiles
+from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore, StoreRefused
 from taskloop.plan_types import (
     RULES,
@@ -331,7 +333,9 @@ def test_the_insert_is_conditional_never_rewritten_and_a_differing_row_is_incons
 
 
 def test_the_real_composition_opens_the_factory_database(tmp_path: Path) -> None:
-    assert open_plan_verifier(tmp_path / "factory.db").verify(KEY) == VerifyRefused("not_captured")
+    store = Store(SCHEMA)
+    assert open_plan_verifier(tmp_path / "factory.db", store).verify(KEY) == VerifyRefused("not_captured")
+    store.close_shared()
 
 
 def test_every_rule_a_verdict_can_name_is_one_the_store_reads_back() -> None:

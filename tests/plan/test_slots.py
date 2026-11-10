@@ -87,15 +87,16 @@ def test_unusable_worktree_is_refused_with_its_reason(
             repo.drop_checkout(path)
     elif reason == "listing":
         monkeypatch.setattr(repo, "worktrees", unavailable)
-    assert adopted(factory, repo, root, 1) == (NotAdopted("s1", expected),)
+    assert adopted(factory, repo, root, 1) == (NotAdopted("s1", expected, path),)  # where to add the worktree
     assert factory.execute("SELECT count(*) FROM slot").fetchone() == (0,)
 
 
 def test_adopt_refuses_without_a_current_store(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
     add(repo, root, "s1")
-    assert adopt(lambda: None, begin_immediate, repo, root, 1) == (NotAdopted("s1", "store_unavailable"),)
+    path = derived(repo, root, "s1")
+    assert adopt(lambda: None, begin_immediate, repo, root, 1) == (NotAdopted("s1", "store_unavailable", path),)
     factory.execute("PRAGMA user_version=1")
-    assert adopted(factory, repo, root, 1) == (NotAdopted("s1", "store_unavailable"),)
+    assert adopted(factory, repo, root, 1) == (NotAdopted("s1", "store_unavailable", path),)
 
 
 def test_without_a_slot_row_a_clean_derived_worktree_is_no_slot(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
@@ -170,7 +171,7 @@ def test_v1_factory_database_is_refused_loudly(tmp_path: Path) -> None:
     store = Store(SCHEMA)
     repo = FakeRepo.init(tmp_path / "repo")
     refused = adopt(lambda: store.shared_rw(path), store.begin_immediate, repo, tmp_path / "slots", 1)
-    assert refused == (NotAdopted("s1", "store_unavailable"),)
+    assert refused == (NotAdopted("s1", "store_unavailable", derived(repo, tmp_path / "slots", "s1")),)
     store.close_shared()
 
 
@@ -181,14 +182,14 @@ def test_readopting_under_another_root_is_reported_not_moved(
     adopted(factory, repo, root, 1)
     elsewhere = tmp_path / "elsewhere"
     add(repo, elsewhere, "s1")
-    assert adopted(factory, repo, elsewhere, 1) == (NotAdopted("s1", "other_root"),)
+    assert adopted(factory, repo, elsewhere, 1) == (NotAdopted("s1", "other_root", derived(repo, elsewhere, "s1")),)
     assert factory.execute("SELECT cwd FROM slot").fetchall() == [(str(derived(repo, root, "s1")),)]
 
 
 def test_a_root_inside_the_main_checkout_is_refused(factory: sqlite3.Connection, repo: FakeRepo) -> None:
     inside = repo.path / ".slots"
     add(repo, inside, "s1")
-    assert adopted(factory, repo, inside, 1) == (NotAdopted("s1", "inside_checkout"),)
+    assert adopted(factory, repo, inside, 1) == (NotAdopted("s1", "inside_checkout", derived(repo, inside, "s1")),)
     assert factory.execute("SELECT count(*) FROM slot").fetchone() == (0,)
 
 
@@ -203,6 +204,7 @@ def test_nothing_pending_takes_no_write_lock(factory: sqlite3.Connection, repo: 
 
     assert adopt(lambda: factory, begin, repo, root, 1) == (Adopted("s1", derived(repo, root, "s1")),)
     repo.worktree(derived(repo, root, "s1")).write_file("dirty", "x")
-    assert adopt(lambda: factory, begin, repo, root, 2) == (Adopted("s1", derived(repo, root, "s1")), NotAdopted("s2", "not_listed"))
+    s1, s2 = derived(repo, root, "s1"), derived(repo, root, "s2")
+    assert adopt(lambda: factory, begin, repo, root, 2) == (Adopted("s1", s1), NotAdopted("s2", "not_listed", s2))
     assert taken == []
 

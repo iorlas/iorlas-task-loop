@@ -7,11 +7,38 @@ root_packages =
 include_external_packages = True
 
 [importlinter:contract:entry-depends-on-cli]
-name = The module entry delegates to the CLI; the CLI never imports the entry
+name = The module entry delegates to the CLI; the CLI delegates to the plan surface; neither imports upward
 type = layers
 layers =
     taskloop.__main__
     taskloop.cli
+    taskloop.cli_plan
+    taskloop.cli_composition
+
+[importlinter:contract:cli-never-imports-the-attempt-entry]
+name = The command surface, its operations and the machine config never import the attempt entry process
+type = forbidden
+source_modules =
+    taskloop.cli
+    taskloop.cli_plan
+    taskloop.cli_composition
+    taskloop.plan_ops
+    taskloop.machine_config
+forbidden_modules =
+    taskloop.attempt_entry
+
+[importlinter:contract:entry-never-imports-the-command-surface]
+name = The attempt entry process imports no command surface, operations or machine config (its import closure stays small)
+type = forbidden
+source_modules =
+    taskloop.attempt_entry
+    taskloop.composition
+forbidden_modules =
+    taskloop.cli
+    taskloop.cli_plan
+    taskloop.cli_composition
+    taskloop.plan_ops
+    taskloop.machine_config
 
 [importlinter:contract:no-runtime-mechanisms]
 name = The foundation has no direct network or process mechanisms

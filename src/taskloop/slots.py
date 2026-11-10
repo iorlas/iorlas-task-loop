@@ -35,8 +35,11 @@ class Adopted:
 
 @dataclass(frozen=True)
 class NotAdopted:
+    """`path` is where the slot belongs (`git worktree add --detach <path>`); None when the repository was not read."""
+
     name: str
     reason: Unadoptable
+    path: Path | None = None
 
 
 class SlotsUnavailable(Exception):
@@ -90,17 +93,20 @@ def adopt(
     names = slot_names(count)
     try:
         repo_id = repo.identity().key
+    except GitUnavailable:
+        return tuple(NotAdopted(name, "git_unavailable") for name in names)
+    base = root.resolve() / repo_id
+    try:
         con = connect()
         if con is None or not current(con):
-            return tuple(NotAdopted(name, "store_unavailable") for name in names)
+            return tuple(NotAdopted(name, "store_unavailable", base / name) for name in names)
         known = _adopted(con, repo_id)
         pending = [name for name in names if name not in known]
         listed = repo.worktrees() if pending else ()
     except GitUnavailable:
-        return tuple(NotAdopted(name, "git_unavailable") for name in names)
+        return tuple(NotAdopted(name, "git_unavailable", base / name) for name in names)
     except sqlite3.Error:
-        return tuple(NotAdopted(name, "store_unavailable") for name in names)
-    base = root.resolve() / repo_id
+        return tuple(NotAdopted(name, "store_unavailable", base / name) for name in names)
     refused = _refusals(repo, listed, base, pending)
     accepted = [name for name in pending if name not in refused]
     if accepted:
@@ -124,10 +130,10 @@ def _refusals(repo: Repo, listed: tuple[WorktreeInfo, ...], base: Path, pending:
 
 def _result(name: str, base: Path, known: dict[str, str], refused: dict[str, Unadoptable]) -> Adopted | NotAdopted:
     if name in refused:
-        return NotAdopted(name, refused[name])
+        return NotAdopted(name, refused[name], base / name)
     if name not in known:
-        return NotAdopted(name, "store_unavailable")
-    return Adopted(name, base / name) if Path(known[name]) == base / name else NotAdopted(name, "other_root")
+        return NotAdopted(name, "store_unavailable", base / name)
+    return Adopted(name, base / name) if Path(known[name]) == base / name else NotAdopted(name, "other_root", base / name)
 
 
 def observe(con: sqlite3.Connection, repo: Repo, repo_id: RepoId) -> tuple[SlotView, ...]:

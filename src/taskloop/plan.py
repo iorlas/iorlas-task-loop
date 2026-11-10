@@ -108,6 +108,20 @@ def succeeded(result: AttemptResult) -> bool:
     return result.status == "collected" and result.reason in ("verified", "reused")
 
 
+def collect(store: PlanStore, key: AttemptKey) -> AttemptResult:
+    """Read-only: stored facts need no reservation, input, credential or remaining deadline."""
+    try:
+        stored = store.collect(key)
+        if stored is not None:
+            return report(stored)
+        state = store.state(key)
+    except StoreUnavailable:
+        return AttemptResult("unavailable", "collect")
+    if state is None:
+        return AttemptResult("refused", "absent")
+    return AttemptResult("conflict", "session") if state[1] else AttemptResult("pending", state[0])
+
+
 class PlanAttempts:
     def __init__(
         self,
@@ -126,17 +140,7 @@ class PlanAttempts:
         self.gate = store if gate is None else gate
 
     def collect(self, key: AttemptKey) -> AttemptResult:
-        """Read-only: stored facts need no reservation, input, credential or remaining deadline."""
-        try:
-            stored = self.store.collect(key)
-            if stored is not None:
-                return report(stored)
-            state = self.store.state(key)
-        except StoreUnavailable:
-            return AttemptResult("unavailable", "collect")
-        if state is None:
-            return AttemptResult("refused", "absent")
-        return AttemptResult("conflict", "session") if state[1] else AttemptResult("pending", state[0])
+        return collect(self.store, key)
 
     def execute(self, key: AttemptKey, me: tuple[int, str, str]) -> AttemptResult:
         """`me` is the caller's own (pid, start, boot): an admitted attempt dispatches only for its registered entry."""

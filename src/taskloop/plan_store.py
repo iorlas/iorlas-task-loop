@@ -3,7 +3,7 @@
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
-from dataclasses import astuple
+from dataclasses import astuple, dataclass
 from typing import Literal
 
 from any_agent.procs import Worker
@@ -31,6 +31,20 @@ from taskloop.task import TaskReference, TaskScope
 # A registration write (the entry's or the harness's) waits at most this for the write lock, so it finishes well inside
 # the registered start's fixed 5 s window; every other write keeps the library's 5 s.
 REGISTRATION_BUSY_MS = 1500
+
+
+@dataclass(frozen=True)
+class AttemptRow:
+    """One attempt as the status reads see it; the key is for further reads only, never for display."""
+
+    key: AttemptKey
+    backlog: str
+    task_id: str
+    slot: str
+    phase: str
+    entry: tuple[int, str, str] | None
+    deadline: float
+    worker: tuple[int, int] | None  # the agent's pid and process group, once registered
 
 
 class StoreUnavailable(Exception):
@@ -221,6 +235,25 @@ class PlanStore:
             return None
         entry = None if any(value is None for value in row[4:7]) else (_int(row[4]), _str(row[5]), _str(row[6]))
         return AttemptKey(_str(row[0]), _str(row[1]), _int(row[2])), _str(row[3]), entry
+
+    def attempts(self, backlog: str | None = None, task_id: str | None = None) -> tuple[AttemptRow, ...]:
+        """Every attempt (or one backlog's, or one task's), by backlog and task: SELECT only, no reservation or deadline check."""
+        with self._connection() as con:
+            rows: list[tuple[object, ...]] = con.execute(
+                """SELECT attempt_id,dispatch_token,generation,backlog,task_id,slot,phase,entry_pid,entry_start,entry_boot,deadline,
+                worker_pid,worker_pgid FROM plan_attempt WHERE adapter='beads' AND (?1 IS NULL OR backlog=?1) AND (?2 IS NULL OR task_id=?2)
+                ORDER BY backlog,task_id""",
+                (backlog, task_id),
+            ).fetchall()
+        found: list[AttemptRow] = []
+        for row in rows:
+            entry = None if any(value is None for value in row[7:10]) else (_int(row[7]), _str(row[8]), _str(row[9]))
+            if not isinstance(row[10], (int, float)):
+                raise StoreUnavailable("Malformed deadline")
+            key = AttemptKey(_str(row[0]), _str(row[1]), _int(row[2]))
+            worker = None if row[11] is None or row[12] is None else (_int(row[11]), _int(row[12]))
+            found.append(AttemptRow(key, _str(row[3]), _str(row[4]), _str(row[5]), _str(row[6]), entry, float(row[10]), worker))
+        return tuple(found)
 
     def warm(self) -> None:
         """Open (and on first use check) this store's connection now; StoreUnavailable when it cannot."""
