@@ -341,6 +341,9 @@ def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admi
     first = bench.round()
     assert moves(first) == [("t-2", "report", "running"), ("t-1", "skip", "abandoned"), ("t-2", "skip", "attempted"),
                             ("t-3", "skip", "assigned"), ("t-4", "skip", "ancestry"), ("t-5", "start", "started")]
+    skips = {(each.task_id, each.word): each.attempt_id for each in first.moves if each.action == "skip"}
+    assert (skips[("t-1", "abandoned")], skips[("t-2", "attempted")], skips[("t-3", "assigned")]) == ("gone-1", "lapsed", "")
+    assert any(line.endswith(" tasks t-1 skip abandoned gone-1") for line in bench.lines)
     second = bench.round()
     assert ("t-5", "skip", "attempted") in moves(second) and ("t-5", "report", "running") in moves(second)
     assert admission.requests == ["t-5"] and ready.reads == ["missing", "missing"]  # one show per unique parent per round

@@ -47,8 +47,9 @@ HELD = ("The tracker claim stays held, and the slot until the step ends on a cle
 ABANDON = "`tl plan release --abandon` frees the slot and gives the task back."
 GUIDE = {
     "start": "Re-run `tl plan start` to relaunch its entry (each `tl plan next` round relaunches it until its deadline). "
-    "If the last entry says `claim_lost`, the tracker claim was taken back: check `bd show <task>`; re-claim it by hand as "
-    "`taskloop` before `tl plan start`, or leave it.",
+    "If the last entry says `claim_lost`, the tracker claim is gone (reverted, taken by another actor, or the task closed): "
+    "check `bd show <task>`; relaunching cannot help and nothing retakes the claim. `tl plan release --abandon` (its claim "
+    "answers `not_held`), then `tl plan start` to plan the task again.",
     "wait": "Its entry runs; wait, then `tl plan show` again.",
     "verify": "Run `tl plan verify`.",
     "repeat": "Run `tl plan start` again to repeat it with this listing as feedback, or remove the files and `tl plan verify`.",

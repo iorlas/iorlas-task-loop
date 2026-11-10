@@ -401,8 +401,11 @@ mkdir "$SMOKE/markers"
 cd "$TRACKER"
 G_PARENT=$(bd create "Smoke urgent group" -t epic -p 0 --silent)             # not approved: never planned itself
 G_TOP=$(bd create "Smoke P1" -p 1 -l auto --silent)
-G_CHILD=$(bd create "Smoke P2 under P0" -p 2 -l auto --parent "$G_PARENT" --silent)
 G_LOW=$(bd create "Smoke P2 alone" -p 2 -l auto --silent)
+G_CHILD=$(bd create "Smoke P2 under P0" -p 2 -l auto --parent "$G_PARENT" --silent)
+# G3 pre-check: by natural id alone $G_LOW must come first, so only the P0 parent can put $G_CHILD ahead of it
+"$TL/.venv/bin/python" -I -c 'import sys; from taskloop.selection import natural as n; sys.exit(n(sys.argv[1]) >= n(sys.argv[2]))' \
+  "$G_LOW" "$G_CHILD" && echo "G3 can prove ancestry" || echo "G3 INCONCLUSIVE: $G_LOW sorts after $G_CHILD by id; redo Run G"
 G_OFF=$(bd create "Smoke P0 unapproved" -p 0 --silent)                       # no label: never taken
 G_WAIT=$(bd create "Smoke P0 blocked" -p 0 -l auto --deps "blocked-by:$G_LOW" --silent)
 printf 'G_PARENT=%s\nG_TOP=%s\nG_CHILD=%s\nG_LOW=%s\nG_OFF=%s\nG_WAIT=%s\n' "$G_PARENT" "$G_TOP" "$G_CHILD" "$G_LOW" \
@@ -411,15 +414,18 @@ for t in "$G_TOP" "$G_CHILD" "$G_LOW" "$G_OFF" "$G_WAIT"; do bd update "$t" -d "
 paragraph. Answer planned and list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."; done
 T slot adopt "$REPO"
 NEXT=(plan next --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" --effort "$EFFORT" --minutes 30)
-T "${NEXT[@]}" --json        # G1: start $G_TOP started; stopped no_free_slot; nothing else claimed (bd show each)
-T "${NEXT[@]}"               # G2, at once: report $G_TOP running; stopped no_free_slot; no second entry (ps)
+T "${NEXT[@]}" --json        # G1: one move, start $G_TOP started; "stopped": "no_free_slot" ($G_CHILD hit it: no move for
+                             #     it, never claimed); nothing else claimed (bd show each)
+T "${NEXT[@]}"               # G2, at once: report $G_TOP running; stopped no_free_slot (no move for $G_CHILD); no second entry (ps)
 T plan show "$G_TOP" --backlog "$BACKLOG"   # repeat until Next: done (released, published)
-T "${NEXT[@]}"               # G3: start $G_CHILD (P2 under a P0 parent beats P2 alone)
+T "${NEXT[@]}"               # G3: start $G_CHILD (P2 under a P0 parent beats P2 alone, though $G_LOW's id sorts first);
+                             #     stopped no_free_slot, no move for $G_LOW
 T plan show "$G_CHILD" --backlog "$BACKLOG" # until Next: done
-T "${NEXT[@]}"               # G4: start $G_LOW ($G_WAIT stays blocked while $G_LOW is open)
+T "${NEXT[@]}"               # G4: start $G_LOW; no candidate left, so stopped is empty ("stopped": null in JSON, no
+                             #     `Stopped:` line); $G_WAIT stays blocked while $G_LOW is open
 T plan show "$G_LOW" --backlog "$BACKLOG"   # until Next: done
 T plan release "$G_LOW" --backlog "$BACKLOG" --abandon   # G5: abandon a finished attempt; $G_LOW is open again
-bd ready -l auto             # lists $G_LOW (open, unassigned) and $G_WAIT still blocked
+bd ready -l auto             # lists only $G_LOW (open, unassigned); $G_WAIT is absent: blocked by the open $G_LOW
 T "${NEXT[@]}"               # G5: skip $G_LOW abandoned; nothing started; $G_OFF and $G_WAIT never appear
 # G6, an entry that exits before the agent: no Codex login for that one round's entry
 G_RELAUNCH=$(cd "$TRACKER" && bd create "Smoke relaunch" -p 1 -l auto --silent) && echo "G_RELAUNCH=$G_RELAUNCH" >> "$SMOKE/env.sh"
@@ -434,7 +440,7 @@ ls "$SMOKE/markers"          # empty: no hook ran
 |---|---|---|
 | G1 order | `$G_TOP` first; only it claimed (`bd show`: others open, unassigned) | another task first; a claim on a task left unadmitted |
 | G2 idempotent | `report running`, no new entry, no new attempt row | a second launch or admission |
-| G3 hierarchy | `$G_CHILD` before `$G_LOW` | `$G_LOW` first (ancestry ignored) |
+| G3 hierarchy | the pre-check printed `G3 can prove ancestry`, and `$G_CHILD` started before `$G_LOW` | `$G_LOW` first (ancestry ignored); an `INCONCLUSIVE` pre-check proves nothing either way |
 | G5 abandon | `skip abandoned`; no new attempt for `$G_LOW` | the round admitted it again |
 | approval, blockers | `$G_OFF`, `$G_PARENT` and `$G_WAIT` never in any move | an unapproved or blocked task taken |
 | publication | each finished task published to `remote.git` (Run F rules) | a forced or missing push |
@@ -448,6 +454,15 @@ refusal included), 3 when admission stopped on, or a move says, `unavailable:*`,
 `unknown` (a verify's `branch=` word and `skip unavailable:ancestry` included; rerun), 1 for a refused round (`label`,
 `tracker_root`, `database`) or one stopped on its own refused inputs. A `report claim_leaked` move names a task whose
 claim a failed start could not return: `bd unclaim <task> --if-assignee taskloop` by hand.
+
+**Observed (smoke 7, Linux/OrbStack, real Codex, 2026-11-10).** Run G passed: G1 to G6 as written, every move in
+`rounds.log` in fixed words, no marker. Real `bd ready` rows carry `parent`, and an ancestor outside the ready set
+(the unapproved epic) resolves through `bd show`. Findings fixed in this runbook afterwards: G3 as first written could not
+prove the parent tie-break (natural id gave the same order; now the pre-check above), `bd ready -l auto` lists only
+`$G_LOW` (G5), and a round with no candidate left has an empty `stopped` (G4). Not observed live yet: a real reboot or
+network loss mid-start, `refused slot_busy`, `refused claim_lost`, `stuck:expired_admitted` reached by a round,
+`report claim_leaked`, `skip unavailable:ancestry`, a round's `verify` or `repeat` move, a publication refused or
+retried by a round, two concurrent rounds, macOS.
 
 **Not run yet.**
 

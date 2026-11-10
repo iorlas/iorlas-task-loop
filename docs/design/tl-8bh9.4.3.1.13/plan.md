@@ -556,6 +556,18 @@ Review repairs (same day, before any commit):
   every admission path including the `no_free_slot` stop; GUIDE row `claim_leaked`.
 - **`input` and `task` stop the round**; an admitted attempt whose launch is `unavailable`/`uncertain` stops admission.
 - **The label is stripped once** before the check and the ready read; `selection.natural` uses `isdecimal`.
+
+Smoke 7 (Run G, Linux/OrbStack, real Codex, 2026-11-10): passed. Real `bd ready` rows carry `parent`, and ancestors
+outside the ready set resolve through `bd show` (section 16's open point, now observed). Findings, fixed afterwards in
+the runbook: G3 could not prove the parent tie-break when natural id gave the same order (a pre-check now requires
+`$G_LOW` to sort first by id); `bd ready -l auto` lists only `$G_LOW` (`$G_WAIT` is blocked by it); G1/G4 now say that
+a candidate hitting `no_free_slot` gets no move and that `stopped` is empty (JSON `null`) when no candidate is left.
+Also afterwards: the `Next: start` guide for `refused claim_lost` follows section 4 (`tl plan release --abandon`, then
+`tl plan start`; the .9 hand re-claim as `taskloop` is withdrawn: it could take another actor's task), and `skip
+attempted`/`skip abandoned` moves and their round-log lines name the attempt holding the task. Not observed live yet: a
+real reboot or network loss mid-start, `refused slot_busy`, `refused claim_lost`, `stuck:expired_admitted` reached by a
+round, `report claim_leaked`, `skip unavailable:ancestry`, a round's `verify` or `repeat` move, a publication refused or
+retried by a round, two concurrent rounds, macOS.
 - **JSON.** The round shape also carries `logged` (the dashboard needs it as the human `Log:` line does).
 - **Order of moves.** Settle moves, then every `skip` (selection runs before admission), then `start` moves, then
   `publish` moves, then the closing log line.

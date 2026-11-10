@@ -206,8 +206,9 @@ def _admit(ports: Advancing, request: NextRequest, current: tuple[AttemptStatus,
         return "refused:tracker" if error.kind == "malformed" else "unavailable:tracker"
     attempts = {each.task_id: each.release is not None and each.release.abandoned for each in current}
     ordered, skipped = order(rows, ancestry(ports.ready, rows), attempts, ACTOR)
+    ids = {each.task_id: each.attempt_id for each in current}
     for task_id, reason in skipped:
-        trail.add(Move(task_id, "skip", reason))
+        trail.add(Move(task_id, "skip", reason, ids.get(task_id, "")))  # attempted/abandoned: the attempt that holds it
     for row in ordered:
         result = start(ports.starting, _request(request, row.task_id))
         if isinstance(result, Started):

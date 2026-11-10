@@ -116,6 +116,8 @@ and nothing acts on it. For `refused claim_lost` the attempt stays `admitted` an
 for it gains: "If the last entry says `claim_lost`, the tracker claim was taken back: check `bd show <task>`; re-claim it
 by hand as `taskloop` before `tl plan start`, or leave it." While an entry runs, `plan show` cannot tell a loss
 (the line is written at exit); see Q4.
+Superseded by [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md) section 4: the guide no longer suggests a hand re-claim as
+`taskloop` (it could take another actor's task); a truly lost claim is `tl plan release --abandon`, then `tl plan start`.
 
 ## 5. The idle gap between steps (honest answer)
 
