@@ -1,7 +1,9 @@
-"""Admit one plan attempt: the only writer of `reservation` and of the admitted `plan_attempt` row; it runs nothing.
+"""Admit a plan attempt: the only writer of `reservation` and of the admitted `plan_attempt` row; it runs nothing.
 
-An admitted attempt stays unregistered (entry_* NULL): the body refuses it with `unregistered_entry` until
-`PlanStore.register_entry` registers its entry. One attempt per task; nothing here releases, retries or replaces one.
+A task's first attempt takes a free slot and the tracker claim (`admit`); a repeat (`admit_repeat`) is the step's next
+attempt, which takes over the reservation its previous attempt holds in the same transaction, so the slot is never
+released between attempts. An admitted attempt stays unregistered (entry_* NULL): the body refuses it with
+`unregistered_entry` until `PlanStore.register_entry` registers its entry. Nothing here releases a slot or a claim.
 """
 
 import math
@@ -19,7 +21,7 @@ from git_porcelain import GitUnavailable, Repo
 
 from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.plan_types import PLAN_NAME, AttemptKey, Checkouts, FileRef, plan_stage
+from taskloop.plan_types import ATTEMPTS, PLAN_NAME, AttemptKey, Checkouts, FileRef, RepeatReason, plan_stage
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import SlotsUnavailable, SlotView, observe
 from taskloop.task import TaskInspection, TaskInspectionError
@@ -28,9 +30,20 @@ type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, 
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
 type Refusal = Literal[
-    "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint"
+    "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
+    "not_repeatable", "repeat_cap",
 ]
-GENERATION = 1  # fixed until a release slice introduces monotonic generations
+GENERATION = 1  # a fresh admission's; a repeat advances it on the held reservation (until a release slice moves it to `slot`)
+# The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
+# clean completely published `planned`/`unchanged` answer (the gate of `plan_commit` and the verdict), and no verdict.
+PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
+EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id),
+p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
+ AND r.generation=p.generation)
+AND EXISTS (SELECT 1 FROM plan_execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
+ AND e.disposition IN ('planned','unchanged') AND e.publication='complete')
+AND NOT EXISTS (SELECT 1 FROM plan_verification v WHERE v.attempt_id=p.attempt_id)
+FROM plan_attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 NOT_CLAIMED = frozenset({"missing_binary", "version", "not_found", "lint"})  # BdError kinds where the claim certainly did not happen
 
 
@@ -70,6 +83,20 @@ class AdmitUnavailable:
 
 
 type AdmitResult = Admitted | AdmitRefused | AdmitUnavailable
+
+
+@dataclass(frozen=True)
+class RepeatRequest:
+    """The step's next attempt: `previous` is the current attempt it repeats, `text` its complete admitted input."""
+
+    previous: AttemptKey
+    text: str
+    deadline: float
+    reason: RepeatReason
+
+
+class _Lost(Exception):
+    """No reservation row moved from the previous attempt: roll the new attempt back."""
 
 
 @dataclass(frozen=True)
@@ -151,9 +178,69 @@ class PlanAdmission:
     def _choices(self, request: AdmitRequest) -> AdmitRefused | None:
         if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
             return AdmitRefused("choices")
-        if not math.isfinite(request.deadline):
+        return self._deadline(request.deadline)
+
+    def _deadline(self, deadline: float) -> AdmitRefused | None:
+        if not math.isfinite(deadline):
             return AdmitRefused("deadline")
-        return AdmitRefused("expired") if self.clock() >= request.deadline else None
+        return AdmitRefused("expired") if self.clock() >= deadline else None
+
+    def admit_repeat(self, request: RepeatRequest) -> Admitted | AdmitRefused | AdmitUnavailable:
+        """The next attempt N of `previous` (P), its input written first under N's key: in one write transaction, every
+        check re-read under the lock, insert N (P's choices, number + 1, generation + 1) and move the held reservation
+        from P to N, fenced on P and its generation. Afterwards every fenced write of P is refused."""
+        refused = self._deadline(request.deadline)
+        if refused is not None:
+            return refused
+        previous = request.previous
+        key = AttemptKey(uuid4().hex, secrets.token_hex(16), previous.reservation_generation + 1)
+        try:
+            ref = self.files.put_input(key, request.text)
+        except (EvidenceError, UnicodeError, OSError) as error:
+            return AdmitRefused("input", detail=why(error))
+        try:
+            return self._takeover(self._open(), request, key, ref)
+        except _Lost:
+            return AdmitRefused("task_attempted")
+        except sqlite3.IntegrityError as error:  # caught after the rollback: a concurrent repeat's UNIQUE number or previous
+            return AdmitRefused("task_attempted", detail=why(error))
+        except sqlite3.Error as error:
+            return AdmitUnavailable("store", detail=why(error))
+
+    def _takeover(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
+        previous = request.previous
+        with self.begin(con):
+            row: tuple[object, ...] | None = con.execute(PREVIOUS, (previous.attempt_id, previous.dispatch_token,
+                                                                    previous.reservation_generation)).fetchone()
+            if row is None:
+                return AdmitRefused("not_repeatable")
+            if row[10]:
+                return AdmitRefused("task_attempted")
+            number = row[1]
+            if not isinstance(number, int) or number >= ATTEMPTS:
+                return AdmitRefused("repeat_cap")
+            if not row[11]:
+                return AdmitRefused("not_repeatable")
+            refused = self._deadline(request.deadline)
+            if refused is not None:
+                return refused
+            attempt = {
+                "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
+                "adapter": row[2], "backlog": row[3], "task_id": row[4], "repo_id": row[5], "slot": row[6],
+                "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
+                "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
+                "repeat_reason": request.reason,
+            }
+            values = bound(ATTEMPT_ADMITTED, attempt)
+            con.execute(f"INSERT INTO plan_attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
+            moved = con.execute(
+                """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
+                AND generation=?""",
+                (key.attempt_id, row[5], row[6], previous.attempt_id, previous.reservation_generation),
+            )
+            if moved.rowcount != 1:
+                raise _Lost
+        return Admitted(key, str(row[6]))
 
     def _task(self, request: AdmitRequest) -> TaskInspection | AdmitRefused | AdmitUnavailable:
         try:
@@ -240,7 +327,8 @@ class PlanAdmission:
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
                 "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "repo_id": repo_id, "slot": name,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
-                "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline,
+                "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
+                "previous_attempt_id": None, "repeat_reason": None,
             }
             values = bound(ATTEMPT_ADMITTED, attempt)
             con.execute(f"INSERT INTO plan_attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)

@@ -128,9 +128,9 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified", 0, 8),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty", 1, 8),
-        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted", 1, 8),
+        ({P: "# Plan\n"}, "collected verified verify=verified", 0, 9),
+        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty", 1, 9),
+        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted", 1, 9),
         ({}, "pending verification verify=unsettled:unsafe", 1, 5),
     ],
     ids=["verified", "rejected", "uncommitted", "unsafe"],
@@ -142,9 +142,10 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert entry() == code
     assert entry.lines == [line] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
-    # two Git opens (root, slot) before dispatch; the one verification: three to commit, two for the clean check, one
-    # to judge or list; the worker is observed once, right before the commit, never when the paths are unsafe
-    assert entry.waits == [] and entry.git_opens == opens and entry.observed == ([] if files == {} else [WORKER])
+    # two Git opens (root, slot) before dispatch; the one verification: four to commit (the staged set read before the
+    # record), two for the clean check, one
+    # to judge or list; the worker is observed right before each Git write (stage, record), never when the paths are unsafe
+    assert entry.waits == [] and entry.git_opens == opens and entry.observed == ([] if files == {} else [WORKER, WORKER])
 
 
 INCOMPLETE = "collected incomplete verify=not_applicable"

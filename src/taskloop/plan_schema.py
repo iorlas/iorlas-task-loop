@@ -5,7 +5,7 @@ import sqlite3
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=4,
+    version=5,
     name="factory",
     steps={},
     ddl="""
@@ -29,8 +29,12 @@ CREATE TABLE plan_attempt (
  session_ref TEXT, session_conflict INTEGER NOT NULL DEFAULT 0 CHECK(session_conflict IN (0,1)),
  base_commit TEXT CHECK(base_commit IS NULL OR length(base_commit) IN (40,64)),
  plan_commit TEXT CHECK(plan_commit IS NULL OR length(plan_commit) IN (40,64)),
+ number INTEGER NOT NULL CHECK(number >= 1),
+ previous_attempt_id TEXT UNIQUE REFERENCES plan_attempt(attempt_id),
+ repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored')),
+ CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(plan_commit IS NULL OR phase='captured'),
- UNIQUE(adapter, backlog, task_id)
+ UNIQUE(adapter, backlog, task_id, number)
 );
 CREATE TABLE plan_execution (
  attempt_id TEXT PRIMARY KEY REFERENCES plan_attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
@@ -57,11 +61,12 @@ SLOT = "repo_id,name,cwd"
 RESERVATION = "slot,repo_id,cwd,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline"
+    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
-    "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,plan_commit"
+    "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,plan_commit,"
+    "number,previous_attempt_id"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,tokens_known,t_in,t_cached,t_out,"

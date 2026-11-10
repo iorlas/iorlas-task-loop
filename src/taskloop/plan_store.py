@@ -2,15 +2,22 @@
 
 import json
 import sqlite3
-from collections.abc import Callable, Generator
-from contextlib import AbstractContextManager, contextmanager
-from dataclasses import astuple, dataclass
+from dataclasses import astuple
 from typing import Literal
 
 from any_agent.procs import Worker
-from sqlite_store import begin_immediate
 
-from taskloop.plan_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, current, prefixed
+from taskloop.plan_reads import (
+    PlanReads,
+    StoreRefused,
+    StoreUnavailable,
+    as_int,
+    as_listed,
+    as_nullable_int,
+    as_nullable_text,
+    as_text,
+)
+from taskloop.plan_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, prefixed
 from taskloop.plan_types import (
     RULES,
     Admission,
@@ -32,61 +39,6 @@ from taskloop.task import TaskReference, TaskScope
 # A registration write (the entry's or the harness's) waits at most this for the write lock, so it finishes well inside
 # the registered start's fixed 5 s window; every other write keeps the library's 5 s.
 REGISTRATION_BUSY_MS = 1500
-
-
-@dataclass(frozen=True)
-class AttemptRow:
-    """One attempt as the status reads see it; the key is for further reads only, never for display."""
-
-    key: AttemptKey
-    backlog: str
-    task_id: str
-    slot: str
-    phase: str
-    entry: tuple[int, str, str] | None
-    deadline: float
-    worker: tuple[int, int] | None  # the agent's pid and process group, once registered
-
-
-class StoreUnavailable(Exception):
-    """No progress was acknowledged by the store."""
-
-
-class StoreRefused(Exception):
-    """The authoritative admission or reservation fence does not match."""
-
-
-def _str(value: object) -> str:
-    if isinstance(value, str):
-        return value
-    raise StoreUnavailable("Malformed stored text")
-
-
-def _int(value: object) -> int:
-    if isinstance(value, int):
-        return value
-    raise StoreUnavailable("Malformed stored integer")
-
-
-def _nullable_int(value: object) -> int | None:
-    return None if value is None else _int(value)
-
-
-def _nullable_str(value: object) -> str | None:
-    return None if value is None else _str(value)
-
-
-def _listed(value: object) -> tuple[str, ...]:
-    """The stored `commit_paths` JSON array (NULL for an answer that is not valid)."""
-    if value is None:
-        return ()
-    try:
-        paths = json.loads(_str(value))
-    except ValueError as error:
-        raise StoreUnavailable("Malformed stored paths") from error
-    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
-        raise StoreUnavailable("Malformed stored paths")
-    return tuple(str(path) for path in paths)
 
 
 def _identity(worker: Worker) -> tuple[int, str, str]:
@@ -125,41 +77,23 @@ def _verdict(row: tuple[object, ...]) -> Verdict | None:
     if kind is None:
         return None
     if kind == "verified":
-        return Verified(_str(blob), bool(_int(reused)))
+        return Verified(as_text(blob), bool(as_int(reused)))
     rule = next((rule for rule in RULES if rule == reason), None)
     if kind != "rejected" or rule is None:
         raise StoreUnavailable("Invalid stored verdict")
     return Rejected(rule)
 
 
-class PlanStore:
-    def __init__(
-        self,
-        connect: Callable[[], sqlite3.Connection | None],
-        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
-    ) -> None:
-        """`begin` is the writer transaction; a composition on a Store passes its begin_immediate, which evicts a failed shared writer."""
-        self.connect, self.begin = connect, begin
-
-    @contextmanager
-    def _connection(self, *, write: bool = False) -> Generator[sqlite3.Connection]:
-        try:
-            con = self.connect()
-            if con is None or not current(con):
-                raise StoreUnavailable("Factory database unavailable or incompatible")
-            if write:
-                with self.begin(con):
-                    yield con
-            else:
-                yield con
-        except sqlite3.Error as error:
-            raise StoreUnavailable("Factory database operation failed") from error
+class PlanStore(PlanReads):
+    """The fenced writes of an admitted attempt and the reads they need; the status reads are `PlanReads`'."""
 
     def _load(self, con: sqlite3.Connection, key: AttemptKey) -> AttemptRecord | None:
+        """The fenced read; `start` (E) is the previous attempt's X, else its B, frozen since this attempt took over."""
         row: tuple[object, ...] | None = con.execute(
             f"""SELECT {prefixed("p", ATTEMPT_LOADED)},
-            (SELECT cwd FROM reservation WHERE slot=p.slot AND repo_id=p.repo_id) FROM plan_attempt p
-            WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
+            (SELECT cwd FROM reservation WHERE slot=p.slot AND repo_id=p.repo_id),
+            (SELECT coalesce(q.plan_commit, q.base_commit) FROM plan_attempt q WHERE q.attempt_id=p.previous_attempt_id)
+            FROM plan_attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
             astuple(key),
         ).fetchone()
         if row is None:
@@ -169,26 +103,32 @@ class PlanStore:
         held = con.execute(
             "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
         ).fetchone()
-        if held != (row[2], key.reservation_generation, key.attempt_id) or row[23] is None:
+        if held != (row[2], key.reservation_generation, key.attempt_id) or row[25] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):
             raise StoreUnavailable("Malformed deadline")
+        start = as_nullable_text(row[26])
+        if (row[24] is None) != (start is None):  # a later attempt always starts where a captured one ended
+            raise StoreUnavailable("Malformed previous attempt")
         admission = Admission(
             key,
-            TaskReference(TaskScope(_str(row[0])), _str(row[1])),
-            RepoId(_str(row[2])),
-            _str(row[3]),
-            _str(row[23]),
-            FileRef(_str(row[4]), _str(row[5])),
-            _str(row[6]),
-            _str(row[7]),
-            _str(row[8]),
+            TaskReference(TaskScope(as_text(row[0])), as_text(row[1])),
+            RepoId(as_text(row[2])),
+            as_text(row[3]),
+            as_text(row[25]),
+            FileRef(as_text(row[4]), as_text(row[5])),
+            as_text(row[6]),
+            as_text(row[7]),
+            as_text(row[8]),
             float(row[9]),
-            (_int(row[10]), _str(row[11]), _str(row[12])),
+            (as_int(row[10]), as_text(row[11]), as_text(row[12])),
+            as_int(row[23]),
         )
-        worker = None if row[15] is None else Worker(pid=_int(row[15]), pgid=_int(row[16]), start=_str(row[17]), boot=_str(row[18]))
-        session, conflict, base, plan = _nullable_str(row[19]), bool(_int(row[20])), _nullable_str(row[21]), _nullable_str(row[22])
-        return AttemptRecord(admission, _str(row[13]), _int(row[14]), worker, session, conflict, base, plan)
+        pid, pgid, began, boot = row[15:19]
+        worker = None if pid is None else Worker(pid=as_int(pid), pgid=as_int(pgid), start=as_text(began), boot=as_text(boot))
+        session, conflict = as_nullable_text(row[19]), bool(as_int(row[20]))
+        base, plan = as_nullable_text(row[21]), as_nullable_text(row[22])
+        return AttemptRecord(admission, as_text(row[13]), as_int(row[14]), worker, session, conflict, base, plan, start)
 
     def load(self, key: AttemptKey) -> AttemptRecord | None:
         with self._connection() as con:
@@ -199,14 +139,6 @@ class PlanStore:
         if record is None or record.admission != admission:
             raise StoreRefused("changed_admission")
         return record
-
-    def state(self, key: AttemptKey) -> tuple[str, bool] | None:
-        """Dispatch phase and recorded session conflict, without needing a live reservation (historical reads)."""
-        with self._connection() as con:
-            row = con.execute(
-                "SELECT phase,session_conflict FROM plan_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
-            ).fetchone()
-            return None if row is None else (_str(row[0]), bool(_int(row[1])))
 
     def register_entry(
         self, key: AttemptKey, entry: tuple[int, str, str], now: float, replacing: Replaced | None = None
@@ -227,7 +159,7 @@ class PlanStore:
                 return "refused"
             if row[0] != "admitted":
                 return "conflict"
-            stored = None if any(value is None for value in row[2:5]) else (_int(row[2]), _str(row[3]), _str(row[4]))
+            stored = None if any(value is None for value in row[2:5]) else (as_int(row[2]), as_text(row[3]), as_text(row[4]))
             if entry == stored or stored != (None if replacing is None else replacing.identity):
                 return "conflict"  # replacing an identity with itself would only bump rev under a live dispatch read
             # the row was read in this same immediate transaction, so no revision predicate is needed
@@ -235,38 +167,6 @@ class PlanStore:
                 "UPDATE plan_attempt SET entry_pid=?,entry_start=?,entry_boot=?,rev=rev+1 WHERE attempt_id=?", (*entry, key.attempt_id)
             )
             return "accepted"
-
-    def attempt_of(self, backlog: str, task_id: str) -> tuple[AttemptKey, str, tuple[int, str, str] | None] | None:
-        """The recovery read: a task's attempt key, phase and registered entry, with no reservation or deadline check."""
-        with self._connection() as con:
-            row: tuple[object, ...] | None = con.execute(
-                """SELECT attempt_id,dispatch_token,generation,phase,entry_pid,entry_start,entry_boot FROM plan_attempt
-                WHERE adapter='beads' AND backlog=? AND task_id=?""",
-                (backlog, task_id),
-            ).fetchone()
-        if row is None:
-            return None
-        entry = None if any(value is None for value in row[4:7]) else (_int(row[4]), _str(row[5]), _str(row[6]))
-        return AttemptKey(_str(row[0]), _str(row[1]), _int(row[2])), _str(row[3]), entry
-
-    def attempts(self, backlog: str | None = None, task_id: str | None = None) -> tuple[AttemptRow, ...]:
-        """Every attempt (or one backlog's, or one task's), by backlog and task: SELECT only, no reservation or deadline check."""
-        with self._connection() as con:
-            rows: list[tuple[object, ...]] = con.execute(
-                """SELECT attempt_id,dispatch_token,generation,backlog,task_id,slot,phase,entry_pid,entry_start,entry_boot,deadline,
-                worker_pid,worker_pgid FROM plan_attempt WHERE adapter='beads' AND (?1 IS NULL OR backlog=?1) AND (?2 IS NULL OR task_id=?2)
-                ORDER BY backlog,task_id""",
-                (backlog, task_id),
-            ).fetchall()
-        found: list[AttemptRow] = []
-        for row in rows:
-            entry = None if any(value is None for value in row[7:10]) else (_int(row[7]), _str(row[8]), _str(row[9]))
-            if not isinstance(row[10], (int, float)):
-                raise StoreUnavailable("Malformed deadline")
-            key = AttemptKey(_str(row[0]), _str(row[1]), _int(row[2]))
-            worker = None if row[11] is None or row[12] is None else (_int(row[11]), _int(row[12]))
-            found.append(AttemptRow(key, _str(row[3]), _str(row[4]), _str(row[5]), _str(row[6]), entry, float(row[10]), worker))
-        return tuple(found)
 
     def warm(self) -> None:
         """Open (and on first use check) this store's connection now; StoreUnavailable when it cannot."""
@@ -380,7 +280,7 @@ class PlanStore:
                 (commit, admission.key.attempt_id),
             )
             row = con.execute("SELECT plan_commit FROM plan_attempt WHERE attempt_id=?", (admission.key.attempt_id,)).fetchone()
-        stored = None if row is None else _nullable_str(row[0])
+        stored = None if row is None else as_nullable_text(row[0])
         if stored is None:
             raise StoreRefused("changed_answer")
         return stored
@@ -421,30 +321,30 @@ class PlanStore:
         ).fetchone()
         if row is None:
             return None
-        tokens = tuple(_nullable_int(v) for v in row[10:13]) if row[9] else None
-        cumulative = tuple(_nullable_int(v) for v in row[14:17]) if row[13] else None
+        tokens = tuple(as_nullable_int(v) for v in row[10:13]) if row[9] else None
+        cumulative = tuple(as_nullable_int(v) for v in row[14:17]) if row[13] else None
         facts = ExecutionFacts(
-            _nullable_int(row[0]),
+            as_nullable_int(row[0]),
             bool(row[1]),
-            _nullable_str(row[2]),
-            _nullable_str(row[3]),
+            as_nullable_text(row[2]),
+            as_nullable_text(row[3]),
             bool(row[4]),
             bool(row[5]),
             None if row[6] is None else bool(row[6]),
-            _nullable_str(row[7]),
-            _nullable_int(row[8]),
+            as_nullable_text(row[7]),
+            as_nullable_int(row[8]),
             None if tokens is None else (tokens[0], tokens[1], tokens[2]),
             None if cumulative is None else (cumulative[0], cumulative[1], cumulative[2]),
-            _nullable_int(row[17]),
-            _nullable_str(row[18]),
+            as_nullable_int(row[17]),
+            as_nullable_text(row[18]),
         )
-        evidence = Evidence(*(FileRef(_str(row[i]), _str(row[i + 1])) for i in (19, 21, 23, 25)))
-        kind, publication = _str(row[27]), _str(row[32])
+        evidence = Evidence(*(FileRef(as_text(row[i]), as_text(row[i + 1])) for i in (19, 21, 23, 25)))
+        kind, publication = as_text(row[27]), as_text(row[32])
         if kind not in ("validation_pending", "valid", "missing", "json_invalid", "schema_invalid"):
             raise StoreUnavailable("Invalid answer phase")
         if publication not in ("complete", "pending", "conflict", "fault"):
             raise StoreUnavailable("Invalid publication phase")
-        answer = AnswerState(kind, _nullable_str(row[28]), _nullable_str(row[29]), _listed(row[30]), _nullable_str(row[31]))
+        answer = AnswerState(kind, as_nullable_text(row[28]), as_nullable_text(row[29]), as_listed(row[30]), as_nullable_text(row[31]))
         return StoredExecution(key, facts, evidence, answer, publication, _verdict(row[33:37]))
 
     def collect(self, key: AttemptKey) -> StoredExecution | None:

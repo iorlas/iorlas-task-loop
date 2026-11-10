@@ -25,9 +25,9 @@ HOOKS = ("pre-commit", "commit-msg", "prepare-commit-msg", "post-commit", "post-
 ANSWER = AnswerState("valid", "planned", P, (P,), "Plan tl-1")
 
 
-def quiet() -> bool:
-    """The worker is gone (these tests run no agent)."""
-    return True
+def quiet() -> Unsettled | None:
+    """The worker is gone and the attempt holds its reservation (these tests run no agent)."""
+    return None
 
 
 def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) -> tuple[Path, Path, Path]:
@@ -60,7 +60,7 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) 
 def admission(main: Path, slot: Path) -> Admission:
     key = checkouts(main).identity().key
     task = TaskReference(TaskScope("tasks"), "tl-1")
-    choices = ("m", "e", "s", 100, (1, "", ""))
+    choices = ("m", "e", "s", 100, (1, "", ""), 1)
     return Admission(AttemptKey("attempt", "dispatch", 1), task, RepoId(key), "s1", str(slot), FileRef("i", "d"), *choices)
 
 

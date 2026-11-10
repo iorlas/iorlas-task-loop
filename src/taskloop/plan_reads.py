@@ -1,0 +1,170 @@
+"""The plan store's connection and its status reads (SELECT only, no reservation or deadline check): a task's current
+attempt, every attempt, a dispatch phase, and the attempts of one step. `PlanStore` adds the fenced writes."""
+
+import json
+import sqlite3
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, contextmanager
+from dataclasses import astuple, dataclass
+
+from sqlite_store import begin_immediate
+
+from taskloop.plan_schema import current
+from taskloop.plan_types import ATTEMPTS, AttemptKey, FileRef, StepAttempt
+
+
+@dataclass(frozen=True)
+class AttemptRow:
+    """One attempt as the status reads see it; the key is for further reads only, never for display. `successor`: a
+    later attempt of the step names this one (it was repeated, so it is fenced and superseded)."""
+
+    key: AttemptKey
+    backlog: str
+    task_id: str
+    slot: str
+    phase: str
+    entry: tuple[int, str, str] | None
+    deadline: float
+    worker: tuple[int, int] | None  # the agent's pid and process group, once registered
+    number: int
+    previous_attempt_id: str | None
+    repeat_reason: str | None
+    successor: bool
+
+
+class StoreUnavailable(Exception):
+    """No progress was acknowledged by the store."""
+
+
+class StoreRefused(Exception):
+    """The authoritative admission or reservation fence does not match."""
+
+
+def as_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    raise StoreUnavailable("Malformed stored text")
+
+
+def as_int(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    raise StoreUnavailable("Malformed stored integer")
+
+
+def as_nullable_int(value: object) -> int | None:
+    return None if value is None else as_int(value)
+
+
+def as_nullable_text(value: object) -> str | None:
+    return None if value is None else as_text(value)
+
+
+def as_listed(value: object) -> tuple[str, ...]:
+    """The stored `commit_paths` JSON array (NULL for an answer that is not valid)."""
+    if value is None:
+        return ()
+    try:
+        paths = json.loads(as_text(value))
+    except ValueError as error:
+        raise StoreUnavailable("Malformed stored paths") from error
+    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+        raise StoreUnavailable("Malformed stored paths")
+    return tuple(str(path) for path in paths)
+
+
+STEP = """SELECT p.number,p.base_commit,p.plan_commit,p.input_path,p.input_digest,e.disposition,e.commit_paths,p.previous_attempt_id
+FROM plan_attempt p LEFT JOIN plan_execution e ON e.attempt_id=p.attempt_id"""
+
+
+def _step(row: tuple[object, ...]) -> StepAttempt:
+    """A dispatched attempt: its B is recorded (a broken chain otherwise)."""
+    base, commit = as_text(row[1]), as_nullable_text(row[2])
+    return StepAttempt(as_int(row[0]), base, commit, as_nullable_text(row[5]), as_listed(row[6]), FileRef(as_text(row[3]), as_text(row[4])))
+
+
+class PlanReads:
+    def __init__(
+        self,
+        connect: Callable[[], sqlite3.Connection | None],
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
+    ) -> None:
+        """`begin` is the writer transaction; a composition on a Store passes its begin_immediate, which evicts a failed shared writer."""
+        self.connect, self.begin = connect, begin
+
+    @contextmanager
+    def _connection(self, *, write: bool = False) -> Generator[sqlite3.Connection]:
+        try:
+            con = self.connect()
+            if con is None or not current(con):
+                raise StoreUnavailable("Factory database unavailable or incompatible")
+            if write:
+                with self.begin(con):
+                    yield con
+            else:
+                yield con
+        except sqlite3.Error as error:
+            raise StoreUnavailable("Factory database operation failed") from error
+
+    def state(self, key: AttemptKey) -> tuple[str, bool] | None:
+        """Dispatch phase and recorded session conflict, without needing a live reservation (historical reads)."""
+        with self._connection() as con:
+            row = con.execute(
+                "SELECT phase,session_conflict FROM plan_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
+            ).fetchone()
+            return None if row is None else (as_text(row[0]), bool(as_int(row[1])))
+
+    def attempt_of(self, backlog: str, task_id: str) -> tuple[AttemptKey, str, tuple[int, str, str] | None] | None:
+        """The recovery read: a task's current attempt (its highest number) key, phase and registered entry, with no
+        reservation or deadline check."""
+        with self._connection() as con:
+            row: tuple[object, ...] | None = con.execute(
+                """SELECT attempt_id,dispatch_token,generation,phase,entry_pid,entry_start,entry_boot FROM plan_attempt
+                WHERE adapter='beads' AND backlog=? AND task_id=? ORDER BY number DESC LIMIT 1""",
+                (backlog, task_id),
+            ).fetchone()
+        if row is None:
+            return None
+        entry = None if any(value is None for value in row[4:7]) else (as_int(row[4]), as_text(row[5]), as_text(row[6]))
+        return AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), entry
+
+    def attempts(self, backlog: str | None = None, task_id: str | None = None) -> tuple[AttemptRow, ...]:
+        """Every attempt (or one backlog's, or one task's), by backlog, task and number, the current attempt of each task
+        first: SELECT only, no reservation or deadline check."""
+        with self._connection() as con:
+            rows: list[tuple[object, ...]] = con.execute(
+                """SELECT attempt_id,dispatch_token,generation,backlog,task_id,slot,phase,entry_pid,entry_start,entry_boot,deadline,
+                worker_pid,worker_pgid,number,previous_attempt_id,repeat_reason,
+                EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id) FROM plan_attempt p
+                WHERE adapter='beads' AND (?1 IS NULL OR backlog=?1) AND (?2 IS NULL OR task_id=?2) ORDER BY backlog,task_id,number DESC""",
+                (backlog, task_id),
+            ).fetchall()
+        found: list[AttemptRow] = []
+        for row in rows:
+            entry = None if any(value is None for value in row[7:10]) else (as_int(row[7]), as_text(row[8]), as_text(row[9]))
+            if not isinstance(row[10], (int, float)):
+                raise StoreUnavailable("Malformed deadline")
+            key = AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2]))
+            worker = None if row[11] is None or row[12] is None else (as_int(row[11]), as_int(row[12]))
+            found.append(
+                AttemptRow(key, as_text(row[3]), as_text(row[4]), as_text(row[5]), as_text(row[6]), entry, float(row[10]), worker,
+                           as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])))
+            )
+        return tuple(found)
+
+    def chain(self, key: AttemptKey) -> tuple[StepAttempt, ...]:
+        """Attempts 1..n of the key's dispatched step, oldest first, followed through `previous_attempt_id` (at most
+        ATTEMPTS): the earlier ones are frozen once their successor exists. No reservation check; an absent key, an
+        undispatched attempt or a broken chain is StoreUnavailable."""
+        found: list[tuple[object, ...]] = []
+        with self._connection() as con:
+            row: tuple[object, ...] | None = con.execute(
+                STEP + " WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?", astuple(key)
+            ).fetchone()
+            while row is not None and len(found) < ATTEMPTS:
+                found.append(row)
+                row = None if row[7] is None else con.execute(STEP + " WHERE p.attempt_id=?", (row[7],)).fetchone()
+        steps = tuple(_step(each) for each in reversed(found))
+        if not steps or [step.number for step in steps] != list(range(1, len(steps) + 1)):
+            raise StoreUnavailable("Malformed step chain")
+        return steps

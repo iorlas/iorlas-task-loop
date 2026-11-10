@@ -29,11 +29,13 @@ from taskloop.plan_types import (
     AttemptKey,
     Checkouts,
     FileEntry,
+    FileRef,
     NotApplicable,
     Rejected,
     Rule,
     SlotFiles,
     StageRules,
+    StepAttempt,
     StoredExecution,
     Unsettled,
     Verified,
@@ -360,6 +362,11 @@ def rules(cap: int = 1 << 20) -> StageRules:
     return StageRules(D, file_cap=cap)
 
 
+def one(base: str, paths: tuple[str, ...]) -> tuple[StepAttempt, ...]:
+    """Attempt 1 alone, `planned`: today's one-step chain."""
+    return (StepAttempt(1, base, None, "planned", paths, FileRef("input.txt", "d")),)
+
+
 @pytest.mark.parametrize(
     ("changes", "paths", "cap", "expected"),
     [
@@ -377,18 +384,18 @@ def test_judge_rules_the_verify_path_cannot_reach(
     base = head(slot)
     for files in changes:
         commit(slot, files)
-    found = judge(repo, repo.path, base, head(slot), rules(cap), paths, unchanged=False)
+    found = judge(repo, repo.path, head(slot), rules(cap), one(base, paths))
     assert found == expected if expected is not None else isinstance(found, Verified)
 
 
 def test_a_commit_that_does_not_descend_from_b_or_is_no_commit(repo: FakeRepo, slot: FakeWorktree) -> None:
     base = commit(slot, {"notes.txt": "x"})
     slot.checkout("HEAD^")
-    assert judge(repo, repo.path, base, head(slot), rules(), (P,), unchanged=False) == Rejected("not_descendant")
+    assert judge(repo, repo.path, head(slot), rules(), one(base, (P,))) == Rejected("not_descendant")
     tree = slot.snapshot("HEAD").head_tree
     assert tree is not None
     for reported in ("c" * 40, tree, base[:12]):  # an abbreviation resolves to another name of a commit: never X itself
-        assert judge(repo, repo.path, base, reported, rules(), (P,), unchanged=False) == Rejected("commit_absent")
+        assert judge(repo, repo.path, reported, rules(), one(base, (P,))) == Rejected("commit_absent")
 
 
 @pytest.mark.parametrize("unread", ["parent", "blob"])

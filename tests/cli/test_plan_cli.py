@@ -16,7 +16,7 @@ from taskloop import cli_composition, cli_plan
 from taskloop.cli import main
 from taskloop.plan import SANDBOX
 from taskloop.plan_admit import AdmitRequest, AdmitResult, Admitted
-from taskloop.plan_launch import Launched, LaunchResult
+from taskloop.plan_launch import Entry, Launched, LaunchResult
 from taskloop.plan_ops import (
     Adoption,
     AttemptStatus,
@@ -44,11 +44,11 @@ STATUS = AttemptStatus("tasks", "tl-1", "attempt", "s1", "captured", "gone", Att
 ERROR = {"kind", "reason", "message", "claim_leaked", "admitted", "slots"}
 STATUS_KEYS = {
     "backlog", "task", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process", "worker",
-    "leftovers",
+    "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier",
 }
 REPEAT = AttemptStatus(
     "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
-    ("uncommitted", "?? docs/design/tl-1/note.md", "+3 more"),
+    ("uncommitted", "?? docs/design/tl-1/note.md", "+3 more"), 2, "first", "uncommitted", (("first", "uncommitted"),),
 )
 
 
@@ -81,6 +81,11 @@ class Launcher:
         return Launched(KEY, ENTRY)
 
 
+class NoRepeat:
+    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int) -> Started | Failed:
+        raise AssertionError("a first start never repeats")
+
+
 def test_start_flags_and_config_reach_the_request_and_the_openers(
     tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -91,7 +96,7 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     @contextmanager
     def opener(database: Path, artifacts: Path) -> Generator[Starting | Failed]:
         opened.append((database, artifacts))
-        yield Starting(PlanStore(lambda: con), admission, Launcher(), lambda: 1000)
+        yield Starting(PlanStore(lambda: con), admission, Launcher(), lambda: 1000, NoRepeat())
 
     monkeypatch.setattr(cli_composition, "open_plan_start", opener)
     config = tmp_path / "scratch.toml"
@@ -105,19 +110,29 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     output = capsys.readouterr()
     assert json.loads(output.out) == {
         "status": "started", "backlog": "tasks", "task": "tl-1", "attempt_id": "attempt", "existing": False,
-        "entry": {"pid": 7, "start": "entry-start", "boot": "boot"},
+        "entry": {"pid": 7, "start": "entry-start", "boot": "boot"}, "number": None, "result": "",
     }
     assert "dispatch-token-never-shown" not in output.out + output.err
     assert not home.exists()
 
 
 VIEW = SlotView("s2", Path("/slots/s2"), "unknown", "dirty")
-STARTED = {"status", "backlog", "task", "attempt_id", "existing", "entry"}
+STARTED = {"status", "backlog", "task", "attempt_id", "existing", "entry", "number", "result"}
 CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (START, Started("started", "tasks", "tl-1", "attempt", False, ENTRY), 0, ["started: attempt attempt for tl-1", cli_plan.HELD], STARTED),
     (START, Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY), 0, ["existing attempt; its admitted choices stand"], STARTED),
     (START, Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY), 0, ["already_running: attempt"], STARTED),
     (START, Started("already_dispatched", "tasks", "tl-1", "attempt", True), 0, ["already_dispatched: attempt"], STARTED),
+    (START, Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:paths"), 0, ["Result: rejected:paths"],
+     STARTED),
+    (START, Started("repeated", "tasks", "tl-1", "next", False, ENTRY, number=2), 0,
+     ["repeated: attempt next for tl-1", "attempt 2 of at most 3; attempt 1's choices stand; deadline from --minutes", cli_plan.HELD],
+     STARTED),
+    (START, Failed("refused", "repeats_exhausted"), 1, ["refused:repeats_exhausted", cli_plan.GUIDE["repeats_exhausted"]], ERROR),
+    (START, Failed("refused", "repeat_cap"), 1, ["tl plan start: refused:repeat_cap"], ERROR),
+    (START, Failed("refused", "not_repeatable"), 1, ["tl plan start: refused:not_repeatable"], ERROR),
+    (START, Failed("unsettled", "worker_alive"), 3, ["tl plan start: unsettled:worker_alive", cli_plan.GUIDE["unsettled"]], ERROR),
+    (START, Failed("unsettled", "superseded"), 3, ["tl plan start: unsettled:superseded"], ERROR),
     (START, Failed("refused", "no_free_slot", slots=(VIEW,)), 1, ["tl plan start: refused:no_free_slot", "s2 unknown dirty /slots/s2"],
      ERROR),
     (START, Failed("refused", "registration_refused"), 1, ["refused:registration_refused"], ERROR),
@@ -130,9 +145,13 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      STATUS_KEYS | {"directory", "entry_log"}),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Unsettled: uncommitted",
-      "  ?? docs/design/tl-1/note.md", "  +3 more", "Next: repeat (deferred)", cli_plan.GUIDE["repeat"]],
+      "  ?? docs/design/tl-1/note.md", "  +3 more", f"Next: repeat\n{cli_plan.GUIDE['repeat']}",
+      "Attempt: attempt (2 of at most 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1"],
      STATUS_KEYS | {"directory", "entry_log"}),
-    (["plan", "list", "--stuck"], Listed((STATUS,)), 0, ["tl-1\ttasks\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
+    (["plan", "list", "--stuck"], Listed((STATUS,)), 0,
+     ["task\tbacklog\tattempt\tslot", "tl-1\ttasks\t1/3\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
+    (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
+     ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log"}),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("reused", "tasks", "tl-1", "attempt"), 0, ["reused: attempt attempt"],
      {"status", "backlog", "task", "attempt_id"}),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("rejected", "paths"), 1, ["tl plan verify: rejected:paths"], ERROR),
@@ -172,8 +191,7 @@ def test_every_next_step_renders_with_its_guidance(step: Next, monkeypatch: pyte
                   Path("/d"), Path("/d/entry.log"))
     monkeypatch.setitem(cli_plan.OPERATIONS, ("plan", "show"), lambda _arguments, _loaded: shown)
     assert main(["plan", "show", "tl-1", "--backlog", "tasks"]) == 0
-    deferred = " (deferred)" if step == "repeat" else ""
-    assert f"Next: {step}{deferred}\n{cli_plan.GUIDE[step]}" in capsys.readouterr().out
+    assert f"Next: {step}\n{cli_plan.GUIDE[step]}" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("entry", words(EntryState))
@@ -220,8 +238,8 @@ def admitted(path: Path) -> None:
         con.execute("INSERT INTO reservation VALUES ('s1','repo','/slots/s1',1,'attempt')")
         con.execute(
             """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline)
-            VALUES ('attempt',?,1,'beads','tasks','tl-1','repo','s1','input.txt',?,1,'m','high','workspace-write',100)""",
+            input_digest,schema_version,model,effort,sandbox,deadline,number)
+            VALUES ('attempt',?,1,'beads','tasks','tl-1','repo','s1','input.txt',?,1,'m','high','workspace-write',100,1)""",
             (KEY.dispatch_token, hashlib.sha256(b"x").hexdigest()),
         )
     con.close()

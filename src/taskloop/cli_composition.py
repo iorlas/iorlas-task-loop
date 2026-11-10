@@ -21,8 +21,10 @@ from taskloop.composition import (
     worker_gone,
 )
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
+from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import Entry, entry_process
 from taskloop.plan_ops import Adoption, Failed, Reads, Seen, Starting, require_database
+from taskloop.plan_repeat import PlanRepeat
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import Checkouts
@@ -81,12 +83,20 @@ def open_plan_reads(database: Path) -> Generator[Reads | Failed]:
 
 @contextmanager
 def open_plan_start(database: Path, artifacts: Path) -> Generator[Starting | Failed]:
-    """The database guard first, then the admission and the launcher on the same paths."""
+    """The database guard first, then the admission, the launcher and the repeat (with the verifier's shared writer, which
+    this closes) on the same paths."""
+    store = Store(SCHEMA)
     with _read_only(database) as con:
-        if isinstance(con, Failed):
-            yield con
-        else:
-            yield Starting(_reader(con), open_plan_admission(database, artifacts), open_launcher(database, artifacts), time.time)
+        try:
+            if isinstance(con, Failed):
+                yield con
+            else:
+                reader, admission, launcher = _reader(con), open_plan_admission(database, artifacts), open_launcher(database, artifacts)
+                verifier = open_plan_verifier(database, store)
+                repeat = PlanRepeat(reader, verifier, PlanFiles(artifacts), admission, launcher, worker_gone, entry_seen, time.time)
+                yield Starting(reader, admission, launcher, time.time, repeat)
+        finally:
+            store.close_shared()
 
 
 @contextmanager

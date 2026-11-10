@@ -87,7 +87,8 @@ currently hardcodes `user_version == (1,)` and must read `SCHEMA.version`; the e
 - A refused, crashed or stuck attempt keeps its `plan_attempt` row and its held `reservation` and **stays unresolved**.
 - **Nothing in this slice or the next can resume, retry, release, replace or delete it.** No second admission for that task
   is possible (`task_attempted`), and the slot stays held, until a later *release slice* exists. That slice does not exist
-  yet and is not designed here.
+  yet and is not designed here. (Later, [.4.3.1.8](../tl-8bh9.4.3.1.8/plan.md): a captured attempt whose slot has Git
+  leftovers is repeated by the step's next attempt, which takes the held reservation over; nothing is released.)
 - Only a person editing `factory.db` by hand could free it; that is outside this design and not offered as a path.
 Generation is fixed at 1 (Q5 decided: acceptable because the body also fences on `attempt_id` and `dispatch_token`, and
 no release exists to reuse a slot). The release slice must introduce monotonic generations before it deletes any reservation.

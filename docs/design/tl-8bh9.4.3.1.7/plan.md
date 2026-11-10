@@ -211,6 +211,10 @@ row (`UPDATE plan_attempt`, `UPDATE plan_execution` are already `plan_store.py`)
 
 ## 7. The repeat: this slice reports it, a named slice launches it
 
+> Superseded by [.4.3.1.8](../tl-8bh9.4.3.1.8/plan.md): `tl plan start` on a captured attempt repeats it as the step's
+> next attempt (a fresh session, no resume; the reservation taken over; at most 3 attempts, then `repeats_exhausted`).
+> `plan show` prints `Next: repeat` without "(deferred)". The text below is this slice's record.
+
 **What a repeat is.** A new attempt of the same task, launched with `LaunchInputs.resume = <native session>` (the field
 exists in any_agent `protocol.py`) and a fixed feedback prompt: the listing of section 5 step 6 (or the `unsafe` /
 `schema_invalid` reason) and "commit it (list it in `paths`) or remove it". .4.3.1 already says a correction

@@ -1,7 +1,9 @@
 """Commit, check clean, then judge: the one operation that settles a stored valid `planned` or `unchanged` answer.
 
-The entry (once, after the run) and `tl plan verify` run the same operation; running it again finishes a crash at any
-step. A stored verdict is returned with no Git read; slot state and every unknown store nothing.
+The entry (once, after the run), `tl plan verify` and a repeating `tl plan start` run the same operation; running it
+again finishes a crash at any step. A stored verdict is returned with no Git read; slot state and every unknown store
+nothing. Right before each factory Git write the attempt must still hold the reservation: a verify of an attempt that a
+repeat took over is `superseded`, never a commit on the next attempt's slot.
 """
 
 from collections.abc import Callable
@@ -88,16 +90,24 @@ class PlanVerifier:
         except (StoreUnavailable, StoreRefused, NotSettled, GitUnavailable, Unreadable):
             return None
 
+    def _quiet(self, record: AttemptRecord) -> Unsettled | None:
+        """Asked right before each factory Git write: this attempt still holds the reservation (a fresh fenced load, else
+        `superseded`) and its registered worker is gone (a captured attempt always has one; none counts as alive)."""
+        try:
+            held = self.store.load(record.admission.key)
+        except StoreRefused:
+            held = None
+        if held is None or held.admission != record.admission:
+            return Unsettled("superseded")
+        worker = record.worker
+        return None if worker is not None and self.gone(worker) else Unsettled("worker_alive")
+
     def _settle(self, record: AttemptRecord, base: str, stored: StoredExecution) -> VerifyResult:
-        """Outside any transaction: X (stored, adopted or made), then the clean tree at X, then the verdict."""
+        """Outside any transaction: X (stored, adopted or made), then the clean tree at X, then the verdict over the
+        step's chain."""
         admission, answer, commit = record.admission, stored.answer, record.plan_commit
         if commit is None:
-            worker = record.worker
-
-            def quiet() -> bool:  # a captured attempt always has a registered worker; none counts as alive
-                return worker is not None and self.gone(worker)
-
-            settled = settle(self.checkouts, self.files, admission, base, answer, quiet)
+            settled = settle(self.checkouts, self.files, admission, base, answer, lambda: self._quiet(record))
             if isinstance(settled, Unsettled):
                 return settled
             if isinstance(settled, Rejected):  # nothing_written: no commit to bind
@@ -110,8 +120,7 @@ class PlanVerifier:
             return root
         if record.plan_commit is None and answer.disposition == "unchanged" and self.store.plan_commit(admission, commit) != commit:
             return VerifyUnavailable("inconsistent")
-        unchanged = answer.disposition == "unchanged"
-        found = judge(self.checkouts(root), root, base, commit, admission.rules, answer.paths, unchanged=unchanged)
+        found = judge(self.checkouts(root), root, commit, admission.rules, self.store.chain(admission.key))
         return self._kept(record, base, commit, found)
 
     def _kept(self, record: AttemptRecord, base: str, commit: str | None, found: Verdict) -> Verdict | VerifyUnavailable:

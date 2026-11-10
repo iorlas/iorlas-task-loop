@@ -20,6 +20,9 @@ type WorkerGone = Callable[[Worker], bool]
 TRAILER: Final = "Task-Loop-Attempt"  # the factory's commit trailer; an agent's message may never carry it
 PLAN_NAME: Final = "plan.md"
 MiB: Final = 1 << 20
+ATTEMPTS: Final = 3  # attempts of one step at most (2 repeats); always compared as `number >= ATTEMPTS`
+type RepeatReason = Literal["uncommitted", "unsafe", "ignored"]
+REPEATABLE: Final[tuple[RepeatReason, ...]] = ("uncommitted", "unsafe", "ignored")  # the only leftovers a repeat hands back
 
 
 @dataclass(frozen=True)
@@ -90,11 +93,11 @@ class Admission:
     sandbox: str
     deadline: float
     entry: tuple[int, str, str]
+    number: int  # the attempt's number in its step (1, 2, 3), admitted with it
 
     @property
     def rules(self) -> StageRules:
         return plan_stage(self.task.task_id)
-
 
 
 @dataclass(frozen=True)
@@ -115,6 +118,20 @@ class AttemptRecord:
     session_conflict: bool
     base_commit: str | None  # B: the slot HEAD read just before dispatch; never part of the fenced Admission
     plan_commit: str | None = None  # the commit the stage ends at (X, or B for `unchanged`), written once
+    start: str | None = None  # E: where the previous attempt ended (its X, else its B), read frozen; None for attempt 1
+
+
+@dataclass(frozen=True)
+class StepAttempt:
+    """One dispatched attempt of a step as the chain verdict reads it (frozen once a successor exists): its B, its X
+    (None until stored), its valid answer's disposition and committed paths, and its admitted input."""
+
+    number: int
+    base_commit: str
+    plan_commit: str | None
+    disposition: str | None
+    paths: tuple[str, ...]
+    input_ref: FileRef
 
 
 @dataclass(frozen=True)
@@ -164,7 +181,8 @@ RULES: Final[tuple[Rule, ...]] = (
 
 @dataclass(frozen=True)
 class Verified:
-    """Every rule held over (B, X, the one-step chain, the plan blob); `reused`: the agent answered `unchanged`, X is B."""
+    """Every rule held over the step's chain (B1, each attempt's commit, the plan blob at Xn); `reused`: no attempt of
+    the step committed anything, the plan at B1 stands."""
 
     plan_blob: str
     reused: bool = False
@@ -179,8 +197,9 @@ class Rejected:
 
 @dataclass(frozen=True)
 class Unsettled:
-    """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `uncommitted`, `unsafe`,
-    `ignored`); nothing stored, retryable. `listing` is data for a person (the leftovers, or the unsafe path), never parsed."""
+    """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `worker_alive`, `superseded`,
+    `staged`, `uncommitted`, `unsafe`, `ignored`); nothing stored, retryable. `listing` is data for a person and a repeat's
+    feedback (the leftovers, the unsafe path, the ignored paths), never parsed."""
 
     reason: str
     listing: tuple[str, ...] = ()

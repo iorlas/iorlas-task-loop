@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import replace
+from pathlib import Path
 from typing import Final, Literal
 
 from any_agent import CodexHarness, DecodedAnswer, Harness, InvalidAnswer, LaunchInputs, LaunchSpec, RunHooks, RunOutcome, decode_answer
@@ -30,7 +31,7 @@ from taskloop.plan_types import (
     decode_plan_answer,
     execution_facts,
 )
-from taskloop.plan_verify import observe_slot
+from taskloop.plan_verify import SlotState, observe_slot, staged
 
 type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
 type Credentials = Callable[[], tuple[str, dict[str, str]]]
@@ -226,7 +227,7 @@ class PlanAttempts:
         harness, spec = launch
         running = False
         try:
-            base = self._base(admission)
+            base = self._base(record)
             if isinstance(base, AttemptResult):
                 return base
             self.gate.warm()  # the first gated open runs here, never inside the harness registration window
@@ -238,24 +239,35 @@ class PlanAttempts:
             if not running:
                 harness.cleanup()
 
-    def _base(self, admission: Admission) -> str | AttemptResult:
+    def _base(self, record: AttemptRecord) -> str | AttemptResult:
         """B: the slot HEAD the agent starts from, read just before dispatch while the deadline is ahead; only a born,
-        detached, clean slot of the admitted repository dispatches."""
+        detached, clean slot of the admitted repository dispatches. A repeat starts at E, where the previous attempt
+        ended, and its leftovers (`dirty`) are expected: they are its feedback, but nothing may be staged (`staged`): the
+        factory's commit records the whole index."""
+        admission = record.admission
         if self.clock() >= admission.deadline:  # crossed while resolving the launch: stays admitted
             return AttemptResult("refused", "expired")
         try:
             state = observe_slot(self.checkouts, self.slot_files, admission.cwd, admission.repo_id)
+            problem = None if isinstance(state, str) else self._problem(record, state)
         except GitUnavailable:
             return AttemptResult("unavailable", "git")
         if state == "redirected":
             return AttemptResult("refused", "slot_redirected")
         if isinstance(state, str):
             return AttemptResult("unavailable", state)
-        head, problem = state.head, state.problem()
+        head = state.head
         if head is None or problem is not None:
             return AttemptResult("refused", f"slot_{problem}")
         # the Git reads have no timeout: the deadline is checked again right before the dispatch write
         return AttemptResult("refused", "expired") if self.clock() >= admission.deadline else head
+
+    def _problem(self, record: AttemptRecord, state: SlotState) -> str | None:
+        problem = state.problem(record.start)
+        if record.start is None or problem != "dirty":
+            return problem
+        path = Path(record.admission.cwd)
+        return "staged" if staged(self.checkouts(path), path) else None
 
     def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec] | AttemptResult:
         try:

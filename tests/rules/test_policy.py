@@ -70,6 +70,7 @@ WRITERS = {
     ("INSERT", "slot"): "slots.py",
     ("INSERT", "reservation"): "plan_admit.py",
     ("INSERT", "plan_attempt"): "plan_admit.py",
+    ("UPDATE", "reservation"): "plan_admit.py",
     ("INSERT", "plan_execution"): "plan_store.py",
     ("INSERT", "plan_verification"): "plan_store.py",
     ("UPDATE", "plan_attempt"): "plan_store.py",

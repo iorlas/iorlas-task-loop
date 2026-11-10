@@ -1,5 +1,5 @@
-"""Read-only Git evidence for a stage's commit: the slot's pointer and state, and the verdict over (B, X, the one-step
-chain, the plan blob).
+"""Read-only Git evidence for a stage's commits: the slot's pointer and state, and the verdict over the step's chain
+(attempt 1's B, each attempt's commit, the plan blob at the last).
 
 Git only, through `git_porcelain`, plus the narrow file port for the slot's `.git` pointer: no Git write, process, lock,
 ref, push or factory.db access. Identity, the worktree listing and every commit read run from the person's checkout (the
@@ -9,19 +9,21 @@ they mean unknown, never a verdict.
 
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
 
-from git_porcelain import Repo, Tree
+from git_porcelain import GitUnavailable, Repo, Tree
 
-from taskloop.plan_types import PLAN_NAME, Checkouts, Rejected, Rule, SlotFiles, StageRules, Verdict, Verified, path_allowed
+from taskloop.plan_types import PLAN_NAME, Checkouts, Rejected, Rule, SlotFiles, StageRules, StepAttempt, Verdict, Verified, path_allowed
 
 type Problem = Literal["unborn", "branch", "head_moved", "dirty"]
 MODE: Final = "100644"
 POINTER_CAP: Final = 4096  # bytes of a `.git` pointer, `commondir` or `gitdir` file
 LISTED: Final = 50  # leftover lines shown; the rest is counted
 LINE_CAP: Final = 300  # characters of one leftover line
+ORIGINAL: Final = "R<"  # a status record of a rename's original path (staged, never listed)
 GITDIR: Final = re.compile(r"gitdir:\s*(.+)")  # git_porcelain's `real_env.git_dir` rule
 
 
@@ -118,27 +120,51 @@ def observe_slot(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str)
     return SlotState(found.root, info.head, info.branch, checkouts(path).worktree(path).dirty().raw)
 
 
-def listing(repo: Repo, slot: Path) -> tuple[str, ...]:
-    """The slot's leftovers as `XY path` lines from one porcelain status read, at most LISTED, then `+N more`, each made
-    safe to print (`shown`): data for a person and a later repeat prompt, never parsed for control."""
+def _status(repo: Repo, slot: Path) -> tuple[tuple[str, str], ...] | None:
+    """One porcelain v2 status read of the slot as (XY, path) records: `??` for untracked, a rename's original path as
+    its own `R` record; None when Git cannot read the slot."""
     raw = repo.worktree_state(slot)
-    records = () if raw is None else tuple(raw.decode("utf-8", "replace").split("\0"))
-    lines: list[str] = []
-    skip = False
-    for record in records:
-        if skip:
-            skip = False
+    if raw is None:
+        return None
+    found: list[tuple[str, str]] = []
+    renamed = False
+    for record in raw.decode("utf-8", "replace").split("\0"):
+        if renamed:
+            found.append((ORIGINAL, record))  # its deletion is staged with the rename; not a listing line of its own
+            renamed = False
             continue
         kind, _, rest = record.partition(" ")
         fields = {"1": 7, "2": 8, "u": 9}.get(kind)
         if fields is not None:
             parts = rest.split(" ", fields)
-            lines.append(f"{parts[0]} {parts[-1]}")
-            skip = kind == "2"  # a rename's original path follows as its own record
+            found.append((parts[0], parts[-1]))
+            renamed = kind == "2"
         elif kind == "?":
-            lines.append(f"?? {rest}")
-    more = [f"+{len(lines) - LISTED} more"] if len(lines) > LISTED else []
-    return (*(shown(line) for line in lines[:LISTED]), *more)
+            found.append(("??", rest))
+    return tuple(found)
+
+
+def listing(repo: Repo, slot: Path) -> tuple[str, ...]:
+    """The slot's leftovers as `XY path` lines from one porcelain status read, `bounded`: data for a person and a
+    repeat's feedback, never parsed for control."""
+    return bounded(f"{code} {path}" for code, path in _status(repo, slot) or () if code != ORIGINAL)
+
+
+def staged(repo: Repo, slot: Path) -> tuple[str, ...]:
+    """The paths whose index entry differs from HEAD (staged changes, renames' both sides), from one status read; Git
+    unable to read the slot is GitUnavailable, never an empty index."""
+    found = _status(repo, slot)
+    if found is None:
+        raise GitUnavailable("The slot's status is unreadable")
+    return tuple(path for code, path in found if code[0] not in ".?")
+
+
+def bounded(lines: Iterable[str]) -> tuple[str, ...]:
+    """The one listing shape for a person and an agent: every line `shown`, at most LISTED, then `+K more` with the true
+    count of the lines left out. Applied once, where a listing is made."""
+    found = list(lines)
+    more = [f"+{len(found) - LISTED} more"] if len(found) > LISTED else []
+    return (*(shown(line) for line in found[:LISTED]), *more)
 
 
 def shown(line: str) -> str:
@@ -148,27 +174,47 @@ def shown(line: str) -> str:
     return clean if len(clean) <= LINE_CAP else clean[: LINE_CAP - 3] + "..."
 
 
-def judge(repo: Repo, root: Path, base: str, commit: str, rules: StageRules, paths: tuple[str, ...], *, unchanged: bool) -> Verdict:
-    """The rules in order; the first broken one decides. Every read is of content-addressed objects. `unchanged`: X is
-    B and only the plan rules apply to the plan at B (`reused`)."""
+def judge(repo: Repo, root: Path, commit: str, rules: StageRules, steps: tuple[StepAttempt, ...]) -> Verdict:
+    """The rules in order over the step's chain; the first broken one decides. Every read is of content-addressed
+    objects. S: each earlier `planned` attempt's stored X, then `commit` (Xn) when the last attempt is `planned`. Xn is
+    len(S) first-parent commits on attempt 1's B, each S_k one commit on S_k-1 judged against its own attempt's `paths`;
+    then the plan rules at Xn. No commit in the whole step (`commit` is B1): only the plan rules, `reused`. Attempt 1
+    alone is the one-step chain."""
     plan_path = rules.root + PLAN_NAME
     tip = repo.tree(f"{commit}^{{commit}}")
     if tip is None or tip.sha != commit:  # never a tag, tree or abbreviation that resolves to some other commit
         return Rejected("commit_absent")
-    if unchanged:
+    *earlier, last = steps
+    chain = [(each.plan_commit, each.paths) for each in earlier if each.disposition == "planned" and each.plan_commit is not None]
+    chain += [(commit, last.paths)] if last.disposition == "planned" else []
+    if not chain:
         return _plan(tip, plan_path, rules, reused=True)
-    relation = repo.relate(base, commit)
+    parent = steps[0].base_commit
+    relation = repo.relate(parent, commit)
     if relation.ahead != 0:
         return Rejected("not_descendant")
-    if relation.behind != 1:
+    if relation.behind != len(chain):
         return Rejected("chain_length")
-    parent = repo.tree(f"{commit}^")
-    if parent is None:
+    for sha, paths in chain:
+        broken = _link(repo, root, sha, parent, rules, paths)
+        if broken is not None:
+            return Rejected(broken)
+        parent = sha
+    return _plan(tip, plan_path, rules, reused=False)
+
+
+def _link(repo: Repo, root: Path, sha: str, parent: str, rules: StageRules, paths: tuple[str, ...]) -> Rule | None:
+    """One commit of the chain: a commit whose first parent is `parent` (else a merge brought it in), its changes held
+    to its own attempt's listed `paths`."""
+    tree = repo.tree(f"{sha}^{{commit}}")
+    if tree is None or tree.sha != sha:
+        return "commit_absent"
+    up = repo.tree(f"{sha}^")
+    if up is None:
         raise Unreadable("parent")
-    if parent.sha != base:  # one commit ahead, but its first parent is another: a merge brought B in
-        return Rejected("not_descendant")
-    broken = _changes(repo, root, tip, base, rules, paths)
-    return Rejected(broken) if broken is not None else _plan(tip, plan_path, rules, reused=False)
+    if up.sha != parent:
+        return "not_descendant"
+    return _changes(repo, root, tree, parent, rules, paths)
 
 
 def _changes(repo: Repo, root: Path, tip: Tree, base: str, rules: StageRules, paths: tuple[str, ...]) -> Rule | None:

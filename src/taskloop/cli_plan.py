@@ -10,6 +10,7 @@ from taskloop import cli_composition, plan_ops
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.plan import succeeded
 from taskloop.plan_ops import Adoption, AttemptStatus, Checked, Failed, Listed, Result, Shown, Started, StartRequest
+from taskloop.plan_types import ATTEMPTS
 from taskloop.slots import Adopted
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
@@ -20,8 +21,8 @@ GUIDE = {
     "start": "Re-run `tl plan start` to relaunch its entry.",
     "wait": "Its entry runs; wait, then `tl plan show` again.",
     "verify": "Run `tl plan verify`.",
-    "repeat": "The stage left files it did not commit, or listed an unsafe path (above, read now). Its repeat is deferred to "
-    "its own slice: remove the listed files, then `tl plan verify`.",
+    "repeat": "Run `tl plan start` again to repeat it with this listing as feedback, or remove the files and `tl plan verify`.",
+    "repeats_exhausted": "Repeated twice and still unsettled: inspect the slot, tidy it, then `tl plan verify`.",
     "done": "Collected: `succeeded` tells whether the plan was verified.",
     "unknown": "The entry or the store could not be read; run `tl plan show` again.",
     "stuck:expired_admitted": "Nothing in the factory can release it. Leave it, or discard the whole factory.db.",
@@ -33,7 +34,8 @@ GUIDE = {
     "stuck:unpublished": "The result is incomplete; keep the evidence; leave it, or discard the whole factory.db.",
     "stuck:conflict": "The owner inspects the evidence; leave it, or discard the whole factory.db.",
     "unsettled": "The slot has files the stage did not commit (listed), or the slot pointer or HEAD changed. Remove the "
-    "listed files or wait for a repeat; for `redirected` or `head_moved` inspect first. Then `tl plan verify`.",
+    "listed files and `tl plan verify`, or run `tl plan start` again to repeat the step; for `redirected` or `head_moved` "
+    "inspect first; for `worker_alive` stop the worker first; for `staged` unstage the listed paths first.",
     "registration_conflict": "Another start registered its entry first; `tl plan show` follows that attempt.",
 }
 
@@ -85,17 +87,17 @@ def register(commands: Parsers) -> None:
     release.add_argument("slot_name", metavar="SLOT")
     _common(release)
     plan = _add(commands, "plan", f"Plan attempts ({ATTEMPT_ONLY})").add_subparsers(dest="operation", required=True)
-    start = _add(plan, "start", f"Admit (free slot, tracker claim) and launch the task's attempt; {ATTEMPT_ONLY}. {HELD}")
+    start = _add(plan, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim); {ATTEMPT_ONLY}. {HELD}")
     start.add_argument("task_id", metavar="TASK")
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         start.add_argument(flag, required=True)
-    start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt, from now")
+    start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _common(start, "--db", "--artifacts")
     status = _add(plan, "show", f"The task's attempt, its entry, result and next step (read-only; {ATTEMPT_ONLY})")
     status.add_argument("task_id", metavar="TASK")
     status.add_argument("--backlog", required=True)
     _common(status, "--db", "--artifacts")
-    listing = _add(plan, "list", f"Every attempt with its next step (read-only; {ATTEMPT_ONLY})")
+    listing = _add(plan, "list", f"Every task's current attempt with its next step (read-only; {ATTEMPT_ONLY})")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next step is stuck:* or unknown")
     _common(listing, "--db")
     verify = _add(plan, "verify", f"Commit the stage's listed files and verify them ({ATTEMPT_ONLY})")
@@ -174,8 +176,11 @@ def _status_lines(each: AttemptStatus) -> list[str]:
     entry = "" if each.entry_process is None else f" (pid {each.entry_process[0]}, started {each.entry_process[1]})"
     # the stored registration only: the agent may have exited long ago, so it is never shown as running
     worker = "none" if each.worker is None else f"last known pid {each.worker[0]}, process group {each.worker[1]} (not checked)"
+    repeats = "" if each.previous_attempt_id is None else f"; repeats {each.previous_attempt_id}, {each.repeat_reason}"
     return [
-        f"Task: {each.task_id} (backlog {each.backlog})", f"Attempt: {each.attempt_id}", f"Slot: {each.slot}", f"Phase: {each.phase}",
+        f"Task: {each.task_id} (backlog {each.backlog})", f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})",
+        *(f"Earlier: {attempt_id} repeated ({reason})" for attempt_id, reason in each.earlier),
+        f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}", f"Result: {each.result.status} {each.result.reason}".rstrip(),
         f"Succeeded: {'yes' if succeeded(each.result) else 'no'}", f"Deadline passed: {'yes' if each.deadline_passed else 'no'}",
     ]
@@ -194,20 +199,23 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
         case Started():
             entry = "" if result.entry is None else f"; entry pid {result.entry[0]}"
             lines = [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog}){entry}"]
+            lines += [f"Result: {result.result}"] if result.result else []
+            if result.number is not None:
+                stand = f"attempt {result.number - 1}'s choices stand; deadline from --minutes"
+                lines += [f"attempt {result.number} of at most {ATTEMPTS}; {stand}"]
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
             return [*lines, f"This is an {ATTEMPT_ONLY}. Follow it with `tl plan show {result.task_id} --backlog {result.backlog}`."]
         case Shown(status=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             steps = [GUIDE[each.next], *(stuck if each.next.startswith("stuck:") else [])]
-            shown = f"Next: {each.next}" + (" (deferred)" if each.next == "repeat" else "")
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
-            return [*_status_lines(each), *paths, *left, shown, *steps]
+            return [*_status_lines(each), *paths, *left, f"Next: {each.next}", *steps]
         case Listed(attempts=attempts):
-            rows = [f"{a.task_id}\t{a.backlog}\t{a.slot}\t{a.phase}\t{a.entry}\t{a.result.status} {a.result.reason}\t{a.next}"
-                    for a in attempts]
+            rows = [f"{a.task_id}\t{a.backlog}\t{a.number}/{ATTEMPTS}\t{a.slot}\t{a.phase}\t{a.entry}\t"
+                    f"{a.result.status} {a.result.reason}\t{a.next}" for a in attempts]
             kinds = dict.fromkeys(a.next for a in attempts if a.next.startswith("stuck:"))
             steps = [f"{kind}: {GUIDE[kind]}" for kind in kinds] + (stuck if kinds else [])
-            return ["task\tbacklog\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
+            return ["task\tbacklog\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
         case Checked():
             return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})"]
         case Adoption() | Loaded():

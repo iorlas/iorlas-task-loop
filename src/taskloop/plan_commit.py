@@ -3,7 +3,8 @@
 Git and the slot file port only: no factory.db (the verifier stores what this module finds). The only factory module
 that calls `stage` or `record`. The slot pointer is checked before any Git call on the slot and again right before each
 of the two Git writes; the agent's own commit cannot happen under the sandbox, so a moved HEAD is adopted only when it is
-this attempt's own trailer commit from a crash before its recording. `GitUnavailable` and `Unreadable` propagate.
+this attempt's own trailer commit from a crash before its recording. The caller's `quiet` is asked right before each Git
+write too: the worker gone and this attempt still the reservation's holder. `GitUnavailable` and `Unreadable` propagate.
 """
 
 from collections.abc import Callable
@@ -13,7 +14,7 @@ from pathlib import Path
 from git_porcelain import NothingToRecord, Recorded, Repo, Worktree
 
 from taskloop.plan_types import TRAILER, Admission, AnswerState, Checkouts, Rejected, SlotFiles, StageRules, Unsettled, dot_git
-from taskloop.plan_verify import SlotState, listing, observe_slot, pointer
+from taskloop.plan_verify import SlotState, bounded, listing, observe_slot, pointer, staged
 
 
 class NotSettled(Exception):
@@ -32,6 +33,7 @@ class Committed:
 
 
 type Settled = Committed | Unsettled | Rejected
+type Quiet = Callable[[], Unsettled | None]  # None: the factory may write Git in the slot now; else why not
 
 
 def attributes(rules: StageRules) -> tuple[str, ...]:
@@ -57,11 +59,9 @@ def trailer(admission: Admission) -> str:
     return f"{TRAILER}: {admission.key.attempt_id}"
 
 
-def settle(
-    checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: Callable[[], bool]
-) -> Settled:
+def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: Quiet) -> Settled:
     """Steps 2 to 5 of the stage commit for a valid `planned` or `unchanged` answer with no stored `plan_commit`.
-    `quiet` is asked right before any Git write: False (the worker may still run) is `worker_alive`, nothing staged."""
+    `quiet` is asked right before each Git write: its answer (`worker_alive`, `superseded`) stops it, nothing written."""
     state = _observed(checkouts, files, admission)
     if isinstance(state, Unsettled):
         return state
@@ -76,21 +76,22 @@ def settle(
 
 
 def _commit(
-    checkouts: Checkouts, files: SlotFiles, admission: Admission, root: Path, base: str, answer: AnswerState, quiet: Callable[[], bool]
+    checkouts: Checkouts, files: SlotFiles, admission: Admission, root: Path, base: str, answer: AnswerState, quiet: Quiet
 ) -> Settled:
     """Step 4 (the listed paths, Git's own files near them, ignored files), then step 5: stage exactly the listed paths
-    and commit them with the agent's message and this attempt's trailer, the pointer checked before each Git write."""
+    and commit them with the agent's message and this attempt's trailer, `quiet` and the pointer checked before each Git
+    write."""
     slot = checkouts(Path(admission.cwd)).worktree(Path(admission.cwd))  # slot calls run from the slot, under its ceiling
-    refused = _refusal(slot, files, admission, base, answer)
+    refused = refusal(slot, files, admission, base, answer)
     if refused is not None:
         return refused
-    if not quiet():  # a live worker could rewrite `.git` between the check below and the Git write
-        return Unsettled("worker_alive")
-    if _redirected(files, admission, root):
-        return Unsettled("redirected")
+    blocked = _blocked(quiet, files, admission, root)
+    if blocked is not None:
+        return blocked
     slot.stage(answer.paths, literal=True)
-    if _redirected(files, admission, root):
-        return Unsettled("redirected")
+    blocked = _blocked(quiet, files, admission, root) or _foreign(checkouts, admission, answer)
+    if blocked is not None:
+        return blocked
     made = slot.record(f"{answer.message}\n\n{trailer(admission)}", paths="staged", hooks=False)
     if isinstance(made, Recorded):
         return Committed(made.sha)
@@ -99,16 +100,31 @@ def _commit(
     raise NotSettled("git:HookRejected")  # cannot happen with hooks off: unknown, never a verdict
 
 
-def _refusal(slot: Worktree, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Unsettled | None:
-    """Step 4's reads: an unsafe listed path, a changed `.git*` file near them, or an ignored file under them."""
+def _blocked(quiet: Quiet, files: SlotFiles, admission: Admission, root: Path) -> Unsettled | None:
+    """Why the next Git write may not run: the caller's `quiet` (a live worker could rewrite `.git` between the check
+    and the write; another attempt took the reservation over), then the slot pointer."""
+    return quiet() or (Unsettled("redirected") if _redirected(files, admission, root) else None)
+
+
+def _foreign(checkouts: Checkouts, admission: Admission, answer: AnswerState) -> Unsettled | None:
+    """`record` commits the whole index: any staged path the answer did not list (a person's, or an earlier attempt's
+    left staged by a superseded verify) is `staged`, nothing committed."""
+    path = Path(admission.cwd)
+    extra = sorted(set(staged(checkouts(path), path)) - set(answer.paths))
+    return Unsettled("staged", bounded(extra)) if extra else None
+
+
+def refusal(slot: Worktree, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Unsettled | None:
+    """Step 4's reads, no Git write: an unsafe listed path, a changed `.git*` file near them, or ignored files under
+    them (listed)."""
     unsafe = unsafe_path(files, Path(admission.cwd), admission.rules, answer.paths)
     if unsafe is not None:
-        return Unsettled("unsafe", (unsafe,))
+        return Unsettled("unsafe", bounded((unsafe,)))
     dirt = slot.dirty(base, ignored_under=attributes(admission.rules))
     unsafe = git_file(dirt.tracked + dirt.untracked, admission.rules, answer.paths)
     if unsafe is not None:
-        return Unsettled("unsafe", (unsafe,))
-    return Unsettled("ignored") if dirt.ignored else None
+        return Unsettled("unsafe", bounded((unsafe,)))
+    return Unsettled("ignored", bounded(dirt.ignored)) if dirt.ignored else None
 
 
 def _unwritten(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str) -> Settled:
@@ -177,12 +193,12 @@ def leftovers(
     checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, plan_commit: str | None
 ) -> Unsettled | None:
     """Read-only, for a person (`tl plan show`): what a verify would report as a stage to repeat, read now. Before the
-    factory's commit only the listed paths are checked (`unsafe`); after it, or for `unchanged`, the clean-tree check."""
+    factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for `unchanged`, the clean-tree
+    check."""
     if answer.disposition == "planned" and plan_commit is None:
         state = _observed(checkouts, files, admission)
         if isinstance(state, Unsettled) or state.head != base:
             return None
-        unsafe = unsafe_path(files, Path(admission.cwd), admission.rules, answer.paths)
-        return None if unsafe is None else Unsettled("unsafe", (unsafe,))
+        return refusal(checkouts(Path(admission.cwd)).worktree(Path(admission.cwd)), files, admission, base, answer)
     found = clean_at(checkouts, files, admission, plan_commit or base)
     return found if isinstance(found, Unsettled) else None

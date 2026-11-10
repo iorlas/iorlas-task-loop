@@ -18,7 +18,7 @@ from taskloop.cli_composition import adopt, open_plan_reads, open_plan_start, op
 from taskloop.plan import SANDBOX, PlanAttempts
 from taskloop.plan_admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.plan_files import PlanFiles
-from taskloop.plan_launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
+from taskloop.plan_launch import AlreadyRunning, Entry, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.plan_ops import (
     Adoption,
     Checked,
@@ -82,6 +82,19 @@ class Launcher:
         return self.result
 
 
+class Repeats:
+    """The repeat port: records each call; `start` reaches it only for a captured current attempt."""
+
+    def __init__(self, result: Started | Failed | None = None) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str, AttemptKey, Entry | None, int]] = []
+
+    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int) -> Started | Failed:
+        self.calls.append((backlog, task_id, current, entry, minutes))
+        assert self.result is not None, "only a captured attempt repeats"
+        return self.result
+
+
 class Verifier:
     def __init__(self, result: VerifyResult) -> None:
         self.result = result
@@ -116,7 +129,7 @@ def write(path: Path, sql: str, *values: object) -> None:
 
 def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: PlanStore) -> None:
     admission, launcher = Admission(Admitted(KEY, "s1")), Launcher(Launched(KEY, ENTRY))
-    started = start(Starting(empty, admission, launcher, lambda: 1000), REQUEST)
+    started = start(Starting(empty, admission, launcher, lambda: 1000, Repeats()), REQUEST)
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
@@ -125,9 +138,10 @@ def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: PlanSto
 
 
 def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(empty: PlanStore, reader: PlanStore) -> None:
-    fresh = start(Starting(empty, Admission(Admitted(KEY, "s1")), Launcher(LaunchUnavailable("start")), lambda: 10), REQUEST)
+    fresh = start(Starting(empty, Admission(Admitted(KEY, "s1")), Launcher(LaunchUnavailable("start")), lambda: 10, Repeats()), REQUEST)
     assert fresh == Failed("unavailable", "start", admitted=True)
-    existing = start(Starting(reader, Admission(AdmitRefused("task")), Launcher(LaunchUnavailable("start")), lambda: 10), REQUEST)
+    failing = Launcher(LaunchUnavailable("start"))
+    existing = start(Starting(reader, Admission(AdmitRefused("task")), failing, lambda: 10, Repeats()), REQUEST)
     assert existing == Failed("unavailable", "start")
 
 
@@ -143,7 +157,7 @@ def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
     reader: PlanStore, launched: LaunchResult, expected: Started | Failed
 ) -> None:
     admission, launcher = Admission(AdmitRefused("task")), Launcher(launched)
-    assert start(Starting(reader, admission, launcher, lambda: 10), REQUEST) == expected
+    assert start(Starting(reader, admission, launcher, lambda: 10, Repeats()), REQUEST) == expected
     assert admission.requests == []  # the given model, effort and minutes are not applied
     assert launcher.calls == [("tasks", "tl-1")]
 
@@ -151,7 +165,7 @@ def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
 def test_a_concurrent_start_that_won_is_launched_as_existing(admitted: Path, reader: PlanStore) -> None:
     write(admitted, "UPDATE plan_attempt SET task_id='hidden'")
     admission = Admission(AdmitRefused("task_attempted"), lambda: write(admitted, "UPDATE plan_attempt SET task_id='tl-1'"))
-    launched = start(Starting(reader, admission, Launcher(AlreadyRunning(KEY, ENTRY)), lambda: 10), REQUEST)
+    launched = start(Starting(reader, admission, Launcher(AlreadyRunning(KEY, ENTRY)), lambda: 10, Repeats()), REQUEST)
     assert launched == Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY)
     assert len(admission.requests) == 1
 
@@ -168,7 +182,7 @@ VIEW = SlotView("s1", Path("/slots/s1"), "held", attempt_id="other")
 ])
 def test_a_refusal_or_unknown_stops_before_any_launch(empty: PlanStore, admit: AdmitResult, expected: Failed) -> None:
     launcher = Launcher(Launched(KEY, ENTRY))
-    assert start(Starting(empty, Admission(admit), launcher, lambda: 10), REQUEST) == expected
+    assert start(Starting(empty, Admission(admit), launcher, lambda: 10, Repeats()), REQUEST) == expected
     assert launcher.calls == []
 
 
@@ -315,7 +329,7 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     assert opened == []
 
 
-def test_show_reads_leftovers_fresh_and_names_the_deferred_repeat(
+def test_show_reads_leftovers_fresh_and_names_the_repeat(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     path, stray = "docs/design/tl-1/plan.md", "docs/design/tl-1/stray.md"
@@ -366,7 +380,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 5])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 6])
 def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
