@@ -189,7 +189,8 @@ T plan show "$TASK2" --backlog "$BACKLOG"   # repeat until Next: done
 ```
 
 Pass: `Result: collected reused`, `Succeeded: yes`; entry.log `collected reused verify=reused`; `plan_commit` = the seed
-commit (`G -C "$SLOT" rev-parse HEAD`), no new commit, the slot on `task/$TASK2` at it, `status --short` empty,
+commit (`G -C "$SLOT" rev-parse HEAD` in the slot before the run), no new commit, `task/$TASK2` at it, the slot parked
+detached at that commit after the release (slice .11), `status --short` empty,
 `ls "$SMOKE/markers"` empty. Fail:
 `collected rejected:<rule>` (paste it), `unsettled:uncommitted` (the agent changed or left a file while saying `unchanged`),
 or a `planned` answer (`rejected:nothing_written` when it listed the unchanged plan).
@@ -296,9 +297,13 @@ T plan list                                 # one row for $TASK4: the fresh atte
 G -C "$SLOT" status --short; ls "$SMOKE/markers"
 ```
 
-Optional, the held case: after a step ends, write a stray file in the slot before the entry finishes (or let a failed
-run leave one): entry.log ends `release=held:slot_dirty`, `T plan show` says `Next: release`, `T plan release` refuses
-`slot_dirty` with the listing (exit 1, nothing changed); remove the file and `T plan release` parks it.
+Optional, the held case (smoke 5 showed the simple form does not reach it): a stray file written while the agent runs
+gives `unsettled:uncommitted`, `Next: repeat`, and `T plan release` refuses `not_terminal`; the repeat feedback then makes
+the agent delete the listed file, so a held slot belongs to the factory and nobody leaves their own files in it.
+`release=held:slot_dirty` needs a file that appears after verification but before the release, or a failed final result
+that left files behind: entry.log ends `release=held:slot_dirty`, `T plan show` says `Next: release`, `T plan release`
+refuses `slot_dirty` with the listing (exit 1, nothing changed); remove the file and `T plan release` parks it.
+Note: `s1.lock` keeps the last holder's record (dead pid) after release; it is informational only.
 
 | Check | Pass | Fail means |
 |---|---|---|
