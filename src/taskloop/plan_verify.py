@@ -7,6 +7,7 @@ root the verified pointer names); only the status reads run on the slot. `GitUna
 they mean unknown, never a verdict.
 """
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,22 +73,26 @@ def pointer(files: SlotFiles, slot: Path) -> Pointer | None:
     """What `<slot>/.git` names, judged with the resolution Git and git_porcelain's pin use (`(slot / text).resolve()`,
     `(G / commondir).resolve()`), never a lexical one: the slot path itself has no symlink; `.git` is a regular gitdir
     file; G resolves outside the slot to a directory directly under `<C>/worktrees`, C (from `G/commondir`) also outside
-    the slot; and G's back-pointer `G/gitdir` resolves to exactly `<slot>/.git`. Else None (`redirected`). Relative
+    the slot; and G's back-pointer `G/gitdir` resolves to exactly `<slot>/.git`. G and C must also resolve to the very
+    path written (no symlink on the way, so no agent-made link can steer them). Else None (`redirected`). Relative
     pointers (`git worktree add --relative-paths`) resolve against the slot and G as Git resolves them. Plain reads only:
-    a directory, symlink or FIFO at `.git` is refused before any open."""
+    a directory, symlink or FIFO at `.git` is refused before any open. The library re-reads `.git` on each later Git
+    call: a swap after this check is the named residual (design section 4)."""
     if files.resolve(slot) != slot:
         return None
     dotgit = slot / ".git"
     entry = files.lstat(dotgit)
     text = _small(files, dotgit) if entry is not None and entry.kind == "file" and entry.size <= POINTER_CAP else None
     found = None if text is None else GITDIR.fullmatch(text)
-    gitdir = None if found is None else files.resolve(slot / found[1].strip())
-    if gitdir is None or gitdir.is_relative_to(slot):
-        return None
+    named = None if found is None else slot / found[1].strip()
+    gitdir = None if named is None else files.resolve(named)
+    if named is None or gitdir is None or gitdir != Path(os.path.normpath(named)) or gitdir.is_relative_to(slot):
+        return None  # through no symlink at all: the path as written is the path Git resolves
     listed = files.lstat(gitdir)
     common = _small(files, gitdir / "commondir") if listed is not None and listed.kind == "dir" else None
     shared = None if common is None else files.resolve(gitdir / common)
-    if shared is None or shared.is_relative_to(slot) or gitdir.parent != shared / "worktrees":
+    lexical = None if common is None else Path(os.path.normpath(gitdir / common))
+    if shared is None or shared != lexical or shared.is_relative_to(slot) or gitdir.parent != shared / "worktrees":
         return None
     back = _small(files, gitdir / "gitdir")
     return Pointer(gitdir, shared) if back is not None and files.resolve(gitdir / back) == dotgit else None
@@ -110,7 +115,7 @@ def observe_slot(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str)
     info = next((worktree for worktree in repo.worktrees() if worktree.path == path), None)
     if info is None:
         return "not_listed"
-    return SlotState(found.root, info.head, info.branch, repo.worktree(path).dirty().raw)
+    return SlotState(found.root, info.head, info.branch, checkouts(path).worktree(path).dirty().raw)
 
 
 def listing(repo: Repo, slot: Path) -> tuple[str, ...]:

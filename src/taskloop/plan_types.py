@@ -1,5 +1,6 @@
 """Typed admitted-plan facts; none of these records grants admission."""
 
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,8 @@ from taskloop.task import TaskReference
 
 DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
 type Checkouts = Callable[[Path], Repo]  # a fresh Git view from one checkout path
+# The registered worker and its process group observed gone (True), or alive/unknown (False); never descendant proof.
+type WorkerGone = Callable[[Worker], bool]
 TRAILER: Final = "Task-Loop-Attempt"  # the factory's commit trailer; an agent's message may never carry it
 PLAN_NAME: Final = "plan.md"
 MiB: Final = 1 << 20
@@ -262,13 +265,20 @@ type PlanDecoder = Callable[[object, StageRules], PlanAnswer]
 ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
 
 
+def dot_git(name: str) -> bool:
+    """A name that starts with `.git` for Git or for a file system that ignores case and some code points (HFS+ drops
+    zero-width and bidi marks): format characters (Unicode category Cf: U+200B-U+200F, U+202A-U+202E, U+2060-U+206F,
+    U+FEFF, ...) are removed, then the name is case folded."""
+    return "".join(c for c in name if unicodedata.category(c) != "Cf").casefold().startswith(".git")
+
+
 def path_allowed(path: str, rules: StageRules) -> bool:
     """A path the stage may commit: at most 255 bytes, relative, under `rules.root`, no NUL, newline or backslash, and no
     empty, `.` or `..` component nor one that starts with `.git` in any case (macOS file systems ignore case)."""
     if len(path.encode("utf-8", "surrogatepass")) > 255 or any(c in path for c in "\0\n\\") or not path.startswith(rules.root):
         return False
     parts = path.split("/")
-    return len(path) > len(rules.root) and not any(p in ("", ".", "..") or p.casefold().startswith(".git") for p in parts)
+    return len(path) > len(rules.root) and not any(p in ("", ".", "..") or dot_git(p) for p in parts)
 
 
 def _message(message: object) -> bool:

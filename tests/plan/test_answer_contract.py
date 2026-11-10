@@ -85,7 +85,7 @@ def test_the_schema_has_the_five_keys_and_the_unchanged_disposition(tmp_path: Pa
 
 BAD_PATHS = [
     D + "../escape.md", D + ".GIT/hooks", D + ".github/x", D + ".gitkeep", D + "sub//x.md", D + "./x.md", "docs/design/tl-2/x.md",
-    "src/x.py", "/" + EXPECTED, D + "a\\b", D + "a\nb", D + "a\0b", D + "x" * 256, D,
+    "src/x.py", "/" + EXPECTED, D + ".g\u200cit/x", D + ".\ufeffGit", D + "a\\b", D + "a\nb", D + "a\0b", D + "x" * 256, D,
 ]
 
 

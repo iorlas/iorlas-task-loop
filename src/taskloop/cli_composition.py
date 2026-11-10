@@ -11,7 +11,15 @@ from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import Store
 from stream_proc import observe_owned
 
-from taskloop.composition import RealSlotFiles, adopt_slots, checkouts, open_launcher, open_plan_admission, open_plan_verifier
+from taskloop.composition import (
+    RealSlotFiles,
+    adopt_slots,
+    checkouts,
+    open_launcher,
+    open_plan_admission,
+    open_plan_verifier,
+    worker_gone,
+)
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.plan_launch import Entry, entry_process
 from taskloop.plan_ops import Adoption, Failed, Reads, Seen, Starting, require_database
@@ -68,7 +76,7 @@ def open_plan_reads(database: Path) -> Generator[Reads | Failed]:
             yield con
         else:
             reader = _reader(con)
-            yield Reads(reader, entry_seen, time.time, PlanVerifier(reader, checkouts, RealSlotFiles(), time.time).leftovers)
+            yield Reads(reader, entry_seen, time.time, PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time).leftovers)
 
 
 @contextmanager

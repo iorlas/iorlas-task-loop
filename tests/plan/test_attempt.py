@@ -493,6 +493,9 @@ def test_the_sandbox_never_escalates_and_has_no_reviewer() -> None:
     pairs = {key: value for key, _, value in (flag.partition("=") for flag in CODEX_ACCESS if "=" in flag)}
     assert pairs["approval_policy"] == "never" and "approvals_reviewer" not in pairs
     assert pairs["sandbox_workspace_write.writable_roots"] == "[]" and pairs["sandbox_workspace_write.network_access"] == "false"
+    # Codex's workspace-write sandbox also writes /tmp and $TMPDIR by default: both removed (keys from codex 0.167.0)
+    assert pairs["sandbox_workspace_write.exclude_slash_tmp"] == "true"
+    assert pairs["sandbox_workspace_write.exclude_tmpdir_env_var"] == "true"
 
 
 class Spy(CodexHarness):

@@ -81,6 +81,7 @@ class Entry:
         self.waits: list[float] = []
         self.lines: list[str] = []
         self.opened: list[tuple[Path, Path]] = []
+        self.observed: list[Worker] = []
 
     def credentials(self) -> tuple[str, dict[str, str]]:
         self.credential_calls += 1
@@ -108,13 +109,17 @@ class Entry:
     def clock(self) -> float:
         return self.now
 
+    def gone(self, worker: Worker) -> bool:
+        self.observed.append(worker)
+        return True
+
     def wait(self, seconds: float) -> None:
         self.waits.append(seconds)
         self.now = self.wait_to
 
     def __call__(self, inspect: Callable[[int], ProcessObservation] = inspect_process, task_id: str = "tl-1") -> int:
         args = EntryArgs(self.db, self.db.parent, "tasks", task_id)
-        return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append)
+        return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append, self.gone)
 
 
 NOTE = "docs/design/tl-1/note.md"
@@ -123,10 +128,10 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified", 0, 5),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty", 1, 5),
-        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted", 1, 5),
-        ({}, "pending verification verify=unsettled:unsafe", 1, 3),
+        ({P: "# Plan\n"}, "collected verified verify=verified", 0, 8),
+        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty", 1, 8),
+        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted", 1, 8),
+        ({}, "pending verification verify=unsettled:unsafe", 1, 5),
     ],
     ids=["verified", "rejected", "uncommitted", "unsafe"],
 )
@@ -137,8 +142,9 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert entry() == code
     assert entry.lines == [line] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
-    # one Git open before dispatch; the one verification: two to commit, one for the clean check, one to judge or list
-    assert entry.waits == [] and entry.git_opens == opens
+    # two Git opens (root, slot) before dispatch; the one verification: three to commit, two for the clean check, one
+    # to judge or list; the worker is observed once, right before the commit, never when the paths are unsafe
+    assert entry.waits == [] and entry.git_opens == opens and entry.observed == ([] if files == {} else [WORKER])
 
 
 INCOMPLETE = "collected incomplete verify=not_applicable"

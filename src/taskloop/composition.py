@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Protocol
 
 from any_agent import run
+from any_agent.procs import Worker
 from beads_client import Bd, Runner
 from git_porcelain import GitUnavailable, RealRepo, Repo
 from sqlite_store import Store
-from stream_proc import observe_owned, popen_registered
+from stream_proc import OwnedProcess, group_alive, observe_owned, popen_registered
 
 from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
 from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
@@ -158,9 +159,26 @@ def hardened(env: Mapping[str, str]) -> dict[str, str]:
     return entries
 
 
+def ceiling(path: Path, environ: Mapping[str, str]) -> dict[str, str]:
+    """`GIT_CEILING_DIRECTORIES` with the checkout's parent first: when `<checkout>/.git` is gone, git_porcelain pins
+    nothing and Git would discover an enclosing repository (a dotfiles repository at the home that holds the slots root);
+    with the ceiling Git looks at the checkout itself and never above it. An ambient ceiling list is kept after it."""
+    ambient = environ.get("GIT_CEILING_DIRECTORIES")
+    return {"GIT_CEILING_DIRECTORIES": os.pathsep.join([str(path.parent), *([ambient] if ambient else [])])}
+
+
+def worker_gone(worker: Worker) -> bool:
+    """The registered agent process is gone (or its pid now names another process) and no process is left in its
+    process group: the library's identity read and `killpg(pgid, 0)`. Unknown counts as alive. Not a stop proof for
+    descendants that left the group (.4.4)."""
+    seen = observe_owned(OwnedProcess(worker.pid, worker.pgid, worker.start, worker.boot)).kind
+    return seen in ("gone", "different_process") and not group_alive(worker.pgid)
+
+
 def checkouts(path: Path) -> Repo:
-    """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment."""
-    return RealRepo(path, memoize=False, env=hardened(os.environ))
+    """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment, its discovery ceiling
+    at that path: calls that run on a slot open their view from the slot itself."""
+    return RealRepo(path, memoize=False, env=hardened(os.environ) | ceiling(path, os.environ))
 
 
 class RealSlotFiles:
@@ -170,7 +188,7 @@ class RealSlotFiles:
     def lstat(self, path: Path) -> FileEntry | None:
         try:
             found = os.lstat(path)
-        except OSError:
+        except (OSError, ValueError):  # ValueError: an embedded NUL; fails closed like a missing file
             return None
         mode = found.st_mode
         if stat.S_ISREG(mode):
@@ -183,7 +201,7 @@ class RealSlotFiles:
             return None
         try:
             descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        except OSError:
+        except (OSError, ValueError):
             return None
         with os.fdopen(descriptor, "rb") as stream:
             data = stream.read(cap + 1)
@@ -192,7 +210,7 @@ class RealSlotFiles:
     def resolve(self, path: Path) -> Path | None:
         try:
             return path.resolve(strict=True)
-        except (OSError, RuntimeError):
+        except (OSError, RuntimeError, ValueError):
             return None
 
 
@@ -225,7 +243,8 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
 def open_plan_verifier(database: Path, store: Store) -> PlanVerifier:
     """Real wiring for on-demand verification: a shared writer of `store` (the caller closes it) on factory.db, real Git,
     wall clock."""
-    return PlanVerifier(PlanStore(lambda: store.shared_rw(database), store.begin_immediate), checkouts, RealSlotFiles(), time.time)
+    writer = PlanStore(lambda: store.shared_rw(database), store.begin_immediate)
+    return PlanVerifier(writer, checkouts, RealSlotFiles(), worker_gone, time.time)
 
 
 def open_launcher(database: Path, artifacts: Path) -> Launcher:

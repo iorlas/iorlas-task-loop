@@ -96,6 +96,10 @@ def agent(slot: FakeWorktree, files: Files, answer: Mapping[str, object] = PLAN,
     return call
 
 
+def gone(_worker: Worker) -> bool:
+    return True
+
+
 class Counted:
     def __init__(self, checkouts: Checkouts) -> None:
         self.checkouts, self.opens = checkouts, 0
@@ -117,7 +121,7 @@ def captured(
 
 
 def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles) -> PlanVerifier:
-    return PlanVerifier(PlanStore(lambda: con), checkouts, files, lambda: 20)
+    return PlanVerifier(PlanStore(lambda: con), checkouts, files, gone, lambda: 20)
 
 
 def stored(con: sqlite3.Connection) -> list[tuple[object, ...]]:
@@ -196,6 +200,7 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("gitmodules_on_the_way", None, PLANNED | {"docs/.gitmodules": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
     ("github_folder_on_the_way", None, PLANNED | {"docs/.github/x.yml": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
     ("gitignore_under_the_root", None, PLANNED | {D + "sub/.gitignore": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
+    ("hfs_ignorable_gitattributes", None, PLANNED | {"docs/.g\u200cit\ufeffattributes": "x"}, PLAN, None, None, "unsettled:unsafe", 0),
     ("git_file_elsewhere", None, PLANNED | {"src/.gitignore": "x"}, PLAN, None, None, "unsettled:uncommitted", 1),
     ("adopted_after_a_crash", None, PLANNED, PLAN, adopt, None, "verified", 1),
     ("foreign_commit", None, PLANNED, PLAN, foreign, None, "unsettled:head_moved", 1),
@@ -462,7 +467,7 @@ def test_refusals_and_unknowns_before_any_git_read(
         "UPDATE plan_execution SET answer_kind='validation_pending',disposition=NULL,plan_path=NULL,commit_paths=NULL,commit_message=NULL"
     )
     assert verifier(registered, counted, slot_files).verify(KEY) == VerifyUnavailable("validation_pending")
-    assert PlanVerifier(PlanStore(lambda: None), counted, slot_files, lambda: 20).verify(KEY) == VerifyUnavailable("store")
+    assert PlanVerifier(PlanStore(lambda: None), counted, slot_files, gone, lambda: 20).verify(KEY) == VerifyUnavailable("store")
     assert counted.opens == 0 and stored(registered) == []
 
 
@@ -520,7 +525,7 @@ def test_another_verifier_storing_first_is_inconsistent(
             found = super().collect(key)
             return None if found is None else dataclasses.replace(found, verification=None)
 
-    assert PlanVerifier(Racing(lambda: registered), checkouts, slot_files, lambda: 3).verify(KEY) == VerifyUnavailable("inconsistent")
+    assert PlanVerifier(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3).verify(KEY) == VerifyUnavailable("inconsistent")
 
 
 def test_the_real_composition_opens_the_factory_database(tmp_path: Path) -> None:
@@ -638,3 +643,20 @@ def test_the_listing_is_safe_to_print(
     result = verifier(registered, checkouts, slot_files).verify(KEY)
     assert isinstance(result, Unsettled) and result.listing[0] == "?? evil?[31m?name?"
     assert len(result.listing[1]) == 300 and result.listing[1].endswith("...")
+
+
+def test_no_git_write_while_the_worker_may_still_run(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
+) -> None:
+    base = head(slot)
+    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
+    index, seen = dict(slot.state().index), list[Worker]()
+
+    def alive(worker: Worker) -> bool:
+        seen.append(worker)
+        return False
+
+    found = PlanVerifier(PlanStore(lambda: registered), checkouts, slot_files, alive, lambda: 20).verify(KEY)
+    assert found == Unsettled("worker_alive") and seen == [WORKER]
+    assert slot.state().index == index and made(slot, base) == [] and plan_commit(registered) is None
+    assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)  # once it is gone

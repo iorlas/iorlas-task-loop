@@ -1,8 +1,8 @@
 # The agent chooses what to commit; the factory commits it and checks the tree is clean
 
 Task: tl-8bh9.4.3.1.7 (proposed id; after [.4.3.1.5](../tl-8bh9.4.3.1.5/plan.md) and [.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md)).
-Design proposal, 2026-11-10, revision 4: revision 3 (independent review and the owner's answers applied) as implemented,
-plus the repair round after the implementation review (section 16). No live agent has run it. It closes .4.3.1.5 section 9 and changes steps 4-5 of the [one-shot plan](../tl-8bh9.3.2.1/plan.md). Read:
+Design proposal, 2026-11-10, revision 5: revision 3 (independent review and the owner's answers applied) as implemented,
+plus two repair rounds after security reviews (sections 16 and 17). No live agent has run it. It closes .4.3.1.5 section 9 and changes steps 4-5 of the [one-shot plan](../tl-8bh9.3.2.1/plan.md). Read:
 CLAUDE.md, AGENTS.md, glossary, those plans, [.4.3.1](../tl-8bh9.4.3.1/plan.md), [.4.3.1.1](../tl-8bh9.4.3.1.1/plan.md),
 [.4.3.1.4](../tl-8bh9.4.3.1.4/plan.md) and its [live smoke](../tl-8bh9.4.3.1.4/live-smoke.md), `src/taskloop/plan*.py`,
 `composition.py`, `cli_plan.py`, `tests/plan`, git_porcelain 0.13.0 source, any_agent `protocol.py`, `~/tl-smoke`.
@@ -60,7 +60,11 @@ is reported back to you as a failed stage."*
 ## 3. Sandbox flags (decided)
 
 `CODEX_ACCESS`: `approval_policy=never`; `approvals_reviewer=auto_review` removed (it only reviews escalations, which
-`never` never makes). `writable_roots=[]`, `network_access=false` and the push bar stay. A blocked command fails back to
+`never` never makes). `writable_roots=[]`, `network_access=false` and the push bar stay, and
+`sandbox_workspace_write.exclude_slash_tmp=true` and `sandbox_workspace_write.exclude_tmpdir_env_var=true` remove `/tmp`
+and `$TMPDIR`, which workspace-write otherwise also lets the agent write (so it cannot stage a Git directory there; both
+keys are fields of codex 0.167.0's `SandboxWorkspaceWrite`, read from its strings; a codex that needs `/tmp` would fail,
+which the smoke shows). A blocked command fails back to
 the model; nothing runs outside the sandbox. Checked by strings only (codex 0.167.0, never run): `approval_policy`
 takes `untrusted`, `on-request`, `never` or granular; the binary also says `never` falls back to read-only when
 requirements forbid `danger-full-access`, which would stop the plan write: the smoke checks it. Smoke 3 ran on Linux
@@ -76,26 +80,49 @@ and the pin use**, never a lexical one (revision 3's `normpath` let `gitdir: L/.
 a symlink inside the slot pass while Git resolved it into the slot; reproduced with real Git in review). Through a
 narrow file port (plain reads plus `resolve`, in composition; the domain gets bytes, entries or resolved paths):
 1. The slot path has no symlink: `resolve(<slot>) == <slot>` (decided: a symlinked slot path is refused rather than
-   compared through the listing; `tl slot adopt` stores resolved paths).
+   compared through the listing; `tl slot adopt` stores resolved paths). A path the port cannot even resolve (an
+   embedded NUL: `ValueError`) is refused like a missing one, never a traceback.
 2. `lstat(<slot>/.git)` is a **regular file** (a directory, symlink or FIFO is refused before any open), at most 4 KiB;
    it parses as `gitdir: T`.
 3. `G = resolve(<slot> / T)` (a relative T, as `git worktree add --relative-paths` writes it, resolves against the slot,
-   exactly as the pin does) exists, is a directory, and is **not inside the slot**.
-4. `C = resolve(G / <G/commondir>)` (git_porcelain's `common_of` rule) is not inside the slot, and G's parent is
-   exactly `C/worktrees`.
+   exactly as the pin does) exists, is a directory, is **not inside the slot**, and equals the lexically normalised
+   `<slot> / T`: no symlink on the way, so `gitdir: glink` with an agent-made link (right today, retargetable tomorrow)
+   is refused. Git writes real paths, so a person's worktree passes.
+4. `C = resolve(G / <G/commondir>)` (git_porcelain's `common_of` rule), likewise equal to its lexical form, is not inside
+   the slot, and G's parent is exactly `C/worktrees`.
 5. `resolve(G / <G/gitdir>)` (Git's back-pointer, absolute or relative to G, outside the slot) is exactly `<slot>/.git`.
 6. Then Git, from the root (C's parent when C is `.git`, else C), never from the slot: `identity().key == repo_id`,
-   `identity().common_dir == C`, and `worktrees()` lists the slot path with HEAD and branch.
+   `identity().common_dir == C`, and `worktrees()` lists the slot path with HEAD and branch. Honest strength: the key is
+   the hash of the common directory the root reports, so with C already outside the slot and G under `C/worktrees`,
+   `common_dir == C` adds little beyond `key == repo_id`; it is kept as a cheap cross-check of the port's resolution
+   against Git's own, not as a defence.
+7. **Discovery ceiling.** Every factory Git view runs with `GIT_CEILING_DIRECTORIES=<parent of its checkout path>`
+   (ambient ceilings kept after it), and every call that runs on the slot (status, stage, record, the listing) opens
+   its view from the slot itself. When `<slot>/.git` is gone (deleted after the check), git_porcelain pins nothing and
+   Git would otherwise discover an enclosing repository, e.g. a dotfiles repository at `~` above the default slots root
+   `~/.local/share/task-loop/slots`, and commit on the person's branch there (reproduced in review); with the ceiling
+   Git checks the slot only and fails (`unavailable:git:*`).
 Failure: `unsettled:redirected` (before dispatch `refused:slot_redirected`), nothing staged. The check runs in
 `observe_slot` (dispatch, verify, commit and `plan show` all get it) and **again right before `stage` and before
 `record`**.
 
-**Residuals.** (a) A swap between a check and the Git call: the library re-reads `.git` on each call, so the agent can
-still race it; only an explicit pinned Git directory in git_porcelain (`RealRepo(..., git_dir=G)` that never re-reads
-the pointer) closes it. That is a shelf change, **not made here: follow-up** for git_porcelain. (b) A FIFO (or a slow
+**Residuals.** (a) **HIGH, open: a swap between a check and the Git call.** git_porcelain re-reads `<slot>/.git` on every
+call (`real_env.pinned`), so a process still running in the slot can swap the pointer after the check (reproduced in
+review: about 1 in 940 blind tries, and the swapped-in Git directory's `clean` filter ran). This repo shrinks the
+precondition, it does not close it: no Git write happens unless the registered worker and its process group are
+observed gone (`unsettled:worker_alive` otherwise, nothing staged; through a narrow `WorkerGone` port, real
+`stream_proc.observe_owned` plus `group_alive`); that is **not** stop proof for descendants that left the group (.4.4).
+The pointer is checked again before `stage` and before `record`. **Shelf follow-up (exact API):**
+`RealRepo.worktree(path, *, git_dir: Path)` (or `RealRepo(..., pins={checkout: git_dir})`) that pins
+`GIT_DIR=<git_dir>` and `GIT_WORK_TREE=<path>` from the caller's verified value on every call, never re-reading
+`<path>/.git`, and raises `NotARepo` instead of running unpinned when no pin is known (so discovery can never happen
+either); the factory would pass the G it verified. (b) A FIFO (or a slow
 file system) put at `.git`, `G/commondir` or `G/gitdir` between the `lstat` and Git's own read makes the Git call hang:
 local Git reads have no timeout. Accepted for v1; the bound belongs in git_porcelain (a per-call timeout), with (a).
 (c) Whether codex protects a `.git` file inside the writable root was not observed (the binary has gitdir-pointer code).
+(d) Names: a `.git*` component is recognised after removing Unicode format characters (category Cf: zero-width and
+bidi marks, BOM, which HFS+ ignores) and case folding, in the answer decoder and in the pre-stage `.git*` rule; other
+file-system aliasing (NTFS short names, NFD/NFC forms) is not handled (macOS only, not observed).
 
 ## 5. The factory commit and the clean-tree check
 
@@ -119,6 +146,8 @@ order: `captured` -> answer `valid` `planned` or `unchanged`, run clean (`rc=0`,
    - any tracked or untracked changed path with a component that starts with `.git` (any case: `.gitattributes`,
      `.gitignore`, `.gitmodules`, `.github/`) in a folder on the way to a listed path or under the stage root is
      `unsettled:unsafe <path>`: it would change how Git stages the listed paths, and the agent may not commit it;
+   - (revision 5) then, right before the first Git write, the registered worker and its process group must be
+     observed gone, else `unsettled:worker_alive` (retryable, nothing staged);
    - an ignored file there (an attributes file status does not show, or a listed path itself ignored by `.gitignore`,
      `info/exclude` or the global excludes, on which `git add` would fail forever) is `unsettled:ignored`.
    Failure of the file check: `unsettled:unsafe <path>`.
@@ -234,6 +263,8 @@ expected until step 6. `slots._clean` and `_base` need no change: a captured att
 | A changed `.git*` file on the way to a listed path or under the stage root | nothing | `unsettled:unsafe <path>` | repeat / tidy |
 | Listed path is a symlink, under one, not regular, exec, oversize | nothing | `unsettled:unsafe` | repeat / tidy |
 | Ignored attributes file on the plan's path, or a listed path ignored | nothing | `unsettled:ignored` | tidy |
+| The worker or a process of its group is still observed (or unknown) before the factory's Git write | nothing | `unsettled:worker_alive` | stop it, re-run verify |
+| `<slot>/.git` gone (before or after the check) | nothing | `unsettled:redirected`, or `unavailable:git:*` under the ceiling | owner inspects |
 | HEAD moved, not this attempt's trailer commit | nothing | `unsettled:head_moved` | owner inspects |
 | `index.lock`, identity unknown, Git missing or failing | nothing | `unavailable:git:<Type>` | re-run verify |
 | Crash after `stage`, before `record` | nothing | next verify stages again, commits once | re-run |
@@ -336,9 +367,12 @@ the trailer as written, and that `--relative-paths` pointers pass the check. Sti
 (binary strings) and whether `never` falls back to read-only; whether codex protects a `.git` file in the writable
 root; that `git commit` refuses to move a HEAD changed since it read it (git's ref transaction, believed); whether strict
 mode accepts `maxItems` (bounds therefore live in the decoder only); how a resume launch behaves; macOS (Seatbelt,
-`/private` paths). **Residual risk classes:** a clean/smudge/textconv driver or other command from the person's own Git
-config (or a repository config the person wrote) still runs during `status`/`add`/`diff` (section 5); the pointer race
-and the FIFO hang of section 4; and everything codex-dependent (the sandbox actually bounding the agent).
+`/private` paths); whether codex accepts the two `exclude_*` keys and still runs without `/tmp`. **Residual risk
+classes:** (1) HIGH: the pointer swap race of section 4(a), narrowed to "a process that outlives the worker's group"
+until the shelf follow-up lands; (2) a clean/smudge/textconv driver or other command from the person's own Git config
+(or a repository config the person wrote) still runs during `status`/`add`/`diff` (section 5), unobserved; (3) the FIFO
+hang of section 4(b); (4) everything codex-dependent and unobserved: whether the sandbox actually bounds the agent,
+whether codex protects `<slot>/.git`, macOS Seatbelt.
 
 ## 16. Revision 4: the implementation review's repair round
 
@@ -354,3 +388,16 @@ and the FIFO hang of section 4; and everything codex-dependent (the sandbox actu
   residual and the git_porcelain follow-ups are named (section 4); `Admission.plan_path` (unused) removed; stale lines in
   .4.3.1.4 and .4.3.1.5 rewritten; the Git-write rule (tests/rules) also catches a reference of `stage`/`record` on any
   receiver, a bare call, and the name as a string (`getattr(slot, "record")`); it cannot see a name built at runtime.
+
+## 17. Revision 5: the second security review's repair round
+
+- F2 (discovery): `GIT_CEILING_DIRECTORIES` per checkout view and slot calls from the slot (section 4, step 7). A real-Git
+  test puts the person's home under a dotfiles repository, deletes `<slot>/.git`, and shows `settle` is `redirected` and
+  a stage or record on the slot raises, with the dotfiles branch unchanged (it committed there before the fix).
+- F1 (swap): the HIGH residual and the exact shelf API (section 4(a)); here, `worker_alive` before any Git write, the
+  sandbox no longer writes `/tmp` or `$TMPDIR` (section 3), and a pointer must resolve to the very path written
+  (section 4, steps 3-4; a real `gitdir: glink` test).
+- F3: the file port fails closed on an embedded NUL (`ValueError`); a test drives `pointer()` with one.
+- F6: `.git*` names ignore Unicode format characters (section 4(d)), in the decoder and the pre-stage rule.
+- Mutations killed by the tests: no ceiling, no `worker_alive` check, no lexical-equals-resolved check, no format
+  character removal, `exclude_slash_tmp=false`.

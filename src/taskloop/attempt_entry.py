@@ -20,7 +20,7 @@ from pathlib import Path
 from sqlite_store import open_ro
 from stream_proc import ProcessObservation, inspect_process
 
-from taskloop.composition import open_plan_attempts
+from taskloop.composition import open_plan_attempts, worker_gone
 from taskloop.plan import ACCEPTED, PlanAttempts, judged, succeeded
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import StoreUnavailable
@@ -34,6 +34,7 @@ from taskloop.plan_types import (
     VerifyRefused,
     VerifyResult,
     VerifyUnavailable,
+    WorkerGone,
 )
 from taskloop.plan_verifier import PlanVerifier
 
@@ -107,8 +108,10 @@ def enter(
     clock: Callable[[], float],
     wait: Callable[[float], None],
     log: Callable[[str], None],
+    gone: WorkerGone,
 ) -> int:
-    """Run the attempt as its registered entry; the return code is display only."""
+    """Run the attempt as its registered entry; the return code is display only. `gone` observes the worker before the
+    verification's Git write."""
     try:
         if not _exists(args.database):
             log("refused database")
@@ -130,7 +133,7 @@ def enter(
     result = app.execute(key, me)
     published = _publish(app, result, clock, wait)
     accepted = published is not None and published.status in ACCEPTED
-    verified = PlanVerifier(app.store, app.checkouts, app.slot_files, app.clock).verify(key)
+    verified = PlanVerifier(app.store, app.checkouts, app.slot_files, gone, app.clock).verify(key)
     # newly stored facts or a stored verdict: read the terminal outcome back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
@@ -152,7 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args is None:
             log("refused usage")
             return 2
-        return enter(args, open_plan_attempts, inspect_process, time.time, time.sleep, log)
+        return enter(args, open_plan_attempts, inspect_process, time.time, time.sleep, log, worker_gone)
     except BaseException as error:  # the type name only, never its text
         log("failed " + type(error).__name__)
         return 1

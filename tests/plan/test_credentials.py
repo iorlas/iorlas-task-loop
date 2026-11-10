@@ -2,11 +2,15 @@
 the hardened Git environment of every factory Git view."""
 
 from pathlib import Path
+from typing import Literal
 
 import pytest
+from any_agent.procs import Worker
 from git_porcelain import GitUnavailable, RealRepo
+from stream_proc import OwnedProcess, ProcessObservation
 
-from taskloop.composition import checkouts, codex_machine_credentials, hardened
+from taskloop import composition
+from taskloop.composition import checkouts, codex_machine_credentials, hardened, worker_gone
 from taskloop.plan import CredentialsUnavailable
 
 BASE = {"PATH": "/usr/bin:/bin", "HOME": "/home/me"}
@@ -165,8 +169,32 @@ def test_every_factory_git_view_runs_hardened_after_existing_git_config_entries(
         "GIT_CONFIG_VALUE_4": "false",
     }
     monkeypatch.setenv("GIT_CONFIG_COUNT", "0")
-    view = checkouts(Path("/nowhere"))
-    assert isinstance(view, RealRepo) and view.extra_env == hardened({})
+    monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
+    view = checkouts(Path("/slots/s1"))
+    assert isinstance(view, RealRepo) and view.extra_env == hardened({}) | {"GIT_CEILING_DIRECTORIES": "/slots"}
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", "/home")  # the person's own ceiling stays, after the checkout's parent
+    other = checkouts(Path("/slots/s1"))
+    assert isinstance(other, RealRepo) and other.extra_env["GIT_CEILING_DIRECTORIES"] == "/slots:/home"
     monkeypatch.setenv("GIT_CONFIG_COUNT", "two")
     with pytest.raises(GitUnavailable, match="GIT_CONFIG_COUNT"):
         checkouts(Path("/nowhere"))
+
+
+@pytest.mark.parametrize(
+    ("seen", "group", "expected"),
+    [
+        ("gone", False, True),
+        ("different_process", False, True),
+        ("gone", True, False),
+        ("matching", False, False),
+        ("unknown", False, False),
+    ],
+)
+def test_the_worker_is_gone_only_with_its_process_and_its_group(
+    monkeypatch: pytest.MonkeyPatch, seen: Literal["matching", "gone", "different_process", "unknown"], group: bool, expected: bool
+) -> None:
+    asked: list[object] = []
+    monkeypatch.setattr(composition, "observe_owned", lambda identity: asked.append(identity) or ProcessObservation(seen))
+    monkeypatch.setattr(composition, "group_alive", lambda pgid: asked.append(pgid) or group)
+    assert worker_gone(Worker(pid=42, pgid=41, start="s", boot="b")) is expected
+    assert asked[0] == OwnedProcess(42, 41, "s", "b")

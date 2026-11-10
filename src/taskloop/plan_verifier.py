@@ -24,6 +24,7 @@ from taskloop.plan_types import (
     VerifyRefused,
     VerifyResult,
     VerifyUnavailable,
+    WorkerGone,
 )
 from taskloop.plan_verify import Unreadable, judge
 
@@ -49,8 +50,9 @@ class PlanVerifier:
     """Git evidence for a stored valid `planned` or `unchanged` answer: the factory's commit of the listed paths, the
     clean tree at it, then one verdict over immutable facts, stored once and then returned with no Git read."""
 
-    def __init__(self, store: PlanStore, checkouts: Checkouts, files: SlotFiles, clock: Callable[[], float]) -> None:
-        self.store, self.checkouts, self.files, self.clock = store, checkouts, files, clock
+    def __init__(self, store: PlanStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone, clock: Callable[[], float]) -> None:
+        """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise)."""
+        self.store, self.checkouts, self.files, self.gone, self.clock = store, checkouts, files, gone, clock
 
     def verify(self, key: AttemptKey) -> VerifyResult:
         try:
@@ -90,7 +92,12 @@ class PlanVerifier:
         """Outside any transaction: X (stored, adopted or made), then the clean tree at X, then the verdict."""
         admission, answer, commit = record.admission, stored.answer, record.plan_commit
         if commit is None:
-            settled = settle(self.checkouts, self.files, admission, base, answer)
+            worker = record.worker
+
+            def quiet() -> bool:  # a captured attempt always has a registered worker; none counts as alive
+                return worker is not None and self.gone(worker)
+
+            settled = settle(self.checkouts, self.files, admission, base, answer, quiet)
             if isinstance(settled, Unsettled):
                 return settled
             if isinstance(settled, Rejected):  # nothing_written: no commit to bind

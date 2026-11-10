@@ -200,6 +200,10 @@ def test_the_next_step_table(phase: str, entry: EntryState, collected: AttemptRe
     assert next_step(phase, entry, collected, passed) == expected
 
 
+def gone(_worker: Worker) -> bool:
+    return True
+
+
 def nothing_left(_key: AttemptKey) -> Unsettled | None:
     return None
 
@@ -298,7 +302,7 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     store = PlanStore(lambda: registered)
     attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, lambda: 20), "tasks", "tl-1")
+    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, gone, lambda: 20), "tasks", "tl-1")
     assert first == Checked("verified", "tasks", "tl-1", "attempt")
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
@@ -307,7 +311,7 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         opened.append(where)
         return checkouts(where)
 
-    assert verify_task(store, PlanVerifier(store, counted, slot_files, lambda: 20), "tasks", "tl-1") == first
+    assert verify_task(store, PlanVerifier(store, counted, slot_files, gone, lambda: 20), "tasks", "tl-1") == first
     assert opened == []
 
 
@@ -326,7 +330,7 @@ def test_show_reads_leftovers_fresh_and_names_the_deferred_repeat(
     store = PlanStore(lambda: registered)
     attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = PlanVerifier(store, checkouts, slot_files, lambda: 20)
+    verifier = PlanVerifier(store, checkouts, slot_files, gone, lambda: 20)
     reads = Reads(store, observe("gone", []), lambda: 10, verifier.leftovers)
     before = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.status.next, before.status.leftovers) == ("verify", ())  # nothing committed yet

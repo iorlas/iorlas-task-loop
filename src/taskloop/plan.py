@@ -36,10 +36,11 @@ type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutc
 type Credentials = Callable[[], tuple[str, dict[str, str]]]
 ACCEPTED = ("accepted", "already_same")
 SANDBOX = "workspace-write"  # the only mode CODEX_ACCESS constrains
-# Neither the user's config nor a repo file widens or narrows these. The sandbox has no network and writes only the working
-# directory; a command it blocks fails back to the model (`never`: no escalation, so no reviewer), nothing runs outside it.
-# The agent never writes Git: the factory commits the paths it lists (tl-8bh9.4.3.1.7). Values read from codex 0.167.0's
-# strings, never run here.
+# Neither the user's config nor a repo file widens or narrows these. The sandbox has no network; it writes the working
+# directory and, by Codex's default, also /tmp and $TMPDIR, which the two `exclude_*` keys remove (so the agent cannot
+# stage a Git directory there). A command it blocks fails back to the model (`never`: no escalation, so no reviewer).
+# The agent never writes Git: the factory commits the paths it lists (tl-8bh9.4.3.1.7). Keys and values read from codex
+# 0.167.0's strings (its SandboxWorkspaceWrite fields), never run here.
 CODEX_ACCESS: Final = (
     "--ignore-user-config",
     "--ignore-rules",
@@ -47,6 +48,10 @@ CODEX_ACCESS: Final = (
     "sandbox_workspace_write.network_access=false",
     "-c",
     "sandbox_workspace_write.writable_roots=[]",
+    "-c",
+    "sandbox_workspace_write.exclude_slash_tmp=true",
+    "-c",
+    "sandbox_workspace_write.exclude_tmpdir_env_var=true",
     "-c",
     "approval_policy=never",
     "-c",
