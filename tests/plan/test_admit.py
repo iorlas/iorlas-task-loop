@@ -21,14 +21,15 @@ from taskloop.plan_admit import AdmitRefused, AdmitRequest, AdmitResult, Admitte
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore, StoreRefused
-from taskloop.plan_types import AttemptKey, Checkouts, FileRef
+from taskloop.plan_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.slots import adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 ENTRY = (7, "entry-start", "boot")
-PLAN = {"disposition": "planned", "plan_path": "docs/design/tl-1/plan.md", "commit": "a" * 40, "explanation": "Plan committed"}
+P = "docs/design/tl-1/plan.md"
+PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
 TASKS = FakeTaskReadClient(
     [
         Bead("tl-1", title="Plan it", description="Do the thing", acceptance_criteria="It is done"),
@@ -119,8 +120,9 @@ def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractCon
     return begin
 
 
-def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts) -> PlanAttempts:
-    return PlanAttempts(PlanStore(lambda: con), PlanFiles(tmp_path / "artifacts"), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts)
+def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> PlanAttempts:
+    artifacts = PlanFiles(tmp_path / "artifacts")
+    return PlanAttempts(PlanStore(lambda: con), artifacts, lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
 
 
 def rows(con: sqlite3.Connection) -> tuple[int, int]:
@@ -128,7 +130,7 @@ def rows(con: sqlite3.Connection) -> tuple[int, int]:
 
 
 def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     slots(factory, repo, root, 2)
     result = admit(factory, tmp_path, repo)
@@ -142,14 +144,14 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
     with pytest.raises(StoreRefused, match="unregistered_entry"):
         PlanStore(lambda: factory).load(key)
     run = FakeRun(RunOutcome(rc=0, worker=WORKER))
-    refused = body(factory, tmp_path, run, checkouts).execute(key, ENTRY)
+    refused = body(factory, tmp_path, run, checkouts, slot_files).execute(key, ENTRY)
     assert (refused.status, refused.reason) == ("refused", "unregistered_entry") and run.calls == []
-    pending = body(factory, tmp_path, run, checkouts).collect(key)
+    pending = body(factory, tmp_path, run, checkouts, slot_files).collect(key)
     assert (pending.status, pending.reason) == ("pending", "admitted")
 
 
 def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     slots(factory, repo, root, 1)
     result = admit(factory, tmp_path, repo)
@@ -157,13 +159,18 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     store = PlanStore(lambda: factory)
     assert store.register_entry(result.key, ENTRY, time()) == "accepted"
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
-    other = body(factory, tmp_path, run, checkouts).execute(result.key, (8, "entry-start", "boot"))
+    other = body(factory, tmp_path, run, checkouts, slot_files).execute(result.key, (8, "entry-start", "boot"))
     assert (other.status, other.reason) == ("refused", "not_entry") and run.calls == []
-    collected = body(factory, tmp_path, run, checkouts).execute(result.key, ENTRY)
+    collected = body(factory, tmp_path, run, checkouts, slot_files).execute(result.key, ENTRY)
     assert (collected.status, collected.reason) == ("pending", "verification") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / repo.identity().key / "s1")
-    assert "Do the thing" in spec.stdin + " ".join(spec.argv) and "It is done" in spec.stdin + " ".join(spec.argv)
+    prompt = spec.stdin + " ".join(spec.argv)
+    assert "Do the thing" in prompt and "It is done" in prompt
+    closing = "First read `docs/design/tl-1/plan.md` if it exists. If it is still valid for the task and the code as they are now"
+    assert closing in prompt and "answer `unchanged`" in prompt and "do not run `git add`, `git commit`, `git push`" in prompt
+    assert "list in `paths` every file you want committed and give a one-line commit `message`" in prompt
+    assert prompt.index("It is done") < prompt.index(closing)  # the fixed closing words come last, in the admitted input
 
 
 @pytest.mark.parametrize("case", ["none_adopted", "held", "dirty", "attached", "main_only"])

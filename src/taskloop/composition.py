@@ -3,25 +3,27 @@
 import os
 import shutil
 import sqlite3
+import stat
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
 from any_agent import run
 from beads_client import Bd, Runner
-from git_porcelain import RealRepo, Repo
+from git_porcelain import GitUnavailable, RealRepo, Repo
 from sqlite_store import Store
 from stream_proc import observe_owned, popen_registered
 
-from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts, PlanVerifier
+from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
 from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import Launcher
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import REGISTRATION_BUSY_MS, PlanStore
-from taskloop.plan_types import Checkouts
+from taskloop.plan_types import Checkouts, FileEntry
+from taskloop.plan_verifier import PlanVerifier
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Adopted, NotAdopted, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
@@ -48,6 +50,7 @@ CREDENTIAL_MARKERS = ("TOKEN", "SECRET", "PASSW", "CREDENTIAL", "API_KEY", "APIK
 # Not in the baseline scrub: the entry runs inside the factory's venv, and the agent must not inherit it.
 VENV_NAMES = frozenset({"VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "PYTHONHOME", "__PYVENV_LAUNCHER__", "PYTHONEXECUTABLE"})
 PUSH_REFUSED = "delegate-push-refused://"  # baseline delegate env.push_bar: no such remote helper, so git aborts any push
+HARDENED = (("core.hooksPath", "/dev/null"), ("core.fsmonitor", "false"), ("commit.gpgSign", "false"), ("maintenance.auto", "false"))
 
 
 class Which(Protocol):
@@ -121,20 +124,76 @@ def codex_machine_credentials(
     return str(Path(found).absolute()), env | push_bar(env)
 
 
-def push_bar(env: Mapping[str, str]) -> dict[str, str]:
-    """Baseline `push_bar`, re-stated: one more git env-config entry rewriting every push URL (the empty prefix matches all)
-    to a scheme git cannot run, so an approved out-of-sandbox push fails whatever the credentials; fetch is untouched.
-    Existing GIT_CONFIG_* entries are kept and the bar is appended after them; a malformed count refuses."""
+def appended(env: Mapping[str, str], entries: Sequence[tuple[str, str]]) -> dict[str, str] | None:
+    """Git env-config entries appended after any existing GIT_CONFIG_* ones (command-line scope, so no repository or
+    user config file overrides them); None when the existing count is malformed."""
     count = env.get("GIT_CONFIG_COUNT") or "0"
     if not count.isascii() or not count.isdigit():
-        raise CredentialsUnavailable("git_config")
+        return None
     n = int(count)
-    return {"GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": f"url.{PUSH_REFUSED}.pushInsteadOf", f"GIT_CONFIG_VALUE_{n}": ""}
+    added = {"GIT_CONFIG_COUNT": str(n + len(entries))}
+    for i, (key, value) in enumerate(entries, n):
+        added |= {f"GIT_CONFIG_KEY_{i}": key, f"GIT_CONFIG_VALUE_{i}": value}
+    return added
+
+
+def push_bar(env: Mapping[str, str]) -> dict[str, str]:
+    """Baseline `push_bar`, re-stated: one more git env-config entry rewriting every push URL (the empty prefix matches all)
+    to a scheme git cannot run, so a push by the agent fails whatever the credentials; fetch is untouched. A malformed
+    count refuses."""
+    bar = appended(env, [(f"url.{PUSH_REFUSED}.pushInsteadOf", "")])
+    if bar is None:
+        raise CredentialsUnavailable("git_config")
+    return bar
+
+
+def hardened(env: Mapping[str, str]) -> dict[str, str]:
+    """Every factory Git call runs no hook (`--no-verify` skips only two: `prepare-commit-msg`, `post-commit`,
+    `post-index-change` and `reference-transaction` would still run, from a hooks path the agent may have written), no
+    fsmonitor program, no signing prompt and no automatic maintenance. This also stops `pre-push` for a later push from
+    the same views; signed-commit repositories are unsupported. A malformed count is GitUnavailable (`git_config`)."""
+    entries = appended(env, HARDENED)
+    if entries is None:
+        raise GitUnavailable("Malformed GIT_CONFIG_COUNT", hint="git_config")
+    return entries
 
 
 def checkouts(path: Path) -> Repo:
-    """A fresh (unmemoized) real Git view from one checkout path."""
-    return RealRepo(path, memoize=False)
+    """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment."""
+    return RealRepo(path, memoize=False, env=hardened(os.environ))
+
+
+class RealSlotFiles:
+    """The slot file port over the real file system: `lstat` never follows a symlink, and a read opens only what `lstat`
+    just saw as a regular file within the cap (`O_NOFOLLOW`, non-blocking), so a FIFO or symlink is never opened."""
+
+    def lstat(self, path: Path) -> FileEntry | None:
+        try:
+            found = os.lstat(path)
+        except OSError:
+            return None
+        mode = found.st_mode
+        if stat.S_ISREG(mode):
+            return FileEntry("file", found.st_size, bool(mode & 0o111))
+        return FileEntry("dir" if stat.S_ISDIR(mode) else "link" if stat.S_ISLNK(mode) else "other", found.st_size, False)
+
+    def read(self, path: Path, cap: int) -> bytes | None:
+        entry = self.lstat(path)
+        if entry is None or entry.kind != "file" or entry.size > cap:
+            return None
+        try:
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except OSError:
+            return None
+        with os.fdopen(descriptor, "rb") as stream:
+            data = stream.read(cap + 1)
+        return data if len(data) <= cap else None
+
+    def resolve(self, path: Path) -> Path | None:
+        try:
+            return path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            return None
 
 
 def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> PlanAttempts:
@@ -158,6 +217,7 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
         run,
         time.time,
         checkouts,
+        RealSlotFiles(),
         gate=PlanStore(bounded, gated.begin_immediate),
     )
 
@@ -165,7 +225,7 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
 def open_plan_verifier(database: Path, store: Store) -> PlanVerifier:
     """Real wiring for on-demand verification: a shared writer of `store` (the caller closes it) on factory.db, real Git,
     wall clock."""
-    return PlanVerifier(PlanStore(lambda: store.shared_rw(database), store.begin_immediate), checkouts, time.time)
+    return PlanVerifier(PlanStore(lambda: store.shared_rw(database), store.begin_immediate), checkouts, RealSlotFiles(), time.time)
 
 
 def open_launcher(database: Path, artifacts: Path) -> Launcher:

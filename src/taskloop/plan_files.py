@@ -7,19 +7,21 @@ from typing import Final
 
 from any_agent import RunOutcome
 
-from taskloop.plan_types import DISPOSITIONS, AttemptKey, Evidence, FileRef
+from taskloop.plan_types import ANSWER_KEYS, DISPOSITIONS, AttemptKey, Evidence, FileRef
 
 # The structural answer contract Codex forwards as an OpenAI strict response format: a plain object at the top level (no
 # allOf/anyOf/oneOf/not/enum/if there), every property required, nullable by type list, no composition keywords at all.
-# The cross-field rule (planned needs the expected path and a commit) and value bounds belong to decode_plan_answer alone.
+# `paths` and `message` are what the agent asks the factory to commit; the agent never commits. Every bound and every
+# cross-field rule (planned needs the expected path, the listed paths and a message) belong to decode_plan_answer alone.
 ANSWER_SCHEMA: Final = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["disposition", "plan_path", "commit", "explanation"],
+    "required": list(ANSWER_KEYS),
     "properties": {
         "disposition": {"type": "string", "enum": list(DISPOSITIONS)},
         "plan_path": {"type": ["string", "null"]},
-        "commit": {"type": ["string", "null"], "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"},
+        "paths": {"type": "array", "items": {"type": "string"}},
+        "message": {"type": ["string", "null"]},
         "explanation": {"type": "string"},
     },
 }

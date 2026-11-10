@@ -191,7 +191,7 @@ settled. Nothing here releases a reservation or claim, retries an agent, or make
 | `hung` (entry running past its deadline) | Stop the worker first (the agent may keep editing the slot), as above; then the entry by its verified pid (`ps -o command=` shows `taskloop.attempt_entry`); then `show` again. |
 | `unpublished` (captured, session/validation pending, entry gone) | Result incomplete; keep evidence; as above. |
 | `conflict` | Owner inspects evidence; as above. |
-| verify `unsettled:<r>` | Inspect the slot; if HEAD is the reported commit and only stray files make it dirty, remove them, then `tl plan verify`. |
+| verify `unsettled:<r>` | The slot has files the stage did not commit (listed), or the slot pointer or HEAD changed. Remove the listed files or wait for a repeat; for `redirected` or `head_moved` inspect first. Then `tl plan verify` ([.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md); `plan show` says `Next: repeat (deferred)`). |
 
 **Whole-DB discard** is the only release that exists (AGENTS.md: deliberate discard permits reevaluation): stop all
 entries and workers first (verified PIDs), delete factory.db and its `-wal`/`-shm` (the text names the resolved path

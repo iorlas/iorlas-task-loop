@@ -19,7 +19,7 @@ from git_porcelain import GitUnavailable, Repo
 
 from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.plan_types import AttemptKey, Checkouts, FileRef
+from taskloop.plan_types import PLAN_NAME, AttemptKey, Checkouts, FileRef, plan_stage
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import SlotsUnavailable, SlotView, observe
 from taskloop.task import TaskInspection, TaskInspectionError
@@ -86,8 +86,18 @@ def why(error: BaseException) -> str:
 
 
 def task_text(task: TaskInspection) -> str:
-    """The task's own prose, stored as the input; no prompt template."""
-    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n"
+    """The task's own prose, then the fixed closing words of the plan stage (where the plan goes, `unchanged` or `planned`,
+    no Git write: the factory commits the listed paths), stored as the admitted input under its digest."""
+    root = plan_stage(task.reference.task_id).root
+    closing = (
+        f"First read `{root}{PLAN_NAME}` if it exists. If it is still valid for the task and the code as they are now, change "
+        f"nothing and answer `unchanged`. Otherwise write the plan there (rewrite it in place if it exists) and answer "
+        f"`planned`; other files only under `{root}`. You may read Git; do not run `git add`, `git commit`, `git push` or "
+        "any other Git write; they will fail. With `planned`, list in `paths` every file you want committed and give a "
+        "one-line commit `message`; the factory commits exactly those paths. Remove any other file you created. Anything "
+        "left uncommitted is reported back to you as a failed stage."
+    )
+    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{closing}\n"
 
 
 class PlanAdmission:

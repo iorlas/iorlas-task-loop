@@ -34,12 +34,15 @@ from taskloop.plan_types import (
     PublicationResult,
     Replaced,
     SessionInput,
+    SlotFiles,
+    StageRules,
 )
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")  # the registered entry seeded below; execute runs only for it
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
-PLAN = {"disposition": "planned", "plan_path": "docs/design/tl-1/plan.md", "commit": "a" * 40, "explanation": "Plan committed"}
+P = "docs/design/tl-1/plan.md"
+PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan committed"}
 BASE = "b" * 40  # a recorded B for store-level dispatches; the body reads the slot's own HEAD
 
 
@@ -54,6 +57,7 @@ class Body:
     tmp: Path
     slot: FakeWorktree
     checkouts: Checkouts
+    files: SlotFiles
 
     def attempts(
         self,
@@ -64,12 +68,12 @@ class Body:
         clock: Callable[[], float] = lambda: 10,
         gate: PlanStore | None = None,
     ) -> PlanAttempts:
-        return PlanAttempts(store, PlanFiles(self.tmp), credentials, execution, clock, self.checkouts, gate=gate)
+        return PlanAttempts(store, PlanFiles(self.tmp), credentials, execution, clock, self.checkouts, self.files, gate=gate)
 
 
 @pytest.fixture
-def body(tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts) -> Body:
-    return Body(tmp_path, slot, checkouts)
+def body(tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles) -> Body:
+    return Body(tmp_path, slot, checkouts, slot_files)
 
 
 def database(body: Body) -> sqlite3.Connection:
@@ -207,7 +211,7 @@ def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(tmp_pa
     execution = fake()
     owner = app(con, body, execution)
 
-    def broken(_value: object, _path: str) -> PlanAnswer:
+    def broken(_value: object, _rules: StageRules) -> PlanAnswer:
         raise RuntimeError("decoder bug")
 
     owner.decoder = broken
@@ -484,6 +488,13 @@ def test_only_the_workspace_write_sandbox_is_launched(tmp_path: Path, body: Body
     assert con.execute("SELECT phase FROM plan_attempt").fetchone() == ("admitted",)
 
 
+def test_the_sandbox_never_escalates_and_has_no_reviewer() -> None:
+    """`never`: a blocked command (the agent's `git commit` among them) fails back to the model; nothing runs outside."""
+    pairs = {key: value for key, _, value in (flag.partition("=") for flag in CODEX_ACCESS if "=" in flag)}
+    assert pairs["approval_policy"] == "never" and "approvals_reviewer" not in pairs
+    assert pairs["sandbox_workspace_write.writable_roots"] == "[]" and pairs["sandbox_workspace_write.network_access"] == "false"
+
+
 class Spy(CodexHarness):
     """The real Codex harness, counting cleanups; `broken` makes `launch_spec` fail."""
 
@@ -621,7 +632,7 @@ def test_answer_summary_is_idempotent_and_never_replaced(tmp_path: Path, body: B
     store = PlanStore(flaky)
     loaded = store.load(KEY)
     assert loaded is not None and pending.evidence is not None
-    same = AnswerState("valid", "planned", "docs/design/tl-1/plan.md", "a" * 40)
+    same = AnswerState("valid", "planned", P, (P,), "Plan tl-1")
     assert store.answer(loaded.admission, pending.evidence, same) == "already_same"
     assert store.answer(loaded.admission, pending.evidence, AnswerState("missing")) == "conflict"
     assert store.answer(loaded.admission, dataclasses.replace(pending.evidence, stderr=FileRef("x", "0" * 64)), same) == "conflict"

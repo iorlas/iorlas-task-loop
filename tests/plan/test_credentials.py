@@ -1,10 +1,12 @@
-"""The machine's Codex credential source: the whole environment minus the baseline scrub, the venv, a file login."""
+"""The machine's Codex credential source (the whole environment minus the baseline scrub, the venv, a file login) and
+the hardened Git environment of every factory Git view."""
 
 from pathlib import Path
 
 import pytest
+from git_porcelain import GitUnavailable, RealRepo
 
-from taskloop.composition import codex_machine_credentials
+from taskloop.composition import checkouts, codex_machine_credentials, hardened
 from taskloop.plan import CredentialsUnavailable
 
 BASE = {"PATH": "/usr/bin:/bin", "HOME": "/home/me"}
@@ -147,3 +149,24 @@ def test_the_push_bar_is_appended_after_existing_git_config_entries() -> None:
         "GIT_CONFIG_KEY_2": "url.delegate-push-refused://.pushInsteadOf",
         "GIT_CONFIG_VALUE_2": "",
     }
+
+
+def test_every_factory_git_view_runs_hardened_after_existing_git_config_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    existing = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "a.b", "GIT_CONFIG_VALUE_0": "1"}
+    assert hardened(existing) == {
+        "GIT_CONFIG_COUNT": "5",
+        "GIT_CONFIG_KEY_1": "core.hooksPath",
+        "GIT_CONFIG_VALUE_1": "/dev/null",
+        "GIT_CONFIG_KEY_2": "core.fsmonitor",
+        "GIT_CONFIG_VALUE_2": "false",
+        "GIT_CONFIG_KEY_3": "commit.gpgSign",
+        "GIT_CONFIG_VALUE_3": "false",
+        "GIT_CONFIG_KEY_4": "maintenance.auto",
+        "GIT_CONFIG_VALUE_4": "false",
+    }
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "0")
+    view = checkouts(Path("/nowhere"))
+    assert isinstance(view, RealRepo) and view.extra_env == hardened({})
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "two")
+    with pytest.raises(GitUnavailable, match="GIT_CONFIG_COUNT"):
+        checkouts(Path("/nowhere"))

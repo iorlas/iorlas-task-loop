@@ -43,8 +43,13 @@ START = ["plan", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/trac
 STATUS = AttemptStatus("tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "verification"), False, "verify")
 ERROR = {"kind", "reason", "message", "claim_leaked", "admitted", "slots"}
 STATUS_KEYS = {
-    "backlog", "task", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process", "worker"
+    "backlog", "task", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process", "worker",
+    "leftovers",
 }
+REPEAT = AttemptStatus(
+    "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
+    ("uncommitted", "?? docs/design/tl-1/note.md", "+3 more"),
+)
 
 
 @pytest.fixture(autouse=True)
@@ -123,6 +128,10 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Phase: captured", "Result: pending verification", "Entry log: /a/d/entry.log", "Next: verify", "Run `tl plan verify`."],
      STATUS_KEYS | {"directory", "entry_log"}),
+    (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log")), 0,
+     ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Unsettled: uncommitted",
+      "  ?? docs/design/tl-1/note.md", "  +3 more", "Next: repeat (deferred)", cli_plan.GUIDE["repeat"]],
+     STATUS_KEYS | {"directory", "entry_log"}),
     (["plan", "list", "--stuck"], Listed((STATUS,)), 0, ["tl-1\ttasks\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("reused", "tasks", "tl-1", "attempt"), 0, ["reused: attempt attempt"],
      {"status", "backlog", "task", "attempt_id"}),
@@ -163,7 +172,8 @@ def test_every_next_step_renders_with_its_guidance(step: Next, monkeypatch: pyte
                   Path("/d"), Path("/d/entry.log"))
     monkeypatch.setitem(cli_plan.OPERATIONS, ("plan", "show"), lambda _arguments, _loaded: shown)
     assert main(["plan", "show", "tl-1", "--backlog", "tasks"]) == 0
-    assert f"Next: {step}\n{cli_plan.GUIDE[step]}" in capsys.readouterr().out
+    deferred = " (deferred)" if step == "repeat" else ""
+    assert f"Next: {step}{deferred}\n{cli_plan.GUIDE[step]}" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("entry", words(EntryState))
@@ -183,7 +193,10 @@ def test_every_failure_kind_has_its_exit_code(
     assert capsys.readouterr().err.startswith("tl plan list: ")
 
 
-@pytest.mark.parametrize("argv", [["plan", "abandon", "tl-1"], ["slot", "release", "s1"]])
+ABANDON = ["plan", "abandon", "tl-1"]
+
+
+@pytest.mark.parametrize("argv", [ABANDON, [*ABANDON, "--backlog", "tasks"], ["slot", "release", "s1"]])
 def test_the_placeholders_refuse_deferred_with_the_manual_steps(
     argv: list[str], tmp_path: Path, home: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

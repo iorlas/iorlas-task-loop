@@ -111,8 +111,8 @@ classifier category, not its freeform diagnostic detail. Codex cost remains unkn
 Summary.cost's default0 is not measured cost. No invented zero tokens or absent session.
 
 Answer phase is validation_pending, valid, missing, json_invalid or schema_invalid.
-A valid summary contains only disposition, expected plan path and reported commit
-reference; freeform explanation and parser diagnostic text stay behind the evidence
+A valid summary contains only disposition, expected plan path, the paths to commit and the commit message (since
+[.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md); no reported commit); freeform explanation and parser diagnostic text stay behind the evidence
 reader. None establishes Git correctness or plan-step completion. Custody is always
 reported unresolved by this slice, independently of result and answer state.
 
@@ -201,14 +201,15 @@ control rows or allow recreation of authority. No directory scanning or log pars
 The file owner uses native Python and explicit paths/references, with separate
 read-input, capture-evidence and read-answer operations; tests use real temporary
 files. It does not infer completion. The pure PlanAnswer decoder accepts exactly
-factory-schema fields: disposition (planned/incomplete/needs_owner), expected plan
-path or null, reported full commit reference or null, and bounded explanation.
-Planned requires the expected task plan path and a reported commit; Git verification
+factory-schema fields ([.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)): disposition (planned/unchanged/incomplete/needs_owner), expected plan
+path or null, `paths` (the files to commit), `message` or null, and bounded explanation.
+Planned requires the expected task plan path, the plan among non-empty unique allowed `paths` and a message;
+unchanged requires the plan path and nothing to commit; Git verification
 is deliberately later. Reject extra/wrongly typed fields with ValueError. Its structural
 part is forwarded via LaunchInputs.schema as an OpenAI strict response format: a plain
 object root (no allOf/anyOf/oneOf/not/enum/if at the root, and none of them anywhere),
-every property required, nullable by type list. The cross-field rule (planned needs the
-expected path and a commit) and the explanation bound live only in the decoder: the API
+every property required, nullable by type list. Every cross-field rule and every bound (paths, message,
+explanation) live only in the decoder, `decode_plan_answer(value, StageRules)`: the API
 refuses a root `allOf` with HTTP 400 `invalid_json_schema` (live smoke, 2026-11-10). Explanation is returned as
 transient typed data/evidence, not a DB transcript or a stored authoritative plan.
 

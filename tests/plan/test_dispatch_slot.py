@@ -16,12 +16,13 @@ from git_porcelain.testing import FakeRepo, FakeWorktree
 from taskloop.plan import PlanAttempts
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_store import PlanStore
-from taskloop.plan_types import AttemptKey, Checkouts
+from taskloop.plan_types import AttemptKey, Checkouts, SlotFiles
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
-PLAN = {"disposition": "planned", "plan_path": "docs/design/tl-1/plan.md", "commit": "a" * 40, "explanation": "Plan committed"}
+P = "docs/design/tl-1/plan.md"
+PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
 
 
 class Spy(CodexHarness):
@@ -41,8 +42,8 @@ def con(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> sqli
     return registered
 
 
-def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts) -> PlanAttempts:
-    return PlanAttempts(PlanStore(lambda: con), PlanFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts)
+def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> PlanAttempts:
+    return PlanAttempts(PlanStore(lambda: con), PlanFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
 
 
 def run() -> FakeRun:
@@ -54,13 +55,13 @@ def head(repo: FakeRepo, path: Path) -> Sha | None:
 
 
 def test_the_dispatch_records_the_slot_head_as_base_and_keeps_the_fenced_admission(
-    con: sqlite3.Connection, slot: FakeWorktree, repo: FakeRepo, tmp_path: Path, checkouts: Checkouts
+    con: sqlite3.Connection, slot: FakeWorktree, repo: FakeRepo, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     store = PlanStore(lambda: con)
     before = store.load(KEY)
     assert before is not None and before.base_commit is None
     agent = run()
-    result = body(con, tmp_path, agent, checkouts).execute(KEY, ENTRY)
+    result = body(con, tmp_path, agent, checkouts, slot_files).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("pending", "verification") and len(agent.calls) == 1
     after = store.load(KEY)
     assert after is not None and after.admission == before.admission  # B is not part of the fence: every later write passed
@@ -69,7 +70,7 @@ def test_the_dispatch_records_the_slot_head_as_base_and_keeps_the_fenced_admissi
 
 
 def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
-    con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts
+    con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     now = [10.0]
 
@@ -78,7 +79,8 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
         return checkouts(path)
 
     agent = run()
-    attempts = PlanAttempts(PlanStore(lambda: con), PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: now[0], slow)
+    store, files = PlanStore(lambda: con), PlanFiles(tmp_path)
+    attempts = PlanAttempts(store, files, lambda: ("/bin/codex", {}), agent, lambda: now[0], slow, slot_files)
     result = attempts.execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "expired") and agent.calls == [] and Spy.cleanups == [1]
     assert con.execute("SELECT phase,rev,base_commit FROM plan_attempt").fetchone() == ("admitted", 0, None)
@@ -102,6 +104,7 @@ def test_an_unusable_slot_never_dispatches_and_the_attempt_stays_admitted(
     repo: FakeRepo,
     tmp_path: Path,
     checkouts: Checkouts,
+    slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch,
     case: str,
     status: str,
@@ -119,12 +122,13 @@ def test_an_unusable_slot_never_dispatches_and_the_attempt_stays_admitted(
     elif case == "missing":
         repo.drop_checkout(slot.path)
     elif case == "not_listed":
+        assert slot_files.lstat(slot.path / ".git") is not None  # its pointer stays readable: only Git's registration goes
         repo.drop_worktree(slot.path)
     else:
         con.execute("UPDATE reservation SET repo_id='other'")
         con.execute("UPDATE plan_attempt SET repo_id='other'")
     agent = run()
-    attempts = body(con, tmp_path, agent, checkouts)
+    attempts = body(con, tmp_path, agent, checkouts, slot_files)
     for _ in range(2):  # nothing moved: the same refusal again
         result = attempts.execute(KEY, ENTRY)
         assert (result.status, result.reason) == (status, reason)

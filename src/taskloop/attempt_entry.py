@@ -2,11 +2,11 @@
 
 It runs only as the identity the launcher registered: its own boot-aware identity is read and compared with the stored
 entry before the attempt key is used or any credential is read. It never creates factory.db, runs the agent at most once
-(through `PlanAttempts.execute`), retries only an unavailable publication, then verifies once (`PlanVerifier.verify`, never
-retried), and writes one log line of fixed words: status and reason, read back after a stored verdict (a published retry
-instead keeps the run's own words and adds `publish=` and the collected `then=`), always `verify=`, never facts,
-environment, argv or exception text. It exits 0 only for a verified plan, new or reused (`plan.succeeded`). Its stdout and
-stderr are the attempt's `entry.log`.
+(through `PlanAttempts.execute`), retries only an unavailable publication, then verifies once (`PlanVerifier.verify`:
+commit the listed paths, check the tree is clean, judge; never retried), and writes one log line of fixed words: status
+and reason, read back after a stored verdict (a published retry instead keeps the run's own words and adds `publish=` and
+the collected `then=`), always `verify=`, never facts, environment, argv or exception text. It exits 0 only for a
+verified plan, new or reused (`plan.succeeded`). Its stdout and stderr are the attempt's `entry.log`.
 """
 
 import os
@@ -21,7 +21,7 @@ from sqlite_store import open_ro
 from stream_proc import ProcessObservation, inspect_process
 
 from taskloop.composition import open_plan_attempts
-from taskloop.plan import ACCEPTED, PlanAttempts, PlanVerifier, judged, succeeded
+from taskloop.plan import ACCEPTED, PlanAttempts, judged, succeeded
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import StoreUnavailable
 from taskloop.plan_types import (
@@ -35,6 +35,7 @@ from taskloop.plan_types import (
     VerifyResult,
     VerifyUnavailable,
 )
+from taskloop.plan_verifier import PlanVerifier
 
 PUBLISH_RETRIES = 3
 RETRY_WAIT = 2.0
@@ -129,7 +130,7 @@ def enter(
     result = app.execute(key, me)
     published = _publish(app, result, clock, wait)
     accepted = published is not None and published.status in ACCEPTED
-    verified = PlanVerifier(app.store, app.checkouts, app.clock).verify(key)
+    verified = PlanVerifier(app.store, app.checkouts, app.slot_files, app.clock).verify(key)
     # newly stored facts or a stored verdict: read the terminal outcome back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"

@@ -1,5 +1,6 @@
 """Conditional SQL owner for admitted plan execution; no admission or release writer."""
 
+import json
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
@@ -73,6 +74,19 @@ def _nullable_int(value: object) -> int | None:
 
 def _nullable_str(value: object) -> str | None:
     return None if value is None else _str(value)
+
+
+def _listed(value: object) -> tuple[str, ...]:
+    """The stored `commit_paths` JSON array (NULL for an answer that is not valid)."""
+    if value is None:
+        return ()
+    try:
+        paths = json.loads(_str(value))
+    except ValueError as error:
+        raise StoreUnavailable("Malformed stored paths") from error
+    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+        raise StoreUnavailable("Malformed stored paths")
+    return tuple(str(path) for path in paths)
 
 
 def _identity(worker: Worker) -> tuple[int, str, str]:
@@ -155,7 +169,7 @@ class PlanStore:
         held = con.execute(
             "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
         ).fetchone()
-        if held != (row[2], key.reservation_generation, key.attempt_id) or row[22] is None:
+        if held != (row[2], key.reservation_generation, key.attempt_id) or row[23] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):
             raise StoreUnavailable("Malformed deadline")
@@ -164,7 +178,7 @@ class PlanStore:
             TaskReference(TaskScope(_str(row[0])), _str(row[1])),
             RepoId(_str(row[2])),
             _str(row[3]),
-            _str(row[22]),
+            _str(row[23]),
             FileRef(_str(row[4]), _str(row[5])),
             _str(row[6]),
             _str(row[7]),
@@ -173,9 +187,8 @@ class PlanStore:
             (_int(row[10]), _str(row[11]), _str(row[12])),
         )
         worker = None if row[15] is None else Worker(pid=_int(row[15]), pgid=_int(row[16]), start=_str(row[17]), boot=_str(row[18]))
-        return AttemptRecord(
-            admission, _str(row[13]), _int(row[14]), worker, _nullable_str(row[19]), bool(_int(row[20])), _nullable_str(row[21])
-        )
+        session, conflict, base, plan = _nullable_str(row[19]), bool(_int(row[20])), _nullable_str(row[21]), _nullable_str(row[22])
+        return AttemptRecord(admission, _str(row[13]), _int(row[14]), worker, session, conflict, base, plan)
 
     def load(self, key: AttemptKey) -> AttemptRecord | None:
         with self._connection() as con:
@@ -344,25 +357,51 @@ class PlanStore:
                 return "conflict"
             if current.answer.kind != "validation_pending":
                 return "already_same" if current.answer == answer else "conflict"
+            paths = json.dumps(list(answer.paths)) if answer.kind == "valid" else None
             con.execute(
-                "UPDATE plan_execution SET answer_kind=?,disposition=?,plan_path=?,reported_commit=? WHERE attempt_id=?",
-                (*astuple(answer), admission.key.attempt_id),
+                "UPDATE plan_execution SET answer_kind=?,disposition=?,plan_path=?,commit_paths=?,commit_message=? WHERE attempt_id=?",
+                (answer.kind, answer.disposition, answer.plan_path, paths, answer.message, admission.key.attempt_id),
             )
             return "accepted"
 
-    def verdict(self, admission: Admission, base: str, commit: str, result: Verdict, now: float) -> Verdict:
-        """Insert-only: written while the reservation is held, the run was clean, its session publication complete, and the
-        stored valid `planned` answer and base are exactly the verified X and B; an existing row is kept, never rewritten.
-        Returns the row now stored."""
+    def plan_commit(self, admission: Admission, commit: str) -> str:
+        """Write once the commit the stage ends at: X != B for `planned`, B itself for `unchanged`, only for a captured,
+        clean, completely published valid answer with no verdict stored yet (a `nothing_written` verdict has no commit and
+        is never contradicted afterwards). Returns the value now stored: another one than `commit` is the caller's
+        `inconsistent`; a refused gate is StoreRefused."""
+        with self._connection(write=True) as con:
+            self._fence(con, admission)
+            con.execute(
+                """UPDATE plan_attempt SET plan_commit=?1,rev=rev+1 WHERE attempt_id=?2 AND plan_commit IS NULL AND phase='captured'
+                AND EXISTS (SELECT 1 FROM plan_execution e WHERE e.attempt_id=?2 AND e.answer_kind='valid' AND e.rc=0
+                AND e.timed_out=0 AND e.publication='complete' AND ((e.disposition='planned' AND ?1<>plan_attempt.base_commit)
+                OR (e.disposition='unchanged' AND ?1=plan_attempt.base_commit)))
+                AND NOT EXISTS (SELECT 1 FROM plan_verification v WHERE v.attempt_id=?2)""",
+                (commit, admission.key.attempt_id),
+            )
+            row = con.execute("SELECT plan_commit FROM plan_attempt WHERE attempt_id=?", (admission.key.attempt_id,)).fetchone()
+        stored = None if row is None else _nullable_str(row[0])
+        if stored is None:
+            raise StoreRefused("changed_answer")
+        return stored
+
+    def verdict(self, admission: Admission, base: str, commit: str | None, result: Verdict, now: float) -> Verdict:
+        """Insert-only: written while the reservation is held, the run was clean, its session publication complete, the
+        stored valid answer `planned` or `unchanged`, its base B and its stored `plan_commit` exactly the verified ones;
+        `nothing_written` alone has no commit (a `planned` answer, `plan_commit` NULL) and `reused` needs `unchanged`. An
+        existing row is kept, never rewritten. Returns the row now stored."""
+        values = _verdict_values(result)
         with self._connection(write=True) as con:
             self._fence(con, admission)
             con.execute(
                 f"""INSERT INTO plan_verification (attempt_id,dispatch_token,generation,{VERDICT},observed_at)
                 SELECT ?,?,?,?,?,?,?,? FROM plan_execution e JOIN plan_attempt p ON p.attempt_id=e.attempt_id
-                WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=? AND e.answer_kind='valid' AND e.disposition='planned'
-                AND e.rc=0 AND e.timed_out=0 AND e.publication='complete' AND e.reported_commit=? AND p.base_commit=?
+                WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=? AND e.answer_kind='valid'
+                AND e.disposition IN ('planned','unchanged') AND e.rc=0 AND e.timed_out=0 AND e.publication='complete'
+                AND p.base_commit=? AND CASE WHEN ?='nothing_written' THEN p.plan_commit IS NULL AND e.disposition='planned'
+                ELSE p.plan_commit=? END AND (?=0 OR e.disposition='unchanged')
                 ON CONFLICT DO NOTHING""",
-                (*astuple(admission.key), *_verdict_values(result), now, *astuple(admission.key), commit, base),
+                (*astuple(admission.key), *values, now, *astuple(admission.key), base, values[1], commit, values[3]),
             )
             row: tuple[object, ...] | None = con.execute(
                 f"SELECT {VERDICT} FROM plan_verification WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(admission.key)
@@ -400,13 +439,13 @@ class PlanStore:
             _nullable_str(row[18]),
         )
         evidence = Evidence(*(FileRef(_str(row[i]), _str(row[i + 1])) for i in (19, 21, 23, 25)))
-        kind, publication = _str(row[27]), _str(row[31])
+        kind, publication = _str(row[27]), _str(row[32])
         if kind not in ("validation_pending", "valid", "missing", "json_invalid", "schema_invalid"):
             raise StoreUnavailable("Invalid answer phase")
         if publication not in ("complete", "pending", "conflict", "fault"):
             raise StoreUnavailable("Invalid publication phase")
-        answer = AnswerState(kind, _nullable_str(row[28]), _nullable_str(row[29]), _nullable_str(row[30]))
-        return StoredExecution(key, facts, evidence, answer, publication, _verdict(row[32:36]))
+        answer = AnswerState(kind, _nullable_str(row[28]), _nullable_str(row[29]), _listed(row[30]), _nullable_str(row[31]))
+        return StoredExecution(key, facts, evidence, answer, publication, _verdict(row[33:37]))
 
     def collect(self, key: AttemptKey) -> StoredExecution | None:
         with self._connection() as con:

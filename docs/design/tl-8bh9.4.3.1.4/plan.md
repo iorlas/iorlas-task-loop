@@ -116,12 +116,14 @@ capture, session and answer. That leaves the harness gate (1.5 s plus one short 
   `API_KEY` marker).
 - Baseline's `UV_CACHE_DIR`/`UV_OFFLINE` additions (`decide.py:48-60`) are not carried. A plan step needs no uv.
 
-**`plan.CODEX_ACCESS`** is baseline `decide.py:32-45` verbatim: `--ignore-user-config`, `--ignore-rules`, and `-c` for each of
-`sandbox_workspace_write.network_access=false`, `sandbox_workspace_write.writable_roots=[]`, `approval_policy=on-request`,
-`approvals_reviewer=auto_review`, `tool_output_token_limit=3000`. It goes into `LaunchInputs.access`. Candid limits:
-- "Network off" holds for sandboxed commands only. Under `on-request`, a command Codex's automatic reviewer approves runs
-  outside the sandbox.
-- With `writable_roots=[]`, a `git commit` in a linked worktree (git dir under the main checkout) needs such an escalation.
+**`plan.CODEX_ACCESS`** is `--ignore-user-config`, `--ignore-rules`, and `-c` for each of
+`sandbox_workspace_write.network_access=false`, `sandbox_workspace_write.writable_roots=[]`, `approval_policy=never`,
+`tool_output_token_limit=3000` (since [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md); it was baseline `decide.py:32-45`, with `on-request` and
+`approvals_reviewer=auto_review`). It goes into `LaunchInputs.access`. Candid limits:
+- "Network off" holds for sandboxed commands; under `never` a blocked command fails back to the model, nothing runs
+  outside the sandbox (read from the codex binary's strings, unobserved live).
+- With `writable_roots=[]`, a `git commit` in a linked worktree (git dir under the main checkout) fails in the sandbox;
+  the factory commits the paths the agent lists ([.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)).
 - These flags are accepted by the codex-cli baseline used (0.162.1 per `decide.py:26-30`). The installed codex version is unverified.
 
 ## 6. Slice B: launcher and entry
@@ -246,7 +248,7 @@ macOS, observation truthfulness, Codex accepting the flags and the auth, timings
 admit; launch; kill the coordinator after `Launched`; from a new shell confirm the attempt reaches `captured`, `collect`
 returns it, a second `launch` reports `AlreadyRunning`/`dispatched`, and exactly one Codex session exists.
 
-The answer may be `incomplete` if the commit escalation is refused (section 5). The smoke proves the launch path, not plan quality.
+The agent's own commit fails under `never`; the factory commits the listed paths ([.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)). The smoke proves the launch path, not plan quality.
 
 ## 10. Files and acceptance
 

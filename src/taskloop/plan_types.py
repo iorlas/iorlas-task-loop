@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, Protocol
 
 from any_agent import RunOutcome, classify
 from any_agent.procs import Worker
@@ -12,8 +12,53 @@ from git_porcelain import Repo
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference
 
-DISPOSITIONS: Final = ("planned", "incomplete", "needs_owner")
+DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
 type Checkouts = Callable[[Path], Repo]  # a fresh Git view from one checkout path
+TRAILER: Final = "Task-Loop-Attempt"  # the factory's commit trailer; an agent's message may never carry it
+PLAN_NAME: Final = "plan.md"
+MiB: Final = 1 << 20
+
+
+@dataclass(frozen=True)
+class StageRules:
+    """What one stage may commit: files under `root` (ending in `/`), at most `max_paths` of them, each at most `file_cap`
+    bytes; `deletions` is False for the plan stage (the implementation and review stages bring their own rules)."""
+
+    root: str
+    max_paths: int = 32
+    file_cap: int = MiB
+    deletions: bool = False
+
+
+def plan_stage(task_id: str) -> StageRules:
+    """The plan stage's rules: its files live under `docs/design/<task-id>/`, the plan itself is `plan.md` there."""
+    return StageRules(f"docs/design/{task_id}/")
+
+
+@dataclass(frozen=True)
+class FileEntry:
+    """One `lstat`, never following a symlink: the kind, the size and whether any execute bit is set."""
+
+    kind: Literal["file", "dir", "link", "other"]
+    size: int
+    executable: bool
+
+
+class SlotFiles(Protocol):
+    """The narrow file port over a slot and its Git pointer: plain reads, no Git, nothing written."""
+
+    def lstat(self, path: Path) -> FileEntry | None:
+        """None when nothing is there or it cannot be read."""
+        ...
+
+    def read(self, path: Path, cap: int) -> bytes | None:
+        """The bytes of a regular file (checked by `lstat` before any open) of at most `cap` bytes; else None."""
+        ...
+
+    def resolve(self, path: Path) -> Path | None:
+        """The path with every symlink and `..` resolved as the operating system (and so Git) resolves it; None when it
+        does not exist or cannot be resolved."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -44,8 +89,9 @@ class Admission:
     entry: tuple[int, str, str]
 
     @property
-    def plan_path(self) -> str:
-        return f"docs/design/{self.task.task_id}/plan.md"
+    def rules(self) -> StageRules:
+        return plan_stage(self.task.task_id)
+
 
 
 @dataclass(frozen=True)
@@ -65,6 +111,7 @@ class AttemptRecord:
     session_ref: str | None
     session_conflict: bool
     base_commit: str | None  # B: the slot HEAD read just before dispatch; never part of the fenced Admission
+    plan_commit: str | None = None  # the commit the stage ends at (X, or B for `unchanged`), written once
 
 
 @dataclass(frozen=True)
@@ -98,20 +145,23 @@ class AnswerState:
     kind: Literal["validation_pending", "valid", "missing", "json_invalid", "schema_invalid"]
     disposition: str | None = None
     plan_path: str | None = None
-    commit: str | None = None
+    paths: tuple[str, ...] = ()  # the files the agent asked the factory to commit, as validated
+    message: str | None = None
 
 
 type Rule = Literal[
-    "commit_absent", "not_descendant", "chain_length", "merge", "paths", "mode", "plan_missing", "plan_encoding", "plan_empty", "plan_size"
+    "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
+    "plan_encoding", "plan_empty", "plan_size",
 ]
 RULES: Final[tuple[Rule, ...]] = (
-    "commit_absent", "not_descendant", "chain_length", "merge", "paths", "mode", "plan_missing", "plan_encoding", "plan_empty", "plan_size"
+    "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
+    "plan_encoding", "plan_empty", "plan_size",
 )
 
 
 @dataclass(frozen=True)
 class Verified:
-    """Every rule held over (B, X, the chain, the plan blob); `reused`: X is B, so nothing new was committed."""
+    """Every rule held over (B, X, the one-step chain, the plan blob); `reused`: the agent answered `unchanged`, X is B."""
 
     plan_blob: str
     reused: bool = False
@@ -119,21 +169,23 @@ class Verified:
 
 @dataclass(frozen=True)
 class Rejected:
-    """The first rule the reported commit broke; terminal for the attempt."""
+    """The first rule the stage's commit broke (or `nothing_written`: no commit at all); terminal for the attempt."""
 
     reason: Rule
 
 
 @dataclass(frozen=True)
 class Unsettled:
-    """The slot is not detached, born and clean at X (`unborn`, `branch`, `head_moved`, `dirty`); nothing stored, retryable."""
+    """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `uncommitted`, `unsafe`,
+    `ignored`); nothing stored, retryable. `listing` is data for a person (the leftovers, or the unsafe path), never parsed."""
 
     reason: str
+    listing: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class NotApplicable:
-    """No valid `planned` answer of a clean run to verify; `what` is the stored outcome."""
+    """No valid `planned` or `unchanged` answer of a clean run to verify; `what` is the stored outcome."""
 
     what: str
 
@@ -197,32 +249,57 @@ class AttemptResult:
 
 @dataclass(frozen=True)
 class PlanAnswer:
+    """`paths` and `message`: what the agent asks the factory to commit (only with `planned`); the agent never commits."""
+
     disposition: str
     plan_path: str | None
-    commit: str | None
+    paths: tuple[str, ...]
+    message: str | None
     explanation: str
 
 
-type PlanDecoder = Callable[[object, str], PlanAnswer]
+type PlanDecoder = Callable[[object, StageRules], PlanAnswer]
+ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
 
 
-def decode_plan_answer(value: object, expected_path: str) -> PlanAnswer:
-    """Validate the factory's reported plan contract, without verifying Git effects; the single owner of its cross-field rule."""
-    if isinstance(value, dict) and set(value) == {"disposition", "plan_path", "commit", "explanation"}:
-        disposition, path, commit, explanation = (value[key] for key in ("disposition", "plan_path", "commit", "explanation"))
-        valid_commit = commit is None or (
-            isinstance(commit, str) and len(commit) in (40, 64) and all(c in "0123456789abcdef" for c in commit)
-        )
-        if (
-            disposition in DISPOSITIONS
-            and (path is None or path == expected_path)
-            and valid_commit
-            and isinstance(explanation, str)
-            and len(explanation) <= 2000
-            and (disposition != "planned" or (path == expected_path and isinstance(commit, str)))
-        ):
-            return PlanAnswer(disposition, path, commit, explanation)
-    raise ValueError("Invalid plan answer")
+def path_allowed(path: str, rules: StageRules) -> bool:
+    """A path the stage may commit: at most 255 bytes, relative, under `rules.root`, no NUL, newline or backslash, and no
+    empty, `.` or `..` component nor one that starts with `.git` in any case (macOS file systems ignore case)."""
+    if len(path.encode("utf-8", "surrogatepass")) > 255 or any(c in path for c in "\0\n\\") or not path.startswith(rules.root):
+        return False
+    parts = path.split("/")
+    return len(path) > len(rules.root) and not any(p in ("", ".", "..") or p.casefold().startswith(".git") for p in parts)
+
+
+def _message(message: object) -> bool:
+    return (
+        isinstance(message, str) and 1 <= len(message) <= 500 and "\0" not in message and TRAILER.casefold() + ":" not in message.casefold()
+    )
+
+
+def _paths(paths: object, rules: StageRules) -> tuple[str, ...] | None:
+    if not isinstance(paths, list) or len(paths) > rules.max_paths:
+        return None
+    found = tuple(path for path in paths if isinstance(path, str) and path_allowed(path, rules))
+    return found if len(found) == len(paths) and len(set(found)) == len(found) else None
+
+
+def decode_plan_answer(value: object, rules: StageRules) -> PlanAnswer:
+    """Validate the factory's plan answer contract, without verifying Git effects; the single owner of its cross-field
+    rules and every bound (the strict schema carries none). The expected plan is `<rules.root>plan.md`."""
+    if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
+        raise ValueError("Invalid plan answer")
+    disposition, path, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
+    expected, listed = rules.root + PLAN_NAME, _paths(paths, rules)
+    if disposition == "planned":
+        fits = path == expected and listed is not None and expected in listed and _message(message)
+    else:
+        named = path == expected or (path is None and disposition != "unchanged")
+        fits = disposition in DISPOSITIONS and named and listed == () and message is None
+    if not fits or listed is None or not isinstance(explanation, str) or len(explanation) > 2000:
+        raise ValueError("Invalid plan answer")
+    text = message if isinstance(message, str) else None
+    return PlanAnswer(str(disposition), None if path is None else expected, listed, text, explanation)
 
 
 def optional_int(value: object) -> int | None:

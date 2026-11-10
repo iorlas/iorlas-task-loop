@@ -15,8 +15,9 @@ installed git_porcelain 0.13.0 (`api.py`, `real.py`, `real_read.py`, `real_obser
 
 Today `execute` returns a validated `PlanAnswer`. That is a well-formed claim, not Git evidence. Four pieces are missing:
 
-1. **Verification (this slice).** Read-only Git over facts that cannot change: the reported commit X, the chain from
-   the recorded base B to X, and the plan blob. It stores one verdict and makes no process, push, lock, ref or Git write.
+1. **Verification (this slice).** Read-only Git over facts that cannot change: the stage's commit X (since [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)
+   the factory's own commit of the paths the agent listed, recorded as `plan_attempt.plan_commit`), its one step from
+   the recorded base B, and the plan blob. It stores one verdict; the only Git write is [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)`'s factory commit.
 2. **Preparation and lock.** The entry takes `ProcessLock(reentrant=False)` before any worktree mutation, then moves the
    slot onto `task/<task-id>` with `Worktree.take_branch(..., mode="resume")`. The same handle spans the Supervisor and
    cleanup, and the lock check joins the slot `free` rule (O4 of .4.3.1.4).
@@ -49,6 +50,10 @@ Preparation first would add the lock, the dependency and the branch handling bef
 Only `dirty()` runs on the slot.
 
 ## 3. The verdict: what "verified" means
+
+> Superseded in part by [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md) sections 3-8: the factory commits the agent's listed paths; the chain is one step
+> (`CHAIN_CAP` and the `merge` rule are gone); reuse (Q2) happens only on the agent's explicit `unchanged`; X is
+> `plan_attempt.plan_commit`, not `reported_commit`; RULES gain `nothing_written` and `file_size`.
 
 Inputs: the stored valid answer (`planned`, commit X, `plan_path` P = `docs/design/<task-id>/plan.md`), B from
 `plan_attempt.base_commit`, and the admission's `cwd` and `repo_id`. Every check reads only content-addressed objects,
@@ -99,8 +104,9 @@ first-parent diff still applies the path and mode rules to everything it brings 
 
 ## 5. Storage: schema v2 -> v3 (no compat: `current()` refuses an old DB)
 
-One owner per fact. B is owned by `plan_attempt.base_commit` and X by `plan_execution.reported_commit`, each written
-once. The verdict table holds only what is new:
+One owner per fact. B is owned by `plan_attempt.base_commit` and X by `plan_attempt.plan_commit` (schema v4,
+[.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md); schema v3 had X in `plan_execution.reported_commit`, now replaced by `commit_paths`/`commit_message`), each
+written once. The verdict table holds only what is new:
 
 ```sql
 -- plan_attempt gains: base_commit TEXT CHECK(base_commit IS NULL OR length(base_commit) IN (40,64)),
@@ -118,7 +124,8 @@ commit, result)`. `plan_verify.py` reads Git and nothing else. `WRITERS` gains `
 plan_schema.py` and `("INSERT","plan_verification"): plan_store.py`; there is no UPDATE or DELETE. The INSERT runs in
 one `begin_immediate`, only while the reservation is still held for this attempt and generation (the fence runs inside
 the writer), the run was clean (`rc=0`, not timed out), the session publication is `complete`, `answer_kind='valid'`,
-`disposition='planned'`, and `reported_commit` and `base_commit` equal the X and B that were verified; otherwise it
+`disposition` `planned` or `unchanged`, and the stored `plan_commit` and `base_commit` equal the X and B that were
+verified (`nothing_written` alone has no commit, with `plan_commit` NULL; [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)); otherwise it
 refuses (`stale_reservation` / `changed_answer`). It uses
 `ON CONFLICT DO NOTHING`, then reads the row back. The inputs cannot change, so a second verifier computes the same
 verdict and there is no conflict branch; a stored row that differs would be a defect, reported as
@@ -190,8 +197,11 @@ another name of a commit). Every other `None` read is unknown, not a verdict.
 - **Custody.** No lock is taken, and the agent's descendants have no stop proof (.4.4); later slot changes are found
   only by the lock-held checks of slices 2 and 4. No ref pins X (Q7): on a detached HEAD, X is held only by the
   worktree's HEAD and its reflog until slice 2 creates the branch.
-- **The sandbox is not a boundary.** `CODEX_ACCESS` sets `approval_policy=on-request` with `approvals_reviewer=auto_review`,
-  so an approved command runs **outside** the sandbox. It can write the shared `.git/config` (hooks, `core.fsmonitor`,
+- **The sandbox was not a boundary** (resolved in [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)). Revision 2 of this slice set `approval_policy=on-request`
+  with `approvals_reviewer=auto_review`, so an approved command ran **outside** the sandbox (smoke 3 saw the agent's
+  commit succeed that way). Now `CODEX_ACCESS` sets `approval_policy=never` with no reviewer, the agent never writes
+  Git, and every factory Git call runs with hooks, fsmonitor, signing and auto-maintenance off. Under the old flags an
+  escalated command could write the shared `.git/config` (hooks, `core.fsmonitor`,
   `core.worktree`, include paths) and create refs and tags, none detected here. A `core.fsmonitor` set that way would run
   a program on the factory's own `git status`; git_porcelain does not neutralise it (no `-c` for it in `real_env.py`).
   Reading commits from the person's checkout narrows this but cannot close it, because `.git/config` is shared. The same
@@ -216,8 +226,8 @@ another name of a commit). Every other `None` read is unknown, not a verdict.
 | Smoke result | Effect |
 |---|---|
 | `refused identity` (start or boot changes across exec on macOS) | No live entry runs. This design is unchanged; the launcher fix comes first. |
-| Commit refused, so the answer is `incomplete` | Verification is valid but never exercised live. Slice 2 must choose between a sandbox that may write the git common dir and **the factory committing the plan** (`Worktree.record(paths="own")` under the lock). In the second case X comes from the factory's `Recorded.sha`, `planned` stops requiring a reported commit (an owner decision), and the verdict's X binds to a new factory-owned column instead of `reported_commit`. |
-| Commit made **through an approved escalation** | The sandbox assumption is void (section 8): treat `.git/config` as agent-writable and harden before slice 2. |
+| Commit refused, so the answer is `incomplete` | Resolved by [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md) (the factory commits). Verification is valid but never exercised live. Slice 2 must choose between a sandbox that may write the git common dir and **the factory committing the plan** (`Worktree.record(paths="own")` under the lock). In the second case X comes from the factory's `Recorded.sha`, `planned` stops requiring a reported commit (an owner decision), and the verdict's X binds to a new factory-owned column instead of `reported_commit`. |
+| Commit made **through an approved escalation** | Seen in smoke 3; resolved by [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md) (`never`, hardened Git). The sandbox assumption is void (section 8): treat `.git/config` as agent-writable and harden before slice 2. |
 | Slot dirty after the run, or HEAD not at X | Section 4 gives `unsettled` with nothing stored until a person or the cleanup slice acts. If common, the prompt needs work; verification does not loosen. |
 | A second commit, or an extra file | Within the chain and path rules, or rejected. Confirms or tunes Q3 and the cap of 8. |
 | The push bar fails (a `smoke` ref exists) | Fix it before slice 3. |

@@ -1,29 +1,32 @@
-"""Read-only Git evidence for a returned plan answer: the slot's state, and the verdict over (B, X, the chain, the plan blob).
+"""Read-only Git evidence for a stage's commit: the slot's pointer and state, and the verdict over (B, X, the one-step
+chain, the plan blob).
 
-Git only, through `git_porcelain`: no Git write, process, lock, ref, push or factory.db access. Identity is read through
-the slot; every commit read and the worktree listing run from the person's checkout (`RepoIdentity.root`); only the
-status read runs on the slot. `GitUnavailable` and `Unreadable` propagate: they mean unknown, never a verdict.
+Git only, through `git_porcelain`, plus the narrow file port for the slot's `.git` pointer: no Git write, process, lock,
+ref, push or factory.db access. Identity, the worktree listing and every commit read run from the person's checkout (the
+root the verified pointer names); only the status reads run on the slot. `GitUnavailable` and `Unreadable` propagate:
+they mean unknown, never a verdict.
 """
 
+import re
 from dataclasses import dataclass
-from itertools import pairwise
 from pathlib import Path
 from typing import Final, Literal
 
 from git_porcelain import Repo, Tree
 
-from taskloop.plan_types import Checkouts, Rejected, Rule, Verdict, Verified
+from taskloop.plan_types import PLAN_NAME, Checkouts, Rejected, Rule, SlotFiles, StageRules, Verdict, Verified, path_allowed
 
 type Problem = Literal["unborn", "branch", "head_moved", "dirty"]
-CHAIN_CAP: Final = 8  # a plan step commits the plan and perhaps a few design artifacts
-PLAN_CAP: Final = 1 << 20  # bytes, known only after the full read: a tree listing carries no sizes
 MODE: Final = "100644"
-FORBIDDEN: Final = frozenset({"", ".", "..", ".git"})  # compared case-folded: macOS file systems ignore case
+POINTER_CAP: Final = 4096  # bytes of a `.git` pointer, `commondir` or `gitdir` file
+LISTED: Final = 50  # leftover lines shown; the rest is counted
+LINE_CAP: Final = 300  # characters of one leftover line
+GITDIR: Final = re.compile(r"gitdir:\s*(.+)")  # git_porcelain's `real_env.git_dir` rule
 
 
 class Unreadable(Exception):
-    """A read that cannot be told apart from a failure returned nothing: a parent of a chain commit, a listed blob, or a
-    listed path's entry. The library reads these with an unchecked exit code, so None is never taken as evidence."""
+    """A read that cannot be told apart from a failure returned nothing: the parent of X, a listed blob, or a listed
+    path's entry. The library reads these with an unchecked exit code, so None is never taken as evidence."""
 
 
 @dataclass(frozen=True)
@@ -44,71 +47,151 @@ class SlotState:
         return "dirty" if self.dirty else None
 
 
-def observe_slot(checkouts: Checkouts, cwd: str, repo_id: str) -> SlotState | Literal["repo", "not_listed"]:
-    """`repo` when the slot's repository is not `repo_id`; `not_listed` when Git does not list the slot."""
+def _small(files: SlotFiles, path: Path) -> str | None:
+    data = files.read(path, POINTER_CAP)
+    try:
+        return None if data is None else data.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return None
+
+
+@dataclass(frozen=True)
+class Pointer:
+    """The linked Git directory and the common Git directory a slot's `.git` names, both as Git resolves them."""
+
+    gitdir: Path
+    common: Path
+
+    @property
+    def root(self) -> Path:
+        """git_porcelain's `RepoIdentity.root` rule: the common directory's parent when it is named `.git`."""
+        return self.common.parent if self.common.name == ".git" else self.common
+
+
+def pointer(files: SlotFiles, slot: Path) -> Pointer | None:
+    """What `<slot>/.git` names, judged with the resolution Git and git_porcelain's pin use (`(slot / text).resolve()`,
+    `(G / commondir).resolve()`), never a lexical one: the slot path itself has no symlink; `.git` is a regular gitdir
+    file; G resolves outside the slot to a directory directly under `<C>/worktrees`, C (from `G/commondir`) also outside
+    the slot; and G's back-pointer `G/gitdir` resolves to exactly `<slot>/.git`. Else None (`redirected`). Relative
+    pointers (`git worktree add --relative-paths`) resolve against the slot and G as Git resolves them. Plain reads only:
+    a directory, symlink or FIFO at `.git` is refused before any open."""
+    if files.resolve(slot) != slot:
+        return None
+    dotgit = slot / ".git"
+    entry = files.lstat(dotgit)
+    text = _small(files, dotgit) if entry is not None and entry.kind == "file" and entry.size <= POINTER_CAP else None
+    found = None if text is None else GITDIR.fullmatch(text)
+    gitdir = None if found is None else files.resolve(slot / found[1].strip())
+    if gitdir is None or gitdir.is_relative_to(slot):
+        return None
+    listed = files.lstat(gitdir)
+    common = _small(files, gitdir / "commondir") if listed is not None and listed.kind == "dir" else None
+    shared = None if common is None else files.resolve(gitdir / common)
+    if shared is None or shared.is_relative_to(slot) or gitdir.parent != shared / "worktrees":
+        return None
+    back = _small(files, gitdir / "gitdir")
+    return Pointer(gitdir, shared) if back is not None and files.resolve(gitdir / back) == dotgit else None
+
+
+def observe_slot(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str) -> SlotState | Literal["repo", "not_listed", "redirected"]:
+    """The pointer check first (`redirected`, no Git call); then, from the root it names, `repo` when the repository is
+    not `repo_id`, `redirected` when Git's common directory is not the one the pointer names, and `not_listed` when Git
+    does not list the slot."""
     path = Path(cwd)
-    slot = checkouts(path)
-    identity = slot.identity()
+    found = pointer(files, path)
+    if found is None:
+        return "redirected"
+    repo = checkouts(found.root)
+    identity = repo.identity()
     if identity.key != repo_id:
         return "repo"
-    info = next((worktree for worktree in checkouts(identity.root).worktrees() if worktree.path == path), None)
+    if identity.common_dir != found.common:
+        return "redirected"
+    info = next((worktree for worktree in repo.worktrees() if worktree.path == path), None)
     if info is None:
         return "not_listed"
-    return SlotState(identity.root, info.head, info.branch, slot.worktree(path).dirty().raw)
+    return SlotState(found.root, info.head, info.branch, repo.worktree(path).dirty().raw)
 
 
-def allowed(path: str, task_id: str) -> bool:
-    """Under `docs/design/<task-id>/`, with no empty, `.`, `..` or `.git` component in any case."""
-    parts = path.split("/")
-    return parts[:3] == ["docs", "design", task_id] and len(parts) > 3 and not any(part.casefold() in FORBIDDEN for part in parts)
+def listing(repo: Repo, slot: Path) -> tuple[str, ...]:
+    """The slot's leftovers as `XY path` lines from one porcelain status read, at most LISTED, then `+N more`, each made
+    safe to print (`shown`): data for a person and a later repeat prompt, never parsed for control."""
+    raw = repo.worktree_state(slot)
+    records = () if raw is None else tuple(raw.decode("utf-8", "replace").split("\0"))
+    lines: list[str] = []
+    skip = False
+    for record in records:
+        if skip:
+            skip = False
+            continue
+        kind, _, rest = record.partition(" ")
+        fields = {"1": 7, "2": 8, "u": 9}.get(kind)
+        if fields is not None:
+            parts = rest.split(" ", fields)
+            lines.append(f"{parts[0]} {parts[-1]}")
+            skip = kind == "2"  # a rename's original path follows as its own record
+        elif kind == "?":
+            lines.append(f"?? {rest}")
+    more = [f"+{len(lines) - LISTED} more"] if len(lines) > LISTED else []
+    return (*(shown(line) for line in lines[:LISTED]), *more)
 
 
-def judge(repo: Repo, root: Path, base: str, commit: str, task_id: str, plan_path: str) -> Verdict:
-    """The section 3 rules in order; the first broken one decides. Every read is of content-addressed objects."""
+def shown(line: str) -> str:
+    """A listing line safe to print: every control character (C0, DEL, C1: newlines, escapes, ANSI sequences) becomes
+    `?`, and the line is cut at LINE_CAP characters. A path is agent-chosen data, never terminal input."""
+    clean = "".join("?" if ord(c) < 32 or 127 <= ord(c) < 160 else c for c in line)
+    return clean if len(clean) <= LINE_CAP else clean[: LINE_CAP - 3] + "..."
+
+
+def judge(repo: Repo, root: Path, base: str, commit: str, rules: StageRules, paths: tuple[str, ...], *, unchanged: bool) -> Verdict:
+    """The rules in order; the first broken one decides. Every read is of content-addressed objects. `unchanged`: X is
+    B and only the plan rules apply to the plan at B (`reused`)."""
+    plan_path = rules.root + PLAN_NAME
     tip = repo.tree(f"{commit}^{{commit}}")
     if tip is None or tip.sha != commit:  # never a tag, tree or abbreviation that resolves to some other commit
         return Rejected("commit_absent")
+    if unchanged:
+        return _plan(tip, plan_path, rules, reused=True)
     relation = repo.relate(base, commit)
     if relation.ahead != 0:
         return Rejected("not_descendant")
-    if relation.behind > CHAIN_CAP:
+    if relation.behind != 1:
         return Rejected("chain_length")
-    broken = _chain(repo, root, tip, base, relation.behind, task_id)
-    return Rejected(broken) if broken is not None else _plan(tip, plan_path, task_id, reused=relation.behind == 0)
+    parent = repo.tree(f"{commit}^")
+    if parent is None:
+        raise Unreadable("parent")
+    if parent.sha != base:  # one commit ahead, but its first parent is another: a merge brought B in
+        return Rejected("not_descendant")
+    broken = _changes(repo, root, tip, base, rules, paths)
+    return Rejected(broken) if broken is not None else _plan(tip, plan_path, rules, reused=False)
 
 
-def _chain(repo: Repo, root: Path, tip: Tree, base: str, steps: int, task_id: str) -> Rule | None:
-    """Exactly `steps` first-parent steps from X reach B, and not before (else a merge brought in outside commits);
-    then every commit of the chain changes only allowed files, added or modified, with mode 100644. A missing parent is
-    unknown, not a merge: a root commit and a failed read look the same."""
-    trees = [tip]
-    for _ in range(steps):
-        if trees[-1].sha == base:
-            return "merge"
-        parent = repo.tree(f"{trees[-1].sha}^")
-        if parent is None:
-            raise Unreadable("parent")
-        trees.append(parent)
-    if trees[-1].sha != base:
-        return "merge"
-    checkout = repo.worktree(root)
-    for child, parent in pairwise(trees):
-        for change in checkout.diff(parent.sha, child.sha, cap=0).changes:
-            if change.kind == "D" or not allowed(change.path, task_id):
-                return "paths"
-            entry = child.files.get(change.path)
-            if entry is None:
-                raise Unreadable("entry")
-            if entry[0] != MODE:
-                return "mode"
+def _changes(repo: Repo, root: Path, tip: Tree, base: str, rules: StageRules, paths: tuple[str, ...]) -> Rule | None:
+    """One diff B..X: each change added or modified (deletions only when the stage allows them), on an allowed path the
+    answer listed, mode 100644, and every committed blob at most `file_cap` bytes after the full read."""
+    for change in repo.worktree(root).diff(base, tip.sha, cap=0).changes:
+        if (change.kind == "D" and not rules.deletions) or not path_allowed(change.path, rules) or change.path not in paths:
+            return "paths"
+        if change.kind == "D":
+            continue
+        entry = tip.files.get(change.path)
+        if entry is None:
+            raise Unreadable("entry")
+        if entry[0] != MODE:
+            return "mode"
+        data = tip.read(change.path)
+        if data is None:
+            raise Unreadable("blob")
+        if len(data) > rules.file_cap:
+            return "file_size"
     return None
 
 
-def _plan(tip: Tree, plan_path: str, task_id: str, *, reused: bool) -> Verdict:
+def _plan(tip: Tree, plan_path: str, rules: StageRules, *, reused: bool) -> Verdict:
     """The plan at X passes the path and mode rules and the content floor; never a review of what it says."""
-    entry = tip.files.get(plan_path)
-    if not allowed(plan_path, task_id):
+    if not path_allowed(plan_path, rules):
         return Rejected("paths")
+    entry = tip.files.get(plan_path)
     if entry is None:
         return Rejected("plan_missing")
     if entry[0] != MODE:
@@ -116,16 +199,16 @@ def _plan(tip: Tree, plan_path: str, task_id: str, *, reused: bool) -> Verdict:
     data = tip.read(plan_path)
     if data is None:  # the listing has the plan: an empty read is a failed read
         raise Unreadable("blob")
-    broken = _content(data)
+    broken = _content(data, rules.file_cap)
     return Verified(entry[1], reused) if broken is None else Rejected(broken)
 
 
-def _content(data: bytes) -> Rule | None:
-    """Strict UTF-8, not whitespace only, at most PLAN_CAP bytes after the full read."""
+def _content(data: bytes, cap: int) -> Rule | None:
+    """Strict UTF-8, not whitespace only, at most `cap` bytes after the full read."""
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         return "plan_encoding"
     if not text.strip():
         return "plan_empty"
-    return "plan_size" if len(data) > PLAN_CAP else None
+    return "plan_size" if len(data) > cap else None

@@ -5,7 +5,7 @@ import sqlite3
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=3,
+    version=4,
     name="factory",
     steps={},
     ddl="""
@@ -28,7 +28,8 @@ CREATE TABLE plan_attempt (
  rev INTEGER NOT NULL DEFAULT 0, worker_pid INTEGER, worker_pgid INTEGER, worker_start TEXT, worker_boot TEXT,
  session_ref TEXT, session_conflict INTEGER NOT NULL DEFAULT 0 CHECK(session_conflict IN (0,1)),
  base_commit TEXT CHECK(base_commit IS NULL OR length(base_commit) IN (40,64)),
- CHECK(phase='admitted' OR base_commit IS NOT NULL),
+ plan_commit TEXT CHECK(plan_commit IS NULL OR length(plan_commit) IN (40,64)),
+ CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(plan_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id)
 );
 CREATE TABLE plan_execution (
@@ -40,7 +41,7 @@ CREATE TABLE plan_execution (
  answer_path TEXT NOT NULL, answer_digest TEXT NOT NULL, diagnostic_path TEXT NOT NULL, diagnostic_digest TEXT NOT NULL,
  answer_kind TEXT NOT NULL DEFAULT 'validation_pending'
   CHECK(answer_kind IN ('validation_pending','valid','missing','json_invalid','schema_invalid')),
- disposition TEXT, plan_path TEXT, reported_commit TEXT,
+ disposition TEXT, plan_path TEXT, commit_paths TEXT, commit_message TEXT,
  publication TEXT NOT NULL CHECK(publication IN ('complete','pending','conflict','fault'))
 );
 CREATE TABLE plan_verification (
@@ -60,14 +61,14 @@ ATTEMPT_ADMITTED = (
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
-    "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit"
+    "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,plan_commit"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,tokens_known,t_in,t_cached,t_out,"
     "cumulative_known,c_in,c_cached,c_out,turns,session"
 )
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
-ANSWER = "answer_kind,disposition,plan_path,reported_commit,publication"
+ANSWER = "answer_kind,disposition,plan_path,commit_paths,commit_message,publication"
 VERDICT = "verdict,reason,plan_blob,reused"
 
 

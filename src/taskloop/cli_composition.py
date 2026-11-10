@@ -11,14 +11,14 @@ from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import Store
 from stream_proc import observe_owned
 
-from taskloop.composition import adopt_slots, checkouts, open_launcher, open_plan_admission, open_plan_verifier
+from taskloop.composition import RealSlotFiles, adopt_slots, checkouts, open_launcher, open_plan_admission, open_plan_verifier
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
-from taskloop.plan import PlanVerifier
 from taskloop.plan_launch import Entry, entry_process
 from taskloop.plan_ops import Adoption, Failed, Reads, Seen, Starting, require_database
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
 from taskloop.plan_types import Checkouts
+from taskloop.plan_verifier import PlanVerifier
 
 
 def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Path.home) -> Loaded | ConfigRefused:
@@ -61,9 +61,14 @@ def _reader(con: sqlite3.Connection) -> PlanStore:
 
 @contextmanager
 def open_plan_reads(database: Path) -> Generator[Reads | Failed]:
-    """Read-only factory.db, the native process-table observation and the wall clock; writes and creates nothing."""
+    """Read-only factory.db, the native process-table observation, the wall clock and the read-only leftovers of a stage
+    still to settle (Git and slot reads); writes and creates nothing."""
     with _read_only(database) as con:
-        yield con if isinstance(con, Failed) else Reads(_reader(con), entry_seen, time.time)
+        if isinstance(con, Failed):
+            yield con
+        else:
+            reader = _reader(con)
+            yield Reads(reader, entry_seen, time.time, PlanVerifier(reader, checkouts, RealSlotFiles(), time.time).leftovers)
 
 
 @contextmanager

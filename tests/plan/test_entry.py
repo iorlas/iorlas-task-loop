@@ -10,7 +10,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from git_porcelain import Recorded, Repo
+from git_porcelain import Repo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store
 from stream_proc import ProcessObservation, inspect_process
@@ -20,11 +20,12 @@ from taskloop.plan import PlanAttempts
 from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore
-from taskloop.plan_types import AttemptKey, Checkouts, Evidence
+from taskloop.plan_types import AttemptKey, Checkouts, Evidence, SlotFiles
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
-PLAN = {"disposition": "planned", "plan_path": "docs/design/tl-1/plan.md", "commit": "a" * 40, "explanation": "Plan committed"}
+P = "docs/design/tl-1/plan.md"
+PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
 
 
 def me() -> tuple[int, str, str]:
@@ -48,21 +49,23 @@ class FlakyFiles(PlanFiles):
 
 
 class Entry:
-    """One entry's collaborators: the run fake (with `commit`, the agent first commits that file in the slot and reports
-    the commit), a counting credential source and Git view, a clock the wait advances, and the log."""
+    """One entry's collaborators: the run fake (with `written`, the agent first writes those files in the slot and lists
+    the given paths), a counting credential source and Git view, the slot file port, a clock the wait advances, and the log."""
 
     def __init__(
         self,
         db: Path,
         checkouts: Checkouts,
+        slot_files: SlotFiles,
         entry: tuple[int, str, str] | None = None,
         failures: int = 0,
         wait_to: float = 10,
         rc: int = 0,
         text: str = "",
-        commit: tuple[FakeWorktree, str] | None = None,
+        written: tuple[FakeWorktree, dict[str, str], list[str]] | None = None,
     ) -> None:
-        self.db, self.now, self.wait_to, self.git, self.commit = db, 10.0, wait_to, checkouts, commit
+        self.db, self.now, self.wait_to, self.git, self.written = db, 10.0, wait_to, checkouts, written
+        self.slot_files = slot_files
         self.git_opens = 0
         if entry is not None:
             store = Store(SCHEMA)
@@ -88,12 +91,11 @@ class Entry:
         return self.git(path)
 
     def execution(self, harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        if self.commit is not None:
-            slot, path = self.commit
-            slot.write_file(path, "# Plan\n")
-            made = slot.record("Plan", paths="all")
-            assert isinstance(made, Recorded)
-            summary = dataclasses.replace(self.outcome.summary, text=json.dumps(PLAN | {"commit": made.sha}))
+        if self.written is not None:
+            slot, files, paths = self.written
+            for path, text in files.items():
+                slot.write_file(path, text)
+            summary = dataclasses.replace(self.outcome.summary, text=json.dumps(PLAN | {"paths": paths}))
             self.run = FakeRun(dataclasses.replace(self.outcome, summary=summary))
         return self.run(harness, spec, timeout, hooks)
 
@@ -101,7 +103,7 @@ class Entry:
         self.opened.append((database, artifacts))
         store = Store(SCHEMA)
         connect = PlanStore(lambda: store.shared_rw(database), store.begin_immediate)
-        return PlanAttempts(connect, self.files, self.credentials, self.execution, self.clock, self.checkouts)
+        return PlanAttempts(connect, self.files, self.credentials, self.execution, self.clock, self.checkouts, self.slot_files)
 
     def clock(self) -> float:
         return self.now
@@ -115,23 +117,27 @@ class Entry:
         return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append)
 
 
+NOTE = "docs/design/tl-1/note.md"
+
+
 @pytest.mark.parametrize(
-    ("path", "line", "code", "opens"),
+    ("files", "line", "code", "opens"),
     [
-        ("docs/design/tl-1/plan.md", "collected verified verify=verified", 0, 5),
-        ("src/plan.md", "collected rejected:paths verify=rejected:paths", 1, 5),
-        (None, "pending verification verify=unsettled:head_moved", 1, 4),
+        ({P: "# Plan\n"}, "collected verified verify=verified", 0, 5),
+        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty", 1, 5),
+        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted", 1, 5),
+        ({}, "pending verification verify=unsettled:unsafe", 1, 3),
     ],
-    ids=["verified", "rejected", "unsettled"],
+    ids=["verified", "rejected", "uncommitted", "unsafe"],
 )
 def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verified(
-    admitted: Path, checkouts: Checkouts, slot: FakeWorktree, path: str | None, line: str, code: int, opens: int
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree, files: dict[str, str], line: str, code: int, opens: int
 ) -> None:
-    entry = Entry(admitted, checkouts, me(), commit=None if path is None else (slot, path))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, files, [P]))
     assert entry() == code
     assert entry.lines == [line] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
-    # two Git opens before dispatch, two for the one verification's slot reads, one for its commit reads: never retried
+    # one Git open before dispatch; the one verification: two to commit, one for the clean check, one to judge or list
     assert entry.waits == [] and entry.git_opens == opens
 
 
@@ -144,37 +150,40 @@ INCOMPLETE = "collected incomplete verify=not_applicable"
         (1, "", "collected run:vendor_blip verify=not_applicable"),
         (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable"),
         (0, "not json", "collected answer:json_invalid verify=not_applicable"),
-        (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "commit": None}), INCOMPLETE),
+        (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
+        (0, json.dumps(PLAN | {"commit": "a" * 40}), "collected answer:schema_invalid verify=not_applicable"),
     ],
-    ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete"],
+    ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete", "old_commit_key"],
 )
 def test_a_terminal_failure_is_collected_with_its_reason_and_exits_1(
-    admitted: Path, checkouts: Checkouts, rc: int, text: str, line: str
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, rc: int, text: str, line: str
 ) -> None:
-    entry = Entry(admitted, checkouts, me(), rc=rc, text=text)
+    entry = Entry(admitted, checkouts, slot_files, me(), rc=rc, text=text)
     assert entry() == 1
     assert entry.lines == [line] and all("SECRET" not in logged and "credential" not in logged for logged in entry.lines)
 
 
 @pytest.mark.parametrize("stored", [None, (1, "someone-else", "boot")])
 def test_a_process_that_is_not_the_registered_entry_reads_no_credentials(
-    admitted: Path, checkouts: Checkouts, stored: tuple[int, str, str] | None
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, stored: tuple[int, str, str] | None
 ) -> None:
-    entry = Entry(admitted, checkouts, stored)
+    entry = Entry(admitted, checkouts, slot_files, stored)
     assert entry() == 1
     assert entry.lines == ["refused identity"] and entry.credential_calls == 0 and entry.run.calls == [] and entry.git_opens == 0
 
 
-def test_an_unknown_own_identity_reads_no_credentials(admitted: Path, checkouts: Checkouts) -> None:
-    entry = Entry(admitted, checkouts, me())
+def test_an_unknown_own_identity_reads_no_credentials(admitted: Path, checkouts: Checkouts, slot_files: SlotFiles) -> None:
+    entry = Entry(admitted, checkouts, slot_files, me())
     assert entry(lambda _pid: ProcessObservation("unknown")) == 1
     assert entry.lines == ["refused identity"] and entry.credential_calls == 0 and entry.run.calls == []
 
 
-def test_an_absent_task_or_a_missing_database_runs_nothing(admitted: Path, checkouts: Checkouts, tmp_path: Path) -> None:
-    entry = Entry(admitted, checkouts, me())
+def test_an_absent_task_or_a_missing_database_runs_nothing(
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, tmp_path: Path
+) -> None:
+    entry = Entry(admitted, checkouts, slot_files, me())
     assert entry(task_id="tl-9") == 1 and entry.lines == ["refused absent"]
-    missing = Entry(tmp_path / "missing.db", checkouts)
+    missing = Entry(tmp_path / "missing.db", checkouts, slot_files)
     assert missing() == 1 and missing.lines == ["refused database"]
     assert not (tmp_path / "missing.db").exists() and missing.opened == [] and missing.run.calls == []
 
@@ -189,9 +198,17 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(admitted: Path, check
     ids=["second_try_publishes", "three_retries_at_most", "never_past_the_deadline"],
 )
 def test_publication_is_retried_only_while_unavailable_and_the_agent_never_again(
-    admitted: Path, checkouts: Checkouts, slot: FakeWorktree, failures: int, wait_to: float, line: str, waits: int, captures: int
+    admitted: Path,
+    checkouts: Checkouts,
+    slot_files: SlotFiles,
+    slot: FakeWorktree,
+    failures: int,
+    wait_to: float,
+    line: str,
+    waits: int,
+    captures: int,
 ) -> None:
-    entry = Entry(admitted, checkouts, me(), failures, wait_to, commit=(slot, "docs/design/tl-1/plan.md"))
+    entry = Entry(admitted, checkouts, slot_files, me(), failures, wait_to, written=(slot, {P: "# Plan\n"}, [P]))
     assert entry() == (0 if failures == 1 else 1)
     assert entry.lines == [line] and len(entry.waits) == waits and entry.files.captures == captures
     assert len(entry.run.calls) == 1

@@ -35,9 +35,11 @@ type Seen = Literal["matching", "gone", "different_process", "unknown"]
 type Observe = Callable[[Entry], Seen]  # a native process-table read of the entry's identity; no spawn or signal
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
 type Stuck = Literal["stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:unpublished", "stuck:conflict"]
-type Next = Literal["start", "wait", "verify", "done", "unknown"] | Stuck
+type Next = Literal["start", "wait", "verify", "repeat", "done", "unknown"] | Stuck
+type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a stage still to settle
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
+REPEATED: Final = ("uncommitted", "unsafe")  # what a stage repeat (its own slice, deferred) would hand back to the agent
 VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",
     NotApplicable: "not_applicable",
@@ -77,6 +79,7 @@ class Reads:
     store: PlanStore
     observe: Observe
     clock: Clock
+    leftovers: Leftovers
 
 
 @dataclass(frozen=True)
@@ -122,7 +125,8 @@ class AttemptStatus:
     deadline_passed: bool
     next: Next
     entry_process: Entry | None = None  # the registered entry's identity, for the manual steps (not secret)
-    worker: tuple[int, int] | None = None  # the agent's pid and process group, once registered
+    worker: tuple[int, int] | None = None  # the agent's last known pid and process group, once registered
+    leftovers: tuple[str, ...] = ()  # with `repeat`: why (`uncommitted`, `unsafe`) and the listing, read now, never stored
 
 
 @dataclass(frozen=True)
@@ -239,7 +243,9 @@ def _stopped(phase: str, result: AttemptResult, passed: bool) -> Next:
     return "verify" if result.reason == "verification" else "stuck:unpublished"
 
 
-def _status(reads: Reads, row: AttemptRow) -> AttemptStatus:
+def _status(reads: Reads, row: AttemptRow, *, probe: bool = True) -> AttemptStatus:
+    """`probe`: read the leftovers of a stage still to settle (Git and slot reads); never for a listing that keeps only
+    stuck or unknown attempts, which a `verify` or `repeat` step never is."""
     entry: EntryState = "none"
     if row.entry is not None:
         seen = reads.observe(row.entry)
@@ -248,7 +254,11 @@ def _status(reads: Reads, row: AttemptRow) -> AttemptStatus:
     passed = reads.clock() >= row.deadline
     step = next_step(row.phase, entry, result, passed)
     found = (row.backlog, row.task_id, row.key.attempt_id, row.slot, row.phase)
-    return AttemptStatus(*found, entry, result, passed, step, row.entry, row.worker)
+    left = reads.leftovers(row.key) if probe and step == "verify" else None
+    if left is None or left.reason not in REPEATED:
+        return AttemptStatus(*found, entry, result, passed, step, row.entry, row.worker)
+    repeat = AttemptResult("pending", "repeat", result.execution)
+    return AttemptStatus(*found, entry, repeat, passed, "repeat", row.entry, row.worker, (left.reason, *left.listing))
 
 
 def status(reads: Reads, artifacts: Path, backlog: str, task_id: str) -> Shown | Failed:
@@ -270,7 +280,7 @@ def attempts_status(reads: Reads, *, stuck: bool = False) -> Listed | Failed:
         rows = reads.store.attempts()
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
-    found = (_status(reads, row) for row in rows)
+    found = (_status(reads, row, probe=not stuck) for row in rows)
     return Listed(tuple(each for each in found if not stuck or each.next == "unknown" or each.next.startswith("stuck:")))
 
 
@@ -313,6 +323,7 @@ def _status_data(each: AttemptStatus) -> dict[str, object]:
         "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
         "entry_process": _entry_data(each.entry_process),
         "worker": None if each.worker is None else {"pid": each.worker[0], "pgid": each.worker[1]},
+        "leftovers": list(each.leftovers),
     }
 
 

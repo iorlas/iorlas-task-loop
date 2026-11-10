@@ -20,6 +20,8 @@ GUIDE = {
     "start": "Re-run `tl plan start` to relaunch its entry.",
     "wait": "Its entry runs; wait, then `tl plan show` again.",
     "verify": "Run `tl plan verify`.",
+    "repeat": "The stage left files it did not commit, or listed an unsafe path (above, read now). Its repeat is deferred to "
+    "its own slice: remove the listed files, then `tl plan verify`.",
     "done": "Collected: `succeeded` tells whether the plan was verified.",
     "unknown": "The entry or the store could not be read; run `tl plan show` again.",
     "stuck:expired_admitted": "Nothing in the factory can release it. Leave it, or discard the whole factory.db.",
@@ -30,8 +32,8 @@ GUIDE = {
     "taskloop.attempt_entry, then `kill -TERM <entry pid>`. Then `tl plan show` again.",
     "stuck:unpublished": "The result is incomplete; keep the evidence; leave it, or discard the whole factory.db.",
     "stuck:conflict": "The owner inspects the evidence; leave it, or discard the whole factory.db.",
-    "unsettled": "Inspect the slot; if HEAD is the reported commit and only stray files make it dirty, remove them, then "
-    "`tl plan verify`.",
+    "unsettled": "The slot has files the stage did not commit (listed), or the slot pointer or HEAD changed. Remove the "
+    "listed files or wait for a repeat; for `redirected` or `head_moved` inspect first. Then `tl plan verify`.",
     "registration_conflict": "Another start registered its entry first; `tl plan show` follows that attempt.",
 }
 
@@ -96,12 +98,13 @@ def register(commands: Parsers) -> None:
     listing = _add(plan, "list", f"Every attempt with its next step (read-only; {ATTEMPT_ONLY})")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next step is stuck:* or unknown")
     _common(listing, "--db")
-    verify = _add(plan, "verify", f"Verify the plan commit the task's attempt reported ({ATTEMPT_ONLY})")
+    verify = _add(plan, "verify", f"Commit the stage's listed files and verify them ({ATTEMPT_ONLY})")
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
     _common(verify, "--db")
     abandon = _add(plan, "abandon", "Deferred: refuses `deferred` and prints the manual steps")
     abandon.add_argument("task_id", metavar="TASK")
+    abandon.add_argument("--backlog", help="The task's backlog (accepted; the command is deferred)")
     _common(abandon)
 
 
@@ -169,7 +172,8 @@ def run(arguments: argparse.Namespace) -> int:
 
 def _status_lines(each: AttemptStatus) -> list[str]:
     entry = "" if each.entry_process is None else f" (pid {each.entry_process[0]}, started {each.entry_process[1]})"
-    worker = "none" if each.worker is None else f"pid {each.worker[0]}, process group {each.worker[1]}"
+    # the stored registration only: the agent may have exited long ago, so it is never shown as running
+    worker = "none" if each.worker is None else f"last known pid {each.worker[0]}, process group {each.worker[1]} (not checked)"
     return [
         f"Task: {each.task_id} (backlog {each.backlog})", f"Attempt: {each.attempt_id}", f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}", f"Result: {each.result.status} {each.result.reason}".rstrip(),
@@ -195,7 +199,9 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
         case Shown(status=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             steps = [GUIDE[each.next], *(stuck if each.next.startswith("stuck:") else [])]
-            return [*_status_lines(each), *paths, f"Next: {each.next}", *steps]
+            shown = f"Next: {each.next}" + (" (deferred)" if each.next == "repeat" else "")
+            left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
+            return [*_status_lines(each), *paths, *left, shown, *steps]
         case Listed(attempts=attempts):
             rows = [f"{a.task_id}\t{a.backlog}\t{a.slot}\t{a.phase}\t{a.entry}\t{a.result.status} {a.result.reason}\t{a.next}"
                     for a in attempts]

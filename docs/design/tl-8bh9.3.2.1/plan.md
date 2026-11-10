@@ -73,11 +73,14 @@ conditional mutation contract, rather than being smuggled into plan cleanup.
    .4.3.1 in this process's existing supervisor, which publishes native session and execution/result facts into
    factory.db. Preparation and failure policy remain factory code; factory source/tests contain no subprocess mechanism.
 4. Give the planner the actual requirements/acceptance, existing plan and repository context. Its authorized work is
-   the requested plan and necessary selected design artifacts; it writes and commits those intended files on the
-   task branch. Instruct it to leave unrelated work intact and report unresolved work or decisions explicitly. Do
-   not use an automatic factory stage-all/commit operation to turn unexplained changes into apparent completion.
+   the requested plan and necessary selected design artifacts; it writes those intended files and lists them in its
+   answer, and the factory commits exactly the listed, checked paths outside the sandbox (the agent never writes Git,
+   decided in [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)). Instruct it to leave unrelated work intact and report unresolved work or decisions explicitly.
+   Do not use an automatic factory stage-all/commit operation to turn unexplained changes into apparent completion: a
+   file left uncommitted means the stage is not done and is repeated (a later slice).
 5. Consume the agent interface's validated structured result. Factory supplies the domain result schema, including
-   disposition, plan path, reported commit reference and concise explanation. The shared agent interface owns
+   disposition (`planned`, `unchanged`, `incomplete`, `needs_owner`), plan path, the paths to commit, a commit message
+   and concise explanation ([.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md)). The shared agent interface owns
    parsing/structural validation; factory owns the workflow meaning. Malformed output or an unmet condition returns
    a typed unsuccessful/unresolved result. This first path contains no automatic model repair or hidden second launch.
 6. Reconcile actual Git evidence through its owning API and record the local plan result against the exact commit.
@@ -149,8 +152,8 @@ execution evidence referencing it, not a separately authoritative JSON plan stor
 | Agent finishes while coordinator is absent | Collect its persisted typed result; do not parse transcript/log history for completion. |
 | Result collector dies or process table is unreadable | Explicit unresolved result/custody; no new writer, automatic retry, detach/reset or success claim. |
 | Structured output is invalid | Report the actual failure while preserving Git work; no hidden correction launch. |
-| Agent reports success without a committed plan | Local completion fails; retain the actual evidence and work for an explicitly admitted later attempt. |
-| Commit exists but factory acknowledgment was lost | Inspect Git's authoritative branch/commit/path and reconcile the pending plan verification; do not rerun a completed agent to repeat its commit. |
+| Agent reports success without a committed plan | Since [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md) the factory commits the listed paths; `planned` with nothing changed is `rejected:nothing_written`, a leftover file `unsettled:uncommitted` (a repeat, later slice). |
+| Commit exists but factory acknowledgment was lost | The next verify adopts the factory's own commit by its `Task-Loop-Attempt` trailer ([.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md) section 5); the agent is never rerun to repeat a commit. |
 | DB unavailable/corrupt/schema-unusable | Refuse admission/control changes; no deletion, backup restore, log replay or file fallback. |
 | Stale caller tries to finish/release | Conditional attempt/reservation revision rejects it; another generation's state remains intact. |
 | Local plan is committed but not published | Report local completion/publication pending; do not advance to implementation or claim task completion. |

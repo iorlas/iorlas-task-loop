@@ -19,31 +19,27 @@ from taskloop.plan_types import (
     AttemptResult,
     Checkouts,
     Evidence,
-    NotApplicable,
     PendingPlanResult,
     PlanDecoder,
     PublicationResult,
     Rejected,
     SessionInput,
+    SlotFiles,
     StoredExecution,
-    Unsettled,
     Verdict,
-    Verified,
-    VerifyRefused,
-    VerifyResult,
-    VerifyUnavailable,
     decode_plan_answer,
     execution_facts,
 )
-from taskloop.plan_verify import Unreadable, judge, observe_slot
+from taskloop.plan_verify import observe_slot
 
 type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
 type Credentials = Callable[[], tuple[str, dict[str, str]]]
 ACCEPTED = ("accepted", "already_same")
 SANDBOX = "workspace-write"  # the only mode CODEX_ACCESS constrains
-# Baseline `decide.py` CODEX_ACCESS (731b7c76), verbatim: neither the user's config nor a repo file widens or narrows these.
-# The sandbox has no network and writes only the working directory; a command it blocks may ask to run outside it, and
-# Codex's automatic reviewer (a model, no human) approves or refuses that one command (accepted by codex-cli 0.162.1).
+# Neither the user's config nor a repo file widens or narrows these. The sandbox has no network and writes only the working
+# directory; a command it blocks fails back to the model (`never`: no escalation, so no reviewer), nothing runs outside it.
+# The agent never writes Git: the factory commits the paths it lists (tl-8bh9.4.3.1.7). Values read from codex 0.167.0's
+# strings, never run here.
 CODEX_ACCESS: Final = (
     "--ignore-user-config",
     "--ignore-rules",
@@ -52,9 +48,7 @@ CODEX_ACCESS: Final = (
     "-c",
     "sandbox_workspace_write.writable_roots=[]",
     "-c",
-    "approval_policy=on-request",
-    "-c",
-    "approvals_reviewer=auto_review",
+    "approval_policy=never",
     "-c",
     "tool_output_token_limit=3000",
 )
@@ -70,7 +64,7 @@ class CredentialsUnavailable(Exception):
 
 def outcome(stored: StoredExecution) -> str:
     """The run's own outcome, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
-    for an unusable answer, else the valid answer's disposition (only `planned` goes on to verification)."""
+    for an unusable answer, else the valid answer's disposition (`planned` and `unchanged` go on to verification)."""
     facts, answer = stored.facts, stored.answer
     if facts.timed_out or facts.rc != 0:
         return "run:" + (facts.reason or ("timeout" if facts.timed_out else "exit"))
@@ -81,7 +75,8 @@ def outcome(stored: StoredExecution) -> str:
 
 def report(stored: StoredExecution) -> AttemptResult:
     """Stored terminal data is collected with its outcome; a pending validation, session publication or verification is
-    never complete. A `planned` outcome is collected only with its verdict: `verified`, `reused` or `rejected:<rule>`."""
+    never complete. A `planned` or `unchanged` outcome is collected only with its verdict: `verified`, `reused` or
+    `rejected:<rule>`."""
     if stored.answer.kind == "validation_pending":
         return AttemptResult("pending", "validation_pending", stored)
     if stored.publication == "conflict":
@@ -89,7 +84,7 @@ def report(stored: StoredExecution) -> AttemptResult:
     if stored.publication != "complete":
         return AttemptResult("pending", "session_" + stored.publication, stored)
     reason, verdict = outcome(stored), stored.verification
-    if reason != "planned":
+    if reason not in ("planned", "unchanged"):
         return AttemptResult("collected", reason, stored)
     if verdict is None:
         return AttemptResult("pending", "verification", stored)
@@ -131,12 +126,14 @@ class PlanAttempts:
         execution: Execution,
         clock: Callable[[], float],
         checkouts: Checkouts,
+        slot_files: SlotFiles,
         decoder: PlanDecoder = decode_plan_answer,
         gate: PlanStore | None = None,
     ) -> None:
-        """`gate` serves only the harness registration write (composition bounds its busy wait); default `store`."""
+        """`gate` serves only the harness registration write (composition bounds its busy wait); default `store`.
+        `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot."""
         self.store, self.files, self.credentials = store, files, credentials
-        self.execution, self.clock, self.checkouts, self.decoder = execution, clock, checkouts, decoder
+        self.execution, self.clock, self.checkouts, self.slot_files, self.decoder = execution, clock, checkouts, slot_files, decoder
         self.gate = store if gate is None else gate
 
     def collect(self, key: AttemptKey) -> AttemptResult:
@@ -242,9 +239,11 @@ class PlanAttempts:
         if self.clock() >= admission.deadline:  # crossed while resolving the launch: stays admitted
             return AttemptResult("refused", "expired")
         try:
-            state = observe_slot(self.checkouts, admission.cwd, admission.repo_id)
+            state = observe_slot(self.checkouts, self.slot_files, admission.cwd, admission.repo_id)
         except GitUnavailable:
             return AttemptResult("unavailable", "git")
+        if state == "redirected":
+            return AttemptResult("refused", "slot_redirected")
         if isinstance(state, str):
             return AttemptResult("unavailable", state)
         head, problem = state.head, state.problem()
@@ -348,66 +347,12 @@ class PlanAttempts:
         """The released strict decoder plus the factory's pure PlanAnswer decoder; decoder faults propagate."""
         if evidence is None:
             return "conflict"
-        answer = decode_answer(text, lambda value: self.decoder(value, admission.plan_path))
+        answer = decode_answer(text, lambda value: self.decoder(value, admission.rules))
         if isinstance(answer, DecodedAnswer):
-            state = AnswerState("valid", answer.value.disposition, answer.value.plan_path, answer.value.commit)
+            value = answer.value
+            state = AnswerState("valid", value.disposition, value.plan_path, value.paths, value.message)
         elif isinstance(answer, InvalidAnswer):
             state = AnswerState("json_invalid" if answer.kind == "json" else "schema_invalid")
         else:
             state = AnswerState("missing")
         return self.store.answer(admission, evidence, state)
-
-
-def _applicable(stored: StoredExecution | None) -> VerifyResult | str:
-    """X when a verdict is still to be made; otherwise what `verify` returns, with no Git read."""
-    if stored is None:
-        return VerifyRefused("not_captured")
-    if stored.answer.kind == "validation_pending":
-        return VerifyUnavailable("validation_pending")
-    if stored.verification is not None:
-        return stored.verification
-    commit = stored.answer.commit
-    if outcome(stored) != "planned" or commit is None:
-        return NotApplicable(outcome(stored))
-    if stored.publication != "complete":  # the verdict's writer requires a complete session publication too
-        return VerifyRefused("session") if stored.publication == "conflict" else VerifyUnavailable("session_" + stored.publication)
-    return commit
-
-
-class PlanVerifier:
-    """Git evidence for a stored valid `planned` answer: one verdict over immutable facts, stored once and then returned
-    with no Git read. Slot state and every unknown store nothing."""
-
-    def __init__(self, store: PlanStore, checkouts: Checkouts, clock: Callable[[], float]) -> None:
-        self.store, self.checkouts, self.clock = store, checkouts, clock
-
-    def verify(self, key: AttemptKey) -> VerifyResult:
-        try:
-            commit = _applicable(self.store.collect(key))
-            if not isinstance(commit, str):
-                return commit
-            record = self.store.load(key)
-            if record is None or record.base_commit is None:
-                return VerifyRefused("absent" if record is None else "no_base")
-            found = self._judge(record.admission, record.base_commit, commit)
-            if not isinstance(found, (Verified, Rejected)):
-                return found
-            kept = self.store.verdict(record.admission, record.base_commit, commit, found, self.clock())
-            return found if kept == found else VerifyUnavailable("inconsistent")  # same inputs, same rules: a defect
-        except StoreUnavailable:
-            return VerifyUnavailable("store")
-        except StoreRefused as error:
-            return VerifyRefused(str(error))
-
-    def _judge(self, admission: Admission, base: str, commit: str) -> Verdict | Unsettled | VerifyUnavailable:
-        """Identity, then the slot at X, born, detached and clean, then the rules; outside any transaction."""
-        try:
-            state = observe_slot(self.checkouts, admission.cwd, admission.repo_id)
-            if isinstance(state, str):
-                return VerifyUnavailable(state)
-            problem = state.problem(commit)
-            if problem is not None:
-                return Unsettled(problem)
-            return judge(self.checkouts(state.root), state.root, base, commit, admission.task.task_id, admission.plan_path)
-        except (GitUnavailable, Unreadable) as error:
-            return VerifyUnavailable("git:" + type(error).__name__)

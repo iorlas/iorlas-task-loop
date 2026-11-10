@@ -10,12 +10,12 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from git_porcelain import GitUnavailable, NotARepo, Recorded, Repo
+from git_porcelain import GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store
 
 from taskloop.cli_composition import adopt, open_plan_reads, open_plan_start, open_plan_verify
-from taskloop.plan import SANDBOX, PlanAttempts, PlanVerifier
+from taskloop.plan import SANDBOX, PlanAttempts
 from taskloop.plan_admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
@@ -46,12 +46,14 @@ from taskloop.plan_types import (
     Checkouts,
     NotApplicable,
     Rejected,
+    SlotFiles,
     Unsettled,
     Verified,
     VerifyRefused,
     VerifyResult,
     VerifyUnavailable,
 )
+from taskloop.plan_verifier import PlanVerifier
 from taskloop.slots import Adopted, SlotView
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -198,6 +200,10 @@ def test_the_next_step_table(phase: str, entry: EntryState, collected: AttemptRe
     assert next_step(phase, entry, collected, passed) == expected
 
 
+def nothing_left(_key: AttemptKey) -> Unsettled | None:
+    return None
+
+
 def observe(seen: Seen, calls: list[tuple[int, str, str]]) -> Callable[[tuple[int, str, str]], Seen]:
     def observed(entry: tuple[int, str, str]) -> Seen:
         calls.append(entry)
@@ -219,13 +225,13 @@ def test_show_observes_the_registered_entry(
 ) -> None:
     write(admitted, "UPDATE plan_attempt SET entry_pid=?,entry_start=?,entry_boot=?", *ENTRY)
     calls: list[tuple[int, str, str]] = []
-    shown = status(Reads(reader, observe(seen, calls), lambda: now), tmp_path / "art", "tasks", "tl-1")
+    shown = status(Reads(reader, observe(seen, calls), lambda: now, nothing_left), tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown)
     assert (shown.status.entry, shown.status.next, shown.status.deadline_passed) == (entry, expected, now >= 100)
     assert calls == [ENTRY]
     assert (shown.status.entry_process, shown.status.worker) == (ENTRY, None)
     write(admitted, "UPDATE plan_attempt SET phase='dispatching',base_commit=?,worker_pid=42,worker_pgid=41", "a" * 40)
-    again = status(Reads(reader, observe(seen, calls), lambda: now), tmp_path / "art", "tasks", "tl-1")
+    again = status(Reads(reader, observe(seen, calls), lambda: now, nothing_left), tmp_path / "art", "tasks", "tl-1")
     assert isinstance(again, Shown) and again.status.worker == (42, 41)
 
 
@@ -241,21 +247,21 @@ def test_show_creates_nothing_and_computes_the_attempt_directory(admitted: Path,
             con.close()
 
     before, stored = files(), rows()
-    shown = status(Reads(reader, observe("gone", []), lambda: 10), tmp_path / "art", "tasks", "tl-1")
+    shown = status(Reads(reader, observe("gone", []), lambda: 10, nothing_left), tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown)
     directory = PlanFiles(tmp_path / "art").root / PlanFiles(tmp_path / "art").directory(KEY)
     assert (shown.directory, shown.entry_log) == (directory, directory / "entry.log")
     assert (shown.status.entry, shown.status.next, shown.status.result) == ("none", "start", AttemptResult("pending", "admitted"))
     assert (files(), rows()) == (before, stored)
     assert not (tmp_path / "art").exists()
-    assert status(Reads(reader, observe("gone", []), lambda: 10), tmp_path / "art", "tasks", "tl-2") == Failed(
+    assert status(Reads(reader, observe("gone", []), lambda: 10, nothing_left), tmp_path / "art", "tasks", "tl-2") == Failed(
         "refused", "absent", "No attempt for tl-2 in backlog tasks"
     )
 
 
 @pytest.mark.parametrize("now, stuck, rows", [(10, False, 1), (10, True, 0), (200, True, 1)])
 def test_list_keeps_only_stuck_or_unknown_when_asked(reader: PlanStore, now: float, stuck: bool, rows: int) -> None:
-    listed = attempts_status(Reads(reader, observe("gone", []), lambda: now), stuck=stuck)
+    listed = attempts_status(Reads(reader, observe("gone", []), lambda: now, nothing_left), stuck=stuck)
     assert isinstance(listed, Listed) and len(listed.attempts) == rows
 
 
@@ -279,22 +285,20 @@ def test_verify_maps_every_verdict(reader: PlanStore, verdict: VerifyResult, exp
 
 
 def test_verify_returns_a_stored_verdict_with_no_git_read(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         slot.write_file(path, "# Plan\n")
-        assert isinstance(slot.record("plan", paths="all"), Recorded)
-        head = next(each.head for each in slot.repo.worktrees() if each.path == slot.path)
-        text = json.dumps({"disposition": "planned", "plan_path": path, "commit": head, "explanation": "done"})
+        text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = PlanStore(lambda: registered)
-    attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts)
+    attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    first = verify_task(store, PlanVerifier(store, checkouts, lambda: 20), "tasks", "tl-1")
+    first = verify_task(store, PlanVerifier(store, checkouts, slot_files, lambda: 20), "tasks", "tl-1")
     assert first == Checked("verified", "tasks", "tl-1", "attempt")
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
@@ -303,8 +307,47 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         opened.append(where)
         return checkouts(where)
 
-    assert verify_task(store, PlanVerifier(store, counted, lambda: 20), "tasks", "tl-1") == first
+    assert verify_task(store, PlanVerifier(store, counted, slot_files, lambda: 20), "tasks", "tl-1") == first
     assert opened == []
+
+
+def test_show_reads_leftovers_fresh_and_names_the_deferred_repeat(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    path, stray = "docs/design/tl-1/plan.md", "docs/design/tl-1/stray.md"
+
+    def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
+        slot.write_file(path, "# Plan\n")
+        slot.write_file(stray, "x")
+        text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
+        worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
+        return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
+
+    store = PlanStore(lambda: registered)
+    attempts = PlanAttempts(store, PlanFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    assert attempts.execute(KEY, ENTRY).reason == "verification"
+    verifier = PlanVerifier(store, checkouts, slot_files, lambda: 20)
+    reads = Reads(store, observe("gone", []), lambda: 10, verifier.leftovers)
+    before = status(reads, tmp_path / "art", "tasks", "tl-1")
+    assert isinstance(before, Shown) and (before.status.next, before.status.leftovers) == ("verify", ())  # nothing committed yet
+    assert verify_task(store, verifier, "tasks", "tl-1") == Failed("unsettled", "uncommitted")
+    shown = status(reads, tmp_path / "art", "tasks", "tl-1")
+    assert isinstance(shown, Shown) and shown.status.next == "repeat"
+    assert (shown.status.result.status, shown.status.result.reason) == ("pending", "repeat")
+    assert shown.status.leftovers == ("uncommitted", f"?? {stray}")
+    probed: list[AttemptKey] = []
+
+    def counted(key: AttemptKey) -> Unsettled | None:
+        probed.append(key)
+        return verifier.leftovers(key)
+
+    counting = Reads(store, observe("gone", []), lambda: 10, counted)
+    assert attempts_status(counting, stuck=True) == Listed(()) and probed == []  # no Git read for a filtered-out attempt
+    listed = attempts_status(counting)
+    assert isinstance(listed, Listed) and [each.next for each in listed.attempts] == ["repeat"] and probed == [KEY]
+    slot.remove_file(stray)
+    tidied = status(reads, tmp_path / "art", "tasks", "tl-1")
+    assert isinstance(tidied, Shown) and (tidied.status.next, tidied.status.leftovers) == ("verify", ())
 
 
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
@@ -319,7 +362,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize("version", [1, 2, 4])
+@pytest.mark.parametrize("version", [1, 2, 3, 5])
 def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
