@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Final
 
@@ -74,6 +75,19 @@ class PlanFiles:
         path = self._path(self.directory(key) + "/entry.log")
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
+
+    def round_log(self) -> Path:
+        """The scheduling rounds' append-only log (`rounds.log` beside `attempts/`), with the root made. Evidence for a
+        person; nothing reads it for control."""
+        path = self._path("rounds.log")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def log_round(self, line: str) -> None:
+        """Append one line, opened as the launcher opens `entry.log` (0600, append, close-on-exec); OSError propagates."""
+        descriptor = os.open(self.round_log(), os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        with os.fdopen(descriptor, "ab") as stream:
+            stream.write(line.encode("utf-8") + b"\n")
 
     def entry_tail(self, key: AttemptKey, cap: int = 4096) -> str | None:
         """Read-only: the last `cap` bytes of the attempt's entry log, None when it does not exist or cannot be read;

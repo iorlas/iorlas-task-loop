@@ -4,7 +4,7 @@ It never holds a dispatch token, a remote URL or Git output."""
 from taskloop.machine_config import Loaded
 from taskloop.plan import succeeded
 from taskloop.plan_launch import Entry
-from taskloop.plan_ops import Adoption, AttemptStatus, Checked, Failed, Freed, Listed, PublishedTask, Result, Shown, Started
+from taskloop.plan_ops import Adoption, AttemptStatus, Checked, Failed, Freed, Listed, PublishedTask, Result, Round, Shown, Started
 from taskloop.plan_publish import BranchPublished
 from taskloop.plan_reads import PublishedRow, ReleaseRow
 from taskloop.plan_release import Released
@@ -86,12 +86,22 @@ def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
                     "existing": result.existing, "entry": _entry_data(result.entry), "number": result.number, "result": result.result}
         case Shown():
             return _status_data(result.status) | {"directory": str(result.directory), "entry_log": str(result.entry_log)}
-        case Listed():
-            return {"attempts": [_status_data(each) for each in result.attempts]}
+        case Listed() | Round():
+            return _rows_data(result)
         case Checked() | Freed() | PublishedTask():
             return _freed_data(result)
         case Adoption() | Loaded():
             return _setup_data(result)
+
+
+def _rows_data(result: Listed | Round) -> dict[str, object]:
+    """`tl plan list`: every current attempt; `tl plan next`: each move in the order performed and `stopped`, the word that
+    ended admission early, or null."""
+    if isinstance(result, Listed):
+        return {"attempts": [_status_data(each) for each in result.attempts]}
+    moves = [{"task": each.task_id, "action": each.action, "word": each.word, "attempt_id": each.attempt_id, "detail": each.detail}
+             for each in result.moves]
+    return {"status": "round", "backlog": result.backlog, "moves": moves, "stopped": result.stopped or None, "logged": result.logged}
 
 
 def _setup_data(result: Adoption | Loaded) -> dict[str, object]:

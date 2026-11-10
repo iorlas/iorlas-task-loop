@@ -1,6 +1,7 @@
 # Hierarchical priority: task first, ancestry breaks ties
 
-Task: tl-8bh9.3.7. Owner accepted Astra's rule on 2026-11-08. Decision settled; implementation remains pending.
+Task: tl-8bh9.3.7. Owner accepted Astra's rule on 2026-11-08. Decision settled; implemented for plan admission in
+[.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md) (`selection.py`); approval is the tracker label `auto`.
 A less urgent task never beats an urgent task because of its ancestors. When own priorities tie, compare ancestor
 priorities from nearest parent to root, including every containment level.
 
@@ -92,5 +93,6 @@ Read current QueueRule missing-priority handling, Areas parent traversal, task r
 ancestor lookup is required by the accepted contract; move the minimal retained lookup to its
 actual task-selection owner while deleting areas, not to another area framework.
 Astra provided an initial recommendation, self-attack over unequal paths/transitivity, and a follow-up challenge on
-P2 wrapper insertion. These are reasoned scenarios, not executed source tests. No source, task priorities or task
+P2 wrapper insertion. These are reasoned scenarios; since .4.3.1.13 each scenario row, the padding, the
+non-transitive trap and natural ids are focused fake tests (`tests/plan/test_selection.py`). No source, task priorities or task
 hierarchy changed. Eventual focused fake tests should assert the retained ordering contract, with normal repo gates.

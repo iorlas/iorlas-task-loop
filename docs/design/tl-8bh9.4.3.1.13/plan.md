@@ -77,8 +77,12 @@ publication, claim and heartbeat behave exactly as built in .9 to .12.
 
 **Eligibility filters, in order, in our code (pure, `selection.py`):** an attempt row for (`beads`, backlog, id) exists ->
 `skip attempted`, or `skip abandoned` when its current attempt's release is abandoned; `assignee` set and not `taskloop`
--> `skip assigned` (`taskloop` itself is allowed: bd's claim is idempotent for its holder, and a leaked compensation
-claim must not wedge the task); an unreadable, missing or cyclic ancestor chain -> `skip ancestry`. No issue-type rule:
+-> `skip assigned` (`taskloop` itself is allowed: bd's claim is idempotent for its holder, so an open task still showing
+`taskloop` as assignee is not refused for that alone). A leaked compensation claim is different: the task stays in
+progress, so it is not ready and no round sees it again; the round that leaked it records `report claim_leaked` (the
+move, its human guide, its JSON and its round-log line) and a person runs `bd unclaim <task> --if-assignee taskloop`
+(as-built repair). A missing or cyclic ancestor chain -> `skip ancestry`; an ancestor that could not be read ->
+`skip unavailable:ancestry` (transient, exit 3). No issue-type rule:
 an epic is planned only if a person approved it with the label, as the review asks ("distinguish true containers from
 ordinary executable tasks"; the person does, by labelling).
 
@@ -150,7 +154,10 @@ automatically**; the attempt is `stuck:expired_admitted` (new owner question 5).
 **Publication retry.** A verified plan not on `origin` is pushed again every round (non-force, idempotent; .12). Only
 success is stored, so after `refused:diverged`, `remote_moved` or `remote_ahead` every round repeats the push and the
 same refusal until a person reconciles; the move says so each time. Accepted: the cost is one push per round per such
-task, and no failure state is added to factory.db for it.
+task, and no failure state is added to factory.db for it. **A held release waits for a person.** A verify move's
+`release=unavailable:slot_busy` (or any held release) leaves the attempt `Next: release`, which rounds only report: its
+publication waits until a person runs `tl plan release`, after which a round publishes it. Report-only by design; no
+code retries the release.
 
 ## 5. How a round is triggered
 
@@ -244,11 +251,13 @@ type Action = Literal["start", "relaunch", "repeat", "verify", "publish", "repor
 | Result | Then |
 |---|---|
 | `Started` | `start started` (or the race's `already_running`), next candidate |
-| `Failed(admitted=True)` (launch failed after admission) | `start <kind>:<reason>`; the next round relaunches it (no entry registered); next candidate |
-| refused `claimed_elsewhere`, `task`, `branch_name`, `branch_held`, `branch_diverged`, `input`, `release` | `start refused:<reason>`, next candidate (nothing was written or claimed) |
+| `Failed(admitted=True)`, refused (launch refused after admission) | `start refused:<reason>`; the next round relaunches it (no entry registered); next candidate |
+| `Failed(admitted=True)`, `unavailable`/`uncertain` (as-built repair) | `start <kind>:<reason>`, then stop: `stopped = "<kind>:<reason>"` (no more attempts that never start) |
+| refused `claimed_elsewhere`, `branch_name`, `branch_held`, `branch_diverged`, `release`, or a refusal of an attempt another start made meanwhile (`registration_conflict`, `registration_refused`, ...) | `start refused:<reason>`, next candidate |
 | refused `no_free_slot` | stop admitting: `stopped = "no_free_slot"` |
-| refused `checkout`, `choices`, `deadline`, `expired`, `constraint`, `schema`, `database` | stop: the round's own inputs are wrong; `stopped = "refused:<reason>"` |
+| refused `checkout`, `choices`, `deadline`, `expired`, `constraint`, `schema`, `database`, `input`, `task` | `start refused:<reason>`, then stop: the round's own inputs are wrong; `stopped = "refused:<reason>"` |
 | any `unavailable`/`uncertain` | stop: `stopped = "<kind>:<reason>"` |
+| any result with `claim_leaked` | also `report claim_leaked`, whatever follows |
 
 The ready read failing (`BdError`) stops before any admission (`stopped = "unavailable:tracker"`, or `refused:tracker`
 for `malformed`); settling already ran and publishing still runs. No candidates: `stopped` stays empty.
@@ -498,3 +507,64 @@ Everything above is read, not run. Not checked: `bd ready --label` with `-n 0` o
 ready rows always carry `parent` for every containment level (one row read showed it); `--deps blocked-by:` and
 `--parent` spellings in the runbook against bd 1.3.1 beyond `bd create --help`; every line estimate. bd's events journal
 was read from `bd events --help` only (not enabled, not tailed); its per-replica and retention behaviour is bd's own text.
+
+## 17. As built (2026-11-10, on 519cab0c8, uncommitted)
+
+Pin first, as [the shelf request](shelf-request.md) says: `beads-client==0.2.0` from the shelf tag `beads-client-v0.2.0`
+(commit af5189bc), `uv lock` changed only that entry; `tests/rules/test_isolation.SHARED` names the new tag. Tests use
+beads-client's `ReadyReadClient` and `FakeTaskReadClient(ready=, ready_fault=)`; no local ready-set fake.
+
+Built as designed: `selection.py` (filters, chains with cycle check, padded key, natural id, `order`), `plan_next.py`
+(`NextRequest`, `Advancing`, `advance`: settle, admit, publish), `tracker.py` (`ReadyRows`, `TaskRow`, `ready_rows`,
+`ancestry`), `plan_ops` (`Action`, `Move`, `Round`, the `Result` union, `exit_code`), `plan_data` (the round shape),
+`plan_files.round_log`, `cli_plan` (`tl plan next`, rendering, `Log:` line, GUIDE rows, the HELD sentence),
+`cli_composition.open_plan_next`, `composition.tracker_reads`, the two `.importlinter` rows, Run G (section 6f of the
+live smoke) and the doc notes of section 13. No schema, SQL write or Git write added (`WRITERS`, `GIT_WRITES` unchanged).
+SLOC by the policy counter, after the review repairs: `plan_next` 177, `selection` 49, `tracker` 51, `plan_ops` 360,
+`plan_data` 87, `cli_plan` 338, `cli_composition` 146, `composition` 249, `plan_files` 84; tests `test_next` 338,
+`test_selection` 71, `test_ops` 538, `test_attempt` 622, `test_plan_cli` 411, `test_task` 99. Gates: `just check` clean
+(ruff, pyrefly 0 errors, import-linter 5 kept); `just test` 1123 passed. Nothing run live; Run G not run.
+
+Decided while building (open to veto):
+
+- **One owner of the actor.** `ACTOR = "taskloop"` moved from `composition` to `tracker` (composition imports it), so
+  selection keeps the factory's own assignee eligible without importing the composition. `composition._tracker_root` is
+  the one root rule of `inspect_tracker_task` and `tracker_reads`.
+- **The log writer.** `PlanFiles.round_log()` returns the path (root made); `PlanFiles.log_round(line)` appends with the
+  launcher's open flags (0600). The round catches `OSError` and `EvidenceError` per line; `logged` is False after any
+  failed line. Each move is written as it is performed; ids that are not one plain word (`[A-Za-z0-9._:@+/-]`, at most
+  128) and words failing `WORD` are written `invalid`; time is the reads' clock, `%Y-%m-%dT%H:%M:%SZ`.
+- **Whole-round refusals.** `refused:label` (empty label, before any read), `refused:tracker_root` (the opener, an
+  unusable root), `database`/`schema` (the opener's guard), `unavailable:store` (the attempts read).
+- **Exit.** 3 when `stopped` or any word of a move is `unavailable:*`, `uncertain:*`, `unsettled:*` (the existing
+  `UNKNOWN_KINDS`) or `unknown`, a verify move's `branch=` word included (as a publish move's) and a transient
+  `skip unavailable:ancestry`; 1 when admission stopped on `refused:*` (the round's own inputs, or a malformed ready
+  read); else 0. A verify move's `release=` word does not change the exit (as for `tl plan verify`; see "A held release
+  waits for a person"); neither does `report claim_leaked`.
+- **Stopping moves.** Admission stopped by anything but `no_free_slot` records a `start <kind>:<reason>` move for the
+  task it was trying, so the stop is traceable to a task.
+
+Review repairs (same day, before any commit):
+
+- **Settling never admits.** A `relaunch` (`Next: start`) or `repeat` row is resumed on the snapshot's own attempt only
+  (`plan_next._resume`: the launcher, or the repeat port, on that attempt's key), never through `start`. An attempt
+  abandoned or released between the snapshot and the call is `skip abandoned` (or `relaunch refused:released`); another
+  current attempt is `refused:changed`; the action word is always the operation that was called.
+- **Races are per task.** A candidate another start admitted after the snapshot is launched as existing by `start`; its
+  launcher or repeat refusal is a per-task `start refused:<reason>`, never a round stop.
+- **Leaked claims are moves** (`report claim_leaked`, detail naming `bd unclaim <task> --if-assignee taskloop`), in
+  every admission path including the `no_free_slot` stop; GUIDE row `claim_leaked`.
+- **`input` and `task` stop the round**; an admitted attempt whose launch is `unavailable`/`uncertain` stops admission.
+- **The label is stripped once** before the check and the ready read; `selection.natural` uses `isdecimal`.
+- **JSON.** The round shape also carries `logged` (the dashboard needs it as the human `Log:` line does).
+- **Order of moves.** Settle moves, then every `skip` (selection runs before admission), then `start` moves, then
+  `publish` moves, then the closing log line.
+- **Publication twice.** A round publishes only rows whose `Next` was `publish` when it started; after a success the
+  task is `done`, so the next round makes no publish move at all (`already_published` appears only after a race).
+- **Guides.** New GUIDE rows `failed`, `running`, `attempted`, `abandoned_skip` (a `skip abandoned` move; `abandoned`
+  keeps its `tl plan show` meaning) and `no_free_slot`; `start` and `stuck:expired_admitted` mention rounds.
+- **Settling reads all backlogs' attempts once** (`attempts_status`, leftovers probed for `verify` rows) and keeps this
+  backlog's: one read path, no new store query.
+
+Residuals: the live `bd ready --label auto -n 0` row shape (parent on every level), the runbook's `bd create` spellings,
+and the relaunch on a real entry exit are unverified until Run G; question 5 stays open (expired attempts are reported).

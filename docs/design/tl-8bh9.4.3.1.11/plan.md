@@ -259,6 +259,10 @@ change refuses at the fence before a Git write.
   branch (section 5).
 - Future idea only, not designed: the dashboard shows the humanized time since the last command started and ended. A
   supervisor is built only after a real stuck case shows the need.
+- Since [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md): an `admitted` attempt whose entry exited before the agent ran (none,
+  gone or a different process) is relaunched by each `tl plan next` round until its deadline; `tl plan start` remains
+  the manual equivalent. Past the deadline (`stuck:expired_admitted`) rounds only report it; every `stuck:*` and a
+  failed result stay a person's.
 
 ## 10. Out of scope
 

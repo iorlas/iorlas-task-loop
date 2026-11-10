@@ -33,9 +33,8 @@ from taskloop.plan_verifier import PlanVerifier
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Adopted, NotAdopted, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
-from taskloop.tracker import inspect_task
+from taskloop.tracker import ACTOR, ReadyRows, inspect_task
 
-ACTOR = "taskloop"
 # Baseline child_env.scrub defaults (731b7c76, skills/task-loop/_vendor/child_env), re-stated here, never imported.
 APP_PREFIXES = ("CLAUDE_", "ANTHROPIC_", "DELEGATE_", "MCP_", "OTEL_", "CODEX_COMPANION")
 APP_NAMES = frozenset(
@@ -74,9 +73,8 @@ def inspect_checkout(path: str) -> RepoInspection:
     return inspect_repo(RealRepo(checkout, memoize=False), checkout)
 
 
-def inspect_tracker_task(task_id: str, backlog: str, tracker_root: str) -> TaskInspection:
-    """Bind the supplied logical backlog to the explicit tracker root, without discovery."""
-    scope = TaskScope(backlog)
+def _tracker_root(tracker_root: str) -> Path:
+    """The explicit tracker root, resolved, without discovery; unusable is `invalid_binding`."""
     if not tracker_root.strip():
         raise TaskInspectionError("invalid_binding", "An explicit nonempty tracker root is required")
     try:
@@ -85,8 +83,20 @@ def inspect_tracker_task(task_id: str, backlog: str, tracker_root: str) -> TaskI
             raise TaskInspectionError("invalid_binding", f"Tracker root is not an available directory: {root}")
     except (RuntimeError, OSError) as error:
         raise TaskInspectionError("invalid_binding", f"Cannot resolve tracker root: {tracker_root}") from error
-    binding = TaskBinding(scope, root)
-    return inspect_task(binding, Bd(ACTOR, cwd=str(root)), task_id)
+    return root
+
+
+def inspect_tracker_task(task_id: str, backlog: str, tracker_root: str) -> TaskInspection:
+    """Bind the supplied logical backlog to the explicit tracker root, without discovery."""
+    scope = TaskScope(backlog)
+    root = _tracker_root(tracker_root)
+    return inspect_task(TaskBinding(scope, root), Bd(ACTOR, cwd=str(root)), task_id)
+
+
+def tracker_reads(tracker_root: str) -> ReadyRows:
+    """The scheduling round's tracker reads (ready set, parents) at the same root rule as `inspect_tracker_task`; raises
+    TaskInspectionError(`invalid_binding`) for an unusable root. Only reads are reachable through the returned port."""
+    return Bd(ACTOR, cwd=str(_tracker_root(tracker_root)))
 
 
 def _dropped(name: str) -> bool:

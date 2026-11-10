@@ -7,7 +7,7 @@ from beads_client import BdError, Bead, Dep
 from beads_client.testing import FakeTaskReadClient
 
 from taskloop.task import TaskBinding, TaskInspectionError, TaskReference, TaskScope
-from taskloop.tracker import inspect_task
+from taskloop.tracker import TaskRow, ancestry, inspect_task, ready_rows
 
 
 def test_equal_task_ids_keep_their_explicit_backlog_and_requirements(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,3 +84,38 @@ def test_empty_backlog_is_refused(backlog: str) -> None:
     with pytest.raises(TaskInspectionError, match="backlog") as failure:
         TaskScope(backlog)
     assert failure.value.kind == "invalid_binding"
+
+
+def test_ready_rows_keep_the_trackers_order_label_and_scheduling_fields() -> None:
+    records = [
+        Bead("t-3", priority=None, parent="p-1", assignee="taskloop", labels=("auto",)),
+        Bead("t-1", priority=0, labels=("auto",)),
+        Bead("t-2", priority=1, labels=("other",)),
+    ]
+    client = FakeTaskReadClient(records, ready=["t-3", "t-1", "t-2"])
+    assert ready_rows(client, "auto") == (TaskRow("t-3", None, "p-1", "taskloop"), TaskRow("t-1", 0, "", ""))
+    assert client.ready_reads == ["auto"] and client.reads == []
+
+
+@pytest.mark.parametrize("fault, kind", [
+    (BdError("malformed", "bd failed"), "malformed"), (BdError("timeout", "bd failed"), "tracker_unavailable"),
+    (BdError("other", "bd failed"), "tracker_unavailable"),
+])
+def test_a_failed_ready_read_raises_and_is_never_empty(fault: BdError, kind: str) -> None:
+    client = FakeTaskReadClient(ready_fault=fault)
+    with pytest.raises(TaskInspectionError) as failure:
+        ready_rows(client, "auto")
+    assert (failure.value.kind, failure.value.backend_kind) == (kind, fault.kind) and "bd failed" in str(failure.value)
+
+
+def test_ancestry_reads_each_unique_missing_parent_once_failures_included() -> None:
+    client = FakeTaskReadClient([Bead("p-1", priority=0, parent="p-2"), Bead("p-2")], faults={"p-9": BdError("timeout", "slow")})
+    lookup = ancestry(client, (TaskRow("t-1", 1, "p-1", ""),))
+    assert lookup("t-1") == TaskRow("t-1", 1, "p-1", "")  # a ready row: no read
+    assert lookup("p-1") == lookup("p-1") == TaskRow("p-1", 0, "p-2", "")
+    assert lookup("absent") is None and lookup("absent") is None
+    for _ in range(2):
+        with pytest.raises(TaskInspectionError) as failure:
+            lookup("p-9")
+        assert failure.value.kind == "tracker_unavailable"
+    assert client.reads == ["p-1", "absent", "p-9"]

@@ -47,6 +47,8 @@ Exception (owner, 2026-11-10, [.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 2),
 start/show/list/verify` (and the `abandon` placeholder) are registered before the plan step is complete; root and
 `tl plan` help say "attempt only: no task branch, publication or release"; `tl plan` alone still exits 2. Since
 [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md) the wording is "plan step only: publishes task/<id>; no merge or land".
+`tl plan next` ([.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md), one scheduling round for the plan step) joins the registered
+plan surface under the same exception and wording.
 The foundation is explicitly the exception that establishes build/executable boundaries before the first full slice.
 
 Retain Python 3.15 and existing tool pins/policies. Add no runtime dependency or semantic fake before an actual

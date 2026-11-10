@@ -20,10 +20,12 @@ from taskloop.composition import (
     open_plan_verifier,
     open_publisher,
     open_releaser,
+    tracker_reads,
     worker_gone,
 )
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.plan_files import PlanFiles
+from taskloop.plan_next import Advancing
 from taskloop.plan_ops import Adoption, Failed, Reads, Starting, require_database
 from taskloop.plan_publish import PlanPublish
 from taskloop.plan_release import PlanRelease
@@ -33,6 +35,7 @@ from taskloop.plan_store import PlanStore
 from taskloop.plan_types import Checkouts
 from taskloop.plan_verifier import PlanVerifier
 from taskloop.slot_lock import refused, repeating
+from taskloop.task import TaskInspectionError
 
 
 def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Path.home) -> Loaded | ConfigRefused:
@@ -91,11 +94,39 @@ def open_plan_start(database: Path, artifacts: Path) -> Generator[Starting | Fai
             if isinstance(con, Failed):
                 yield con
             else:
-                reader, admission, launcher = _reader(con), open_plan_admission(database, artifacts), open_launcher(database, artifacts)
-                verifier = open_plan_verifier(database, store)
-                repeat = PlanRepeat(reader, verifier, PlanFiles(artifacts), admission, launcher, worker_gone, entry_seen, time.time,
-                                    repeating)
-                yield Starting(reader, admission, launcher, time.time, repeat)
+                yield _starting(_reader(con), database, artifacts, store)
+        finally:
+            store.close_shared()
+
+
+def _starting(reader: PlanStore, database: Path, artifacts: Path, store: Store) -> Starting:
+    admission, launcher = open_plan_admission(database, artifacts), open_launcher(database, artifacts)
+    repeat = PlanRepeat(reader, open_plan_verifier(database, store), PlanFiles(artifacts), admission, launcher, worker_gone, entry_seen,
+                        time.time, repeating)
+    return Starting(reader, admission, launcher, time.time, repeat)
+
+
+@contextmanager
+def open_plan_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[Advancing | Failed]:
+    """`tl plan next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
+    refuses `tracker_root`), the start, verify, release and publish ports on one shared writer (closed here), the reads
+    and the round log appended under the artifacts root."""
+    store = Store(SCHEMA)
+    with _read_only(database) as con:
+        try:
+            if isinstance(con, Failed):
+                yield con
+                return
+            try:
+                ready = tracker_reads(tracker_root)
+            except TaskInspectionError as error:
+                yield Failed("refused", "tracker_root", str(error))
+                return
+            reader = _reader(con)
+            reads = Reads(reader, entry_seen, time.time, PlanVerifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time,
+                                                                       refused).leftovers)
+            yield Advancing(reads, _starting(reader, database, artifacts, store), open_plan_verifier(database, store),
+                            open_releaser(database, store), open_publisher(database, store), ready, PlanFiles(artifacts).log_round)
         finally:
             store.close_shared()
 

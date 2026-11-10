@@ -217,7 +217,47 @@ class Adoption:
     slots: tuple[Adopted | NotAdopted, ...]
 
 
-type Result = Started | Shown | Listed | Checked | Freed | PublishedTask | Adoption | Loaded | Failed
+type Action = Literal["start", "relaunch", "repeat", "verify", "publish", "report", "skip"]
+
+
+@dataclass(frozen=True)
+class Move:
+    """One thing a scheduling round did or saw for one task (`plan_next`): `word` is an existing fixed word (a start's
+    status, `<kind>:<reason>`, a verdict with its release and branch words, a publication, a `Next` word or a skip
+    reason); `detail` is diagnostic only and never logged."""
+
+    task_id: str
+    action: Action
+    word: str
+    attempt_id: str = ""
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class Round:
+    """`tl plan next`: the moves in the order performed; `stopped`, the word that ended admission early; `logged`, False
+    when a round-log line could not be written."""
+
+    backlog: str
+    moves: tuple[Move, ...]
+    stopped: str = ""
+    logged: bool = True
+
+
+UNKNOWN_WORDS: Final = ("unavailable:", "uncertain:", "unsettled:")
+
+
+def _round_exit(result: Round) -> int:
+    """3 when admission stopped on an unknown or a move's word is one, a verify's `branch=` word included, as a publish
+    move's (rerunning is safe); 1 when the round's own inputs were refused; else 0 (a per-task refusal, a held release
+    and a leaked claim, reported as its own move, do not change the exit)."""
+    words = [result.stopped, *(word.removeprefix("branch=") for move in result.moves for word in move.word.split(" "))]
+    if any(word.startswith(UNKNOWN_WORDS) or word == "unknown" for word in words):
+        return 3
+    return 1 if result.stopped.startswith("refused:") else 0
+
+
+type Result = Started | Shown | Listed | Checked | Freed | PublishedTask | Adoption | Loaded | Round | Failed
 
 
 def require_database(open_ro: Callable[[], sqlite3.Connection | None]) -> sqlite3.Connection | Failed:
@@ -465,5 +505,7 @@ def exit_code(result: Result) -> int:
         case Adoption(slots=slots):
             reasons = {each.reason for each in slots if isinstance(each, NotAdopted)}
             return 3 if reasons & {"git_unavailable", "store_unavailable"} else 1 if reasons else 0
+        case Round():
+            return _round_exit(result)
         case _:
             return 0

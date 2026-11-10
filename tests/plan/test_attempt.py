@@ -772,3 +772,13 @@ def test_report_never_presents_pending_state_as_collected(tmp_path: Path, body: 
         assert (shown.status, shown.reason) == (status, reason)
     waiting = report(dataclasses.replace(stored, answer=AnswerState("validation_pending")))
     assert (waiting.status, waiting.reason) == ("pending", "validation_pending")
+
+
+def test_the_round_log_is_made_on_demand_appended_and_private(tmp_path: Path) -> None:
+    files = PlanFiles(tmp_path / "art")
+    assert not (tmp_path / "art").exists()
+    files.log_round("first line")
+    files.log_round("second line")
+    path = files.round_log()
+    assert path == (tmp_path / "art").resolve() / "rounds.log"
+    assert path.read_text() == "first line\nsecond line\n" and path.stat().st_mode & 0o777 == 0o600

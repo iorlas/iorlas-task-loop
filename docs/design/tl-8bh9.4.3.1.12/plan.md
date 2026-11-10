@@ -313,7 +313,10 @@ Budgets (total lines today): `test_ops.py` 576, `test_entry.py` 377, `test_plan_
 Merge into `main` or any target, PR creation or update, land, task completion or closure, task sync (`bd dolt push`),
 software release or installation, deleting or moving a remote ref, fetch, force or lease pushes, publishing after other
 steps (implement/repair), a retry scheduler or backoff, remote names other than `origin`, a dashboard page (its data is
-`as_data`), renaming the session-result `publication` words (section 1), a GitHub/forge API.
+`as_data`), renaming the session-result `publication` words (section 1), a GitHub/forge API. Since
+[.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md) each `tl plan next` round retries the push of a verified, unpublished plan,
+with no backoff and no failure state stored (after `refused:diverged`, `remote_moved` or `remote_ahead` every round
+repeats the push and the refusal until a person reconciles).
 
 ## 12. Measured (scratch, 2026-11-10)
 

@@ -24,6 +24,8 @@ source_modules =
     taskloop.cli_plan
     taskloop.cli_composition
     taskloop.plan_ops
+    taskloop.plan_next
+    taskloop.selection
     taskloop.plan_data
     taskloop.machine_config
 forbidden_modules =
@@ -40,6 +42,7 @@ forbidden_modules =
     taskloop.cli_plan
     taskloop.cli_composition
     taskloop.plan_ops
+    taskloop.plan_next
     taskloop.plan_data
     taskloop.machine_config
 

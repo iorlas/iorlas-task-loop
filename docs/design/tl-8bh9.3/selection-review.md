@@ -1,5 +1,8 @@
 # Simple scheduling and existing queue policies
 
+> Implemented for plan admission in [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md) (`tl plan next`, one-shot rounds); approval
+> is the tracker label `auto`; eligibility is revalidated at acquisition by admission's claim.
+
 > STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
 > [reconciled STORE slices](../tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
 > Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.

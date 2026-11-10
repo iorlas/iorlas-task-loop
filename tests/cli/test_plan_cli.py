@@ -26,9 +26,11 @@ from taskloop.plan_ops import (
     FailureKind,
     Freed,
     Listed,
+    Move,
     Next,
     PublishedTask,
     Result,
+    Round,
     Shown,
     Started,
     Starting,
@@ -67,6 +69,11 @@ X, T = "a" * 40, "b" * 40
 PUBLISH = ["plan", "publish", "tl-1", "--backlog", "tasks"]
 PUBLISHED = {"status", "backlog", "task", "attempt_id", "commit", "remote_head"}
 CHECKED = {"status", "backlog", "task", "attempt_id", "release", "published"}
+NEXT = ["plan", "next", "--backlog", "tasks", "--tracker-root", "/tracker", "--checkout", "/checkout", "--label", "auto", "--model", "m",
+        "--effort", "high", "--minutes", "30"]
+ROUND = {"status", "backlog", "moves", "stopped", "logged"}
+MOVES = (Move("tl-3", "start", "started", "a3"), Move("tl-2", "report", "stuck:hung", "a2"), Move("tl-10", "skip", "abandoned"),
+         Move("tl-4", "report", "failed:rejected:paths", "a4", "never shown"), Move("tl-5", "report", "claim_leaked"))
 DONE = AttemptStatus(
     "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("collected", "verified"), False, "done",
     release=ReleaseRow(D, 30.0, False, "kept"), published=PublishedRow(X, X, 40.0),
@@ -219,6 +226,14 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ERROR),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("unavailable", "slot_busy"), 3,
      ["unavailable:slot_busy", cli_plan.GUIDE["slot_busy"]], ERROR),
+    (NEXT, Round("tasks", MOVES, "no_free_slot"), 0,
+     ["tl-3   start    started a3\ntl-2   report   stuck:hung a2\ntl-10  skip     abandoned\n", "Stopped: no_free_slot",
+      f"stuck:hung: {cli_plan.GUIDE['stuck:hung']}", f"failed: {cli_plan.GUIDE['failed']}",
+      f"abandoned_skip: {cli_plan.GUIDE['abandoned_skip']}", f"no_free_slot: {cli_plan.GUIDE['no_free_slot']}",
+      "tl-5   report   claim_leaked\n", f"claim_leaked: {cli_plan.GUIDE['claim_leaked']}"], ROUND),
+    (NEXT, Round("tasks", (), "unavailable:tracker"), 3, ["Stopped: unavailable:tracker"], ROUND),
+    (NEXT, Round("tasks", ()), 0, ["Nothing to do in backlog tasks."], ROUND),
+    (NEXT, Failed("refused", "label"), 1, ["tl plan next: refused:label"], ERROR),
     (["slot", "adopt", "/repo"], Adoption((Adopted("s1", Path("/s/s1")),)), 0, ["s1 adopted /s/s1"], {"slots"}),
     (["slot", "adopt", "/repo"], Adoption((NotAdopted("s1", "not_listed", Path("/s/s1")),)), 1,
      ["s1 not_listed /s/s1", "git worktree add --detach"], {"slots"}),
@@ -368,7 +383,8 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert set(shown) == STATUS_KEYS | {"directory", "entry_log"} and (shown["entry_process"], shown["worker"]) == (None, None)
     assert main(["plan", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
-    assert "stuck:expired_admitted: Nothing ran. `tl plan release --abandon`" in listed and f"delete {db} and its" in listed
+    assert "stuck:expired_admitted: Nothing ran; rounds only report it. `tl plan release --abandon`" in listed
+    assert f"delete {db} and its" in listed
     assert main(["plan", "verify", "tl-1", "--backlog", "tasks", "--db", str(db), "--json"]) == 1
     output = capsys.readouterr()
     assert json.loads(output.err)["error"]["reason"] == "not_captured"
@@ -410,3 +426,59 @@ def test_adopt_takes_its_paths_and_count_from_flags_config_and_defaults(
         {"name": "s1", "adopted": True, "reason": None, "path": str(tmp_path / "slots/id/s1")},
         {"name": "s2", "adopted": False, "reason": "not_listed", "path": str(tmp_path / "slots/id/s2")},
     ]}
+
+
+class Rounds:
+    """`advance`'s ports are opaque to the surface: the opener's value is passed through to the stubbed operation."""
+
+
+def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    opened: list[tuple[Path, Path, str]] = []
+    requests: list[object] = []
+    ports = Rounds()
+
+    @contextmanager
+    def opener(database: Path, artifacts: Path, tracker_root: str) -> Generator[Rounds]:
+        opened.append((database, artifacts, tracker_root))
+        yield ports
+
+    def advanced(given: object, request: object) -> Round:
+        assert given is ports
+        requests.append(request)
+        return Round("tasks", (MOVES[0],), logged=False)
+
+    monkeypatch.setattr(cli_composition, "open_plan_next", opener)
+    monkeypatch.setattr(cli_plan, "advance", advanced)
+    assert main([*NEXT, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art"), "--json"]) == 0
+    assert opened == [(tmp_path / "f.db", tmp_path / "art", "/tracker")]
+    assert requests == [cli_plan.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)]
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "round", "backlog": "tasks", "stopped": None, "logged": False,
+        "moves": [{"task": "tl-3", "action": "start", "word": "started", "attempt_id": "a3", "detail": ""}],
+    }
+    assert main([*NEXT, "--artifacts", str(tmp_path / "art")]) == 0
+    assert f"Log: not written ({tmp_path / 'art' / 'rounds.log'})" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--model", "--effort", "--minutes"])
+def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, capsys: pytest.CaptureFixture[str]) -> None:
+    at = NEXT.index(missing)
+    with pytest.raises(SystemExit) as result:
+        main([*NEXT[:at], *NEXT[at + 2:]])
+    assert result.value.code == 2 and missing in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        main(["plan", "next", "--help"])
+    shown = " ".join(capsys.readouterr().out.split())
+    assert "Run one scheduling round for the plan step: settle existing attempts, start approved ready tasks" in shown
+    assert "plan step only: publishes task/<id>; no merge or land" in shown
+
+
+def test_next_refuses_an_unusable_tracker_root_and_a_missing_database(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    db = tmp_path / "factory.db"
+    assert main([*NEXT, "--db", str(db), "--json"]) == 1
+    assert json.loads(capsys.readouterr().err)["error"]["reason"] == "database" and not db.exists()
+    admitted(db)
+    assert main([*NEXT[:5], str(tmp_path / "absent"), *NEXT[6:], "--db", str(db), "--json"]) == 1
+    assert json.loads(capsys.readouterr().err)["error"]["reason"] == "tracker_root"

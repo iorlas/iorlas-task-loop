@@ -10,6 +10,7 @@ from pathlib import Path
 from taskloop import cli_composition, plan_data, plan_ops
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.plan import succeeded
+from taskloop.plan_next import NextRequest, advance
 from taskloop.plan_ops import (
     UNCLAIMING,
     Adoption,
@@ -20,6 +21,7 @@ from taskloop.plan_ops import (
     Listed,
     PublishedTask,
     Result,
+    Round,
     Shown,
     Started,
     StartRequest,
@@ -39,11 +41,14 @@ COMMANDS = ("config", "slot", "plan")
 HELD = ("The tracker claim stays held, and the slot until the step ends on a clean slot (`tl plan release` frees a slot left "
         "held; `--abandon` also returns the claim). While a step runs its entry renews the claim's bd lease every 100 s; between "
         "steps nothing does, so a `bd reclaim` run on that tracker can revert the claim once its lease lapses: at the earliest "
-        "about 5 minutes after a step ends (bd's default reclaim grace is 10 minutes, so about 15 minutes with a plain `bd reclaim`).")
+        "about 5 minutes after a step ends (bd's default reclaim grace is 10 minutes, so about 15 minutes with a plain `bd reclaim`). "
+        "A round (`tl plan next`) never renews or retakes a claim: a task whose claim lapsed is open again while factory.db holds "
+        "its attempt, and rounds skip it (`attempted`).")
 ABANDON = "`tl plan release --abandon` frees the slot and gives the task back."
 GUIDE = {
-    "start": "Re-run `tl plan start` to relaunch its entry. If the last entry says `claim_lost`, the tracker claim was taken "
-    "back: check `bd show <task>`; re-claim it by hand as `taskloop` before `tl plan start`, or leave it.",
+    "start": "Re-run `tl plan start` to relaunch its entry (each `tl plan next` round relaunches it until its deadline). "
+    "If the last entry says `claim_lost`, the tracker claim was taken back: check `bd show <task>`; re-claim it by hand as "
+    "`taskloop` before `tl plan start`, or leave it.",
     "wait": "Its entry runs; wait, then `tl plan show` again.",
     "verify": "Run `tl plan verify`.",
     "repeat": "Run `tl plan start` again to repeat it with this listing as feedback, or remove the files and `tl plan verify`.",
@@ -56,7 +61,17 @@ GUIDE = {
     "publish": PUBLISH,
     "done": "Collected: `succeeded` tells whether the plan was verified.",
     "unknown": "The entry or the store could not be read; run `tl plan show` again.",
-    "stuck:expired_admitted": f"Nothing ran. {ABANDON}",
+    "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl plan start` plans it "
+    "again.",
+    "failed": "The step ended without a verified plan; the claim stays held, so rounds never retry it. Read `tl plan show`; "
+    "to plan it again, `tl plan release --abandon` then `tl plan start`.",
+    "running": "Its entry runs; the round leaves it alone.",
+    "attempted": "Open in the tracker while factory.db holds its attempt: the claim was returned or lapsed. `tl plan show` it; "
+    "rounds never take it again.",
+    "abandoned_skip": "Abandoned here: rounds never re-admit it; `tl plan start` admits a fresh attempt.",
+    "no_free_slot": "Every slot is held: the next round after a step ends fills it.",
+    "claim_leaked": "A start's compensation could not return the tracker claim: the task stays in progress for taskloop and is "
+    "not ready again until a person checks `bd show <task>` and runs `bd unclaim <task> --if-assignee taskloop`.",
     "stuck:entry_lost": "The agent may still run: if `Worker` names a pid, check its cwd is the slot (`lsof -a -p <pid> -d cwd`) "
     f"and stop only its group (`kill -TERM -<pgid>`); then {ABANDON} With no `Worker` recorded it cannot be shown stopped: "
     "only the whole-DB discard remains.",
@@ -158,6 +173,13 @@ def register(commands: Parsers) -> None:
     release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl plan start` "
                          "then admits a fresh attempt")
     _common(release, "--db")
+    rounds = _add(plan, "next", "Run one scheduling round for the plan step: settle existing attempts, start approved ready tasks in "
+                  f"free slots, publish verified plans; {PLAN_ONLY}. {HELD}")
+    for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
+        rounds.add_argument(flag, required=True)
+    rounds.add_argument("--label", required=True, help="The tracker label approving autonomous execution (`auto`)")
+    rounds.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt this round admits, from now")
+    _common(rounds, "--db", "--artifacts")
     publish = _add(plan, "publish", "Push the verified plan commit to origin's task/<id> as you, never forced; nothing merges or lands")
     publish.add_argument("task_id", metavar="TASK")
     publish.add_argument("--backlog", required=True)
@@ -169,6 +191,13 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                            arguments.effort, arguments.minutes)
     with cli_composition.open_plan_start(loaded.settings.db.value, loaded.settings.artifacts.value) as ports:
         return ports if isinstance(ports, Failed) else plan_ops.start(ports, request)
+
+
+def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    request = NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
+                          arguments.effort, arguments.minutes)
+    with cli_composition.open_plan_next(loaded.settings.db.value, loaded.settings.artifacts.value, arguments.tracker_root) as ports:
+        return ports if isinstance(ports, Failed) else advance(ports, request)
 
 
 def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -209,6 +238,7 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
     ("config", "show"): lambda _arguments, loaded: loaded,
     ("slot", "adopt"): _adopt,
     ("plan", "start"): _start,
+    ("plan", "next"): _next,
     ("plan", "show"): _show,
     ("plan", "list"): _list,
     ("plan", "verify"): _verify,
@@ -235,7 +265,10 @@ def run(arguments: argparse.Namespace) -> int:
             task = arguments.task_id
             print(f"the tracker claim on {task} may still be held by taskloop; check `bd show {task}`", file=sys.stderr)
         db = None if isinstance(loaded, ConfigRefused) else loaded.settings.db.value
-        print("\n".join(_human(f"tl {arguments.command} {arguments.operation}", result, db)), file=stream)
+        lines = _human(f"tl {arguments.command} {arguments.operation}", result, db)
+        if isinstance(result, Round) and not result.logged and not isinstance(loaded, ConfigRefused):
+            lines.append(f"Log: not written ({loaded.settings.artifacts.value / 'rounds.log'})")
+        print("\n".join(lines), file=stream)
     return plan_ops.exit_code(result)
 
 
@@ -291,16 +324,31 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
             return [*_status_lines(each), *paths, *last, *left, f"Next: {each.next}", *steps]
-        case Listed(attempts=attempts):
-            rows = [f"{a.task_id}\t{a.backlog}\t{a.number}/{ATTEMPTS}\t{a.slot}\t{a.phase}\t{a.entry}\t"
-                    f"{a.result.status} {a.result.reason}\t{a.next}" for a in attempts]
-            kinds = dict.fromkeys(a.next for a in attempts if a.next.startswith("stuck:"))
-            steps = [f"{kind}: {GUIDE[kind]}" for kind in kinds] + (stuck if kinds else [])
-            return ["task\tbacklog\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
+        case Listed() | Round():
+            return _rows_lines(result, stuck)
         case Checked() | Freed() | PublishedTask():
             return _freed_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
+
+
+def _rows_lines(result: Listed | Round, stuck: list[str]) -> list[str]:
+    """`tl plan list`: one row per task. `tl plan next`: one line per move as performed, `Stopped:` when admission ended
+    early, then the guide of each distinct reported, skipped or stopping word once."""
+    if isinstance(result, Listed):
+        attempts = result.attempts
+        rows = [f"{a.task_id}\t{a.backlog}\t{a.number}/{ATTEMPTS}\t{a.slot}\t{a.phase}\t{a.entry}\t"
+                f"{a.result.status} {a.result.reason}\t{a.next}" for a in attempts]
+        kinds = dict.fromkeys(a.next for a in attempts if a.next.startswith("stuck:"))
+        steps = [f"{kind}: {GUIDE[kind]}" for kind in kinds] + (stuck if kinds else [])
+        return ["task\tbacklog\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
+    width = max((len(each.task_id) for each in result.moves), default=0)
+    lines = [f"{each.task_id:<{width}}  {each.action:<8} {each.word} {each.attempt_id}".rstrip() for each in result.moves]
+    lines += [f"Stopped: {result.stopped}"] if result.stopped else []
+    lines += [] if result.moves or result.stopped else [f"Nothing to do in backlog {result.backlog}."]
+    words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves if each.action in ("report", "skip")]
+    keys = dict.fromkeys(key for word in [*words, result.stopped] for key in (word, word.split(":")[0]) if key in GUIDE)
+    return lines + [f"{key}: {GUIDE[key]}" for key in keys]
 
 
 def _freed_lines(result: Checked | Freed | PublishedTask) -> list[str]:

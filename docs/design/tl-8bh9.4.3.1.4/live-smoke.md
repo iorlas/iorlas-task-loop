@@ -9,7 +9,9 @@ still-valid plan is reused on the agent's `unchanged`, and (Run C, owner-run) th
 `/tmp` write; and, since [.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md), that a step's slot is released and an abandoned task
 starts again (Run E, owner-run, not yet run); and, since [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md), that a verified plan
 is published to `origin` (the scratch `remote.git` only), retried by `tl plan publish`, and never forced (Run F,
-owner-run, not yet run).
+owner-run); and, since [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md), that a scheduling round (`tl plan next`) takes approved
+ready tasks into the free slot in priority order, never re-admits an abandoned task, and relaunches an entry that exited
+before the agent ran (Run G, owner-run, not yet run).
 
 **Status (2026-11-10).** Smoke runs 3 and 4 passed on Linux (OrbStack, aarch64, codex-cli 0.167.0). Not observed yet: the `worker_alive` and `uncommitted` verify states (they appear only when
 the worker outlives the run or the agent leaves files; both runs were fast and tidy); the sandbox actually refusing a
@@ -384,6 +386,71 @@ authentication failure; an abandon after a publication; macOS.
 
 Cleanup: `rm -rf "$SMOKE/other"` with the rest of `~/tl-smoke`. Section 9 is unchanged: push nowhere but `remote.git`.
 
+## 6f. Run G: scheduling rounds, `tl plan next` (optional, owner-run; tl-8bh9.4.3.1.13)
+
+One round settles the backlog's existing attempts (relaunch an admitted attempt whose entry is not running, verify,
+repeat; report the rest), starts approved (`--label auto`) ready tasks in priority order into free slots, then publishes
+verified plans. It keeps no state; each round appends one line per move to `$ART/rounds.log`, never read back. With
+`slot_count = 1` as configured, each round admits at most one task. Move the previous run aside as Run F does (a new
+timestamped directory, `$SMOKE/markers` recreated), then:
+
+```bash
+ASIDE="$SMOKE/before-runG-$(date +%Y%m%d%H%M%S)" && mkdir "$ASIDE" \
+  && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$ASIDE/"; done
+mkdir "$SMOKE/markers"
+cd "$TRACKER"
+G_PARENT=$(bd create "Smoke urgent group" -t epic -p 0 --silent)             # not approved: never planned itself
+G_TOP=$(bd create "Smoke P1" -p 1 -l auto --silent)
+G_CHILD=$(bd create "Smoke P2 under P0" -p 2 -l auto --parent "$G_PARENT" --silent)
+G_LOW=$(bd create "Smoke P2 alone" -p 2 -l auto --silent)
+G_OFF=$(bd create "Smoke P0 unapproved" -p 0 --silent)                       # no label: never taken
+G_WAIT=$(bd create "Smoke P0 blocked" -p 0 -l auto --deps "blocked-by:$G_LOW" --silent)
+printf 'G_PARENT=%s\nG_TOP=%s\nG_CHILD=%s\nG_LOW=%s\nG_OFF=%s\nG_WAIT=%s\n' "$G_PARENT" "$G_TOP" "$G_CHILD" "$G_LOW" \
+  "$G_OFF" "$G_WAIT" >> "$SMOKE/env.sh"
+for t in "$G_TOP" "$G_CHILD" "$G_LOW" "$G_OFF" "$G_WAIT"; do bd update "$t" -d "Write docs/design/$t/plan.md with one short \
+paragraph. Answer planned and list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."; done
+T slot adopt "$REPO"
+NEXT=(plan next --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" --effort "$EFFORT" --minutes 30)
+T "${NEXT[@]}" --json        # G1: start $G_TOP started; stopped no_free_slot; nothing else claimed (bd show each)
+T "${NEXT[@]}"               # G2, at once: report $G_TOP running; stopped no_free_slot; no second entry (ps)
+T plan show "$G_TOP" --backlog "$BACKLOG"   # repeat until Next: done (released, published)
+T "${NEXT[@]}"               # G3: start $G_CHILD (P2 under a P0 parent beats P2 alone)
+T plan show "$G_CHILD" --backlog "$BACKLOG" # until Next: done
+T "${NEXT[@]}"               # G4: start $G_LOW ($G_WAIT stays blocked while $G_LOW is open)
+T plan show "$G_LOW" --backlog "$BACKLOG"   # until Next: done
+T plan release "$G_LOW" --backlog "$BACKLOG" --abandon   # G5: abandon a finished attempt; $G_LOW is open again
+bd ready -l auto             # lists $G_LOW (open, unassigned) and $G_WAIT still blocked
+T "${NEXT[@]}"               # G5: skip $G_LOW abandoned; nothing started; $G_OFF and $G_WAIT never appear
+# G6, an entry that exits before the agent: no Codex login for that one round's entry
+G_RELAUNCH=$(cd "$TRACKER" && bd create "Smoke relaunch" -p 1 -l auto --silent) && echo "G_RELAUNCH=$G_RELAUNCH" >> "$SMOKE/env.sh"
+CODEX_HOME="$SMOKE/no-codex-login" T "${NEXT[@]}"   # start $G_RELAUNCH started; its entry exits `unavailable credentials:auth`
+T plan show "$G_RELAUNCH" --backlog "$BACKLOG"      # Phase: admitted, Entry: gone, Next: start
+T "${NEXT[@]}"               # relaunch $G_RELAUNCH relaunched (same attempt); the step then runs to Next: done
+cat "$ART/rounds.log"        # one line per move of every round above, fixed words, the relaunch naming the attempt
+ls "$SMOKE/markers"          # empty: no hook ran
+```
+
+| Check | Pass | Fail means |
+|---|---|---|
+| G1 order | `$G_TOP` first; only it claimed (`bd show`: others open, unassigned) | another task first; a claim on a task left unadmitted |
+| G2 idempotent | `report running`, no new entry, no new attempt row | a second launch or admission |
+| G3 hierarchy | `$G_CHILD` before `$G_LOW` | `$G_LOW` first (ancestry ignored) |
+| G5 abandon | `skip abandoned`; no new attempt for `$G_LOW` | the round admitted it again |
+| approval, blockers | `$G_OFF`, `$G_PARENT` and `$G_WAIT` never in any move | an unapproved or blocked task taken |
+| publication | each finished task published to `remote.git` (Run F rules) | a forced or missing push |
+| G6 relaunch | first round: `start started`, entry.log `unavailable credentials:auth`; second: `relaunch relaunched` on the same attempt id, then `Next: done`; `rounds.log` holds both rounds | no relaunch; a second attempt row; anything but fixed words in `rounds.log` |
+
+G6 stands in for a reboot or network loss mid-start: the entry is gone while the attempt is `admitted`, which is what the
+round decides on. Not covered live: a real reboot, `refused slot_busy` and `refused claim_lost` (tests cover the rule).
+An admitted attempt past its deadline (`stuck:expired_admitted`) is only reported by rounds: abandon it, then
+`tl plan start` (question 5 of the plan stays open). Exit codes: 0 for a round whose words are all settled (a per-task
+refusal included), 3 when admission stopped on, or a move says, `unavailable:*`, `uncertain:*`, `unsettled:*` or
+`unknown` (a verify's `branch=` word and `skip unavailable:ancestry` included; rerun), 1 for a refused round (`label`,
+`tracker_root`, `database`) or one stopped on its own refused inputs. A `report claim_leaked` move names a task whose
+claim a failed start could not return: `bd unclaim <task> --if-assignee taskloop` by hand.
+
+**Not run yet.**
+
 ## 7. Paste back to the agent
 
 `codex --version`; the `--json` outputs of `T config show`, both `T slot adopt`, section 4's starts (with `time`) and shows,
@@ -392,7 +459,8 @@ and `lsof` lines; `entry.log`; the two `sqlite3` result sets; `ls -la $ATT`; `an
 `diagnostics.txt` after checking them for secrets; slot `git log`/`status`; `show-ref`; the push probe's error line;
 the approved-escalation commands (or "none") and `G -C "$REPO" config --list --local`; for Run C, the `ACCESS`
 listing, the command lines and exit codes from `runC.jsonl` (checked for secrets) and its `ls`/`log`/`show-ref` output;
-for Run F, every `T plan publish --json` and `T plan show` output, the entry.log lines, and the `show-ref`/`rev-parse` lines.
+for Run F, every `T plan publish --json` and `T plan show` output, the entry.log lines, and the `show-ref`/`rev-parse` lines;
+for Run G, every `T plan next --json` output, `rounds.log`, and `bd show` of each `G_*` task.
 Never paste `auth.json`, `env`, or the agent's environment.
 
 ## 8. Known wedges, reset and cleanup
@@ -430,5 +498,6 @@ Cleanup after the smoke: check `ps -ax -o pid,command | grep -F "$SMOKE"` shows 
 - Create the slot root inside any checkout; run `bd` in a real repo; push anywhere but `remote.git`.
 - Kill by name (`pkill codex`, `killall python`): only verified PIDs (section 8).
 - Edit `factory.db` rows by hand, or rerun `start` in a loop; one launch per admitted attempt plus one check.
+- Run `tl plan next` against the real tracker, or a backlog whose tasks carry the `auto` label outside this scratch tracker.
 - Run a bare `tl` or omit `--config`: always `T`, so every path stays under `$SMOKE` (the defaults are `~/.local/...`).
 - Let an agent run this without Denis's authorization for that run; otherwise agents read the pasted output.

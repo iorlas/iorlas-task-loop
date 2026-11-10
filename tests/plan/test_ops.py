@@ -27,9 +27,11 @@ from taskloop.plan_ops import (
     EntryState,
     Failed,
     Listed,
+    Move,
     Next,
     PublishedTask,
     Reads,
+    Round,
     Shown,
     Started,
     Starting,
@@ -651,3 +653,20 @@ def test_a_verified_plan_is_release_first_then_publish_then_done(
     found = publish_task(store, PlanPublish(store, checkouts, slot_files, lambda: 40), "tasks", "tl-1")
     assert found == PublishedTask("tasks", "tl-1", "attempt", BranchPublished(x, x))
     assert (shown().next, shown().published) == ("done", PublishedRow(x, x, 40.0))
+
+
+@pytest.mark.parametrize("stopped, word, code", [
+    ("", "started", 0),
+    ("no_free_slot", "refused:claimed_elsewhere", 0),
+    ("", "verified release=unavailable:slot_busy branch=published", 0),  # a held release: as verify's own exit
+    ("", "verified release=released branch=unavailable:remote", 3),  # as a publish move's
+    ("", "claim_leaked", 0),
+    ("", "unavailable:ancestry", 3),
+    ("", "unavailable:store", 3),
+    ("", "uncertain:launch", 3),
+    ("", "unknown", 3),
+    ("unavailable:tracker", "started", 3),
+    ("refused:checkout", "started", 1),
+])
+def test_a_rounds_exit_code(stopped: str, word: str, code: int) -> None:
+    assert exit_code(Round("tasks", (Move("tl-1", "start", word),), stopped)) == code
