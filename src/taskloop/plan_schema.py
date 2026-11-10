@@ -5,7 +5,7 @@ import sqlite3
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=2,
+    version=3,
     name="factory",
     steps={},
     ddl="""
@@ -27,6 +27,8 @@ CREATE TABLE plan_attempt (
  phase TEXT NOT NULL DEFAULT 'admitted' CHECK(phase IN ('admitted','dispatching','registered','captured')),
  rev INTEGER NOT NULL DEFAULT 0, worker_pid INTEGER, worker_pgid INTEGER, worker_start TEXT, worker_boot TEXT,
  session_ref TEXT, session_conflict INTEGER NOT NULL DEFAULT 0 CHECK(session_conflict IN (0,1)),
+ base_commit TEXT CHECK(base_commit IS NULL OR length(base_commit) IN (40,64)),
+ CHECK(phase='admitted' OR base_commit IS NOT NULL),
  UNIQUE(adapter, backlog, task_id)
 );
 CREATE TABLE plan_execution (
@@ -41,6 +43,12 @@ CREATE TABLE plan_execution (
  disposition TEXT, plan_path TEXT, reported_commit TEXT,
  publication TEXT NOT NULL CHECK(publication IN ('complete','pending','conflict','fault'))
 );
+CREATE TABLE plan_verification (
+ attempt_id TEXT PRIMARY KEY REFERENCES plan_execution(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
+ verdict TEXT NOT NULL CHECK(verdict IN ('verified','rejected')), reason TEXT, plan_blob TEXT, observed_at REAL NOT NULL,
+ reused INTEGER NOT NULL DEFAULT 0 CHECK(reused IN (0,1)), CHECK(reused=0 OR verdict='verified'),
+ CHECK((verdict='verified') = (reason IS NULL)), CHECK((verdict='verified') = (plan_blob IS NOT NULL))
+);
 """,
 )
 
@@ -52,7 +60,7 @@ ATTEMPT_ADMITTED = (
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
-    "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict"
+    "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,tokens_known,t_in,t_cached,t_out,"
@@ -60,6 +68,7 @@ FACTS = (
 )
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
 ANSWER = "answer_kind,disposition,plan_path,reported_commit,publication"
+VERDICT = "verdict,reason,plan_blob,reused"
 
 
 def marks(columns: str) -> str:

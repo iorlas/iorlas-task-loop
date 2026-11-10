@@ -9,8 +9,9 @@ from typing import Literal
 from any_agent.procs import Worker
 from sqlite_store import begin_immediate
 
-from taskloop.plan_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, current, prefixed
+from taskloop.plan_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, current, prefixed
 from taskloop.plan_types import (
+    RULES,
     Admission,
     AnswerState,
     AttemptKey,
@@ -18,8 +19,11 @@ from taskloop.plan_types import (
     Evidence,
     ExecutionFacts,
     FileRef,
+    Rejected,
     Replaced,
     StoredExecution,
+    Verdict,
+    Verified,
 )
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference, TaskScope
@@ -81,6 +85,25 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
     )
 
 
+def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:
+    if isinstance(result, Verified):
+        return "verified", None, result.plan_blob, int(result.reused)
+    return "rejected", result.reason, None, 0
+
+
+def _verdict(row: tuple[object, ...]) -> Verdict | None:
+    """The stored verdict of a verification row; None for the all-NULL row of a LEFT JOIN without one."""
+    kind, reason, blob, reused = row
+    if kind is None:
+        return None
+    if kind == "verified":
+        return Verified(_str(blob), bool(_int(reused)))
+    rule = next((rule for rule in RULES if rule == reason), None)
+    if kind != "rejected" or rule is None:
+        raise StoreUnavailable("Invalid stored verdict")
+    return Rejected(rule)
+
+
 class PlanStore:
     def __init__(
         self,
@@ -118,7 +141,7 @@ class PlanStore:
         held = con.execute(
             "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
         ).fetchone()
-        if held != (row[2], key.reservation_generation, key.attempt_id) or row[21] is None:
+        if held != (row[2], key.reservation_generation, key.attempt_id) or row[22] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):
             raise StoreUnavailable("Malformed deadline")
@@ -127,7 +150,7 @@ class PlanStore:
             TaskReference(TaskScope(_str(row[0])), _str(row[1])),
             RepoId(_str(row[2])),
             _str(row[3]),
-            _str(row[21]),
+            _str(row[22]),
             FileRef(_str(row[4]), _str(row[5])),
             _str(row[6]),
             _str(row[7]),
@@ -136,7 +159,9 @@ class PlanStore:
             (_int(row[10]), _str(row[11]), _str(row[12])),
         )
         worker = None if row[15] is None else Worker(pid=_int(row[15]), pgid=_int(row[16]), start=_str(row[17]), boot=_str(row[18]))
-        return AttemptRecord(admission, _str(row[13]), _int(row[14]), worker, _nullable_str(row[19]), bool(_int(row[20])))
+        return AttemptRecord(
+            admission, _str(row[13]), _int(row[14]), worker, _nullable_str(row[19]), bool(_int(row[20])), _nullable_str(row[21])
+        )
 
     def load(self, key: AttemptKey) -> AttemptRecord | None:
         with self._connection() as con:
@@ -202,14 +227,15 @@ class PlanStore:
         with self._connection():
             pass
 
-    def dispatch(self, expected: AttemptRecord) -> Literal["accepted", "conflict"]:
+    def dispatch(self, expected: AttemptRecord, base: str) -> Literal["accepted", "conflict"]:
+        """`base` is the slot HEAD read just before this write; it is recorded once, with the phase change."""
         with self._connection(write=True) as con:
             current = self._fence(con, expected.admission)
             if current.phase != "admitted" or current.revision != expected.revision:
                 return "conflict"
             con.execute(
-                "UPDATE plan_attempt SET phase='dispatching',rev=rev+1 WHERE attempt_id=? AND rev=?",
-                (expected.admission.key.attempt_id, expected.revision),
+                "UPDATE plan_attempt SET phase='dispatching',base_commit=?,rev=rev+1 WHERE attempt_id=? AND rev=?",
+                (base, expected.admission.key.attempt_id, expected.revision),
             )
             return "accepted"
 
@@ -291,9 +317,35 @@ class PlanStore:
             )
             return "accepted"
 
+    def verdict(self, admission: Admission, base: str, commit: str, result: Verdict, now: float) -> Verdict:
+        """Insert-only: written while the reservation is held, the run was clean, its session publication complete, and the
+        stored valid `planned` answer and base are exactly the verified X and B; an existing row is kept, never rewritten.
+        Returns the row now stored."""
+        with self._connection(write=True) as con:
+            self._fence(con, admission)
+            con.execute(
+                f"""INSERT INTO plan_verification (attempt_id,dispatch_token,generation,{VERDICT},observed_at)
+                SELECT ?,?,?,?,?,?,?,? FROM plan_execution e JOIN plan_attempt p ON p.attempt_id=e.attempt_id
+                WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=? AND e.answer_kind='valid' AND e.disposition='planned'
+                AND e.rc=0 AND e.timed_out=0 AND e.publication='complete' AND e.reported_commit=? AND p.base_commit=?
+                ON CONFLICT DO NOTHING""",
+                (*astuple(admission.key), *_verdict_values(result), now, *astuple(admission.key), commit, base),
+            )
+            row: tuple[object, ...] | None = con.execute(
+                f"SELECT {VERDICT} FROM plan_verification WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(admission.key)
+            ).fetchone()
+        stored = None if row is None else _verdict(row)
+        if stored is None:
+            raise StoreRefused("changed_answer")
+        return stored
+
     def _execution(self, con: sqlite3.Connection, key: AttemptKey) -> StoredExecution | None:
         row: tuple[object, ...] | None = con.execute(
-            f"SELECT {FACTS},{EVIDENCE},{ANSWER} FROM plan_execution WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
+            f"""SELECT {prefixed("e", FACTS)},{prefixed("e", EVIDENCE)},{prefixed("e", ANSWER)},{prefixed("v", VERDICT)}
+            FROM plan_execution e LEFT JOIN plan_verification v
+            ON v.attempt_id=e.attempt_id AND v.dispatch_token=e.dispatch_token AND v.generation=e.generation
+            WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=?""",
+            astuple(key),
         ).fetchone()
         if row is None:
             return None
@@ -320,9 +372,8 @@ class PlanStore:
             raise StoreUnavailable("Invalid answer phase")
         if publication not in ("complete", "pending", "conflict", "fault"):
             raise StoreUnavailable("Invalid publication phase")
-        return StoredExecution(
-            key, facts, evidence, AnswerState(kind, _nullable_str(row[28]), _nullable_str(row[29]), _nullable_str(row[30])), publication
-        )
+        answer = AnswerState(kind, _nullable_str(row[28]), _nullable_str(row[29]), _nullable_str(row[30]))
+        return StoredExecution(key, facts, evidence, answer, publication, _verdict(row[32:36]))
 
     def collect(self, key: AttemptKey) -> StoredExecution | None:
         with self._connection() as con:

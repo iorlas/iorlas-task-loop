@@ -2,15 +2,18 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final, Literal
 
 from any_agent import RunOutcome, classify
 from any_agent.procs import Worker
+from git_porcelain import Repo
 
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference
 
 DISPOSITIONS: Final = ("planned", "incomplete", "needs_owner")
+type Checkouts = Callable[[Path], Repo]  # a fresh Git view from one checkout path
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,7 @@ class AttemptRecord:
     worker: Worker | None
     session_ref: str | None
     session_conflict: bool
+    base_commit: str | None  # B: the slot HEAD read just before dispatch; never part of the fenced Admission
 
 
 @dataclass(frozen=True)
@@ -97,6 +101,59 @@ class AnswerState:
     commit: str | None = None
 
 
+type Rule = Literal[
+    "commit_absent", "not_descendant", "chain_length", "merge", "paths", "mode", "plan_missing", "plan_encoding", "plan_empty", "plan_size"
+]
+RULES: Final[tuple[Rule, ...]] = (
+    "commit_absent", "not_descendant", "chain_length", "merge", "paths", "mode", "plan_missing", "plan_encoding", "plan_empty", "plan_size"
+)
+
+
+@dataclass(frozen=True)
+class Verified:
+    """Every rule held over (B, X, the chain, the plan blob); `reused`: X is B, so nothing new was committed."""
+
+    plan_blob: str
+    reused: bool = False
+
+
+@dataclass(frozen=True)
+class Rejected:
+    """The first rule the reported commit broke; terminal for the attempt."""
+
+    reason: Rule
+
+
+@dataclass(frozen=True)
+class Unsettled:
+    """The slot is not detached, born and clean at X (`unborn`, `branch`, `head_moved`, `dirty`); nothing stored, retryable."""
+
+    reason: str
+
+
+@dataclass(frozen=True)
+class NotApplicable:
+    """No valid `planned` answer of a clean run to verify; `what` is the stored outcome."""
+
+    what: str
+
+
+@dataclass(frozen=True)
+class VerifyRefused:
+    reason: str
+
+
+@dataclass(frozen=True)
+class VerifyUnavailable:
+    """Unknown: nothing stored (`git:<Type>`, `repo`, `not_listed`, `store`, `validation_pending`, `inconsistent`)."""
+
+    reason: str
+
+
+type Verdict = Verified | Rejected
+type VerifyResult = Verified | Rejected | Unsettled | NotApplicable | VerifyRefused | VerifyUnavailable
+
+
 @dataclass(frozen=True)
 class StoredExecution:
     key: AttemptKey
@@ -104,6 +161,7 @@ class StoredExecution:
     evidence: Evidence
     answer: AnswerState
     publication: Literal["complete", "pending", "conflict", "fault"]
+    verification: Verdict | None = None
     custody: Literal["unresolved"] = "unresolved"
 
 

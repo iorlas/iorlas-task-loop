@@ -19,7 +19,7 @@ from git_porcelain import GitUnavailable, Repo
 
 from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.plan_types import AttemptKey, FileRef
+from taskloop.plan_types import AttemptKey, Checkouts, FileRef
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import SlotsUnavailable, SlotView, observe
 from taskloop.task import TaskInspection, TaskInspectionError
@@ -27,7 +27,6 @@ from taskloop.task import TaskInspection, TaskInspectionError
 type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, False held elsewhere, BdError unknown
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
-type Checkouts = Callable[[Path], Repo]
 type Refusal = Literal[
     "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint"
 ]

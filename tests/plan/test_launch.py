@@ -192,7 +192,7 @@ def test_only_an_admitted_attempt_of_a_known_task_launches(admitted: Path) -> No
     start = FakeStart()
     assert launcher(admitted, start).launch("tasks", "tl-9") == LaunchRefused("absent")
     con = sqlite3.connect(admitted)
-    con.execute("UPDATE plan_attempt SET phase='dispatching'")
+    con.execute("UPDATE plan_attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
     con.commit()
     con.close()
     assert launcher(admitted, start).launch("tasks", "tl-1") == LaunchRefused("dispatched")

@@ -1,4 +1,4 @@
-"""Execute, publish and collect one already admitted plan attempt; it grants no admission and releases nothing."""
+"""Execute, publish, collect and verify one already admitted plan attempt; it grants no admission and releases nothing."""
 
 from collections.abc import Callable
 from contextlib import suppress
@@ -6,26 +6,36 @@ from dataclasses import replace
 from typing import Final, Literal
 
 from any_agent import CodexHarness, DecodedAnswer, Harness, InvalidAnswer, LaunchInputs, LaunchSpec, RunHooks, RunOutcome, decode_answer
+from git_porcelain import GitUnavailable
 
 from taskloop.plan_files import EvidenceError, PlanFiles
 from taskloop.plan_session import GateRefused, SessionLatch, reconcile, registration_gate
 from taskloop.plan_store import PlanStore, StoreRefused, StoreUnavailable
 from taskloop.plan_types import (
-    DISPOSITIONS,
     Admission,
     AnswerState,
     AttemptKey,
     AttemptRecord,
     AttemptResult,
+    Checkouts,
     Evidence,
+    NotApplicable,
     PendingPlanResult,
     PlanDecoder,
     PublicationResult,
+    Rejected,
     SessionInput,
     StoredExecution,
+    Unsettled,
+    Verdict,
+    Verified,
+    VerifyRefused,
+    VerifyResult,
+    VerifyUnavailable,
     decode_plan_answer,
     execution_facts,
 )
+from taskloop.plan_verify import Unreadable, judge, observe_slot
 
 type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
 type Credentials = Callable[[], tuple[str, dict[str, str]]]
@@ -59,8 +69,8 @@ class CredentialsUnavailable(Exception):
 
 
 def outcome(stored: StoredExecution) -> str:
-    """The terminal reason, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
-    for an unusable answer, else the valid answer's disposition (the only reasons `succeeded` accepts)."""
+    """The run's own outcome, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
+    for an unusable answer, else the valid answer's disposition (only `planned` goes on to verification)."""
     facts, answer = stored.facts, stored.answer
     if facts.timed_out or facts.rc != 0:
         return "run:" + (facts.reason or ("timeout" if facts.timed_out else "exit"))
@@ -70,19 +80,32 @@ def outcome(stored: StoredExecution) -> str:
 
 
 def report(stored: StoredExecution) -> AttemptResult:
-    """Stored terminal data is collected with its outcome; a pending validation or session publication is never complete."""
+    """Stored terminal data is collected with its outcome; a pending validation, session publication or verification is
+    never complete. A `planned` outcome is collected only with its verdict: `verified`, `reused` or `rejected:<rule>`."""
     if stored.answer.kind == "validation_pending":
         return AttemptResult("pending", "validation_pending", stored)
     if stored.publication == "conflict":
         return AttemptResult("conflict", "session", stored)
     if stored.publication != "complete":
         return AttemptResult("pending", "session_" + stored.publication, stored)
-    return AttemptResult("collected", outcome(stored), stored)
+    reason, verdict = outcome(stored), stored.verification
+    if reason != "planned":
+        return AttemptResult("collected", reason, stored)
+    if verdict is None:
+        return AttemptResult("pending", "verification", stored)
+    return AttemptResult("collected", judged(verdict), stored)
+
+
+def judged(verdict: Verdict) -> str:
+    """A verdict in fixed words: `verified` (new work), `reused` (an existing plan) or `rejected:<rule>`."""
+    if isinstance(verdict, Rejected):
+        return "rejected:" + verdict.reason
+    return "reused" if verdict.reused else "verified"
 
 
 def succeeded(result: AttemptResult) -> bool:
-    """`collected` means terminal, never success: success is a clean run with a valid answer (any disposition)."""
-    return result.status == "collected" and result.reason in DISPOSITIONS
+    """`collected` means terminal, never success: success is a verified plan, new (`verified`) or existing (`reused`)."""
+    return result.status == "collected" and result.reason in ("verified", "reused")
 
 
 class PlanAttempts:
@@ -93,12 +116,13 @@ class PlanAttempts:
         credentials: Credentials,
         execution: Execution,
         clock: Callable[[], float],
+        checkouts: Checkouts,
         decoder: PlanDecoder = decode_plan_answer,
         gate: PlanStore | None = None,
     ) -> None:
         """`gate` serves only the harness registration write (composition bounds its busy wait); default `store`."""
         self.store, self.files, self.credentials = store, files, credentials
-        self.execution, self.clock, self.decoder = execution, clock, decoder
+        self.execution, self.clock, self.checkouts, self.decoder = execution, clock, checkouts, decoder
         self.gate = store if gate is None else gate
 
     def collect(self, key: AttemptKey) -> AttemptResult:
@@ -180,7 +204,8 @@ class PlanAttempts:
         return "sandbox" if admission.sandbox != SANDBOX else None
 
     def _start(self, record: AttemptRecord, me: tuple[int, str, str]) -> AttemptResult:
-        """Credentials, files and the launch spec resolve before dispatch: their failure leaves the attempt `admitted`."""
+        """Credentials, files, the launch spec and the slot check resolve before dispatch: their failure leaves the attempt
+        `admitted`. The slot HEAD read here is B, recorded by the dispatch write."""
         admission = record.admission
         refusal = self._refusal(admission, me)
         if refusal is not None:
@@ -195,16 +220,34 @@ class PlanAttempts:
         harness, spec = launch
         running = False
         try:
-            if self.clock() >= admission.deadline:  # crossed while resolving the launch: stays admitted
-                return AttemptResult("refused", "expired")
+            base = self._base(admission)
+            if isinstance(base, AttemptResult):
+                return base
             self.gate.warm()  # the first gated open runs here, never inside the harness registration window
-            if self.store.dispatch(record) == "conflict":
+            if self.store.dispatch(record, base) == "conflict":
                 return AttemptResult("pending", "dispatching")
             running = True
             return self._run(admission, harness, spec)
         finally:
             if not running:
                 harness.cleanup()
+
+    def _base(self, admission: Admission) -> str | AttemptResult:
+        """B: the slot HEAD the agent starts from, read just before dispatch while the deadline is ahead; only a born,
+        detached, clean slot of the admitted repository dispatches."""
+        if self.clock() >= admission.deadline:  # crossed while resolving the launch: stays admitted
+            return AttemptResult("refused", "expired")
+        try:
+            state = observe_slot(self.checkouts, admission.cwd, admission.repo_id)
+        except GitUnavailable:
+            return AttemptResult("unavailable", "git")
+        if isinstance(state, str):
+            return AttemptResult("unavailable", state)
+        head, problem = state.head, state.problem()
+        if head is None or problem is not None:
+            return AttemptResult("refused", f"slot_{problem}")
+        # the Git reads have no timeout: the deadline is checked again right before the dispatch write
+        return AttemptResult("refused", "expired") if self.clock() >= admission.deadline else head
 
     def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec] | AttemptResult:
         try:
@@ -309,3 +352,58 @@ class PlanAttempts:
         else:
             state = AnswerState("missing")
         return self.store.answer(admission, evidence, state)
+
+
+def _applicable(stored: StoredExecution | None) -> VerifyResult | str:
+    """X when a verdict is still to be made; otherwise what `verify` returns, with no Git read."""
+    if stored is None:
+        return VerifyRefused("not_captured")
+    if stored.answer.kind == "validation_pending":
+        return VerifyUnavailable("validation_pending")
+    if stored.verification is not None:
+        return stored.verification
+    commit = stored.answer.commit
+    if outcome(stored) != "planned" or commit is None:
+        return NotApplicable(outcome(stored))
+    if stored.publication != "complete":  # the verdict's writer requires a complete session publication too
+        return VerifyRefused("session") if stored.publication == "conflict" else VerifyUnavailable("session_" + stored.publication)
+    return commit
+
+
+class PlanVerifier:
+    """Git evidence for a stored valid `planned` answer: one verdict over immutable facts, stored once and then returned
+    with no Git read. Slot state and every unknown store nothing."""
+
+    def __init__(self, store: PlanStore, checkouts: Checkouts, clock: Callable[[], float]) -> None:
+        self.store, self.checkouts, self.clock = store, checkouts, clock
+
+    def verify(self, key: AttemptKey) -> VerifyResult:
+        try:
+            commit = _applicable(self.store.collect(key))
+            if not isinstance(commit, str):
+                return commit
+            record = self.store.load(key)
+            if record is None or record.base_commit is None:
+                return VerifyRefused("absent" if record is None else "no_base")
+            found = self._judge(record.admission, record.base_commit, commit)
+            if not isinstance(found, (Verified, Rejected)):
+                return found
+            kept = self.store.verdict(record.admission, record.base_commit, commit, found, self.clock())
+            return found if kept == found else VerifyUnavailable("inconsistent")  # same inputs, same rules: a defect
+        except StoreUnavailable:
+            return VerifyUnavailable("store")
+        except StoreRefused as error:
+            return VerifyRefused(str(error))
+
+    def _judge(self, admission: Admission, base: str, commit: str) -> Verdict | Unsettled | VerifyUnavailable:
+        """Identity, then the slot at X, born, detached and clean, then the rules; outside any transaction."""
+        try:
+            state = observe_slot(self.checkouts, admission.cwd, admission.repo_id)
+            if isinstance(state, str):
+                return VerifyUnavailable(state)
+            problem = state.problem(commit)
+            if problem is not None:
+                return Unsettled(problem)
+            return judge(self.checkouts(state.root), state.root, base, commit, admission.task.task_id, admission.plan_path)
+        except (GitUnavailable, Unreadable) as error:
+            return VerifyUnavailable("git:" + type(error).__name__)

@@ -59,6 +59,8 @@ def test_listed_clean_linked_worktree_is_adopted_once(factory: sqlite3.Connectio
         ("not_listed", "not_listed"),
         ("elsewhere", "not_listed"),
         ("main", "main"),
+        ("unborn", "unborn"),
+        ("attached", "attached"),
         ("dirty", "dirty"),
         ("missing", "git_unavailable"),
         ("listing", "git_unavailable"),
@@ -72,6 +74,11 @@ def test_unusable_worktree_is_refused_with_its_reason(
         repo.add_worktree(root / "elsewhere" / "s1", "HEAD")
     elif reason == "main":
         monkeypatch.setattr(repo, "worktrees", lambda *, with_dirty=False: (WorktreeInfo(path, None, "main", True, None),))
+    elif reason == "unborn":  # a linked worktree on an unborn branch: the fake makes linked worktrees only at a commit
+        monkeypatch.setattr(repo, "worktrees", lambda *, with_dirty=False: (WorktreeInfo(path, None, "orphan", False, None),))
+    elif reason == "attached":
+        add(repo, root, "s1")
+        repo.worktree(path).checkout_new("task/tl-1")
     elif reason in ("dirty", "missing"):
         add(repo, root, "s1")
         if reason == "dirty":

@@ -11,11 +11,11 @@ from typing import Protocol
 
 from any_agent import run
 from beads_client import Bd, Runner
-from git_porcelain import RealRepo
+from git_porcelain import RealRepo, Repo
 from sqlite_store import Store
 from stream_proc import observe_owned, popen_registered
 
-from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts
+from taskloop.plan import Credentials, CredentialsUnavailable, PlanAttempts, PlanVerifier
 from taskloop.plan_admit import Claim, PlanAdmission, Unclaim
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_launch import Launcher
@@ -131,6 +131,11 @@ def push_bar(env: Mapping[str, str]) -> dict[str, str]:
     return {"GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": f"url.{PUSH_REFUSED}.pushInsteadOf", f"GIT_CONFIG_VALUE_{n}": ""}
 
 
+def checkouts(path: Path) -> Repo:
+    """A fresh (unmemoized) real Git view from one checkout path."""
+    return RealRepo(path, memoize=False)
+
+
 def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> PlanAttempts:
     """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
 
@@ -151,8 +156,15 @@ def open_plan_attempts(database: Path, artifacts: Path, credentials: Credentials
         credentials,
         run,
         time.time,
+        checkouts,
         gate=PlanStore(bounded, gated.begin_immediate),
     )
+
+
+def open_plan_verifier(database: Path) -> PlanVerifier:
+    """Real wiring for the coordinator's on-demand verification: a shared writer on factory.db, real Git, wall clock."""
+    store = Store(SCHEMA)
+    return PlanVerifier(PlanStore(lambda: store.shared_rw(database), store.begin_immediate), checkouts, time.time)
 
 
 def open_launcher(database: Path, artifacts: Path) -> Launcher:
@@ -196,7 +208,7 @@ def open_plan_admission(database: Path, artifacts: Path) -> PlanAdmission:
         store.begin_immediate,
         PlanFiles(artifacts),
         inspect_tracker_task,
-        lambda checkout: RealRepo(checkout, memoize=False),
+        checkouts,
         claim,
         unclaim,
         time.time,

@@ -62,7 +62,7 @@ def test_replacement_needs_the_exact_stored_identity(con: sqlite3.Connection) ->
 def test_no_registration_or_replacement_after_admitted(con: sqlite3.Connection, phase: str) -> None:
     store = PlanStore(lambda: con)
     assert store.register_entry(KEY, FIRST, 10) == "accepted"
-    con.execute("UPDATE plan_attempt SET phase=?", (phase,))
+    con.execute("UPDATE plan_attempt SET phase=?,base_commit=?", (phase, "b" * 40))
     assert store.register_entry(KEY, SECOND, 10, Replaced(FIRST, "gone")) == "conflict"
     con.execute("UPDATE plan_attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL")
     assert store.register_entry(KEY, SECOND, 10) == "conflict"
@@ -137,7 +137,7 @@ def test_attempt_of_is_the_recovery_read_by_task(con: sqlite3.Connection) -> Non
     assert store.attempt_of("tasks", "tl-2") is None
     assert store.attempt_of("other", "tl-1") is None
     assert store.register_entry(KEY, FIRST, 10) == "accepted"
-    con.execute("UPDATE plan_attempt SET phase='dispatching'")
+    con.execute("UPDATE plan_attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
     con.execute("DELETE FROM reservation")  # a recovery read needs no live reservation
     assert store.attempt_of("tasks", "tl-1") == (KEY, "dispatching", FIRST)
     with pytest.raises(StoreUnavailable):

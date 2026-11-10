@@ -54,18 +54,21 @@ Inputs: the stored valid answer (`planned`, commit X, `plan_path` P = `docs/desi
 `plan_attempt.base_commit`, and the admission's `cwd` and `repo_id`. Every check reads only content-addressed objects,
 so the result can be stored for good. The first failure decides.
 
-1. `t = tree(f"{X}^{{commit}}")`. `None`: reject `commit_absent`.
+1. `t = tree(f"{X}^{{commit}}")`. `None`, or `t.sha != X` (an annotated tag or another name that resolves to some other
+   commit): reject `commit_absent`.
 2. `rel = relate(B, X)`, N = `rel.behind`. `rel.ahead != 0`: reject `not_descendant`. N > **8**: reject `chain_length`.
    N == 0 (X == B) is **reuse (Q2, decided)**: skip steps 3 and 4; step 5 applies in full and P must pass step 4's path
    rules. The verdict is `verified` with `reused` set, so it never reads as new work.
 3. **Chain walk.** From c = X, take exactly N first-parent steps (`tree(f"{c}^").sha`). B must be reached at step N and
    not before, else reject `merge`: a first-parent walk shorter than `|B..X|` means a merge brought in outside commits.
+   A parent read that gives `None` is **unknown** (`git:Unreadable`), never `merge`: the library reads it with an
+   unchecked exit code, so a root commit and a failed read look the same.
 4. **Each commit in the chain** (c with parent p), over `diff(p, c, cap=0)`: every change is A or M (a D rejects `paths`);
-   its path lies under `docs/design/<task-id>/` and has no `.`, `..` or `.git` component in any case (macOS file systems
-   ignore case), else `paths`; and `tree(c).files[path][0] == "100644"`, else `mode`. Checking every commit catches a
-   disallowed file that a later commit modified away.
+   its path lies under `docs/design/<task-id>/` and has no empty, `.`, `..` or `.git` component in any case (macOS file
+   systems ignore case), else `paths`; and `tree(c).files[path][0] == "100644"`, else `mode` (a changed path missing
+   from the listing is unknown). Checking every commit catches a disallowed file that a later commit modified away.
 5. **The plan at X.** `t.files.get(P)` missing: `plan_missing`; mode not `100644`: `mode`. Read the whole blob
-   (`t.read(P)`); it must decode as strict UTF-8 (`plan_encoding`), not be whitespace only (`plan_empty`), and be at
+   (`t.read(P)`; `None` for a listed path is unknown, `git:Unreadable`, never `plan_missing`); it must decode as strict UTF-8 (`plan_encoding`), not be whitespace only (`plan_empty`), and be at
    most 1 MiB (`plan_size`). The size is known only after the full read: `Tree.files` carries no sizes. There are no
    heading or structure checks, and this is never presented as review of the plan's content (3.2.1).
 
@@ -84,7 +87,9 @@ first-parent diff still applies the path and mode rules to everything it brings 
 - **The body checks again before dispatch.** In `_start`, after `_launch` and before `store.dispatch`,
   `observe_slot(checkouts, cwd)` (in `plan_verify.py`) reads `(head, branch, dirty)`. `GitUnavailable` gives
   `unavailable("git")`; unborn, a set branch or a dirty slot give `refused("slot_unborn" | "slot_branch" | "slot_dirty")`.
-  Each leaves the attempt `admitted` and runs `harness.cleanup()`, as today. Otherwise `dispatch(record, base=head)`
+  A slot of another repository or one Git does not list gives `unavailable("repo" | "not_listed")`. Each leaves the
+  attempt `admitted` and runs `harness.cleanup()`, as today. The reads have no timeout, so the deadline is checked again
+  after them, immediately before the dispatch write (`refused("expired")`). Otherwise `dispatch(record, base=head)`
   writes `base_commit` in its conditional UPDATE.
 - **B belongs on `AttemptRecord`, never on `Admission`.** `_fence` compares the whole `Admission`, so a field written
   at dispatch would make every later write fail with `changed_admission`.
@@ -111,8 +116,10 @@ CREATE TABLE plan_verification (
 **The writer** is `plan_store.py`, already the conditional SQL owner, through a new `PlanStore.verdict(admission, base,
 commit, result)`. `plan_verify.py` reads Git and nothing else. `WRITERS` gains `("CREATE TABLE","plan_verification"):
 plan_schema.py` and `("INSERT","plan_verification"): plan_store.py`; there is no UPDATE or DELETE. The INSERT runs in
-one `begin_immediate`, only while the reservation is still held for this attempt and generation, `answer_kind='valid'`,
-`disposition='planned'`, and `reported_commit` and `base_commit` equal the X and B that were verified. It uses
+one `begin_immediate`, only while the reservation is still held for this attempt and generation (the fence runs inside
+the writer), the run was clean (`rc=0`, not timed out), the session publication is `complete`, `answer_kind='valid'`,
+`disposition='planned'`, and `reported_commit` and `base_commit` equal the X and B that were verified; otherwise it
+refuses (`stale_reservation` / `changed_answer`). It uses
 `ON CONFLICT DO NOTHING`, then reads the row back. The inputs cannot change, so a second verifier computes the same
 verdict and there is no conflict branch; a stored row that differs would be a defect, reported as
 `unavailable("inconsistent")`. No Git call runs inside the transaction. Line risk: `plan_store.py` grows from 329 to
@@ -137,31 +144,42 @@ no new commit). Consumers must read the reason (section 6).
 `NotApplicable(what)`, `VerifyRefused(reason)` or `VerifyUnavailable(reason)`:
 
 1. `store.collect(key)`. `None`: refused `not_captured`. `validation_pending`: unavailable. A stored verdict: return it
-   with **no Git read**. A non-planned or invalid answer: `NotApplicable`, with no Git read.
+   with **no Git read**. A non-planned or invalid answer, or a failed run: `NotApplicable`, with no Git read. A session
+   publication still `pending`/`fault`: unavailable `session_<state>`; `conflict`: refused `session`.
 2. `store.load(key)`. `StoreRefused` (stale reservation): refused. A NULL base: refused `no_base`.
 3. Identity, the section 4 preconditions (`Unsettled`), then the section 3 checks, all outside any transaction. An
    unknown gives `VerifyUnavailable("git:<Type>" | "repo" | "not_listed")` and stores nothing.
 4. `store.verdict(...)`.
 
-**The entry.** `attempt_entry.enter` calls `verify` once, without retry, after `execute`/`publish` leave a stored valid
-`planned` answer. Its one log line becomes
-`<status> <reason>[ publish=<s>] verify=<verified|reused|rejected:r|unsettled:r|unavailable:r|not_applicable>`; the
-`verify=` part is always present. The exit code stays display only: 0 exactly for `verified` or `reused`, 1 otherwise,
+**The entry.** `attempt_entry.enter` calls `verify` once, without retry, after `execute`/`publish` (it returns
+`not_applicable` or `refused:not_captured` when there is nothing to verify). Its one log line becomes
+`<status> <reason>[ publish=<s>[ then=<status>:<reason>]] verify=<verified|reused|rejected:r|unsettled:r|unavailable:r|refused:r|not_applicable>`;
+the `verify=` part is always present, and after a stored verdict the leading words (or `then=`) are read back, so success
+reads `collected verified verify=verified`. The identity, database and usage refusals before `execute` keep their own
+one-word lines. The exit code stays display only: 0 exactly for a collected `verified` or `reused`, 1 otherwise,
 including `incomplete`. A rejected or unsettled result therefore never looks like success in the log or the exit code.
-The coordinator runs the same operation on demand through `composition.open_plan_verifier(db)`. A lost acknowledgment
-is handled by calling `verify` again (3.2.1); the agent is never rerun.
+`composition.open_plan_verifier(db)` wires the same operation for the coordinator, but **it has no production caller
+yet**: nothing re-triggers a verification that the entry left `unsettled` or `unavailable`, so such an attempt stays
+`pending("verification")` until an operator or coordinator entry point (a follow-up) calls it. A lost acknowledgment is
+handled by calling `verify` again (3.2.1); the agent is never rerun.
 
 ## 7. Failure and unknown table (every row keeps the reservation and the claim)
 
 | Situation | Stored | Result | Next |
 |---|---|---|---|
-| Git missing, `index.lock`, timeout, read failure | nothing | unavailable `git:<Type>` | call again |
+| Git missing, `index.lock`, timeout, read failure | nothing | unavailable `git:<Type>` | call again (no caller yet: section 6) |
+| A chain parent, a listed plan blob or a changed path's listing entry reads as nothing | nothing | unavailable `git:Unreadable` | call again; persistent: owner inspects |
 | B no longer resolves (lost to gc, or an object missing) | nothing | unavailable `git:MissingRevision`, **permanently** | owner decides; no automatic path |
 | Identity mismatch, or the slot is not listed | nothing | unavailable `repo` / `not_listed` | owner inspects |
 | Slot HEAD is not X, on a branch, unborn, or dirty | nothing | `unsettled:<r>`, retryable | owner or cleanup slice; work retained |
 | Answer not `planned`, or invalid | nothing | not_applicable | reported as in section 5 |
 | X absent, not a descendant, chain too long, merge, path, mode or plan rule broken | `rejected` | `collected("rejected:<r>")` | terminal for the attempt (Q6) |
-| `tree()` gives `None` because the repository is corrupt, not because X is absent | `rejected commit_absent` | a **false terminal**, accepted | owner repairs and admits again |
+| `tree()` gives `None` because the repository is corrupt or the read failed, not because X is absent | `rejected commit_absent` | a **false terminal**, accepted | owner repairs and admits again |
+
+The one accepted false terminal is `commit_absent`. Through `verify` it is in practice **only** that false terminal: the
+slot precondition runs first and requires HEAD == X, and a HEAD is always an existing commit, so a truly absent X
+reports `unsettled:head_moved`; `commit_absent` is reached only when the read of X itself fails (or X names a tag or
+another name of a commit). Every other `None` read is unknown, not a verdict.
 | Every rule holds | `verified` | `collected("verified")` | slice 3 pushes X |
 | X == B, and the plan at B passes | `verified`, `reused` | `collected("reused")` | slice 3 publishes B; nothing new |
 | Store unavailable; stale reservation | nothing | unavailable `store` / refused | call again / none |
@@ -176,7 +194,11 @@ is handled by calling `verify` again (3.2.1); the agent is never rerun.
   so an approved command runs **outside** the sandbox. It can write the shared `.git/config` (hooks, `core.fsmonitor`,
   `core.worktree`, include paths) and create refs and tags, none detected here. A `core.fsmonitor` set that way would run
   a program on the factory's own `git status`; git_porcelain does not neutralise it (no `-c` for it in `real_env.py`).
-  Reading commits from the person's checkout narrows this but cannot close it, because `.git/config` is shared. The smoke
+  Reading commits from the person's checkout narrows this but cannot close it, because `.git/config` is shared. The same
+  class is unmitigated on every read from the root: `status` (fsmonitor, `core.untrackedCache`), `diff --raw --numstat`
+  (`diff.<driver>.textconv`/`binary` attributes from a `.gitattributes` the agent committed or from `info/attributes`,
+  which may change the counts numstat shows; the kind and path come from `--raw`, believed unaffected but not observed), `ls-tree` and `cat-file blob` (no filters).
+  Whether textconv applies to `--numstat` was not observed; the verdict uses only kinds, paths, modes and blob bytes. The smoke
   records which escalations were approved (live-smoke section 7); hardening (a library `-c core.fsmonitor=false`, or a
   smaller `CODEX_ACCESS`) is decided on that evidence.
 - **Hangs.** Local git reads have no timeout (`RealRepo.run`, `timeout=None`). A hung read in the entry is the existing

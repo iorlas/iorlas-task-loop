@@ -21,7 +21,7 @@ from taskloop.plan_admit import AdmitRefused, AdmitRequest, AdmitResult, Admitte
 from taskloop.plan_files import PlanFiles
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import PlanStore, StoreRefused
-from taskloop.plan_types import AttemptKey, FileRef
+from taskloop.plan_types import AttemptKey, Checkouts, FileRef
 from taskloop.slots import adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
@@ -119,8 +119,8 @@ def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractCon
     return begin
 
 
-def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun) -> PlanAttempts:
-    return PlanAttempts(PlanStore(lambda: con), PlanFiles(tmp_path / "artifacts"), lambda: ("/bin/codex", {}), run, lambda: 10)
+def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts) -> PlanAttempts:
+    return PlanAttempts(PlanStore(lambda: con), PlanFiles(tmp_path / "artifacts"), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts)
 
 
 def rows(con: sqlite3.Connection) -> tuple[int, int]:
@@ -128,7 +128,7 @@ def rows(con: sqlite3.Connection) -> tuple[int, int]:
 
 
 def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts
 ) -> None:
     slots(factory, repo, root, 2)
     result = admit(factory, tmp_path, repo)
@@ -142,14 +142,14 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
     with pytest.raises(StoreRefused, match="unregistered_entry"):
         PlanStore(lambda: factory).load(key)
     run = FakeRun(RunOutcome(rc=0, worker=WORKER))
-    refused = body(factory, tmp_path, run).execute(key, ENTRY)
+    refused = body(factory, tmp_path, run, checkouts).execute(key, ENTRY)
     assert (refused.status, refused.reason) == ("refused", "unregistered_entry") and run.calls == []
-    pending = body(factory, tmp_path, run).collect(key)
+    pending = body(factory, tmp_path, run, checkouts).collect(key)
     assert (pending.status, pending.reason) == ("pending", "admitted")
 
 
 def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts
 ) -> None:
     slots(factory, repo, root, 1)
     result = admit(factory, tmp_path, repo)
@@ -157,16 +157,16 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     store = PlanStore(lambda: factory)
     assert store.register_entry(result.key, ENTRY, time()) == "accepted"
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
-    other = body(factory, tmp_path, run).execute(result.key, (8, "entry-start", "boot"))
+    other = body(factory, tmp_path, run, checkouts).execute(result.key, (8, "entry-start", "boot"))
     assert (other.status, other.reason) == ("refused", "not_entry") and run.calls == []
-    collected = body(factory, tmp_path, run).execute(result.key, ENTRY)
-    assert collected.status == "collected" and len(run.calls) == 1
+    collected = body(factory, tmp_path, run, checkouts).execute(result.key, ENTRY)
+    assert (collected.status, collected.reason) == ("pending", "verification") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / repo.identity().key / "s1")
     assert "Do the thing" in spec.stdin + " ".join(spec.argv) and "It is done" in spec.stdin + " ".join(spec.argv)
 
 
-@pytest.mark.parametrize("case", ["none_adopted", "held", "dirty", "main_only"])
+@pytest.mark.parametrize("case", ["none_adopted", "held", "dirty", "attached", "main_only"])
 def test_no_free_slot_refuses_before_any_effect(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, case: str) -> None:
     if case != "none_adopted":
         slots(factory, repo, root, 1)
@@ -176,6 +176,8 @@ def test_no_free_slot_refuses_before_any_effect(factory: sqlite3.Connection, rep
         factory.execute(held, (repo.identity().key,))
     elif case == "dirty":
         repo.worktree(path).write_file("scratch", "x")
+    elif case == "attached":  # adopted while detached, then a branch was checked out there
+        repo.worktree(path).checkout_new("task/tl-1")
     elif case == "main_only":
         repo.drop_worktree(path)
     tracker = Tracker(factory, tmp_path / "artifacts")

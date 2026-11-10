@@ -2,9 +2,11 @@
 
 It runs only as the identity the launcher registered: its own boot-aware identity is read and compared with the stored
 entry before the attempt key is used or any credential is read. It never creates factory.db, runs the agent at most once
-(through `PlanAttempts.execute`), retries only an unavailable publication, and writes one log line of fixed words: status and
-reason (a published retry adds `publish=` and the collected `then=`), never facts, environment, argv or exception text. It exits 0
-only for a clean run with a valid answer (`plan.succeeded`). Its stdout and stderr are the attempt's `entry.log`.
+(through `PlanAttempts.execute`), retries only an unavailable publication, then verifies once (`PlanVerifier.verify`, never
+retried), and writes one log line of fixed words: status and reason, read back after a stored verdict (a published retry
+instead keeps the run's own words and adds `publish=` and the collected `then=`), always `verify=`, never facts,
+environment, argv or exception text. It exits 0 only for a verified plan, new or reused (`plan.succeeded`). Its stdout and
+stderr are the attempt's `entry.log`.
 """
 
 import os
@@ -19,10 +21,20 @@ from sqlite_store import open_ro
 from stream_proc import ProcessObservation, inspect_process
 
 from taskloop.composition import open_plan_attempts
-from taskloop.plan import ACCEPTED, PlanAttempts, succeeded
+from taskloop.plan import ACCEPTED, PlanAttempts, PlanVerifier, judged, succeeded
 from taskloop.plan_schema import SCHEMA
 from taskloop.plan_store import StoreUnavailable
-from taskloop.plan_types import AttemptResult, PublicationResult
+from taskloop.plan_types import (
+    AttemptResult,
+    NotApplicable,
+    PublicationResult,
+    Rejected,
+    Unsettled,
+    Verified,
+    VerifyRefused,
+    VerifyResult,
+    VerifyUnavailable,
+)
 
 PUBLISH_RETRIES = 3
 RETRY_WAIT = 2.0
@@ -72,6 +84,21 @@ def _publish(
     return published
 
 
+def shown(result: VerifyResult) -> str:
+    """The `verify=` word of the log line."""
+    match result:
+        case Verified() | Rejected():
+            return judged(result)
+        case Unsettled(reason=reason):
+            return "unsettled:" + reason
+        case VerifyUnavailable(reason=reason):
+            return "unavailable:" + reason
+        case VerifyRefused(reason=reason):
+            return "refused:" + reason
+        case NotApplicable():
+            return "not_applicable"
+
+
 def enter(
     args: EntryArgs,
     attempts: Callable[[Path, Path], PlanAttempts],
@@ -101,14 +128,16 @@ def enter(
         return 1
     result = app.execute(key, me)
     published = _publish(app, result, clock, wait)
-    line = f"{result.status} {result.reason}"
+    accepted = published is not None and published.status in ACCEPTED
+    verified = PlanVerifier(app.store, app.checkouts, app.clock).verify(key)
+    # newly stored facts or a stored verdict: read the terminal outcome back
+    latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
+    line = f"{latest.status} {latest.reason}"
     if published is not None:
-        line += f" publish={published.status}"
-        if published.status in ACCEPTED:  # the published facts are now stored: read their terminal outcome back
-            result = app.collect(key)
-            line += f" then={result.status}:{result.reason}"
-    log(line)
-    return 0 if succeeded(result) else 1
+        then = f" then={latest.status}:{latest.reason}" if accepted else ""
+        line = f"{result.status} {result.reason} publish={published.status}{then}"
+    log(f"{line} verify={shown(verified)}")
+    return 0 if succeeded(latest) else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:

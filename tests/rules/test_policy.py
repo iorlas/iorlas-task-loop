@@ -66,10 +66,12 @@ WRITERS = {
     ("CREATE TABLE", "reservation"): "plan_schema.py",
     ("CREATE TABLE", "plan_attempt"): "plan_schema.py",
     ("CREATE TABLE", "plan_execution"): "plan_schema.py",
+    ("CREATE TABLE", "plan_verification"): "plan_schema.py",
     ("INSERT", "slot"): "slots.py",
     ("INSERT", "reservation"): "plan_admit.py",
     ("INSERT", "plan_attempt"): "plan_admit.py",
     ("INSERT", "plan_execution"): "plan_store.py",
+    ("INSERT", "plan_verification"): "plan_store.py",
     ("UPDATE", "plan_attempt"): "plan_store.py",
     ("UPDATE", "plan_execution"): "plan_store.py",
 }

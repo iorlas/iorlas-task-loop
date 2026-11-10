@@ -1,5 +1,5 @@
 """The answer contract: the schema Codex forwards as a strict response format, the decoder that owns the cross-field rule,
-and the terminal outcome a collected result reports."""
+and the terminal outcome a collected result reports, a planned one only with its verdict."""
 
 import json
 from collections.abc import Iterator
@@ -16,7 +16,10 @@ from taskloop.plan_types import (
     Evidence,
     ExecutionFacts,
     FileRef,
+    Rejected,
     StoredExecution,
+    Verdict,
+    Verified,
     decode_plan_answer,
 )
 
@@ -82,10 +85,10 @@ def test_the_decoder_accepts_planned_with_path_and_commit_and_incomplete_with_nu
     assert (incomplete.disposition, incomplete.plan_path, incomplete.commit) == ("incomplete", None, None)
 
 
-def stored(rc: int | None, timed_out: bool, reason: str | None, answer: AnswerState) -> StoredExecution:
+def stored(rc: int | None, timed_out: bool, reason: str | None, answer: AnswerState, verdict: Verdict | None = None) -> StoredExecution:
     ref = FileRef("f", "d")
     facts = ExecutionFacts(rc, timed_out, None, None, False, False, None, reason, None, None, None, None, None)
-    return StoredExecution(KEY, facts, Evidence(ref, ref, ref, ref), answer, "complete")
+    return StoredExecution(KEY, facts, Evidence(ref, ref, ref, ref), answer, "complete", verdict)
 
 
 VALID = AnswerState("valid", "planned", EXPECTED, "a" * 40)
@@ -94,8 +97,8 @@ VALID = AnswerState("valid", "planned", EXPECTED, "a" * 40)
 @pytest.mark.parametrize(
     ("rc", "timed_out", "reason", "answer", "expected"),
     [
-        (0, False, None, VALID, "planned"),
         (0, False, None, AnswerState("valid", "incomplete"), "incomplete"),
+        (0, False, None, AnswerState("valid", "needs_owner"), "needs_owner"),
         (1, False, "bad_request", AnswerState("missing"), "run:bad_request"),
         (7, False, "worker_failed", VALID, "run:worker_failed"),
         (None, True, "timeout", VALID, "run:timeout"),
@@ -106,13 +109,29 @@ VALID = AnswerState("valid", "planned", EXPECTED, "a" * 40)
         (0, False, None, AnswerState("schema_invalid"), "answer:schema_invalid"),
     ],
 )
-def test_collected_always_names_its_outcome_and_success_needs_a_clean_valid_run(
+def test_collected_always_names_its_outcome_and_only_a_verified_plan_succeeds(
     rc: int | None, timed_out: bool, reason: str | None, answer: AnswerState, expected: str
 ) -> None:
     result = report(stored(rc, timed_out, reason, answer))
     assert (result.status, result.reason) == ("collected", expected) and outcome(stored(rc, timed_out, reason, answer)) == expected
-    assert succeeded(result) is (expected in ("planned", "incomplete"))
+    assert not succeeded(result)
+
+
+@pytest.mark.parametrize(
+    ("verdict", "status", "reason", "success"),
+    [
+        (None, "pending", "verification", False),
+        (Verified("c" * 40), "collected", "verified", True),
+        (Verified("c" * 40, reused=True), "collected", "reused", True),
+        (Rejected("paths"), "collected", "rejected:paths", False),
+    ],
+)
+def test_a_planned_answer_is_collected_only_with_its_verdict(verdict: Verdict | None, status: str, reason: str, success: bool) -> None:
+    planned = stored(0, False, None, VALID, verdict)
+    result = report(planned)
+    assert (result.status, result.reason) == (status, reason) and outcome(planned) == "planned"
+    assert succeeded(result) is success
 
 
 def test_only_collected_can_succeed() -> None:
-    assert not succeeded(AttemptResult("pending", "planned"))
+    assert not succeeded(AttemptResult("pending", "verified"))

@@ -12,7 +12,7 @@ from git_porcelain import GitUnavailable, Repo, WorktreeInfo
 from taskloop.plan_schema import SLOT, current, marks
 from taskloop.repo import RepoId
 
-type Unknown = Literal["not_listed", "main", "dirty", "git_unavailable", "store_unavailable"]
+type Unknown = Literal["not_listed", "main", "unborn", "attached", "dirty", "git_unavailable", "store_unavailable"]
 type Unadoptable = Unknown | Literal["other_root", "inside_checkout"]
 
 
@@ -54,12 +54,16 @@ def _order(name: str) -> tuple[int, str]:
 
 
 def _clean(repo: Repo, listed: tuple[WorktreeInfo, ...], path: Path) -> Unknown | None:
-    """None when Git lists a non-main worktree at exactly `path` and its one status read is clean."""
+    """None when Git lists a non-main, born, detached worktree at exactly `path` and its one status read is clean."""
     info = next((worktree for worktree in listed if worktree.path == path), None)
     if info is None:
         return "not_listed"
     if info.is_main:
         return "main"
+    if info.head is None:
+        return "unborn"
+    if info.branch is not None:
+        return "attached"
     try:
         return "dirty" if repo.worktree(path).dirty().raw else None
     except GitUnavailable:
