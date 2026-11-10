@@ -493,56 +493,71 @@ T "${ROUNDS[@]}" --every 120          # H1: start line; rounds.log: rounds start
 # tab A
 H_ONE=$(cd "$TRACKER" && bd create "Smoke rounds one" -p 1 -l auto --silent)
 H_TWO=$(cd "$TRACKER" && bd create "Smoke rounds two" -p 2 -l auto --silent)
-printf 'H_ONE=%s\nH_TWO=%s\n' "$H_ONE" "$H_TWO" >> "$SMOKE/env.sh"
+H_LONG=$(cd "$TRACKER" && bd create "Smoke rounds long" -p 3 -l auto --silent)   # a longer step, for H7 to H10
+printf 'H_ONE=%s\nH_TWO=%s\nH_LONG=%s\n' "$H_ONE" "$H_TWO" "$H_LONG" >> "$SMOKE/env.sh"
 for t in "$H_ONE" "$H_TWO"; do (cd "$TRACKER" && bd update "$t" -d "Write docs/design/$t/plan.md with one short paragraph. \
 Answer planned and list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."); done
+(cd "$TRACKER" && bd update "$H_LONG" -d "Write docs/design/$H_LONG/plan.md: five sections (goal, context, steps, risks, \
+checks), each with a few careful paragraphs. Answer planned and list the plan in paths." \
+  --acceptance "The plan is committed on task/$H_LONG and published to origin.")
 tail -f "$ART/rounds.log"            # H2: within 120 s `start started` for $H_ONE; then nothing while it runs
 T "${ROUNDS[@]}" --every 120; echo "exit $?"   # H3 (tab C): refused:rounds_running naming tab B's pid, exit 1
 T plan next --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" \
   --effort "$EFFORT" --minutes 30 --json     # H4: works beside it: report running, stopped no_free_slot
 T plan show "$H_ONE" --backlog "$BACKLOG"    # until Released; note its Released time
-# H5: $H_TWO's `start started` line within ~5 s of $H_ONE's Released time (the interval is 120 s)
-wc -l < "$ART/rounds.log"; sleep 300; wc -l < "$ART/rounds.log"   # H6, once both are done: no new line while idle
-# H7, graceful: Ctrl-C ONCE in tab B while $H_TWO runs (the process is between rounds): the terminal says
+# H5: $H_TWO's `start started` line within ~5 s of $H_ONE's Released time (the interval is 120 s); likewise $H_LONG's
+#   within ~5 s of $H_TWO's Released time
+# H7, graceful, while $H_LONG runs: Ctrl-C ONCE in tab B (the process is between rounds): the terminal says
 #   "Stopping after the current move; Ctrl-C again to exit at once.", within 2 s `rounds stopped interrupted`; echo $? -> 0;
-#   `ps` still shows $H_TWO's entry
-T "${ROUNDS[@]}" --every 120          # H8, tab B again: the first round writes `report running` for $H_TWO once
-# H9, abrupt: Ctrl-C TWICE quickly in tab B: `Stopped at once.`; echo $? -> 130; rounds.log ends `rounds stopped abrupt`
-#   (best effort); `ps` still shows $H_TWO's entry if it still runs
-T "${ROUNDS[@]}" --every 120          # H10: starts normally, no second entry; then Ctrl-C once to end the run
+#   `ps` still shows $H_LONG's entry
+T "${ROUNDS[@]}" --every 120          # H8, tab B again: the first round writes `report running` for the running task once
+# H9, abrupt, $H_LONG still running: Ctrl-C TWICE quickly in tab B: `Stopped at once.`; echo $? -> 130; rounds.log ends
+#   `rounds stopped abrupt` (best effort); `ps` still shows $H_LONG's entry
+T "${ROUNDS[@]}" --every 120          # H10: starts normally, no second entry; keep it running
+T plan show "$H_LONG" --backlog "$BACKLOG"   # until Next: done
+wc -l < "$ART/rounds.log"; sleep 300; wc -l < "$ART/rounds.log"   # H6, last, every task done: no new line while idle
+# then Ctrl-C once in tab B to end the run
 cd "$TRACKER" && bd list --status in_progress --assignee taskloop; T plan list   # every claimed task has its attempt
 ls "$SMOKE/markers"                   # empty: no hook ran
 ```
 
-Optional **H11, backoff:** with nothing running and tab B's rounds running, move `$TRACKER/.beads` aside for 5 minutes:
-`rounds wait seconds=240 after=unavailable:tracker` (and longer) lines appear; after moving it back, a
-`rounds wait seconds=120` line and the next round succeed. With every slot held the tracker is never read, so run H11
-with the slot free.
+Optional **H11, backoff:** with nothing running and tab B's rounds running (`--every 120`), move `$TRACKER/.beads` aside
+for 10 minutes: the first line is `rounds wait seconds=120 after=unavailable:tracker`, then `seconds=240` and
+`seconds=300`; after moving it back, a `rounds wait seconds=120` line and the next round succeed. With every slot held
+the tracker is never read, so run H11 with the slot free.
 
 | Check | Pass | Fail means |
 |---|---|---|
 | H2 new task | `$H_ONE` started within one interval | the trigger missed a ready task |
 | H3 singleton | exit 1, `rounds_running` with a pid | two rounds processes for one backlog |
-| H5 wake | `$H_TWO` started seconds after the release, not up to 120 s later | the slot-freed wake does not work |
-| H6 quiet | no new line over 5 idle minutes | idle rounds write lines |
+| H5 wake | `$H_TWO` (and `$H_LONG`) started seconds after the previous release, not up to 120 s later | the slot-freed wake does not work |
 | H7 graceful | the notice, `rounds stopped interrupted` within 2 s, exit 0, the entry still running | the stop killed the step, or waited for a full interval |
-| H8 restart | one `report running` line; no second entry, no new attempt row | a restart launched again |
+| H8 restart | one `report running` line (for whichever task runs then); no second entry, no new attempt row | a restart launched again |
 | H9 abrupt | exit 130, `Stopped at once.`, the entry still running | a second press waited, or the step died |
 | H10 after abrupt | a normal first round, no second entry or attempt row; `bd list` and `tl plan list` agree | the abrupt stop left something a round could not continue |
+| H6 quiet | no new line over 5 idle minutes | idle rounds write lines |
 
 Notes. A first Ctrl-C while a move runs waits for that move: a verify finishes its release and publish push first, up to
 Git's timeout. While every slot is held no candidate is tried, so a wrong `--checkout` is refused (`refused:checkout`)
-only once a slot frees. The wake follows reserved `(repo, slot)` pairs of every backlog, read just before each round:
-a release during a round wakes the next round within 2 s; a repeat taking over its slot does not wake; another backlog's
-release wakes one round that finds nothing to do. A factory.db that exists but cannot be opened now backs off
-(`rounds wait ... after=unavailable:store`); a missing one ends the rounds `refused:database`, exit 1. Started with
-SIGINT ignored (a background job), Ctrl-C stays ignored; run it in the foreground.
+only once a slot frees. The wake follows reserved `(repo, slot)` pairs of every backlog, read just before and just after
+each round: a release during a round, or the end of a step the round itself started, wakes the next round within 2 s; a
+repeat taking over its slot does not wake; another backlog's release wakes one round that finds nothing to do. A
+factory.db that exists but cannot be opened now backs off (`rounds wait ... after=unavailable:store`); a missing one ends
+the rounds `refused:database`, exit 1. Started with SIGINT ignored (a background job), Ctrl-C stays ignored; run it in the
+foreground.
+
+**Observed (first Run H, Linux/OrbStack, 2026-11-10).** H5 failed as first built: the wake baseline was read only before
+the round, so a step started by a round that began with the slot free never woke the next round (91 s instead of about
+2 s; after a restart, with the slot already held, it woke in 1.1 s). Fixed: the baseline is the union of the reads before
+and after the round (plan section 25); H5 is to be rerun. A SIGINT mid-round, sent with `kill -INT` to the process
+group (an emulated Ctrl-C), killed the in-flight `bd ready` child within 50 ms, and the round closed
+`stopped=interrupted`, exit 0. Exited entries were seen as zombies (`Zs`) of the rounds process and were reaped after its
+next `bd` call. Not observed: a real terminal press, and a SIGINT while a claim's `bd` or a push's Git child runs.
 
 Accepted residual: H5 can miss its wake when the 2 s check reads factory.db in the instant between an entry's
 reservation removal and its slot-lock release; the next regular round (at most one interval) fills the slot. Not covered
-live: a real reboot, that wake race, the reaping of exited entries (they stay zombies of the rounds process until its next
-`bd` or Git call), a first Ctrl-C landing mid-round (the tests cover the safe points), macOS. An admitted attempt that
-expired while the machine was off stays `stuck:expired_admitted` until the follow-up of the plan's section 16 lands.
+live: a real reboot, that wake race, macOS. An admitted attempt that expired while the machine was off stays
+`stuck:expired_admitted` until the follow-up of the plan's section 16 lands.
 
 ## 7. Paste back to the agent
 
@@ -554,7 +569,7 @@ the approved-escalation commands (or "none") and `G -C "$REPO" config --list --l
 listing, the command lines and exit codes from `runC.jsonl` (checked for secrets) and its `ls`/`log`/`show-ref` output;
 for Run F, every `T plan publish --json` and `T plan show` output, the entry.log lines, and the `show-ref`/`rev-parse` lines;
 for Run G, every `T plan next --json` output, `rounds.log`, and `bd show` of each `G_*` task; for Run H, tab B's start and
-end lines with their exit codes, `rounds.log`, `T plan show` of `$H_ONE` and `$H_TWO`, H3's and H4's output, and the
+end lines with their exit codes, `rounds.log`, `T plan show` of `$H_ONE`, `$H_TWO` and `$H_LONG`, H3's and H4's output, and the
 `bd list --status in_progress --assignee taskloop` and `T plan list` pair.
 Never paste `auth.json`, `env`, or the agent's environment.
 

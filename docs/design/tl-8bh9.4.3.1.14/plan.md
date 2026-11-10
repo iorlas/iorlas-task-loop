@@ -558,16 +558,21 @@ enabled, not tailed). Every line estimate.
 
 Built as designed in sections 5 to 15 and 17 to 20, with the review repairs below; nothing of section 16 (its own
 follow-up task). No live run (Run H is owner-run, not yet run). Gates: `just check` (ruff, pyrefly 0 errors, 6
-import-linter contracts kept) and `just test` (1199 passed). SLOC by the policy counter: `plan_rounds` 104, `rounds_lock`
+import-linter contracts kept) and `just test` (1200 passed). SLOC by the policy counter: `plan_rounds` 108, `rounds_lock`
 18, `interrupts` 35, `plan_next` 220, `plan_reads` 179, `machine_config` 101, `plan_ops` 370, `plan_data` 91, `cli_plan`
-379, `cli_composition` 205; tests `test_rounds` 194, `test_rounds_lock` 21, `test_interrupts` 11, `test_next` 427,
+379, `cli_composition` 205; tests `test_rounds` 200, `test_rounds_lock` 21, `test_interrupts` 11, `test_next` 427,
 `test_plan_cli` 510, `test_config` 133, `test_slots` 201, `test_ops` 542, `test_policy` 159.
 
 Differences from the text above:
 
-- **The wake baseline is read before each round**, not after it, and passed to the pause: a slot released while the
-  round runs (its own verify's release, an entry ending) wakes the next round at the first check. A failed baseline
-  read is retried at each check (the first successful read becomes the baseline; it never wakes by itself). An empty
+- **The wake baseline is the union of the reserved slots read just before and just after each round**, passed to the
+  pause: a slot released while the round runs (its own verify's release, an entry ending) wakes the next round at the
+  first check, and a slot the round itself reserved wakes it when that step ends. The first repair read the baseline
+  only before the round, which was incomplete: live Run H found that a round starting with the slot free left an empty
+  baseline, the pause skipped every check, and the step's end woke nothing (H5: 91 s instead of about 2 s; it worked
+  only from the second round after a start). Fixed and covered by a fake-clock test (slot free before round 1, held
+  after it, released at t = 4: round 2 at t = 4.5, not 120). Either read alone stands when the other fails; with both
+  failed each check retries it (the first successful read becomes the baseline; it never wakes by itself). An empty
   baseline has nothing to lose and is not read again during that pause.
 - **`SlotUse(free, held)`**: `free` counts adopted slots with no reservation row of their own `(repo_id, name)`, so the
   gate is `free == 0`; `held` is the reserved **`(repo_id, slot)`** pairs, not rows with their attempt: a repeat's
@@ -618,6 +623,12 @@ Differences from the text above:
   passes `free=False`. A whole-round unknown keeps the previous round's `quiet`. Behavioural tests replace the two that
   restated the code (the keys of `reported`; the count of baseline reads): a failed log write makes the next round write
   the state again, and a slot released during a round wakes the next one.
+
+Live Run H (first run, emulated Ctrl-C by `kill -INT` to the process group): a SIGINT mid-round killed the in-flight
+`bd ready` child within 50 ms and the round closed `stopped=interrupted`, exit 0; exited entries stayed zombies (`Zs`)
+until the next `bd` call reaped them. Not observed: a real terminal press, a SIGINT during a claim's `bd` or a push's
+Git child. The runbook's Run H now runs H7 to H9 on a third, longer step right after H5 and H6 last; H11's first wait
+line is `seconds=120` at `--every 120`.
 
 Residual: the wake race of section 6; a claim with no attempt row after an abrupt stop between the tracker's commit and
 factory.db's (runbook section 8); zombies of exited entries until the next `bd` or Git call; that `time.sleep` resumes

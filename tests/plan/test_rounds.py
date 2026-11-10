@@ -115,6 +115,15 @@ def test_a_slot_released_during_the_round_wakes_the_next_round_at_the_first_chec
     assert bench.times() == [0, 3]
 
 
+def test_a_slot_the_round_itself_reserves_wakes_the_next_round_when_its_step_ends() -> None:
+    """Live Run H: the round starts with the slot free and admits into it; that step's release must wake the next round."""
+    bench = Bench([CLEAN, CLEAN])
+    bench.cost = 0.5
+    bench.use = lambda t: SlotUse(1, frozenset()) if t == 0 else SlotUse(0, HELD if t < 4 else frozenset())
+    bench.run(every=120)
+    assert bench.times() == [0, 4.5]
+
+
 def test_a_failed_baseline_read_is_retried_by_the_next_check() -> None:
     bench = Bench([CLEAN, CLEAN], lambda t: None if t < 2 else SlotUse(0, HELD if t < 6 else frozenset()))
     bench.run()

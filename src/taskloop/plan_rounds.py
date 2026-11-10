@@ -1,8 +1,9 @@
 """`tl plan rounds`: scheduling rounds one after another in this foreground process until it is stopped.
 
 A round at once; then the next regular round `every` seconds after the previous one ended, or sooner when a slot frees:
-the reserved slots are read just before each round (the baseline) and every `CHECK` seconds after it, and when a slot
-of the baseline is no longer reserved the next round starts at once (a release during the round included). The baseline
+the reserved slots are read just before and just after each round (their union is the baseline) and every `CHECK`
+seconds after it, and when a slot of the baseline is no longer reserved the next round starts at once (a release during
+the round, and the end of a step the round itself started, included). The baseline
 is every backlog's reservations: another backlog's release also wakes a round, which then finds nothing to do. Each
 round is `plan_next.advance` as built (its free-slot gate reads the tracker only when a slot may be free). A round that
 ends on an unknown (`unavailable`/`uncertain`, whole-round or admission's stop word) backs the regular rounds off,
@@ -119,7 +120,7 @@ def _rounds(ports: Pacing, request: RoundsRequest, log: _Log) -> Ended:
     quiet: Quiet = frozenset()
     backoff = _Backoff(request.every)
     while not ports.stopping():
-        baseline = _held(ports)
+        before = _held(ports)
         found = ports.round(quiet)
         if isinstance(found, Failed) and found.kind not in UNKNOWN:
             return _end(log, request.backlog, f"{found.kind}:{found.reason}", found.detail)
@@ -128,7 +129,7 @@ def _rounds(ports: Pacing, request: RoundsRequest, log: _Log) -> Ended:
             quiet = found.written
         if ports.stopping():
             break
-        _pause(ports, backoff.after(found, log), baseline)
+        _pause(ports, backoff.after(found, log), _union(before, _held(ports)))
     return _end(log, request.backlog, INTERRUPTED)
 
 
@@ -137,9 +138,17 @@ def _held(ports: Pacing) -> frozenset[tuple[str, str]] | None:
     return None if found is None else found.held
 
 
+def _union(before: frozenset[tuple[str, str]] | None, after: frozenset[tuple[str, str]] | None) -> frozenset[tuple[str, str]] | None:
+    """The wake baseline: the slots reserved before the round (released during it: the first check wakes) and after it
+    (reserved by it: its step's end wakes); None only when neither read succeeded."""
+    if before is None or after is None:
+        return after if before is None else before
+    return before | after
+
+
 def _pause(ports: Pacing, delay: int, baseline: frozenset[tuple[str, str]] | None) -> None:
-    """Until the next regular round is due, a stop is asked, or a reserved slot of the baseline (read before the round)
-    is no longer reserved. A slot reserved since never wakes; an empty baseline has nothing to lose and is not read
+    """Until the next regular round is due, a stop is asked, or a reserved slot of the baseline (read before and after
+    the round) is no longer reserved. A slot reserved since never wakes; an empty baseline has nothing to lose and is not read
     again; a failed read neither wakes nor fails, and while there is no baseline each check retries it."""
     due = ports.monotonic() + delay
     while not ports.stopping() and (left := due - ports.monotonic()) > 0:
