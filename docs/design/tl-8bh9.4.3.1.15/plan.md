@@ -1,0 +1,431 @@
+# Generalize the step machinery once: plan becomes the first step kind
+
+Task: tl-8bh9.4.3.1.15 (proposed id; not in the tracker). Design, 2026-11-10, against HEAD 283ae2271. Docs only:
+nothing is built or run. Commands run: source and doc reads, and the policy's own line counter
+(`tests/rules/test_policy.code_lines`) over every `src` and `tests` file at HEAD. The working tree also holds another
+agent's uncommitted deadline-renewal follow-up ([.14](../tl-8bh9.4.3.1.14/plan.md) section 16, about +40 lines in
+`plan_launch`, `plan_store`, `plan_ops`, `plan_next`, `plan_repeat`, `cli_plan`, the two compositions); the counts below
+are HEAD's and do not include it.
+
+Read: CLAUDE.md, glossary, [.8.7](../tl-8bh9.8.7/plan.md), [coverage](../tl-8bh9/coverage.md),
+[delivery/publication](../tl-8bh9.9/delivery-publication.md), [one-shot plan](../tl-8bh9.3.2.1/plan.md),
+[.4.3.1](../tl-8bh9.4.3.1/plan.md) and slices [.1](../tl-8bh9.4.3.1.1/plan.md) to [.14](../tl-8bh9.4.3.1.14/plan.md);
+all of `src/taskloop/`, `tests/`, `.importlinter`, `justfile`; installed `beads_client` 0.2.0 `records.py`.
+
+## 1. The decision, and words
+
+**Owner decision (given):** design the generalization first (what is step-generic, what is plan-specific), then rename
+and generalize once, rather than copy the machinery per step. The next step is implement; checks, review and land
+follow ([coverage](../tl-8bh9/coverage.md), sequence item 2). This document does not design the implement step: only
+what the machinery must offer it.
+
+- **step** (glossary): plan, implement, check, review, land. **attempt**: one try at a step. **step run** below is
+  plain prose for attempts 1..3 of one step linked by repeats (`previous_attempt_id`); it is not a new entity.
+- **step kind** (code name `StepKind`): the few values and functions that make a step the plan step and not the
+  implement step. A code concept, not a product noun, registry or plugin; the set of kinds is a fixed tuple in code.
+- **release** stays the verb for ending a slot reservation (a lease: the glossary keeps standard lease words). The
+  glossary's **release** (a versioned distribution) never names a module or table here: the module is `slot_release`.
+- **mutating step**: a step whose agent changes files the factory then commits (plan, implement). Delivery/publication
+  item 2 already uses this distinction.
+
+## 2. Inventory
+
+Counts are physical lines / code lines (the policy's count: no blank, comment or docstring lines) at HEAD.
+Class: **generic** (no plan meaning, at most a `plan_` name or "plan" in prose), **plan** (only meaningful for the plan
+step), **mixed** (generic machinery with plan-specific pieces named in the next column).
+
+### 2a. Source modules (37 files, 5,405 code lines)
+
+| Module | Lines | Class | Plan-specific content | Target (section 3.6) |
+|---|---|---|---|---|
+| `plan_types.py` | 374/252 | mixed | `DISPOSITIONS`, `PLAN_NAME`, `plan_stage`, `Admission.rules`, `PlanAnswer`, `ANSWER_KEYS`, `decode_plan_answer`, the `plan_*` words in `Rule` | `attempt_types` + `plan_step` |
+| `plan_schema.py` | 109/96 | mixed | tables named `plan_*`; columns `plan_commit`, `plan_path`, `plan_blob`; CHECK verified implies `plan_blob` | `factory_schema` |
+| `plan_store.py` | 352/302 | mixed | `'planned'`/`'unchanged'` in three SQL fences; method `plan_commit` | `attempt_store` |
+| `plan_reads.py` | 259/179 | generic | names only | `attempt_reads` |
+| `plan_admit.py` | 443/338 | mixed | `task_text` closing words; `'planned','unchanged'` in `PREVIOUS` | `admit` (+ `admit_chain` in S5) |
+| `plan.py` | 344/285 | mixed | `report` and `outcome` test `planned`/`unchanged`; default decoder `decode_plan_answer` | `attempt` |
+| `plan_files.py` | 117/84 | mixed | `ANSWER_SCHEMA` (the plan answer's JSON schema) | `evidence_files`; schema to `plan_step` |
+| `plan_commit.py` | 209/133 | mixed | `attributes()` hardcodes `docs/.gitattributes`, `docs/design/.gitattributes`; `unchanged`/`planned` tests | `factory_commit` |
+| `plan_verify.py` | 279/188 | mixed | `_plan`/`_content`: the plan.md rule at X; `planned` in `judge` | `slot_state` + `verdict`; plan.md rule to `plan_step` |
+| `plan_verifier.py` | 170/126 | mixed | `STAGED = ("planned", "unchanged")` | `verifier` |
+| `plan_repeat.py` | 223/173 | mixed | `feedback` instructions name `plan.md` and "the plan folder" | `repeat`; instructions to `plan_step` |
+| `plan_prepare.py` | 169/107 | generic | none (the task branch rule and the first attempt's branch take) | `prepare` |
+| `plan_launch.py` | 203/143 | generic | none | `launch` |
+| `plan_session.py` | 83/58 | generic | none | `session` |
+| `plan_release.py` | 332/238 | generic | names only | `slot_release` |
+| `plan_publish.py` | 266/193 | generic | refusal prose ("The plan is not verified yet") | `publish` |
+| `plan_ops.py` | 531/370 | generic | prose and `tl plan` spellings | `operations` + `attempt_status` (S4) |
+| `plan_next.py` | 302/220 | generic | "plan step" in prose | `round` |
+| `plan_rounds.py` | 174/108 | generic | names only | `rounds` |
+| `plan_data.py` | 121/91 | generic | names only | `result_data` |
+| `attempt_entry.py` | 295/216 | generic | prose: "verified plan" | stays |
+| `cli_plan.py` | 437/379 | mixed | the `plan` noun, `PLAN_ONLY`, plan wording in `GUIDE` (section 2d) | `cli_step` + `cli_guide` (S4) |
+| `cli.py` | 111/98 | mixed | root description quotes `PLAN_ONLY` | stays |
+| `cli_composition.py` | 274/205 | generic | `open_plan_*` names | stays, `open_step_*` |
+| `composition.py` | 386/249 | generic | `open_plan_attempts`/`open_plan_*` names; Codex credentials are agent-generic | stays |
+| `slots.py` 197/142, `slot_lock.py` 94/46, `claim_lease.py` 101/62, `selection.py` 76/49, `tracker.py` 79/51, `task.py` 67/47, `repo.py` 35/21, `machine_config.py` 149/101, `rounds_lock.py` 43/18, `interrupts.py` 59/35, `__main__` 5/2, `__init__` 1/0 | | generic | none (prose mentions `tl plan`) | stay |
+
+Plan-specific code in total is small: about 110 code lines (the answer contract and decoder, the schema, the input's
+closing words, the plan.md rule at X, the repeat instructions). The rest is the step machinery under a plan name.
+
+### 2b. factory.db tables (schema v8)
+
+| Table | Class | Plan-specific columns or checks |
+|---|---|---|
+| `slot`, `reservation` | generic | none |
+| `plan_attempt` | generic | name; `plan_commit` (X, the commit the step ends at) |
+| `plan_execution` | mixed | `plan_path` (validated by the decoder, never read for control); `disposition` words used in fences |
+| `plan_verification` | mixed | `plan_blob`; `CHECK((verdict='verified') = (plan_blob IS NOT NULL))` |
+| `plan_release` | generic | name |
+| `published_branch` | generic | none |
+
+### 2c. CLI verbs
+
+| Verb | Class |
+|---|---|
+| `tl repo inspect`, `tl task show`, `tl config show`, `tl slot adopt` | generic |
+| `tl plan start/show/list/verify/release/publish/next/rounds` | generic operations under the `plan` noun: each follows a task's current attempt, whatever its step |
+
+### 2d. GUIDE keys, help strings and log words
+
+- **GUIDE (42 keys in `cli_plan.py`)**: every key names a generic state or refusal. Plan wording is in the text only:
+  `start` ("plan the task again"), `publish` ("The plan is verified"), `done` ("whether the plan was verified"),
+  `failed` ("without a verified plan"), `stuck:expired_admitted` ("plans it again"), `not_verified` ("Only a verified
+  plan"), `unsettled` ("the stage"). The other 35 are generic apart from the `tl plan` spelling. `PLAN_ONLY`, `HELD`,
+  `ROUNDS`, `ABANDON`, `PUBLISH` and `discard()` likewise.
+- **`entry.log`**: one line of fixed words, `<status> <reason> [publish= then=] verify= claim= release= [branch=]`:
+  generic. Verdict words `verified`, `reused`, `rejected:<rule>` are generic except the rules `plan_missing`,
+  `plan_encoding`, `plan_empty`, `plan_size`.
+- **`rounds.log`**: `<time> <backlog> <task> <action> <words> [<attempt>]`, actions `start relaunch repeat verify
+  publish report skip`, `round moves=N [stopped=W]`, `rounds started/stopped`: generic.
+
+### 2e. Test files (38 files, 8,021 code lines)
+
+| File | Lines | Class |
+|---|---|---|
+| `tests/plan/test_answer_contract.py` | 202/160 | plan (decoder and schema) |
+| `tests/plan/test_verify.py` | 683/531 | mixed (generic chain verdict and slot pointer; plan.md content rules) |
+| `tests/plan/test_repeat.py` | 533/421 | mixed (generic repeat; plan feedback text) |
+| `tests/plan/test_admit.py` | 557/455 | mixed (generic admission; `task_text` words) |
+| `tests/cli/test_plan_cli.py` | 608/510 | generic behaviors under the `tl plan` spelling |
+| `tests/plan/test_attempt.py` 784/622, `test_ops.py` 678/542, `test_next.py` 539/427, `test_repeat_run.py` 485/379, `test_entry.py` 428/333, `test_publish.py` 386/286, `test_release.py` 353/271, `test_prepare.py` 316/234, `test_rounds.py` 274/200, `test_slots.py` 260/201, `test_launch.py` 251/196, `conftest.py` 210/155, `test_credentials.py` 200/170, `test_slot_lock.py` 185/137, `test_entry_store.py` 145/113, `test_dispatch_slot.py` 140/112, `test_claim_lease.py` 125/92, `test_selection.py` 105/71, `test_rounds_lock.py` 30/21, `test_interrupts.py` 16/11 | | generic (plan answers appear only as data) |
+| `tests/plan/real/test_commit_real.py` 212/163, `test_publish_real.py` 185/146, `test_release_real.py` 134/99, `test_repeat_real.py` 116/95, `test_prepare_real.py` 82/65 | | generic (plan paths as data) |
+| `tests/cli/test_cli.py` 72/56, `test_config.py` 159/133, `test_repo*.py`, `test_task*.py`; `tests/rules/test_isolation.py` 109/90, `test_policy.py` 209/159 | | generic (`test_policy` and `.importlinter` name modules and tables) |
+
+Raw SQL in tests names the `plan_*` tables or columns about 230 times across 25 files: the schema slice edits them.
+
+## 3. Target design
+
+### 3.1 What a step kind is
+
+One frozen dataclass per step, holding exactly what plan and implement differ in. Everything else is the shared
+machinery: admission, launch, entry, session, capture, factory commit, chain verdict, clean-tree check, repeat,
+release, publish, status, rounds.
+
+```python
+type Step = Literal["plan"]            # S5 adds "implement"
+type Effect = Literal["commit", "keep", "none"]
+
+@dataclass(frozen=True)
+class Answer:                          # replaces PlanAnswer; the decoder's one result
+    disposition: str                   # the step's own word, for display (`planned`)
+    effect: Effect                     # commit the listed paths / B stands / nothing to verify
+    paths: tuple[str, ...]
+    message: str | None
+    explanation: str
+
+@dataclass(frozen=True)
+class StepKind:
+    step: Step
+    rules: Callable[[str], StepRules]                     # task id -> root, caps, deletions
+    input_text: Callable[[TaskInspection, StepRules], str] # the task prose plus the step's closing words
+    answer_schema: Mapping[str, object]                    # the strict JSON schema Codex forwards
+    decode: Callable[[object, StepRules], Answer]          # every bound and cross-field rule; ValueError otherwise
+    artifact: Callable[[Tree, StepRules], Rule | str | None]  # the step's own rule at X: broken rule, blob, or nothing
+    feedback: Callable[[RepeatReason, StepRules, bool], str]  # a repeat's fixed instructions (the bool: unrecorded)
+```
+
+`steps.py` owns the kinds: `PLAN = StepKind("plan", ...)`, `STEPS: tuple[StepKind, ...] = (PLAN,)` (the fixed order),
+`kind(step) -> StepKind` (a `match`, no lookup table of strings to callables supplied from elsewhere), `RULES` (the
+generic rules plus every kind's artifact rules, for the stored-verdict reader). `plan_step.py` holds the plan's values:
+the four dispositions mapped to effects (`planned` commit, `unchanged` keep, `incomplete` and `needs_owner` none), the
+plan answer schema (unchanged bytes), the decoder (unchanged rules, plus the effect), `task_text`'s closing words, the
+plan.md rule (`_plan`/`_content`, returning the blob), and the repeat instructions. **Only `steps.py` imports
+`plan_step`** (an import-linter contract), so no generic module can grow a plan branch again.
+
+What each field answers, from the brief:
+
+| Concern | Where it lives |
+|---|---|
+| prompt / task text | `input_text`; the admitted input stays a stored file under its digest |
+| output schema / answer decode | `answer_schema` (written to `schema.json` by `evidence_files.prepare`) and `decode` |
+| what "verified" means | generic: the chain rules (`commit_absent`, `not_descendant`, `chain_length`, `paths`, `mode`, `file_size`, `nothing_written`) and the clean tree at X; per kind: `artifact` at X (plan: plan.md exists, mode 100644, UTF-8, not blank, at most 1 MiB; a kind with no artifact returns None) |
+| what is committed / published | generic: the factory commits exactly the listed paths within `StepRules`; a verified X is pushed to `task/<id>` (delivery/publication item 2: every mutating step). Not a field |
+| repeat policy | generic: `REPEATABLE` leftovers, `ATTEMPTS = 3` per step run, fresh session; per kind only the `feedback` instructions |
+| access / sandbox | generic for now: `SANDBOX` and `CODEX_ACCESS` (no network, no `/tmp`, never escalate). Not a field until a kind needs other values (section 5) |
+
+`StepRules` (renamed from `StageRules`; the glossary retires "stage") keeps its four fields: `root`, `max_paths`,
+`file_cap`, `deletions`. `attributes()` becomes the `.gitattributes` of every folder on the way to `root`, plus `root`:
+for the plan root that is exactly today's list.
+
+### 3.2 Which step a task is in next: derived from factory.db, owned by `steps.py`
+
+**Decided.** The step is local execution state (glossary storage table: factory.db owns steps and attempts). The
+tracker never stores it, no label or metadata carries it, and no log is read for it.
+
+- A task's attempt is **done** when its verdict is `verified` (new or `reused`), its release is settled (`slot_release`
+  row, `abandoned=0`) and its commit is recorded published (`published_branch`). Delivery/publication: do not advance
+  to another mutating step until the checkpoint is published.
+- `steps.next_step(done, current)` is pure: given the steps that have a done attempt for the task and the task's
+  current attempt (highest `seq`), it answers the step to admit next, or None. No attempt, or a current attempt that
+  was abandoned with its claim returned: the step after the last done step (the first step when none is done). A
+  current attempt that is done: the following step in `STEPS`, or None when it was the last built step. Anything else:
+  None (the current attempt is still in its step; its own `Next` word applies).
+- Admission is the only writer and re-derives under its write lock; the status read and the round call the same
+  function. One owner of the fact, one function, every consumer.
+- **After a deliberate factory.db discard** the derivation restarts at the first step. The plan agent reads the
+  committed plan and answers `unchanged` (`reused`), the publish is an up-to-date push, and the task advances: normal
+  reevaluation, as CLAUDE.md requires, at the cost of one short plan attempt. No history reconstruction.
+
+### 3.3 How attempts of different steps chain on one task
+
+| Column | Meaning (existing unless marked) |
+|---|---|
+| `seq` | the attempt's order among all its task's attempts, every step and every fresh start |
+| `step` (new, S2) | which step the attempt belongs to |
+| `number`, `previous_attempt_id`, `repeat_reason` | the attempt's place in its step run; a repeat links to the attempt it repeats, never across steps |
+| `base_commit` B, `end_commit` X (renamed from `plan_commit`) | where the attempt started and ended |
+| `after_commit` (new, S5) | for attempt 1 of a later step only: the previous step's done X, read under admission's lock |
+
+The current attempt stays "highest `seq`" (`attempt_of`, unchanged), so `show/verify/release/publish` keep following the
+task's current attempt whatever its step. The chain verdict stays per step run: B1 is the step run's attempt 1 B, so a
+later step is judged only on its own commits. Three admission paths, one module family:
+
+| Path | When | Claim | Slot |
+|---|---|---|---|
+| fresh (`admit`, exists) | no attempt, or the current one abandoned with its claim returned | taken (`Bd.claim`) | a free slot, branch rule |
+| repeat (`admit_repeat`, exists) | the current attempt captured with repeatable leftovers | copied | the same reservation, taken over |
+| next step (`admit_next`, S5) | the current attempt is done and a following step exists | kept from the previous step (never retaken; Q2) | a free slot, branch rule |
+
+A next-step attempt copies `tracker_root`, takes `model`/`effort` from the request (Q4), stores `after_commit`, and
+its preparation refuses `branch_moved` when the local `task/<id>` it checks out does not contain `after_commit`
+(someone moved the branch; the agent must start from the published previous step). The first beat of the entry's
+claim keep-alive still re-arms a lapsed lease or refuses `claim_lost` before the agent runs (.9 section 5), as for
+every step.
+
+### 3.4 Schema
+
+Two direct version bumps, no compatibility: `current()` refuses the older file (`refused:schema`), the owner discards
+factory.db (the existing discard runbook), nothing migrates. Before a bump the owner finishes or abandons the attempts
+in flight.
+
+- **v9 (S2): generic names and the step column.** `plan_attempt` to `attempt`, `plan_execution` to `execution`,
+  `plan_verification` to `verification`, `plan_release` to `slot_release`; `published_branch`, `slot`, `reservation`
+  keep their names. `plan_commit` to `end_commit`, `plan_blob` to `blob` (nullable: a kind without an artifact stores
+  none; the CHECK tying it to `verified` goes, the `reason` CHECK stays). `attempt.step TEXT NOT NULL CHECK(step IN
+  ('plan'))`. `execution.effect TEXT CHECK(effect IN ('commit','keep','none'))`, written by `answer()` with the
+  disposition; every fence that today names `'planned'`/`'unchanged'` (the end-commit write, the verdict insert, the
+  repeat's `PREVIOUS`) reads `effect` instead. `plan_path` is dropped (the decoder already validated it; nothing reads
+  it). The `UNIQUE(adapter, backlog, task_id, seq)` and every other constraint stay.
+- **v10 (S5): a second step.** `step IN ('plan','implement')`; `attempt.after_commit TEXT` with
+  `CHECK(after_commit IS NULL OR length(after_commit) IN (40,64))` and `CHECK((number = 1 AND step <> 'plan') =
+  (after_commit IS NOT NULL))`. Each later step kind (review) is another bump of this kind; that is accepted, not
+  avoided with an unchecked column.
+
+No other table gains a `step` column: execution, verification, release and publication rows are one per attempt and
+join to it. Reservations and slots know nothing of steps.
+
+### 3.5 Release and publish per step
+
+Unchanged in meaning, generic in name. Release (settled) parks the slot at the attempt's D and keeps the claim: a
+verified step result is not task completion, land is. Abandon returns the claim. Publish pushes the attempt's verified
+X to origin's `task/<id>`, never forced, and records it; it runs per attempt, so every mutating step publishes its own
+tip (delivery/publication item 2). A `reused`/`keep` result pushes the same X again (an up-to-date push records it).
+Checks, review and land are not mutating agent steps in this machinery (section 5).
+
+### 3.6 Naming
+
+No generic module keeps a `plan_` prefix; only `plan_step.py` means the plan step. Renames (S1 unless noted):
+
+| Old | New | Classes and functions |
+|---|---|---|
+| `plan_schema` | `factory_schema` | |
+| `plan_types` | `attempt_types` (+ `plan_step` in S1, + `steps` in S3) | `StageRules` to `StepRules`, `StepAttempt` to `ChainLink`, `PendingPlanResult` to `PendingResult`, `PlanDecoder` to `Decoder`; `PlanAnswer` becomes `Answer` (S3) |
+| `plan_reads`, `plan_store` | `attempt_reads`, `attempt_store` | `PlanReads`/`PlanStore` to `AttemptReads`/`AttemptStore`; `plan_commit()` to `end_commit()` (S2) |
+| `plan_admit` | `admit` (+ `admit_chain` in S5: repeat takeover and next step) | `PlanAdmission` to `AttemptAdmission` |
+| `plan` | `attempt` | `PlanAttempts` to `Attempts` |
+| `plan_launch`, `plan_session`, `plan_prepare` | `launch`, `session`, `prepare` | |
+| `plan_files` | `evidence_files` | `PlanFiles` to `EvidenceFiles` |
+| `plan_commit` | `factory_commit` | |
+| `plan_verify` | `slot_state` (pointer, observation, listing, staged) + `verdict` (`judge` and the chain) | |
+| `plan_verifier` | `verifier` | `PlanVerifier` to `Verifier` |
+| `plan_release`, `plan_publish`, `plan_repeat` | `slot_release`, `publish`, `repeat` | `PlanRelease` to `SlotRelease`, `PlanPublish` to `BranchPublish`, `PlanRepeat` to `StepRepeat` |
+| `plan_ops` | `operations` (+ `attempt_status` in S4) | |
+| `plan_next`, `plan_rounds`, `plan_data` | `round`, `rounds`, `result_data` | |
+| `cli_plan` | `cli_step` + `cli_guide` (S4) | `open_plan_*` to `open_*` (S1) |
+| `tests/plan/` | `tests/steps/` (S1; `justfile` follows) | `test_plan_cli.py` to `test_step_cli.py` (S4) |
+
+### 3.7 CLI shape
+
+**Recommended (Q1): `tl step <verb>` replaces `tl plan <verb>` in one cut, no alias.** The verbs and flags stay:
+`start show list verify release publish next rounds`. The person never names the step: `tl step start TASK` relaunches,
+repeats, advances or freshly admits whatever the task's current attempt and `steps.next_step` call for; `show` and
+`list` print a `Step:` line and a `step` column; `--json` rows gain `"step"`. The help scope string replaces
+`PLAN_ONLY`: "steps built: plan; publishes task/<id>; no merge or land" (S5: "plan, implement"). `tl plan` then exits 2
+like any unknown command. The [.8.7](../tl-8bh9.8.7/plan.md) exception paragraph is rewritten for `tl step` in the
+same slice. Until that slice (S1 to S3) `tl plan ...` works exactly as today.
+
+`rounds.log` move lines gain the step word after the task (`<time> <backlog> <task> <step> <action> ...`). It is
+evidence for a person, never read back; the live-smoke runbook's greps follow. `entry.log` is per attempt and does not
+change.
+
+### 3.8 Rounds and scheduling
+
+A round today: settle each current attempt, admit ready tasks, publish. With S5 it becomes **settle, advance, admit,
+publish** (Q3):
+
+- `Next` gains `advance`: the current attempt is done and a following step exists (`done` stays for a failed result
+  and for the last built step).
+- **advance**: each `advance` attempt, oldest settled release first (FIFO, no tracker priority read), gets one
+  `tl step start` through the same operation; the free-slot gate and the stop words are admission's. One tracker read
+  per candidate (`show`) confirms it may continue (Q2): status `in_progress`, assignee `taskloop`, the round's approval
+  label still present. Otherwise a `skip` move with `claim_lost` or `not_approved`, nothing written. That read also
+  supplies the task prose for the next step's input. `TaskInspection` gains `status`, `assignee`, `labels`, all
+  already on `beads_client.Bead`.
+- **admit**: unchanged. A ready task with any attempt is still skipped (`attempted`/`abandoned`); claimed tasks are not
+  in the ready set anyway, so advancing never comes from the tracker's ready list.
+- One `--model`/`--effort`/`--minutes` per request applies to every step (Q4).
+
+### 3.9 Decided in this document (no owner question)
+
+Names in 3.6; `release` kept in its lease sense; the step stored only in factory.db; discard restarts at the first
+step; the stored `effect` instead of disposition words in SQL; `plan_path` dropped; `blob` nullable; the `StepKind`
+fields in 3.1 and nothing more; two version bumps (v9, v10); the step order a fixed tuple in code, never configuration.
+
+## 4. Migration: bounded slices
+
+Each slice lands green with `just check` and `just test`, reviewed independently, one source writer at a time.
+**S0, precondition:** the uncommitted deadline-renewal follow-up lands first; S1 renames the files it touches.
+
+| Slice | What | Schema | CLI / words | Size |
+|---|---|---|---|---|
+| **S1 Renames and moves** | Every rename in 3.6 except S4's; `plan_types` split into `attempt_types` and `plan_step` (moved verbatim: dispositions, `PLAN_NAME`, rules, decoder, `ANSWER_SCHEMA` from `plan_files`, `task_text`'s closing words, the plan.md rule from `plan_verify`, the repeat instructions); `tests/plan` to `tests/steps`; `.importlinter`, `test_policy` (`WRITERS`, `git_writers`), `justfile` updated | none (tables keep `plan_*` names for one slice) | none: `tl plan` and every word unchanged | about +20 code lines (new module headers); about 25 source and 35 test files touched, imports and names only |
+| **S2 factory.db v9** | 3.4 v9: table and column renames, `step` (plan), `effect`, drop `plan_path`, nullable `blob`; `end_commit()`; fences on `effect`; `AttemptRow`/`AttemptRecord`/`Admission` carry `step` | v8 to v9, discard | none | about +15 source; about 230 test SQL references edited |
+| **S3 The step port** | `steps.py` (`StepKind`, `PLAN`, `STEPS`, `kind`, `RULES`); `Answer` with `effect`; the five consumers (`admit` input text, `evidence_files.prepare` schema, `attempt._validate`, `verifier`/`verdict` artifact, `repeat` feedback) call `kind(admission.step)`; `attributes()` derived from the root; import-linter: only `steps` imports `plan_step` | none | none: identical input text and schema bytes | about +45 source |
+| **S4 CLI cut (Q1)** | `tl step` replaces `tl plan`; `cli_guide.py` takes `GUIDE`, `discard`, help strings (generic wording); `attempt_status.py` takes status and `next_step` from `operations`; `step` in rows, JSON and `rounds.log`; .8.7 exception and live-smoke runbook updated | none | the cut | about +30 source |
+| **S5 Step sequencing** (lands with the implement kind) | `steps.next_step`; `admit_next` in `admit_chain` (with the repeat takeover moved there); the `after_commit` check in `prepare`; `advance` in status, `tl step start` and the round (3.8); `TaskInspection` status, assignee, labels; the implement `StepKind` per its own design | v9 to v10, discard | `advance` word and GUIDE entry; scope string names implement | about +250 source, +350 test |
+
+**What stays plan-only after S5:** `plan_step.py` (its answer contract, words, input closing words, plan.md rule,
+repeat instructions) and the plan.md artifact rules' verdict words. Nothing else names the plan step.
+
+Ordering rationale: pure renames first, so S2's schema diff and S3's behavior-preserving port read cleanly; the CLI
+cut waits for the owner's answer but must precede S5, because with two steps `tl plan start` would start an implement
+step. S1 to S4 change no behavior a person sees except S4's spelling.
+
+## 5. Not generalized yet, and risks
+
+**Not generalized (only the implement step's needs are covered):**
+
+- **Checks** (a non-agent step with individual check attempts, check keys, passes and reuse), and **land** (merge,
+  final squash, task completion, sync) are not step kinds of this machinery: no session, worker, answer or factory
+  commit. They get their own designs and tables; attempt rows are not made nullable for them now.
+- **Review**: an agent step, but whether it commits (delivery/publication item 3 says checks/review do not commit to
+  record results; .7 section 14 floated committed review reports) is review's own design. No read-only step mode now.
+- **Repair** (returning to implement after failed checks or review): the retry owner tl-7i9k.56.1, later.
+- **Per-step access/sandbox**, per-step caps beyond `StepRules`, per-step deadlines, per-step harness, multiple commit
+  groups per answer, factory reverts, session resume, a configurable step order, tracker-visible step state.
+
+**Risks:**
+
+- **Implement's rules will differ from the plan's in ways the plan never met.** With `root=""` the ignored-file check
+  (`dirty(..., ignored_under=attributes(rules))`) would report every ignored file in the repository (`__pycache__`,
+  `.pytest_cache`, `.venv`) and repeat the step; the `.git*` rule refuses `.gitignore` and `.github/`; 32 paths may be
+  too few; the sandbox excludes `/tmp`, which test runs use. These are implement's decisions; when it makes them,
+  `StepRules` (ignored-file scope, `.git*` policy) and possibly an `access` field grow in S5, not before.
+- **The branch rule's D for a later step.** Admission accepts a slot only when every existing `task/<id>` tip contains
+  the slot's parked HEAD D. Slots park back at their own D, so slots adopted at one base keep passing; slots adopted at
+  different bases may refuse `branch_diverged` for a later step. Stated, not changed; `after_commit` covers the real
+  requirement (start from the published previous step).
+- **The claim between steps.** Nothing renews the lease between steps (.9 section 5): a `bd reclaim` can revert it
+  minutes after a step ends; the next step then stops at `claim_lost` (Q2), as the plan step does today.
+- **Rename churn.** S1 touches most files: it must run with no other source writer in the tree, right after S0.
+  Proof of no behavior change: the existing suites, unchanged except imports and names.
+- **Caps.** `cli_plan` is at 379/400 code lines, `plan_ops` 370, `plan_admit` 338, `plan_store` 302: S4 and S5 split
+  them (section 7) before they grow. `test_attempt.py` is at 622/800.
+- **Two discards** (v9, v10) of the owner's smoke factory.db; in-flight attempts must be finished or abandoned first.
+
+## 6. Tests and smoke
+
+- **S1:** no new tests. The existing suites, with only import and name edits, are the proof; the reviewer reads
+  `git diff -M` and checks that no logic line changed. `test_policy` and `.importlinter` follow the new names.
+- **S2:** the existing tests with their SQL renamed. New, only for new behavior: `answer()` stores `effect`, and the
+  end-commit and verdict fences accept `commit`/`keep` and refuse `none` (one parametrized test replacing the
+  disposition-word fixtures it supersedes); a v8 factory.db is refused `schema` (reuse the existing refusal test).
+  **Live smoke after S2 (owner-run, scratch repo and tracker):** the runbook's plan path end to end (start, show,
+  verify, release, publish), one repeat with leftovers, one abandon and fresh start, and one `tl plan next` round;
+  first, the old v8 file refused `schema`. The runbook's `sqlite3` lines use the new table names.
+- **S3:** `tests/steps/test_steps.py`: the plan kind's input text for a fixed task, and its `schema.json` bytes, equal
+  constants recorded from S2's output (the agent-facing contract did not move); the import-linter contract. The
+  decoder tests in `test_answer_contract.py` call it through `kind("plan")`.
+- **S4:** CLI tests respelled `tl step` (`test_step_cli.py`); `tl plan` exits 2; `step` in JSON and human rows. A short
+  owner smoke: `tl step --help`, one `tl step next` round.
+- **S5:** new behavior tests: `next_step` over its cases (pure table test); `admit_next` (no claim call, root copied,
+  `after_commit` stored, refused when the previous attempt is not done, unpublished, abandoned or superseded, two
+  concurrent advances admit one); `prepare` refuses `branch_moved` without `after_commit`; status `advance`; a round
+  advances FIFO before admitting a ready task and skips `claim_lost`/`not_approved`. Live smoke: plan then implement
+  on a scratch task, both published to scratch `remote.git`. No agent runs whole-suite or live tests.
+
+## 7. Module plan (code lines; caps 400 per file, 80 per function, 800 per test file)
+
+| Module after S5 | Estimate | From |
+|---|---|---|
+| `factory_schema` | 105 | `plan_schema` 96 |
+| `attempt_types` | 210 | `plan_types` 252 minus plan content |
+| `plan_step` | 115 | moved plan content |
+| `steps` | 85 | new (S3 45, S5 +40) |
+| `attempt_reads` / `attempt_store` | 200 / 305 | 179 / 302 |
+| `admit` / `admit_chain` | 285 / 145 | `plan_admit` 338 (repeat takeover moves out) + next step |
+| `attempt` / `session` / `launch` / `attempt_entry` | 280 / 58 / 143 / 216 | 285 / 58 / 143 / 216 |
+| `prepare` / `evidence_files` / `factory_commit` | 115 / 72 / 133 | 107 / 84 / 133 |
+| `slot_state` / `verdict` / `verifier` | 128 / 62 / 126 | `plan_verify` 188 (plan.md rule out), 126 |
+| `slot_release` / `publish` / `repeat` | 238 / 193 / 160 | 238 / 193 / 173 |
+| `operations` / `attempt_status` | 235 / 180 | `plan_ops` 370 |
+| `round` / `rounds` / `result_data` | 265 / 108 / 96 | 220 / 108 / 91 |
+| `cli_step` / `cli_guide` | 295 / 105 | `cli_plan` 379 |
+| `cli_composition` / `composition` / `cli` | 210 / 252 / 98 | 205 / 249 / 98 |
+| `task` / `tracker` | 50 / 53 | 47 / 51 |
+
+Unchanged: `slots`, `slot_lock`, `claim_lease`, `selection`, `repo`, `machine_config`, `rounds_lock`, `interrupts`.
+New test files: `test_steps.py` (about 70), `test_advance.py` (about 300); `test_admit.py` (455) and `test_next.py`
+(427) take S5's smaller additions. No function nears 80 lines; the largest new one, the round's advance phase, is
+about 30.
+
+## 8. Owner questions
+
+1. **The command noun: `tl step` instead of `tl plan`, in one cut, no alias?** Today every verb is `tl plan ...`. With
+   implement added, `tl plan start` would also start implementation steps, which reads wrong; a second noun per step
+   (`tl implement start`) would duplicate every verb. With `tl step`, the factory picks the task's next step from its
+   own records and the person only names the task. **Recommendation: yes, `tl step`, landing before implement (S4);
+   `tl plan` stops working at that commit.**
+2. **May a task move from one step to the next by itself?** When the plan is verified, released and published, the
+   next round (or `tl step start`) would start implementation without asking again. Before it does, it reads the task
+   once: still `in_progress`, still claimed by taskloop, still carrying the approval label (`auto`). If the claim was
+   lost (for example `bd reclaim` reverted it during the idle gap) or the label was removed, it does not continue and
+   never retakes the claim; removing the label is then the owner's way to stop a task between steps.
+   **Recommendation: yes, automatic, with that check; no retaking.**
+3. **Finish started tasks before starting new ones?** When a slot frees, a round could give it to a task waiting for
+   its next step or to a new ready task. **Recommendation: tasks waiting for their next step first, oldest first;
+   new ready tasks only with slots left over** (fewer half-done tasks; the priority order still decides among new ones).
+4. **One model and effort for every step, for now?** `tl step rounds --model --effort` would use the same pair for
+   planning and implementing. Separate pairs per step mean new flags or machine-config keys. **Recommendation: one pair
+   now; add per-step settings only when implement's design or a smoke shows the plan model is wrong for it.**
+
+## 9. Not verified
+
+- The rename and split sizes are estimates from the line counter; S1's real diff is the check.
+- `beads_client.Bead` has `status`, `assignee` and `labels` (read in the installed 0.2.0 `records.py`); that `bd show`
+  fills `labels` for a claimed task was not run.
+- That an up-to-date push of the same X (a `keep` result after a discard) returns `Pushed` is what the plan step's
+  `reused` path relies on today; not re-measured here.
+- The implement step's rules, prompt, answer contract and access are not designed here; section 5 lists what its design
+  must decide before S5.
