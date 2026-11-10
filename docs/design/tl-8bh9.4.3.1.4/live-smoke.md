@@ -9,7 +9,7 @@ It runs with `tl` commands only ([.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 
 ## 0. Prerequisites
 
 macOS, a plain Terminal (two tabs, A and B), `git`, `sqlite3`, `lsof`, `bd` 1.3.1, and in this checkout (`$TL`, HEAD
-the commit that ships the CLI slice, or later): `just prepare` (non-editable install), then
+9fe6da79a, or later): `just prepare` (non-editable install), then
 `uv run --frozen --no-sync python -I -c "import taskloop.attempt_entry, taskloop.plan_launch"` and `.venv/bin/tl plan -h`.
 Codex: `command -v codex; codex --version` (paste both); file login: `test -f "${CODEX_HOME:-$HOME/.codex}/auth.json" && echo ok`
 (stat only; never open or paste it). Run every step from a shell where `codex` is on `PATH`: the entry inherits it.
