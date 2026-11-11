@@ -17,7 +17,8 @@ class ReadyRows(TaskReadClient, ReadyReadClient, Protocol):
 
 def leaked_claim(task: str) -> str:
     """The one wording for a start whose compensation could not return the claim: what is true, and the person's check."""
-    return f"the tracker claim on {task} may still be held by taskloop: check `bd show {task}`; `bd unclaim {task} --if-assignee taskloop`"
+    return (f"the tracker claim on {task} may still be held by {ACTOR}, so the task stays in progress for {ACTOR} and is not ready "
+            f"again until a person returns the claim: check `bd show {task}`; `bd unclaim {task} --if-assignee {ACTOR}`")
 
 
 @dataclass(frozen=True)

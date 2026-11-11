@@ -41,6 +41,7 @@ from taskloop.publish import BranchPublish, BranchPublished, NotPublished, Publi
 from taskloop.round import NextRequest, RoundPorts, advance, never
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
+from taskloop.tracker import leaked_claim
 from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -431,7 +432,7 @@ def test_a_candidate_another_start_admitted_meanwhile_is_a_per_task_refusal(
     assert bench.admission.requests == ["t-3"] and found.stopped == "" and exit_code(found) == 0
 
 
-LEAK = "the tracker claim on t-1 may still be held by taskloop: check `bd show t-1`; `bd unclaim t-1 --if-assignee taskloop`"
+LEAK = leaked_claim("t-1")
 
 
 @pytest.mark.parametrize("admit, launch, expected, stopped, code", [

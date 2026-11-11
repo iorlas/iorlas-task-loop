@@ -43,6 +43,7 @@ from taskloop.operations import (
 from taskloop.publish import BranchPublished, PublishResult
 from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.slots import Adopted, NotAdopted, SlotView
+from taskloop.tracker import leaked_claim
 
 KEY = AttemptKey("attempt", "dispatch-token-never-shown", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -190,6 +191,9 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (["plan", "verify", "tl-1", "--backlog", "tasks"],
      VerifiedTask("verified", "tasks", "tl-1", "attempt", "held:slot_dirty", "unavailable:remote"), 0,
      ["Release: held:slot_dirty", plan_guide.GUIDE["release"], f"Publish: unavailable:remote\n{plan_guide.PUBLISH}"], CHECKED),
+    (["plan", "verify", "tl-1", "--backlog", "tasks"],
+     VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published"), 0,
+     ["Release: already_released\nPublish: already_published\n"], CHECKED),
     (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", BranchPublished(X, X)), 0,
      [f"published: task/tl-1 at {X} on origin (attempt attempt, backlog tasks)\n"], PUBLISHED),
     (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", PublishedRow(X, X, 40.0)), 0,
@@ -233,7 +237,8 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["tl-3   start    started a3\ntl-2   report   stuck:hung a2\ntl-10  skip     abandoned\n", "Stopped: no_free_slot",
       f"stuck:hung: {plan_guide.GUIDE['stuck:hung']}", f"failed: {plan_guide.GUIDE['failed']}",
       f"abandoned_skip: {plan_guide.GUIDE['abandoned_skip']}", f"no_free_slot: {plan_guide.GUIDE['no_free_slot']}",
-      "tl-5   report   claim_leaked\n", f"claim_leaked: {plan_guide.GUIDE['claim_leaked']}"], ROUND),
+      "tl-5   report   claim_leaked\n", f"claim_leaked: {leaked_claim('tl-5')}", "`bd unclaim tl-5 --if-assignee taskloop`",
+      "not ready again until a person returns the claim"], ROUND),
     (NEXT, Round("tasks", (), "unavailable:tracker"), 3, ["Stopped: unavailable:tracker"], ROUND),
     (NEXT, Round("tasks", ()), 0, ["Nothing to do in backlog tasks."], ROUND),
     (NEXT, Failed("refused", "label"), 1, ["tl plan next: refused:label"], ERROR),
@@ -263,8 +268,21 @@ def test_result_exit_code_text_and_json_keys(
     else:
         assert all(line in data for line in lines), data
         if isinstance(result, Failed) and result.claim_leaked:
-            assert data.startswith("the tracker claim on tl-1 may still be held by taskloop: check `bd show tl-1`; "
-                                   "`bd unclaim tl-1 --if-assignee taskloop`\n")
+            assert data.startswith(leaked_claim("tl-1") + "\n")
+
+
+@pytest.mark.parametrize("release, published, guided", [
+    ("already_released", "already_published", False), ("released", "published", False),
+    ("held:slot_dirty", "unavailable:remote", True),
+])
+def test_verify_prints_the_release_and_publish_guides_only_when_not_done(
+    release: str, published: str, guided: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = VerifiedTask("verified", "tasks", "tl-1", "attempt", release, published)
+    monkeypatch.setitem(cli_plan.OPERATIONS, ("plan", "verify"), lambda _arguments, _loaded: result)
+    assert main(["plan", "verify", "tl-1", "--backlog", "tasks"]) == 0
+    out = capsys.readouterr().out
+    assert (plan_guide.GUIDE["release"] in out) is guided and (plan_guide.PUBLISH in out) is guided
 
 
 @pytest.mark.parametrize("step", words(Next))

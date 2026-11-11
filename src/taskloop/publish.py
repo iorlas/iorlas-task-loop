@@ -80,6 +80,14 @@ class NotPublished:
 type PublishResult = BranchPublished | PublishedRow | NotPublished
 
 
+PUBLISHED_WORDS: Final = ("published", "already_published")
+
+
+def is_published(word: str) -> bool:
+    """Whether a `publish_word` (or a log's `branch=` word) says the branch is on `origin`."""
+    return word in PUBLISHED_WORDS
+
+
 def publish_word(result: PublishResult) -> str:
     """The one word for a log line, a status or a result: `published` (this call pushed it), `already_published` (it was
     before), `refused:<reason>` or `unavailable:<reason>`."""

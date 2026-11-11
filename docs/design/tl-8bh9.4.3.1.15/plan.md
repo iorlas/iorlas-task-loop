@@ -549,6 +549,11 @@ Four commits after S2, no stored or printed word changed except the B rows below
   - Claim-leak text: before two texts (`GUIDE["claim_leaked"]` and the round's `LEAKED`), after one,
     `tracker.leaked_claim`.
   - `stage` became `step` in the agent input and the CLI help text.
+- **B repairs** (uncommitted): `tracker.leaked_claim` is the one claim-leak text, now with the in-progress/not-ready
+  explanation and `ACTOR`; the round renderer prints it with the real task id (the `GUIDE["claim_leaked"]` placeholder is gone).
+- `publish.is_published` and `slot_release.is_released` own the done words; `plan_render` uses them and `release_word`
+  instead of hardcoded words. A render test covers `already_*` (no guide) against a held release (guide).
+- `live-smoke.md` entry.log grammar lists `already_released` for `release=` and `already_published` for `branch=`.
 - **A3** (this repair, uncommitted): test doubles moved to `tests/steps/doubles.py`; `gated`, `_freed_*`, `checked`,
   `Shown.status` (now `view`), `_status*` in `operations`/`plan_render`/`result_data` (now `_show*`) and the test
   `Launcher` doubles (now `FakeLauncher`) renamed; two prose fixes. No printed or JSON word changed.

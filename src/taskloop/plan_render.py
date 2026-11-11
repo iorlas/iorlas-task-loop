@@ -23,9 +23,10 @@ from taskloop.operations import (
     VerifiedTask,
 )
 from taskloop.plan_guide import GUIDE, HELD, PLAN_ONLY, PUBLISH, discard
-from taskloop.publish import publish_word
-from taskloop.slot_release import Released
+from taskloop.publish import is_published, publish_word
+from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
+from taskloop.tracker import leaked_claim
 
 
 def _show_lines(each: AttemptView) -> list[str]:
@@ -110,7 +111,8 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     lines += [] if result.moves or result.stopped else [f"Nothing to do in backlog {result.backlog}."]
     words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves if each.action in ("report", "skip")]
     keys = dict.fromkeys(key for word in [*words, result.stopped] for key in (word, word.split(":")[0]) if key in GUIDE)
-    return lines + [f"{key}: {GUIDE[key]}" for key in keys]
+    leaked = [f"claim_leaked: {leaked_claim(each.task_id)}" for each in result.moves if each.word == "claim_leaked"]
+    return lines + [f"{key}: {GUIDE[key]}" for key in keys] + leaked
 
 
 def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:
@@ -122,14 +124,14 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
         return [f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
                 *(["Nothing changed: it was published before."] if done == "already_published" else [])]
     if isinstance(result, VerifiedTask):
-        held = [f"Release: {result.release}"] + ([] if result.release in ("released", "already_released") else [GUIDE["release"]])
-        held += [f"Publish: {result.published}"] + ([] if result.published in ("published", "already_published") else [PUBLISH])
+        held = [f"Release: {result.release}"] + ([] if is_released(result.release) else [GUIDE["release"]])
+        held += [f"Publish: {result.published}"] + ([] if is_published(result.published) else [PUBLISH])
         return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
     found, task = result.result, result.task_id
     if not isinstance(found, Released):
-        return [f"already_released: attempt {result.attempt_id} for {task} (backlog {result.backlog}); nothing changed",
+        return [f"{release_word(found)}: attempt {result.attempt_id} for {task} (backlog {result.backlog}); nothing changed",
                 f"Claim: {found.claim}{'; abandoned' if found.abandoned else ''}"]
-    lines = [f"released: attempt {result.attempt_id} for {task} (backlog {result.backlog})"]
+    lines = [f"{release_word(found)}: attempt {result.attempt_id} for {task} (backlog {result.backlog})"]
     lines += [f"Slot {found.slot} parked at {found.parked}" if found.parked else f"Slot {found.slot}: no Git write"]
     lines += [f"Reservation of {found.slot} removed"] if found.reservation_removed else []
     claims = {"kept": "Claim kept", "unclaimed": "Claim returned to the tracker",

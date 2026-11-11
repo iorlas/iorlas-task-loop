@@ -91,6 +91,14 @@ class NotReleased:
 type ReleaseResult = Released | AlreadyReleased | NotReleased
 
 
+RELEASED_WORDS: Final = ("released", "already_released")
+
+
+def is_released(word: str) -> bool:
+    """Whether a `release_word` (or a log's `release=` word) says the slot is free."""
+    return word in RELEASED_WORDS
+
+
 def release_word(result: ReleaseResult) -> str:
     """The one word for a log line, a status or a result: `released` (this call), `already_released` (nothing pending),
     `held:<reason>` (the slot's state or a live process keeps it reserved), `refused:<reason>` or `unavailable:<reason>`."""
