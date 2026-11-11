@@ -21,7 +21,7 @@ from stream_proc import (
 )
 
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, StoreUnavailable
-from taskloop.attempt_types import AttemptKey
+from taskloop.attempt_types import AttemptKey, EntryIdentity
 from taskloop.composition import current_boot, open_launcher
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -116,7 +116,7 @@ def stored(db: Path) -> tuple[object, ...]:
         con.close()
 
 
-def register(db: Path, entry: tuple[int, str, str]) -> None:
+def register(db: Path, entry: EntryIdentity) -> None:
     store = Store(SCHEMA)
     con = store.open_rw(db)
     assert con is not None

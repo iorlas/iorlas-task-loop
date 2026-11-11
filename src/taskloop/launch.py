@@ -17,7 +17,7 @@ from sqlite_store import Store
 from stream_proc import IdentityUnavailableError, OwnedProcess, ProcessObservation, RegisteredStartUncertainError
 
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, StoreUnavailable
-from taskloop.attempt_types import AttemptKey, Replaced
+from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 
@@ -55,20 +55,19 @@ class Start(Protocol):
     ) -> tuple[Child, OwnedProcess]: ...
 
 
-type Observe = Callable[[OwnedProcess], ProcessObservation]
-type Entry = tuple[int, str, str]
+type ObserveProcess = Callable[[OwnedProcess], ProcessObservation]
 
 
 @dataclass(frozen=True)
 class Launched:
     key: AttemptKey
-    entry: Entry
+    entry: EntryIdentity
 
 
 @dataclass(frozen=True)
 class AlreadyRunning:
     key: AttemptKey
-    entry: Entry
+    entry: EntryIdentity
 
 
 @dataclass(frozen=True)
@@ -89,7 +88,7 @@ class LaunchUncertain:
     """The permit was being sent: the registered entry may run. A later launch observes it."""
 
     key: AttemptKey
-    entry: Entry
+    entry: EntryIdentity
 
 
 type LaunchResult = Launched | AlreadyRunning | LaunchRefused | LaunchUnavailable | LaunchUncertain
@@ -101,18 +100,18 @@ class _CallbackRefused(Exception):
         self.reason: Literal["registration_conflict", "registration_refused"] = reason
 
 
-def entry_process(entry: Entry) -> OwnedProcess:
+def entry_process(entry: EntryIdentity) -> OwnedProcess:
     """The one identity rule for a registered entry: a new session makes it its own group leader, so its pgid is its pid."""
     return OwnedProcess(entry[0], entry[0], entry[1], entry[2])
 
 
-def _entry(identity: OwnedProcess) -> Entry:
+def _entry(identity: OwnedProcess) -> EntryIdentity:
     return identity.pid, identity.start, identity.boot
 
 
 class Launcher:
     def __init__(
-        self, database: Path, files: EvidenceFiles, clock: Callable[[], float], start: Start, observe: Observe, executable: str
+        self, database: Path, files: EvidenceFiles, clock: Callable[[], float], start: Start, observe: ObserveProcess, executable: str
     ) -> None:
         self.database, self.files, self.clock = database, files, clock
         self.start, self.observe, self.executable = start, observe, executable

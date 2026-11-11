@@ -29,14 +29,13 @@ from taskloop.admit import Unclaim
 from taskloop.attempt import collect
 from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts, Observe, SlotFiles, WorkerGone
+from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe, SlotFiles, WorkerGone
 from taskloop.factory_schema import RELEASE, current, marks
 from taskloop.prepare import task_branch
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import listing, observe_slot
 
-type Identity = tuple[int, str, str]  # a registered entry's (pid, start, boot)
-type Hold = Callable[[str, str], AbstractContextManager[None]]  # (slot cwd, attempt id): the slot's lock, never waiting
+type ParkHold = Callable[[str, str], AbstractContextManager[None]]  # (slot cwd, attempt id): the slot's lock, never waiting
 type Claimed = Literal["kept", "unclaiming", "unclaimed", "not_held"]
 CLAIMS: Final[tuple[Claimed, ...]] = ("kept", "unclaiming", "unclaimed", "not_held")
 NOTHING: Final = "Nothing changed."
@@ -88,7 +87,7 @@ class NotReleased:
 type ReleaseResult = Released | AlreadyReleased | NotReleased
 
 
-def word(result: ReleaseResult) -> str:
+def release_word(result: ReleaseResult) -> str:
     """The one word for a log line or a status: `released`, `held:<reason>` (the slot's state or a live process keeps it
     reserved), `refused:<reason>` or `unavailable:<reason>`."""
     if not isinstance(result, NotReleased):
@@ -103,11 +102,11 @@ class Stopping:
     """What the stop proof reads of an attempt: its phase, its registered entry and its registered agent."""
 
     phase: str
-    entry: Identity | None
+    entry: EntryIdentity | None
     worker: Worker | None
 
 
-def entry_stopped(observe: Observe, me: Identity | None, entry: Identity | None) -> NotReleased | None:
+def entry_stopped(observe: Observe, me: EntryIdentity | None, entry: EntryIdentity | None) -> NotReleased | None:
     """The registered entry, by its boot-aware identity (a native process-table read, never by name): running refuses
     unless it is `me` (the entry releasing itself after its own verify); unknown is unavailable; gone, a different process
     or no registered entry passes."""
@@ -131,7 +130,7 @@ def worker_stopped(gone: WorkerGone, phase: str, worker: Worker | None) -> NotRe
     return None if gone(worker) else NotReleased("unsettled", "worker_alive", alive)
 
 
-def stop_proof(observe: Observe, gone: WorkerGone, me: Identity | None, row: Stopping) -> NotReleased | None:
+def stop_proof(observe: Observe, gone: WorkerGone, me: EntryIdentity | None, row: Stopping) -> NotReleased | None:
     """The one stop rule, shared with a repeat: exactly the entry observation, then the agent's. The slot's lock is never
     part of it (a free lock is not a stopped agent)."""
     return entry_stopped(observe, me, row.entry) or worker_stopped(gone, row.phase, row.worker)
@@ -178,11 +177,11 @@ class SlotRelease:
     slot_files: SlotFiles
     observe: Observe
     gone: WorkerGone
-    hold: Hold
+    hold: ParkHold
     unclaim: Unclaim
     clock: Callable[[], float]
 
-    def release(self, key: AttemptKey, abandon: bool, me: Identity | None = None) -> ReleaseResult:
+    def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         """Release the attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
         try:
             row = self._read(key)
@@ -222,7 +221,7 @@ class SlotRelease:
         row: tuple[object, ...] | None = con.execute(ROW, astuple(key)).fetchone()
         return None if row is None else _row(row, key)
 
-    def _refusal(self, row: _Row, abandon: bool, me: Identity | None) -> NotReleased | None:
+    def _refusal(self, row: _Row, abandon: bool, me: EntryIdentity | None) -> NotReleased | None:
         """Read before anything changes: the reservation held, the result collected (settled only), the stop proof."""
         if row.cwd is None or row.successor:
             return NotReleased("unavailable", "changed", f"The attempt no longer holds its reservation. {NOTHING}")

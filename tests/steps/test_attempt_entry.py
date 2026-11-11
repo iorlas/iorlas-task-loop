@@ -20,7 +20,7 @@ from stream_proc import ProcessObservation, inspect_process
 from taskloop.attempt import Attempts
 from taskloop.attempt_entry import EntryArgs, arguments, enter, main
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts, Evidence, SlotFiles
+from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Evidence, SlotFiles
 from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -32,7 +32,7 @@ P = "docs/design/tl-1/plan.md"
 PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
 
 
-def me() -> tuple[int, str, str]:
+def me() -> EntryIdentity:
     observation = inspect_process(os.getpid())
     assert observation.kind == "matching" and observation.identity is not None
     return observation.identity.pid, observation.identity.start, observation.identity.boot
@@ -78,7 +78,7 @@ class Entry:
         db: Path,
         checkouts: Checkouts,
         slot_files: SlotFiles,
-        entry: tuple[int, str, str] | None = None,
+        entry: EntryIdentity | None = None,
         failures: int = 0,
         wait_to: float = 10,
         rc: int = 0,
@@ -224,7 +224,7 @@ def test_a_terminal_failure_is_collected_with_its_reason_and_exits_1(
 
 @pytest.mark.parametrize("stored", [None, (1, "someone-else", "boot")])
 def test_a_process_that_is_not_the_registered_entry_reads_no_credentials(
-    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, stored: tuple[int, str, str] | None
+    admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, stored: EntryIdentity | None
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, stored)
     assert entry() == 1

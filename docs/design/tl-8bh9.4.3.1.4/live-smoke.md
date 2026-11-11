@@ -560,8 +560,8 @@ reservation removal and its slot-lock release; the next regular round (at most o
 live: a real reboot, that wake race, macOS.
 
 **Reboot renewal (owner-run check, optional; plan section 16).** A reboot cannot be simulated here: the tests stand in
-for it with a stored `entry_boot` other than the current boot id (`tests/steps/test_entry_store.py`, `test_launch.py`,
-`test_ops.py`, `test_next.py`). What stays unobserved without a real reboot is the whole path on a real machine. If you
+for it with a stored `entry_boot` other than the current boot id (`tests/steps/test_attempt_store.py`, `test_launch.py`,
+`test_operations.py`, `test_round.py`). What stays unobserved without a real reboot is the whole path on a real machine. If you
 choose to reboot the scratch machine mid-start: before it, `T plan show <task> --backlog "$BACKLOG" --json` for an attempt
 still `admitted` with an entry registered (e.g. G6's `unavailable credentials:auth` state), noting `deadline_passed` and
 the entry's identity; after the reboot, past the deadline, `cat /proc/sys/kernel/random/boot_id` differs from the stored

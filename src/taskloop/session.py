@@ -1,4 +1,4 @@
-"""Live registration gate and native-session latch for one execution; both are bounded and hold no retry."""
+"""Live registration hook and native-session latch for one execution; both are bounded and hold no retry."""
 
 import threading
 from collections.abc import Callable
@@ -10,18 +10,22 @@ from taskloop.attempt_store import AttemptStore, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import Admission, ExecutionFacts, SessionInput
 
 
-class GateRefused(Exception):
+class RegistrationRefused(Exception):
     """Registration was refused, so the gated target must not be executed."""
 
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
-def registration_gate(store: AttemptStore, admission: Admission, clock: Callable[[], float]) -> Callable[[Worker], None]:
-    """The started hook: deadline and boot-aware identity are checked behind the gate; any refusal raises."""
+
+def registration_hook(store: AttemptStore, admission: Admission, clock: Callable[[], float]) -> Callable[[Worker], None]:
+    """The started hook: deadline and boot-aware identity are checked behind the registration write; any refusal raises."""
 
     def register(worker: Worker) -> None:
         if clock() >= admission.deadline:
-            raise GateRefused("expired")
+            raise RegistrationRefused("expired")
         if store.register(admission, worker) == "conflict":
-            raise GateRefused("registration_conflict")
+            raise RegistrationRefused("registration_conflict")
 
     return register
 

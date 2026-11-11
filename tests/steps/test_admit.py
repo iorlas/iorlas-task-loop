@@ -128,7 +128,7 @@ def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractCon
     return begin
 
 
-def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
+def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
     artifacts = EvidenceFiles(tmp_path / "artifacts")
     return Attempts(AttemptStore(lambda: con), artifacts, lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
 
@@ -153,9 +153,9 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
     with pytest.raises(StoreRefused, match="unregistered_entry"):
         AttemptStore(lambda: factory).load(key)
     run = FakeRun(RunOutcome(rc=0, worker=WORKER))
-    refused = body(factory, tmp_path, run, checkouts, slot_files).execute(key, ENTRY)
+    refused = attempts(factory, tmp_path, run, checkouts, slot_files).execute(key, ENTRY)
     assert (refused.status, refused.reason) == ("refused", "unregistered_entry") and run.calls == []
-    pending = body(factory, tmp_path, run, checkouts, slot_files).collect(key)
+    pending = attempts(factory, tmp_path, run, checkouts, slot_files).collect(key)
     assert (pending.status, pending.reason) == ("pending", "admitted")
 
 
@@ -168,9 +168,9 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     store = AttemptStore(lambda: factory)
     assert store.register_entry(result.key, ENTRY, time()) == "accepted"
     run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
-    other = body(factory, tmp_path, run, checkouts, slot_files).execute(result.key, (8, "entry-start", "boot"))
+    other = attempts(factory, tmp_path, run, checkouts, slot_files).execute(result.key, (8, "entry-start", "boot"))
     assert (other.status, other.reason) == ("refused", "not_entry") and run.calls == []
-    collected = body(factory, tmp_path, run, checkouts, slot_files).execute(result.key, ENTRY)
+    collected = attempts(factory, tmp_path, run, checkouts, slot_files).execute(result.key, ENTRY)
     assert (collected.status, collected.reason) == ("pending", "verification") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / repo.identity().key / "s1")
@@ -251,10 +251,10 @@ def test_a_concurrent_admission_of_the_task_keeps_the_winners_claim_with_one_slo
     winner = Tracker(factory, tmp_path / "artifacts")
     loser = Tracker(factory, tmp_path / "artifacts", claim=failure if isinstance(failure, BdError) else True)
     loser.during = lambda: admission(factory, tmp_path, winner, repo).admit(request(tmp_path, repo))
-    gate = admission(factory, tmp_path, loser, repo)
+    admitter = admission(factory, tmp_path, loser, repo)
     if isinstance(failure, sqlite3.Error):
-        gate.begin = breaking(failure)
-    assert gate.admit(request(tmp_path, repo)) == expected
+        admitter.begin = breaking(failure)
+    assert admitter.admit(request(tmp_path, repo)) == expected
     assert winner.calls == ["claim:tl-1"] and loser.calls == ["claim:tl-1"] and rows(factory) == (1, 1)
 
 
@@ -305,10 +305,10 @@ def test_store_failure_after_the_claim_is_compensated(
 ) -> None:
     slots(factory, repo, root, 1)
     tracker = Tracker(factory, tmp_path / "artifacts", unclaim=unclaim)
-    gate = admission(factory, tmp_path, tracker, repo)
-    gate.begin = breaking(sqlite3.OperationalError("database is locked"))
+    admitter = admission(factory, tmp_path, tracker, repo)
+    admitter.begin = breaking(sqlite3.OperationalError("database is locked"))
     leaked = unclaim is not True
-    assert gate.admit(request(tmp_path, repo)) == AdmitUnavailable("store", leaked, "OperationalError: database is locked")
+    assert admitter.admit(request(tmp_path, repo)) == AdmitUnavailable("store", leaked, "OperationalError: database is locked")
     assert tracker.calls == ["claim:tl-1", "unclaim:tl-1"] and rows(factory) == (0, 0)
 
 
@@ -327,10 +327,10 @@ def test_an_unreadable_attempt_check_keeps_the_claim_and_reports_it_leaked(
 def test_an_unexpected_failure_compensates_then_propagates(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
     slots(factory, repo, root, 1)
     tracker = Tracker(factory, tmp_path / "artifacts")
-    gate = admission(factory, tmp_path, tracker, repo)
-    gate.begin = breaking(KeyboardInterrupt())
+    admitter = admission(factory, tmp_path, tracker, repo)
+    admitter.begin = breaking(KeyboardInterrupt())
     with pytest.raises(KeyboardInterrupt):
-        gate.admit(request(tmp_path, repo))
+        admitter.admit(request(tmp_path, repo))
     assert tracker.calls == ["claim:tl-1", "unclaim:tl-1"] and rows(factory) == (0, 0)
 
 
@@ -364,11 +364,11 @@ def test_invalid_request_or_store_refuses_before_any_claim(
         factory.execute("PRAGMA user_version=1")
     elif change == "reservations":
         factory.execute("DROP TABLE reservation")
-    gate = admission(factory, tmp_path, tracker, repo)
+    admitter = admission(factory, tmp_path, tracker, repo)
     if change == "store":
-        gate.connect = lambda: None
-    gate.checkouts = lambda _path: repo
-    result = gate.admit(wanted)
+        admitter.connect = lambda: None
+    admitter.checkouts = lambda _path: repo
+    result = admitter.admit(wanted)
     assert (result.reason if isinstance(result, AdmitRefused) else getattr(result, "what", None)) == expected
     assert tracker.calls == [] and tracker.files.inputs == []
     assert change == "input" or not (tmp_path / "artifacts").exists()
@@ -383,9 +383,9 @@ def test_a_v1_file_database_is_refused_by_the_real_store(repo: FakeRepo, tmp_pat
     store = Store(SCHEMA)
     unused = sqlite3.connect(":memory:")
     tracker = Tracker(unused, tmp_path / "artifacts")
-    gate = admission(unused, tmp_path, tracker, repo)
-    gate.connect, gate.begin = (lambda: store.shared_rw(path)), store.begin_immediate
-    result = gate.admit(request(tmp_path, repo))
+    admitter = admission(unused, tmp_path, tracker, repo)
+    admitter.connect, admitter.begin = (lambda: store.shared_rw(path)), store.begin_immediate
+    result = admitter.admit(request(tmp_path, repo))
     assert isinstance(result, AdmitUnavailable) and result.what == "store" and result.detail.startswith("SchemaError:")
     assert tracker.calls == []
     store.close_shared()

@@ -22,11 +22,12 @@ from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
+from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Verified
 from taskloop.composition import RealSlotFiles, checkouts, remotes
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.publish import AlreadyPublished, BranchPublish, BranchPublished, NotPublished, PublishResult
+from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.repo import RepoId
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
@@ -133,7 +134,7 @@ def test_a_published_plan_is_on_origin_and_the_tracking_ref_and_the_second_call_
     assert git(real.slot, "rev-parse", "--abbrev-ref", "HEAD").strip() == "HEAD" and real.rev(real.slot, "HEAD") == real.d
     assert real.slot not in real.opened
     real.opened.clear()
-    assert real.publish() == AlreadyPublished(real.x, real.x, 40.0) and real.opened == []
+    assert real.publish() == PublishedRow(real.x, real.x, 40.0) and real.opened == []
 
 
 def test_a_commit_pushed_on_top_by_another_clone_is_refused_remote_ahead_and_not_recorded(real: Published) -> None:

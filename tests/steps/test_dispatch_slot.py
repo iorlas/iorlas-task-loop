@@ -26,24 +26,24 @@ P = "docs/design/tl-1/plan.md"
 PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
 
 
-class Spy(CodexHarness):
+class CountingHarness(CodexHarness):
     """The real Codex harness, counting cleanups."""
 
     cleanups: ClassVar[list[int]] = []
 
     def cleanup(self) -> None:
-        Spy.cleanups.append(1)
+        CountingHarness.cleanups.append(1)
         super().cleanup()
 
 
 @pytest.fixture
 def con(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
-    monkeypatch.setattr("taskloop.attempt.CodexHarness", Spy)
-    monkeypatch.setattr(Spy, "cleanups", [])
+    monkeypatch.setattr("taskloop.attempt.CodexHarness", CountingHarness)
+    monkeypatch.setattr(CountingHarness, "cleanups", [])
     return registered
 
 
-def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
+def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
     return Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
 
 
@@ -62,12 +62,12 @@ def test_the_dispatch_records_the_slot_head_as_base_and_keeps_the_fenced_admissi
     before = store.load(KEY)
     assert before is not None and before.base_commit is None
     agent = run()
-    result = body(con, tmp_path, agent, checkouts, slot_files).execute(KEY, ENTRY)
+    result = attempts(con, tmp_path, agent, checkouts, slot_files).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("pending", "verification") and len(agent.calls) == 1
     after = store.load(KEY)
     assert after is not None and after.admission == before.admission  # B is not part of the fence: every later write passed
     assert after.base_commit == head(repo, slot.path) and after.phase == "captured"
-    assert Spy.cleanups == [1]
+    assert CountingHarness.cleanups == [1]
 
 
 def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
@@ -83,7 +83,7 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
     store, files = AttemptStore(lambda: con), EvidenceFiles(tmp_path)
     attempts = Attempts(store, files, lambda: ("/bin/codex", {}), agent, lambda: now[0], slow, slot_files)
     result = attempts.execute(KEY, ENTRY)
-    assert (result.status, result.reason) == ("refused", "expired") and agent.calls == [] and Spy.cleanups == [1]
+    assert (result.status, result.reason) == ("refused", "expired") and agent.calls == [] and CountingHarness.cleanups == [1]
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 
 
@@ -132,9 +132,9 @@ def test_an_unusable_slot_never_dispatches_and_the_attempt_stays_admitted(
         con.execute("UPDATE reservation SET repo_id='other'")
         con.execute("UPDATE attempt SET repo_id='other'")
     agent = run()
-    attempts = body(con, tmp_path, agent, checkouts, slot_files)
+    running = attempts(con, tmp_path, agent, checkouts, slot_files)
     for _ in range(2):  # nothing moved: the same refusal again
-        result = attempts.execute(KEY, ENTRY)
+        result = running.execute(KEY, ENTRY)
         assert (result.status, result.reason) == (status, reason)
-    assert agent.calls == [] and Spy.cleanups == [1, 1]
+    assert agent.calls == [] and CountingHarness.cleanups == [1, 1]
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)

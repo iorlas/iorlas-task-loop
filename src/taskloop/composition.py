@@ -22,11 +22,11 @@ from taskloop import slot_lock
 from taskloop.admit import AttemptAdmission, Claim, Unclaim
 from taskloop.attempt import Attempts, Credentials, CredentialsUnavailable
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
-from taskloop.attempt_types import Checkouts, FileEntry, Seen
+from taskloop.attempt_types import Checkouts, EntryIdentity, FileStat, Seen
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
-from taskloop.launch import Entry, Launcher, entry_process
+from taskloop.launch import Launcher, entry_process
 from taskloop.publish import BranchPublish
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.slot_release import SlotRelease
@@ -191,7 +191,7 @@ def worker_gone(worker: Worker) -> bool:
     return seen in ("gone", "different_process") and not group_alive(worker.pgid)
 
 
-def entry_seen(entry: Entry) -> Seen:
+def entry_seen(entry: EntryIdentity) -> Seen:
     """A native process-table read of the registered entry, by the launcher's identity rule; no spawn or signal."""
     return observe_owned(entry_process(entry)).kind
 
@@ -220,15 +220,15 @@ class RealSlotFiles:
     """The slot file port over the real file system: `lstat` never follows a symlink, and a read opens only what `lstat`
     just saw as a regular file within the cap (`O_NOFOLLOW`, non-blocking), so a FIFO or symlink is never opened."""
 
-    def lstat(self, path: Path) -> FileEntry | None:
+    def lstat(self, path: Path) -> FileStat | None:
         try:
             found = os.lstat(path)
         except (OSError, ValueError):  # ValueError: an embedded NUL; fails closed like a missing file
             return None
         mode = found.st_mode
         if stat.S_ISREG(mode):
-            return FileEntry("file", found.st_size, bool(mode & 0o111))
-        return FileEntry("dir" if stat.S_ISDIR(mode) else "link" if stat.S_ISLNK(mode) else "other", found.st_size, False)
+            return FileStat("file", found.st_size, bool(mode & 0o111))
+        return FileStat("dir" if stat.S_ISDIR(mode) else "link" if stat.S_ISLNK(mode) else "other", found.st_size, False)
 
     def read(self, path: Path, cap: int) -> bytes | None:
         entry = self.lstat(path)
@@ -252,7 +252,7 @@ class RealSlotFiles:
 def open_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> Attempts:
     """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
 
-    The harness registration gate writes through its own store, whose connections wait at most REGISTRATION_BUSY_MS for the
+    The harness registration write goes through its own store, whose connections wait at most REGISTRATION_BUSY_MS for the
     write lock; every other write keeps the library's 5 s.
     """
     store, gated = Store(SCHEMA), Store(SCHEMA)
@@ -271,7 +271,7 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
         time.time,
         checkouts,
         RealSlotFiles(),
-        gate=AttemptStore(bounded, gated.begin_immediate),
+        registration_store=AttemptStore(bounded, gated.begin_immediate),
     )
 
 

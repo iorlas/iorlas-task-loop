@@ -26,6 +26,7 @@ from taskloop.attempt_types import (
     AttemptKey,
     AttemptRecord,
     Effect,
+    EntryIdentity,
     Evidence,
     ExecutionFacts,
     FileRef,
@@ -44,7 +45,7 @@ from taskloop.task import TaskReference, TaskScope
 REGISTRATION_BUSY_MS = 1500
 
 
-def _identity(worker: Worker) -> tuple[int, str, str]:
+def _identity(worker: Worker) -> EntryIdentity:
     return worker.pid, worker.start, worker.boot
 
 
@@ -152,7 +153,7 @@ class AttemptStore(AttemptReads):
         return record
 
     def register_entry(
-        self, key: AttemptKey, entry: tuple[int, str, str], now: float, replacing: Replaced | None = None,
+        self, key: AttemptKey, entry: EntryIdentity, now: float, replacing: Replaced | None = None,
         renewed: float | None = None,
     ) -> Literal["accepted", "conflict", "refused"]:
         """The only writer of entry_*: one winner while `admitted`; a replacement names the exact stored identity.
@@ -288,7 +289,7 @@ class AttemptStore(AttemptReads):
         """Write once the commit the step ends at: X != B for effect `commit`, B itself for `keep`, only for a captured,
         clean, completely published valid answer with no verdict stored yet (a `nothing_written` verdict has no commit and
         is never contradicted afterwards). Returns the value now stored: another one than `commit` is the caller's
-        `inconsistent`; a refused gate is StoreRefused."""
+        `inconsistent`; a refused registration write is StoreRefused."""
         with self._connection(write=True) as con:
             self._fence(con, admission)
             con.execute(

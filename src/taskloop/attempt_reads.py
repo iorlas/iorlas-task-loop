@@ -10,7 +10,7 @@ from dataclasses import astuple, dataclass
 
 from sqlite_store import begin_immediate
 
-from taskloop.attempt_types import ATTEMPTS, AttemptKey, ChainLink, FileRef
+from taskloop.attempt_types import ATTEMPTS, AttemptKey, ChainLink, EntryIdentity, FileRef
 from taskloop.factory_schema import current
 
 
@@ -45,7 +45,7 @@ class AttemptRow:
     task_id: str
     slot: str
     phase: str
-    entry: tuple[int, str, str] | None
+    entry: EntryIdentity | None
     deadline: float
     worker: tuple[int, int] | None  # the agent's pid and process group, once registered
     number: int
@@ -76,6 +76,10 @@ class StoreUnavailable(Exception):
 
 class StoreRefused(Exception):
     """The authoritative admission or reservation fence does not match."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 def as_text(value: object) -> str:
@@ -173,7 +177,7 @@ class AttemptReads:
             ).fetchone()
             return None if row is None else (as_text(row[0]), bool(as_int(row[1])))
 
-    def attempt_of(self, backlog: str, task_id: str) -> tuple[AttemptKey, str, tuple[int, str, str] | None] | None:
+    def attempt_of(self, backlog: str, task_id: str) -> tuple[AttemptKey, str, EntryIdentity | None] | None:
         """The recovery read: a task's current attempt (its highest `seq`) key, phase and registered entry, with no
         reservation or deadline check."""
         with self._connection() as con:
@@ -232,7 +236,7 @@ class AttemptReads:
         return tuple(found)
 
     def slot_use(self) -> SlotUse:
-        """The free-slot gate's and the slot-freed check's read: two SELECTs, no write."""
+        """The free-slot read's and the slot-freed check's read: two SELECTs, no write."""
         with self._connection() as con:
             free = con.execute(
                 """SELECT count(*) FROM slot s

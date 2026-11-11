@@ -9,7 +9,7 @@ import pytest
 from sqlite_store import Store
 
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
-from taskloop.attempt_types import AttemptKey, Replaced
+from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
 from taskloop.factory_schema import SCHEMA
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -110,7 +110,7 @@ def test_two_connections_contend_for_one_registration(tmp_path: Path) -> None:
     seed(first)
     barrier, outcomes = threading.Barrier(2), []
 
-    def contender(identity: tuple[int, str, str]) -> None:
+    def contender(identity: EntryIdentity) -> None:
         store = Store(SCHEMA)
         mine = store.open_rw(path)
         barrier.wait()

@@ -34,7 +34,7 @@ from git_porcelain import (
     Transient,
 )
 
-from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
+from taskloop.attempt_reads import PublishedRow, StoreUnavailable, as_int, as_nullable_text, as_text
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.factory_schema import PUBLISHED, current, marks
@@ -65,15 +65,6 @@ class BranchPublished:
 
 
 @dataclass(frozen=True)
-class AlreadyPublished:
-    """Recorded before: nothing was read from Git or the network."""
-
-    commit: str
-    remote_head: str
-    published_at: float
-
-
-@dataclass(frozen=True)
 class NotPublished:
     """A refusal (exit 1) or an unknown (exit 3, rerun); the remote changed only if `detail` says so."""
 
@@ -82,10 +73,10 @@ class NotPublished:
     detail: str = NOTHING
 
 
-type PublishResult = BranchPublished | AlreadyPublished | NotPublished
+type PublishResult = BranchPublished | PublishedRow | NotPublished
 
 
-def word(result: PublishResult) -> str:
+def publish_word(result: PublishResult) -> str:
     """The one word for a log line or a status: `published`, `refused:<reason>` or `unavailable:<reason>`."""
     return f"{result.kind}:{result.reason}" if isinstance(result, NotPublished) else "published"
 
@@ -99,14 +90,14 @@ class _Row:
     verdict: str | None
     reason: str | None  # a rejected verdict's rule
     abandoned: bool
-    published: AlreadyPublished | None
+    published: PublishedRow | None
 
 
-def _already(values: tuple[object, ...]) -> AlreadyPublished:
+def _already(values: tuple[object, ...]) -> PublishedRow:
     """A stored `published_branch` row: (commit_sha, remote_head, published_at)."""
     if not isinstance(values[2], (int, float)):
         raise StoreUnavailable("Malformed publication time")
-    return AlreadyPublished(as_text(values[0]), as_text(values[1]), float(values[2]))
+    return PublishedRow(as_text(values[0]), as_text(values[1]), float(values[2]))
 
 
 def _row(row: tuple[object, ...]) -> _Row:

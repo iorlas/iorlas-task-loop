@@ -24,6 +24,7 @@ from taskloop.attempt_types import (
     AttemptKey,
     AttemptRecord,
     Checkouts,
+    EntryIdentity,
     FileRef,
     PendingResult,
     PlanAnswer,
@@ -51,7 +52,7 @@ def codex() -> tuple[str, dict[str, str]]:
 
 
 @dataclasses.dataclass(frozen=True)
-class Body:
+class AttemptSurroundings:
     """The admitted attempt's surroundings: the artifacts root, its clean detached slot, and the one Attempts builder."""
 
     tmp: Path
@@ -66,17 +67,20 @@ class Body:
         *,
         credentials: Credentials = codex,
         clock: Callable[[], float] = lambda: 10,
-        gate: AttemptStore | None = None,
+        registration_store: AttemptStore | None = None,
     ) -> Attempts:
-        return Attempts(store, EvidenceFiles(self.tmp), credentials, execution, clock, self.checkouts, self.files, gate=gate)
+        return Attempts(
+            store, EvidenceFiles(self.tmp), credentials, execution, clock, self.checkouts, self.files,
+            registration_store=registration_store,
+        )
 
 
 @pytest.fixture
-def body(tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles) -> Body:
-    return Body(tmp_path, slot, checkouts, slot_files)
+def surroundings(tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles) -> AttemptSurroundings:
+    return AttemptSurroundings(tmp_path, slot, checkouts, slot_files)
 
 
-def database(body: Body) -> sqlite3.Connection:
+def database(surroundings: AttemptSurroundings) -> sqlite3.Connection:
     con = sqlite3.connect(":memory:", isolation_level=None)
     con.execute("PRAGMA foreign_keys=ON")
     with begin_immediate(con):
@@ -84,14 +88,14 @@ def database(body: Body) -> sqlite3.Connection:
             if statement.strip():
                 con.execute(statement)
         con.execute(f"PRAGMA user_version={SCHEMA.version}")
-    return seed(con, body)
+    return seed(con, surroundings)
 
 
-def seed(con: sqlite3.Connection, body: Body) -> sqlite3.Connection:
+def seed(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> sqlite3.Connection:
     """The authoritative prerequisites: an admitted, entry-registered attempt on the clean slot and its held reservation."""
-    repo_id = body.slot.repo.identity().key
+    repo_id = surroundings.slot.repo.identity().key
     with begin_immediate(con):
-        con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(body.slot.path)))
+        con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(surroundings.slot.path)))
         digest = hashlib.sha256(b"Plan the actual task").hexdigest()
         con.execute(
             """INSERT INTO attempt
@@ -101,7 +105,7 @@ def seed(con: sqlite3.Connection, body: Body) -> sqlite3.Connection:
             'workspace-write',100,7,'entry-start','boot',1,1,'dddddddddddddddddddddddddddddddddddddddd')""",
             (repo_id, digest),
         )
-    (body.tmp / "input.txt").write_text("Plan the actual task")
+    (surroundings.tmp / "input.txt").write_text("Plan the actual task")
     return con
 
 
@@ -121,23 +125,21 @@ def fake(answer: str | None = None, *, rc: int = 0, refs: tuple[str, ...] = ()) 
     )
 
 
-def app(con: sqlite3.Connection, body: Body, execution: Execution) -> Attempts:
-    return body.attempts(AttemptStore(lambda: con), execution, credentials=lambda: ("/bin/codex", {"SECRET": "credential"}))
+def app(con: sqlite3.Connection, surroundings: AttemptSurroundings, execution: Execution) -> Attempts:
+    return surroundings.attempts(AttemptStore(lambda: con), execution, credentials=lambda: ("/bin/codex", {"SECRET": "credential"}))
 
 
-def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
     execution = fake(refs=("native-session",))
-    result = app(con, body, execution).execute(KEY, ENTRY)
+    result = app(con, surroundings, execution).execute(KEY, ENTRY)
     assert result.reason == "verification"
     assert result.execution is not None
     assert result.execution.answer.kind == "valid"
     assert result.execution.facts.tokens == (8, None, 3)
-    assert result.execution.facts.cost_usd is None
-    assert result.execution.custody == "unresolved"
     assert con.execute("SELECT session_ref FROM attempt").fetchone() == ("native-session",)
     other = fake()
-    reader = app(con, body, other)
+    reader = app(con, surroundings, other)
     assert reader.collect(KEY) == result
     assert reader.execute(KEY, ENTRY) == result
     assert not other.calls
@@ -166,8 +168,8 @@ def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_p
         ("version", "unavailable", "store"),
     ],
 )
-def test_invalid_admission_never_executes(tmp_path: Path, body: Body, change: str, status: str, reason: str) -> None:
-    con = database(body)
+def test_invalid_admission_never_executes(tmp_path: Path, surroundings: AttemptSurroundings, change: str, status: str, reason: str) -> None:
+    con = database(surroundings)
     if change == "missing":
         con.execute("DELETE FROM attempt")
     elif change == "stale":
@@ -183,14 +185,14 @@ def test_invalid_admission_never_executes(tmp_path: Path, body: Body, change: st
     else:
         con.execute(f"PRAGMA user_version={SCHEMA.version + 1}")
     execution = fake()
-    result = app(con, body, execution).execute(KEY, ENTRY)
+    result = app(con, surroundings, execution).execute(KEY, ENTRY)
     assert (result.status, result.reason) == (status, reason)
     assert execution.calls == []
 
 
-def test_failed_execution_valid_answer_is_not_success(tmp_path: Path, body: Body) -> None:
-    con = database(body)
-    result = app(con, body, fake(rc=7)).execute(KEY, ENTRY)
+def test_failed_execution_valid_answer_is_not_success(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    result = app(con, surroundings, fake(rc=7)).execute(KEY, ENTRY)
     assert result.execution is not None
     assert result.execution.facts.rc == 7
     assert result.execution.facts.reason == "worker_failed"
@@ -198,10 +200,10 @@ def test_failed_execution_valid_answer_is_not_success(tmp_path: Path, body: Body
 
 
 @pytest.mark.parametrize("text, kind", [("", "missing"), ("not json", "json_invalid"), ('{"plan":3}', "schema_invalid")])
-def test_bad_answer_has_one_execution(tmp_path: Path, body: Body, text: str, kind: str) -> None:
-    con = database(body)
+def test_bad_answer_has_one_execution(tmp_path: Path, surroundings: AttemptSurroundings, text: str, kind: str) -> None:
+    con = database(surroundings)
     execution = fake(text)
-    result = app(con, body, execution).execute(KEY, ENTRY)
+    result = app(con, surroundings, execution).execute(KEY, ENTRY)
     assert result.execution is not None and result.execution.answer.kind == kind
     assert len(execution.calls) == 1
 
@@ -215,17 +217,19 @@ def test_bad_answer_has_one_execution(tmp_path: Path, body: Body, text: str, kin
         ("not json", (None, None)),
     ],
 )
-def test_the_answer_is_stored_with_its_effect(tmp_path: Path, body: Body, answer: str, stored: tuple[str | None, str | None]) -> None:
-    con = database(body)
-    result = app(con, body, fake(answer)).execute(KEY, ENTRY)
+def test_the_answer_is_stored_with_its_effect(
+    tmp_path: Path, surroundings: AttemptSurroundings, answer: str, stored: tuple[str | None, str | None]
+) -> None:
+    con = database(surroundings)
+    result = app(con, surroundings, fake(answer)).execute(KEY, ENTRY)
     assert result.execution is not None and result.execution.answer.effect == stored[1]
     assert con.execute("SELECT disposition,effect FROM execution").fetchone() == stored
 
 
-def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
     execution = fake()
-    owner = app(con, body, execution)
+    owner = app(con, surroundings, execution)
 
     def broken(_value: object, _rules: StepRules) -> PlanAnswer:
         raise RuntimeError("decoder bug")
@@ -234,7 +238,7 @@ def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(tmp_pa
     with pytest.raises(RuntimeError, match="decoder bug"):
         owner.execute(KEY, ENTRY)
     resumed, secrets = fake(), []
-    reader = body.attempts(AttemptStore(lambda: con), resumed, credentials=lambda: secrets.append(1) or ("/bin/codex", {}))
+    reader = surroundings.attempts(AttemptStore(lambda: con), resumed, credentials=lambda: secrets.append(1) or ("/bin/codex", {}))
     captured = reader.collect(KEY)
     assert captured.status == "pending" and captured.execution is not None and captured.execution.answer.kind == "validation_pending"
     assert captured.execution.facts.rc == 0
@@ -242,17 +246,17 @@ def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(tmp_pa
     assert not resumed.calls and secrets == []
 
 
-def test_dispatch_is_consumed_and_wrong_key_cannot_publish(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_dispatch_is_consumed_and_wrong_key_cannot_publish(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
     store = AttemptStore(lambda: con)
     admitted = store.load(KEY)
     assert admitted is not None
     assert store.dispatch(admitted, BASE) == "accepted"
     assert store.dispatch(admitted, BASE) == "conflict"
     execution = fake()
-    assert app(con, body, execution).execute(KEY, ENTRY).status == "pending"
+    assert app(con, surroundings, execution).execute(KEY, ENTRY).status == "pending"
     assert execution.calls == []
-    assert app(con, body, fake()).collect(dataclasses.replace(KEY, dispatch_token="other")).status == "refused"
+    assert app(con, surroundings, fake()).collect(dataclasses.replace(KEY, dispatch_token="other")).status == "refused"
 
 
 class Flaky:
@@ -286,41 +290,41 @@ def gated(run: FakeRun, flaky: Flaky, *, down_after_start: bool = False, probe: 
     return call
 
 
-def owner(flaky: Flaky, body: Body, execution: Execution, clock: Callable[[], float] = lambda: 10) -> Attempts:
-    return body.attempts(AttemptStore(flaky), execution, clock=clock)
+def owner(flaky: Flaky, surroundings: AttemptSurroundings, execution: Execution, clock: Callable[[], float] = lambda: 10) -> Attempts:
+    return surroundings.attempts(AttemptStore(flaky), execution, clock=clock)
 
 
-def test_live_ref_is_published_while_running_and_duplicates_are_idempotent(tmp_path: Path, body: Body) -> None:
-    flaky, probe = Flaky(database(body)), []
+def test_live_ref_is_published_while_running_and_duplicates_are_idempotent(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    flaky, probe = Flaky(database(surroundings)), []
     run = fake(refs=("s", "s"))
-    result = owner(flaky, body, gated(run, flaky, probe=probe)).execute(KEY, ENTRY)
+    result = owner(flaky, surroundings, gated(run, flaky, probe=probe)).execute(KEY, ENTRY)
     assert probe == [("s",), ("s",)]
     assert result.reason == "verification" and result.execution is not None and result.execution.publication == "complete"
 
 
-def test_absent_ref_stays_absent_and_late_reported_ref_is_published(tmp_path: Path, body: Body) -> None:
-    con = database(body)
-    assert app(con, body, fake(refs=())).execute(KEY, ENTRY).execution is not None
+def test_absent_ref_stays_absent_and_late_reported_ref_is_published(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    assert app(con, surroundings, fake(refs=())).execute(KEY, ENTRY).execution is not None
     assert con.execute("SELECT session_ref FROM attempt").fetchone() == (None,)
-    con2 = database(body)
+    con2 = database(surroundings)
     late = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), res={"ref": "late"})))
-    result = app(con2, body, late).execute(KEY, ENTRY)
+    result = app(con2, surroundings, late).execute(KEY, ENTRY)
     assert result.execution is not None and result.execution.facts.session == "late"
     assert con2.execute("SELECT session_ref FROM attempt").fetchone() == ("late",)
 
 
-def test_conflicting_ref_is_recorded_not_overwritten(tmp_path: Path, body: Body) -> None:
-    con = database(body)
-    result = app(con, body, fake(refs=("first", "second"))).execute(KEY, ENTRY)
+def test_conflicting_ref_is_recorded_not_overwritten(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    result = app(con, surroundings, fake(refs=("first", "second"))).execute(KEY, ENTRY)
     assert result.status == "conflict" and result.reason == "session"
     assert result.execution is not None and result.execution.answer.kind == "valid"
     assert con.execute("SELECT session_ref,session_conflict FROM attempt").fetchone() == ("first", 1)
 
 
-def test_storage_loss_keeps_first_ref_and_conflict_then_publish_retries(tmp_path: Path, body: Body) -> None:
-    flaky = Flaky(database(body))
+def test_storage_loss_keeps_first_ref_and_conflict_then_publish_retries(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    flaky = Flaky(database(surroundings))
     execution = fake(refs=("first", "second"))
-    result = owner(flaky, body, gated(execution, flaky, down_after_start=True)).execute(KEY, ENTRY)
+    result = owner(flaky, surroundings, gated(execution, flaky, down_after_start=True)).execute(KEY, ENTRY)
     assert (
         result.status == "unavailable"
         and result.pending is not None
@@ -330,7 +334,7 @@ def test_storage_loss_keeps_first_ref_and_conflict_then_publish_retries(tmp_path
     assert pending.sessions == SessionInput("first", True, None) and pending.facts is not None and pending.facts.rc == 0
     assert pending.evidence is not None
     flaky.down = False
-    retry = owner(flaky, body, fake())
+    retry = owner(flaky, surroundings, fake())
     assert retry.publish(pending) == PublicationResult("accepted")
     assert retry.publish(pending) == PublicationResult("already_same")
     stored = retry.collect(KEY)
@@ -338,12 +342,14 @@ def test_storage_loss_keeps_first_ref_and_conflict_then_publish_retries(tmp_path
     assert flaky.con.execute("SELECT session_ref FROM attempt").fetchone() == ("first",)
 
 
-def test_publication_conflicts_on_different_facts_and_stale_publisher_cannot_rewrite(tmp_path: Path, body: Body) -> None:
-    flaky = Flaky(database(body))
-    result = owner(flaky, body, gated(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
+def test_publication_conflicts_on_different_facts_and_stale_publisher_cannot_rewrite(
+    tmp_path: Path, surroundings: AttemptSurroundings
+) -> None:
+    flaky = Flaky(database(surroundings))
+    result = owner(flaky, surroundings, gated(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
     assert result.pending is not None
     flaky.down = False
-    attempts = owner(flaky, body, fake())
+    attempts = owner(flaky, surroundings, fake())
     assert attempts.publish(result.pending) == PublicationResult("accepted")
     assert result.pending.facts is not None
     different = dataclasses.replace(result.pending, facts=dataclasses.replace(result.pending.facts, rc=9))
@@ -352,27 +358,27 @@ def test_publication_conflicts_on_different_facts_and_stale_publisher_cannot_rew
     assert kept is not None and kept.facts.rc == 0
 
 
-def test_unavailable_storage_refuses_without_agent_and_never_reports_missing(tmp_path: Path, body: Body) -> None:
-    flaky = Flaky(database(body))
+def test_unavailable_storage_refuses_without_agent_and_never_reports_missing(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    flaky = Flaky(database(surroundings))
     flaky.down = True
     execution = fake()
-    attempts = owner(flaky, body, execution)
+    attempts = owner(flaky, surroundings, execution)
     assert attempts.execute(KEY, ENTRY).status == "unavailable" and attempts.collect(KEY).status == "unavailable"
     flaky.con.close()
     flaky.down = False
     assert attempts.execute(KEY, ENTRY).status == "unavailable" and execution.calls == []
 
 
-def test_registration_gate_refuses_before_ref_or_result(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_registration_hook_refuses_before_ref_or_result(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
     now = [10.0]
     inner = fake(refs=("s",))
 
     def late(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        now[0] = 500.0  # the deadline passes between the launch decision and the gate
+        now[0] = 500.0  # the deadline passes between the launch decision and the registration
         return inner(harness, spec, timeout, hooks)
 
-    attempts = app(con, body, late)
+    attempts = app(con, surroundings, late)
     attempts.clock = lambda: now[0]
     result = attempts.execute(KEY, ENTRY)
     assert result.status == "refused" and result.reason == "expired"
@@ -380,32 +386,32 @@ def test_registration_gate_refuses_before_ref_or_result(tmp_path: Path, body: Bo
     assert con.execute("SELECT count(*) FROM execution").fetchone() == (0,)
 
 
-def test_reservation_change_after_dispatch_fences_registration(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_reservation_change_after_dispatch_fences_registration(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
 
     def swap(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         con.execute("UPDATE reservation SET generation=2")
         return fake()(harness, spec, timeout, hooks)
 
-    assert app(con, body, swap).execute(KEY, ENTRY).status == "refused"
+    assert app(con, surroundings, swap).execute(KEY, ENTRY).status == "refused"
     assert con.execute("SELECT count(*) FROM execution").fetchone() == (0,)
 
 
-def test_historical_collect_needs_no_reservation_input_or_deadline(tmp_path: Path, body: Body) -> None:
-    con = database(body)
-    result = app(con, body, fake()).execute(KEY, ENTRY)
+def test_historical_collect_needs_no_reservation_input_or_deadline(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    result = app(con, surroundings, fake()).execute(KEY, ENTRY)
     con.execute("DELETE FROM reservation")  # test-only: collection must not depend on the live reservation
     (tmp_path / "input.txt").unlink()
     con.execute("UPDATE attempt SET deadline=1")
     again = fake()
-    assert app(con, body, again).collect(KEY) == result and app(con, body, again).execute(KEY, ENTRY) == result
+    assert app(con, surroundings, again).collect(KEY) == result and app(con, surroundings, again).execute(KEY, ENTRY) == result
     assert again.calls == []
 
 
-def test_usage_unknown_is_not_zero_and_answer_grace_facts_are_kept(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_usage_unknown_is_not_zero_and_answer_grace_facts_are_kept(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
     grace = FakeRun(RunOutcome(rc=-15, stop="answer", worker=WORKER, summary=Summary(text=json.dumps(PLAN), stands=True, work=True)))
-    facts = app(con, body, grace).execute(KEY, ENTRY).execution
+    facts = app(con, surroundings, grace).execute(KEY, ENTRY).execution
     assert facts is not None and facts.facts.tokens is None and facts.facts.turns is None
     assert facts.facts.stop == "answer" and facts.facts.stands and facts.answer.kind == "valid"
 
@@ -417,45 +423,47 @@ def test_real_file_database_composition_opens_and_collects(tmp_path: Path) -> No
     assert (tmp_path / "factory.db").exists()
 
 
-def test_run_failure_after_registration_is_typed_and_keeps_registered_state(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_run_failure_after_registration_is_typed_and_keeps_registered_state(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
 
     def crash(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         assert hooks is not None and hooks.started is not None
         hooks.started(WORKER)
         raise RuntimeError("library fault")
 
-    result = app(con, body, crash).execute(KEY, ENTRY)
+    result = app(con, surroundings, crash).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("unavailable", "run_failed:RuntimeError")
     assert con.execute("SELECT phase,worker_pid FROM attempt").fetchone() == ("registered", 42)
-    assert app(con, body, fake()).execute(KEY, ENTRY).status == "pending"
+    assert app(con, surroundings, fake()).execute(KEY, ENTRY).status == "pending"
 
 
-def test_projection_fault_keeps_evidence_and_publish_retries(tmp_path: Path, body: Body, monkeypatch: pytest.MonkeyPatch) -> None:
-    con = database(body)
+def test_projection_fault_keeps_evidence_and_publish_retries(
+    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    con = database(surroundings)
 
     def broken(_raw: RunOutcome) -> None:
         raise RuntimeError("projection bug")
 
     with monkeypatch.context() as patch:
         patch.setattr("taskloop.attempt.execution_facts", broken)
-        result = app(con, body, fake()).execute(KEY, ENTRY)
+        result = app(con, surroundings, fake()).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("unavailable", "projection:RuntimeError")
     assert result.pending is not None and result.pending.facts is None and result.pending.evidence is not None
     assert (tmp_path / result.pending.evidence.answer.path).exists()
-    attempts = app(con, body, fake())
+    attempts = app(con, surroundings, fake())
     assert attempts.publish(result.pending) == PublicationResult("accepted")
     assert attempts.collect(KEY).reason == "verification"
 
 
-def test_stored_pending_publication_is_reconciled_by_execute(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_stored_pending_publication_is_reconciled_by_execute(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
     late = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), res={"ref": "late"})))
-    assert app(con, body, late).execute(KEY, ENTRY).reason == "verification"
+    assert app(con, surroundings, late).execute(KEY, ENTRY).reason == "verification"
     con.execute("UPDATE execution SET publication='fault'")
     con.execute("UPDATE attempt SET session_ref=NULL")
     again = fake()
-    result = app(con, body, again).execute(KEY, ENTRY)
+    result = app(con, surroundings, again).execute(KEY, ENTRY)
     assert result.reason == "verification" and again.calls == []
     assert con.execute("SELECT session_ref FROM attempt").fetchone() == ("late",)
 
@@ -463,43 +471,45 @@ def test_stored_pending_publication_is_reconciled_by_execute(tmp_path: Path, bod
 @pytest.mark.parametrize(
     ("error", "reason"), [(OSError("keychain locked"), "credentials:OSError"), (CredentialsUnavailable("auth"), "credentials:auth")]
 )
-def test_credentials_failure_leaves_the_attempt_admitted_and_never_dispatches(body: Body, error: Exception, reason: str) -> None:
-    con = database(body)
+def test_credentials_failure_leaves_the_attempt_admitted_and_never_dispatches(
+    surroundings: AttemptSurroundings, error: Exception, reason: str
+) -> None:
+    con = database(surroundings)
 
     def refuse() -> tuple[str, dict[str, str]]:
         raise error
 
     execution = fake()
-    attempts = body.attempts(AttemptStore(lambda: con), execution, credentials=refuse)
+    attempts = surroundings.attempts(AttemptStore(lambda: con), execution, credentials=refuse)
     for _ in range(2):
         result = attempts.execute(KEY, ENTRY)
         assert (result.status, result.reason) == ("unavailable", reason) and execution.calls == []
         assert con.execute("SELECT phase,rev FROM attempt").fetchone() == ("admitted", 0)
 
 
-def test_files_failure_is_typed_and_leaves_the_attempt_admitted(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_files_failure_is_typed_and_leaves_the_attempt_admitted(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
     (tmp_path / "attempts").write_text("a file where the artifact folder belongs")
     execution = fake()
-    result = app(con, body, execution).execute(KEY, ENTRY)
+    result = app(con, surroundings, execution).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("unavailable", "files") and execution.calls == []
     assert con.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)
 
 
 @pytest.mark.parametrize("me", [(8, "entry-start", "boot"), (7, "other-start", "boot"), (7, "entry-start", "other-boot")])
-def test_only_the_registered_entry_executes(tmp_path: Path, body: Body, me: tuple[int, str, str]) -> None:
-    con, execution, asked = database(body), fake(), []
-    attempts = body.attempts(AttemptStore(lambda: con), execution, credentials=lambda: asked.append(1) or ("/bin/codex", {}))
+def test_only_the_registered_entry_executes(tmp_path: Path, surroundings: AttemptSurroundings, me: EntryIdentity) -> None:
+    con, execution, asked = database(surroundings), fake(), []
+    attempts = surroundings.attempts(AttemptStore(lambda: con), execution, credentials=lambda: asked.append(1) or ("/bin/codex", {}))
     result = attempts.execute(KEY, me)
     assert (result.status, result.reason) == ("refused", "not_entry")
     assert asked == [] and execution.calls == [] and not (tmp_path / "attempts").exists()
     assert con.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)
 
 
-def test_only_the_workspace_write_sandbox_is_launched(tmp_path: Path, body: Body) -> None:
-    con, execution = database(body), fake()
+def test_only_the_workspace_write_sandbox_is_launched(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con, execution = database(surroundings), fake()
     con.execute("UPDATE attempt SET sandbox='danger-full-access'")
-    result = app(con, body, execution).execute(KEY, ENTRY)
+    result = app(con, surroundings, execution).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "sandbox") and execution.calls == []
     assert con.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)
 
@@ -514,19 +524,19 @@ def test_the_sandbox_never_escalates_and_has_no_reviewer() -> None:
     assert pairs["sandbox_workspace_write.exclude_tmpdir_env_var"] == "true"
 
 
-class Spy(CodexHarness):
+class CountingHarness(CodexHarness):
     """The real Codex harness, counting cleanups; `broken` makes `launch_spec` fail."""
 
     cleanups: ClassVar[list[int]] = []
     broken: ClassVar[bool] = False
 
     def launch_spec(self, i: LaunchInputs) -> LaunchSpec:
-        if Spy.broken:
+        if CountingHarness.broken:
             raise ValueError("bad launch")
         return super().launch_spec(i)
 
     def cleanup(self) -> None:
-        Spy.cleanups.append(1)
+        CountingHarness.cleanups.append(1)
         super().cleanup()
 
 
@@ -541,12 +551,12 @@ class Spy(CodexHarness):
     ],
 )
 def test_the_harness_is_cleaned_up_once_on_every_exit(
-    body: Body, monkeypatch: pytest.MonkeyPatch, case: str, status: str, reason: str, phase: str
+    surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, case: str, status: str, reason: str, phase: str
 ) -> None:
-    flaky, now, execution = Flaky(database(body)), [10.0], fake()
-    monkeypatch.setattr("taskloop.attempt.CodexHarness", Spy)
-    monkeypatch.setattr(Spy, "cleanups", [])
-    monkeypatch.setattr(Spy, "broken", case == "launch")
+    flaky, now, execution = Flaky(database(surroundings)), [10.0], fake()
+    monkeypatch.setattr("taskloop.attempt.CodexHarness", CountingHarness)
+    monkeypatch.setattr(CountingHarness, "cleanups", [])
+    monkeypatch.setattr(CountingHarness, "broken", case == "launch")
 
     def credentials() -> tuple[str, dict[str, str]]:
         if case == "raced":  # another writer moves the row between load and dispatch
@@ -558,27 +568,29 @@ def test_the_harness_is_cleaned_up_once_on_every_exit(
     def clock() -> float:
         return now[0]
 
-    result = body.attempts(AttemptStore(flaky), execution, credentials=credentials, clock=clock).execute(KEY, ENTRY)
+    result = surroundings.attempts(AttemptStore(flaky), execution, credentials=credentials, clock=clock).execute(KEY, ENTRY)
     assert (result.status, result.reason) == (status, reason)
-    assert Spy.cleanups == [1] and len(execution.calls) == (case == "run")
+    assert CountingHarness.cleanups == [1] and len(execution.calls) == (case == "run")
     assert flaky.con.execute("SELECT phase FROM attempt").fetchone() == (phase,)
 
 
-def test_the_registration_gate_writes_through_the_gate_store_only(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_the_registration_write_goes_through_the_registration_store_only(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
 
     class Main(AttemptStore):
         def register(self, admission: Admission, worker: Worker) -> Literal["accepted", "already_same", "conflict"]:
-            raise AssertionError("the harness registration must use the bounded gate store")
+            raise AssertionError("the harness registration must use the bounded registration store")
 
-    gate = AttemptStore(lambda: con)
-    attempts = body.attempts(Main(lambda: con), fake(), gate=gate)
+    registration_store = AttemptStore(lambda: con)
+    attempts = surroundings.attempts(Main(lambda: con), fake(), registration_store=registration_store)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     assert con.execute("SELECT phase,worker_pid FROM attempt").fetchone() == ("captured", 42)
 
 
-def test_the_gate_connection_is_opened_before_dispatch_and_its_fault_leaves_admitted(tmp_path: Path, body: Body) -> None:
-    con, events = database(body), []
+def test_the_registration_connection_is_opened_before_dispatch_and_its_fault_leaves_admitted(
+    tmp_path: Path, surroundings: AttemptSurroundings
+) -> None:
+    con, events = database(surroundings), []
 
     class Main(AttemptStore):
         def dispatch(self, expected: AttemptRecord, base: str) -> Literal["accepted", "conflict"]:
@@ -586,50 +598,52 @@ def test_the_gate_connection_is_opened_before_dispatch_and_its_fault_leaves_admi
             return super().dispatch(expected, base)
 
     def opened() -> sqlite3.Connection | None:
-        events.append("gate")
+        events.append("registration_store")
         return con
 
-    attempts = body.attempts(Main(lambda: con), fake(), gate=AttemptStore(opened))
+    attempts = surroundings.attempts(Main(lambda: con), fake(), registration_store=AttemptStore(opened))
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    assert events[:2] == ["gate", "dispatch"]
-    con2, run = database(body), fake()
-    broken = body.attempts(Main(lambda: con2), run, gate=AttemptStore(lambda: None))
+    assert events[:2] == ["registration_store", "dispatch"]
+    con2, run = database(surroundings), fake()
+    broken = surroundings.attempts(Main(lambda: con2), run, registration_store=AttemptStore(lambda: None))
     result = broken.execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("unavailable", "store") and run.calls == []
     assert con2.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)
 
 
-def test_an_entry_replaced_between_load_and_dispatch_fences_the_dispatch(tmp_path: Path, body: Body) -> None:
-    con, run = database(body), fake()
+def test_an_entry_replaced_between_load_and_dispatch_fences_the_dispatch(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con, run = database(surroundings), fake()
     store = AttemptStore(lambda: con)
 
     def replacing() -> tuple[str, dict[str, str]]:
         assert store.register_entry(KEY, (9, "new-start", "boot"), 10, Replaced(ENTRY, "gone")) == "accepted"
         return "/bin/codex", {}
 
-    result = body.attempts(store, run, credentials=replacing).execute(KEY, ENTRY)
+    result = surroundings.attempts(store, run, credentials=replacing).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "changed_admission") and run.calls == []
     assert con.execute("SELECT phase,entry_pid FROM attempt").fetchone() == ("admitted", 9)
 
 
-def test_composition_bounds_only_the_gate_connection(tmp_path: Path) -> None:
+def test_composition_bounds_only_the_registration_connection(tmp_path: Path) -> None:
     attempts = open_attempts(tmp_path / "factory.db", tmp_path, lambda: ("/bin/codex", {}))
-    gate, main = attempts.gate.connect(), attempts.store.connect()
-    assert gate is not None and main is not None and gate is not main
-    assert gate.execute("PRAGMA busy_timeout").fetchone() == (1500,)
+    registration_store, main = attempts.registration_store.connect(), attempts.store.connect()
+    assert registration_store is not None and main is not None and registration_store is not main
+    assert registration_store.execute("PRAGMA busy_timeout").fetchone() == (1500,)
     assert main.execute("PRAGMA busy_timeout").fetchone() == (5000,)
 
 
-def pending_result(body: Body) -> tuple[Flaky, Attempts, PendingResult]:
-    flaky = Flaky(database(body))
-    result = owner(flaky, body, gated(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
+def pending_result(surroundings: AttemptSurroundings) -> tuple[Flaky, Attempts, PendingResult]:
+    flaky = Flaky(database(surroundings))
+    result = owner(flaky, surroundings, gated(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
     assert result.pending is not None and result.pending.facts is not None
     flaky.down = False
-    return flaky, owner(flaky, body, fake()), result.pending
+    return flaky, owner(flaky, surroundings, fake()), result.pending
 
 
-def test_capture_upgrades_pending_publication_once_and_rejects_different_evidence(tmp_path: Path, body: Body) -> None:
-    flaky, _attempts, pending = pending_result(body)
+def test_capture_upgrades_pending_publication_once_and_rejects_different_evidence(
+    tmp_path: Path, surroundings: AttemptSurroundings
+) -> None:
+    flaky, _attempts, pending = pending_result(surroundings)
     store = AttemptStore(flaky)
     loaded = store.load(KEY)
     assert loaded is not None and pending.facts is not None and pending.evidence is not None
@@ -641,12 +655,12 @@ def test_capture_upgrades_pending_publication_once_and_rejects_different_evidenc
     assert store.capture(admission, None, pending.facts, pending.evidence, "pending") == "already_same"
     other = dataclasses.replace(pending.evidence, stdout=FileRef("elsewhere", "0" * 64))
     assert store.capture(admission, None, pending.facts, other, "complete") == "conflict"
-    attempts = owner(flaky, body, fake())
+    attempts = owner(flaky, surroundings, fake())
     assert attempts.publish(dataclasses.replace(pending, evidence=other)) == PublicationResult("conflict")
 
 
-def test_answer_summary_is_idempotent_and_never_replaced(tmp_path: Path, body: Body) -> None:
-    flaky, attempts, pending = pending_result(body)
+def test_answer_summary_is_idempotent_and_never_replaced(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    flaky, attempts, pending = pending_result(surroundings)
     assert attempts.publish(pending) == PublicationResult("accepted")
     store = AttemptStore(flaky)
     loaded = store.load(KEY)
@@ -657,12 +671,12 @@ def test_answer_summary_is_idempotent_and_never_replaced(tmp_path: Path, body: B
     assert store.answer(loaded.admission, dataclasses.replace(pending.evidence, stderr=FileRef("x", "0" * 64)), same) == "conflict"
 
 
-def test_ref_callback_on_another_thread_uses_its_own_shared_writer_connection(tmp_path: Path, body: Body) -> None:
+def test_ref_callback_on_another_thread_uses_its_own_shared_writer_connection(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     store = Store(SCHEMA)
     path = tmp_path / "factory.db"
     seeded = store.open_rw(path)
     assert seeded is not None
-    seed(seeded, body)
+    seed(seeded, surroundings)
     inner = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN))))  # reports no ref: only the thread can publish
     seen: list[int] = []
 
@@ -676,19 +690,19 @@ def test_ref_callback_on_another_thread_uses_its_own_shared_writer_connection(tm
         worker.join()
         return outcome
 
-    attempts = body.attempts(AttemptStore(lambda: store.shared_rw(path), store.begin_immediate), threaded)
+    attempts = surroundings.attempts(AttemptStore(lambda: store.shared_rw(path), store.begin_immediate), threaded)
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     assert seen and seen != [threading.get_ident()]
     assert seeded.execute("SELECT session_ref FROM attempt").fetchone() == ("threaded",)
     store.close_shared()
 
 
-def test_two_connections_contend_for_one_dispatch(tmp_path: Path, body: Body) -> None:
+def test_two_connections_contend_for_one_dispatch(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     store = Store(SCHEMA)
     path = tmp_path / "factory.db"
     first = store.open_rw(path)
     assert first is not None
-    seed(first, body)
+    seed(first, surroundings)
     record = AttemptStore(lambda: first).load(KEY)
     assert record is not None
     barrier, outcomes = threading.Barrier(2), []
@@ -706,12 +720,12 @@ def test_two_connections_contend_for_one_dispatch(tmp_path: Path, body: Body) ->
     assert sorted(outcomes) == ["accepted", "conflict"]
 
 
-def test_stored_pending_publication_is_not_promoted_without_evidence(tmp_path: Path, body: Body) -> None:
-    con = database(body)
-    assert app(con, body, fake()).execute(KEY, ENTRY).reason == "verification"  # the summary reports no ref: facts.session is None
+def test_stored_pending_publication_is_not_promoted_without_evidence(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    assert app(con, surroundings, fake()).execute(KEY, ENTRY).reason == "verification"  # the summary reports no ref: facts.session is None
     con.execute("UPDATE execution SET publication='pending'")
     again = fake()
-    attempts = app(con, body, again)
+    attempts = app(con, surroundings, again)
     for _ in range(2):
         result = attempts.execute(KEY, ENTRY)
         assert (result.status, result.reason) == ("pending", "session_pending") and again.calls == []
@@ -724,16 +738,18 @@ def test_stored_pending_publication_is_not_promoted_without_evidence(tmp_path: P
     assert attempts.collect(KEY).reason == "session_fault"
 
 
-def test_recorded_session_conflict_is_visible_without_a_result_and_blocks_complete(tmp_path: Path, body: Body) -> None:
-    flaky, attempts, pending = pending_result(body)
+def test_recorded_session_conflict_is_visible_without_a_result_and_blocks_complete(
+    tmp_path: Path, surroundings: AttemptSurroundings
+) -> None:
+    flaky, attempts, pending = pending_result(surroundings)
     flaky.con.execute("UPDATE attempt SET session_ref='first',session_conflict=1")
     assert (attempts.collect(KEY).status, attempts.collect(KEY).reason) == ("conflict", "session")
     assert attempts.publish(pending).status == "accepted"
     assert flaky.con.execute("SELECT publication FROM execution").fetchone() == ("conflict",)
 
 
-def test_registration_conflict_and_same_identity_are_distinguished(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_registration_conflict_and_same_identity_are_distinguished(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
     inner = fake()
 
     def twice(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
@@ -741,11 +757,11 @@ def test_registration_conflict_and_same_identity_are_distinguished(tmp_path: Pat
         hooks.started(WORKER)
         return inner(harness, spec, timeout, hooks)  # the same identity again: already_same, not an error
 
-    assert app(con, body, twice).execute(KEY, ENTRY).reason == "verification"
+    assert app(con, surroundings, twice).execute(KEY, ENTRY).reason == "verification"
 
 
-def test_different_worker_identity_refuses_registration_before_exec(tmp_path: Path, body: Body) -> None:
-    con = database(body)
+def test_different_worker_identity_refuses_registration_before_exec(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
 
     def different(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         assert hooks is not None and hooks.started is not None
@@ -753,7 +769,7 @@ def test_different_worker_identity_refuses_registration_before_exec(tmp_path: Pa
         hooks.started(dataclasses.replace(WORKER, pid=43))
         raise AssertionError("exec must stay gated")
 
-    result = app(con, body, different).execute(KEY, ENTRY)
+    result = app(con, surroundings, different).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("conflict", "registration_conflict")
 
 
@@ -761,8 +777,10 @@ def test_different_worker_identity_refuses_registration_before_exec(tmp_path: Pa
     ("error", "fault"),
     [(RuntimeError("bug"), "unexpected:RuntimeError"), (StoreRefused("stale_reservation"), "refused:stale_reservation")],
 )
-def test_ref_callback_faults_are_retained_with_cause_and_never_raised(tmp_path: Path, body: Body, error: Exception, fault: str) -> None:
-    con = database(body)
+def test_ref_callback_faults_are_retained_with_cause_and_never_raised(
+    tmp_path: Path, surroundings: AttemptSurroundings, error: Exception, fault: str
+) -> None:
+    con = database(surroundings)
     loaded = AttemptStore(lambda: con).load(KEY)
     assert loaded is not None
 
@@ -775,8 +793,8 @@ def test_ref_callback_faults_are_retained_with_cause_and_never_raised(tmp_path: 
     assert latch.snapshot() == SessionInput("ref", False, fault)
 
 
-def test_report_never_presents_pending_state_as_collected(tmp_path: Path, body: Body) -> None:
-    result = app(database(body), body, fake()).execute(KEY, ENTRY)
+def test_report_never_presents_pending_state_as_collected(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+    result = app(database(surroundings), surroundings, fake()).execute(KEY, ENTRY)
     stored = result.execution
     assert stored is not None and report(stored).reason == "verification"
     for publication, status, reason in (

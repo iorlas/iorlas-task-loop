@@ -322,17 +322,17 @@ class AttemptAdmission:
         if not taken:
             return AdmitRefused("claimed_elsewhere")
         try:
-            outcome = self._commit(con, prepared, free, key, ref)
+            result = self._commit(con, prepared, free, key, ref)
         except sqlite3.IntegrityError as error:  # caught after the rollback; every constraint is pre-checked, so it means a schema mismatch
-            outcome = AdmitRefused("constraint", detail=why(error))
+            result = AdmitRefused("constraint", detail=why(error))
         except sqlite3.Error as error:
-            outcome = AdmitUnavailable("store", detail=why(error))
+            result = AdmitUnavailable("store", detail=why(error))
         except BaseException:
             self._compensate(request)
             raise
-        if isinstance(outcome, Admitted):
-            return outcome
-        return replace(outcome, claim_leaked=self._compensate(request))
+        if isinstance(result, Admitted):
+            return result
+        return replace(result, claim_leaked=self._compensate(request))
 
     def _compensate(self, request: AdmitRequest) -> bool:
         """Release the claim only when a fresh read shows no attempt for the task; True when the claim may have leaked.

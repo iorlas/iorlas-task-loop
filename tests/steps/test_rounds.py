@@ -12,7 +12,7 @@ import pytest
 from taskloop.attempt_reads import SlotUse
 from taskloop.operations import Ended, Failed, Move, Quiet, Round, exit_code
 from taskloop.round import NextRequest
-from taskloop.rounds import CHECK, Pacing, RoundsRequest, abrupt, inputs, run_rounds
+from taskloop.rounds import CHECK, RoundsPorts, RoundsRequest, abrupt, inputs, run_rounds
 
 HELD = frozenset({("repo", "s1")})
 CLEAN = Round("tasks", (Move("tl-1", "report", "running", "a1"),), written=frozenset({("tl-1", "report", "running", "a1")}))
@@ -59,7 +59,7 @@ class Bench:
         self.warned += 1
 
     def run(self, every: int = 60) -> Ended:
-        ports = Pacing(self.round, self.slot_use, lambda: 1000 + self.now, lambda: self.now, self.wait, self.log,
+        ports = RoundsPorts(self.round, self.slot_use, lambda: 1000 + self.now, lambda: self.now, self.wait, self.log,
                        self.warn, lambda: self.stopped, 7)
         return run_rounds(ports, RoundsRequest("tasks", every))
 

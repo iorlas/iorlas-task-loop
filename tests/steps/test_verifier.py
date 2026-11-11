@@ -8,12 +8,13 @@ import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import Literal, Protocol, get_args
+from typing import Literal, get_args
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
+from conftest import FakeSlotFiles
 from git_porcelain import Dirty, Recorded, Repo, Tree
 from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
@@ -28,12 +29,11 @@ from taskloop.attempt_types import (
     AttemptKey,
     ChainLink,
     Checkouts,
-    FileEntry,
     FileRef,
+    FileStat,
     NotApplicable,
     Rejected,
     Rule,
-    SlotFiles,
     StepRules,
     StoredExecution,
     Unsettled,
@@ -47,7 +47,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.slot_lock import hold
 from taskloop.verdict import judge
-from taskloop.verifier import Hold, Verifier
+from taskloop.verifier import Verifier, VerifyHold
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -59,14 +59,6 @@ PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan
 UNCHANGED = {"disposition": "unchanged", "plan_path": P, "paths": [], "message": None, "explanation": "Still valid"}
 TRAILER = "Task-Loop-Attempt: attempt"
 type Files = Mapping[str, str | bytes]
-
-
-class FakeSlotFiles(SlotFiles, Protocol):
-    """The conftest's fake slot file port, as these tests use it: `entries` and `contents` override any path."""
-
-    entries: dict[Path, FileEntry | None]
-    contents: dict[Path, bytes]
-    resolved: dict[Path, Path | None]
 
 
 type After = Callable[[FakeWorktree, FakeSlotFiles], object]
@@ -114,7 +106,7 @@ class Counted:
         return self.checkouts(path)
 
 
-def body(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: FakeSlotFiles, run: Execution) -> Attempts:
+def attempts(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: FakeSlotFiles, run: Execution) -> Attempts:
     return Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
 
 
@@ -122,14 +114,14 @@ def captured(
     con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: FakeSlotFiles,
     written: Files, answer: Mapping[str, object] = PLAN,
 ) -> None:
-    assert body(con, tmp_path, checkouts, files, agent(slot, written, answer)).execute(KEY, ENTRY).reason == "verification"
+    assert attempts(con, tmp_path, checkouts, files, agent(slot, written, answer)).execute(KEY, ENTRY).reason == "verification"
 
 
 def unheld(_admission: Admission) -> AbstractContextManager[None]:
     return nullcontext()
 
 
-def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles, custody: Hold = hold) -> Verifier:
+def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles, custody: VerifyHold = hold) -> Verifier:
     return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, custody)
 
 
@@ -162,7 +154,7 @@ def trailer_commit(slot: FakeWorktree, files: FakeSlotFiles) -> None:
     adopt(slot, files)
 
 
-def entry(path: str, found: FileEntry | None) -> After:
+def entry(path: str, found: FileStat | None) -> After:
     def override(slot: FakeWorktree, files: FakeSlotFiles) -> None:
         files.entries[slot.path / path] = found
 
@@ -204,8 +196,8 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("plan_at_cap", None, {P: "a" * (1 << 20)}, PLAN, None, None, "verified", 1),
     ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "unsettled:unsafe", 0),
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
-    ("executable", None, PLANNED, PLAN, entry(P, FileEntry("file", 7, True)), None, "unsettled:unsafe", 0),
-    ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileEntry("link", 9, False)), None, "unsettled:unsafe", 0),
+    ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
+    ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "unsettled:unsafe", 0),
     ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "unsettled:ignored", 0),
     ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "unsettled:ignored", 0),
     ("gitattributes_at_the_top", None, PLANNED | {".gitattributes": "* filter=x\n"}, PLAN, None, None, "unsettled:unsafe", 0),
@@ -260,8 +252,8 @@ def test_the_stage_commit_and_verdict_table(
     assert len(stored(registered)) == (1 if final else 0)  # slot state and unknowns are never stored
     if expected != "unavailable:not_listed":
         assert len(made(slot, base)) == commits
-        assert all(body == TRAILER for subject, body in made(slot, base) if subject == "Plan tl-1")
-    collected = body(registered, tmp_path, checkouts, slot_files, agent(slot, {})).collect(KEY)
+        assert all(attempts == TRAILER for subject, attempts in made(slot, base) if subject == "Plan tl-1")
+    collected = attempts(registered, tmp_path, checkouts, slot_files, agent(slot, {})).collect(KEY)
     assert (collected.status, collected.reason) == (("collected", expected) if final else ("pending", "verification"))
 
 
@@ -312,9 +304,9 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
 @pytest.mark.parametrize(
     "rewrite",
     [
-        entry(".git", FileEntry("dir", 0, False)),
-        entry(".git", FileEntry("link", 30, False)),
-        entry(".git", FileEntry("other", 0, False)),
+        entry(".git", FileStat("dir", 0, False)),
+        entry(".git", FileStat("link", 30, False)),
+        entry(".git", FileStat("other", 0, False)),
         contents(".git", b"gitdir: /elsewhere/.git/worktrees/s1\n"),
         contents(".git", b"x" * 5000),
     ],
@@ -364,8 +356,8 @@ def test_a_wrong_back_pointer_is_redirected(
 def test_a_rewritten_pointer_refuses_dispatch(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
-    slot_files.entries[slot.path / ".git"] = FileEntry("dir", 0, False)
-    result = body(registered, tmp_path, checkouts, slot_files, agent(slot, PLANNED)).execute(KEY, ENTRY)
+    slot_files.entries[slot.path / ".git"] = FileStat("dir", 0, False)
+    result = attempts(registered, tmp_path, checkouts, slot_files, agent(slot, PLANNED)).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "slot_redirected")
 
 
@@ -470,7 +462,7 @@ def test_no_valid_staged_answer_of_a_clean_run_is_not_applicable_with_no_git_rea
 ) -> None:
     quiet = {"paths": [], "message": None} if answer.get("disposition") in ("incomplete", "needs_owner") else {}
     run = agent(slot, PLANNED, PLAN | answer | quiet, rc)
-    assert body(registered, tmp_path, checkouts, slot_files, run).execute(KEY, ENTRY).status == "collected"
+    assert attempts(registered, tmp_path, checkouts, slot_files, run).execute(KEY, ENTRY).status == "collected"
     counted = Counted(checkouts)
     assert verifier(registered, counted, slot_files).verify(KEY) == expected and counted.opens == 0 and stored(registered) == []
 
@@ -612,7 +604,7 @@ def test_the_end_commit_and_verdict_fences_read_the_stored_effect(
 
 
 def flip(slot: FakeWorktree, files: FakeSlotFiles) -> None:
-    files.entries[slot.path / ".git"] = FileEntry("dir", 0, False)
+    files.entries[slot.path / ".git"] = FileStat("dir", 0, False)
 
 
 def test_a_pointer_rewritten_after_the_slot_read_stops_before_stage(

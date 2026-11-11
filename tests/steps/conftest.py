@@ -15,7 +15,7 @@ from git_porcelain import GitUnavailable, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
 
-from taskloop.attempt_types import Checkouts, FileEntry
+from taskloop.attempt_types import Checkouts, FileStat
 from taskloop.factory_schema import SCHEMA
 
 
@@ -69,7 +69,7 @@ class FakeSlotFiles:
     def __init__(self, repo: FakeRepo) -> None:
         self.repo, self.common = repo, repo.identity().common_dir
         self.known: dict[Path, FakeWorktree] = {}
-        self.entries: dict[Path, FileEntry | None] = {}
+        self.entries: dict[Path, FileStat | None] = {}
         self.contents: dict[Path, bytes] = {}
         self.resolved: dict[Path, Path | None] = {}
 
@@ -118,13 +118,13 @@ class FakeSlotFiles:
                 return any(name.startswith(prefix) for name in self._files(slot))
         return False
 
-    def lstat(self, path: Path) -> FileEntry | None:
+    def lstat(self, path: Path) -> FileStat | None:
         if path in self.entries:
             return self.entries[path]
         data = self._data(path)
         if data is not None:
-            return FileEntry("file", len(data), False)
-        return FileEntry("dir", 0, False) if self._folder(path) else None
+            return FileStat("file", len(data), False)
+        return FileStat("dir", 0, False) if self._folder(path) else None
 
     def resolve(self, path: Path) -> Path | None:
         """No symlinks in the fake unless `resolved` names one; `..` folds as the operating system would."""

@@ -7,8 +7,8 @@ root_packages =
     multiprocessing
 include_external_packages = True
 
-[importlinter:contract:entry-depends-on-cli]
-name = The module entry delegates to the CLI; the CLI delegates to the plan surface; neither imports upward
+[importlinter:contract:main-depends-on-cli]
+name = The `tl` module entry (`__main__`) delegates to the CLI; the CLI delegates to the plan surface; neither imports upward
 type = layers
 layers =
     taskloop.__main__

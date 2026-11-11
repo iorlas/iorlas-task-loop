@@ -3,19 +3,32 @@ It never holds a dispatch token, a remote URL or Git output."""
 
 from taskloop.attempt import succeeded
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
-from taskloop.launch import Entry
+from taskloop.attempt_types import EntryIdentity
 from taskloop.machine_config import Loaded
-from taskloop.operations import Adoption, AttemptStatus, Checked, Ended, Failed, Freed, Listed, PublishedTask, Result, Round, Shown, Started
+from taskloop.operations import (
+    Adoption,
+    AttemptView,
+    Ended,
+    Failed,
+    Listed,
+    PublishedTask,
+    ReleasedTask,
+    Result,
+    Round,
+    Shown,
+    Started,
+    VerifiedTask,
+)
 from taskloop.publish import BranchPublished
 from taskloop.slot_release import Released
 from taskloop.slots import Adopted, NotAdopted, SlotView
 
 
-def _entry_data(entry: Entry | None) -> dict[str, object] | None:
+def _entry_data(entry: EntryIdentity | None) -> dict[str, object] | None:
     return None if entry is None else {"pid": entry[0], "start": entry[1], "boot": entry[2]}
 
 
-def _status_data(each: AttemptStatus) -> dict[str, object]:
+def _status_data(each: AttemptView) -> dict[str, object]:
     return {
         "backlog": each.backlog, "task": each.task_id, "attempt_id": each.attempt_id, "slot": each.slot, "phase": each.phase,
         "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
@@ -41,13 +54,13 @@ def _published_data(published: PublishedRow | None) -> dict[str, object] | None:
     return {"commit": published.commit, "remote_head": published.remote_head, "published_at": published.published_at}
 
 
-def _freed_data(result: Checked | Freed | PublishedTask) -> dict[str, object]:
+def _freed_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[str, object]:
     if isinstance(result, PublishedTask):
         return _publish_data(result)
-    if isinstance(result, Checked):
+    if isinstance(result, VerifiedTask):
         return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
                 "release": result.release, "published": result.published}
-    found = result.outcome
+    found = result.result
     changed = (found.parked, found.reservation_removed) if isinstance(found, Released) else (None, False)
     status = "released" if isinstance(found, Released) else "already_released"
     return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id, "slot": found.slot,
@@ -55,7 +68,7 @@ def _freed_data(result: Checked | Freed | PublishedTask) -> dict[str, object]:
 
 
 def _publish_data(result: PublishedTask) -> dict[str, object]:
-    found = result.outcome
+    found = result.result
     status = "published" if isinstance(found, BranchPublished) else "already_published"
     return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
             "commit": found.commit, "remote_head": found.remote_head}
@@ -88,7 +101,7 @@ def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
             return _status_data(result.status) | {"directory": str(result.directory), "entry_log": str(result.entry_log)}
         case Listed() | Round() | Ended():
             return _rows_data(result)
-        case Checked() | Freed() | PublishedTask():
+        case VerifiedTask() | ReleasedTask() | PublishedTask():
             return _freed_data(result)
         case Adoption() | Loaded():
             return _setup_data(result)

@@ -5,7 +5,7 @@ the reserved slots are read just before and just after each round (their union i
 seconds after it, and when a slot of the baseline is no longer reserved the next round starts at once (a release during
 the round, and the end of a step the round itself started, included). The baseline
 is every backlog's reservations: another backlog's release also wakes a round, which then finds nothing to do. Each
-round is `round.advance` as built (its free-slot gate reads the tracker only when a slot may be free). A round that
+round is `round.advance` as built (its free-slot read reads the tracker only when a slot may be free). A round that
 ends on an unknown (`unavailable`/`uncertain`, whole-round or admission's stop word) backs the regular rounds off,
 doubling from the interval up to `CAP`; nothing is stored. It ends gracefully when `stopping` turns True (the first
 Ctrl-C) and on a whole-round refusal; a `KeyboardInterrupt` (the second Ctrl-C) passes through as the abrupt stop, after
@@ -20,7 +20,7 @@ from typing import Final
 from taskloop.attempt_reads import SlotUse
 from taskloop.evidence_files import EvidenceError
 from taskloop.operations import Ended, Failed, Quiet, Round, minutes_refused
-from taskloop.round import IDENT, INTERRUPTED, UNKNOWN, NextRequest, fixed, stamped
+from taskloop.round import IDENT, INTERRUPTED, STOPPING_UNKNOWN, NextRequest, fixed, stamped
 
 CHECK: Final = 2.0  # seconds between two reads of the reservation rows
 CAP: Final = 300  # the longest backoff delay, unless the interval is longer
@@ -33,7 +33,7 @@ class RoundsRequest:
 
 
 @dataclass(frozen=True)
-class Pacing:
+class RoundsPorts:
     """`round`: one `advance` over fresh ports, with the given `quiet`; `slot_use`: factory.db's reservation rows read
     now (None when unreadable); `clock`, the wall clock for log stamps; `monotonic` and `wait` pace; `warn`, said when
     the round log stops being written; `stopping`, True once a graceful stop is asked."""
@@ -64,7 +64,7 @@ def inputs(request: NextRequest) -> Failed | None:
 class _Log:
     """The rounds process's own round-log lines; `warn` once each time the log stops being written."""
 
-    def __init__(self, ports: Pacing, backlog: str) -> None:
+    def __init__(self, ports: RoundsPorts, backlog: str) -> None:
         self.ports, self.backlog = ports, backlog
         self.logged = True
 
@@ -100,10 +100,10 @@ class _Backoff:
 
 def _unknown(found: Round | Failed) -> str:
     word = f"{found.kind}:{found.reason}" if isinstance(found, Failed) else found.stopped
-    return word if word.split(":")[0] in UNKNOWN else ""
+    return word if word.split(":")[0] in STOPPING_UNKNOWN else ""
 
 
-def run_rounds(ports: Pacing, request: RoundsRequest) -> Ended:
+def run_rounds(ports: RoundsPorts, request: RoundsRequest) -> Ended:
     """Rounds until a stop: `Ended("interrupted")` after a graceful stop (no further move or round), `Ended` with the
     word of a whole-round refusal (`refused:database`, `refused:schema`, ...). Per-task words never end or back off. A
     `KeyboardInterrupt` once `rounds started` is written adds the best-effort `rounds stopped abrupt` and passes on."""
@@ -116,13 +116,13 @@ def run_rounds(ports: Pacing, request: RoundsRequest) -> Ended:
         raise
 
 
-def _rounds(ports: Pacing, request: RoundsRequest, log: _Log) -> Ended:
+def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log) -> Ended:
     quiet: Quiet = frozenset()
     backoff = _Backoff(request.every)
     while not ports.stopping():
         before = _held(ports)
         found = ports.round(quiet)
-        if isinstance(found, Failed) and found.kind not in UNKNOWN:
+        if isinstance(found, Failed) and found.kind not in STOPPING_UNKNOWN:
             return _end(log, request.backlog, f"{found.kind}:{found.reason}", found.detail)
         if isinstance(found, Round):
             log.seen(found.logged)
@@ -133,7 +133,7 @@ def _rounds(ports: Pacing, request: RoundsRequest, log: _Log) -> Ended:
     return _end(log, request.backlog, INTERRUPTED)
 
 
-def _held(ports: Pacing) -> frozenset[tuple[str, str]] | None:
+def _held(ports: RoundsPorts) -> frozenset[tuple[str, str]] | None:
     found = ports.slot_use()
     return None if found is None else found.held
 
@@ -146,7 +146,7 @@ def _union(before: frozenset[tuple[str, str]] | None, after: frozenset[tuple[str
     return before | after
 
 
-def _pause(ports: Pacing, delay: int, baseline: frozenset[tuple[str, str]] | None) -> None:
+def _pause(ports: RoundsPorts, delay: int, baseline: frozenset[tuple[str, str]] | None) -> None:
     """Until the next regular round is due, a stop is asked, or a reserved slot of the baseline (read before and after
     the round) is no longer reserved. A slot reserved since never wakes; an empty baseline has nothing to lose and is not read
     again; a failed read neither wakes nor fails, and while there is no baseline each check retries it."""

@@ -18,6 +18,7 @@ from taskloop.attempt_types import (
     REPEATABLE,
     AttemptKey,
     AttemptRecord,
+    EntryIdentity,
     NotApplicable,
     Observe,
     Rejected,
@@ -30,11 +31,10 @@ from taskloop.attempt_types import (
     WorkerGone,
 )
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.launch import Entry
 from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, launched, verify_failure
 from taskloop.plan_step import OPENING, plan_stage, repeat_instructions
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
-from taskloop.slot_release import Hold, entry_stopped, worker_stopped
+from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
 from taskloop.slot_state import shown
 
 
@@ -88,9 +88,9 @@ class StepRepeat:
     gone: WorkerGone
     observe: Observe
     clock: Clock
-    hold: Hold  # the slot's lock around the takeover (`slot_lock.repeating`), so a concurrent abandon cannot park under it
+    hold: ParkHold  # the slot's lock around the takeover (`slot_lock.repeating`), so a concurrent abandon cannot park under it
 
-    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int) -> Started | Failed:
+    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed:
         """For the task's captured current attempt C: the stop proof (C's entry, then its worker and group) before any Git
         read; C's own verify (it may finish a crash or settle); only REPEATABLE leftovers below the cap are repeated."""
         stopped = self._stopped(backlog, task_id, current, entry, minutes)
@@ -147,7 +147,7 @@ class StepRepeat:
         return feedback(found, plan_stage(record.admission.task.task_id), number, task, secrets.token_hex(8), unrecorded=unrecorded)
 
     def _stopped(
-        self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int
+        self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int
     ) -> AttemptRecord | Started | Failed:
         """The stop proof (`slot_release`'s one rule): C's registered entry does not run, then C's worker and its process
         group are gone (unknown counts as alive). A running entry is `already_running`."""
@@ -160,8 +160,8 @@ class StepRepeat:
         except StoreUnavailable as error:
             return Failed("unavailable", "store", str(error))
         except StoreRefused as error:
-            stale = str(error) == "stale_reservation"  # another start took the step over after this one's read
-            return self._existing(backlog, task_id, current, minutes) if stale else Failed("refused", str(error))
+            stale = error.reason == "stale_reservation"  # another start took the step over after this one's read
+            return self._existing(backlog, task_id, current, minutes) if stale else Failed("refused", error.reason)
         if record is None:
             return Failed("refused", "absent")
         alive = worker_stopped(self.gone, record.phase, record.worker)

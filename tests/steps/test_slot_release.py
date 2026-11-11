@@ -7,13 +7,14 @@ import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
-from typing import NoReturn, Protocol
+from typing import NoReturn
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError
+from conftest import FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import begin_immediate
@@ -21,11 +22,11 @@ from sqlite_store import begin_immediate
 from taskloop.admit import AdmitRefused, AttemptAdmission, RepeatRequest
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore, StoreRefused
-from taskloop.attempt_types import AttemptKey, Checkouts, FileEntry, Seen, SlotFiles, Verified
+from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat, Seen, SlotFiles, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.repo import RepoId
 from taskloop.slot_lock import custody, lock_path, probe
-from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease, word
+from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease, release_word
 from taskloop.slots import adopt, observe
 from taskloop.verifier import Verifier
 
@@ -56,7 +57,7 @@ class Ports:
 
     def __init__(self, con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, seen: Seen = "gone", alive: bool = False) -> None:
         self.con, self.git, self.files, self.seen, self.alive = con, checkouts, files, seen, alive
-        self.opens, self.holds, self.observed = 0, 0, list[tuple[int, str, str]]()
+        self.opens, self.holds, self.observed = 0, 0, list[EntryIdentity]()
         self.answers: list[bool | BdError] = [True]
         self.unclaimed: list[tuple[str, str]] = []
         self.inside: Callable[[], object] = lambda: None
@@ -65,7 +66,7 @@ class Ports:
         self.opens += 1
         return self.git(path)
 
-    def observe(self, entry: tuple[int, str, str]) -> Seen:
+    def observe(self, entry: EntryIdentity) -> Seen:
         self.observed.append(entry)
         return self.seen
 
@@ -143,7 +144,7 @@ def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then
     assert stored(registered) == ([], [(d, 30.0, 0, "kept")]) and ports.unclaimed == [] and ports.holds == 1
     ports.opens = ports.holds = 0
     again = ports.releaser().release(KEY, False)
-    assert again == AlreadyReleased("s1", "kept", False) and word(again) == "released" and (ports.opens, ports.holds) == (0, 0)
+    assert again == AlreadyReleased("s1", "kept", False) and release_word(again) == "released" and (ports.opens, ports.holds) == (0, 0)
 
 
 @pytest.mark.parametrize("phase", ["admitted", "registered", "captured"])
@@ -218,19 +219,13 @@ def test_abandon_a_prepared_admitted_attempt_parks_it_at_d(
     assert (slot.branch(), head(slot), tip(slot)) == (None, d, d) and ports.unclaimed == [("/tracker", "tl-1")]
 
 
-class FakeFiles(SlotFiles, Protocol):
-    """The conftest's fake slot file port, as these tests use it: `entries` overrides any path."""
-
-    entries: dict[Path, FileEntry | None]
-
-
-def unborn(slot: FakeWorktree, _files: FakeFiles, monkeypatch: pytest.MonkeyPatch) -> None:
+def unborn(slot: FakeWorktree, _files: FakeSlotFiles, monkeypatch: pytest.MonkeyPatch) -> None:
     info = WorktreeInfo(slot.path, None, "task/tl-1", False, None)
     monkeypatch.setattr(slot.repo, "worktrees", lambda *, with_dirty=False: (info,))
 
 
-def redirected(slot: FakeWorktree, files: FakeFiles, _monkeypatch: pytest.MonkeyPatch) -> None:
-    files.entries[slot.path / ".git"] = FileEntry("link", 10, False)
+def redirected(slot: FakeWorktree, files: FakeSlotFiles, _monkeypatch: pytest.MonkeyPatch) -> None:
+    files.entries[slot.path / ".git"] = FileStat("link", 10, False)
 
 
 @pytest.mark.parametrize(
@@ -245,14 +240,14 @@ def redirected(slot: FakeWorktree, files: FakeFiles, _monkeypatch: pytest.Monkey
     ids=["dirty", "staged", "other_branch", "redirected", "unborn"],
 )
 def test_a_slot_that_is_not_clean_on_its_branch_is_refused_and_stays_held(
-    registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: FakeFiles, monkeypatch: pytest.MonkeyPatch,
-    change: Callable[[FakeWorktree, FakeFiles, pytest.MonkeyPatch], object], reason: str,
+    registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: FakeSlotFiles, monkeypatch: pytest.MonkeyPatch,
+    change: Callable[[FakeWorktree, FakeSlotFiles, pytest.MonkeyPatch], object], reason: str,
 ) -> None:
     slot.take_branch("task/tl-1", "HEAD", mode="resume")
     change(slot, slot_files, monkeypatch)
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     found = ports.releaser().release(KEY, True)
-    assert isinstance(found, NotReleased) and (found.kind, found.reason, word(found)) == ("refused", reason, f"held:{reason}")
+    assert isinstance(found, NotReleased) and (found.kind, found.reason, release_word(found)) == ("refused", reason, f"held:{reason}")
     assert (stored(registered), ports.unclaimed, ports.holds) == (before, [], 1)
     assert reason != "slot_redirected" or ports.opens == 0  # the pointer is read first: no Git call
     assert reason != "slot_dirty" or ("x.md" in found.detail or "README" in found.detail)

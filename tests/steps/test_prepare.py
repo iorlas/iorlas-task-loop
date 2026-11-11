@@ -38,11 +38,11 @@ PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan
 BRANCH = "task/tl-1"
 
 
-class Spy(CodexHarness):
+class CountingHarness(CodexHarness):
     cleanups: ClassVar[list[int]] = []
 
     def cleanup(self) -> None:
-        Spy.cleanups.append(1)
+        CountingHarness.cleanups.append(1)
         super().cleanup()
 
 
@@ -61,8 +61,8 @@ def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
 
 @pytest.fixture
 def con(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
-    monkeypatch.setattr("taskloop.attempt.CodexHarness", Spy)
-    monkeypatch.setattr(Spy, "cleanups", [])
+    monkeypatch.setattr("taskloop.attempt.CodexHarness", CountingHarness)
+    monkeypatch.setattr(CountingHarness, "cleanups", [])
     return registered
 
 
@@ -172,7 +172,7 @@ def test_a_tip_without_the_slots_commit_is_diverged_and_nothing_runs(
     for _ in range(2):  # nothing moved: the same refusal again
         status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
         assert (status, reason, agent.calls) == ("refused", "branch_diverged", [])
-    assert Spy.cleanups == [1, 1] and slot.branch() is None and dict(repo.branches("task/")).get(BRANCH) in (tip, None)
+    assert CountingHarness.cleanups == [1, 1] and slot.branch() is None and dict(repo.branches("task/")).get(BRANCH) in (tip, None)
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 
 
@@ -185,7 +185,7 @@ def test_an_unreadable_branch_is_unknown_never_absent(
 
     monkeypatch.setattr(repo, "refs", refs)
     status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
-    assert (status, reason, agent.calls, Spy.cleanups) == ("unavailable", "git", [], [1]) and slot.branch() is None
+    assert (status, reason, agent.calls, CountingHarness.cleanups) == ("unavailable", "git", [], [1]) and slot.branch() is None
 
 
 class PointerFiles(SlotFiles, Protocol):
@@ -194,7 +194,7 @@ class PointerFiles(SlotFiles, Protocol):
 
 def refused_untouched(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, word: str) -> None:
     status, reason, agent = execute(con, tmp_path, checkouts, files)
-    assert (status, reason, agent.calls, Spy.cleanups) == ("refused", word, [], [1])
+    assert (status, reason, agent.calls, CountingHarness.cleanups) == ("refused", word, [], [1])
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 
 

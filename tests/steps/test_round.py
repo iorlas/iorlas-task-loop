@@ -20,12 +20,25 @@ from git_porcelain.testing import FakeWorktree
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts, Seen, SlotFiles, Unsettled, Verified, VerifyResult
+from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Seen, SlotFiles, Unsettled, Verified, VerifyResult
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.launch import Entry, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
-from taskloop.operations import Checked, Failed, Move, Publish, Reads, Release, Round, Started, Starting, Verify, exit_code, verify_task
+from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
+from taskloop.operations import (
+    Failed,
+    Move,
+    Publish,
+    Release,
+    Round,
+    Started,
+    StartPorts,
+    StatusPorts,
+    VerifiedTask,
+    Verify,
+    exit_code,
+    verify_task,
+)
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
-from taskloop.round import Advancing, NextRequest, advance, never
+from taskloop.round import NextRequest, RoundPorts, advance, never
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
 from taskloop.verifier import Verifier
@@ -75,7 +88,7 @@ class Repeats:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int) -> Started | Failed:
+    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed:
         self.calls.append(task_id)
         return Started("repeated", backlog, task_id, "next", False, ENTRY, number=2)
 
@@ -94,7 +107,7 @@ class Recorded:
         self.calls.append("verify")
         return Verified("blob")
 
-    def release(self, key: AttemptKey, abandon: bool, me: Entry | None = None) -> ReleaseResult:
+    def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         self.calls.append("release")
         return self.released
 
@@ -105,7 +118,7 @@ class Recorded:
 
 class Bench:
     """The round's ports over one factory.db connection; `now`, `seen` and `left` steer the reads. `free`: one more adopted
-    slot (another repo's) without a reservation row, so the free-slot gate lets admission read the tracker."""
+    slot (another repo's) without a reservation row, so the free-slot read lets admission read the tracker."""
 
     def __init__(
         self, con: sqlite3.Connection, ready: FakeTaskReadClient | None = None, admission: Admission | None = None, *, free: bool = True,
@@ -125,7 +138,7 @@ class Bench:
         self.publisher: Publish = self.recorded
         self.stopping: Callable[[], bool] = never
 
-    def observe(self, _entry: Entry) -> Seen:
+    def observe(self, _entry: EntryIdentity) -> Seen:
         """Called while the round reads its snapshot: `during` is another actor acting right after that read."""
         self.during()
         return self.seen
@@ -133,10 +146,10 @@ class Bench:
     def leftovers(self, _key: AttemptKey) -> Unsettled | None:
         return self.left
 
-    def ports(self) -> Advancing:
-        reads = Reads(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
-        starting = Starting(self.store, self.admission, self.launcher, lambda: self.now, self.repeats)
-        return Advancing(reads, starting, self.verifier, self.releaser, self.publisher, self.ready, self.log, self.stopping)
+    def ports(self) -> RoundPorts:
+        reads = StatusPorts(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
+        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats)
+        return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, self.ready, self.log, self.stopping)
 
     def round(self, request: NextRequest = REQUEST) -> Round:
         found = advance(self.ports(), request)
@@ -144,7 +157,7 @@ class Bench:
         return found
 
 
-def seed(con: sqlite3.Connection, task_id: str, attempt_id: str, *, phase: str = "admitted", entry: Entry | None = None) -> None:
+def seed(con: sqlite3.Connection, task_id: str, attempt_id: str, *, phase: str = "admitted", entry: EntryIdentity | None = None) -> None:
     """One attempt of `tasks/<task_id>` (deadline 100), with its registered entry when given."""
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
@@ -178,7 +191,7 @@ def moves(found: Round) -> list[tuple[str, str, str]]:
     ("admitted", None, "gone", 10, "unclaiming", ("report", "release"), 0),
 ])
 def test_each_existing_attempt_by_its_next_word(
-    factory: sqlite3.Connection, phase: str, entry: Entry | None, seen: Seen, now: float, claim: str | None,
+    factory: sqlite3.Connection, phase: str, entry: EntryIdentity | None, seen: Seen, now: float, claim: str | None,
     expected: tuple[str, str] | None, launched: int,
 ) -> None:
     seed(factory, "tl-1", "attempt", phase=phase, entry=entry)
@@ -259,7 +272,7 @@ def verified_released(
     verifier = Verifier(store, checkouts, slot_files, lambda _worker: True, lambda: 20, hold)
     held = Recorded(NotReleased("unavailable", "slot_busy"))
     checked = verify_task(store, verifier, held, held, "tasks", "tl-1")  # its own publication is the recording stub's
-    assert isinstance(checked, Checked) and checked.release == "unavailable:slot_busy"
+    assert isinstance(checked, VerifiedTask) and checked.release == "unavailable:slot_busy"
     real = SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30)
     assert isinstance(real.release(KEY, False), Released)
     return store

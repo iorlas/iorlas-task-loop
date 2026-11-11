@@ -7,12 +7,13 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import NoReturn, Protocol
+from typing import NoReturn
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
+from conftest import FakeSlotFiles
 from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
@@ -25,8 +26,9 @@ from taskloop.attempt_types import (
     AttemptKey,
     ChainLink,
     Checkouts,
-    FileEntry,
+    EntryIdentity,
     FileRef,
+    FileStat,
     Rejected,
     SlotFiles,
     StepRules,
@@ -37,7 +39,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.launch import Launched, LaunchResult
-from taskloop.operations import Failed, Reads, Started, status
+from taskloop.operations import Failed, Started, StatusPorts, show_attempt
 from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import hold, repeating
 from taskloop.verdict import judge
@@ -86,7 +88,7 @@ class Agent:
         return FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
 
-class Launches:
+class Launcher:
     """The launcher: registers the current attempt's entry (a new identity per attempt) as the real one does."""
 
     def __init__(self, con: sqlite3.Connection) -> None:
@@ -106,10 +108,10 @@ class Step:
 
     def __init__(self, con: sqlite3.Connection, tmp: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> None:
         self.con, self.tmp, self.slot, self.checkouts, self.files = con, tmp, slot, checkouts, files
-        self.store, self.launcher = AttemptStore(lambda: con), Launches(con)
+        self.store, self.launcher = AttemptStore(lambda: con), Launcher(con)
         self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold)
 
-    def run(self, key: AttemptKey, entry: tuple[int, str, str], agent: Agent) -> str:
+    def run(self, key: AttemptKey, entry: EntryIdentity, agent: Agent) -> str:
         attempts = Attempts(self.store, EvidenceFiles(self.tmp), lambda: ("/bin/codex", {}), agent, lambda: 10, self.checkouts, self.files)
         found = attempts.execute(key, entry)
         return f"{found.status} {found.reason}"
@@ -127,7 +129,7 @@ class Step:
                             lambda _entry: "gone", lambda: 10, repeating)
         return repeat.repeat("tasks", "tl-1", current, found[2], 30)
 
-    def next_attempt(self, current: AttemptKey) -> tuple[AttemptKey, tuple[int, str, str]]:
+    def next_attempt(self, current: AttemptKey) -> tuple[AttemptKey, EntryIdentity]:
         started = self.repeat(current)
         assert isinstance(started, Started) and started.status == "repeated" and started.entry is not None
         return self.launcher.keys[-1], started.entry
@@ -213,14 +215,14 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     step.verifier.verify(KEY)
     second, entry = step.next_attempt(KEY)
     step.run(second, entry, Agent(slot, {}, UNCHANGED))
-    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
-    shown_two = status(reads, tmp_path / "art", "tasks", "tl-1")
+    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
+    shown_two = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_two, Failed) and (shown_two.status.number, shown_two.status.next) == (2, "repeat")
     third, entry = step.next_attempt(second)
     text = step.input(third)
     assert text.startswith("Attempt 2 of this step") and text.count("BEGIN SLOT STATUS") == 1 and text.endswith(TASK)
     step.run(third, entry, Agent(slot, {}, UNCHANGED))
-    shown_three = status(reads, tmp_path / "art", "tasks", "tl-1")
+    shown_three = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_three, Failed)
     each = shown_three.status
     assert (each.number, each.next, each.result.reason, each.leftovers) == (3, "repeats_exhausted", "repeats_exhausted",
@@ -305,10 +307,6 @@ def test_judge_refuses_a_foreign_commit_inside_the_chain(repo: FakeRepo, slot: F
     assert reused == Rejected("plan_missing")  # no commit in the whole step: only the plan rules at B1
 
 
-class FakeSlotFiles(SlotFiles, Protocol):
-    entries: dict[Path, FileEntry | None]
-
-
 @pytest.mark.parametrize("reason", ["unsafe", "ignored"])
 def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_again_and_verifies(
     step: Step, slot: FakeWorktree, slot_files: FakeSlotFiles, reason: str
@@ -321,7 +319,7 @@ def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_aga
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", **({stray: "x"} if reason == "ignored" else {})}, PLAN))
     if reason == "unsafe":
-        slot_files.entries[slot.path / P] = FileEntry("file", 7, True)
+        slot_files.entries[slot.path / P] = FileStat("file", 7, True)
     assert shown(step.verifier.verify(KEY)) == f"unsettled:{reason}"
     key, entry = step.next_attempt(KEY)
     assert "Nothing of attempt 1 was committed" in step.input(key) and "answer `unchanged`" not in step.input(key)
@@ -354,9 +352,9 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
         step.run(KEY, ENTRY, Agent(slot, written, PLAN))
     else:
         step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", EVIL: "x"}, PLAN | {"paths": [P, EVIL]}))
-        slot_files.entries[slot.path / EVIL] = FileEntry("file", 1, True)
-    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
-    shown_now = status(reads, tmp_path / "art", "tasks", "tl-1")
+        slot_files.entries[slot.path / EVIL] = FileStat("file", 1, True)
+    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
+    shown_now = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_now, Failed)
     left = shown_now.status.leftovers
     assert left[0] == reason and not any(ord(c) < 32 or 127 <= ord(c) < 160 for line in left for c in line)
@@ -478,8 +476,8 @@ def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: Fake
     key, _entry = step.next_attempt(KEY)
     log = EvidenceFiles(tmp_path).entry_log(key)
     log.write_text("refused slot_staged verify=refused:not_captured\nTraceback \x1b]0;owned\x07 (most recent call last)\n")
-    reads = Reads(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
-    found = status(reads, tmp_path, "tasks", "tl-1")
+    reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
+    found = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert not isinstance(found, Failed)
     assert (found.status.phase, found.status.next, found.status.last_entry) == (
         "admitted", "start", "refused slot_staged verify=refused:not_captured")

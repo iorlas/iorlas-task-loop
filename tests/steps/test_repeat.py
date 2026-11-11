@@ -9,12 +9,13 @@ import threading
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import NoReturn, Protocol
+from typing import NoReturn
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
+from conftest import FakeSlotFiles
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store, begin_immediate
@@ -25,8 +26,9 @@ from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import (
     AttemptKey,
     Checkouts,
-    FileEntry,
+    EntryIdentity,
     FileRef,
+    FileStat,
     NotApplicable,
     Rejected,
     Seen,
@@ -39,8 +41,8 @@ from taskloop.attempt_types import (
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
-from taskloop.launch import Entry, Launched, LaunchResult
-from taskloop.operations import Failed, Reads, Started, Starting, StartRequest, attempts_status, start, status
+from taskloop.launch import Launched, LaunchResult
+from taskloop.operations import Failed, Started, StartPorts, StartRequest, StatusPorts, list_attempts, show_attempt, start
 from taskloop.plan_step import plan_stage
 from taskloop.repeat import Settle, StepRepeat, feedback
 from taskloop.result_data import as_data
@@ -95,13 +97,7 @@ def gone(_worker: Worker) -> bool:
     return True
 
 
-class FakeSlotFiles(SlotFiles, Protocol):
-    """The conftest's fake slot file port, as these tests use it: `entries` overrides any path."""
-
-    entries: dict[Path, FileEntry | None]
-
-
-class Launches:
+class Launcher:
     """The launcher: registers the task's current attempt's entry as the real one does, then reports it launched."""
 
     def __init__(self, con: sqlite3.Connection) -> None:
@@ -130,17 +126,17 @@ class Verifies:
         return ()
 
 
-def seen(word: Seen) -> Callable[[Entry], Seen]:
+def seen(word: Seen) -> Callable[[EntryIdentity], Seen]:
     return lambda _entry: word
 
 
 def repeater(
     con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, *,
-    verifier: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: Launches | None = None,
+    verifier: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: Launcher | None = None,
 ) -> StepRepeat:
     store = AttemptStore(lambda: con)
     check = verifier or Verifier(store, checkouts, files, gone, lambda: 20, hold)
-    return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path), launcher or Launches(con),
+    return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path), launcher or Launcher(con),
                       lambda _worker: not alive, seen(observe), lambda: 10, repeating)
 
 
@@ -153,7 +149,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
 def unsafe(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: FakeSlotFiles) -> None:
     """Attempt 1 captured with its plan executable: `unsafe`, nothing committed, so E is B."""
     captured(con, tmp_path, slot, checkouts, files, {P: "# Plan\n"})
-    files.entries[slot.path / P] = FileEntry("file", 7, True)
+    files.entries[slot.path / P] = FileStat("file", 7, True)
 
 
 def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
@@ -185,7 +181,7 @@ def ignored(slot: FakeWorktree, _files: FakeSlotFiles) -> None:
 
 
 def executable(slot: FakeWorktree, files: FakeSlotFiles) -> None:
-    files.entries[slot.path / P] = FileEntry("file", 7, True)
+    files.entries[slot.path / P] = FileStat("file", 7, True)
 
 
 # id, before dispatch, the agent's files, after the run, the reason, whether attempt 1 committed (E is X1, else B)
@@ -212,7 +208,7 @@ def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
     store = AttemptStore(lambda: registered)
     previous = store.load(KEY)
     assert previous is not None
-    launcher = Launches(registered)
+    launcher = Launcher(registered)
     result = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30)
     (new,) = launcher.calls
     assert result == Started("repeated", "tasks", "tl-1", new.attempt_id, False, SECOND, number=2)
@@ -239,7 +235,7 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    launcher = Launches(registered)
+    launcher = Launcher(registered)
     assert isinstance(repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30),
                       Started)
     probed: list[AttemptKey] = []
@@ -248,15 +244,15 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
         probed.append(key)
         return None
 
-    reads = Reads(AttemptStore(lambda: registered), seen("gone"), lambda: 10, leftovers, lambda: "boot")
-    shown = status(reads, tmp_path / "art", "tasks", "tl-1")
+    reads = StatusPorts(AttemptStore(lambda: registered), seen("gone"), lambda: 10, leftovers, lambda: "boot")
+    shown = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown, Failed)
     each, new = shown.status, launcher.calls[0]
     assert (each.attempt_id, each.number, each.previous_attempt_id, each.repeat_reason) == (new.attempt_id, 2, "attempt", "unsafe")
     assert (each.phase, each.next, each.earlier) == ("admitted", "start", (("attempt", "unsafe"),)) and probed == []
     data = as_data(shown)
     assert (data["number"], data["previous_attempt_id"], data["repeat_reason"], data["earlier"]) == (2, "attempt", "unsafe", ["attempt"])
-    listed = attempts_status(reads)
+    listed = list_attempts(reads)
     assert not isinstance(listed, Failed) and [(a.attempt_id, a.number) for a in listed.attempts] == [(new.attempt_id, 2)]
 
 
@@ -298,7 +294,7 @@ def test_both_repeat_launches_pass_the_request_minutes(
 ) -> None:
     """The repeat's own launch, then a later repeat of the same read that finds the step taken over (`_existing`)."""
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    launcher = Launches(registered)
+    launcher = Launcher(registered)
     first = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 45)
     assert isinstance(first, Started) and first.status == "repeated"
     registered.execute("UPDATE attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL WHERE attempt_id=?", (first.attempt_id,))
@@ -396,7 +392,7 @@ def test_only_git_leftovers_repeat(
     verified: VerifyResult, expected: Started | Failed,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    verifier, launcher = Verifies(verified), Launches(registered)
+    verifier, launcher = Verifies(verified), Launcher(registered)
     found = repeater(registered, tmp_path, checkouts, slot_files, verifier=verifier, launcher=launcher)
     assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == expected
     assert verifier.keys == [KEY] and launcher.calls == [] and len(rows(registered)) == 1
@@ -407,7 +403,7 @@ def test_the_third_attempt_is_not_repeated(
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     renumber(registered, 3)
-    before, launcher = rows(registered), Launches(registered)
+    before, launcher = rows(registered), Launcher(registered)
     found = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert found == Failed("refused", "repeats_exhausted") and rows(registered) == before and launcher.calls == []
 
@@ -429,7 +425,7 @@ def test_a_verdict_stored_between_the_verify_and_the_takeover_refuses_the_repeat
         def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
             return real.staged(key)
 
-    launcher = Launches(registered)
+    launcher = Launcher(registered)
     late = repeater(registered, tmp_path, checkouts, slot_files, verifier=Late(), launcher=launcher)
     found = late.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert found == Failed("refused", "not_repeatable") and len(rows(registered)) == 1 and launcher.calls == []
@@ -447,9 +443,9 @@ class Launching:
 
 class Repeats:
     def __init__(self) -> None:
-        self.calls = list[tuple[str, str, AttemptKey, Entry | None, int]]()
+        self.calls = list[tuple[str, str, AttemptKey, EntryIdentity | None, int]]()
 
-    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int) -> Started | Failed:
+    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed:
         self.calls.append((backlog, task_id, current, entry, minutes))
         return Failed("refused", "repeats_exhausted")
 
@@ -459,7 +455,7 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 ) -> None:
     request = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "other-model", "low", 45)
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
-    ports = Starting(store, admission(registered, tmp_path), launcher, lambda: 10, repeats)
+    ports = StartPorts(store, admission(registered, tmp_path), launcher, lambda: 10, repeats)
     assert start(ports, request) == Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY)
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     assert start(ports, request) == Failed("refused", "repeats_exhausted")
@@ -541,7 +537,7 @@ def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
 ) -> None:
     """`admit_repeat` runs under the slot's lock, so an abandon parking the slot (or anyone else holding it) refuses it."""
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    launcher = Launches(registered)
+    launcher = Launcher(registered)
     found = repeater(registered, tmp_path, checkouts, slot_files, verifier=Verifies(Unsettled("unsafe", (P,))), launcher=launcher)
     with occupy(lock_path(str(slot.path))):
         assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Failed("unavailable", "slot_busy")

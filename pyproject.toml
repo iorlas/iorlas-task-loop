@@ -38,3 +38,4 @@ test-file = 800
 [tool.pytest.ini_options]
 testpaths = ["tests/cli", "tests/steps", "tests/rules"]
 addopts = "--import-mode=importlib -p no:cacheprovider"
+pythonpath = ["tests/steps"]

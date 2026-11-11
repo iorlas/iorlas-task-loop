@@ -17,7 +17,8 @@ type Checkouts = Callable[[Path], Repo]  # a fresh Git view from one checkout pa
 # The registered worker and its process group observed gone (True), or alive/unknown (False); never descendant proof.
 type WorkerGone = Callable[[Worker], bool]
 type Seen = Literal["matching", "gone", "different_process", "unknown"]
-type Observe = Callable[[tuple[int, str, str]], Seen]  # a native process-table read of a registered entry; no spawn or signal
+type EntryIdentity = tuple[int, str, str]  # a registered entry's (pid, start, boot)
+type Observe = Callable[[EntryIdentity], Seen]  # a native process-table read of a registered entry; no spawn or signal
 TRAILER: Final = "Task-Loop-Attempt"  # the factory's commit trailer; an agent's message may never carry it
 MiB: Final = 1 << 20
 MODE: Final = "100644"
@@ -46,7 +47,7 @@ class Unreadable(Exception):
 
 
 @dataclass(frozen=True)
-class FileEntry:
+class FileStat:
     """One `lstat`, never following a symlink: the kind, the size and whether any execute bit is set."""
 
     kind: Literal["file", "dir", "link", "other"]
@@ -57,7 +58,7 @@ class FileEntry:
 class SlotFiles(Protocol):
     """The narrow file port over a slot and its Git pointer: plain reads, no Git, nothing written."""
 
-    def lstat(self, path: Path) -> FileEntry | None:
+    def lstat(self, path: Path) -> FileStat | None:
         """None when nothing is there or it cannot be read."""
         ...
 
@@ -96,7 +97,7 @@ class Admission:
     effort: str
     sandbox: str
     deadline: float
-    entry: tuple[int, str, str]
+    entry: EntryIdentity
     number: int  # the attempt's number in its step (1, 2, 3), admitted with it
     step: str  # the step the attempt belongs to (`plan`), admitted with it
 
@@ -105,7 +106,7 @@ class Admission:
 class Replaced:
     """The launcher's observation that the stored entry process no longer runs; the store cannot verify it."""
 
-    identity: tuple[int, str, str]
+    identity: EntryIdentity
     seen: Literal["gone", "different_process"]
 
 
@@ -158,7 +159,6 @@ class ExecutionFacts:
     cumulative: tuple[int | None, int | None, int | None] | None
     turns: int | None
     session: str | None
-    cost_usd: None = None
 
 
 @dataclass(frozen=True)
@@ -237,7 +237,6 @@ class StoredExecution:
     answer: AnswerState
     publication: Literal["complete", "pending", "conflict", "fault"]
     verification: Verdict | None = None
-    custody: Literal["unresolved"] = "unresolved"
 
 
 @dataclass(frozen=True)

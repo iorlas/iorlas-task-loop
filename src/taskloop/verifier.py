@@ -13,7 +13,7 @@ from pathlib import Path
 
 from git_porcelain import GitUnavailable
 
-from taskloop.attempt import outcome
+from taskloop.attempt import end_word
 from taskloop.attempt_store import AttemptStore, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import (
     Admission,
@@ -38,8 +38,8 @@ from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import bounded, staged
 from taskloop.verdict import judge
 
-type Hold = Callable[[Admission], AbstractContextManager[None]]
-STAGED = ("planned", "unchanged")  # the answers whose stage the factory commits and checks
+type VerifyHold = Callable[[Admission], AbstractContextManager[None]]
+COMMITTING = ("planned", "unchanged")  # the answers whose stage the factory commits and checks
 LOCK_WORDS: dict[type[Exception], str] = {
     SlotBusy: "slot_busy",
     SlotLockUnavailable: "lock",
@@ -55,8 +55,8 @@ def applicable(stored: StoredExecution | None) -> StoredExecution | VerifyResult
         return VerifyUnavailable("validation_pending")
     if stored.verification is not None:
         return stored.verification
-    if outcome(stored) not in STAGED:
-        return NotApplicable(outcome(stored))
+    if end_word(stored) not in COMMITTING:
+        return NotApplicable(end_word(stored))
     if stored.publication != "complete":  # the verdict's writer requires a complete session publication too
         return VerifyRefused("session") if stored.publication == "conflict" else VerifyUnavailable("session_" + stored.publication)
     return stored
@@ -67,7 +67,7 @@ class Verifier:
     clean tree at it, then one verdict over immutable facts, stored once and then returned with no Git read."""
 
     def __init__(
-        self, store: AttemptStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone, clock: Callable[[], float], hold: Hold
+        self, store: AttemptStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone, clock: Callable[[], float], hold: VerifyHold
     ) -> None:
         """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise).
         `hold` is the slot's custody around the commit through the verdict: the entry already holds it (a no-op here),

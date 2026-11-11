@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.attempt import outcome, report, succeeded
+from taskloop.attempt import end_word, report, succeeded
 from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
@@ -174,7 +174,7 @@ def test_collected_always_names_its_outcome_and_only_a_verified_plan_succeeds(
     rc: int | None, timed_out: bool, reason: str | None, answer: AnswerState, expected: str
 ) -> None:
     result = report(stored(rc, timed_out, reason, answer))
-    assert (result.status, result.reason) == ("collected", expected) and outcome(stored(rc, timed_out, reason, answer)) == expected
+    assert (result.status, result.reason) == ("collected", expected) and end_word(stored(rc, timed_out, reason, answer)) == expected
     assert not succeeded(result)
 
 
@@ -194,7 +194,7 @@ def test_a_planned_or_unchanged_answer_is_collected_only_with_its_verdict(
     for answer in (VALID, REUSE):
         staged = stored(0, False, None, answer, verdict)
         result = report(staged)
-        assert (result.status, result.reason) == (status, reason) and outcome(staged) == answer.disposition
+        assert (result.status, result.reason) == (status, reason) and end_word(staged) == answer.disposition
         assert succeeded(result) is success
 
 

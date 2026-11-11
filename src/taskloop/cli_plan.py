@@ -14,18 +14,18 @@ from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.operations import (
     UNCLAIMING,
     Adoption,
-    AttemptStatus,
-    Checked,
+    AttemptView,
     Ended,
     Failed,
-    Freed,
     Listed,
     PublishedTask,
+    ReleasedTask,
     Result,
     Round,
     Shown,
     Started,
     StartRequest,
+    VerifiedTask,
 )
 from taskloop.publish import BranchPublished
 from taskloop.round import NextRequest, advance
@@ -169,12 +169,12 @@ def register(commands: Parsers) -> None:
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _common(start, "--db", "--artifacts")
-    status = _add(plan, "show", f"The task's attempt, its entry, result and next step (read-only; {PLAN_ONLY})")
+    status = _add(plan, "show", f"The task's attempt, its entry, result and next action (read-only; {PLAN_ONLY})")
     status.add_argument("task_id", metavar="TASK")
     status.add_argument("--backlog", required=True)
     _common(status, "--db", "--artifacts")
-    listing = _add(plan, "list", f"Every task's current attempt with its next step (read-only; {PLAN_ONLY})")
-    listing.add_argument("--stuck", action="store_true", help="Only attempts whose next step is stuck:* or unknown")
+    listing = _add(plan, "list", f"Every task's current attempt with its next action (read-only; {PLAN_ONLY})")
+    listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:* or unknown")
     _common(listing, "--db")
     verify = _add(plan, "verify", f"Commit the stage's listed files and verify them, then release a clean slot and publish a verified "
                   f"plan ({PLAN_ONLY})")
@@ -246,12 +246,12 @@ def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_reads(loaded.settings.db.value) as reads:
         if isinstance(reads, Failed):
             return reads
-        return operations.status(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
+        return operations.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
 
 
 def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_reads(loaded.settings.db.value) as reads:
-        return reads if isinstance(reads, Failed) else operations.attempts_status(reads, stuck=arguments.stuck)
+        return reads if isinstance(reads, Failed) else operations.list_attempts(reads, stuck=arguments.stuck)
 
 
 def _verify(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -316,7 +316,7 @@ def run(arguments: argparse.Namespace) -> int:
     return operations.exit_code(result)
 
 
-def _status_lines(each: AttemptStatus) -> list[str]:
+def _status_lines(each: AttemptView) -> list[str]:
     entry = "" if each.entry_process is None else f" (pid {each.entry_process[0]}, started {each.entry_process[1]})"
     # the stored registration only: the agent may have exited long ago, so it is never shown as running
     worker = "none" if each.worker is None else f"last known pid {each.worker[0]}, process group {each.worker[1]} (not checked)"
@@ -370,7 +370,7 @@ def _human(command: str, result: Result, db: Path | None) -> list[str]:
             return [*_status_lines(each), *paths, *last, *left, f"Next: {each.next}", *steps]
         case Listed() | Round() | Ended():
             return _rows_lines(command, result, stuck)
-        case Checked() | Freed() | PublishedTask():
+        case VerifiedTask() | ReleasedTask() | PublishedTask():
             return _freed_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
@@ -402,19 +402,19 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     return lines + [f"{key}: {GUIDE[key]}" for key in keys]
 
 
-def _freed_lines(result: Checked | Freed | PublishedTask) -> list[str]:
+def _freed_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:
     """A verdict with the release and the publication that followed it; a release with each change on its own line; a
     publication."""
     if isinstance(result, PublishedTask):
-        found = result.outcome
+        found = result.result
         done = "published" if isinstance(found, BranchPublished) else "already_published"
         return [f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
                 *(["Nothing changed: it was published before."] if done == "already_published" else [])]
-    if isinstance(result, Checked):
+    if isinstance(result, VerifiedTask):
         held = [f"Release: {result.release}"] + ([] if result.release == "released" else [GUIDE["release"]])
         held += [f"Publish: {result.published}"] + ([] if result.published == "published" else [PUBLISH])
         return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
-    found, task = result.outcome, result.task_id
+    found, task = result.result, result.task_id
     if not isinstance(found, Released):
         return [f"already_released: attempt {result.attempt_id} for {task} (backlog {result.backlog}); nothing changed",
                 f"Claim: {found.claim}{'; abandoned' if found.abandoned else ''}"]

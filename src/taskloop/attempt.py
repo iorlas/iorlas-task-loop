@@ -16,6 +16,7 @@ from taskloop.attempt_types import (
     AttemptResult,
     Checkouts,
     Decoder,
+    EntryIdentity,
     Evidence,
     PendingResult,
     PublicationResult,
@@ -29,7 +30,7 @@ from taskloop.attempt_types import (
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.plan_step import EFFECT_OF, decode_plan_answer, plan_stage
 from taskloop.prepare import base as prepared_base
-from taskloop.session import GateRefused, SessionLatch, reconcile, registration_gate
+from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
 
 type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
 type Credentials = Callable[[], tuple[str, dict[str, str]]]
@@ -66,7 +67,7 @@ class CredentialsUnavailable(Exception):
         self.reason = reason
 
 
-def outcome(stored: StoredExecution) -> str:
+def end_word(stored: StoredExecution) -> str:
     """The run's own outcome, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
     for an unusable answer, else the valid answer's disposition (`planned` and `unchanged` go on to verification)."""
     facts, answer = stored.facts, stored.answer
@@ -87,7 +88,7 @@ def report(stored: StoredExecution) -> AttemptResult:
         return AttemptResult("conflict", "session", stored)
     if stored.publication != "complete":
         return AttemptResult("pending", "session_" + stored.publication, stored)
-    reason, verdict = outcome(stored), stored.verification
+    reason, verdict = end_word(stored), stored.verification
     if reason not in ("planned", "unchanged"):
         return AttemptResult("collected", reason, stored)
     if verdict is None:
@@ -132,18 +133,18 @@ class Attempts:
         checkouts: Checkouts,
         slot_files: SlotFiles,
         decoder: Decoder = decode_plan_answer,
-        gate: AttemptStore | None = None,
+        registration_store: AttemptStore | None = None,
     ) -> None:
-        """`gate` serves only the harness registration write (composition bounds its busy wait); default `store`.
+        """`registration_store` serves only the harness registration write (composition bounds its busy wait); default `store`.
         `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot."""
         self.store, self.files, self.credentials = store, files, credentials
         self.execution, self.clock, self.checkouts, self.slot_files, self.decoder = execution, clock, checkouts, slot_files, decoder
-        self.gate = store if gate is None else gate
+        self.registration_store = store if registration_store is None else registration_store
 
     def collect(self, key: AttemptKey) -> AttemptResult:
         return collect(self.store, key)
 
-    def execute(self, key: AttemptKey, me: tuple[int, str, str]) -> AttemptResult:
+    def execute(self, key: AttemptKey, me: EntryIdentity) -> AttemptResult:
         """`me` is the caller's own (pid, start, boot): an admitted attempt dispatches only for its registered entry."""
         try:
             stored = self.store.collect(key)
@@ -199,7 +200,7 @@ class Attempts:
         self.store.capture(record.admission, None, stored.facts, stored.evidence, publication)
         return self.store.collect(record.admission.key) or stored
 
-    def _refusal(self, admission: Admission, me: tuple[int, str, str]) -> str | None:
+    def _refusal(self, admission: Admission, me: EntryIdentity) -> str | None:
         if admission.entry != me:
             return "not_entry"
         if self.clock() >= admission.deadline:
@@ -208,7 +209,7 @@ class Attempts:
             return "choices"
         return "sandbox" if admission.sandbox != SANDBOX else None
 
-    def _start(self, record: AttemptRecord, me: tuple[int, str, str]) -> AttemptResult:
+    def _start(self, record: AttemptRecord, me: EntryIdentity) -> AttemptResult:
         """Credentials, files, the launch spec, then the slot's preparation onto its task branch and the base check
         (`prepare.base`) resolve before dispatch: their failure leaves the attempt `admitted`. The slot HEAD read
         there is B, recorded by the dispatch write."""
@@ -229,7 +230,7 @@ class Attempts:
             base = prepared_base(self.checkouts, self.slot_files, record, self.clock)
             if isinstance(base, AttemptResult):
                 return base
-            self.gate.warm()  # the first gated open runs here, never inside the harness registration window
+            self.registration_store.warm()  # the first registration open runs here, never inside the harness registration window
             if self.store.dispatch(record, base) == "conflict":
                 return AttemptResult("pending", "dispatching")
             running = True
@@ -286,11 +287,11 @@ class Attempts:
         self, admission: Admission, harness: CodexHarness, spec: LaunchSpec, remaining: float
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
         latch = SessionLatch(self.store, admission)
-        hooks = RunHooks(started=registration_gate(self.gate, admission, self.clock), ref=latch.observe, unattended=False)
+        hooks = RunHooks(started=registration_hook(self.registration_store, admission, self.clock), ref=latch.observe, unattended=False)
         try:
             return self.execution(harness, spec, remaining, hooks), latch.snapshot()
-        except GateRefused as error:
-            return AttemptResult("conflict" if str(error) == "registration_conflict" else "refused", str(error))
+        except RegistrationRefused as error:
+            return AttemptResult("conflict" if error.reason == "registration_conflict" else "refused", error.reason)
         except StoreRefused as error:
             return AttemptResult("refused", str(error))
         except StoreUnavailable:

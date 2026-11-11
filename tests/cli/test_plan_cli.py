@@ -17,30 +17,30 @@ from taskloop.admit import AdmitRequest, AdmitResult, Admitted
 from taskloop.attempt import SANDBOX
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, AttemptResult
+from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity
 from taskloop.cli import main
 from taskloop.factory_schema import SCHEMA
-from taskloop.launch import Entry, Launched, LaunchResult
+from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import (
     Adoption,
-    AttemptStatus,
-    Checked,
+    AttemptView,
     Ended,
     EntryState,
     Failed,
     FailureKind,
-    Freed,
     Listed,
     Move,
     Next,
     PublishedTask,
+    ReleasedTask,
     Result,
     Round,
     Shown,
     Started,
-    Starting,
+    StartPorts,
+    VerifiedTask,
 )
-from taskloop.publish import AlreadyPublished, BranchPublished, PublishResult
+from taskloop.publish import BranchPublished, PublishResult
 from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.slots import Adopted, NotAdopted, SlotView
 
@@ -48,19 +48,19 @@ KEY = AttemptKey("attempt", "dispatch-token-never-shown", 1)
 ENTRY = (7, "entry-start", "boot")
 START = ["plan", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/tracker", "--checkout", "/checkout", "--model", "m",
          "--effort", "high", "--minutes", "30"]
-STATUS = AttemptStatus("tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "verification"), False, "verify")
+STATUS = AttemptView("tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "verification"), False, "verify")
 ERROR = {"kind", "reason", "message"}  # every refusal or unknown but an admission's
 ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl plan start`
 STATUS_KEYS = {
     "backlog", "task", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process", "worker",
     "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release", "published",
 }
-REPEAT = AttemptStatus(
+REPEAT = AttemptView(
     "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
     ("uncommitted", "?? docs/design/tl-1/note.md", "+3 more"), 2, "first", "uncommitted", (("first", "uncommitted"),),
 )
 D = "d" * 40
-ABANDONED = AttemptStatus(
+ABANDONED = AttemptView(
     "tasks", "tl-1", "second", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, "start",
     earlier=(("first", "abandoned"),), seq=2, release=ReleaseRow(D, 30.0, True, "unclaimed"),
 )
@@ -75,7 +75,7 @@ NEXT = ["plan", "next", "--backlog", "tasks", "--tracker-root", "/tracker", "--c
 ROUND = {"status", "backlog", "moves", "stopped", "logged"}
 MOVES = (Move("tl-3", "start", "started", "a3"), Move("tl-2", "report", "stuck:hung", "a2"), Move("tl-10", "skip", "abandoned"),
          Move("tl-4", "report", "failed:rejected:paths", "a4", "never shown"), Move("tl-5", "report", "claim_leaked"))
-DONE = AttemptStatus(
+DONE = AttemptView(
     "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("collected", "verified"), False, "done",
     release=ReleaseRow(D, 30.0, False, "kept"), published=PublishedRow(X, X, 40.0),
 )
@@ -111,7 +111,7 @@ class Launcher:
 
 
 class NoRepeat:
-    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: Entry | None, minutes: int) -> Started | Failed:
+    def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed:
         raise AssertionError("a first start never repeats")
 
 
@@ -123,9 +123,9 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     admission, opened = Admission(), list[tuple[Path, Path]]()
 
     @contextmanager
-    def opener(database: Path, artifacts: Path) -> Generator[Starting | Failed]:
+    def opener(database: Path, artifacts: Path) -> Generator[StartPorts | Failed]:
         opened.append((database, artifacts))
-        yield Starting(AttemptStore(lambda: con), admission, Launcher(), lambda: 1000, NoRepeat())
+        yield StartPorts(AttemptStore(lambda: con), admission, Launcher(), lambda: 1000, NoRepeat())
 
     monkeypatch.setattr(cli_composition, "open_start", opener)
     config = tmp_path / "scratch.toml"
@@ -183,14 +183,14 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["task\tbacklog\tattempt\tslot", "tl-1\ttasks\t1/3\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log"}),
-    (["plan", "verify", "tl-1", "--backlog", "tasks"], Checked("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
+    (["plan", "verify", "tl-1", "--backlog", "tasks"], VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
      ["reused: attempt attempt", "Release: released\nPublish: published"], CHECKED),
     (["plan", "verify", "tl-1", "--backlog", "tasks"],
-     Checked("verified", "tasks", "tl-1", "attempt", "held:slot_dirty", "unavailable:remote"), 0,
+     VerifiedTask("verified", "tasks", "tl-1", "attempt", "held:slot_dirty", "unavailable:remote"), 0,
      ["Release: held:slot_dirty", cli_plan.GUIDE["release"], f"Publish: unavailable:remote\n{cli_plan.PUBLISH}"], CHECKED),
     (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", BranchPublished(X, X)), 0,
      [f"published: task/tl-1 at {X} on origin (attempt attempt, backlog tasks)\n"], PUBLISHED),
-    (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", AlreadyPublished(X, X, 40.0)), 0,
+    (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", PublishedRow(X, X, 40.0)), 0,
      [f"already_published: task/tl-1 at {X} on origin (attempt attempt, backlog tasks)\nNothing changed: it was published before."],
      PUBLISHED),
     (PUBLISH, Failed("refused", "diverged", f"origin's task/tl-1 is at {T}"), 1,
@@ -208,12 +208,12 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["Earlier: first abandoned", f"Released: 1970-01-01 00:00:30 UTC, slot parked at {D}; claim unclaimed; abandoned",
       f"Next: start\n{cli_plan.GUIDE['abandoned']}"],
      STATUS_KEYS | {"directory", "entry_log"}),
-    (RELEASE, Freed("tasks", "tl-1", "attempt", Released("s1", D, True, "kept", False)), 0,
+    (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", Released("s1", D, True, "kept", False)), 0,
      ["released: attempt attempt for tl-1 (backlog tasks)\n", f"Slot s1 parked at {D}\nReservation of s1 removed\nClaim kept"], FREED),
-    ([*RELEASE, "--abandon"], Freed("tasks", "tl-1", "attempt", Released("s1", None, True, "not_held", True)), 0,
+    ([*RELEASE, "--abandon"], ReleasedTask("tasks", "tl-1", "attempt", Released("s1", None, True, "not_held", True)), 0,
      ["Slot s1: no Git write", "Claim not held by taskloop (reverted, or another actor's): check `bd show tl-1`",
       "Abandoned: `tl plan start tl-1` admits a fresh attempt"], FREED),
-    (RELEASE, Freed("tasks", "tl-1", "attempt", AlreadyReleased("s1", "unclaimed", True)), 0,
+    (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", AlreadyReleased("s1", "unclaimed", True)), 0,
      ["already_released: attempt attempt for tl-1 (backlog tasks); nothing changed", "Claim: unclaimed; abandoned"], FREED),
     (RELEASE, Failed("refused", "slot_dirty", "?? x\nRemove the listed files. Nothing changed."), 1,
      ["tl plan release: refused:slot_dirty\n?? x\nRemove the listed files. Nothing changed.", cli_plan.GUIDE["slot_dirty"]], ERROR),
@@ -266,7 +266,7 @@ def test_result_exit_code_text_and_json_keys(
 
 @pytest.mark.parametrize("step", words(Next))
 def test_every_next_step_renders_with_its_guidance(step: Next, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    shown = Shown(AttemptStatus("tasks", "tl-1", "a", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, step),
+    shown = Shown(AttemptView("tasks", "tl-1", "a", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, step),
                   Path("/d"), Path("/d/entry.log"))
     monkeypatch.setitem(cli_plan.OPERATIONS, ("plan", "show"), lambda _arguments, _loaded: shown)
     assert main(["plan", "show", "tl-1", "--backlog", "tasks"]) == 0
@@ -275,7 +275,7 @@ def test_every_next_step_renders_with_its_guidance(step: Next, monkeypatch: pyte
 
 @pytest.mark.parametrize("entry", words(EntryState))
 def test_every_entry_state_renders(entry: EntryState, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    listed = Listed((AttemptStatus("tasks", "tl-1", "a", "s1", "admitted", entry, AttemptResult("pending", "admitted"), False, "unknown"),))
+    listed = Listed((AttemptView("tasks", "tl-1", "a", "s1", "admitted", entry, AttemptResult("pending", "admitted"), False, "unknown"),))
     monkeypatch.setitem(cli_plan.OPERATIONS, ("plan", "list"), lambda _arguments, _loaded: listed)
     assert main(["plan", "list", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["attempts"][0]["entry"] == entry
@@ -302,7 +302,7 @@ class Releases:
     def __init__(self) -> None:
         self.calls: list[tuple[AttemptKey, bool]] = []
 
-    def release(self, key: AttemptKey, abandon: bool, me: Entry | None = None) -> ReleaseResult:
+    def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         self.calls.append((key, abandon))
         return Released("s1", None, True, "unclaimed", abandon)
 

@@ -35,7 +35,7 @@ class Committed:
 
 
 type Settled = Committed | Unsettled | Rejected
-type Quiet = Callable[[], Unsettled | None]  # None: the factory may write Git in the slot now; else why not
+type GitQuiet = Callable[[], Unsettled | None]  # None: the factory may write Git in the slot now; else why not
 
 
 def attributes(rules: StepRules) -> tuple[str, ...]:
@@ -61,7 +61,7 @@ def trailer(admission: Admission) -> str:
     return f"{TRAILER}: {admission.key.attempt_id}"
 
 
-def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: Quiet) -> Settled:
+def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet) -> Settled:
     """Steps 2 to 5 of the stage commit for a valid `planned` or `unchanged` answer with no stored `end_commit`.
     `quiet` is asked right before each Git write: its answer (`worker_alive`, `superseded`) stops it, nothing written."""
     state = _observed(checkouts, files, admission)
@@ -78,7 +78,7 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
 
 
 def _commit(
-    checkouts: Checkouts, files: SlotFiles, admission: Admission, root: Path, base: str, answer: AnswerState, quiet: Quiet
+    checkouts: Checkouts, files: SlotFiles, admission: Admission, root: Path, base: str, answer: AnswerState, quiet: GitQuiet
 ) -> Settled:
     """Step 4 (the listed paths, Git's own files near them, ignored files), then step 5: stage exactly the listed paths
     and commit them with the agent's message and this attempt's trailer, `quiet` and the pointer checked before each Git
@@ -102,7 +102,7 @@ def _commit(
     raise NotSettled("git:HookRejected")  # cannot happen with hooks off: unknown, never a verdict
 
 
-def _blocked(quiet: Quiet, files: SlotFiles, admission: Admission, root: Path) -> Unsettled | None:
+def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, root: Path) -> Unsettled | None:
     """Why the next Git write may not run: the caller's `quiet` (a live worker could rewrite `.git` between the check
     and the write; another attempt took the reservation over), then the slot pointer."""
     return quiet() or (Unsettled("redirected") if _redirected(files, admission, root) else None)

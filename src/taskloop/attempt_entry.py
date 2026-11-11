@@ -39,6 +39,7 @@ from taskloop.attempt_types import (
     AttemptRecord,
     AttemptResult,
     Checkouts,
+    EntryIdentity,
     NotApplicable,
     PublicationResult,
     Rejected,
@@ -52,9 +53,8 @@ from taskloop.attempt_types import (
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
 from taskloop.composition import entry_seen, open_attempts, remotes, tracker_claims, tracker_located, worker_gone
 from taskloop.factory_schema import SCHEMA
-from taskloop.publish import BranchPublish
-from taskloop.publish import word as branch_word
-from taskloop.slot_release import SlotRelease, word
+from taskloop.publish import BranchPublish, publish_word
+from taskloop.slot_release import SlotRelease, release_word
 from taskloop.verifier import Verifier
 
 PUBLISH_RETRIES = 3
@@ -65,7 +65,7 @@ RETRY_WAIT = 2.0
 class _Registered:
     app: Attempts
     key: AttemptKey
-    me: tuple[int, str, str]
+    me: EntryIdentity
     tracker_root: str
     cwd: str  # the slot, from the stored reservation: its custody lock is beside it
 
@@ -240,7 +240,7 @@ def _branch(found: _Registered, publishing: Checkouts) -> str:
     read) is `unavailable:git` or `unavailable:store`: it never loses the step's log line or a verified plan's exit 0."""
     app = found.app
     try:
-        return branch_word(BranchPublish(app.store, publishing, app.slot_files, app.clock).publish(found.key))
+        return publish_word(BranchPublish(app.store, publishing, app.slot_files, app.clock).publish(found.key))
     except (GitUnavailable, ValueError, OSError):
         return "unavailable:git"
     except (sqlite3.Error, StoreUnavailable):
@@ -267,7 +267,7 @@ def _claimed(
     if collected:
         app = found.app
         releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock)
-        line += " release=" + word(releaser.release(found.key, False, found.me))
+        line += " release=" + release_word(releaser.release(found.key, False, found.me))
     return line, ok
 
 
