@@ -7,9 +7,12 @@ run already concluded or replaced is `StoreRefused("setup_changed")`. Reads need
 """
 
 import sqlite3
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import astuple, dataclass
 from typing import Final, Literal
 
+from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
@@ -18,6 +21,11 @@ from taskloop.attempt_types import AttemptKey
 type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "interrupted"]
 CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "interrupted")
 FAILURES: Final[tuple[Conclusion, ...]] = ("failed", "timed_out", "lingering", "dirty")  # `interrupted` is not the setup's fault
+# Concluded with a process possibly left in the last command's group (a member that outlived it, or one the deadline's stop
+# could not prove gone): until that group is empty the run still holds the slot, like an unfinished one.
+LIVE_AFTER: Final[tuple[Conclusion, ...]] = ("lingering", "timed_out")
+type ProcessSeen = Literal["gone", "alive", "unknown"]
+type SetupSeen = Callable[[OwnedProcess], ProcessSeen]  # a registered setup command and its group; another boot is gone
 COLUMNS: Final = "run,commit_sha,digest,command,pid,pgid,proc_start,boot,conclusion"
 HELD: Final = """SELECT 1 FROM attempt p JOIN reservation r ON r.repo_id=p.repo_id AND r.slot=p.slot
 AND r.attempt_id=p.attempt_id AND r.generation=p.generation
@@ -35,6 +43,12 @@ class SetupRow:
     command: int
     process: OwnedProcess | None
     conclusion: Conclusion | None
+
+    @property
+    def unsettled(self) -> OwnedProcess | None:
+        """The registered command whose group must be proven empty before the slot is reset, set up again or released:
+        the run's while it is unfinished or concluded `LIVE_AFTER`; None when nothing ever registered."""
+        return self.process if self.conclusion is None or self.conclusion in LIVE_AFTER else None
 
 
 def _conclusion(value: object) -> Conclusion | None:
@@ -59,15 +73,24 @@ def latest_of(con: sqlite3.Connection, attempt_id: str) -> SetupRow | None:
 
 
 def running(con: sqlite3.Connection, attempt_id: str) -> OwnedProcess | None:
-    """The registered identity of the attempt's latest run while it has no conclusion: what a slot release must prove
-    gone. None when the latest run is concluded, or no command of it ever registered (nothing executed)."""
+    """What a slot release must prove gone: the latest run's `unsettled` command."""
     found = latest_of(con, attempt_id)
-    return None if found is None or found.conclusion is not None else found.process
+    return None if found is None else found.unsettled
 
 
 class SetupStore(AttemptReads):
-    """The fenced `setup_run` writes and the reads the preparation needs; composition passes the bounded registration
-    connection, so the identity write inside the registered start's window waits at most REGISTRATION_BUSY_MS."""
+    """The fenced `setup_run` writes and the reads the preparation needs. Only the identity write runs inside the
+    registered start's window: it goes through `registering` (composition's bounded connection, waiting at most
+    REGISTRATION_BUSY_MS); every other read and write through the store's own connection."""
+
+    def __init__(
+        self,
+        connect: Callable[[], sqlite3.Connection | None],
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
+        registering: AttemptReads | None = None,
+    ) -> None:
+        super().__init__(connect, begin)
+        self.registering = self if registering is None else registering
 
     def latest(self, key: AttemptKey) -> SetupRow | None:
         with self._connection() as con:
@@ -101,18 +124,22 @@ class SetupStore(AttemptReads):
 
     def registered(self, key: AttemptKey, run: int, command: int, process: OwnedProcess) -> None:
         """Command `command`'s identity, committed before it executes (the registered start's callback)."""
-        self._update(key, run, "command=?,pid=?,pgid=?,proc_start=?,boot=?",
-                     (command, process.pid, process.pgid, process.start, process.boot))
+        with self.registering._connection(write=True) as con:
+            self._changed(con, key, run, "command=?,pid=?,pgid=?,proc_start=?,boot=?",
+                          (command, process.pid, process.pgid, process.start, process.boot))
 
     def conclude(self, key: AttemptKey, run: int, conclusion: Conclusion, rc: int | None, now: float) -> None:
         self._update(key, run, "conclusion=?,rc=?,ended_at=?", (conclusion, rc, now))
 
     def _update(self, key: AttemptKey, run: int, assignments: str, values: tuple[object, ...]) -> None:
         with self._connection(write=True) as con:
-            self._held(con, key)
-            changed = con.execute(
-                f"UPDATE setup_run SET {assignments} WHERE attempt_id=? AND run=? AND conclusion IS NULL",
-                (*values, key.attempt_id, run),
-            ).rowcount
-            if changed != 1:
-                raise StoreRefused("setup_changed")
+            self._changed(con, key, run, assignments, values)
+
+    def _changed(self, con: sqlite3.Connection, key: AttemptKey, run: int, assignments: str, values: tuple[object, ...]) -> None:
+        self._held(con, key)
+        changed = con.execute(
+            f"UPDATE setup_run SET {assignments} WHERE attempt_id=? AND run=? AND conclusion IS NULL",
+            (*values, key.attempt_id, run),
+        ).rowcount
+        if changed != 1:
+            raise StoreRefused("setup_changed")

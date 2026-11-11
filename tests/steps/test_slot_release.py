@@ -18,6 +18,7 @@ from doubles import FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import begin_immediate
+from stream_proc import OwnedProcess
 
 from taskloop.admit import AdmitRefused
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
@@ -26,6 +27,7 @@ from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat, Seen, SlotFiles, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.repo import RepoId
+from taskloop.setup_store import ProcessSeen
 from taskloop.slot_lock import custody, lock_path, probe
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease, release_word
 from taskloop.slots import SlotGit, adopt, observe
@@ -62,8 +64,8 @@ class Ports:
         self.answers: list[bool | BdError] = [True]
         self.unclaimed: list[tuple[str, str]] = []
         self.inside: Callable[[], object] = lambda: None
-        self.living: set[int] = set()  # pids whose process or group the agent observation sees alive
-        self.gone_asked: list[int] = []
+        self.setups: dict[int, ProcessSeen] = {}  # a setup command's observation by pid (default gone)
+        self.setup_asked: list[int] = []
 
     def checkouts(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opens += 1
@@ -73,9 +75,12 @@ class Ports:
         self.observed.append(entry)
         return self.seen
 
-    def gone(self, worker: Worker) -> bool:
-        self.gone_asked.append(worker.pid)
-        return not self.alive and worker.pid not in self.living
+    def gone(self, _worker: Worker) -> bool:
+        return not self.alive
+
+    def setup_seen(self, process: OwnedProcess) -> ProcessSeen:
+        self.setup_asked.append(process.pid)
+        return self.setups.get(process.pid, "gone")
 
     @contextmanager
     def hold(self, slot_path: str, attempt_id: str) -> Generator[None]:
@@ -93,7 +98,7 @@ class Ports:
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(AttemptStore(lambda: self.con), self.checkouts, self.files, self.observe, self.gone, self.hold, self.unclaim,
-                           lambda: 30)
+                           lambda: 30, self.setup_seen)
 
 
 def agent(slot: FakeWorktree, files: dict[str, str], rc: int = 0) -> Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]:
@@ -359,23 +364,38 @@ ended_at,conclusion) VALUES ('attempt',?,'dispatch',1,?,?,1,?,?,'start','boot',?
 
 
 @pytest.mark.parametrize("abandon", [True, False], ids=["abandon", "settled"])
-def test_a_release_waits_for_an_unfinished_setup_and_never_stops_it(
-    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, abandon: bool
+@pytest.mark.parametrize("conclusion", [None, "lingering", "timed_out"])
+def test_a_release_waits_for_a_setup_process_left_running_and_never_stops_it(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, abandon: bool,
+    conclusion: str | None,
 ) -> None:
-    """An entry killed during setup leaves its command running: both modes refuse `held:setup_running`, nothing changed
-    and no lock or Git touched, until that command and its group are gone. Only the latest run counts."""
+    """An entry killed during setup, or a command that left a process in its group (`lingering`, or one the deadline's
+    stop could not prove gone): both modes refuse `held:setup_running`, nothing changed and no lock or Git touched,
+    until the group is gone; unknown is `unavailable:setup_unknown`. Only the latest run counts."""
     if not abandon:
         verified(registered, tmp_path, slot, checkouts, slot_files)
-    registered.execute(SETUP, (1, "b" * 40, "d" * 64, 500, 500, 2.0, "failed"))  # an earlier run's pid lives on: not the setup's
-    registered.execute(SETUP, (2, "b" * 40, "d" * 64, 501, 501, None, None))
+    registered.execute(SETUP, (1, "b" * 40, "d" * 64, 500, 500, 2.0, "lingering"))  # an earlier run: never asked
+    registered.execute(SETUP, (2, "b" * 40, "d" * 64, 501, 501, None if conclusion is None else 3.0, conclusion))
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
-    ports.living = {500, 501}
+    ports.setups = {500: "alive", 501: "alive"}
     found = ports.releaser().release(KEY, abandon)
-    assert isinstance(found, NotReleased) and release_word(found) == "held:setup_running" and "pid 501, process group 501" in found.detail
+    assert isinstance(found, NotReleased) and release_word(found) == "held:setup_running" and "process group 501" in found.detail
     assert (stored(registered), ports.opens, ports.holds, ports.unclaimed) == (before, 0, 0, [])
-    ports.living = {500}
+    ports.setups[501] = "unknown"
+    assert release_word(ports.releaser().release(KEY, abandon)) == "unavailable:setup_unknown"
+    ports.setups[501] = "gone"
     assert isinstance(ports.releaser().release(KEY, abandon), Released)
-    assert 500 not in ports.gone_asked
+    assert 500 not in ports.setup_asked
+
+
+@pytest.mark.parametrize("conclusion", ["passed", "failed", "dirty", "interrupted"])
+def test_a_setup_run_concluded_with_its_groups_proven_empty_is_not_observed(
+    registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles, conclusion: str
+) -> None:
+    registered.execute(SETUP, (1, "b" * 40, "d" * 64, 501, 501, 3.0, conclusion))
+    ports = Ports(registered, checkouts, slot_files)
+    ports.setups = {501: "alive"}
+    assert isinstance(ports.releaser().release(KEY, True), Released) and ports.setup_asked == []
 
 
 def test_an_unfinished_setup_that_never_registered_a_command_does_not_hold_the_slot(

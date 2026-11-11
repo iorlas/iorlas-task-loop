@@ -96,7 +96,8 @@ class Published:
         attempts.execute(self.key, ENTRY)
         assert isinstance(Verifier(self.store, checkouts, self.files, gone, lambda: 20, hold).verify(self.key), Verified)
         self.x = self.rev(self.main, BRANCH)
-        releaser = SlotRelease(self.store, checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30)
+        releaser = SlotRelease(self.store, checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
+                               lambda _setup: "gone")
         assert isinstance(releaser.release(self.key, False), Released)
         self.opened: list[Path] = []
 

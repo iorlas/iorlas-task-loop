@@ -52,7 +52,7 @@ from taskloop.attempt_types import (
     WorkerGone,
 )
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
-from taskloop.composition import entry_seen, open_attempts, remotes, tracker_claims, tracker_located, worker_gone
+from taskloop.composition import entry_seen, open_attempts, remotes, setup_seen, tracker_claims, tracker_located, worker_gone
 from taskloop.environment import Renew, Renewal
 from taskloop.factory_schema import SCHEMA
 from taskloop.publish import BranchPublish, publish_word
@@ -282,7 +282,7 @@ def _claimed(
     line = f"{line} claim={alive.word()}"
     if collected:
         app = found.app
-        releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock)
+        releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock, setup_seen)
         line += " release=" + release_word(releaser.release(found.key, False, found.me))
     return line, ok
 

@@ -5,7 +5,8 @@ Two modes of one operation. settled: the attempt's result is collected; the slot
 base D and the tracker claim is kept (a verified plan is not task completion; land is). abandon: any phase; the slot is
 parked, the claim returned (the fenced `unclaim`, never forced) and the attempt thrown away, so the task can be started
 again. Before anything changes, in order: the terminal check (settled only), the stop proof (the registered entry, then
-the agent and its group, then an unfinished slot setup's command and its group: `unsettled setup_running`), then the
+the agent and its group, then the latest setup run's unsettled command and its group, boot-aware: `unsettled
+setup_running`, `unavailable setup_unknown`), then the
 slot's lock (`hold`, never waiting), the slot read and the park, then one write transaction fenced on the attempt, its
 reservation and the `rev` and phase read at proof time: the release row in, the reservation out. An abandon unclaims
 after that commit; a failed unclaim stays `unclaiming` for the next call to retry. A slot that is dirty, on another
@@ -25,6 +26,7 @@ from typing import Final, Literal
 from any_agent.procs import Worker
 from beads_client import BdError
 from git_porcelain import GitUnavailable
+from stream_proc import OwnedProcess
 
 from taskloop.admit import Unclaim
 from taskloop.attempt import collect
@@ -33,7 +35,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe, SlotFiles, WorkerGone
 from taskloop.factory_schema import LATER, RELEASE, current, marks
 from taskloop.prepare import task_branch
-from taskloop.setup_store import running
+from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import listing, observe_slot
 
@@ -168,7 +170,7 @@ class _Row:
     slot_path: str | None  # the held reservation's slot path; None when it is not held at the key's generation
     successor: bool  # a later attempt of the task exists: this one is no longer current
     released: Claimed | None  # the claim of an existing release row: abandoned unless `kept`
-    setup: Worker | None = None  # the registered command of the attempt's unfinished setup run, if any
+    setup: OwnedProcess | None = None  # the latest setup run's unsettled command (`SetupRow.unsettled`), if any
 
 
 def _claim(value: object) -> Claimed:
@@ -200,6 +202,7 @@ class SlotRelease:
     hold: ParkHold
     unclaim: Unclaim
     clock: Callable[[], float]
+    setup_seen: SetupSeen
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         """Release the attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
@@ -241,9 +244,7 @@ class SlotRelease:
         row: tuple[object, ...] | None = con.execute(ROW, astuple(key)).fetchone()
         if row is None:
             return None
-        command = running(con, key.attempt_id)
-        setup = None if command is None else Worker(pid=command.pid, pgid=command.pgid, start=command.start, boot=command.boot)
-        return replace(_row(row, key), setup=setup)
+        return replace(_row(row, key), setup=running(con, key.attempt_id))
 
     def _refusal(self, row: _Row, abandon: bool, me: EntryIdentity | None) -> NotReleased | None:
         """Read before anything changes: the reservation held, the result collected (settled only), the stop proof."""
@@ -257,12 +258,16 @@ class SlotRelease:
                 return NotReleased("refused", "not_terminal", f"The step has not ended: finish it, repeat it, or abandon it. {NOTHING}")
         return stop_proof(self.observe, self.gone, me, row.stopping) or self._setup_stopped(row.setup)
 
-    def _setup_stopped(self, setup: Worker | None) -> NotReleased | None:
-        """An unfinished setup's registered command, by the agent's rule: gone (or another process) with an empty group.
-        The release never stops it (the factory signals nothing); the person stops it by verified pid or waits."""
-        if setup is None or self.gone(setup):
+    def _setup_stopped(self, setup: OwnedProcess | None) -> NotReleased | None:
+        """The latest setup run's unsettled command, by the entry's rule (`setup_seen`): gone with an empty group, or from
+        another boot, passes; alive refuses; unknown is unavailable. The release never stops it (the factory signals
+        nothing); the person waits, or stops the group once its members are shown to be the slot's setup."""
+        seen = "gone" if setup is None else self.setup_seen(setup)
+        if setup is None or seen == "gone":
             return None
-        alive = f"The slot's setup (pid {setup.pid}, process group {setup.pgid}) may run: wait, or stop it by verified pid. {NOTHING}"
+        if seen == "unknown":
+            return NotReleased("unavailable", "setup_unknown", f"The slot's setup could not be observed. {NOTHING}")
+        alive = f"The slot's setup (process group {setup.pgid}, recorded this boot) still runs: wait, or see the guide. {NOTHING}"
         return NotReleased("unsettled", "setup_running", alive)
 
     def _pending(self, row: _Row, abandon: bool) -> ReleaseResult:

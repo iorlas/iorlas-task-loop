@@ -46,7 +46,7 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     git(main, "add", ".gitignore", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
     slot = root / "slots" / checkouts(main).identity().key / "s1"
-    git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
+    git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     (slot / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/false"]]}))  # the working tree is never read
     git(slot, "update-index", "--assume-unchanged", ".task-loop.json")  # keeps the edited file out of status

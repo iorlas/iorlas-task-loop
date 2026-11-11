@@ -6,7 +6,7 @@ import sqlite3
 import pytest
 from stream_proc import OwnedProcess
 
-from taskloop.attempt_reads import StoreRefused
+from taskloop.attempt_reads import AttemptReads, StoreRefused
 from taskloop.attempt_types import AttemptKey
 from taskloop.setup_store import Conclusion, SetupRow, SetupStore, running
 
@@ -89,3 +89,30 @@ def test_the_v11_checks_hold(registered: sqlite3.Connection, values: tuple[objec
     with pytest.raises(sqlite3.IntegrityError):
         registered.execute("""INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,
                            conclusion) VALUES ('attempt',1,'dispatch',1,?,?,1,?,?)""", values)
+
+
+def test_only_the_identity_write_uses_the_registration_connection(registered: sqlite3.Connection) -> None:
+    """The bounded registration connection serves the write inside the registered start's window, nothing else."""
+    opened: list[str] = []
+
+    def main() -> sqlite3.Connection:
+        opened.append("main")
+        return registered
+
+    def registering() -> sqlite3.Connection:
+        opened.append("registration")
+        return registered
+
+    setup = SetupStore(main, registering=AttemptReads(registering))
+    setup.start(KEY, 1, B, DIGEST, 10)
+    assert opened == ["main"]
+    setup.registered(KEY, 1, 0, ME)
+    assert opened == ["main", "registration"]
+    setup.conclude(KEY, 1, "passed", 0, 11)
+    assert setup.latest(KEY) == SetupRow(1, B, DIGEST, 0, ME, "passed") and opened.count("registration") == 1
+
+
+@pytest.mark.parametrize(("conclusion", "held"), [(None, True), ("lingering", True), ("timed_out", True), ("failed", False),
+                                                  ("passed", False), ("dirty", False), ("interrupted", False)])
+def test_a_run_holds_the_slot_while_unfinished_or_concluded_with_a_group_maybe_left(conclusion: Conclusion | None, held: bool) -> None:
+    assert SetupRow(1, B, DIGEST, 0, ME, conclusion).unsettled == (ME if held else None)

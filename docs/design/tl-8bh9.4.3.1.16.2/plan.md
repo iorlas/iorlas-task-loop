@@ -72,17 +72,18 @@ stays `admitted`; nothing is dispatched.
 
 1. Failure count: two runs of this attempt concluded `failed`, `timed_out`, `lingering` or `dirty`: `refused
    environment:failed`, nothing run (before the probe, so a dead attempt costs nothing).
-2. Reconcile the latest unfinished run of this attempt: other boot, no registered identity, or `observe_owned` gone
-   and `group_alive(pgid)` false: write `interrupted`. Alive: `unavailable environment:running`, never signalled.
-   Unknown: `unavailable environment:unknown`.
+2. Reconcile the latest run of this attempt while it is unfinished or concluded `lingering` or `timed_out` (a process
+   may be left in its last command's group): other boot, no registered identity, or `observe_owned` gone and
+   `group_alive(pgid)` false: an unfinished run is written `interrupted` (a concluded one keeps its conclusion). Alive:
+   `unavailable environment:running`, never signalled. Unknown: `unavailable environment:unknown`. (Review repair, 2026-11-11.)
 3. Preflight (section 6): checks and folder creation only, no emptying.
 4. Empty the scratch.
 5. Reuse: latest run `passed` at this B and digest: skip to 9.
 6. Reset (section 3).
 7. Run each argv of `profile.read_profile(files, B).setup` in order, cwd the slot; after each command check its
    process group empty (else `lingering`); stop at the first non-zero exit (`failed`) or the deadline (`timed_out`).
-8. Re-read the slot's status through the pinned view: tracked or untracked changes are `dirty` (a failed run; the
-   slot stays dirty, so later relaunches refuse `slot_dirty` from `prepare` and `tl step show` names setup as the
+8. Re-read the slot through the pinned view: HEAD not B or not on `task/<id>` is `dirty` with the word
+   `environment:moved` (review repair); tracked or untracked changes are `dirty` (a failed run; the slot stays dirty, so later relaunches refuse `slot_dirty` from `prepare` and `tl step show` names setup as the
    cause; the person removes the files as the `slot_dirty` guide says).
 9. Empty the scratch again (setup's temp files never reach the agent).
 10. Renew the claim once (the entry's keep-alive, passed in as a port): `lost` refuses `claim_lost`.
@@ -154,8 +155,9 @@ and `.task-loop.json` `"setup": [["just", "bootstrap"]]`. The profile default fo
 stays `just install` (B3).
 
 **Slot release (S5e-1).** The release's stop proof (both modes, settled and abandon) gains one check after the agent's:
-the attempt's latest `setup_run` without a conclusion must name an identity that is gone with an empty group, else
-`unsettled setup_running` (or `setup_unknown`), nothing changed. The release does not stop it: CLAUDE.md allows the
+the attempt's latest `setup_run`, while unfinished or concluded `lingering` or `timed_out`, must name an identity that is
+gone with an empty group, observed boot-aware as the entry does (another boot is gone), else `unsettled setup_running`
+(`unavailable setup_unknown` when it cannot be observed), nothing changed. The release does not stop it: CLAUDE.md allows the
 factory no signal outside `interrupts.py`, and the release never stops an agent either; the person stops the recorded
 pid by hand or waits.
 
@@ -427,8 +429,9 @@ byte (no environment event, no setup row; the S3 constants pass unchanged).
   `ended by a signal` or `start uncertain`, and `lingering`); a lingering group is checked before the exit code. After
   the commands the slot's status through the pinned view must be clean (`dirty`).
 - **Words chosen here (the plan was silent).** A start failing before any registration (`OSError` from the spawn) is a
-  `failed` run like an exec failure (`unavailable environment:exit`); `GitUnavailable` in the reset or the final status
-  read is `unavailable git` with the run left unfinished (the next entry reconciles it `interrupted`); a log that cannot
+  `failed` run like an exec failure (`unavailable environment:exit`); `GitUnavailable` in the reset is `unavailable git`
+  with no run row (the reset runs before `start`), and in the final listing or status read `unavailable git` with the
+  run left unfinished (the next entry reconciles it `interrupted`); a log that cannot
   be opened is `unavailable environment:files` before the run row is written (the run number is the latest plus one,
   so the log is opened first). An environment kind with no wired `Preparation` or no `renew` is `unavailable
   environment:unwired` (never an implement agent without its setup).
@@ -485,3 +488,23 @@ Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kep
 358, `attempt` 300, `slot_release` 257, `attempt_entry` 225, `evidence_files` 107); tests +567 against about +380
 (`doubles` gained the environment fakes: 90 to 191). Live smoke not run (owner-run, section 10; its steps 3 and 4 need
 S5e-2).
+
+## 17. Review repairs: S5e-1 (2026-11-11)
+
+An independent review of bbbb0c775 found eight points; all are repaired, each with a test that fails without it (run by
+hand, not kept).
+
+| # | Finding | Repair |
+|---|---|---|
+| 1 | A run concluded `lingering` (or `timed_out` with survivors the adapter dropped) left a live group no later step checked | `setup_store.LIVE_AFTER = ("lingering", "timed_out")` and `SetupRow.unsettled`: the latest run's command while unfinished or concluded so. The entry's reconcile and the release's `running` read both require that group gone (`environment:running`, `held:setup_running`); a concluded run keeps its conclusion. Chosen over leaving a lingering run unconcluded: no extra state, and the failure count still sees it |
+| 2 | `RealEnvFiles.empty` stopped at one vanished entry | Only the folder's own `lstat`/`scandir` maps `FileNotFoundError` to empty; a vanished entry is skipped and the rest removed; any entry left makes it False |
+| 3 | The release used `worker_gone` for setup (an old boot's identity maybe alive) and its guide said to kill `-<pgid>` | `SlotRelease.setup_seen` (a new port, composition's `setup_seen`: another boot gone, unknown `unavailable setup_unknown`); the `setup_running` guide lists the group's members and checks each one's cwd is the slot before any stop |
+| 4 | Step 8 read only the status | Through the pinned view's worktree listing, HEAD must be B on `task/<id>`, else `dirty` with the word `environment:moved` (no new conclusion: the v11 CHECK stays) |
+| 5 | Every setup write used the 1.5 s bounded connection | `SetupStore(connect, begin, registering)`: only `registered` uses the bounded registration connection |
+| 6 | The `onexc` handled only unreadable directories, once, without nesting | `_Writable`: a PermissionError from `unlink`/`rmdir` chmods the parent u+rwx and retries; an unreadable directory is chmodded and removed with the same handler (nested 0o000 folders), each path once; the folder's own entries go through it too |
+| 7 | An `OSError` after the start was taken as "nothing ran" | The `registered` callback records the identity: after it, the run is judged by its group (`lingering`, else `failed`, log `ended uncertainly`) |
+| 8 | Section 16 said a reset `GitUnavailable` leaves an unfinished run | Corrected above |
+
+Also found, not fixed here: the shelf's `stream_proc._pump` buffers a line without a newline without bound, so setup
+output can grow the entry's memory before the 32 MiB log cap applies. Tracked as tl-8bh9.14.25 (shelf, label
+architecture-review).

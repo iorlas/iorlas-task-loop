@@ -92,12 +92,15 @@ GUIDE = {
     "`not_held`), then `tl step start` admits it afresh at plan.",
     "environment": "The slot's setup (the profile's `setup`, run before an implement agent) refused or failed; the attempt "
     "stays admitted and no agent ran. Its output is `setup-<run>.log` beside the attempt's entry.log. `exit` or `lingering`: "
-    "the next relaunch runs it once more, two failed runs refuse `failed`; `dirty`: setup left files in the slot, remove them "
-    "(the `slot_dirty` guide); `running`: a setup from an earlier entry still runs, wait or stop it by verified pid; "
-    "`profile`: fix `.task-loop.json` on the task branch; `platform`: implement runs on Linux only. Otherwise "
-    "`tl step release --abandon`.",
-    "setup_running": "The slot's setup from an entry that died still runs (pid and group named): wait for it, or stop only "
-    "its group by verified pid (`kill -TERM -<pgid>`), then run it again. The factory never stops it.",
+    "the next relaunch runs it once more, two failed runs refuse `failed`; `dirty` or `moved`: setup left files in the slot "
+    "or moved its HEAD, restore it (the `slot_dirty` guide); `running`: a process of an earlier setup still runs (the "
+    "`setup_running` guide); `profile`: fix `.task-loop.json` on the task branch; `platform`: implement runs on Linux only. "
+    "Otherwise `tl step release --abandon`.",
+    "setup_running": "A process of the slot's setup still runs in the process group named (from an entry that died, or left "
+    "behind by a command; one recorded before a reboot never counts). Wait for it. To stop it yourself, list the group "
+    "(`ps -o pid=,lstart=,command= -g <pgid>`), check each member's working directory is the slot (`lsof -a -p <pid> -d "
+    "cwd`), stop only those pids, then run it again. The factory never stops it.",
+    "setup_unknown": "The process table could not be read to show the slot's setup stopped: run it again.",
     "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl step release --abandon`.",
     "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl step publish`.",
     "diverged": "The remote task/<id> does not contain the verified commit: compare them, then merge or move the remote branch "

@@ -300,3 +300,41 @@ def test_a_repeat_keeps_its_environment_and_only_empties_the_scratch(entry: Entr
     assert env.preparation().prepare(repeat, Prepared("d" * 40, gitdir, slot.repo.path), held, {}) is None
     assert env.events == ["ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "empty .t/s1"]
     assert env.profiles.read == [] and rows(env.con) == []
+
+
+@pytest.mark.parametrize(
+    ("command", "conclusion"), [(Command(lingering=True), "lingering"), (Command(timed_out=True, rc=None), "timed_out")]
+)
+def test_a_process_left_by_a_concluded_run_holds_every_later_step_until_its_group_is_gone(
+    entry: Entry, command: Command, conclusion: str
+) -> None:
+    """Concluded, but its last command's group may still hold a process: no reset, setup or dispatch while it lives."""
+    env = entry.environment
+    env.process.script = [command]
+    entry.execute()
+    env.seen[501] = "alive"
+    assert refused(entry, "unavailable", "environment:running") == ["seen 501"]
+    env.seen[501] = "unknown"
+    assert refused(entry, "unavailable", "environment:unknown") == ["seen 501"]
+    env.seen[501] = "gone"
+    entry.execute()
+    assert [row[:2] for row in rows(env.con)] == [(1, conclusion), (2, "passed")]
+    assert env.events[-1] == "agent"
+
+
+def test_a_slot_moved_by_setup_is_a_failed_run(entry: Entry, slot: FakeWorktree) -> None:
+    """Setup checked out another branch (or committed): the agent would start elsewhere than B on `task/<id>`."""
+    entry.environment.process.script = [Command(effect=lambda: slot.checkout_new("elsewhere"))]
+    refused(entry, "refused", "environment:moved")
+    assert rows(entry.environment.con)[0][1] == "dirty"
+
+
+@pytest.mark.parametrize(("lingering", "conclusion", "reason"), [(False, "failed", "environment:exit"),
+                                                                    (True, "lingering", "environment:lingering")])
+def test_a_supervision_failure_after_the_start_is_judged_by_its_group(entry: Entry, lingering: bool, conclusion: str, reason: str) -> None:
+    """The command ran: its group is checked, never assumed empty."""
+    entry.environment.process.script = [Command(supervision_error=True, lingering=lingering)]
+    events = refused(entry, "unavailable", reason)
+    assert "group 501" in events and rows(entry.environment.con) == [(1, conclusion, None, 0, 501)]
+    log = EvidenceFiles(entry.environment.artifacts).setup_log(KEY, 1).read_text()
+    assert log == "$ just bootstrap\ndone\nended uncertainly\n" + ("lingering\n" if lingering else "")

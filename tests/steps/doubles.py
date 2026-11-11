@@ -14,10 +14,10 @@ from stream_proc import OwnedProcess
 from taskloop.admit import AdmitResult
 from taskloop.admit_chain import NextStepRequest
 from taskloop.attempt_types import Checkouts, FileStat
-from taskloop.environment import EnvironmentPorts, Preparation, ProcessSeen, SetupEnded
+from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
-from taskloop.setup_store import SetupStore
+from taskloop.setup_store import ProcessSeen, SetupStore
 
 
 class FakeSlotFiles:
@@ -168,6 +168,7 @@ class Command:
     uncertain: bool = False
     spawn_error: bool = False  # the start fails before any registration
     lingering: bool = False  # a process stays in its group after it ended
+    supervision_error: bool = False  # the supervision fails (OSError) after the command started
     effect: Callable[[], None] | None = None
     output: bytes = b"done\n"
 
@@ -212,6 +213,8 @@ class FakeSetupProcess:
             line(command.output)
         if command.lingering:
             self.groups.add(pid)
+        if command.supervision_error:
+            raise OSError("pump")
         return SetupEnded(command.rc, command.timed_out, command.exec_failed, pid)
 
     def lingering(self, pgid: int) -> bool:

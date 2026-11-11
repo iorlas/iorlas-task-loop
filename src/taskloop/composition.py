@@ -30,17 +30,18 @@ from taskloop import slot_lock
 from taskloop.admit import AttemptAdmission, Claim, Unclaim
 from taskloop.admit_chain import ChainAdmission, NextAdmission
 from taskloop.attempt import Attempts, Credentials, CredentialsUnavailable
+from taskloop.attempt_reads import AttemptReads
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
 from taskloop.attempt_types import Checkouts, EntryIdentity, FileStat, Seen
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
-from taskloop.environment import EnvironmentPorts, Preparation, ProcessSeen, SetupEnded
+from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import Launcher, entry_process
 from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.publish import BranchPublish
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
-from taskloop.setup_store import SetupStore
+from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_release import SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
@@ -228,15 +229,46 @@ def setup_process(
     return SetupEnded(done.returncode, done.timed_out is not None, done.exec_errno is not None, done.pgid)
 
 
-def _writable(function: Callable[[str], object], path: str, error: BaseException) -> None:
-    """`rmtree`'s `onexc`: a directory an agent made unreadable (a PermissionError on an entry `lstat` shows to be a
-    directory, not a link) gets owner `rwx` and is removed once more; anything else stays and the removal fails."""
-    del function
-    found = os.lstat(path)
-    if not isinstance(error, PermissionError) or not stat.S_ISDIR(found.st_mode):
-        raise error
-    os.chmod(path, stat.S_IMODE(found.st_mode) | stat.S_IRWXU)
-    shutil.rmtree(path)
+REMOVERS = (os.unlink, os.rmdir)  # an entry's own removal: a PermissionError there is its parent's mode
+
+
+class _Writable:
+    """`rmtree`'s `onexc` for what an agent can do in its roots: a directory made unreadable (a PermissionError opening or
+    listing a path `lstat` shows to be a directory, not a link) gets owner `rwx` and is removed again; an entry its
+    parent forbids removing (unlink or rmdir) gets owner `rwx` on that parent and is removed again. Each path is retried
+    once; a vanished path is done; anything else stays and the removal fails."""
+
+    def __init__(self) -> None:
+        self.tried: set[str] = set()
+
+    def __call__(self, function: Callable[..., object], path: str, error: BaseException) -> None:
+        if not isinstance(error, PermissionError) or path in self.tried:
+            raise error
+        self.tried.add(path)
+        target = os.path.dirname(path) if function in REMOVERS else path
+        try:
+            found = os.lstat(target)
+        except FileNotFoundError:
+            return
+        if not stat.S_ISDIR(found.st_mode):
+            raise error
+        os.chmod(target, stat.S_IMODE(found.st_mode) | stat.S_IRWXU)
+        if function in REMOVERS:
+            function(path)
+        else:
+            shutil.rmtree(path, onexc=self)
+
+
+def _remove(path: str, retry: _Writable) -> None:
+    """One entry of an emptied folder: a directory through the symlink-safe `rmtree`, anything else (a link included)
+    unlinked; a PermissionError of the unlink goes through `retry` as `rmtree`'s own would."""
+    if stat.S_ISDIR(os.lstat(path).st_mode):
+        shutil.rmtree(path, onexc=retry)
+        return
+    try:
+        os.unlink(path)
+    except PermissionError as error:
+        retry(os.unlink, path, error)
 
 
 class RealEnvFiles:
@@ -251,22 +283,25 @@ class RealEnvFiles:
             return False
 
     def empty(self, path: Path) -> bool:
+        """Every entry is tried; an entry that vanished meanwhile is removed. False when anything stays."""
         try:
             if not stat.S_ISDIR(os.lstat(path).st_mode):
                 return False
-            with os.scandir(path) as entries:
-                for entry in entries:
-                    if entry.is_dir(follow_symlinks=False):
-                        shutil.rmtree(entry.path, onexc=_writable)
-                    else:
-                        os.unlink(entry.path)
+            with os.scandir(path) as listing:
+                names = [entry.path for entry in listing]
         except FileNotFoundError:
             return True
         except OSError:
             return False
-        return True
-
-
+        retry, emptied = _Writable(), True
+        for name in names:
+            try:
+                _remove(name, retry)
+            except FileNotFoundError:
+                continue
+            except OSError:
+                emptied = False
+        return emptied
 def entry_seen(entry: EntryIdentity) -> Seen:
     """A native process-table read of the registered entry, by the launcher's identity rule; no spawn or signal."""
     return observe_owned(entry_process(entry)).kind
@@ -388,8 +423,9 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
         return con
 
     evidence = EvidenceFiles(artifacts)
+    setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
     ports = EnvironmentPorts(
-        SetupStore(bounded, registration.begin_immediate), checkouts, slot_profiles, RealEnvFiles(), setup_process, setup_seen,
+        setup, checkouts, slot_profiles, RealEnvFiles(), setup_process, setup_seen,
         group_alive, evidence, time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks,
     )
     return Attempts(
@@ -422,7 +458,8 @@ def open_releaser(database: Path, store: Store) -> SlotRelease:
     closes it) on factory.db, real Git, the entry and worker observations, the park under the slot's custody lock, the
     tracker's fenced unclaim, wall clock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-    return SlotRelease(writer, checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim, time.time)
+    return SlotRelease(writer, checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim, time.time,
+                       setup_seen)
 
 
 def open_publisher(database: Path, store: Store) -> BranchPublish:

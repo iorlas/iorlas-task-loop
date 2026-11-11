@@ -28,15 +28,13 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Checkouts
 from taskloop.evidence_files import EvidenceFiles, SetupLog
-from taskloop.prepare import Prepared
+from taskloop.prepare import Prepared, task_branch
 from taskloop.profile import ProfileFiles, Refused, Unavailable, read_profile
-from taskloop.setup_store import Conclusion, SetupStore
+from taskloop.setup_store import Conclusion, SetupSeen, SetupStore
 
 SETUP_RUNS: Final = 2  # failed runs of one attempt before relaunches stop running its setup
 type Renewal = Literal["held", "unrenewed", "lost"]
 type Renew = Callable[[], Renewal]  # one claim renewal, now (the entry's keep-alive)
-type ProcessSeen = Literal["gone", "alive", "unknown"]
-type SetupSeen = Callable[[OwnedProcess], ProcessSeen]  # a registered setup command and its group; another boot is gone
 type GroupAlive = Callable[[int], bool]  # any process left in a process group
 type SlotProfiles = Callable[[Path, Path], ProfileFiles]  # (slot, its verified Git directory): the profile at a commit
 
@@ -145,6 +143,8 @@ class _Run:
     key: AttemptKey
     run: int
     slot: Path
+    head: str  # B
+    branch: str  # task/<id>
     deadline: float
     env: Mapping[str, str]
     log: SetupLog
@@ -162,7 +162,8 @@ class Preparation:
         stopped = self._ready(key, found)
         if stopped is None and admission.number == 1:
             try:
-                stopped = self._setup(key, path, slot, admission.deadline, setup_env(env, found))
+                branch = task_branch(admission.task.task_id)
+                stopped = self._setup(key, (path, branch), slot, admission.deadline, setup_env(env, found))
             except GitUnavailable:
                 stopped = _unavailable("git")
         return stopped or self._finish(found, renew, admission.deadline)
@@ -186,17 +187,20 @@ class Preparation:
         return _refused("expired") if self.ports.clock() >= deadline else None
 
     def _reconcile(self, key: AttemptKey) -> AttemptResult | None:
-        """An unfinished latest run: `interrupted` when nothing registered or its process and group are gone (another
-        boot included); a live or unknown one refuses, never signalled."""
+        """The latest run's `unsettled` command (unfinished, or concluded `lingering`/`timed_out`) must be gone with its
+        group (another boot counts as gone); a live or unknown one refuses, never signalled. An unfinished run whose
+        command is gone, or that never registered one, is concluded `interrupted`."""
         latest = self.ports.store.latest(key)
-        if latest is None or latest.conclusion is not None:
+        if latest is None or (latest.conclusion is not None and latest.unsettled is None):
             return None
-        seen = "gone" if latest.process is None else self.ports.seen(latest.process)
+        command = latest.unsettled
+        seen = "gone" if command is None else self.ports.seen(command)
         if seen == "alive":
             return _unavailable("environment:running")
         if seen == "unknown":
             return _unavailable("environment:unknown")
-        self.ports.store.conclude(key, latest.run, "interrupted", None, self.ports.clock())
+        if latest.conclusion is None:
+            self.ports.store.conclude(key, latest.run, "interrupted", None, self.ports.clock())
         return None
 
     def _preflight(self, found: Folders) -> AttemptResult | None:
@@ -208,9 +212,12 @@ class Preparation:
         ensured = all(self.ports.files.ensure(path) for path in (found.tmp, found.cache, found.tools))
         return None if ensured else _unavailable("environment:files")
 
-    def _setup(self, key: AttemptKey, path: Path, slot: Prepared, deadline: float, env: Mapping[str, str]) -> AttemptResult | None:
-        """Steps 5-8: the profile at B, reuse of a passed run, else the reset and a new run."""
-        ports = self.ports
+    def _setup(
+        self, key: AttemptKey, where: tuple[Path, str], slot: Prepared, deadline: float, env: Mapping[str, str]
+    ) -> AttemptResult | None:
+        """Steps 5-8: the profile at B, reuse of a passed run, else the reset and a new run. `where`: the slot and its
+        task branch."""
+        ports, (path, branch) = self.ports, where
         profile = read_profile(ports.profiles(path, slot.gitdir), slot.head)
         if isinstance(profile, Refused):
             return _refused("environment:profile")
@@ -230,7 +237,7 @@ class Preparation:
             return _unavailable("environment:files")
         with closing(log):
             ports.store.start(key, run, slot.head, digest, ports.clock())
-            return self._run(_Run(key, run, path, deadline, env, log), slot.gitdir, profile.setup)
+            return self._run(_Run(key, run, path, slot.head, branch, deadline, env, log), slot.gitdir, profile.setup)
 
     def _reset(self, path: Path, gitdir: Path, found: Folders) -> AttemptResult | None:
         """The slot's ignored files and nested repositories removed (`git clean -ffdx` on the pinned view), then an empty
@@ -244,13 +251,17 @@ class Preparation:
         return None if emptied else _unavailable("environment:files")
 
     def _run(self, run: _Run, gitdir: Path, setup: Sequence[Sequence[str]]) -> AttemptResult | None:
-        """Each command in order; the first that does not end cleanly concludes the run. Then the slot must be clean."""
-        ports = self.ports
+        """Each command in order; the first that does not end cleanly concludes the run. Then, through the pinned view,
+        the slot must still be at B on its task branch (`dirty`, word `moved`) and clean (`dirty`)."""
         for index, argv in enumerate(setup):
             stopped = self._command(run, index, argv)
             if stopped is not None:
                 return stopped
-        if ports.checkouts(run.slot, git_dir=gitdir).worktree(run.slot).dirty().raw:
+        view = self.ports.checkouts(run.slot, git_dir=gitdir)
+        listed = next((info for info in view.worktrees() if info.path == run.slot), None)
+        if listed is None or (listed.head, listed.branch) != (run.head, run.branch):
+            return self._concluded(run, "dirty", None, _refused("environment:moved"))
+        if view.worktree(run.slot).dirty().raw:
             return self._concluded(run, "dirty", None, _refused("environment:dirty"))
         return self._concluded(run, "passed", 0, None)
 
@@ -261,20 +272,30 @@ class Preparation:
             return self._concluded(run, "timed_out", None, _refused("expired"))
         run.log.write(f"$ {shlex.join(argv)}\n".encode())
 
+        committed: list[OwnedProcess] = []
+
         def registered(process: OwnedProcess) -> None:
             ports.store.registered(run.key, run.run, index, process)
+            committed.append(process)
 
         try:
             ended = ports.process(argv, registered=registered, cwd=str(run.slot), env=run.env, timeout=remaining, line=run.log.write)
-        except OSError:  # the start failed before any registration: nothing executed
-            ended = SetupEnded(None, False, True, 0)
+        except OSError:
+            if committed:  # the supervision failed after the command started: how it ended is unknown, its group is not
+                run.log.write(b"ended uncertainly\n")
+                return self._judged(run, SetupEnded(None, False, False, committed[0].pgid))
+            ended = SetupEnded(None, False, True, 0)  # the start failed before any registration: nothing executed
         if ended.uncertain:  # the identity is recorded; the next entry reconciles it
             run.log.write(b"start uncertain\n")
             return _unavailable("environment:uncertain")
         run.log.write(_ending(ended))
+        return self._judged(run, ended)
+
+    def _judged(self, run: _Run, ended: SetupEnded) -> AttemptResult | None:
+        """A command that ended: stopped by the deadline, a process left in its group, a failed or never-run command."""
         if ended.timed_out:
             return self._concluded(run, "timed_out", ended.rc, _refused("expired"))
-        if not ended.exec_failed and ports.lingering(ended.pgid):
+        if not ended.exec_failed and self.ports.lingering(ended.pgid):
             run.log.write(b"lingering\n")
             return self._concluded(run, "lingering", ended.rc, _unavailable("environment:lingering"))
         if ended.exec_failed or ended.rc != 0:

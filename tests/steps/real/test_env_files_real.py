@@ -7,8 +7,10 @@ import os
 import stat
 from pathlib import Path
 
+import pytest
 from stream_proc import OwnedProcess, group_alive
 
+from taskloop import composition
 from taskloop.composition import RealEnvFiles, setup_process, setup_seen
 
 
@@ -24,15 +26,48 @@ def test_empty_removes_a_planted_link_never_its_target(tmp_path: Path) -> None:
     assert list(folder.iterdir()) == [] and (outside / "keep" / "file").read_text() == "mine"
 
 
-def test_empty_removes_directories_an_agent_made_unreadable(tmp_path: Path) -> None:
+def test_empty_removes_directories_an_agent_made_unreadable_or_read_only(tmp_path: Path) -> None:
+    """0o000 folders, nested ones, and read-only (0o500) folders holding files and a 0o000 folder: all removed."""
     folder = tmp_path / "cache"
-    (folder / "a" / "locked" / "deep").mkdir(parents=True)
-    (folder / "a" / "locked" / "deep" / "f").write_text("x")
+    (folder / "a" / "locked" / "deep" / "deeper").mkdir(parents=True)
+    (folder / "a" / "locked" / "deep" / "deeper" / "f").write_text("x")
     (folder / "top").mkdir()
+    (folder / "ro" / "sealed").mkdir(parents=True)
+    for name in ("one", "two"):
+        (folder / "ro" / name).write_text("x")
+    (folder / "a" / "locked" / "deep" / "deeper").chmod(0)
+    (folder / "a" / "locked" / "deep").chmod(0)
     (folder / "a" / "locked").chmod(0)
     (folder / "top").chmod(0)
+    (folder / "ro" / "sealed").chmod(0)
+    (folder / "ro").chmod(0o500)
     assert RealEnvFiles().empty(folder)
     assert folder.is_dir() and list(folder.iterdir()) == []
+
+
+def test_empty_of_a_folder_an_agent_made_read_only_removes_its_entries(tmp_path: Path) -> None:
+    folder = tmp_path / "tmp"
+    folder.mkdir()
+    (folder / "file").write_text("x")
+    folder.chmod(0o500)
+    assert RealEnvFiles().empty(folder)
+    assert list(folder.iterdir()) == []
+
+
+def test_empty_goes_on_past_an_entry_that_vanished_meanwhile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    folder = tmp_path / "tmp"
+    folder.mkdir()
+    for name in ("a", "b", "c"):
+        (folder / name).write_text("x")
+    removing = composition._remove
+
+    def racing(path: str, retry: composition._Writable) -> None:
+        (folder / "b").unlink(missing_ok=True)  # another remover was first
+        removing(path, retry)
+
+    monkeypatch.setattr(composition, "_remove", racing)
+    assert RealEnvFiles().empty(folder)
+    assert list(folder.iterdir()) == []
 
 
 def test_empty_of_a_missing_folder_is_true_and_of_a_link_false(tmp_path: Path) -> None:

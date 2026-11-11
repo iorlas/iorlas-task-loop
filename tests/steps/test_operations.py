@@ -136,7 +136,8 @@ class Publishes:
 
 def releaser(store: AttemptStore, checkouts: Checkouts, slot_files: SlotFiles) -> SlotRelease:
     """The real release over the fakes: the entry gone, the agent gone, the real slot lock, a claim that returns."""
-    return SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", gone, custody, lambda _root, _task: True, lambda: 30)
+    return SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", gone, custody, lambda _root, _task: True, lambda: 30,
+                       lambda _setup: "gone")
 
 
 class FakeVerifier:

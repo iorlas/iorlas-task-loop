@@ -277,7 +277,8 @@ def verified_released(
     held = Recorded(NotReleased("unavailable", "slot_busy"))
     checked = verify_task(store, verifier, held, held, "tasks", "tl-1")  # its own publication is the recording stub's
     assert isinstance(checked, VerifiedTask) and checked.release == "unavailable:slot_busy"
-    real = SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30)
+    real = SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30,
+                       lambda _setup: "gone")
     assert isinstance(real.release(KEY, False), Released)
     return store
 
