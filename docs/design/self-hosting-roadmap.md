@@ -19,10 +19,15 @@ tracker's; a block without one has no tracker entry yet (block B14).
 | D7 | No hung-agent detection until a real case shows the need. |
 | D8 | The dashboard later shows the time since the agent's last command. |
 | D9 | Already accepted earlier: runtime version fixed until restart ([operations](tl-8bh9.8/operations.md)); normal host networking for checks ([coverage](tl-8bh9/coverage.md)); lifetime-scoped keep-awake ([.4.6](tl-8bh9.4.6/plan.md)); merge plus final squash, one resumable land ([delivery](tl-8bh9.9/delivery-publication.md)); one mandatory check set, no pass cache ([candidate checks](tl-8bh9.5.1/candidate-checks.md)). |
+| D10 | The factory's checks run on the host, before any review, with the agent's scrubbed environment and push bar. The owner knowingly accepts that agent-written code runs before anyone reads it: "it is the cheapest review: automatic checks". (Section 7.) |
+| D11 | Required checks and setup commands follow GitHub's model: "copy GitHub security and configuration model; best developer experience for AI and humans". Its reading for the factory is in section 7; one part of that reading is an inference awaiting confirmation (O1). |
+| D12 | The factory prepares the slot before the agent starts by running the repository's own setup command(s), named in `.task-loop.json`: "that is the crucial part of slot setup, the reason we need slots" (example: Unity with assets pre-downloaded, Unity and its license pre-installed). Outside the sandbox, with network, from the same ref as the checks. |
+| D13 | Tracker entries for this roadmap (B14): "yes, file them". |
 
 D2 reverses the recommendation of [.16](tl-8bh9.4.3.1.16/plan.md) Q1 (tests "may not run"), and D3 removes the label
 re-check that .15 Q2 and .16 sections 3.2 and 3.6 put before an advance (`not_approved` goes away). .16 needs both edits
-before S5 is built.
+before S5 is built. D12 replaces the earlier proposal that setup and checks run only `main`'s (the target's) code: .16
+section 2.9 and its decision 8.7 now run `setup` from the task branch.
 
 ## 1. Current state
 
@@ -42,7 +47,7 @@ before S5 is built.
 | Checks step, review step, land (merge, close, sync) | not built; contracts agreed in candidate-checks and delivery-publication | none |
 | Questions and holds; a failed result today leaves the task claimed with no signal | not built | none |
 | Install, pin, release; session resume; dashboard; keep-awake; account routing | not built | none |
-| Tracker entries for slices .4.3.1.2 to .16 | missing (only .4.3.1 and .4.3.1.1 exist, `in_progress`) | none |
+| Tracker entries for slices .4.3.1.2 to .16 | were missing (only .4.3.1 and .4.3.1.1 existed, `in_progress`); filing approved (D13), done separately | none |
 
 Today the factory takes an `auto` task, plans it, verifies and publishes the plan, and stops. A plan result that is not
 `verified` ends as a failed `done`: the slot is released, the claim kept, and nothing tells the person.
@@ -79,7 +84,7 @@ remote.
 | Why | The factory takes only tracker tasks. Self-hosting starts by giving it its own well-specified tasks. |
 | Depends on | nothing |
 | Size | none (tracker writes only) |
-| Open decisions | Q9 (permission to write the tracker) |
+| Open decisions | none (D13) |
 | Design / smoke | no / no |
 
 ### B13. Shelf follow-ups
@@ -98,7 +103,7 @@ Size: one shelf release plus one pin bump per item. Design: no (the APIs are wri
 | | |
 |---|---|
 | What | [.16](tl-8bh9.4.3.1.16/plan.md): `implement` step kind (repository-wide paths, deletions, excluded `.beads/`, `.git*` refused), `next_step`, `admit_next` (no new claim), schema v11 with `after_commit`, `prepare` refuses `branch_moved`, `Next: advance`, the round's advance phase (FIFO, before new tasks). |
-| Changes from .16 required by owner decisions | D2: the input text says tests can and should be run (needs B2; the input names the commands and the scratch folder). D3: drop the label from `NextStepRequest` and the `not_approved` word; the advance still checks `in_progress` and assignee `taskloop`. D4 matches .16 Q4. |
+| Changes from .16 required by owner decisions | D2: the input text says tests can and should be run (needs B2; the input names the commands and the scratch folder). D3: drop the label from `NextStepRequest` and the `not_approved` word; the advance still checks `in_progress` and assignee `taskloop`. D4 matches .16 Q4. D12: S5e's preparation runs the profile's `setup` at the slot's checkout of the task branch (default `just install`), recorded in .16 2.9 and 8.7. |
 | Why | Without it nothing writes code. |
 | Depends on | S4 (built). S5a can start now. S5b's input text and smoke need B2. |
 | Size | 3 slices: S5a preparation (about +15 source lines), S5b kind and hand advance (about +190 / +300 test lines), S5c round advance (about +40 / +260). |
@@ -109,12 +114,13 @@ Size: one shelf release plus one pin bump per item. Design: no (the APIs are wri
 
 | | |
 |---|---|
-| What | One reader and validator for a minimal repository profile, hard cut, no old-key reader: `setup` (argv run to prepare a slot's environment), `checks` (ordered list of id, argv, timeout), `target` (land branch, default `main`). Tasks tl-8bh9.1.1 PROFILE-READS, tl-8bh9.1.2 PROFILE-SURFACE. |
-| Why | B2 needs the setup command, B4 the required checks, B6 the target. Without a profile they become hard-coded factory knowledge of this repository. |
-| Which version is read (proposed) | The target's (the slot's parked HEAD D, from Git, not the working tree). By D1 the implement agent can edit `.task-loop.json`, the `justfile` and `pyproject.toml`; a candidate profile would let it weaken its own checks (Q2). |
+| What | One reader and validator for a minimal repository profile `.task-loop.json`, hard cut, no old-key reader: `setup` (ordered argv list run to prepare a slot's environment; may name a repository script such as `just bootstrap`; default `just install` when absent), `checks` (named checks: name, argv, timeout), `required` (the names of the checks required to land), `target` (land branch, default `main`). Tasks tl-8bh9.1.1 PROFILE-READS, tl-8bh9.1.2 PROFILE-SURFACE. |
+| Why | B2 needs the setup command, B4 the checks and their required names, B6 the target. Without a profile they become hard-coded factory knowledge of this repository. |
+| Which version is read (D11, reading in section 7) | `setup` and the `checks` commands: from Git at the commit under test (the task branch; X for checks, the branch at admission for attempt 1's setup), never the working tree, like a GitHub `push`/`pull_request` workflow. `required` and `target`: from the target (`main`), like branch protection, so a task cannot drop a required check (O1). A required name the candidate's `checks` does not define fails the checks step, as a required GitHub check that never reports blocks the merge. |
+| Accepted risk | A task may change `setup` (D1); that code runs outside the sandbox, with network, before anyone reads it (D12). Flagged, not a blocker; B6's land summary lists every changed `setup`/`checks` entry for the person. |
 | Depends on | nothing; small |
-| Size | 1 slice (reader, validation, `tl config show`-style print) plus the new `.task-loop.json` content |
-| Open decisions | Q2 (target or candidate profile), Q8 (setup outside the sandbox) |
+| Size | 1 slice (reader at a commit, validation, `tl config show`-style print) plus the new `.task-loop.json` content |
+| Open decisions | O1 (confirm required names from `main`; not blocking) |
 | Design / smoke | short design section (schema, refusals), may live in B2's plan / no |
 
 ### B2. Sandbox and environment: tests inside the agent's sandbox
@@ -136,17 +142,22 @@ credentials and push-barred. One `SANDBOX` value for every step; `StepKind` has 
 
 **Proposed shape:**
 
-1. **Prepared per-slot environment.** At preparation, before dispatch and outside the sandbox, with network, the
-   factory runs the profile's `setup` (B3) in the slot at D, with `UV_CACHE_DIR` and the tool directories pointed at a
-   per-slot folder. For this repository, `setup` is a new just recipe: `uv sync --frozen --no-editable` and a warm-up of
-   the pinned ruff, pyrefly and import-linter. Runs once per slot and again only when `uv.lock` or the pins changed.
-   It runs code of the target (D), never of the candidate.
+1. **Prepared per-slot environment (decided, D12).** At preparation, before dispatch and outside the sandbox, with
+   network, the factory runs the profile's `setup` (B3) in the slot, with `UV_CACHE_DIR` and the tool directories
+   pointed at a per-slot folder. `setup` is read from the same ref as the checks: the task branch as checked out in the
+   slot (for attempt 1, the branch at admission, D; for implement, the plan commit). Default `just install` when the
+   profile names none. For this repository, `setup` names a new just recipe (for example `just bootstrap`):
+   `uv sync --frozen --no-editable` and a warm-up of the pinned ruff, pyrefly and import-linter. For other
+   repositories it is whatever makes the slot ready (the owner's example: Unity with assets pre-downloaded, Unity and
+   its license pre-installed). Runs once per slot and again only when its inputs changed (for this repository `uv.lock`
+   or the pins; the exact "changed" key is a design point of this block). Accepted risk: a task can change `setup`, and
+   that code runs with network outside the sandbox (B3).
 2. **Per-attempt scratch folder** as the one writable root outside the slot (for example
    `<artifacts>/<attempt>/tmp`), with `TMPDIR` set to it; `/tmp` stays excluded. Never inside a Git directory.
 3. **Offline inside**: `UV_OFFLINE=1` and the per-slot cache, writable, so `just test`'s reinstall of the project wheel
    works from the cache.
-4. **Access per step kind**: one access for every agent step (plan gets the scratch folder too; harmless) unless the
-   design finds a reason; no new `StepKind` field (.16 Q1 kept).
+4. **Access per step kind**: as .16 section 2.8 now proposes, a `StepKind.access` field; plan keeps today's values,
+   implement gets the scratch root and offline env.
 5. The input text names the commands (`just check`, `just test`, or a focused `pytest` path) and says the factory's
    checks (B4) decide, not the agent's runs.
 
@@ -167,22 +178,22 @@ credentials and push-barred. One `SANDBOX` value for every step; `StepKind` has 
 | Why | D2. Without it the implement agent works blind and new tests are never run before checks. |
 | Depends on | B3 (setup command), B13 pinned `git_dir` (recommended before a writable root outside the slot) |
 | Size | spike (Run S) plus 2 slices: preparation (`setup` run and its record in factory.db) and access (scratch root, env, input words) |
-| Open decisions | Q8 |
+| Open decisions | none (D12); Run S's unknowns remain |
 | Design / smoke | yes (own plan) / yes (Run S first, then an implement run that runs a new test) |
 
 ### B4. Checks step
 
 | | |
 |---|---|
-| What | A non-agent step after implement: the factory runs the profile's required checks (B3) on exactly X, each with its timeout, output kept as evidence files, one result row per check in factory.db (check id, argv digest, profile digest, X, exit, timed out, duration). The step's verdict is passed only when every required check passed. |
-| What "passed" means (proposed) | Exit 0, not timed out, launched on X with the profile read at D, and the tree still clean at X afterwards (a check that changes tracked files invalidates the candidate, candidate-checks). A failure is a result, never a pass; a missing result runs again (glossary: check, pass). No reuse across candidates. |
-| How it runs | Through the shelf process API (no subprocess in factory source); with normal host networking (D9); environment per Q1. In a slot holding X (the implement slot is released; checks admits one like an advance). An interrupted block repeats after stop proof. |
+| What | A non-agent step after implement: the factory runs the checks (B3) on exactly X, each with its timeout, output kept as evidence files, one result row per check in factory.db (check name, argv digest, profile digest, X, exit, timed out, duration). The step's verdict is passed only when every check named required (by `main`'s profile, O1) passed. |
+| What "passed" means (proposed) | Exit 0, not timed out, launched on X with the commands from the profile at X, and the tree still clean at X afterwards (a check that changes tracked files invalidates the candidate, candidate-checks). A required name with no command at X is a failure. A failure is a result, never a pass; a missing result runs again (glossary: check, pass). No reuse across candidates. |
+| How it runs | Through the shelf process API (no subprocess in factory source); on the host with normal host networking (D9), before any review, with the agent's scrubbed environment and push bar, no scratch HOME (D10). In a slot holding X, prepared by `setup` (B2) at X (the implement slot is released; checks admits one like an advance). An interrupted block repeats after stop proof. |
 | Step or verify rule | Its own step (`check` in `Next`/`rounds.log`), not a verify rule: it needs its own attempt, deadline, evidence, restart and failure route. Not a `StepKind` (no agent, answer or commit, .15 section 5); own table. |
-| Failure route | Q3. Proposed: failed checks hold the task (B7) with the output path; automatic repair (back to implement with the output) later, tl-7i9k.56.1. |
+| Failure route | O2. Proposed: failed checks hold the task (B7) with the output path; automatic repair (back to implement with the output) later, tl-7i9k.56.1. |
 | Why | Without it, "implemented" means only "committed": the person runs the checks by hand. |
 | Depends on | B1, B3; B2 for the same prepared environment |
 | Size | 3 slices: schema and result store; the check runner and step in `tl step` (show, list); the round phase |
-| Open decisions | Q1, Q2, Q3 |
+| Open decisions | O1 (not blocking), O2; where they run is decided (D10) |
 | Design / smoke | yes (own plan, tasks tl-8bh9.5, tl-8bh9.5.1, tl-8bh9.5.2) / yes |
 
 ### B5. Review step
@@ -197,23 +208,24 @@ reading every diff. Depends on B4. Size about 2 slices. Design: yes (later). Not
 |---|---|
 | What | `tl step land TASK` (proposed name), person-run at first: requires checks passed on X; in a slot, squash X onto the current origin target; if the target moved, the new candidate runs the checks again (B4); conditional non-force push to origin `main` naming the expected old tip; then `bd close` with the land commit; records each action so a rerun does only what is missing (delivery-publication, D9). |
 | Glossary | land = accepted integration, confirmed task completion and any required task sync; merge and push are its actions, not steps. Publishing `task/<id>` does not land. |
-| Repository rule | CLAUDE.md: the main checkout is the person's; local Git permission does not authorize remote publication or merge. The factory never writes the main checkout; the person pulls. A factory push to origin `main` needs the owner's explicit permission (Q4). Task sync (`bd dolt push`) is a remote operation (Q5). |
+| Repository rule | CLAUDE.md: the main checkout is the person's; local Git permission does not authorize remote publication or merge. The factory never writes the main checkout; the person pulls. A factory push to origin `main` needs the owner's explicit permission (O3). Task sync (`bd dolt push`) is a remote operation (O4). |
+| Land summary | Lists for the person every changed `setup`, `checks` or other check-configuration file between the target and X (D11: a task may change them). |
 | Why | Closes the loop: without it every task ends with hand merge, push and close. |
 | Depends on | B4 |
 | Size | 2-3 slices (land record and actions; conflict and moved-target refusals; tracker close) |
-| Open decisions | Q4, Q5 |
+| Open decisions | O3, O4 |
 | Design / smoke | yes (own plan, tasks tl-8bh9.9, tl-br2.8 SETTLE, tl-br2.19 ACCEPTDONE) / yes (scratch remote and tracker) |
 
 ### B7. Questions and holds
 
 | | |
 |---|---|
-| What (proposed, Q6) | Every terminal non-success (needs_owner, incomplete, rejected verdict, repeats exhausted, failed checks, timeout, `branch_moved`) holds the task: the factory adds the agent's explanation (or the check output path) as a task comment, removes the label `auto`, and returns the claim (the existing abandon path). By D3 and D4, the person answers by editing the task's requirements and adding `auto` again; the next round starts it at plan. |
+| What (proposed, O5) | Every terminal non-success (needs_owner, incomplete, rejected verdict, repeats exhausted, failed checks, timeout, `branch_moved`) holds the task: the factory adds the agent's explanation (or the check output path) as a task comment, removes the label `auto`, and returns the claim (the existing abandon path). By D3 and D4, the person answers by editing the task's requirements and adding `auto` again; the next round starts it at plan. |
 | Why | Today such a task stays claimed and silent forever; an unattended loop needs every stop to be visible in the tracker. |
 | Not now | Structured questions with choices and dashboard answers (tl-8bh9.6.1, settled design), answer revisions, local waits. |
 | Depends on | B1 (implement dispositions); B4 adds failed checks as one more reason. Needs beads-client writes for comment and label (not verified in 0.2.0: may need a shelf request). |
 | Size | 2 slices (hold operation and words; the round applies it) |
-| Open decisions | Q6 |
+| Open decisions | O5 |
 | Design / smoke | short plan / yes |
 
 ### B11. Keep-awake
@@ -225,11 +237,11 @@ through the shelf process API. Needed for M4 on a laptop. 1 slice, no design, sm
 
 | | |
 |---|---|
-| What (proposed, Q7) | Until M5: a dedicated runner worktree at a known commit with its own `.venv`, never synced while rounds run. At M5: one install directory per version (a venv per commit or tag), a durable owner pin in `config.toml`, `tl` resolving the version once at start; the entry process already uses the same interpreter (`sys.executable`). Release: an annotated tag on `main` by the person. No marketplace, plugin cache or canary. Task tl-8bh9.8.3 INSTALL-OWNER. |
+| What (proposed, O6) | Until M5: a dedicated runner worktree at a known commit with its own `.venv`, never synced while rounds run. At M5: one install directory per version (a venv per commit or tag), a durable owner pin in `config.toml`, `tl` resolving the version once at start; the entry process already uses the same interpreter (`sys.executable`). Release: an annotated tag on `main` by the person. No marketplace, plugin cache or canary. Task tl-8bh9.8.3 INSTALL-OWNER. |
 | Why | D9: version fixed until restart. Self-hosting lands changes to the factory's own code while it runs; a reinstall under a running loop would give new entry processes new code against an old round and factory.db. |
 | Depends on | nothing (the runner worktree is the interim); built after M4 |
 | Size | 2 slices (install directory and pin; resolve once) |
-| Open decisions | Q7; the reduced release scope in [operations](tl-8bh9.8/operations.md) stays proposed |
+| Open decisions | O6; the reduced release scope in [operations](tl-8bh9.8/operations.md) stays proposed |
 | Design / smoke | yes / yes |
 
 ### B10. Time since the last command (dashboard later)
@@ -254,8 +266,8 @@ One Codex login (`auth.json`) and one model pair (.15 Q4). A usage-limit failure
 
 | Item | Source | Disposition (proposed) |
 |---|---|---|
-| Protected files: the baseline gated changes to `.task-loop.json`, `mise.toml` and agent instructions | [.13 audit](tl-8bh9.13/audit.md) | Not carried as a gate. B3 reads the profile from the target; B6's land summary lists changed check-configuration files (`justfile`, `.task-loop.json`, `pyproject.toml`, `mise.toml`, import-linter contracts, `tests/rules/`) for the person. |
-| Check environment shaping (credential strip, scratch HOME) | .13 audit | Decided with Q1 in B4. |
+| Protected files: the baseline gated changes to `.task-loop.json`, `mise.toml` and agent instructions | [.13 audit](tl-8bh9.13/audit.md) | Not carried as a gate. B3 reads the required check names from the target (O1) and the commands from the task branch (D11); B6's land summary lists changed check-configuration files (`justfile`, `.task-loop.json`, `pyproject.toml`, `mise.toml`, import-linter contracts, `tests/rules/`) for the person. |
+| Check environment shaping (credential strip, scratch HOME) | .13 audit | Decided (D10): the agent's scrubbed environment and push bar, no scratch HOME. |
 | Review verdict rewriting, stray-file quarantine | .13 audit | Not carried; review is B5, strays are repeats. |
 | `tl step verify` does not check the claim | .9 known gap | Unchanged until a case appears. |
 | Branch rule D for a later step (`branch_diverged`) | .15 section 5 | Adopt all slots at one base; revisit if S5's smoke hits it. |
@@ -276,7 +288,7 @@ S5a ─────────┼─> B3 profile ─> B13 pinned git_dir ─> R
 |---|---|---|---|
 | **M1 semi-assisted** | B14, S5 (a-c), B3, B13 pinned `git_dir`, B2 | Label an own task `auto`, run `tl step rounds` from a runner worktree, get plan and implementation (with new tests the agent ran) on `task/<id>` | Run `just check`/`just test` on `task/<id>`; read the diff; squash-merge, push, `bd close`; spot failed tasks in `tl step list` and abandon them; stop rounds before any factory upgrade |
 | **M2 checks in the factory** | B4 | See per-check passed/failed on X in `tl step show` | Read the diff; land and close; handle failures |
-| **M3 land and close** | B6 | Run `tl step land TASK` after reading diff and checks: squash on origin `main`, task closed | Decide each land; tracker sync if Q5 says so; failures |
+| **M3 land and close** | B6 | Run `tl step land TASK` after reading diff and checks: squash on origin `main`, task closed | Decide each land; tracker sync if O4 says so; failures |
 | **M4 unattended loop** | B7, B11, B13 Git read timeout | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
 | **M5 daily self-hosting** | B8, B10 (then the dashboard) | Run a pinned version; land factory changes and adopt them by changing the pin and restarting; see time since last command | Land decisions; pin changes; anything deferred (section 6) |
 
@@ -301,8 +313,8 @@ The runner is not updated by step 7; the landed change takes effect only after t
 
 | Risk | Mitigation (proposed) |
 |---|---|
-| Agent-written code runs on the host: B4 runs the candidate's tests outside the agent's sandbox, before any person reads them; B2's `setup` could run candidate code if it ran on X | `setup` runs only target code (D). Checks: Q1 (sandboxed or scrubbed environment). The person reads the diff before land until review exists. |
-| The agent weakens its own checks (D1: it may edit `justfile`, profile, `pyproject.toml`, import-linter contracts, `tests/rules/`) | Profile and check commands read from the target (Q2); the land summary lists changed check-configuration files; no automatic land. |
+| Agent-written code runs on the host before any person reads it: B4 runs the candidate's checks outside the agent's sandbox, and B2's `setup` is read from the task branch and runs with network outside the sandbox | **Accepted by the owner** (D10, D12): automatic checks are the cheapest review. Mitigation: the agent's scrubbed environment and push bar for checks and setup; the land summary lists changed `setup`/check configuration; the person reads the diff before land until review exists. A review of the change set for suspicious code is a later, separate block (deferred). |
+| The agent weakens its own checks (D1: it may edit `justfile`, profile, `pyproject.toml`, import-linter contracts, `tests/rules/`) | Required check names from `main` (O1), so a task cannot drop one; it can still change a required check's command (as a GitHub PR can edit its workflow), so the land summary lists every changed check configuration; no automatic land. |
 | Running tests in the sandbox widens it: a writable scratch root outside the slot, more background processes | Pinned `git_dir` first; pointer checks unchanged; scratch never in a Git directory; worker-gone gate before every Git write. |
 | Runaway agents and cost | Deadline per attempt (`--minutes`); at most 3 repeats; no automatic retry or repair; failures hold (B7); D3 means removing `auto` does not stop a task in progress: `tl step release --abandon` does. |
 | The factory edits itself while running | Runner worktree (later pinned install) separate from slots; the entry uses the runner's interpreter; never sync or reinstall the runner while rounds run; upgrade = stop, finish or abandon, discard factory.db if the schema changed, switch, start (D9). |
@@ -310,32 +322,63 @@ The runner is not updated by step 7; the landed change takes effect only after t
 | Claim lease lapses between steps | Hold on `claim_lost` (B7). |
 | Unobserved platforms | macOS Seatbelt, codex versions other than 0.167.0: Run S on each machine used. |
 
-**Deferred deliberately:** review step (B5); automatic land; PR mode and the merge queue (held); structured questions
+**Deferred deliberately:** review step (B5); a review of the change set for suspicious code before checks or setup run
+it (owner, 2026-11-11: a separate idea, not now); automatic land; PR mode and the merge queue (held); structured questions
 with choices and dashboard answering (tl-8bh9.6.1); session resume (B9); hung-agent detection (D7); account routing
 (B12); per-step model, effort or minutes; automatic retry and repair (tl-7i9k.56.1); start at boot or a service (D6);
 multi-machine tracker sync; release publication beyond a tag; pass reuse or a check cache; Windows.
 
-## 7. Owner questions
+## 7. Decisions and open questions
 
-1. **Where do the factory's checks run?** They execute agent-written code. Options: inside a sandbox like the agent's
-   (no network, if `codex sandbox` or an equivalent can wrap a command; unverified), or on the host with host
-   networking (accepted 2026-11-09) and the agent's credential scrub and push bar. **Recommendation: host, with the
-   agent's scrubbed environment and push bar, no scratch HOME; revisit if a sandbox wrapper proves simple in Run S.**
-2. **Which profile sets the required checks: the target's or the candidate's?** The glossary says candidate; with D1
-   the agent could then remove its own checks. **Recommendation: the target's (D) for checks and setup; a candidate
-   that changes check configuration is listed at land for the person.**
-3. **When required checks fail, hold or repair automatically?** **Recommendation: hold the task with the output path
-   (B7) first; add at most one or two automatic repair rounds after smokes show how often it would help.**
-4. **Who pushes to origin `main` at M3?** **Recommendation: the factory, but only when the person runs
-   `tl step land TASK`; a direct squash push with the expected old tip, no PR; no automatic land before review exists.**
-5. **Does land sync the tracker (`bd dolt push`)?** **Recommendation: no; land closes the task locally, sync stays the
-   person's until a second machine is used.**
-6. **How is a task held?** **Recommendation: comment the reason on the task, remove `auto`, return the claim; the
+### 7.1 Decided (owner, 2026-11-11)
+
+These replace the earlier proposals that checks and setup run only `main`'s code.
+
+1. **Where the factory's checks run: DECIDED, on the host** (D10), in the factory, before any review, with the agent's
+   scrubbed environment and push bar (no scratch HOME, no sandbox wrapper). The owner knowingly accepts that
+   agent-written code runs before anyone reads it: "it is the cheapest review: automatic checks". A review of the
+   change set for suspicious code is a separate, later idea (section 6, deferred).
+2. **Which configuration the checks and setup use: DECIDED, GitHub's model** (D11): "copy GitHub security and
+   configuration model; best developer experience for AI and humans".
+3. **Slot environment: DECIDED, the factory runs the repository's own setup** (D12) before the agent starts, outside
+   the sandbox, with network; commands named in `.task-loop.json` (which may name a repository script such as
+   `just bootstrap`), read from the same ref as the checks. Default `just install` when the profile names none.
+4. **Tracker entries: DECIDED, file them** (D13; filed separately).
+
+**GitHub's model, as this roadmap understands it** (from knowledge of GitHub Actions and branch protection, not
+re-checked against current GitHub documentation for this file):
+
+| GitHub | Which configuration applies |
+|---|---|
+| `push` event | The workflow files at the pushed commit. A push that edits a workflow runs the edited workflow. |
+| `pull_request` event | The workflow files at the PR's merge commit (head merged into base, `refs/pull/<n>/merge`), so a PR that edits a workflow is tested with its own edit. For a PR from a fork, the `GITHUB_TOKEN` is read-only and repository secrets are not passed. |
+| `pull_request_target` event | The base branch's workflow files, in the base's context with secrets; the PR cannot change what runs (it is the risky event when such a workflow checks out the PR's code). |
+| Required status checks | Configured on the base branch (branch protection or rulesets), not by the PR. They match checks by name; a required check that never reports blocks the merge. A PR can change what a required check's workflow does, which is why repositories add CODEOWNERS review on `.github/workflows/`; rulesets can also require a workflow file from a named repository and ref (for example a pinned branch or SHA), where available on the plan. |
+
+**Proposed reading for the factory:**
+
+- Commands (`setup`, the `checks` argv) are read from the profile `.task-loop.json` at the branch or commit under test
+  (the task branch; X for the checks step), like a `push`/`pull_request` workflow. A task may legitimately change them.
+- Which check names are **required** to land, and the land target, are read from `main`'s profile, like branch
+  protection, so a task cannot drop a required check. A required name the task branch does not define fails.
+- Land lists every changed `setup`, check or check-configuration entry for the person (the factory's analogue of
+  CODEOWNERS review on workflow files).
+- **Accepted risk, flagged, not a blocker:** setup from the task branch runs with network outside the sandbox before
+  anyone reads it.
+
+### 7.2 Still open (recommendations; none blocks M1)
+
+1. **O1. Required check names from `main`.** The "required names from `main`" part of the reading above is this
+   roadmap's inference from GitHub's branch protection, not the owner's words. **Recommendation: confirm it; until then
+   B3 builds it that way.** Not blocking; settle before B4 is built.
+2. **O2. When required checks fail, hold or repair automatically?** **Recommendation: hold the task with the output
+   path (B7) first; add at most one or two automatic repair rounds after smokes show how often it would help.**
+3. **O3. Does land push to origin `main`, and who runs it?** **Recommendation: the factory pushes, but only when the
+   person runs `tl step land TASK`; a direct squash push with the expected old tip, no PR; no automatic land before
+   review exists.**
+4. **O4. Does land run `bd dolt push`?** **Recommendation: no; land closes the task locally, sync stays the person's
+   until a second machine is used.**
+5. **O5. How is a task held?** **Recommendation: comment the reason on the task, remove `auto`, return the claim; the
    person answers by editing the task and adding `auto` again, and the task restarts at plan.**
-7. **How is the factory installed until M5?** **Recommendation: a runner worktree at a chosen commit, never synced
-   while running; per-version install directories with a pin in `config.toml` at M5.**
-8. **May the factory run the repository's own `setup` command outside the sandbox, with network, to prepare slots?**
-   It runs code from `main`, never from the task branch. **Recommendation: yes; this is what makes D2 possible.**
-   Cost: about one `just install` per slot and per lock or pin change.
-9. **May the tracker be updated now (B14): closed entries for built slices, open tasks for these blocks?**
-   **Recommendation: yes, so the factory has its own tasks to take at M1.**
+6. **O6. How is the factory installed before M5?** **Recommendation: a runner worktree at a chosen commit, never
+   synced while running; per-version install directories with a pin in `config.toml` at M5.**

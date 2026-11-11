@@ -213,9 +213,19 @@ the credentials' env; `operations.start` and `admit_next` store the admitted ste
 - The slot's `.venv/` is ignored by `.gitignore`, so a venv in the slot does not make the tree unclean; the factory
   runs `prepare.base` in the entry process (outside the sandbox) before dispatch, which is where preparation fits.
 
+**Decided (owner, 2026-11-11, 8.7).** The factory prepares the slot before the agent starts by running the repository's
+own `setup` command(s): "that is the crucial part of slot setup, the reason we need slots". The commands are named in
+the profile `.task-loop.json` (the repository may supply a script, such as a `just bootstrap` recipe, that the profile
+names), read from the same ref as the checks: the task branch, like a GitHub `push`/`pull_request` workflow read at the
+commit under test ([roadmap](../self-hosting-roadmap.md) section 7). For attempt 1 of a task that is the task branch at
+admission (D); for implement it is the slot's checkout at the plan commit. Setup runs outside the agent's sandbox, with
+network. When the profile names no `setup` (or until the profile reader, roadmap B3, exists), the default is
+`just install`. Risk the owner accepts: a task may change `setup`, and that code runs with network outside the sandbox
+before anyone reads it (flagged, not a blocker).
+
 **Proposed.** A per-slot environment prepared by the factory: after `prepare.base` and before dispatch, for a kind whose
-access asks for it, the entry runs the repository's own `just install` in the slot (outside the sandbox, with network),
-with `UV_CACHE_DIR` in the slot's scratch folder, so the slot's `.venv` and a cache holding every wheel, the build
+access asks for it, the entry runs the profile's `setup` at the slot's checkout (default `just install`; outside the
+sandbox, with network), with `UV_CACHE_DIR` in the slot's scratch folder, so the slot's `.venv` and a cache holding every wheel, the build
 backend and the pinned tools exist before the agent starts. It runs through the shelf process API the entry already
 uses (`stream_proc`; an external-tool reason: uv), within the attempt's deadline. A failure is `unavailable
 environment` and the attempt stays `admitted`, as for other pre-dispatch failures. Inside the sandbox the agent's `just
@@ -455,7 +465,8 @@ transaction, is about 40.
 
 **Not done:** the checks step (after implement, its own design and table; it reruns tests outside the agent's control),
 review, land (merge, completion, sync), questions and holds (`needs_owner` ends the step; tl-8bh9.6.1), automatic retry
-of a failed implement (tl-7i9k.56.1), environments for repositories without `just install`, network for the agent,
+of a failed implement (tl-7i9k.56.1), reading `setup` from the profile (roadmap B3; S5e uses the default `just install`
+until it exists), network for the agent,
 adding dependencies, per-step model/effort/minutes, executable files or symlinks, `.git*` files, a configurable step
 order, tracker-visible step state, a label check on claimed work.
 
@@ -510,6 +521,15 @@ Numbered as the questions were asked.
    `tl step start TASK`, not a round's advance. The `in_progress` and `taskloop` assignee check stays on every advance.
    Ingestion (label, readiness, priority) and execution (claimed work) are separate concerns (section 1). The draft's
    `not_approved` word, `NextStepRequest.label` and `TaskInspection.labels` are dropped.
+7. **Slot setup runs the repository's own `setup`, from the task branch: decided.** The factory prepares the slot
+   before the agent starts, outside the sandbox and with network, with the command(s) named in the profile
+   `.task-loop.json` at the ref under test (the task branch; at attempt 1, the branch at admission), following GitHub's
+   model where a `push`/`pull_request` workflow is read at the commit under test. Default `just install` when the profile
+   names none. This replaces the earlier proposal of "the repository's `just install` from main". The 2.9 unknowns and
+   the S5e spike stay.
+8. **The factory's checks run on the host: decided** (roadmap B4, not this slice). Before any review, with the agent's
+   scrubbed environment and push bar; the owner accepts that agent-written code runs before anyone reads it ("the
+   cheapest review: automatic checks").
 
 ## 9. Decided here (no owner question, open to veto; all proposed)
 
@@ -520,7 +540,7 @@ the clean tree; `excluded` as a `StepRules` field; `max_paths` 96; `attributes(r
 `admit`; `next_step(current, done)`; v11 columns and CHECKs as .15 3.4; `branch_moved` reused with its one meaning;
 `advance`, `not_advanceable` and `environment` words; the advance phase uses the round's start snapshot; `Access` as a
 `StepKind` field in a leaf `access.py`; a scratch folder outside the slot as implement's one writable root; preparation
-by the factory before dispatch with the repository's `just install`; the four-slice split and its order; S5b before
+in the entry before dispatch (the setup command itself is decided, 8.7); the four-slice split and its order; S5b before
 S5e only for hand advances.
 
 ## 10. Not verified

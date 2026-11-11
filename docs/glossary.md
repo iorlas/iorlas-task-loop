@@ -47,7 +47,8 @@ redesign demonstrates a distinct factory concept that needs it. Do not introduce
 | slot | A managed, reusable worktree reserved for one independently scheduled step attempt at a time. | `s1`. Internal checks may run concurrently. Reservations are local factory state in factory.db; slots are not tracker tasks. Current internal slot tasks are to be retired. |
 | factory | The installation that schedules tasks and executes their steps. | It has a dashboard and local execution state; it can serve several repos. |
 | host | The machine on which an execution happens. | Do not use this product word for a bundle of collaborators. The successor tree has no `*Host` Protocols; the ports are named for what they do (`StatusPorts`, `EvidenceFiles`, ...). |
-| profile | Target concept: the repo's factory settings (today `.task-loop.json` in the baseline). The successor reads no `.task-loop.json`; no profile exists in this tree yet. | Required checks and slot setup. Admission uses the resolved target profile; task checks use the candidate profile, as defined by the agreed configuration strategy. |
+| profile | Target concept: the repo's factory settings in `.task-loop.json`; no reader exists in this tree yet (the file in the tree is baseline-only). | Holds `setup` and the check commands, read at the commit under test (the task branch), like a GitHub `push`/`pull_request` workflow; which checks are required is configured on `main`, like branch protection (proposed, [self-hosting roadmap](design/self-hosting-roadmap.md) section 7). |
+| setup | The repo's own command(s), named in the profile, that prepare a slot's environment before the agent starts. | Decided 2026-11-11: run by the factory outside the agent's sandbox, with network, from the same ref as the checks. `just install` when the profile names none. Not a step. |
 | config | Machine-level settings. | Local paths and account settings. Use `profile` for repo settings. |
 
 A GitHub **runner** executes jobs; a slot is not a runner. A separate clone is not a linked worktree.
@@ -58,7 +59,7 @@ assessed in the repo/store review. A glossary definition does not introduce a ne
 
 | Term | Meaning | Example / distinction |
 |---|---|---|
-| check | A named automated validation of the work. | A build, lint command or test command. One check may execute many tests. |
+| check | A named automated validation of the work. | A build, lint command or test command. One check may execute many tests. Decided 2026-11-11: the factory runs checks on the host, before any review, with the agent's scrubbed environment and push bar. |
 | required checks | The checks that must pass before merging. | Use this phrase instead of a separate "gate" concept. A failed required check prevents the merge. |
 | pass | A stored successful check result for its recorded code and inputs. | A failure is a result, never a pass. A missing pass means the check can run again. |
 | check key | The inputs that determine whether a stored pass applies. | Code, command, toolchain and relevant environment/inputs; the exact fields belong to the check design. |
