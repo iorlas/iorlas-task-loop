@@ -12,12 +12,12 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS, MAIN_PROFILE, REQUIRED, TARGET, D, Done, FakeSlotFiles, PinnedViews, X
+from doubles import CANDIDATE, CHECKS, MAIN_PROFILE, ORIGIN, REQUIRED, SQUASH, TARGET, D, Done, FakeSlotFiles, PinnedViews, X
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
 
-from taskloop import check_store
+from taskloop import check_store, land_store
 from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import SCHEMA
 
@@ -132,6 +132,20 @@ def checking(factory: sqlite3.Connection) -> sqlite3.Connection:
         factory.execute("INSERT INTO reservation VALUES ('s2','r',1,'checks')")
         check_store.insert(factory, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s2", D, TARGET, REQUIRED, 100.0))
     return factory
+
+
+@pytest.fixture
+def landing(checking: sqlite3.Connection) -> sqlite3.Connection:
+    """`checking` with `CHECKS` concluded `passed` and released (parked at D, slot s2 free), and its land candidate 1
+    `CANDIDATE` (O `ORIGIN`, S `SQUASH`, S's tree not X's) pending on slot s1 at D, deadline 300, with its held reservation."""
+    with begin_immediate(checking):
+        checking.execute("""UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?
+        WHERE attempt_id='checks'""", (D,))
+        checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")
+        checking.execute("INSERT INTO reservation VALUES ('s1','r',1,'candidate')")
+        land_store.insert(checking, land_store.LandAdmitted(CANDIDATE, "checks", 1, ORIGIN, SQUASH, False, REQUIRED, "s1", D, 300.0,
+                                                            None, 10.0))
+    return checking
 
 
 @pytest.fixture

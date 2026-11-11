@@ -1,19 +1,20 @@
-"""`checks_attempt` and `check_result` on real SQLite: every v12 CHECK rejecting its bad row, the store's fences (the key,
+"""`checks_attempt` and `check_result` on real SQLite: every CHECK rejecting its bad row, the store's fences (the key,
 the held reservation, `admitted`), its phase and block transitions, the refusal counter, the entry registration without a
-deadline refusal, the admission's insert and the release's record."""
+deadline refusal, the admission's insert and the release's record; a land candidate's results through `RESULT_HELD`
+only, and the abandon fence `LANDING` (v13, tl-8bh9.14.8 section 11)."""
 
 import sqlite3
 from collections.abc import Callable
 
 import pytest
-from doubles import CHECKS, REQUIRED, TARGET, D, X
+from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, TARGET, D, X
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
-from taskloop import check_store
+from taskloop import check_store, land_store
 from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Replaced
-from taskloop.check_store import ChecksAdmitted, CheckStore, Conclusion, ResultRow, latest_results, record_release, unsettled
+from taskloop.check_store import ChecksAdmitted, CheckStore, Conclusion, Recorded, ResultRow, latest_results, record_release, unsettled
 from taskloop.factory_schema import SCHEMA, current
 
 ENTRY = (7, "entry-start", "boot")
@@ -111,9 +112,8 @@ def test_every_check_result_check_rejects_its_bad_row(checking: sqlite3.Connecti
 @pytest.mark.parametrize(("change", "error"), [
     ({"name": "test"}, "UNIQUE constraint failed: check_result.attempt_id, check_result.block, check_result.position"),
     ({"position": 1}, "UNIQUE constraint failed: check_result.attempt_id, check_result.block, check_result.name"),
-    ({"attempt_id": "implement"}, "FOREIGN KEY"),
 ])
-def test_a_result_is_one_per_position_and_name_in_a_block_of_a_checks_attempt(
+def test_a_result_is_one_per_position_and_name_in_a_block(
     checking: sqlite3.Connection, change: dict[str, object], error: str
 ) -> None:
     put(checking, "check_result", RESULT)
@@ -121,9 +121,13 @@ def test_a_result_is_one_per_position_and_name_in_a_block_of_a_checks_attempt(
         put(checking, "check_result", RESULT | change)
 
 
-def test_v12_is_this_codes_schema_and_v11_is_not_current(checking: sqlite3.Connection) -> None:
-    assert SCHEMA.version == 12 and current(checking)
-    checking.execute("PRAGMA user_version=11")
+def test_a_result_names_a_checks_attempt_or_a_land_candidate_so_it_has_no_foreign_key(checking: sqlite3.Connection) -> None:
+    put(checking, "check_result", RESULT | {"attempt_id": "candidate"})
+
+
+def test_v13_is_this_codes_schema_and_v12_is_not_current(checking: sqlite3.Connection) -> None:
+    assert SCHEMA.version == 13 and current(checking)
+    checking.execute("PRAGMA user_version=12")
     assert not current(checking)
     with pytest.raises(StoreUnavailable):
         store(checking).row(CHECKS)
@@ -389,19 +393,19 @@ def test_attempt_of_is_the_latest_checks_attempt_of_the_tasks_current_agent_atte
     assert checks.attempt_of("tasks", "tl-1") is None
 
 
-def released(con: sqlite3.Connection, read: tuple[int, str], abandoned: bool, key: AttemptKey = CHECKS) -> bool:
+def released(con: sqlite3.Connection, read: tuple[int, str], abandoned: bool, key: AttemptKey = CHECKS) -> Recorded:
     with begin_immediate(con):
         return record_release(con, key, read, D, 7, abandoned)
 
 
 def test_a_settled_release_needs_a_conclusion_and_records_once(checking: sqlite3.Connection) -> None:
     checks = store(checking)
-    assert not released(checking, (0, "admitted"), False)
+    assert released(checking, (0, "admitted"), False) == "changed"
     checks.conclude(CHECKS, "passed", None, 5)
-    assert not released(checking, (0, "concluded"), False)  # the rev moved since the proof read
-    assert not released(checking, (1, "admitted"), False)
-    assert released(checking, (1, "concluded"), False)
-    assert not released(checking, (1, "concluded"), False)  # released already
+    assert released(checking, (0, "concluded"), False) == "changed"  # the rev moved since the proof read
+    assert released(checking, (1, "admitted"), False) == "changed"
+    assert released(checking, (1, "concluded"), False) == "released"
+    assert released(checking, (1, "concluded"), False) == "changed"  # released already
     found = checks.row(CHECKS)
     assert found is not None and (found.released_at, found.parked, found.abandoned) == (7.0, D, False)
 
@@ -409,33 +413,33 @@ def test_a_settled_release_needs_a_conclusion_and_records_once(checking: sqlite3
 @pytest.mark.parametrize("change", ["DELETE FROM reservation", "UPDATE reservation SET generation=2"])
 def test_a_release_needs_the_held_reservation(checking: sqlite3.Connection, change: str) -> None:
     checking.execute(change)
-    assert not released(checking, (0, "admitted"), True)
-    assert not released(checking, (0, "admitted"), True, AttemptKey("checks", "other", 1))
+    assert released(checking, (0, "admitted"), True) == "changed"
+    assert released(checking, (0, "admitted"), True, AttemptKey("checks", "other", 1)) == "changed"
 
 
 def test_an_abandon_releases_an_admitted_attempt_and_an_abandon_of_a_released_one_flips_only_the_latest(
     checking: sqlite3.Connection,
 ) -> None:
     checks = store(checking)
-    assert not checks.abandon_released(CHECKS)  # not released yet
+    assert checks.abandon_released(CHECKS) == "changed"  # not released yet
     checks.conclude(CHECKS, "failed", "test:failed", 5)
-    assert released(checking, (1, "concluded"), False)
+    assert released(checking, (1, "concluded"), False) == "released"
     with begin_immediate(checking):
         check_store.insert(checking, admitted(2))
         checking.execute("INSERT INTO reservation VALUES ('s1','r',1,'next')")
     later = AttemptKey("next", "next-token", 1)
-    assert not checks.abandon_released(CHECKS)  # no longer the latest
-    assert released(checking, (0, "admitted"), True, later)  # the abandon of an admitted one releases it abandoned
-    assert not checks.abandon_released(later)  # already abandoned
+    assert checks.abandon_released(CHECKS) == "changed"  # no longer the latest
+    assert released(checking, (0, "admitted"), True, later) == "abandoned"  # the abandon of an admitted one releases it abandoned
+    assert checks.abandon_released(later) == "changed"  # already abandoned
     assert [(row.number, row.abandoned) for row in checks.of_attempt("implement")] == [(1, False), (2, True)]
 
 
 def test_an_abandon_of_the_latest_released_checks_attempt_flips_it_once(checking: sqlite3.Connection) -> None:
     checks = store(checking)
     checks.conclude(CHECKS, "passed", None, 5)
-    assert released(checking, (1, "concluded"), False)
-    assert checks.abandon_released(CHECKS) and not checks.abandon_released(CHECKS)
-    assert not checks.abandon_released(AttemptKey("checks", "other", 1))
+    assert released(checking, (1, "concluded"), False) == "released"
+    assert checks.abandon_released(CHECKS) == "abandoned" and checks.abandon_released(CHECKS) == "changed"
+    assert checks.abandon_released(AttemptKey("checks", "other", 1)) == "changed"
     found = checks.row(CHECKS)
     assert found is not None and found.abandoned
 
@@ -453,7 +457,7 @@ def test_a_partial_stored_identity_is_unavailable_not_a_missing_one(checking: sq
 def test_an_abandoned_or_released_checks_attempt_is_never_offered_to_the_launcher_as_admitted(checking: sqlite3.Connection) -> None:
     """An abandon releases an `admitted` checks attempt without a conclusion: the launcher's read says `released`."""
     checks = store(checking)
-    assert released(checking, (0, "admitted"), True)
+    assert released(checking, (0, "admitted"), True) == "abandoned"
     assert checks.attempt_of("tasks", "tl-1") == (CHECKS, "released", None)
     with begin_immediate(checking):
         check_store.insert(checking, admitted(2))
@@ -461,9 +465,122 @@ def test_an_abandoned_or_released_checks_attempt_is_never_offered_to_the_launche
     later = AttemptKey("next", "next-token", 1)
     checks.conclude(later, "passed", None, 5)
     assert checks.attempt_of("tasks", "tl-1") == (later, "concluded", None)
-    assert released(checking, (1, "concluded"), False, later) and checks.attempt_of("tasks", "tl-1") == (later, "released", None)
+    assert released(checking, (1, "concluded"), False, later) == "released"
+    assert checks.attempt_of("tasks", "tl-1") == (later, "released", None)
 
 
 @pytest.mark.parametrize("read", ["state", "tracker_root", "release_of", "step_of", "attempts", "chain", "slot_use"])
 def test_the_check_store_has_no_agent_attempt_read_to_misread_a_checks_key(read: str) -> None:
     assert not hasattr(CheckStore, read)
+
+
+def candidate_rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
+    return columns(con, "SELECT block,position,name,pid,conclusion FROM check_result WHERE attempt_id='candidate' ORDER BY block,position")
+
+
+def test_a_pending_land_candidates_block_and_results_are_written_under_its_own_key(landing: sqlite3.Connection) -> None:
+    """`CheckSink` serves a candidate key unchanged: the result and block writes take `RESULT_HELD`."""
+    checks = store(landing)
+    assert checks.block(CANDIDATE) == 1
+    checks.start(CANDIDATE, 1, 0, "check", DIGEST, 60, 11)
+    checks.registered(CANDIDATE, 1, 0, ME)
+    checks.finish(CANDIDATE, 1, 0, "passed", 0, 12)
+    checks.undefined(CANDIDATE, 1, 1, "smoke", 12)
+    assert candidate_rows(landing) == [(1, 0, "check", 501, "passed"), (1, 1, "smoke", None, "undefined")]
+    assert checks.results(CANDIDATE)[0] == ResultRow(1, 0, "check", DIGEST, 60, ME, 11.0, 12.0, 0, "passed")
+    assert columns(landing, "SELECT count(*) FROM check_result WHERE attempt_id='checks'") == [(0,)]
+
+
+def test_no_checks_attempt_write_can_match_a_land_candidates_key(landing: sqlite3.Connection) -> None:
+    """`refused`, `profiled`, `conclude` and the entry registration keep the checks-only fence (`HELD`)."""
+    checks = store(landing)
+    before = snapshot(landing), columns(landing, "SELECT * FROM land_candidate")
+    for name, write in {"refused": lambda: checks.refused(CANDIDATE, "slot_busy"), "profiled": lambda: checks.profiled(CANDIDATE, DIGEST),
+                        "conclude": lambda: checks.conclude(CANDIDATE, "passed", None, 5)}.items():
+        with pytest.raises(StoreRefused, match="stale_reservation"):
+            write()
+        assert (snapshot(landing), columns(landing, "SELECT * FROM land_candidate")) == before, name
+    assert checks.register_entry(CANDIDATE, ENTRY, 1) == "refused" and checks.row(CANDIDATE) is None
+
+
+@pytest.mark.parametrize("change", [
+    "DELETE FROM reservation", "UPDATE reservation SET generation=2", "UPDATE reservation SET slot='s2'",
+    "UPDATE land_candidate SET validation='failed',reason='test:failed',validated_at=5",
+    "UPDATE land_candidate SET superseded='moved',superseded_at=5",
+], ids=["released", "generation", "slot", "concluded", "superseded"])
+def test_a_candidates_result_writes_need_it_pending_with_its_held_reservation(landing: sqlite3.Connection, change: str) -> None:
+    checks = store(landing)
+    checks.start(CANDIDATE, 1, 0, "check", DIGEST, 60, 11)
+    landing.execute(change)
+    for write in (lambda: checks.block(CANDIDATE), lambda: checks.start(CANDIDATE, 1, 1, "test", DIGEST, 60, 12),
+                  lambda: checks.undefined(CANDIDATE, 1, 2, "smoke", 12), lambda: checks.registered(CANDIDATE, 1, 0, ME),
+                  lambda: checks.finish(CANDIDATE, 1, 0, "passed", 0, 12)):
+        with pytest.raises(StoreRefused, match="stale_reservation"):
+            write()
+    assert candidate_rows(landing) == [(1, 0, "check", None, None)]
+
+
+def candidate(con: sqlite3.Connection, number: int, **columns: object) -> None:
+    """A candidate of `CHECKS` put directly (no store fence), with its columns."""
+    row: dict[str, object] = {"candidate_id": f"c{number}", "dispatch_token": f"c{number}-token", "generation": 1,
+                              "checks_attempt_id": "checks", "number": number, "origin_commit": ORIGIN, "commit_sha": SQUASH,
+                              "tree_same": 1, "required": "[]", "validation": "same_tree", "validated_at": 1}
+    put(con, "land_candidate", row | columns)
+
+
+SLOTTED: dict[str, object] = {"tree_same": 0, "slot": "s1", "slot_head": D, "deadline": 300, "validation": None, "validated_at": None}
+PUSHED: dict[str, object] = {"delivery": "pushed", "delivered_at": 4, "remote_head": SQUASH}
+LAND_STATES = [  # (the latest candidate's columns, the abandon's word)
+    ({}, "landing"),  # pushable: same tree
+    (SLOTTED, "landing"),  # pending, holding its slot
+    (SLOTTED | {"validation": "failed", "validated_at": 2, "reason": "test:failed"}, "landing"),  # failed, still holding it
+    (SLOTTED | {"validation": "passed", "validated_at": 2, "released_at": 3, "parked": D}, "landing"),  # pushable: passed
+    (PUSHED, "landed"), (SLOTTED | {"validation": "passed", "validated_at": 2} | PUSHED, "landed"),  # delivered
+    ({"superseded": "withdrawn", "superseded_at": 3}, "abandoned"),
+    (SLOTTED | {"validation": "failed", "validated_at": 2, "reason": "test:failed", "released_at": 3, "parked": D}, "abandoned"),
+    (SLOTTED | {"released_at": 3, "parked": D, "superseded": "abandoned", "superseded_at": 3}, "abandoned"),
+]
+
+
+@pytest.mark.parametrize(("change", "word"), LAND_STATES, ids=["same_tree", "pending", "failed_held", "passed", "pushed",
+                                                               "pushed_held", "withdrawn", "failed", "abandoned"])
+def test_the_abandon_of_a_released_checks_attempt_is_fenced_by_its_land_candidates(
+    checking: sqlite3.Connection, change: dict[str, object], word: str
+) -> None:
+    """A candidate first, then the abandon: `LANDING` refuses it (delivered `landed`; pushable or holding a slot
+    `landing`) and changes nothing; a superseded or released failed one does not."""
+    checks = store(checking)
+    checks.conclude(CHECKS, "passed", None, 5)
+    assert released(checking, (1, "concluded"), False) == "released"
+    candidate(checking, 1, superseded="moved", superseded_at=2)  # an earlier, superseded candidate never refuses
+    candidate(checking, 2, **change)
+    assert checks.abandon_released(CHECKS) == word
+    found = checks.row(CHECKS)
+    assert found is not None and found.abandoned == (word == "abandoned")
+
+
+@pytest.mark.parametrize(("change", "word"), LAND_STATES[:6],
+                         ids=["same_tree", "pending", "failed_held", "passed", "pushed", "pushed_held"])
+def test_the_abandon_release_of_an_unreleased_checks_attempt_is_fenced_by_its_land_candidates(
+    checking: sqlite3.Connection, change: dict[str, object], word: str
+) -> None:
+    """Only rows put past the store's fences can hold one (a candidate needs a released checks attempt): still refused."""
+    candidate(checking, 1, **change)
+    assert released(checking, (0, "admitted"), True) == word
+    assert columns(checking, "SELECT released_at,abandoned FROM checks_attempt") == [(None, 0)]
+
+
+def test_the_abandon_first_then_no_candidate_is_inserted_or_delivered(checking: sqlite3.Connection) -> None:
+    """The other race order: the abandon committed first; a land's insert refuses `not_checked`, and a delivery of a
+    candidate put anyway refuses `abandoned`."""
+    checks = store(checking)
+    checks.conclude(CHECKS, "passed", None, 5)
+    assert released(checking, (1, "concluded"), False) == "released"
+    assert checks.abandon_released(CHECKS) == "abandoned"
+    admitted = land_store.LandAdmitted(CANDIDATE, "checks", 1, ORIGIN, SQUASH, True, REQUIRED, None, None, None, "same_tree", 9)
+    with begin_immediate(checking), pytest.raises(StoreRefused, match="not_checked"):
+        land_store.insert(checking, admitted)
+    candidate(checking, 1)
+    with pytest.raises(StoreRefused, match="abandoned"):
+        land_store.LandStore(lambda: checking).record_delivery(AttemptKey("c1", "c1-token", 1), SQUASH, 10)
+    assert columns(checking, "SELECT number,delivery FROM land_candidate") == [(1, None)]

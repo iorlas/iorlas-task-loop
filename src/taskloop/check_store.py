@@ -5,9 +5,11 @@ A checks attempt copies no task fact: every read joins its implement attempt (`a
 repository and X (`end_commit`). Every write of an `admitted` attempt is fenced by its key against its held reservation
 (`HELD`): a mismatch, or a concluded attempt, is `StoreRefused("stale_reservation")`. A result already concluded or
 registered, a position or name already taken in its block, or a block that is not the latest (or, to start one, the next)
-is `StoreRefused("check_changed")`. The admission's row (`insert`) and the release's record (`record_release`) are
-functions on the caller's connection, inside its transaction. "Latest" is always the highest `number` of one implement
-attempt and the highest `block` of one checks attempt, never a clock order.
+is `StoreRefused("check_changed")`. A land candidate's validation block (tl-8bh9.14.8 section 11) writes its results
+here under its own key: only the result and block writes take `RESULT_HELD` (the checks fence or the candidate's); the
+checks attempt's own writes keep `HELD`, so no candidate key can match them. The admission's row (`insert`) and the
+release's record (`record_release`) are functions on the caller's connection, inside its transaction. "Latest" is
+always the highest `number` of one implement attempt and the highest `block` of one checks attempt, never a clock order.
 """
 
 import json
@@ -23,10 +25,13 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
-from taskloop.factory_schema import CHECK_RESULT, CHECKS_ADMITTED, CHECKS_LOADED, marks, prefixed
+from taskloop.factory_schema import CANDIDATE_HELD, CHECK_RESULT, CHECKS_ADMITTED, CHECKS_LOADED, LANDED, LANDING, marks, prefixed
 
 type Outcome = Literal["passed", "failed"]
 type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted"]
+# An abandon's record: `abandoned`, or refused by `factory_schema.LANDING` (`landed`: a candidate delivered; `landing`: one
+# holds its slot or is pushable), or `changed` (off the fence). A settled release records `released`.
+type Recorded = Literal["released", "abandoned", "landed", "landing", "changed"]
 type Required = tuple[tuple[str, str], ...]  # each required name with its check's argv digest at the target, in its order
 OUTCOMES: Final[tuple[Outcome, ...]] = ("passed", "failed")
 CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted")
@@ -38,7 +43,10 @@ JOINED: Final = """FROM checks_attempt c JOIN attempt a ON a.attempt_id=c.after_
 JOIN reservation r ON r.repo_id=a.repo_id AND r.slot=c.slot AND r.attempt_id=c.attempt_id AND r.generation=c.generation"""
 KEYED: Final = "\nWHERE c.attempt_id=? AND c.dispatch_token=? AND c.generation=?"
 RESERVED: Final = JOINED + KEYED
-HELD: Final = "SELECT 1 " + RESERVED + " AND c.phase='admitted'"  # also the checks half of `setup_store.HELD`
+HELD: Final = "SELECT 1 " + RESERVED + " AND c.phase='admitted'"
+# The result and block writes only, bound with the key twice: the checks attempt's fence or a pending land candidate's
+# (`land_store.HELD`). Also the checks and land part of `setup_store.HELD`.
+RESULT_HELD: Final = HELD + "\nUNION ALL " + CANDIDATE_HELD
 LOADED: Final = (f"SELECT {prefixed('c', CHECKS_LOADED)},a.backlog,a.task_id,a.repo_id,a.tracker_root,a.end_commit "
                  "FROM checks_attempt c JOIN attempt a ON a.attempt_id=c.after_attempt_id")
 LATEST_BLOCK: Final = "(SELECT coalesce(max(block),0) FROM check_result WHERE attempt_id=?)"
@@ -111,17 +119,17 @@ class ResultRow:
         return self.conclusion is None or self.conclusion in LIVE_AFTER
 
 
-def _real(value: object) -> float:
+def stored_real(value: object) -> float:
     if isinstance(value, (int, float)):
         return float(value)
     raise StoreUnavailable("Malformed stored time")
 
 
-def _nullable_real(value: object) -> float | None:
-    return None if value is None else _real(value)
+def stored_nullable_real(value: object) -> float | None:
+    return None if value is None else stored_real(value)
 
 
-def _word[W: str](value: object, words: tuple[W, ...]) -> W | None:
+def stored_word[W: str](value: object, words: tuple[W, ...]) -> W | None:
     found = next((each for each in words if each == value), None)
     if (found is None) != (value is None):
         raise StoreUnavailable("Malformed stored conclusion")
@@ -136,7 +144,7 @@ def required_json(required: Required) -> str:
     return json.dumps([[name, digest] for name, digest in required], separators=(",", ":"))
 
 
-def _required(value: object) -> Required:
+def stored_required(value: object) -> Required:
     try:
         found = json.loads(as_text(value))
     except ValueError as error:
@@ -152,7 +160,7 @@ def _required(value: object) -> Required:
     return required
 
 
-def _entry(values: tuple[object, ...]) -> EntryIdentity | None:
+def stored_entry(values: tuple[object, ...]) -> EntryIdentity | None:
     """A stored entry identity (pid, start, boot): all set or none (the CHECK), else a broken row."""
     if all(value is None for value in values):
         return None
@@ -171,22 +179,23 @@ def _process(values: tuple[object, ...]) -> OwnedProcess | None:
 
 
 def _checks(row: tuple[object, ...]) -> ChecksRow:
-    entry = _entry(row[12:15])
+    entry = stored_entry(row[12:15])
     phase = "concluded" if row[15] == "concluded" else "admitted" if row[15] == "admitted" else None
     if phase is None:
         raise StoreUnavailable("Malformed checks phase")
     return ChecksRow(
         AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), as_int(row[4]), as_text(row[5]),
-        as_text(row[6]), as_text(row[7]), as_nullable_text(row[8]), _required(row[9]), as_nullable_text(row[10]), _real(row[11]),
-        entry, phase, as_int(row[16]), as_nullable_text(row[17]), as_int(row[18]), _word(row[19], OUTCOMES),
-        as_nullable_text(row[20]), _nullable_real(row[21]), _nullable_real(row[22]), as_nullable_text(row[23]), bool(as_int(row[24])),
+        as_text(row[6]), as_text(row[7]), as_nullable_text(row[8]), stored_required(row[9]), as_nullable_text(row[10]),
+        stored_real(row[11]), entry, phase, as_int(row[16]), as_nullable_text(row[17]), as_int(row[18]), stored_word(row[19], OUTCOMES),
+        as_nullable_text(row[20]), stored_nullable_real(row[21]), stored_nullable_real(row[22]), as_nullable_text(row[23]),
+        bool(as_int(row[24])),
         as_text(row[25]), as_text(row[26]), as_text(row[27]), as_text(row[28]), as_text(row[29]),
     )
 
 
 def _result(row: tuple[object, ...]) -> ResultRow:
     return ResultRow(as_int(row[0]), as_int(row[1]), as_text(row[2]), as_nullable_text(row[3]), as_nullable_int(row[4]), _process(row[5:9]),
-                     _real(row[9]), _nullable_real(row[10]), as_nullable_int(row[11]), _word(row[12], CONCLUSIONS))
+                     stored_real(row[9]), stored_nullable_real(row[10]), as_nullable_int(row[11]), stored_word(row[12], CONCLUSIONS))
 
 
 def latest_results(con: sqlite3.Connection, attempt_id: str) -> tuple[ResultRow, ...]:
@@ -220,15 +229,25 @@ def insert(con: sqlite3.Connection, admitted: ChecksAdmitted) -> None:
     con.execute(f"INSERT INTO checks_attempt ({CHECKS_ADMITTED}) VALUES ({marks(CHECKS_ADMITTED)})", values)
 
 
-def record_release(con: sqlite3.Connection, key: AttemptKey, read: tuple[int, str], parked: str, now: float, abandoned: bool) -> bool:
-    """The release's record, in the release's transaction: fenced on the `rev` and phase its stop proof `read`, the held
-    reservation and no earlier release; settled (not `abandoned`) only once concluded. False when the fence fails."""
-    fenced = con.execute("SELECT c.rev,c.phase,c.released_at " + RESERVED, astuple(key)).fetchone()
+def _landing(landed: object, landing: object) -> Recorded | None:
+    return "landed" if landed else "landing" if landing else None
+
+
+def record_release(
+    con: sqlite3.Connection, key: AttemptKey, read: tuple[int, str], parked: str, now: float, abandoned: bool,
+) -> Recorded:
+    """The release's record, in the release's (immediate) transaction: fenced on the `rev` and phase its stop proof
+    `read`, the held reservation and no earlier release; settled (not `abandoned`) only once concluded; an abandon also
+    `NOT LANDING`. `changed` when the fence fails."""
+    fenced = con.execute(f"SELECT c.rev,c.phase,c.released_at,{LANDED},{LANDING} " + RESERVED, astuple(key)).fetchone()
     if fenced is None or (fenced[0], fenced[1]) != read or fenced[2] is not None or not (abandoned or read[1] == "concluded"):
-        return False
+        return "changed"
+    landing = _landing(fenced[3], fenced[4]) if abandoned else None
+    if landing is not None:
+        return landing
     con.execute("UPDATE checks_attempt SET released_at=?,parked=?,abandoned=? WHERE attempt_id=?",
                 (now, parked, int(abandoned), key.attempt_id))
-    return True
+    return "abandoned" if abandoned else "released"
 
 
 class CheckStore(StoreConnection):
@@ -258,7 +277,7 @@ class CheckStore(StoreConnection):
                 ORDER BY seq DESC LIMIT 1) ORDER BY number DESC LIMIT 1""", (backlog, task_id)).fetchone()
         if row is None:
             return None
-        return AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), _entry(row[4:7])
+        return AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), stored_entry(row[4:7])
 
     def row(self, key: AttemptKey) -> ChecksRow | None:
         with self._connection() as con:
@@ -291,8 +310,8 @@ class CheckStore(StoreConnection):
             row = con.execute("SELECT c.phase,c.deadline,c.entry_pid,c.entry_start,c.entry_boot " + RESERVED, astuple(key)).fetchone()
             if row is None:
                 return "refused"
-            deadline = _real(row[1])
-            stored = _entry(row[2:5])
+            deadline = stored_real(row[1])
+            stored = stored_entry(row[2:5])
             if renewed is not None and stored is not None and stored[2] != entry[2] and math.isfinite(renewed):
                 deadline = max(deadline, renewed)
             if row[0] != "admitted" or entry == stored or stored != (None if replacing is None else replacing.identity):
@@ -302,7 +321,13 @@ class CheckStore(StoreConnection):
             return "accepted"
 
     def _held(self, con: sqlite3.Connection, key: AttemptKey) -> None:
+        """The checks attempt's own writes: never a land candidate's key."""
         if con.execute(HELD, astuple(key)).fetchone() is None:
+            raise StoreRefused("stale_reservation")
+
+    def _result_held(self, con: sqlite3.Connection, key: AttemptKey) -> None:
+        """The result and block writes: the checks attempt's key or a pending land candidate's."""
+        if con.execute(RESULT_HELD, astuple(key) * 2).fetchone() is None:
             raise StoreRefused("stale_reservation")
 
     def refused(self, key: AttemptKey, word: str) -> int:
@@ -324,7 +349,7 @@ class CheckStore(StoreConnection):
         """A block starts: returns its number, the latest plus one. The refusal count stands: a block that repeats after a
         refusal inside it still counts toward `stuck:checks_refused`; only the conclusion clears it."""
         with self._connection(write=True) as con:
-            self._held(con, key)
+            self._result_held(con, key)
             return as_int(con.execute(f"SELECT {LATEST_BLOCK}", (key.attempt_id,)).fetchone()[0]) + 1
 
     def start(self, key: AttemptKey, block: int, position: int, name: str, argv_digest: str, timeout: int, now: float) -> None:
@@ -338,7 +363,7 @@ class CheckStore(StoreConnection):
     def _new(self, key: AttemptKey, values: tuple[object, ...]) -> None:
         block, position, name = values[0], values[1], values[2]
         with self._connection(write=True) as con:
-            self._held(con, key)
+            self._result_held(con, key)
             latest = as_int(con.execute(f"SELECT {LATEST_BLOCK}", (key.attempt_id,)).fetchone()[0])
             taken = con.execute("SELECT 1 FROM check_result WHERE attempt_id=? AND block=? AND (position=? OR name=?)",
                                 (key.attempt_id, block, position, name)).fetchone()
@@ -364,7 +389,7 @@ class CheckStore(StoreConnection):
 
     def _changed(self, con: sqlite3.Connection, key: AttemptKey, block: int, position: int, assignments: str,
                  values: tuple[object, ...], also: str) -> None:
-        self._held(con, key)
+        self._result_held(con, key)
         changed = con.execute(
             f"UPDATE check_result SET {assignments} WHERE attempt_id=? AND block=? AND position=? AND conclusion IS NULL"
             f" AND block={LATEST_BLOCK}{also}", (*values, key.attempt_id, block, position, key.attempt_id)).rowcount
@@ -381,11 +406,17 @@ class CheckStore(StoreConnection):
                 target_seen=coalesce(?,target_seen),refusal=NULL,refusals=0,rev=rev+1 WHERE attempt_id=?""",
                 (conclusion, reason, now, seen, key.attempt_id))
 
-    def abandon_released(self, key: AttemptKey) -> bool:
+    def abandon_released(self, key: AttemptKey) -> Recorded:
         """The abandon of an already released checks attempt: the latest one of its implement attempt, not abandoned,
-        flipped in one fenced write. False when another call changed it first or it is not the latest."""
+        with no delivered, slot-holding or pushable land candidate (`NOT LANDING`), flipped in one fenced write. `landed`
+        or `landing` when a candidate refuses it, `changed` when another call changed it first or it is not the latest."""
         with self._connection(write=True) as con:
-            return con.execute(
-                """UPDATE checks_attempt SET abandoned=1 WHERE attempt_id=? AND dispatch_token=? AND generation=?
+            if con.execute(
+                f"""UPDATE checks_attempt SET abandoned=1 WHERE attempt_id=? AND dispatch_token=? AND generation=?
                 AND released_at IS NOT NULL AND abandoned=0 AND number=(SELECT max(d.number) FROM checks_attempt d
-                WHERE d.after_attempt_id=checks_attempt.after_attempt_id)""", astuple(key)).rowcount == 1
+                WHERE d.after_attempt_id=checks_attempt.after_attempt_id)
+                AND NOT EXISTS (SELECT 1 FROM checks_attempt c WHERE c.attempt_id=checks_attempt.attempt_id AND {LANDING})""",
+                astuple(key)).rowcount == 1:
+                return "abandoned"
+            found = con.execute(f"SELECT {LANDED},{LANDING} FROM checks_attempt c{KEYED}", astuple(key)).fetchone()
+            return ("changed" if found is None else _landing(found[0], found[1])) or "changed"

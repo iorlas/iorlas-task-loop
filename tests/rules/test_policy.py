@@ -72,6 +72,10 @@ WRITERS = {
     ("CREATE TABLE", "setup_run"): "factory_schema.py",
     ("CREATE TABLE", "checks_attempt"): "factory_schema.py",
     ("CREATE TABLE", "check_result"): "factory_schema.py",
+    ("CREATE TABLE", "land_candidate"): "factory_schema.py",
+    ("CREATE INDEX", "land_candidate"): "factory_schema.py",  # `land_delivered`: at most one delivered candidate per checks attempt
+    ("INSERT", "land_candidate"): "land_store.py",  # the candidate's row, inside the reserving transaction (`land_store.insert`)
+    ("UPDATE", "land_candidate"): "land_store.py",  # also the release's record (`land_store.record_release`)
     ("INSERT", "checks_attempt"): "check_store.py",  # the admission's row, inside its transaction (`check_store.insert`)
     ("UPDATE", "checks_attempt"): "check_store.py",  # also the release's record (`check_store.record_release`)
     ("INSERT", "check_result"): "check_store.py",
@@ -92,19 +96,26 @@ WRITERS = {
     ("UPDATE", "attempt"): "attempt_store.py",  # also the deadline renewal after a reboot, in the entry registration's write
     ("UPDATE", "execution"): "attempt_store.py",
 }
+# A statement verb and its table; an index (`CREATE [UNIQUE] INDEX <name> ON <table>`) is written as `CREATE INDEX` of
+# the table after `ON`.
 WRITE = re.compile(
-    r"\b(CREATE\s+TABLE|(?:INSERT|REPLACE)(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(\w+)", re.IGNORECASE
+    r"\b(?:(CREATE\s+TABLE|(?:INSERT|REPLACE)(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(\w+)"
+    r"|CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?\w+\s+ON\s+(\w+))", re.IGNORECASE
 )
 
 
+def write_of(match: re.Match[str]) -> tuple[str, str]:
+    """The (kind, table) one `WRITE` match names."""
+    if match.group(3) is not None:
+        return "CREATE INDEX", match.group(3).lower()
+    verb = " ".join(match.group(1).upper().split())
+    kind = "INSERT" if verb.startswith(("INSERT", "REPLACE")) else verb.split()[0] if verb.startswith("UPDATE") else verb
+    return kind, match.group(2).lower()
+
+
 def sql_writes() -> set[tuple[str, str, str]]:
-    found: set[tuple[str, str, str]] = set()
-    for path in (ROOT / "src" / "taskloop").glob("*.py"):
-        for match in WRITE.finditer(path.read_text()):
-            verb = " ".join(match.group(1).upper().split())
-            kind = "INSERT" if verb.startswith(("INSERT", "REPLACE")) else verb.split()[0] if verb.startswith("UPDATE") else verb
-            found.add((kind, match.group(2).lower(), path.name))
-    return found
+    paths = (ROOT / "src" / "taskloop").glob("*.py")
+    return {(*write_of(match), path.name) for path in paths for match in WRITE.finditer(path.read_text())}
 
 
 def test_every_sql_write_has_its_one_owner() -> None:
@@ -113,12 +124,15 @@ def test_every_sql_write_has_its_one_owner() -> None:
     assert len(found) == len(WRITERS), sorted(found)
 
 
-@pytest.mark.parametrize(
-    "statement",
-    ["INSERT INTO slot(a) VALUES (1)", "REPLACE INTO reservation VALUES (1)", "delete from attempt", "UPDATE OR ABORT slot SET a=1"],
-)
-def test_write_pattern_catches_spelling_variants(statement: str) -> None:
-    assert WRITE.search(statement) is not None
+@pytest.mark.parametrize(("statement", "write"), [
+    ("INSERT INTO slot(a) VALUES (1)", ("INSERT", "slot")), ("REPLACE INTO reservation VALUES (1)", ("INSERT", "reservation")),
+    ("delete from attempt", ("DELETE FROM", "attempt")), ("UPDATE OR ABORT slot SET a=1", ("UPDATE", "slot")),
+    ("CREATE UNIQUE INDEX one ON land_candidate(a) WHERE b", ("CREATE INDEX", "land_candidate")),
+    ("create index if not exists two\non  Attempt (a)", ("CREATE INDEX", "attempt")), ("CREATE TABLE slot (a)", ("CREATE TABLE", "slot")),
+])
+def test_write_pattern_catches_spelling_variants(statement: str, write: tuple[str, str]) -> None:
+    match = WRITE.search(statement)
+    assert match is not None and write_of(match) == write
 
 
 # The remote and ref writes below (fetch, sync, the other pushes, branch and remote-ref deletion) have no owner: unused.

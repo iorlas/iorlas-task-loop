@@ -36,6 +36,9 @@ from taskloop.tracker import inspect_task
 CHECKS = AttemptKey("checks", "checks-token", 1)
 D, X, TARGET = "d" * 40, "c" * 40, "f" * 40
 REQUIRED = (("check", "1" * 64), ("test", "2" * 64))
+# The `landing` fixture's land candidate of `CHECKS`: its key, O (origin's `main` as fetched) and S (the squash commit).
+CANDIDATE = AttemptKey("candidate", "candidate-token", 1)
+ORIGIN, SQUASH = "0" * 40, "5" * 40
 
 
 # A profile at `main` requiring `check` and `test` and defining a third, non-required check.

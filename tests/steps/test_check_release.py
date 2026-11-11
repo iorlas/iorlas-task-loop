@@ -258,3 +258,22 @@ def test_an_abandon_of_a_released_attempt_that_is_not_the_latest_changes_nothing
     assert isinstance(found, NotReleased) and found.word == "unavailable:changed"
     assert bench.stored() == ([("s1", "rerun")], (30.0, bench.d, 0))
 
+
+
+@pytest.mark.parametrize(("delivery", "word"), [
+    ("", "refused:landing"), (",delivery='pushed',delivered_at=4,remote_head=commit_sha", "refused:landed"),
+])
+def test_an_abandon_of_released_checks_with_a_pushable_or_delivered_land_candidate_is_refused_with_its_guide(
+    bench: Bench, delivery: str, word: str
+) -> None:
+    """`LANDING` (tl-8bh9.14.8 section 13): S may already be on origin, or is; nothing changes until a land delivers or
+    withdraws it."""
+    bench.concluded()
+    assert release_word(bench.release()) == "released"
+    bench.con.execute("""INSERT INTO land_candidate (candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,
+    commit_sha,tree_same,required,validation,validated_at) VALUES ('candidate','candidate-token',1,'checks',1,?,?,1,'[]','same_tree',3)""",
+                      (bench.d, bench.x))
+    bench.con.execute(f"UPDATE land_candidate SET validated_at=3{delivery}")
+    found = bench.release(abandon=True)
+    assert isinstance(found, NotReleased) and found.word == word and "tl step land" in found.detail
+    assert bench.stored() == ([], (30.0, bench.d, 0))

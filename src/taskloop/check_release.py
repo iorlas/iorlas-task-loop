@@ -11,7 +11,9 @@ signalled), then the slot's lock (`hold`, never waiting), then the reset of a sl
 (`environment.reset_to`: the untracked leftovers of a passed block would otherwise refuse the park), then the park at D
 (`held:slot_dirty`, `held:slot_branch` and the other refusals of `park_slot` stand), then one write transaction fenced on
 the `rev` and phase the proof read, the held reservation and no earlier release, then the scratch emptied, best effort. A
-released attempt is only flipped to abandoned (the latest one of its implement attempt, once).
+released attempt is only flipped to abandoned (the latest one of its implement attempt, once). An abandon is refused while
+a land candidate of the checks attempt is delivered (`refused landed`) or holds its slot or is pushable (`refused
+landing`): `factory_schema.LANDING`, fenced in the record (tl-8bh9.14.8 section 13).
 """
 
 import sqlite3
@@ -25,7 +27,7 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe, SlotFiles
-from taskloop.check_store import ChecksRow, CheckStore, ResultRow, held_slot, record_release, unsettled
+from taskloop.check_store import ChecksRow, CheckStore, Recorded, ResultRow, held_slot, record_release, unsettled
 from taskloop.environment import reset_to
 from taskloop.factory_schema import current
 from taskloop.setup_store import SetupSeen, running
@@ -67,6 +69,20 @@ def checks_stopped(seen: SetupSeen, results: tuple[ResultRow, ...]) -> NotReleas
         return NotReleased("unsettled", "check_running", shown)
     if any(each == "unknown" for _, each in found):
         return NotReleased("unavailable", "check_unknown", f"A check's process could not be observed. {NOTHING}")
+    return None
+
+
+LANDED = "The task's land delivered S to origin's main: rerun `tl step land` to finish the close."
+LANDING = ("A land candidate of these checks holds its slot or may already be on origin's main: run `tl step land` to land "
+           "it, or `tl step land --withdraw`, then abandon.")
+
+
+def _refused_by_land(recorded: Recorded, where: str) -> NotReleased | None:
+    """An abandon refused by `factory_schema.LANDING`, with its guide."""
+    if recorded == "landed":
+        return NotReleased("refused", "landed", f"{LANDED} {where}")
+    if recorded == "landing":
+        return NotReleased("refused", "landing", f"{LANDING} {where}")
     return None
 
 
@@ -124,8 +140,10 @@ class ChecksRelease:
         """Released before: an abandon flips it (no Git, no lock); anything else changes nothing."""
         if not abandon or checks.abandoned:
             return AlreadyReleased(checks.slot, "kept", checks.abandoned)
-        if not self.store.abandon_released(checks.key):
-            return NotReleased("unavailable", "changed", f"Another release changed it first, or a later checks attempt exists. {NOTHING}")
+        recorded = self.store.abandon_released(checks.key)
+        if recorded != "abandoned":
+            return _refused_by_land(recorded, NOTHING) or NotReleased(
+                "unavailable", "changed", f"Another release changed it first, or a later checks attempt exists. {NOTHING}")
         return Released(checks.slot, None, False, "kept", True)
 
     def _held(self, row: _Row, abandon: bool) -> Released | NotReleased:
@@ -155,8 +173,10 @@ class ChecksRelease:
             recorded = self._record(checks, head, abandon)
         except (sqlite3.Error, StoreUnavailable) as error:
             return NotReleased("unavailable", "store", f"{type(error).__name__}. {where}; nothing was recorded.")
-        if not recorded:
-            return NotReleased("unavailable", "changed", f"The checks attempt changed after the stop proof. {where}; nothing was recorded.")
+        if recorded not in ("released", "abandoned"):
+            changed = NotReleased("unavailable", "changed",
+                                  f"The checks attempt changed after the stop proof. {where}; nothing was recorded.")
+            return _refused_by_land(recorded, f"{where}; nothing was recorded.") or changed
         self.scratch(path)  # best effort: the next preparation empties it again
         return Released(checks.slot, parked, True, "kept", abandon)
 
@@ -167,11 +187,11 @@ class ChecksRelease:
         if isinstance(state, SlotState) and (state.head, state.branch) == (checks.commit, None):
             reset_to(self.checkouts(path, git_dir=state.gitdir), path, checks.commit)
 
-    def _record(self, checks: ChecksRow, head: str, abandon: bool) -> bool:
+    def _record(self, checks: ChecksRow, head: str, abandon: bool) -> Recorded:
         """One write transaction, fenced on what the proof read: the release recorded, the reservation out."""
         key = checks.key
         with self._connected() as con, self.store.begin(con):
-            if not record_release(con, key, (checks.rev, checks.phase), head, self.clock(), abandon):
-                return False
-            free(con, checks.repo_id, checks.slot, key.attempt_id, key.reservation_generation)
-        return True
+            recorded = record_release(con, key, (checks.rev, checks.phase), head, self.clock(), abandon)
+            if recorded in ("released", "abandoned"):
+                free(con, checks.repo_id, checks.slot, key.attempt_id, key.reservation_generation)
+        return recorded

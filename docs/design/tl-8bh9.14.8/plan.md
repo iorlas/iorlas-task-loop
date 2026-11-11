@@ -694,3 +694,73 @@ names code).
 | 16 | Wording | `remote_head` after an observed delivery contains S; `target_commit` renamed `origin_commit` (the glossary's "the target" is the checks admission's `main`); `push_barred` only catches accidents |
 
 The review also asked how `bd` answers a close of a closed task: measured (section 8), idempotent.
+
+## 25. As built: L1 (tl-8bh9.14.8.2)
+
+Schema v13, `land_store.py`, the candidate fences, `check_store.RESULT_HELD`, the three-way `setup_store.HELD`, the
+abandon fence `LANDING` with its words, and the policy entries; nothing of L0 or L2-L5 (no squash, `validate`, land
+operation, push, close, CLI or status: nothing creates a candidate yet). Code lines by the policy counter: `land_store`
+199 (new), `factory_schema` 207 (+51), `check_store` 290 (+18), `check_release` 142 (+13), `setup_store` 99 (+0);
+`test_land_store` 337 (new), `test_check_store` 456 (+88), `test_setup_store` 136 (+22), `test_check_release` 209 (+15),
+`test_policy` 185 (+9), `conftest` 174 (+10, the `landing` fixture), `doubles` 304 (+2).
+
+- **DDL** exactly as section 11 (its inline SQL comments left out). `check_result.attempt_id` has no foreign key. v12
+  and every other version are refused `schema` (`test_operations`' foreign list now holds 12 and 14). Column lists
+  `LAND_ADMITTED` and `LAND_LOADED` in `factory_schema`.
+- **`land_store`**: `LandAdmitted`, `LandRow` (joined: task, repository, tracker root, X as `checked`, the checks
+  attempt's `checks_abandoned`; properties `holds_slot`, `pending`, `pushable`); module functions `insert(con, admitted)`,
+  `record_release(con, key, (rev, validation), parked, now, abandoned) -> bool` and `of_checks_on`; `LandStore` with
+  `latest`, `of_checks`, `hold`, `renew`, `profiled`, `conclude`, `supersede`, `record_delivery`, `record_close`; `HELD`.
+- **`check_store`**: `RESULT_HELD` (the checks fence `UNION ALL` the candidate's, key bound twice) for `block`, `_new`
+  and `_changed` only; `refused`, `profiled`, `conclude`, `register_entry` keep the checks-only fence.
+  `record_release` and `abandon_released` return a `Recorded` word. `setup_store.HELD` is the agent fence `UNION ALL
+  check_store.RESULT_HELD` (key three times).
+- **`check_release`** maps `landed` and `landing` to `refused` with a one-sentence guide in the detail (`tl step land`,
+  or `tl step land --withdraw`); `changed` stays `unavailable changed`.
+- **Policy**: `WRITERS` gains `CREATE TABLE`/`CREATE INDEX land_candidate` (`factory_schema.py`) and `INSERT`/`UPDATE
+  land_candidate` (`land_store.py`); `WRITE` also sees `CREATE [UNIQUE] INDEX [IF NOT EXISTS] <name> ON <table>` (kind
+  `CREATE INDEX`, the table after `ON`), with a spelling test that checks the kind and table each match yields.
+
+**Deviations (decided here, open to veto).**
+
+1. The candidate fence's SQL lives in `factory_schema` (`CANDIDATE_RESERVED`, `CANDIDATE_HELD`) and `land_store.HELD`
+   is that constant: `land_store` imports `check_store` (the required list and the stored-value readers), so
+   `check_store.RESULT_HELD` cannot import `land_store` without a cycle. `factory_schema.LANDED` (a delivered candidate)
+   sits beside `LANDING` so one fenced read gives the word.
+2. `check_store`'s stored-value readers are public (`stored_required`, `stored_entry`, `stored_word`, `stored_real`,
+   `stored_nullable_real`) and shared with `land_store`.
+3. `check_store.record_release` returns `released` for a settled release (the section names only the abandon's words);
+   the abandon's `landed`/`landing` comes from the fenced read inside the release transaction, before the write.
+4. `land_store.insert` refusal words: `not_checked` (the checks attempt not the latest, unreleased, abandoned, or not
+   `passed` without `no_change`), `not_done` (a later attempt of the task, or the claim not `kept`), `landing` (a
+   delivered candidate, the latest holding its slot or pushable, or `number` not the latest plus one).
+5. `record_delivery` and `record_close` off their fence raise `StoreRefused("land_changed")` (also a second delivered
+   candidate, from the `land_delivered` index); a delivery for an abandoned checks attempt `StoreRefused("abandoned")`.
+6. The candidate `HELD` also requires `superseded IS NULL`. `hold` bumps `rev` (as an entry registration does); `renew`
+   refuses a non-finite deadline (`ValueError`) and leaves `rev`. `supersede` takes `moved`, `withdrawn` or `gone`
+   (`abandoned` is only the release's) and is fenced exactly as section 11 says: not delivered, not superseded.
+7. `land_store.record_release` (consumed by L2's generalized release): settled only once validated; an abandon only
+   for a pending or failed candidate (never pushable, delivered or superseded), marking it `superseded='abandoned'`.
+8. The checks abandon's `LANDING` refusal is in the record, after the stop proof, reset and park of an unreleased
+   checks attempt. It cannot arise there in practice (a candidate needs a released checks attempt); L2 may read it
+   before the slot work if the release is generalized anyway.
+
+**Tests**: every `land_candidate` CHECK rejecting its bad row matched by the exact failing expression SQLite reports
+(each nullable operand's NULL case: a slot-less unvalidated row, a NULL validation with a no-change delivery, with a
+reason, with a pushed delivery), the valid rows, `UNIQUE(checks_attempt_id, number)`, the token, the foreign key and
+`land_delivered` (a second `pushed` or `no_change` delivery refused, undelivered rows beside it accepted); v13 current,
+v12 unavailable; the insert's fences one by one with nothing written; every validation write off `HELD` (another key,
+the checks key, no reservation, another slot, concluded, superseded); `hold` replaced only naming the stored identity;
+renew, profile once, conclude; the release record both modes; supersede, delivery and close fences; malformed stored
+rows unavailable. In `test_check_store`: a pending candidate's block and results under its own key; `refused`,
+`profiled`, `conclude` and the entry registration never matching it; its result writes stale once released, concluded or
+superseded; the abandon of a released checks attempt for nine candidate states (`landing`, `landed` or `abandoned`), the
+abandon release of an unreleased one refused by a candidate put past the fences, and the other race order (abandon first:
+insert `not_checked`, delivery `abandoned`). `test_setup_store`: a candidate's setup runs through the third part of
+`HELD`. `test_check_release`: the abandon refused `landing` and `landed` with its guide, nothing recorded. Fourteen
+hand mutations (the NULL-safe CHECK forms, each `LANDING` disjunct, `HELD`'s superseded clause, `RESULT_HELD` on
+`conclude`, the two-way setup fence, the insert's slot and conclusion fences, the abandon release's pushable fence, the
+delivery's abandoned and delivered fences) each fail a test.
+
+**Not verified**: nothing creates, validates or delivers a candidate yet (L3); `land_store.record_release` has no
+caller until L2.

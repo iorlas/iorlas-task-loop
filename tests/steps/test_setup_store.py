@@ -1,11 +1,11 @@
-"""`setup_run`'s one writer on real SQLite: every write fenced by the attempt's key (an agent attempt's or a checks
-attempt's) against its held reservation while `admitted`, a concluded run never rewritten, "latest" the highest run, and
-the failure count."""
+"""`setup_run`'s one writer on real SQLite: every write fenced by the attempt's key (an agent attempt's, a checks
+attempt's or a land candidate's) against its held reservation while `admitted` (a candidate: pending), a concluded run
+never rewritten, "latest" the highest run, and the failure count."""
 
 import sqlite3
 
 import pytest
-from doubles import CHECKS, X
+from doubles import CANDIDATE, CHECKS, SQUASH, X
 from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import AttemptReads, StoreRefused
@@ -146,3 +146,30 @@ def test_a_checks_attempts_setup_needs_its_held_reservation_while_admitted(check
         with pytest.raises(StoreRefused, match="stale_reservation"):
             write()
     assert checking.execute("SELECT run,pid,conclusion FROM setup_run").fetchall() == [(1, None, None)]
+
+
+def test_a_land_candidates_setup_runs_are_fenced_by_its_own_held_reservation_while_pending(landing: sqlite3.Connection) -> None:
+    """The third part of `HELD`: a land candidate's setup at S; the released checks attempt's key no longer matches."""
+    setup = store(landing)
+    setup.start(CANDIDATE, 1, SQUASH, DIGEST, 10)
+    setup.registered(CANDIDATE, 1, 0, ME)
+    setup.conclude(CANDIDATE, 1, "passed", 0, 11)
+    assert setup.latest(CANDIDATE) == SetupRow(1, SQUASH, DIGEST, 0, ME, "passed")
+    for key in (AttemptKey("candidate", "other", 1), AttemptKey("candidate", "candidate-token", 2), CHECKS):
+        with pytest.raises(StoreRefused, match="stale_reservation"):
+            setup.start(key, 2, SQUASH, DIGEST, 12)
+
+
+@pytest.mark.parametrize("change", [
+    "DELETE FROM reservation", "UPDATE reservation SET generation=2", "UPDATE reservation SET slot='s2'",
+    "UPDATE land_candidate SET validation='passed',validated_at=5", "UPDATE land_candidate SET superseded='moved',superseded_at=5",
+], ids=["released", "generation", "slot", "concluded", "superseded"])
+def test_a_land_candidates_setup_needs_its_held_reservation_while_pending(landing: sqlite3.Connection, change: str) -> None:
+    setup = store(landing)
+    setup.start(CANDIDATE, 1, SQUASH, DIGEST, 10)
+    landing.execute(change)
+    for write in (lambda: setup.registered(CANDIDATE, 1, 0, ME), lambda: setup.conclude(CANDIDATE, 1, "passed", 0, 11),
+                  lambda: setup.start(CANDIDATE, 2, SQUASH, DIGEST, 12)):
+        with pytest.raises(StoreRefused, match="stale_reservation"):
+            write()
+    assert landing.execute("SELECT run,pid,conclusion FROM setup_run").fetchall() == [(1, None, None)]

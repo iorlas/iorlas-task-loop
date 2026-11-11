@@ -4,7 +4,9 @@ v11: `attempt.step` admits `implement`; `attempt.after_commit` names, for attemp
 step's published X it starts from. `setup_run` is the slot setup's record: "latest" is always the highest `run` of one
 attempt, never a wall-clock order. v12 (tl-8bh9.14.6): the checks step's own tables, `checks_attempt` (one per run of the
 profile's checks on a done implement attempt's X, numbered per implement attempt) and `check_result` (one check's result
-in one block); `setup_run.attempt_id` names an `attempt` or a `checks_attempt`, so it has no foreign key. No migration: an
+in one block); `setup_run.attempt_id` names an `attempt` or a `checks_attempt`, so it has no foreign key. v13
+(tl-8bh9.14.8): `land_candidate`, one squash S of a checked X onto origin's `main` at O with its validation, delivery and
+close; `check_result.attempt_id` names a checks attempt or a land candidate, so it loses its foreign key. No migration: an
 older factory.db is refused (`schema`)."""
 
 import sqlite3
@@ -12,7 +14,7 @@ import sqlite3
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=12,
+    version=13,
     name="factory",
     steps={},
     ddl="""
@@ -113,7 +115,7 @@ CREATE TABLE checks_attempt (
  UNIQUE (after_attempt_id, number)
 );
 CREATE TABLE check_result (
- attempt_id TEXT NOT NULL REFERENCES checks_attempt(attempt_id), block INTEGER NOT NULL CHECK(block >= 1),
+ attempt_id TEXT NOT NULL, block INTEGER NOT NULL CHECK(block >= 1),
  position INTEGER NOT NULL CHECK(position >= 0),
  name TEXT NOT NULL, dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  argv_digest TEXT CHECK(argv_digest IS NULL OR length(argv_digest)=64), timeout INTEGER CHECK(timeout IS NULL OR timeout >= 1),
@@ -126,6 +128,39 @@ CREATE TABLE check_result (
  CHECK(conclusion IS NOT 'undefined' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
  PRIMARY KEY (attempt_id, block, position), UNIQUE (attempt_id, block, name)
 );
+CREATE TABLE land_candidate (
+ candidate_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE, generation INTEGER NOT NULL,
+ checks_attempt_id TEXT NOT NULL REFERENCES checks_attempt(attempt_id),
+ number INTEGER NOT NULL CHECK(number >= 1),
+ origin_commit TEXT NOT NULL CHECK(length(origin_commit) IN (40,64)),
+ commit_sha TEXT NOT NULL CHECK(length(commit_sha) IN (40,64)),
+ tree_same INTEGER NOT NULL CHECK(tree_same IN (0,1)),
+ required TEXT NOT NULL,
+ slot TEXT, slot_head TEXT CHECK(slot_head IS NULL OR length(slot_head) IN (40,64)),
+ deadline REAL, profile_digest TEXT CHECK(profile_digest IS NULL OR length(profile_digest)=64),
+ entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
+ validation TEXT CHECK(validation IS NULL OR validation IN ('same_tree','no_change','passed','failed')),
+ reason TEXT, validated_at REAL,
+ released_at REAL, parked TEXT CHECK(parked IS NULL OR length(parked) IN (40,64)),
+ superseded TEXT CHECK(superseded IS NULL OR superseded IN ('moved','withdrawn','gone','abandoned')), superseded_at REAL,
+ delivery TEXT CHECK(delivery IS NULL OR delivery IN ('pushed','no_change')), delivered_at REAL,
+ remote_head TEXT CHECK(remote_head IS NULL OR length(remote_head) IN (40,64)),
+ close TEXT CHECK(close IS NULL OR close IN ('closed','already_closed')), closed_at REAL,
+ rev INTEGER NOT NULL DEFAULT 0,
+ CHECK((slot IS NULL) = (slot_head IS NULL) AND (slot IS NULL) = (deadline IS NULL)),
+ CHECK((slot IS NULL) = (validation IS NOT NULL AND validation IN ('same_tree','no_change'))),
+ CHECK((validation IS 'no_change') = (delivery IS 'no_change')),
+ CHECK((validation IS NULL) = (validated_at IS NULL)), CHECK((validation IS 'failed') = (reason IS NOT NULL)),
+ CHECK((entry_pid IS NULL) = (entry_start IS NULL) AND (entry_pid IS NULL) = (entry_boot IS NULL)),
+ CHECK(entry_pid IS NULL OR slot IS NOT NULL),
+ CHECK((released_at IS NULL) = (parked IS NULL)), CHECK(released_at IS NULL OR slot IS NOT NULL),
+ CHECK((superseded IS NULL) = (superseded_at IS NULL)), CHECK(superseded IS NULL OR delivery IS NULL),
+ CHECK((delivery IS NULL) = (delivered_at IS NULL)), CHECK((delivery IS 'pushed') = (remote_head IS NOT NULL)),
+ CHECK(delivery IS NULL OR (validation IS NOT NULL AND validation IN ('same_tree','no_change','passed'))),
+ CHECK((close IS NULL) = (closed_at IS NULL)), CHECK(close IS NULL OR delivery IS NOT NULL),
+ UNIQUE (checks_attempt_id, number)
+);
+CREATE UNIQUE INDEX land_delivered ON land_candidate(checks_attempt_id) WHERE delivery IS NOT NULL;
 """,
 )
 
@@ -155,6 +190,15 @@ CHECKS_LOADED = (
     "profile_digest,deadline,entry_pid,entry_start,entry_boot,phase,rev,refusal,refusals,conclusion,reason,concluded_at,"
     "released_at,parked,abandoned"
 )
+LAND_ADMITTED = (
+    "candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,commit_sha,tree_same,required,slot,slot_head,"
+    "deadline,validation,validated_at,delivery,delivered_at"
+)
+LAND_LOADED = (
+    "candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,commit_sha,tree_same,required,slot,slot_head,"
+    "deadline,profile_digest,entry_pid,entry_start,entry_boot,validation,reason,validated_at,released_at,parked,superseded,"
+    "superseded_at,delivery,delivered_at,remote_head,close,closed_at,rev"
+)
 CHECK_RESULT = "block,position,name,argv_digest,timeout,pid,pgid,proc_start,boot,started_at,ended_at,rc,conclusion"
 
 
@@ -166,6 +210,22 @@ AND later.task_id=p.task_id AND later.seq>p.seq)"""
 # highest `number`) is not abandoned, so the claim is that checks attempt's now and the task's abandon goes checks first.
 SUCCESSOR = "(" + LATER + """ OR EXISTS (SELECT 1 FROM checks_attempt c WHERE c.after_attempt_id=p.attempt_id AND c.abandoned=0
 AND c.number=(SELECT max(d.number) FROM checks_attempt d WHERE d.after_attempt_id=p.attempt_id)))"""
+
+# A land candidate's validation writes (`land_store.HELD`, and its half of `check_store.RESULT_HELD`): the candidate
+# pending (no validation yet, not superseded) and holding its reservation at the key's generation (`CANDIDATE_RESERVED`).
+# Bound with its key.
+CANDIDATE_RESERVED = """FROM land_candidate l JOIN checks_attempt k ON k.attempt_id=l.checks_attempt_id
+JOIN attempt i ON i.attempt_id=k.after_attempt_id
+JOIN reservation q ON q.repo_id=i.repo_id AND q.slot=l.slot AND q.attempt_id=l.candidate_id AND q.generation=l.generation
+WHERE l.candidate_id=? AND l.dispatch_token=? AND l.generation=?"""
+CANDIDATE_HELD = "SELECT 1 " + CANDIDATE_RESERVED + " AND l.validation IS NULL AND l.superseded IS NULL"
+# A candidate of checks attempt `c` is delivered: its code is on origin's `main` (the abandon's word `landed`).
+LANDED = "EXISTS (SELECT 1 FROM land_candidate l WHERE l.checks_attempt_id=c.attempt_id AND l.delivery IS NOT NULL)"
+# The abandon fence of checks attempt `c`: a candidate of it is delivered, holds its slot, or is pushable (validated
+# `same_tree` or `passed`, not superseded: S may already be on origin). Words `landed`, else `landing`.
+LANDING = """EXISTS (SELECT 1 FROM land_candidate l WHERE l.checks_attempt_id=c.attempt_id AND (l.delivery IS NOT NULL
+OR (l.slot IS NOT NULL AND l.released_at IS NULL)
+OR (l.superseded IS NULL AND l.validation IS NOT NULL AND l.validation IN ('same_tree','passed'))))"""
 
 
 def marks(columns: str) -> str:
