@@ -49,7 +49,7 @@ evidence to paste) is to be written before the run; the steps below are what it 
 
 # M1 end-to-end smoke: plan, round advance, implement (owner-run, after S5c)
 
-**Status: not run.** The [roadmap](../self-hosting-roadmap.md)'s milestone M1 is reached when this run passes: a
+**Status: passed 2026-11-11** at `9b8c62367` ([findings](m1-smoke-findings.md)). The [roadmap](../self-hosting-roadmap.md)'s milestone M1 is reached when this run passes: a
 `tl step rounds` loop from a runner worktree plans and implements one small task of **this repository** (with a new test
 the agent ran offline in its sandbox) on `task/<id>`, without a second claim and without the label after the claim. It
 covers the S5e steps above in passing (setup, access, scratch); run them first if anything below fails. Linux only. Run
@@ -71,6 +71,7 @@ SHA=<the S5c repair commit or later on claude/factory-continuation>   # edit: th
 G() { git --no-optional-locks -c core.hooksPath=/dev/null "$@"; }
 G -C "$SRC" cat-file -e "$SHA^{commit}" && echo "SHA present"
 G -C "$SRC" worktree add --detach "$M1/runner" "$SHA"       # the runner: the factory version under test, never edited
+mise settings add trusted_config_paths "$M1"                 # before any `just` under $M1 (see the prerequisites)
 (cd "$M1/runner" && just install)                            # non-editable wheel in runner/.venv
 T() { "$M1/runner/.venv/bin/tl" --config "$M1/config.toml" "$@"; }
 G clone -q --bare "$SRC" "$M1/remote.git"                    # scratch origin: the publish goes here only
@@ -98,8 +99,8 @@ Prerequisites this layout meets, each a refusal otherwise:
 - **`<slots_root>/<repo_id>/.t/<slot>` is at most 64 bytes** (`environment:path_long`): with `$HOME=/home/<u>` and a
   12-hex repo id, `$M1/slots/<id>/.t/s1` is 43 + len(u) bytes (49 for `iorlas`).
 - **mise trusts `$M1`** (D14; it holds the runner, the slots and the review worktree, each with this repository's
-  `mise.toml`): `mise settings add trusted_config_paths "$M1"` (or the equivalent your mise version documents; not
-  run by the author), so the `codex`, `just` and `uv` shims run there. Check: `(cd "$M1/repo" && just --version)`
+  `mise.toml`): `mise settings add trusted_config_paths "$M1"` (mise 2026.5.12: appends to `~/.config/mise/config.toml`),
+  run before the runner's `just install`, which otherwise fails `not trusted`, so the `codex`, `just` and `uv` shims run there. Check: `(cd "$M1/repo" && just --version)`
   prints no trust error.
 - `codex` on `PATH` in the shell that starts the rounds (the entry inherits it); `codex --version`;
   `test -f "${CODEX_HOME:-$HOME/.codex}/auth.json" && echo ok`. `bd` on `PATH`. Network for `setup` (it runs outside
@@ -138,8 +139,10 @@ tail -f "$M1/artifacts/rounds.log"
    assignee `taskloop`.
 2. Expect, in order (other lines between are fine; an identical line is never repeated):
    `<task> plan verify verified release=released branch=published <a1>` (or, if the entry published it first, nothing
-   for verify and the next line directly), then `<task> implement advance started <a2>`, then
-   `<task> implement verify verified release=released branch=published <a2>`, then a quiet loop (`round moves=0` once).
+   for verify and the next line directly), then `<task> implement advance started <a2>` (and perhaps
+   `<task> implement report running <a2>`), then `<task> implement verify verified release=released branch=published
+   <a2>` (again absent when the entry published first: `T step show`'s `Last entry result` says `verify=verified ...
+   branch=published`), then a quiet loop (`round moves=0` once).
    No `skip claim_lost`, `skip branch_moved` or `advance refused:*` line; no second `bd` claim (`bd show` history).
 3. `T step show "$TASK" --backlog m1`: `Step: implement`, `Next: done`, `Setup: run 1 passed at <B>; log ...`
    (`just bootstrap`), `Earlier: <a1> advanced`. `T step list`: one row, `implement ... done`. If setup fails twice
@@ -162,8 +165,9 @@ ls -A "$(dirname "$SLOT")/.t/s1" 2>/dev/null              # empty or absent: the
 
 - The implement answer's `explanation` names `just check` and `just test` and how they ended, and the new test file.
   `T step show` does not print it: read the answer file in the attempt's `Directory:` (the one `T step show` prints).
-- The agent's transcript in the attempt folder shows `just check` and `just test` run with `UV_OFFLINE=1` and `TMPDIR`
-  under `.t/s1`, and passing.
+- The agent's transcript in the attempt folder (`stdout.txt`) shows `just check` and `just test` run and passing. It
+  shows `UV_OFFLINE=1` and `TMPDIR` under `.t/s1` only if the agent printed them; otherwise the evidence is the codex
+  argv's `shell_environment_policy.set.*` keys (`/proc/<worker pid>/cmdline` while it runs) and the offline runs passing.
 
 ## 4. The person's own checks (what M1 still leaves by hand)
 

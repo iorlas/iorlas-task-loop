@@ -23,7 +23,8 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.4.3.1.16](tl-8bh9.4.3.1.16/plan.md) | Step sequencing and the implement step kind (slice S5) | design; S5a, S5b, S5c built |
 | [tl-8bh9.4.3.1.16 Run S](tl-8bh9.4.3.1.16/run-s-findings.md) | Run S: sandbox and environment spike for block B2 (2026-11-11) | evidence |
 | [tl-8bh9.4.3.1.16.2](tl-8bh9.4.3.1.16.2/plan.md) | S5e: the environment for running checks and tests in the agent sandbox (block B2) | design; S5e-1, S5e-2 built |
-| [tl-8bh9.4.3.1.16.2 live smoke](tl-8bh9.4.3.1.16.2/live-smoke.md) | S5e and M1 end to end (plan, round advance, implement): owner-run live smoke steps | not run |
+| [tl-8bh9.4.3.1.16.2 live smoke](tl-8bh9.4.3.1.16.2/live-smoke.md) | S5e and M1 end to end (plan, round advance, implement): owner-run live smoke steps | M1 passed; S5e checklist partly |
+| [tl-8bh9.4.3.1.16.2 M1 smoke](tl-8bh9.4.3.1.16.2/m1-smoke-findings.md) | M1 end-to-end live smoke: plan, round advance, implement on a scratch remote (2026-11-11) | evidence |
 | [tl-8bh9.4.3.1.2](tl-8bh9.4.3.1.2/plan.md) | Admit one plan attempt (admission only) | built |
 | [tl-8bh9.4.3.1.3](tl-8bh9.4.3.1.3/plan.md) | Managed slots: the smallest slot state admission needs | built |
 | [tl-8bh9.4.3.1.4](tl-8bh9.4.3.1.4/plan.md) | Registered attempt entry: launch an admitted attempt into a surviving process | built |
