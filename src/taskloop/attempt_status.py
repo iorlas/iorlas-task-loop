@@ -14,11 +14,13 @@ from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, EntryIdentity, Observe, Unsettled
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.operations import Clock, Failed
-from taskloop.setup_store import SetupRow, SetupStore
+from taskloop.setup_store import SETUP_RUNS, SetupRow, SetupStore
 from taskloop.steps import following
 
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
-type Stuck = Literal["stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:uncollected", "stuck:conflict"]
+type Stuck = Literal[
+    "stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:uncollected", "stuck:conflict", "stuck:setup_failed"
+]
 type Next = (
     Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "advance", "done", "unknown"] | Stuck
 )
@@ -117,6 +119,7 @@ def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> Attempt
     expired = reads.clock() >= row.deadline
     rebooted = row.entry is not None and reads.boot() not in (None, row.entry[2])
     next_word = _released(row, next_action(row.phase, entry, result, expired, rebooted=rebooted), succeeded(result))
+    next_word = _setup_failed(reads, row, next_word)
     found = (row.backlog, row.task_id, row.step, row.key.attempt_id, row.slot, row.phase)
     left = reads.leftovers(row.key) if probe and next_word == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
@@ -126,6 +129,18 @@ def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> Attempt
     next_word = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
     held = AttemptResult("pending", next_word, result.execution)
     return AttemptView(*found, entry, held, expired, next_word, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
+
+
+def _setup_failed(reads: StatusPorts, row: AttemptRow, step: Next) -> Next:
+    """An admitted attempt 1 whose setup failed `SETUP_RUNS` times is `stuck:setup_failed`, not `start`: a relaunch
+    would only refuse `environment:failed` (a repeat runs no setup). An unreadable count is `unknown`."""
+    if step != "start" or row.number != 1 or row.release is not None:
+        return step
+    try:
+        failed = SetupStore(reads.store.connect, reads.store.begin).failures(row.key)
+    except StoreUnavailable:
+        return "unknown"
+    return "stuck:setup_failed" if failed >= SETUP_RUNS else step
 
 
 def _released(row: AttemptRow, step: Next, verified: bool) -> Next:

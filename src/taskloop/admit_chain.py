@@ -252,20 +252,23 @@ class NextAdmission:
         return (con, found, step) if found.current else AdmitRefused("task_attempted")
 
     def _ready(self, request: NextStepRequest) -> _Ready | AdmitRefused | AdmitUnavailable:
-        """Then the one tracker read (still in progress for the factory's actor; no label), the checkout's repository and
-        its free slots passing the branch rule."""
+        """Then the checkout's repository and its free slots passing the branch rule (local reads: no slot is
+        `no_free_slot` before any tracker call), then the one tracker read (still in progress for the factory's actor;
+        no label)."""
         previous = self._previous(request)
         if not isinstance(previous, tuple):
             return previous
         con, found, step = previous
+        free = self._free(con, request, found)
+        if not isinstance(free, tuple):
+            return free
         task = read_task(self.tasks, found.task_id, found.backlog, found.tracker_root)
         if not isinstance(task, TaskInspection):
             return task
         if task.status != "in_progress" or task.assignee != ACTOR:
             return AdmitRefused("claim_lost", detail=f"The tracker shows {found.task_id} {task.status or 'without status'}, "
                                 f"assigned to {task.assignee or 'nobody'}")
-        free = self._free(con, request, found)
-        return free if not isinstance(free, tuple) else _Ready(con, found, step, task, free)
+        return _Ready(con, found, step, task, free)
 
     def _free(self, con: sqlite3.Connection, request: NextStepRequest, found: _Task) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
         """The checkout is the previous attempt's repository; its free slots whose D the task branch rule passes and

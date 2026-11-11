@@ -54,6 +54,9 @@ from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, leaked_claim, 
 STOPS: Final = frozenset({
     "no_free_slot", "checkout", "choices", "deadline", "expired", "constraint", "schema", "database", "input", "task",
 })
+# The advance's own stop: only words about the round's inputs, store or slots. `task`, `input`, `checkout` and
+# `constraint` come from one claimed task's stored facts (its tracker root, its repository, its row) and are its skip.
+ADVANCE_STOPS: Final = frozenset({"no_free_slot", "choices", "deadline", "expired", "database", "schema"})
 # re-running is safe; a single task's unsettled must not stop admission or back off the loop
 STOPPING_UNKNOWN: Final = frozenset(UNKNOWN_KINDS) - {"unsettled"}
 
@@ -242,17 +245,18 @@ def _full(store: AttemptStore) -> bool:
         return False
 
 
-def _stops(result: Failed) -> bool:
-    """Admission's stop: an unknown, or a refusal of the round's own inputs, the store or the slots (`STOPS`)."""
-    return result.kind in STOPPING_UNKNOWN or (result.kind == "refused" and result.reason in STOPS)
+def _stops(result: Failed, stops: frozenset[str] = STOPS) -> bool:
+    """A stop: an unknown, or a refusal of the round's own inputs, the store or the slots (`stops`)."""
+    return result.kind in STOPPING_UNKNOWN or (result.kind == "refused" and result.reason in stops)
 
 
 def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView, ...], trail: _Trail) -> str:
     """The snapshot's done attempts whose step has a following one (`Next: advance`), oldest settled release first (.15
     Q3): each one's next step admitted into a free slot (one tracker read; no claim, no label) and launched, before any
-    new task. Admission's stop words end both phases (`no_free_slot` unwritten, as admission's); a refusal about one
-    task (`claim_lost`, `not_advanceable`, `branch_moved`, `abandoned`, `changed`) is a `skip` of the done attempt, tried
-    again next round, its unchanged line kept out of the log by `quiet`. With every slot reserved: no tracker call."""
+    new task. An unknown or a round-wide refusal (`ADVANCE_STOPS`) ends both phases (`no_free_slot` unwritten, as
+    admission's); any other refusal is about one task (`claim_lost`, `not_advanceable`, `branch_moved`, `abandoned`,
+    `changed`, `task`, `checkout`, `input`, `constraint`): a `skip` of the done attempt, tried again next round, its
+    unchanged line kept out of the log by `quiet`. With every slot reserved: no tracker call."""
     if not waiting:
         return ""
     if _full(ports.reads.store):
@@ -266,7 +270,7 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
             continue
         if result.reason == "no_free_slot":
             return result.reason
-        stop = _stops(result)
+        stop = _stops(result, ADVANCE_STOPS)
         if stop or result.admitted:  # an unknown, a stop, or the next step admitted but not launched (the next round relaunches)
             trail.add(Move(each.task_id, "advance", result.word, each.attempt_id, result.detail, each.step))
         else:

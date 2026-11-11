@@ -694,9 +694,11 @@ exit code or JSON key change; `rounds.log` gains the `advance` action and the `s
   is `advance`, oldest `release.released_at` first (task id breaks a tie), each through `operations.start(...,
   advancing=<attempt>)` with the round's checkout, model, effort and minutes, and no label. With every adopted slot
   reserved (`_full`) the phase returns `no_free_slot` with no tracker read. **Claimed work first** (the plan's decision,
-  .15 Q3): admission runs only after the advance phase and only into the slots it left; a stop word of the advance
-  (`no_free_slot`, admission's `STOPS`, an unknown) ends admission too. New work cannot be starved for long: each claimed
-  task advances at most once per step and `STEPS` has two; claimed work waits behind new work never.
+  .15 Q3): admission runs only after the advance phase and only into the slots it left; a round-wide stop of the
+  advance ends admission too (as repaired in section 15: only `ADVANCE_STOPS` and unknowns; a refusal from one task's
+  stored facts is that task's skip). New work waits only while some claimed task can advance into a free slot; each
+  claimed task advances at most once per step, so the wait is bounded by the claimed tasks a round finds advanceable,
+  and one task that cannot advance never blocks new work or later advances. Claimed work never waits behind new work.
 - **One operation, fenced** (chosen here): the round calls `start`, the operation `tl step start` runs, with
   `advancing`: it acts only when the task's current attempt is still that done attempt (`_Advance`), else it refuses
   `abandoned` (abandoned since the snapshot: never a fresh admission, so never a claim or an ingestion without the
@@ -738,3 +740,19 @@ Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kep
 `step_guide` 126, `cli_step` 162, `step_render` 138); tests +282 (`test_advance` 228, `test_round` 456 to 507,
 `test_step_cli` 590). Live smoke not run: the owner-run M1 end-to-end steps are in
 [live-smoke.md](../tl-8bh9.4.3.1.16.2/live-smoke.md).
+
+## 15. Review repairs: S5c (2026-11-11)
+
+An independent review of 98283fddb found five points; all are repaired, each with a test that fails without it.
+
+| # | Finding | Repair |
+|---|---|---|
+| 1 | The advance stopped the whole round on admission's `STOPS`, which include words from one claimed task's stored facts: `task` (deleted or malformed task, or its stored tracker root no longer resolves), `checkout` (another repository), `input`, `constraint`. One such task stopped every later advance and all ingestion, every round | `round.ADVANCE_STOPS` (`no_free_slot`, `choices`, `deadline`, `expired`, `database`, `schema`) and unknowns stop; every other refusal is a `skip` of the done attempt and the loop goes on. GUIDE gains `task` and `changed`. `test_round`'s refusal table makes `task`/`checkout`/`input`/`constraint` skips; `test_advance`: a claimed task deleted from the tracker is skipped while the next done task advances and a new ready task starts (two slots). Kept: `unavailable:tracker` stops (an unknown; the rounds back off), also when it comes from one task's stored root |
+| 2 | The M1 runbook built the scratch remote from `main`, the baseline (its profile refused, no `just bootstrap`, no `round_log.py`) | The scratch remote's `main` is set to the successor commit `SHA` (stale `task/*` removed); the runner, the slot base, the profile check (`tl profile show --at HEAD`) and the smoke task all use it; mise trusts `$M1` (runner, slots, review); the answer's `explanation` is read from the attempt folder (`tl step show` does not print it) |
+| 3 | A setup failing twice after an autonomous advance left the attempt `start`: every round relaunched a real entry until the deadline, the log looked healthy and the slot stayed held | `attempt_status` derives `stuck:setup_failed` for an admitted, unreleased attempt 1 with `SETUP_RUNS` failed setup runs (`SETUP_RUNS` moved to `setup_store`, its owner, beside `FAILURES`); settle reports it and never relaunches; `tl step list --stuck` shows it; GUIDE and glossary. An unreadable count is `unknown` |
+| 4 | With one free slot, a second waiting advance read the tracker before it learnt `no_free_slot` | `NextAdmission._ready` observes the free slots (local reads) before the one `bd show`; `test_advance` checks the second task's advance makes no tracker read. A skipped task still costs one `bd show` per round while a slot is free (known cost; holds, B7, end it) |
+| 5 | Roadmap wording | The S5e live-smoke link is no longer called a placeholder; B14 is filed (tl-8bh9.14, 25 children); "every M1 block is built" names the blocks |
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kept); `just test` 1606 passed. Code lines
+(policy counter): `round` 240, `attempt_status` 154, `admit_chain` 261, `step_guide` 133, `setup_store` 97; `test_advance`
+248, `test_round` 508. Mutations reverting repairs 1, 3 and 4 each fail a test (run by hand, not kept).

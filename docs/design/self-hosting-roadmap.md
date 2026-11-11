@@ -43,18 +43,18 @@ section 2.9 and its decision 8.7 now run `setup` from the task branch.
 | Scheduling: `tl step next` (one round); `tl step rounds` (foreground, Ctrl-C); deadline renewal once per reboot | built, gated, live smoke (Runs F-H) | 35bf31804, c26fb0643, 283ae2271, 5ec5fe9c9 |
 | Step generalization S1-S4: generic tables (factory.db v10), step port, `tl step` replaces `tl plan` | built, gated | 43616e040, d2f41da10, cf4df5cff, 9c1cbe426, edc4e31e2, 0304f0abf |
 | Implement step and step chaining (S5) | design ([.16](tl-8bh9.4.3.1.16/plan.md)); S5a, S5b (implement kind, hand advance, factory.db v11), S5c (round advance) built, gated; live smoke not run | f5ee65990, 872e6d2c9, da4245d9c; S5c: .16 section 14 |
-| Test environment inside the agent sandbox (B2, [S5e](tl-8bh9.4.3.1.16.2/plan.md)) | S5e-0 pins, S5e-1 setup and S5e-2 access built, gated (Linux only); live smoke not run ([placeholder](tl-8bh9.4.3.1.16.2/live-smoke.md)) | 06b656747, bbbb0c775, 5cfcaa2fb; S5e-2: plan section 18 |
+| Test environment inside the agent sandbox (B2, [S5e](tl-8bh9.4.3.1.16.2/plan.md)) | S5e-0 pins, S5e-1 setup and S5e-2 access built, gated (Linux only); live smoke not run ([checklist and M1 runbook](tl-8bh9.4.3.1.16.2/live-smoke.md)) | 06b656747, bbbb0c775, 5cfcaa2fb; S5e-2: plan section 18 |
 | Repository profile reader (`.task-loop.json`, B3) | built, gated; `tl profile show` | 85c9e68fc, 2bb02d106 |
 | Checks step, review step, land (merge, close, sync) | not built; contracts agreed in candidate-checks and delivery-publication | none |
 | Questions and holds; a failed result today leaves the task claimed with no signal | not built | none |
 | Install, pin, release; session resume; dashboard; keep-awake; account routing | not built | none |
-| Tracker entries for slices .4.3.1.2 to .16 | were missing (only .4.3.1 and .4.3.1.1 existed, `in_progress`); filing approved (D13), done separately | none |
+| Tracker entries for the roadmap (B14) | filed (D13): epic tl-8bh9.14 with 25 children (blocks B3 to B15 and audits; tl-8bh9.14.1 and .14.2 closed), S5 slices under tl-8bh9.4.3.1.16; stale-entry hygiene remains open (tl-8bh9.14.15) | none |
 
 Today a `tl step rounds` loop takes an `auto` task, plans it, verifies and publishes the plan, then advances it in a
 later round (S5c: no second claim, no label check; claimed work before new tasks) to implement, whose entry runs the
 profile's `setup` and then an agent that may write three folders beside the slots, offline, and is told to run the
 profile's checks (S5e); the implement commit is verified and published on the same `task/<id>`, `Next: done`. With S5c
-every block of M1 is built: **M1 is reached once the owner-run live smoke
+every block of M1 is built (B14 filed, B3, B13 pinned `git_dir`, B2, S5a-c): **M1 is reached once the owner-run live smoke
 ([M1 end to end](tl-8bh9.4.3.1.16.2/live-smoke.md)) passes**. A result that is not `verified` ends as a failed `done`:
 the slot is released, the claim kept, and nothing tells the person.
 

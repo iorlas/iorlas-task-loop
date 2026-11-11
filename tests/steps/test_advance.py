@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from doubles import Command, Environment, PinnedViews
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AttemptAdmission
@@ -39,9 +39,13 @@ WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 type Agent = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
 
 
-def scripted(answer: Mapping[str, object], change: Callable[[], None]) -> Agent:
+def scripted(repo: FakeRepo, answer: Mapping[str, object], files: Mapping[str, str]) -> Agent:
+    """An agent that writes `files` in the slot it runs in (its cwd) and answers `answer`."""
+
     def run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        change()
+        here = repo.worktree(Path(spec.cwd or ""))
+        for path, text in files.items():
+            here.write_file(path, text)
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(answer), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
@@ -87,6 +91,7 @@ class Factory:
     def __init__(self, con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, files: SlotFiles,
                  tracker: Tracker) -> None:
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.repo.identity().key, str(slot.path)))
+        self.root = slot.path.parent
         self.con, self.tmp, self.slot, self.checkouts, self.files, self.tracker = con, tmp_path, slot, checkouts, files, tracker
         self.store = AttemptStore(lambda: con)
         self.environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096)
@@ -96,6 +101,11 @@ class Factory:
         self.last = Round("tasks", ())
         self.during: Callable[[], object] = lambda: None
         self.ran: list[str] = []  # each launched body's result
+
+    def adopt(self, name: str) -> None:
+        """One more slot, made and adopted as a person does: detached at the repository's HEAD."""
+        added = self.slot.repo.add_worktree(self.root / name, "HEAD")
+        self.con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,?,?)", (self.slot.repo.identity().key, name, str(added.path)))
 
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         if self.failing is not None:
@@ -180,16 +190,11 @@ def scripts(factory: Factory, slot: FakeWorktree, *task_ids: str) -> None:
     for task_id in task_ids:
         plan, code, test = f"docs/design/{task_id}/plan.md", f"src/{task_id}.py", f"tests/test_{task_id}.py"
         factory.agents[task_id, "plan"] = scripted(
-            {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
-            lambda plan=plan: slot.write_file(plan, "# Plan\n"))
+            slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
+            {plan: "# Plan\n"})
         factory.agents[task_id, "implement"] = scripted(
-            {"disposition": "implemented", "paths": [code, test], "message": "Add it", "explanation": "ran just check, just test"},
-            lambda code=code, test=test: write(slot, {code: "X = 1\n", test: "def test_x() -> None: ...\n"}))
-
-
-def write(slot: FakeWorktree, files: Mapping[str, str]) -> None:
-    for path, text in files.items():
-        slot.write_file(path, text)
+            slot.repo, {"disposition": "implemented", "paths": [code, test], "message": "Add it", "explanation": "ran just check"},
+            {code: "X = 1\n", test: "def test_x() -> None: ...\n"})
 
 
 @pytest.fixture
@@ -227,9 +232,10 @@ def test_two_done_tasks_and_one_slot_advance_oldest_release_first_and_new_work_w
     factory.by_hand("tl-1")
     factory.tracker.beads["tl-3"] = task("tl-3")  # a new ready task: claimed work goes first
     scripts(factory, factory.slot, "tl-3")
-    reads = factory.tracker.ready_reads
+    reads, shows = factory.tracker.ready_reads, len(factory.tracker.shows)
     assert factory.round() == [("tl-2", "implement", "advance", "started")] and factory.last.stopped == "no_free_slot"
     assert factory.tracker.ready_reads == reads and factory.tracker.claims == ["tl-2", "tl-1"]  # no ready read, no claim
+    assert factory.tracker.shows[shows:] == ["tl-2"]  # tl-1 found no free slot before any tracker read
     assert factory.round() == [("tl-2", "implement", "verify", "verified release=released branch=published"),
                                ("tl-1", "implement", "advance", "started")]
     assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published"),
@@ -281,17 +287,37 @@ def test_a_restart_after_the_advance_was_admitted_but_never_launched_continues_i
     assert factory.con.execute("SELECT count(*) FROM attempt WHERE step='implement'").fetchone() == (1,)
 
 
-def test_a_failing_setup_after_the_advance_is_relaunched_once_per_round_and_written_once(factory: Factory) -> None:
-    """Two failed setup runs, then `environment:failed` with no process: the attempt stays admitted, each round relaunches
-    it once (no tight loop), and its unchanged line is not written again."""
+def test_a_setup_failing_twice_after_the_advance_is_stuck_and_never_relaunched_again(factory: Factory) -> None:
+    """The advance's entry runs setup once, the next round's relaunch once more: two failed runs make the attempt
+    `stuck:setup_failed`, which rounds report (written once) and never relaunch."""
     factory.tracker.beads.pop("tl-2")
     factory.by_hand("tl-1")
     factory.environment.process.script = [Command(rc=1), Command(rc=1)]
     assert factory.round(frozenset()) == [("tl-1", "implement", "advance", "started")]
     implement = factory.current("tl-1")
     assert factory.round(factory.last.written) == [("tl-1", "implement", "relaunch", "relaunched")]
+    assert factory.round(factory.last.written) == [("tl-1", "implement", "report", "stuck:setup_failed")]
     written = len(factory.lines)
-    assert factory.round(factory.last.written) == [("tl-1", "implement", "relaunch", "relaunched")]
+    assert factory.round(factory.last.written) == [("tl-1", "implement", "report", "stuck:setup_failed")]
     assert len(factory.lines) == written and len(factory.environment.process.calls) == 2
-    assert factory.next_words() == {"tl-1": ("implement", "start")} and factory.current("tl-1") == implement
-    assert factory.ran[-3:] == ["unavailable:environment:exit"] * 2 + ["refused:environment:failed"]
+    assert factory.ran[-2:] == ["unavailable:environment:exit"] * 2  # no third entry: nothing relaunched
+    assert factory.next_words() == {"tl-1": ("implement", "stuck:setup_failed")} and factory.current("tl-1") == implement
+    listed = list_attempts(StatusPorts(factory.store, lambda _entry: "gone", lambda: factory.now, lambda _key: None, lambda: "boot"),
+                           stuck=True)
+    assert isinstance(listed, Listed) and [each.next for each in listed.attempts] == ["stuck:setup_failed"]
+
+
+def test_a_claimed_task_the_tracker_lost_is_skipped_and_the_next_advance_and_new_work_proceed(factory: Factory) -> None:
+    """One claimed task's own refusal (`task`: deleted from its tracker) never stops the round: the next done task
+    advances and a new ready task starts, every round."""
+    factory.adopt("s2")
+    factory.by_hand("tl-1")  # released first: tried first
+    factory.by_hand("tl-2")
+    factory.tracker.beads.pop("tl-1")
+    factory.tracker.beads["tl-3"] = task("tl-3")
+    scripts(factory, factory.slot, "tl-3")
+    assert factory.round() == [("tl-1", "plan", "skip", "task"), ("tl-2", "implement", "advance", "started"),
+                               ("tl-3", "plan", "start", "started")]
+    assert factory.last.stopped == ""
+    assert ("tl-1", "plan", "skip", "task") in factory.round() and factory.last.stopped == ""
+    assert factory.con.execute("SELECT count(*) FROM attempt WHERE task_id='tl-1' AND step='implement'").fetchone() == (0,)

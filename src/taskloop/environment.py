@@ -23,7 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, Protocol
+from typing import Literal, Protocol
 
 from git_porcelain import GitUnavailable
 from stream_proc import OwnedProcess
@@ -33,9 +33,8 @@ from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Che
 from taskloop.evidence_files import EvidenceFiles, SetupLog
 from taskloop.prepare import Prepared, task_branch
 from taskloop.profile import ProfileFiles, Refused, Unavailable, read_profile
-from taskloop.setup_store import Conclusion, SetupSeen, SetupStore
+from taskloop.setup_store import SETUP_RUNS, Conclusion, SetupSeen, SetupStore
 
-SETUP_RUNS: Final = 2  # failed runs of one attempt before relaunches stop running its setup
 type Renewal = Literal["held", "unrenewed", "lost"]
 type Renew = Callable[[], Renewal]  # one claim renewal, now (the entry's keep-alive)
 type GroupAlive = Callable[[int], bool]  # any process left in a process group

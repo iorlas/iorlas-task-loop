@@ -21,6 +21,7 @@ from taskloop.attempt_types import AttemptKey
 type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "interrupted"]
 CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "interrupted")
 FAILURES: Final[tuple[Conclusion, ...]] = ("failed", "timed_out", "lingering", "dirty")  # `interrupted` is not the setup's fault
+SETUP_RUNS: Final = 2  # failed runs of one attempt before relaunches stop running its setup (`environment:failed`)
 # Concluded with a process possibly left in the last command's group (a member that outlived it, or one the deadline's stop
 # could not prove gone): until that group is empty the run still holds the slot, like an unfinished one.
 LIVE_AFTER: Final[tuple[Conclusion, ...]] = ("lingering", "timed_out")

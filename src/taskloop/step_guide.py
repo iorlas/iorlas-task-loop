@@ -67,6 +67,13 @@ GUIDE = {
     "stuck:uncollected": "The result was captured but never collected: its answer or its session is still pending or faulted (the "
     f"attempt's entry.log says why), and no verify can judge it. Keep the evidence. {ABANDON}",
     "stuck:conflict": f"The owner inspects the evidence; then {ABANDON}",
+    "stuck:setup_failed": "The step's setup (the profile's `setup`, run before an implement agent) failed twice; no agent ran and "
+    "rounds no longer relaunch it (a relaunch would only refuse `environment:failed`). Read `setup-<run>.log` beside the "
+    f"attempt's entry.log (`Setup:` names the last run), fix the cause (the task branch's `setup`, the network, the slot); then {ABANDON} "
+    "Rounds never re-admit an abandoned task: `tl step start` admits it afresh at plan.",
+    "task": "The task could not be read from the tracker named by the attempt's tracker root (deleted, malformed, or the root no "
+    "longer resolves): check `bd show <task>` there. Rounds skip it every round; `tl step release --abandon` gives it up.",
+    "changed": "Another attempt of the task became current since the round read the store; the next round follows it (`tl step show`).",
     "unsettled": "The slot has files the step did not commit (listed), or the slot pointer or HEAD changed. Remove the "
     "listed files and `tl step verify`, or run `tl step start` again to repeat the step; for `redirected` or `head_moved` "
     "inspect first; for `worker_alive` stop the worker first; for `staged` unstage the listed paths first.",

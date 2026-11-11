@@ -1,6 +1,7 @@
-# Live smoke: the implement step's environment, S5e (owner-run, placeholder)
+# Live smoke: the implement step's environment (S5e) and M1 end to end (owner-run)
 
-**Status: not run.** A placeholder for the owner-run live smoke of [S5e](plan.md) (setup, S5e-1; access, S5e-2), on Linux
+**Status: not run.** The S5e part is a checklist (below); the [M1 end-to-end](#m1-end-to-end-smoke-plan-round-advance-implement-owner-run-after-s5c)
+part is a full runbook that covers most of it. The owner-run live smoke of [S5e](plan.md) (setup, S5e-1; access, S5e-2), on Linux
 only (macOS refuses implement with `environment:platform`). Run by Denis, or by an agent Denis has authorized for that one
 run; never on an agent's own initiative. This repository on a scratch tracker, a scratch remote and a scratch
 `factory.db`, with the successor executable `$TL/.venv/bin/tl` and a scratch machine config, as the
@@ -58,15 +59,28 @@ nothing reaches the real `origin`, the real tracker or `~/.local/state/task-loop
 
 ## 0. Runner, layout and machine config
 
+The factory under test **and** the code the task changes are the successor (this branch), not `main`: on `main`
+the baseline's `.task-loop.json` (`{"engine": ...}`) is refused `unknown_key`, there is no `just bootstrap` and no
+`round_log.py`. So the scratch remote's `main` is set to the successor commit `SHA`, and the slots, the plan and the
+implement commit all start from it.
+
 ```bash
 M1=$HOME/tl-smoke/m1; mkdir -p "$M1" && cd "$M1"
-SRC=$HOME/PATH/TO/main-checkout                              # edit: the person's checkout of this repository
+SRC=$HOME/PATH/TO/a-checkout-of-this-repository             # edit: any checkout whose object store holds SHA
+SHA=<the S5c repair commit or later on claude/factory-continuation>   # edit: the successor commit under test
 G() { git --no-optional-locks -c core.hooksPath=/dev/null "$@"; }
-G -C "$SRC" worktree add --detach "$M1/runner" <S5c-sha>     # the runner: the factory version under test, never edited
+G -C "$SRC" cat-file -e "$SHA^{commit}" && echo "SHA present"
+G -C "$SRC" worktree add --detach "$M1/runner" "$SHA"       # the runner: the factory version under test, never edited
 (cd "$M1/runner" && just install)                            # non-editable wheel in runner/.venv
 T() { "$M1/runner/.venv/bin/tl" --config "$M1/config.toml" "$@"; }
 G clone -q --bare "$SRC" "$M1/remote.git"                    # scratch origin: the publish goes here only
-G clone -q "$M1/remote.git" "$M1/repo" && G -C "$M1/repo" checkout -q main
+G -C "$M1/remote.git" update-ref refs/heads/main "$SHA"      # the scratch main is the successor commit
+G -C "$M1/remote.git" for-each-ref --format='%(refname)' 'refs/heads/task/*' | while read -r ref; do
+  G -C "$M1/remote.git" update-ref -d "$ref"; done           # no stale task/<id> from the source
+G clone -q --branch main "$M1/remote.git" "$M1/repo"
+G -C "$M1/repo" rev-parse HEAD                               # prints SHA
+G -C "$M1/repo" show HEAD:.task-loop.json                    # "setup": [["just", "bootstrap"]], checks check/test
+T profile show --checkout "$M1/repo" --at HEAD               # the same profile, no refusal
 mkdir -p "$M1/state" "$M1/artifacts" "$M1/slots"
 printf 'db = "%s"\nartifacts = "%s"\nslots_root = "%s"\nslot_count = 1\n' \
   "$M1/state/factory.db" "$M1/artifacts" "$M1/slots" > "$M1/config.toml"
@@ -83,8 +97,10 @@ Prerequisites this layout meets, each a refusal otherwise:
   `~/tl-smoke/slots`) refuses.
 - **`<slots_root>/<repo_id>/.t/<slot>` is at most 64 bytes** (`environment:path_long`): with `$HOME=/home/<u>` and a
   12-hex repo id, `$M1/slots/<id>/.t/s1` is 43 + len(u) bytes (49 for `iorlas`).
-- **mise trusts the slots folder** (D14): `mise settings add trusted_config_paths "$M1/slots"` (or the equivalent your
-  mise version documents), so the `codex`, `just` and `uv` shims run in a slot. Trust `$M1/review` too for step 4.
+- **mise trusts `$M1`** (D14; it holds the runner, the slots and the review worktree, each with this repository's
+  `mise.toml`): `mise settings add trusted_config_paths "$M1"` (or the equivalent your mise version documents; not
+  run by the author), so the `codex`, `just` and `uv` shims run there. Check: `(cd "$M1/repo" && just --version)`
+  prints no trust error.
 - `codex` on `PATH` in the shell that starts the rounds (the entry inherits it); `codex --version`;
   `test -f "${CODEX_HOME:-$HOME/.codex}/auth.json" && echo ok`. `bd` on `PATH`. Network for `setup` (it runs outside
   the sandbox: `just bootstrap` fills the slot's uv cache).
@@ -98,7 +114,7 @@ mkdir -p "$(dirname "$SLOT")" && G -C "$M1/repo" worktree add --detach "$SLOT"
 T slot adopt "$M1/repo"                  # `s1 adopted <path>` (exit 0)
 (cd "$SLOT" && codex sandbox -- true; echo "probe exit=$?")   # 0, no mise trust error
 mkdir "$M1/tracker" && cd "$M1/tracker" && git init -q && bd init --non-interactive --skip-hooks --skip-agents -p m1 -q
-TASK=$(bd create "Test the round log words" --silent)
+TASK=$(bd create "Test the round log words" --silent)   # `src/taskloop/round_log.py` exists at SHA, without a test
 bd update "$TASK" -d "Add tests/steps/test_round_log.py with pytest functions for src/taskloop/round_log.py: \
 fixed keeps a valid word and turns an invalid one into 'invalid'; ident does the same for ids; stamped prints the \
 UTC time, the backlog and the words. Change no source file." \
@@ -126,7 +142,8 @@ tail -f "$M1/artifacts/rounds.log"
    `<task> implement verify verified release=released branch=published <a2>`, then a quiet loop (`round moves=0` once).
    No `skip claim_lost`, `skip branch_moved` or `advance refused:*` line; no second `bd` claim (`bd show` history).
 3. `T step show "$TASK" --backlog m1`: `Step: implement`, `Next: done`, `Setup: run 1 passed at <B>; log ...`
-   (`just bootstrap`), `Earlier: <a1> advanced`. `T step list`: one row, `implement ... done`.
+   (`just bootstrap`), `Earlier: <a1> advanced`. `T step list`: one row, `implement ... done`. If setup fails twice
+   instead, the row reads `stuck:setup_failed` and rounds stop relaunching it: paste `setup-<run>.log`.
 4. Ctrl-C once in tab A: `Rounds stopped: interrupted.`; `rounds.log` ends `rounds stopped interrupted`.
 
 Restart (optional, covers "an intact factory.db continues"): Ctrl-C while the implement agent runs (`implement report running`
@@ -143,8 +160,8 @@ G -C "$SLOT" status --porcelain=v1 --ignored=no          # empty: the slot is cl
 ls -A "$(dirname "$SLOT")/.t/s1" 2>/dev/null              # empty or absent: the scratch emptied by the release
 ```
 
-- The implement answer's `explanation` (the attempt's collected result, `T step show`) names `just check` and
-  `just test` and how they ended, and the new test file.
+- The implement answer's `explanation` names `just check` and `just test` and how they ended, and the new test file.
+  `T step show` does not print it: read the answer file in the attempt's `Directory:` (the one `T step show` prints).
 - The agent's transcript in the attempt folder shows `just check` and `just test` run with `UV_OFFLINE=1` and `TMPDIR`
   under `.t/s1`, and passing.
 

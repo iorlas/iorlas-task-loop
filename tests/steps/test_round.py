@@ -319,14 +319,16 @@ def test_a_verified_released_plan_is_published_once_then_advanced_never_before(
     (AdmitRefused("branch_diverged"), [("tl-1", "skip", "branch_diverged")], "", 0),
     (AdmitRefused("no_free_slot"), [], "no_free_slot", 0),
     (AdmitUnavailable("tracker"), [("tl-1", "advance", "unavailable:tracker")], "unavailable:tracker", 3),
-    (AdmitRefused("checkout"), [("tl-1", "advance", "refused:checkout")], "refused:checkout", 1),
+    *[(AdmitRefused(reason), [("tl-1", "skip", reason)], "", 0) for reason in ("task", "checkout", "input", "constraint")],
+    (AdmitRefused("deadline"), [("tl-1", "advance", "refused:deadline")], "refused:deadline", 1),
 ], ids=lambda value: getattr(value, "reason", getattr(value, "what", None)))
 def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admission_too(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
     answer: AdmitResult, expected: list[tuple[str, str, str]], stopped: str, code: int,
 ) -> None:
-    """The advance carries the round's checkout and choices and no label; a refusal about the task skips it (admission
-    goes on to the ready task), a stop word ends the advance and admission (no ready read), as admission's own do."""
+    """The advance carries the round's checkout and choices and no label; a refusal about the task, also one from its
+    stored facts (`task`, `checkout`, `input`, `constraint`), skips it and admission goes on to the ready task; a round-wide
+    word (`no_free_slot`, `deadline`, an unknown) ends the advance and admission (no ready read)."""
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
     ready = FakeTaskReadClient([bead("t-9")], ready=["t-9"])
