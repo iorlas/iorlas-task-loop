@@ -12,6 +12,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from doubles import CHECKS, Command, Environment, FakeProfiles
+from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 
 from taskloop.access import CODEX_ACCESS, SHELL, folders, prepared_access
@@ -488,6 +489,28 @@ def test_an_implement_slot_is_never_reset_hard(entry: Entry, monkeypatch: pytest
 def test_a_checks_setup_must_leave_the_slot_detached_at_x(checks_slot: ChecksSlot, slot: FakeWorktree) -> None:
     checks_slot.environment.process.script = [Command(effect=lambda: slot.checkout_new("elsewhere"))]
     assert checks_slot.prepare() == AttemptResult("refused", "environment:moved")
+
+
+@pytest.mark.parametrize("attached", [True, False], ids=["branch", "elsewhere"])
+def test_a_checks_slot_not_detached_at_x_is_never_reset(checks_slot: ChecksSlot, slot: FakeWorktree, attached: bool) -> None:
+    """A straggler checked out a branch (or another commit) after the take of X: the hard reset would carry that branch
+    to X, so nothing is reset, cleaned or run."""
+    x = checks_slot.x
+    slot.write_file("README", "the straggler's")
+    made = slot.record("a straggler's commit", paths="all")
+    assert isinstance(made, Recorded)
+    if attached:
+        slot.checkout_new("straggler")
+    slot.repo.exclude_locally([".venv/"])
+    slot.write_file(".venv/kept", "x")
+    env = checks_slot.environment
+    target = SetupFor(CHECKS, slot.path, x, None, 100.0, True)
+    gitdir = slot.repo.identity().common_dir / "worktrees" / slot.path.name
+    found = env.preparation().prepare_for(target, Prepared(x, gitdir, slot.repo.path), held, {}, probe=None)
+    assert found == AttemptResult("refused", "environment:moved")
+    assert slot.read_file("README") == "the straggler's" and slot.read_file(".venv/kept") == "x"
+    assert dict(slot.repo.branches("straggler")) == ({"straggler": made.sha} if attached else {})
+    assert not any(event.startswith("exec") for event in env.events) and rows(env.con) == []
 
 
 def test_failed_checks_setups_count_across_blocks_and_stop_after_two(checks_slot: ChecksSlot) -> None:

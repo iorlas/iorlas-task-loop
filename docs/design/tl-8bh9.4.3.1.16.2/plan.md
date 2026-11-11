@@ -81,7 +81,8 @@ stays `admitted`; nothing is dispatched.
 5. Reuse: latest run `passed` at this B and digest: skip to 9.
 6. Reset (section 3).
 7. Run each argv of `profile.read_profile(files, B).setup` in order, cwd the slot; after each command check its
-   process group empty (else `lingering`); stop at the first non-zero exit (`failed`) or the deadline (`timed_out`).
+   process group empty (else `lingering`; since tl-8bh9.14.6 S6b also when the deadline's stop left survivors,
+   checked before `timed_out`); stop at the first non-zero exit (`failed`) or the deadline (`timed_out`).
 8. Re-read the slot through the pinned view: HEAD not B or not on `task/<id>` is `dirty` with the word
    `environment:moved` (review repair); tracked or untracked changes are `dirty` (a failed run; the slot stays dirty, so later relaunches refuse `slot_dirty` from `prepare` and `tl step show` names setup as the
    cause; the person removes the files as the `slot_dirty` guide says).
@@ -104,7 +105,7 @@ tree on timeout).
 | All commands exit 0, groups empty, slot clean | `passed` | (dispatch continues) |
 | A command exits non-zero, or fails to exec after registration | `failed` | `unavailable environment:exit` (the next relaunch runs once more) |
 | Deadline reached | `timed_out` | `refused expired` |
-| A command's group still has a member after it ended | `lingering` | `unavailable environment:lingering` |
+| A command's group still has a member after it ended, or its stop (the deadline) left survivors (tl-8bh9.14.6 S6b) | `lingering` | `unavailable environment:lingering` |
 | The slot is not clean after setup | `dirty` | `refused environment:dirty` |
 | Start uncertain (identity committed, exec unknown) | none yet | `unavailable environment:uncertain`; step 2 reconciles it |
 

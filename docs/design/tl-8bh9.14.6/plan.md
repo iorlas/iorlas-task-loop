@@ -403,6 +403,12 @@ implement, check`. GUIDE gains `no_required`, `target`, `target_profile`, `commi
   command (`setup_store.running`) and every unsettled row of the latest block (`check_store.unsettled`), each through
   `setup_seen`: alive `held:setup_running` / `held:check_running`, unknown `unavailable setup_unknown` /
   `check_unknown`. Never signalled; the guide lists the group's members and their cwd for the person.
+- **Reset before the park (review of S6b, decided here):** after the stop proof and under the lock, a slot listed
+  detached at X through its pinned view is reset to exactly X (`reset --hard X`, then `clean -ffdx`, one `environment`
+  function, so `reset` and `clean` keep their one owner, `environment.py`, in `test_policy.GIT_WRITES`). Otherwise the
+  untracked leftovers of a passed block (`coverage.xml`, `junit.xml`, `build/` not ignored by the repository) would make
+  `park_slot` refuse `held:slot_dirty` and wedge the slot after every block. A slot not detached at X is not reset (an
+  attached HEAD would carry its branch): the park's own refusal stands.
 - Then the lock, the slot read and the park at D (the extracted `slot_release.park_slot`: detached at X and clean is
   parked at D; `held:slot_dirty` when not clean), one transaction fenced on `rev`, `phase`, the held reservation and no
   release (`check_store.record_release` with `abandoned`, `slot_release.free`), then the scratch emptied, best effort.
@@ -482,7 +488,7 @@ Code lines by the policy counter at 4f1d14c2c; current counts in brackets.
 |---|---|---|---|---|
 | 1 | **S6a schema, store, not-current rule** | v12 DDL and column lists; `check_store.py` (rows, `insert`, `of_attempt`, `attempt_of`, `register_entry` without the deadline refusal, `refused`, `profiled`, `block`, the sink writes, `undefined`, `conclude`, `record_release`, `abandon_released`, `results`, `unsettled`, `LIVE_AFTER`); `factory_schema.SUCCESSOR` and its use in `slot_release` `ROW`/`FENCE`/`FLIP`; `setup_store.HELD` union; `WRITERS` | `factory_schema` [109] +40, `check_store` new ~240, `setup_store` [97] +4, `slot_release` [263] +3 | `test_check_store.py` ~340; `test_setup_store` +30; `test_slot_release` +50 (implement abandon refused `changed` with an unabandoned checks attempt, passes once it is abandoned) |
 | 2 | **S6b block and environment** | `checks.py` (`BlockTarget`, `ResultSink`, `Block.run`: undefined rows, each check, the after-end group check, the tracked-only clean read, the completed-block reading, the conclusion); `environment.prepare_for`, `SetupFor`, `commit` reset, `probe` None, no reuse [229] +30; `SetupEnded.survivors` in `slot_env` [96] +2 and setup's judgment; `prepare.detach_at` [125] +28; `evidence_files.check_log`, `CappedLog` [107] +10; `agent_credentials.scrubbed` [65] +6; `GIT_WRITES` `reset` | `checks` new ~230 | `test_checks.py` ~480; `test_environment` +80; `test_prepare` +60; `real/test_checks_real.py` ~100 |
-| 3 | **S6c entry, launcher, release** | `check_entry.py` (section 6 with 6.1's table); `launch.EntryTargets` [150] +14; `slot_release.park_slot`, `free` +8; `check_release.py`; composition wiring of the entry, release and launcher [100] +35; import contracts (`check_entry`, `checks`, `check_release` join the entry's closure; `check_entry` joins `cli-never-imports`) | `check_entry` new ~210, `check_release` new ~135 | `test_check_entry.py` ~420; `test_check_release.py` ~280; `test_launch` +40 |
+| 3 | **S6c entry, launcher, release** | `check_entry.py` (section 6 with 6.1's table); `launch.EntryTargets` [150] +14; `slot_release.park_slot`, `free` +8; `check_release.py` (the reset to X before the park, section 10, through `environment`'s reset function: `reset`/`clean` stay `environment.py`'s in `GIT_WRITES`); composition wiring of the entry, release and launcher [100] +35; import contracts (`check_entry`, `checks`, `check_release` join the entry's closure; `check_entry` joins `cli-never-imports`) | `check_entry` new ~210, `check_release` new ~135 | `test_check_entry.py` ~420; `test_check_release.py` ~280; `test_launch` +40 |
 | 4 | **S6d admission and `tl step`** | `check_admit.py` (section 5, advance and re-run); `steps.ORDER`, `following`, `is_agent` [46] +8; `admit_chain._previous` refusal [261] +3; `attempt.succeeded` +1; `operations` routing (`_current`, re-run, `Started.step`, the `task_attempted` winner through the checks launcher, release and abandon order) [276] +55; `attempt_status` `ChecksView`, the field swap and the `Next` table [154] +70; `step_render` [138] +45, `result_data` [108] +22, `step_guide` [133] +18; `cli_composition` [208] +25 | `check_admit` new ~140 | `test_check_admit.py` ~360; `test_operations` +120 (both race orders, the half-done abandon, re-run); `test_step_cli` +150 |
 | 5 | **S6e round and words** | `round._settle`/`_resume` routing for checks attempts [240] +20; glossary (section 15); roadmap B4 row; the live smoke file | +20 | `test_checks_round.py` ~380; `test_round` +40 |
 
@@ -776,3 +782,18 @@ with a background child is `lingering`.
 
 **Not verified**: a real `setsid` survivor of a stop (smoke step 7); a real deadline stop mid-check; anything of the
 entry around the block (S6c).
+
+### 22.1 Review repairs to S6b (2026-11-11)
+
+An independent review of 89a4a0608 found no defect in the block; three repairs:
+
+1. **The hard reset only of a slot detached at X** (defence in depth): `Preparation._reset` reads the worktree listing
+   through the pinned view first and refuses `environment:moved` (nothing reset, cleaned or run) unless the slot is
+   `(X, detached)`. A straggler that checked out a branch between `detach_at` and the reset would otherwise have had that
+   branch moved to X. Test: a branch and another detached commit, each refused with the branch ref, tracked and ignored
+   files untouched (fails without the check).
+2. **Words**: the S5e plan's run-result table and step 7 say a stop that left survivors is `lingering`; the
+   `environment` guide covers checks blocks, says `lingering` waits for the process (then a relaunch, or `expired` past
+   the deadline) and no longer promises a relaunch runs setup again after the deadline.
+3. **The checks release resets the slot to X before the park** (a design gap of S6c, recorded, not built): section 10
+   and the S6c slice row; also in the S6c tracker issue's notes.

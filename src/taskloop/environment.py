@@ -292,11 +292,16 @@ class Preparation:
 
     def _reset(self, path: Path, gitdir: Path, found: Folders, commit: str | None) -> AttemptResult | None:
         """A checks slot's tracked files and index back to exactly `commit` first (`git reset --hard`, so a check killed
-        mid-rewrite cannot poison the next block); then the slot's ignored files and nested repositories removed (`git
-        clean -ffdx` on the pinned view), then an empty ignored listing; `.env/<slot>` emptied and its two folders made
-        again."""
-        worktree = self.ports.checkouts(path, git_dir=gitdir).worktree(path)
+        mid-rewrite cannot poison the next block), only while the pinned view lists it detached at `commit` (an attached
+        HEAD would carry its branch to X: `environment:moved`); then the slot's ignored files and nested repositories
+        removed (`git clean -ffdx` on the pinned view), then an empty ignored listing; `.env/<slot>` emptied and its two
+        folders made again."""
+        view = self.ports.checkouts(path, git_dir=gitdir)
+        worktree = view.worktree(path)
         if commit is not None:
+            listed = next((info for info in view.worktrees() if info.path == path), None)
+            if listed is None or (listed.head, listed.branch) != (commit, None):
+                return _refused("environment:moved")
             worktree.reset(commit, mode="hard")
         worktree.clean(ignored=True, nested=True)
         if worktree.dirty(ignored_under=["."]).ignored:
