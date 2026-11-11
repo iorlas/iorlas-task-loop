@@ -1,9 +1,11 @@
-"""`setup_run`'s one writer on real SQLite: every write fenced by the attempt's key against its held reservation while
-`admitted`, a concluded run never rewritten, "latest" the highest run, and the failure count."""
+"""`setup_run`'s one writer on real SQLite: every write fenced by the attempt's key (an agent attempt's or a checks
+attempt's) against its held reservation while `admitted`, a concluded run never rewritten, "latest" the highest run, and
+the failure count."""
 
 import sqlite3
 
 import pytest
+from doubles import CHECKS, X
 from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import AttemptReads, StoreRefused
@@ -116,3 +118,31 @@ def test_only_the_identity_write_uses_the_registration_connection(registered: sq
                                                   ("passed", False), ("dirty", False), ("interrupted", False)])
 def test_a_run_holds_the_slot_while_unfinished_or_concluded_with_a_group_maybe_left(conclusion: Conclusion | None, held: bool) -> None:
     assert SetupRow(1, B, DIGEST, 0, ME, conclusion).unsettled == (ME if held else None)
+
+
+def test_a_checks_attempts_setup_runs_are_fenced_by_its_own_held_reservation(checking: sqlite3.Connection) -> None:
+    """`setup_run` names an agent attempt or a checks attempt: `HELD` is the union of the two fences."""
+    setup = store(checking)
+    setup.start(CHECKS, 1, X, DIGEST, 10)
+    setup.registered(CHECKS, 1, 0, ME)
+    setup.conclude(CHECKS, 1, "failed", 2, 11)
+    setup.start(CHECKS, 2, X, DIGEST, 12)
+    assert setup.latest(CHECKS) == SetupRow(2, X, DIGEST, 0, None, None) and setup.failures(CHECKS) == 1
+    for key in (AttemptKey("checks", "other", 1), AttemptKey("checks", "checks-token", 2), AttemptKey("implement", "implement-token", 1)):
+        with pytest.raises(StoreRefused, match="stale_reservation"):  # the implement attempt released its slot
+            setup.start(key, 3, X, DIGEST, 13)
+
+
+@pytest.mark.parametrize("change", [
+    "DELETE FROM reservation", "UPDATE reservation SET generation=2", "UPDATE reservation SET slot='s1'",
+    "UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5",
+], ids=["released", "generation", "slot", "concluded"])
+def test_a_checks_attempts_setup_needs_its_held_reservation_while_admitted(checking: sqlite3.Connection, change: str) -> None:
+    setup = store(checking)
+    setup.start(CHECKS, 1, X, DIGEST, 10)
+    checking.execute(change)
+    for write in (lambda: setup.registered(CHECKS, 1, 0, ME), lambda: setup.conclude(CHECKS, 1, "passed", 0, 11),
+                  lambda: setup.start(CHECKS, 2, X, DIGEST, 12)):
+        with pytest.raises(StoreRefused, match="stale_reservation"):
+            write()
+    assert checking.execute("SELECT run,pid,conclusion FROM setup_run").fetchall() == [(1, None, None)]

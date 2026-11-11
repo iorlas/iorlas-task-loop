@@ -70,6 +70,12 @@ WRITERS = {
     ("CREATE TABLE", "slot_release"): "factory_schema.py",
     ("CREATE TABLE", "published_branch"): "factory_schema.py",
     ("CREATE TABLE", "setup_run"): "factory_schema.py",
+    ("CREATE TABLE", "checks_attempt"): "factory_schema.py",
+    ("CREATE TABLE", "check_result"): "factory_schema.py",
+    ("INSERT", "checks_attempt"): "check_store.py",  # the admission's row, inside its transaction (`check_store.insert`)
+    ("UPDATE", "checks_attempt"): "check_store.py",  # also the release's record (`check_store.record_release`)
+    ("INSERT", "check_result"): "check_store.py",
+    ("UPDATE", "check_result"): "check_store.py",
     ("INSERT", "setup_run"): "setup_store.py",
     ("UPDATE", "setup_run"): "setup_store.py",
     ("INSERT", "slot"): "slots.py",
@@ -116,9 +122,10 @@ def test_write_pattern_catches_spelling_variants(statement: str) -> None:
 
 
 # The remote and ref writes below (fetch, sync, the other pushes, branch and remote-ref deletion) have no owner: unused.
+# `reset` (a checks slot's hard reset to X) gets its one owner, `environment.py`, with the checks block (tl-8bh9.14.6 S6b).
 GIT_WRITES = frozenset({
     "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
-    "push_request", "push_lease", "delete_branch", "clean",
+    "push_request", "push_lease", "delete_branch", "clean", "reset",
 })
 
 

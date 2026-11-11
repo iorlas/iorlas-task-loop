@@ -11,10 +11,11 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
-from doubles import FakeSlotFiles, PinnedViews
+from doubles import CHECKS, REQUIRED, D, FakeSlotFiles, PinnedViews, T, X
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
 
+from taskloop import check_store
 from taskloop.factory_schema import SCHEMA
 
 
@@ -110,6 +111,23 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
             (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text("Plan the actual task")
+    return factory
+
+
+@pytest.fixture
+def checking(factory: sqlite3.Connection) -> sqlite3.Connection:
+    """In memory: tl-1's done implement attempt `implement` (seq 2, captured at X, released `kept`, its slot s1 free) and its
+    checks attempt 1 `CHECKS` (deadline 100, required `REQUIRED`, T) admitted on slot s2 at D, with its held reservation."""
+    with begin_immediate(factory):
+        factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('r','s1','/slots/s1'),('r','s2','/slots/s2')")
+        factory.execute(
+            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker','r','s1','input.txt',
+            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", ("b" * 40, X, D, "a" * 40))
+        factory.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (D,))
+        factory.execute("INSERT INTO reservation VALUES ('s2','r',1,'checks')")
+        check_store.insert(factory, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s2", D, T, REQUIRED, 100.0))
     return factory
 
 

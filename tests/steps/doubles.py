@@ -14,11 +14,17 @@ from stream_proc import OwnedProcess
 from taskloop.access import TMP_BYTES, Folders
 from taskloop.admit import AdmitResult
 from taskloop.admit_chain import NextStepRequest
-from taskloop.attempt_types import Checkouts, FileStat
+from taskloop.attempt_types import AttemptKey, Checkouts, FileStat
 from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
 from taskloop.setup_store import ProcessSeen, SetupStore
+
+# The `checking` fixture's checks attempt: its key, its slot's HEAD D, the implement attempt's X, `main` T at admission,
+# and the required names with their argv digests at T.
+CHECKS = AttemptKey("checks", "checks-token", 1)
+D, X, T = "d" * 40, "c" * 40, "f" * 40
+REQUIRED = (("check", "1" * 64), ("test", "2" * 64))
 
 
 class FakeSlotFiles:

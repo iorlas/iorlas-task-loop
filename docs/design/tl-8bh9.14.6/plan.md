@@ -620,3 +620,63 @@ An independent review of 7ae3b0ec6 found nine points; all are taken.
 | 7 | View swap, `step_of`, the `task_attempted` winner, `_previous`, the reconcile order | Sections 3, 5, 6, 9 |
 | 8 | Copied columns, the `profile_changed` machinery, a missing CHECK, B6 reuse | Section 4; `checks.Block` with a `ResultSink` (section 3) |
 | 9 | Sizes after the composition split, the lease, the smoke | Section 14 sizes; section 6 step 3 and the slot wait (section 5); section 17 |
+
+## 21. As built: S6a (tl-8bh9.14.6.1)
+
+Schema v12, `check_store.py`, `factory_schema.SUCCESSOR`, the `setup_store.HELD` union and the policy entries; nothing of
+S6b-S6e (no block, entry, launcher, release operation, admission, status or round routing). Code lines by the policy
+counter: `check_store` 258 (new), `factory_schema` 153 (+44), `setup_store` 99 (+2), `slot_release` 264 (+1);
+`test_check_store` 341 (new), `test_setup_store` 114 (+24), `test_slot_release` 385 (+61).
+
+- **DDL** exactly as section 4. v11 (and every other version) is refused `schema`; `tests/steps/test_operations`'s
+  foreign-version list now holds 11. The column lists `CHECKS_ADMITTED`, `CHECKS_LOADED`, `CHECK_RESULT` live in
+  `factory_schema` with the others.
+- **`SUCCESSOR`** replaces `LATER` in `slot_release`'s `ROW`, `FENCE` and `FLIP`; `publish` and `admit_chain` keep
+  `LATER`. The `_pending` refusal now says "A later attempt or a checks attempt of the task is current".
+- **`setup_store.HELD`** is today's fence `UNION ALL check_store.HELD` (bound with the key twice); `setup_run` has no
+  foreign key.
+- **`check_store`**: `ChecksAdmitted`, `ChecksRow` (joined with the implement attempt: task, repository, tracker root,
+  X), `ResultRow` (`unsettled`); module functions `insert(con, admitted)` (in the admission's transaction; an existing
+  `(after_attempt_id, number)` is `StoreRefused("task_attempted")`, read before the write), `record_release(con, key,
+  (rev, phase), parked, now, abandoned)` (in the release's transaction; False off the fence: key, the proof's rev and
+  phase, the held reservation, no earlier release, settled only once concluded; it does not remove the reservation:
+  S6c's `slot_release.free` does), `latest_results`, `unsettled`; `CheckStore` with `attempt_of`, `row`, `of_attempt`,
+  `results`, `register_entry`, `refused`, `profiled`, `block`, `start`, `undefined`, `registered`, `finish`, `conclude`,
+  `abandon_released`; `LIVE_AFTER = ("lingering", "timed_out", "interrupted")`.
+- **Policy**: `WRITERS` gains the two `CREATE TABLE` rows (`factory_schema.py`) and `INSERT`/`UPDATE` of both tables
+  (`check_store.py`). `GIT_WRITES` gains `reset` now, with no owner yet: S6b adds `("reset", "environment.py")` to the
+  expected writers when it builds the hard reset.
+
+**Deviations (decided here, open to veto).**
+
+1. A result's conclusion is `CheckStore.finish`, not `conclude`: one class cannot carry both the attempt's and the
+   result's `conclude`. S6b's `ResultSink` is a small adapter binding the key, its `conclude` calling `finish`.
+2. "rows" is built as the dataclasses plus `row(key)`; `of_attempt(after)` returns every checks attempt of the implement
+   attempt by number (the last is the latest), so S6d's `Earlier:` lines need no second read.
+3. `attempt_of` overrides `AttemptReads.attempt_of` with the same signature (the latest checks attempt of the task's
+   current agent attempt), ready for S6c's `EntryTargets`.
+4. There is no block column on the attempt: `block(key)` returns the latest result block plus one (clearing the
+   refusal); called again before any result is written it returns the same number. Result writes are accepted only in
+   the latest block, or to start the next one (`check_changed` otherwise); a command registers once.
+5. `register_entry` ignores a non-finite renewal rather than refusing (it has no deadline refusal at all); `now` is
+   unused and kept for the launcher's port.
+6. The `required` list is validated on insert (1 to 32 distinct names, each with a 64-character digest: `ValueError`) and
+   on every read (`StoreUnavailable`); the DDL itself has no JSON CHECK.
+
+**Tests**: every CHECK of both tables rejecting its bad row (and the valid rows accepted), the two UNIQUEs and both
+foreign keys; v11 not current; the insert's lost race and its validation; every write under another key, without the
+held reservation (removed, another generation, another slot) or once concluded is `stale_reservation` and writes
+nothing; blocks, the latest-block reads, results started outside the latest or next block or on a taken position or
+name, registration once, a result concluded once; the registration connection used only for the identity; `unsettled`
+for every conclusion; the refusal counter; the profile digest once; `conclude`'s CHECK on the reason, `target_seen`, the
+cleared counter; the entry registration (a passed deadline accepted, same-boot and other-boot renewal, off the fence);
+`attempt_of` after a fresh plan; `record_release` and `abandon_released` fences; a checks attempt's setup runs fenced by
+the union. `SUCCESSOR`: `ROW` with the latest checks attempt admitted or abandoned (and an earlier one of each kind),
+`FLIP` with a checks row committed between the abandon's read and its flip, `FENCE` with one committed under the
+release's lock, and the other order: the abandon's flip committed first, then a checks row written anyway, and the
+abandon's rerun still returns the claim. The admission's own refusal in that order (`not_advanceable` on `unclaiming`)
+is S6d's.
+
+**Not verified**: nothing runs a checks attempt yet; the store's shape is exercised only by these tests. The glossary
+letter T is "the remote tip after a push", while this plan also calls `main` at admission T (`target_commit`); S6e's
+glossary pass should name one of them differently.

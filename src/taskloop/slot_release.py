@@ -35,7 +35,7 @@ from taskloop.attempt import collect
 from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe, SlotFiles, WorkerGone
-from taskloop.factory_schema import LATER, RELEASE, current, marks
+from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks
 from taskloop.prepare import task_branch
 from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
@@ -50,20 +50,20 @@ ROW: Final = """SELECT p.task_id,p.repo_id,p.slot,p.phase,p.rev,p.entry_pid,p.en
 p.worker_start,p.worker_boot,p.slot_head,p.tracker_root,
 (SELECT s.path FROM reservation r JOIN slot s ON s.repo_id=r.repo_id AND s.name=r.slot
  WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id AND r.generation=p.generation),
-""" + LATER + """,x.claim
+""" + SUCCESSOR + """,x.claim
 FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 # Inside the write transaction: still the attempt the proof read (same rev and phase), still the task's current attempt,
 # the reservation held at the key's generation, and no release row.
 FENCE: Final = """SELECT 1 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.rev=? AND p.phase=?
-AND NOT """ + LATER + """
+AND NOT """ + SUCCESSOR + """
 AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
 AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id)"""
 
 # An abandon of a settled release, fenced again in its transaction: still `kept` and still the task's current attempt.
 FLIP: Final = """UPDATE slot_release SET claim='unclaiming' WHERE attempt_id=? AND claim='kept'
-AND NOT EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=slot_release.attempt_id AND """ + LATER + ")"
+AND NOT EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=slot_release.attempt_id AND """ + SUCCESSOR + ")"
 
 
 @dataclass(frozen=True)
@@ -171,7 +171,7 @@ class _Row:
     slot_head: str  # D
     tracker_root: str
     slot_path: str | None  # the held reservation's slot path; None when it is not held at the key's generation
-    successor: bool  # a later attempt of the task exists: this one is no longer current
+    successor: bool  # `SUCCESSOR`: a later attempt of the task, or its unabandoned latest checks attempt; no longer current
     released: Claimed | None  # the claim of an existing release row: abandoned unless `kept`
     setup: OwnedProcess | None = None  # the latest setup run's unsettled command (`SetupRow.unsettled`), if any
 
@@ -279,7 +279,8 @@ class SlotRelease:
         it, then returns the claim; an `unclaiming` claim is retried."""
         claim = row.released or "kept"
         if abandon and claim == "kept" and row.successor:  # the claim is the later attempt's now (a next step holds it)
-            return NotReleased("refused", "changed", f"A later attempt of the task is current: release that one. {NOTHING}")
+            current = "A later attempt or a checks attempt of the task is current: release that one first."
+            return NotReleased("refused", "changed", f"{current} {NOTHING}")
         if abandon and claim == "kept":
             with self._writing() as con:
                 flipped = con.execute(FLIP, (row.key.attempt_id,)).rowcount
