@@ -11,11 +11,12 @@ from pathlib import Path
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
 from taskloop import cli_step
-from taskloop.composition import GitProfileFiles, inspect_checkout, inspect_tracker_task, tracker_located
+from taskloop.git_views import GitProfileFiles, inspect_checkout
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
 from taskloop.step_guide import STEP_ONLY
 from taskloop.task import TaskInspectionError
+from taskloop.tracker_client import inspect_tracker_task, tracker_located
 
 
 def inspection_error_kind(error: GitUnavailable | UnsupportedCheckout | OSError) -> str:

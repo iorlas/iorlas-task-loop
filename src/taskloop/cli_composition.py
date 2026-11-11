@@ -17,11 +17,7 @@ from taskloop.attempt_reads import SlotUse
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.composition import (
-    RealSlotFiles,
     adopt_slots,
-    checkouts,
-    current_boot,
-    entry_seen,
     open_admission,
     open_advance,
     open_chain,
@@ -30,23 +26,25 @@ from taskloop.composition import (
     open_releaser,
     open_verifier,
     real_slots,
-    tracker_reads,
-    worker_gone,
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import checkouts
 from taskloop.interrupts import installed
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.operations import Adoption, Failed, Quiet, Round, StartPorts, require_database
+from taskloop.owned_processes import current_boot, entry_seen, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
 from taskloop.round import NextRequest, RoundPorts, run_round
 from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import refused, repeating
 from taskloop.slot_release import SlotRelease
 from taskloop.slots import SlotGit
 from taskloop.task import TaskInspectionError
+from taskloop.tracker_client import tracker_reads
 from taskloop.verifier import Verifier
 
 

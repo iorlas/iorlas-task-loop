@@ -10,7 +10,7 @@ import pytest
 from git_porcelain import GitUnavailable, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 
-from taskloop.composition import GitProfileFiles
+from taskloop.git_views import GitProfileFiles
 from taskloop.profile import (
     DEFAULT_SETUP,
     PROFILE_PATH,

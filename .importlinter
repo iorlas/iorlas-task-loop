@@ -45,6 +45,11 @@ type = forbidden
 source_modules =
     taskloop.attempt_entry
     taskloop.composition
+    taskloop.git_views
+    taskloop.agent_credentials
+    taskloop.owned_processes
+    taskloop.slot_files
+    taskloop.tracker_client
     taskloop.slot_env
     taskloop.access
 forbidden_modules =
@@ -98,7 +103,7 @@ protected_modules =
 allowed_importers = taskloop.steps
 
 [importlinter:contract:profile-is-domain]
-name = The repository profile reader is domain: no command surface, composition, store or Git library (Git enters through its port)
+name = The repository profile reader is domain: no command surface, composition (or the real ports it wires), store or Git library (Git enters through its port)
 type = forbidden
 source_modules = taskloop.profile
 forbidden_modules =
@@ -106,6 +111,11 @@ forbidden_modules =
     taskloop.cli_step
     taskloop.cli_composition
     taskloop.composition
+    taskloop.git_views
+    taskloop.agent_credentials
+    taskloop.owned_processes
+    taskloop.slot_files
+    taskloop.tracker_client
     taskloop.exit_codes
     taskloop.step_render
     taskloop.result_data

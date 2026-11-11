@@ -163,9 +163,9 @@ def bd_importers() -> set[str]:
     return found
 
 
-def test_only_composition_constructs_the_tracker_client() -> None:
+def test_only_tracker_client_constructs_the_tracker_client() -> None:
     """The tracker's writes (claim, unclaim, heartbeat) have one wiring owner."""
-    assert bd_importers() == {"composition.py"}
+    assert bd_importers() == {"tracker_client.py"}
 
 
 SIGNAL_USES = frozenset({"signal", "SIGINT", "SIG_IGN", "default_int_handler", "getsignal"})

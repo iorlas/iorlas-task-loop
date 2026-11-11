@@ -22,8 +22,9 @@ from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import Verified
-from taskloop.composition import RealSlotFiles, checkouts
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.git_views import checkouts
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, lock_path, probe
 from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope

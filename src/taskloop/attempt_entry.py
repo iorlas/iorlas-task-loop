@@ -52,12 +52,15 @@ from taskloop.attempt_types import (
     WorkerGone,
 )
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
-from taskloop.composition import entry_seen, open_attempts, remotes, setup_seen, tracker_claims, tracker_located, worker_gone
+from taskloop.composition import open_attempts
 from taskloop.environment import Renew, Renewal
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import remotes
+from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish, publish_word
 from taskloop.slot_env import RealEnvFiles
 from taskloop.slot_release import SlotRelease, release_word
+from taskloop.tracker_client import tracker_claims, tracker_located
 from taskloop.verifier import Verifier
 
 CAPTURE_RETRIES = 3

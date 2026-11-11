@@ -1,6 +1,6 @@
 """Real layer, the publication's wiring on the real Git adapter: a bare `remote.git` under tmp_path is `origin` (a
 `file://` URL) of a person's checkout with one adopted `--detach` slot; the task is admitted, run with a `FakeRun` agent,
-verified (X on `task/tl-1`), released, then published through `composition.remotes` (hooks off, bounded transport).
+verified (X on `task/tl-1`), released, then published through `git_views.remotes` (hooks off, bounded transport).
 Set-up runs through `git_porcelain.testing`'s runner; nothing leaves tmp_path."""
 
 import json
@@ -25,10 +25,11 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Verified
-from taskloop.composition import RealSlotFiles, checkouts, remotes
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.git_views import checkouts, remotes
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.repo import RepoId
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.slots import SlotGit, adopt

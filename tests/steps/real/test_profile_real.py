@@ -9,7 +9,7 @@ import pytest
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 
-from taskloop.composition import GitProfileFiles
+from taskloop.git_views import GitProfileFiles
 from taskloop.profile import PROFILE_PATH, NoCommit, NotAFile, Refused, Resolved, Unavailable, read_profile, resolve
 
 

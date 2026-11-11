@@ -38,7 +38,6 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
 )
 from taskloop.cli_composition import adopt, open_reads, open_start, open_verify
-from taskloop.composition import RealSlotFiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
@@ -61,6 +60,7 @@ from taskloop.operations import (
     verify_task,
 )
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
 from taskloop.slots import Adopted, SlotGit, SlotView

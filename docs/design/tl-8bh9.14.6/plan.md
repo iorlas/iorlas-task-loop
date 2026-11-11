@@ -240,7 +240,7 @@ pinned view, an empty ignored listing, `.env/<slot>` emptied) and a fresh `setup
 host may have left anything in ignored files or the uv folders; repeating setup is the price of a block that starts
 from X alone. The scratch is emptied before and after setup, as for an agent.
 
-The scrubbed environment without Codex: `composition.codex_machine_credentials` is split into `scrubbed(environ)` (the
+The scrubbed environment without Codex: `agent_credentials.codex_machine_credentials` is split into `scrubbed(environ)` (the
 scrub, the venv drop, the push bar) and the Codex lookup; the checks entry uses `scrubbed` only, so a checks attempt
 needs no `codex` on `PATH` and no `auth.json`.
 
@@ -380,14 +380,14 @@ Code lines by the policy counter; current counts in brackets.
 | Order | Slice | What | Source | Tests |
 |---|---|---|---|---|
 | 1 | **S6a schema and store** | v12 DDL and column lists; `check_store.py` (rows and conclusion types, `insert`, `of_attempt`, `attempt_of`, `register_entry` with the reboot renewal, `profiled`, `block`, `start`, `registered`, `conclude_result`, `undefined`, `conclude`, `record_release`, `results`, `unsettled`); `setup_store.HELD` union; `WRITERS` | `factory_schema` [109] +32, `check_store` new ~210, `setup_store` [97] +4 | `test_check_store.py` ~300; `test_setup_store` +30 |
-| 2 | **S6b block and environment** | `checks.py` (`ChecksPorts`, `Block.run`: reconcile, undefined rows, each check, judgment, clean read, conclusion); `environment.prepare_for`, `SetupFor`, `probe` flag, no reuse for checks [229] +20; `prepare.detach_at` [125] +28; `evidence_files.check_log`, `CappedLog` [107] +10; `composition.scrubbed` [317] +6 | `checks` new ~190 | `test_checks.py` ~420; `test_environment` +60; `test_prepare` +60; `real/test_checks_real.py` ~70 |
-| 3 | **S6c entry, launcher, release** | `check_entry.py` (section 6); `launch.EntryTargets` [150] +14; `slot_release.park_slot`, `free` [263] +8; `check_release.py`; composition wiring of the entry, release and launcher [~323] +35; import contracts (`check_entry`, `checks`, `check_release` join the entry's closure; `check_entry` joins `cli-never-imports`) | `check_entry` new ~175, `check_release` new ~125 | `test_check_entry.py` ~330; `test_check_release.py` ~260; `test_launch` +40 |
+| 2 | **S6b block and environment** | `checks.py` (`ChecksPorts`, `Block.run`: reconcile, undefined rows, each check, judgment, clean read, conclusion); `environment.prepare_for`, `SetupFor`, `probe` flag, no reuse for checks [229] +20; `prepare.detach_at` [125] +28; `evidence_files.check_log`, `CappedLog` [107] +10; `agent_credentials.scrubbed` [65] +6 | `checks` new ~190 | `test_checks.py` ~420; `test_environment` +60; `test_prepare` +60; `real/test_checks_real.py` ~70 |
+| 3 | **S6c entry, launcher, release** | `check_entry.py` (section 6); `launch.EntryTargets` [150] +14; `slot_release.park_slot`, `free` [263] +8; `check_release.py`; composition wiring of the entry, release and launcher [100] +35; import contracts (`check_entry`, `checks`, `check_release` join the entry's closure; `check_entry` joins `cli-never-imports`) | `check_entry` new ~175, `check_release` new ~125 | `test_check_entry.py` ~330; `test_check_release.py` ~260; `test_launch` +40 |
 | 4 | **S6d admission and `tl step`** | `check_admit.py` (section 5); `steps.ORDER`, `following` [46] +6; `operations` routing: `_current` reads the checks attempt, `_admit` dispatch, check launcher, release and abandon order [276] +40; `attempt_status` `ChecksView` and the `Next` table [154] +55; `step_render` [138] +40, `result_data` [108] +20, `step_guide` [133] +15; `cli_composition` [210] +25 | `check_admit` new ~125 | `test_check_admit.py` ~300; `test_operations` +80; `test_step_cli` +140 |
 | 5 | **S6e round and words** | `round._settle`/`_resume` routing for checks attempts [240] +20; glossary (section 15); roadmap B4 row; the live smoke file | +20 | `test_checks_round.py` ~320; `test_round` +40 |
 
 Total about +1,230 source and +2,500 test lines (S5e-1 alone was +408/+567). Largest new functions: `Block.run` split
-into reconcile, one check and conclusion (each under 45); the entry's `enter` about 50. `composition` ends near 365
-code lines: tl-8bh9.14.20 (composition split) should land before S6c if it is ready, else after M2.
+into reconcile, one check and conclusion (each under 45); the entry's `enter` about 50. tl-8bh9.14.20 split `composition` (317 code lines, near 365 after these slices) into `composition`
+(the openers), `git_views`, `agent_credentials`, `owned_processes`, `slot_files` and `tracker_client`, each far under the cap.
 
 Dependencies: S6a, then S6b, S6c, S6d, S6e in order (each needs the previous one's types; S6d's admission writes rows
 only S6c's entry runs). Each slice lands green with `just check` and `just test`, independently reviewed. The live smoke
@@ -470,7 +470,6 @@ folder `$M2`, the runner at the S6e commit, the scratch remote's `main` at that 
 - **Flaky checks** fail the step with no rerun; only abandon (a new plan and implement) reruns them until repair exists.
 - **A checks attempt holds a slot** for its whole block: with one slot, agents wait behind checks (claimed work first).
 - **Schema discard** at the upgrade to v12: finish or abandon attempts first (the existing runbook).
-- **`composition.py` near its cap** (section 14).
 
 ## 19. Not verified
 

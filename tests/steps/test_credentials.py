@@ -9,9 +9,11 @@ from any_agent.procs import Worker
 from git_porcelain import GitUnavailable, RealRepo
 from stream_proc import OwnedProcess, ProcessObservation
 
-from taskloop import composition
+from taskloop import owned_processes
+from taskloop.agent_credentials import codex_machine_credentials
 from taskloop.attempt import CredentialsUnavailable
-from taskloop.composition import checkouts, codex_machine_credentials, hardened, worker_gone
+from taskloop.git_views import checkouts, hardened
+from taskloop.owned_processes import worker_gone
 
 BASE = {"PATH": "/usr/bin:/bin", "HOME": "/home/me"}
 BAR = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "url.delegate-push-refused://.pushInsteadOf", "GIT_CONFIG_VALUE_0": ""}
@@ -194,7 +196,7 @@ def test_the_worker_is_gone_only_with_its_process_and_its_group(
     monkeypatch: pytest.MonkeyPatch, seen: Literal["matching", "gone", "different_process", "unknown"], group: bool, expected: bool
 ) -> None:
     asked: list[object] = []
-    monkeypatch.setattr(composition, "observe_owned", lambda identity: asked.append(identity) or ProcessObservation(seen))
-    monkeypatch.setattr(composition, "group_alive", lambda pgid: asked.append(pgid) or group)
+    monkeypatch.setattr(owned_processes, "observe_owned", lambda identity: asked.append(identity) or ProcessObservation(seen))
+    monkeypatch.setattr(owned_processes, "group_alive", lambda pgid: asked.append(pgid) or group)
     assert worker_gone(Worker(pid=42, pgid=41, start="s", boot="b")) is expected
     assert asked[0] == OwnedProcess(42, 41, "s", "b")

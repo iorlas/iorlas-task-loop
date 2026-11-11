@@ -23,9 +23,10 @@ from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Verified
-from taskloop.composition import RealSlotFiles, checkouts
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.git_views import checkouts
 from taskloop.repo import RepoId
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, observe

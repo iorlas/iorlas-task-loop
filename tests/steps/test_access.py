@@ -5,7 +5,7 @@ import tomllib
 from pathlib import Path
 
 from taskloop.access import CODEX_ACCESS, PROBE, SANDBOX, agent_env, folders, prepared_access, probe_argv
-from taskloop.composition import codex_machine_credentials
+from taskloop.agent_credentials import codex_machine_credentials
 
 FOUND = folders(Path("/home/u/.local/share/task-loop/slots/0123456789ab/s1"))
 ROOTS = ["/home/u/.local/share/task-loop/slots/0123456789ab/.t/s1", "/home/u/.local/share/task-loop/slots/0123456789ab/.env/s1/uv-cache",

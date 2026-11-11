@@ -22,10 +22,11 @@ from stream_proc import (
 
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, EntryIdentity
-from taskloop.composition import current_boot, open_launcher
+from taskloop.composition import open_launcher
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
+from taskloop.owned_processes import current_boot
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 NEW = OwnedProcess(9, 9, "new-start", "boot")

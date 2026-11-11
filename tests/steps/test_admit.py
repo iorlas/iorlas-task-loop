@@ -21,7 +21,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.claim_lease import BD_TIMEOUT_S
-from taskloop.composition import BD_DISCOVERY, adopt_slots, open_admission, tracker_claims, tracker_located
+from taskloop.composition import adopt_slots, open_admission
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.slot_lock import custody
@@ -29,6 +29,7 @@ from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
+from taskloop.tracker_client import BD_DISCOVERY, tracker_claims, tracker_located
 
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 ENTRY = (7, "entry-start", "boot")

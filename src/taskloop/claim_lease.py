@@ -12,12 +12,12 @@ from contextlib import contextmanager
 from typing import Literal, Protocol
 
 type Beat = Literal["held", "lost", "unrenewed"]  # one renewal: renewed; the claim is gone (taken, reverted, closed); unknown
-type Heartbeat = Callable[[], Beat]  # bound to one tracker root and task by composition
+type Heartbeat = Callable[[], Beat]  # bound to one tracker root and task by `tracker_client`
 type HeartbeatFor = Callable[[str, str], Heartbeat]  # (tracker root, task id)
 type ClaimWord = Literal["held", "lost", "unrenewed", "fault"]
 LEASE_TTL_S = 300.0  # bd 1.3.1's lease, measured; no flag, config key or variable sets it
 BEAT_EVERY_S = LEASE_TTL_S / 3
-# Each heartbeat is one bd call (composition passes no lock retry) capped at BD_TIMEOUT_S, so a beat takes at most about
+# Each heartbeat is one bd call (`tracker_client` passes no lock retry) capped at BD_TIMEOUT_S, so a beat takes at most about
 # 30 s plus process start, well inside an interval. The bound holds only for that wiring: the renewing thread is a daemon
 # and `keeping` waits for it at most BD_TIMEOUT_S + 5 s, so a beat stuck past that may outlive the entry's log line (its
 # late result changes nothing that was written; `word` is read under the lock).
