@@ -1,6 +1,6 @@
 """Execute, capture, collect and verify one already admitted plan attempt; it grants no admission and releases nothing."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import replace
 from typing import Final, Literal
@@ -26,7 +26,9 @@ from taskloop.attempt_types import (
     Verdict,
     execution_facts,
 )
+from taskloop.environment import Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
 from taskloop.steps import kind
@@ -139,18 +141,23 @@ class Attempts:
         checkouts: Checkouts,
         slot_files: SlotFiles,
         registration_store: AttemptStore | None = None,
+        environment: Preparation | None = None,
     ) -> None:
         """`registration_store` serves only the harness registration write (composition bounds its busy wait); default `store`.
-        `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot."""
+        `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot. `environment`
+        prepares the slot of a step kind with `environment` (implement); without it such a step is refused, never run
+        without its setup."""
         self.store, self.files, self.credentials = store, files, credentials
         self.execution, self.clock, self.checkouts, self.slot_files = execution, clock, checkouts, slot_files
         self.registration_store = store if registration_store is None else registration_store
+        self.environment = environment
 
     def collect(self, key: AttemptKey) -> AttemptResult:
         return collect(self.store, key)
 
-    def execute(self, key: AttemptKey, me: EntryIdentity) -> AttemptResult:
-        """`me` is the caller's own (pid, start, boot): an admitted attempt dispatches only for its registered entry."""
+    def execute(self, key: AttemptKey, me: EntryIdentity, renew: Renew | None = None) -> AttemptResult:
+        """`me` is the caller's own (pid, start, boot): an admitted attempt dispatches only for its registered entry.
+        `renew` renews the tracker claim once after a step's environment is prepared (the entry's keep-alive)."""
         try:
             stored = self.store.collect(key)
             if stored is not None:
@@ -160,7 +167,7 @@ class Attempts:
                 return AttemptResult("refused", "absent")
             if record.phase != "admitted":
                 return AttemptResult("pending", record.phase)
-            return self._start(record, me)
+            return self._start(record, me, renew)
         except StoreUnavailable:
             return AttemptResult("unavailable", "store")
         except StoreRefused as error:
@@ -214,10 +221,11 @@ class Attempts:
             return "choices"
         return "sandbox" if admission.sandbox != SANDBOX else None
 
-    def _start(self, record: AttemptRecord, me: EntryIdentity) -> AttemptResult:
+    def _start(self, record: AttemptRecord, me: EntryIdentity, renew: Renew | None) -> AttemptResult:
         """Credentials, files, the launch spec, then the slot's preparation onto its task branch and the base check
-        (`prepare.base`) resolve before dispatch: their failure leaves the attempt `admitted`. The slot HEAD read
-        there is B, recorded by the dispatch write."""
+        (`prepare.base`) and, for a kind with `environment`, the slot's environment (`environment.Preparation`) resolve
+        before dispatch: their failure leaves the attempt `admitted`. The slot HEAD read there is B, recorded by the
+        dispatch write."""
         admission = record.admission
         refusal = self._refusal(admission, me)
         if refusal is not None:
@@ -229,14 +237,14 @@ class Attempts:
         launch = self._launch(admission, prompt)
         if isinstance(launch, AttemptResult):
             return launch
-        harness, spec = launch
+        harness, spec, env = launch
         running = False
         try:
-            base = prepared_base(self.checkouts, self.slot_files, record, self.clock)
+            base = self._prepared(record, renew, env)
             if isinstance(base, AttemptResult):
                 return base
             self.registration_store.warm()  # the first registration open runs here, never inside the harness registration window
-            if self.store.dispatch(record, base) == "conflict":
+            if self.store.dispatch(record, base.head) == "conflict":
                 return AttemptResult("pending", "dispatching")
             running = True
             return self._run(admission, harness, spec)
@@ -244,7 +252,17 @@ class Attempts:
             if not running:
                 harness.cleanup()
 
-    def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec] | AttemptResult:
+    def _prepared(self, record: AttemptRecord, renew: Renew | None, env: Mapping[str, str]) -> Prepared | AttemptResult:
+        """The slot on its branch (`prepare.base`), then, for a kind with `environment`, its setup sequence with the
+        agent's environment."""
+        base = prepared_base(self.checkouts, self.slot_files, record, self.clock)
+        if isinstance(base, AttemptResult) or not kind(record.admission.step).environment:
+            return base
+        if self.environment is None or renew is None:
+            return AttemptResult("unavailable", "environment:unwired")
+        return self.environment.prepare(record, base, renew, env) or base
+
+    def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec, dict[str, str]] | AttemptResult:
         try:
             exe, env = self.credentials()
         except CredentialsUnavailable as error:
@@ -269,7 +287,7 @@ class Attempts:
             access=list(CODEX_ACCESS),
         )
         try:
-            return harness, harness.launch_spec(inputs)
+            return harness, harness.launch_spec(inputs), env
         except Exception as error:
             harness.cleanup()
             return AttemptResult("unavailable", "launch:" + type(error).__name__)

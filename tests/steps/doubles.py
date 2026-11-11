@@ -1,14 +1,23 @@
 """Plain test doubles shared by the plan tests; fixtures stay in conftest.py."""
 
+import json
 import os
+import sqlite3
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from git_porcelain import GitUnavailable, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from stream_proc import OwnedProcess
 
 from taskloop.admit import AdmitResult
 from taskloop.admit_chain import NextStepRequest
-from taskloop.attempt_types import FileStat
+from taskloop.attempt_types import Checkouts, FileStat
+from taskloop.environment import EnvironmentPorts, Preparation, ProcessSeen, SetupEnded
+from taskloop.evidence_files import EvidenceFiles
+from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
+from taskloop.setup_store import SetupStore
 
 
 class FakeSlotFiles:
@@ -126,3 +135,132 @@ class NoAdvance:
 
     def admit_next(self, request: NextStepRequest) -> AdmitResult:
         raise AssertionError(f"no advance expected: {request.previous}")
+
+
+type Blob = bytes | NoCommit | NotAFile | Unavailable | None
+
+
+class FakeProfiles:
+    """The slot profile port: the same `.task-loop.json` blob at every commit (`setup` given, or raw `blob`); `opened`
+    records each (slot, Git directory) and `read` each commit."""
+
+    def __init__(self, setup: Sequence[Sequence[str]] = (("just", "bootstrap"),), blob: Blob = b"") -> None:
+        self.data: Blob = blob if blob != b"" else json.dumps({"setup": [list(argv) for argv in setup]}).encode()
+        self.opened: list[tuple[Path, Path]] = []
+        self.read: list[str] = []
+
+    def __call__(self, slot: Path, gitdir: Path) -> ProfileFiles:
+        self.opened.append((slot, gitdir))
+        return self
+
+    def blob(self, commit: str, path: str) -> Blob:
+        self.read.append(commit)
+        return self.data
+
+
+@dataclass(frozen=True)
+class Command:
+    """One scripted setup command: how it ends, what it prints, what it does to the slot while it runs."""
+
+    rc: int | None = 0
+    timed_out: bool = False
+    exec_failed: bool = False
+    uncertain: bool = False
+    spawn_error: bool = False  # the start fails before any registration
+    lingering: bool = False  # a process stays in its group after it ended
+    effect: Callable[[], None] | None = None
+    output: bytes = b"done\n"
+
+
+@dataclass(frozen=True)
+class SetupCall:
+    argv: tuple[str, ...]
+    cwd: str
+    env: Mapping[str, str]
+    timeout: float
+
+
+@dataclass
+class FakeSetupProcess:
+    """The registered start, semantically: the identity is passed to `registered` before the command "executes" (its
+    effect and output), as the shelf's exec gate does; a registration failure propagates with nothing executed. Commands
+    follow `script`, then succeed. `events` is shared with the other fakes to observe the order."""
+
+    events: list[str]
+    script: list[Command] = field(default_factory=list)
+    calls: list[SetupCall] = field(default_factory=list)
+    groups: set[int] = field(default_factory=set)
+    next_pid: int = 500
+
+    def __call__(
+        self, argv: Sequence[str], *, registered: Callable[[OwnedProcess], None], cwd: str, env: Mapping[str, str],
+        timeout: float, line: Callable[[bytes], None],
+    ) -> SetupEnded:
+        command = self.script.pop(0) if self.script else Command()
+        self.calls.append(SetupCall(tuple(argv), cwd, dict(env), timeout))
+        if command.spawn_error:
+            raise OSError("fork")
+        self.next_pid += 1
+        pid = self.next_pid
+        registered(OwnedProcess(pid, pid, f"start-{pid}", "boot"))
+        self.events.append("exec " + " ".join(argv))
+        if command.uncertain:
+            return SetupEnded(None, False, False, pid, uncertain=True)
+        if not command.exec_failed:
+            if command.effect is not None:
+                command.effect()
+            line(command.output)
+        if command.lingering:
+            self.groups.add(pid)
+        return SetupEnded(command.rc, command.timed_out, command.exec_failed, pid)
+
+    def lingering(self, pgid: int) -> bool:
+        self.events.append(f"group {pgid}")
+        return pgid in self.groups
+
+
+@dataclass
+class FakeEnvFiles:
+    """The environment folders: what is ensured, what is emptied (in `events`, by the last two path parts), and
+    folders whose emptying or creation fails."""
+
+    events: list[str]
+    unemptiable: set[Path] = field(default_factory=set)
+    unmakeable: set[Path] = field(default_factory=set)
+
+    def ensure(self, path: Path) -> bool:
+        self.events.append(f"ensure {path.parent.name}/{path.name}")
+        return path not in self.unmakeable
+
+    def empty(self, path: Path) -> bool:
+        self.events.append(f"empty {path.parent.name}/{path.name}")
+        return path not in self.unemptiable
+
+
+@dataclass
+class Environment:
+    """A `Preparation` over fakes and real SQLite and evidence files; `seen` answers for a registered setup command."""
+
+    con: sqlite3.Connection
+    checkouts: Checkouts
+    artifacts: Path
+    events: list[str] = field(default_factory=list)
+    seen: dict[int, ProcessSeen] = field(default_factory=dict)
+    platform: str = "linux"
+    safe_removal: bool = True
+    clock: Callable[[], float] = lambda: 10
+    profiles: FakeProfiles = field(default_factory=FakeProfiles)
+
+    def __post_init__(self) -> None:
+        self.process = FakeSetupProcess(self.events)
+        self.files = FakeEnvFiles(self.events)
+
+    def observe(self, process: OwnedProcess) -> ProcessSeen:
+        self.events.append(f"seen {process.pid}")
+        return self.seen.get(process.pid, "gone")
+
+    def preparation(self) -> Preparation:
+        return Preparation(EnvironmentPorts(
+            SetupStore(lambda: self.con), self.checkouts, self.profiles, self.files, self.process, self.observe,
+            self.process.lingering, EvidenceFiles(self.artifacts), self.clock, self.platform, self.safe_removal,
+        ))

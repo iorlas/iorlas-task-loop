@@ -16,7 +16,15 @@ from any_agent.procs import Worker
 from beads_client import Bd, BdError, Runner
 from git_porcelain import GitUnavailable, RealRepo, Repo
 from sqlite_store import Store
-from stream_proc import OwnedProcess, group_alive, inspect_process, observe_owned, popen_registered
+from stream_proc import (
+    OwnedProcess,
+    RegisteredStartUncertainError,
+    group_alive,
+    inspect_process,
+    observe_owned,
+    popen_registered,
+    run_registered,
+)
 
 from taskloop import slot_lock
 from taskloop.admit import AttemptAdmission, Claim, Unclaim
@@ -25,12 +33,14 @@ from taskloop.attempt import Attempts, Credentials, CredentialsUnavailable
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
 from taskloop.attempt_types import Checkouts, EntryIdentity, FileStat, Seen
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
+from taskloop.environment import EnvironmentPorts, Preparation, ProcessSeen, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import Launcher, entry_process
 from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.publish import BranchPublish
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
+from taskloop.setup_store import SetupStore
 from taskloop.slot_release import SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
@@ -193,6 +203,70 @@ def worker_gone(worker: Worker) -> bool:
     return seen in ("gone", "different_process") and not group_alive(worker.pgid)
 
 
+def setup_seen(process: OwnedProcess) -> ProcessSeen:
+    """A registered setup command, as `worker_gone` observes an agent: alive while its identity matches or a process is
+    left in its group, unknown when the process table cannot be read; one from another boot is gone (its group id names
+    nothing of it now). Never signalled."""
+    seen = observe_owned(process).kind
+    if seen in ("matching", "unknown"):
+        return "alive" if seen == "matching" else "unknown"
+    if current_boot() != process.boot:
+        return "gone"
+    return "alive" if group_alive(process.pgid) else "gone"
+
+
+def setup_process(
+    argv: Sequence[str], *, registered: Callable[[OwnedProcess], None], cwd: str, env: Mapping[str, str], timeout: float,
+    line: Callable[[bytes], None],
+) -> SetupEnded:
+    """One setup command through the shelf's registered start (its identity committed before it executes; stdin empty,
+    stderr merged; the deadline stops and proves its tree). An uncertain start is not waited for."""
+    try:
+        done = run_registered(argv, registered=registered, cwd=cwd, env=env, timeout=timeout, on_line=line)
+    except RegisteredStartUncertainError as error:
+        return SetupEnded(None, False, False, error.identity.pgid, uncertain=True)
+    return SetupEnded(done.returncode, done.timed_out is not None, done.exec_errno is not None, done.pgid)
+
+
+def _writable(function: Callable[[str], object], path: str, error: BaseException) -> None:
+    """`rmtree`'s `onexc`: a directory an agent made unreadable (a PermissionError on an entry `lstat` shows to be a
+    directory, not a link) gets owner `rwx` and is removed once more; anything else stays and the removal fails."""
+    del function
+    found = os.lstat(path)
+    if not isinstance(error, PermissionError) or not stat.S_ISDIR(found.st_mode):
+        raise error
+    os.chmod(path, stat.S_IMODE(found.st_mode) | stat.S_IRWXU)
+    shutil.rmtree(path)
+
+
+class RealEnvFiles:
+    """The environment folders on the real file system: created 0700, emptied with the symlink-safe `rmtree` only
+    (`avoids_symlink_attacks`, checked by the preflight); a link is unlinked, never followed."""
+
+    def ensure(self, path: Path) -> bool:
+        try:
+            path.mkdir(mode=0o700, parents=True, exist_ok=True)
+            return stat.S_ISDIR(os.lstat(path).st_mode)
+        except OSError:
+            return False
+
+    def empty(self, path: Path) -> bool:
+        try:
+            if not stat.S_ISDIR(os.lstat(path).st_mode):
+                return False
+            with os.scandir(path) as entries:
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        shutil.rmtree(entry.path, onexc=_writable)
+                    else:
+                        os.unlink(entry.path)
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        return True
+
+
 def entry_seen(entry: EntryIdentity) -> Seen:
     """A native process-table read of the registered entry, by the launcher's identity rule; no spawn or signal."""
     return observe_owned(entry_process(entry)).kind
@@ -256,6 +330,16 @@ class GitProfileFiles:
         return Unavailable(f"{path} at {commit} is listed but unreadable") if data is None else data
 
 
+def slot_profiles(slot: Path, gitdir: Path) -> GitProfileFiles:
+    """The profile port on the slot's own view, pinned to its verified Git directory."""
+
+    def pinned(path: Path, /, *, git_dir: Path | None = None) -> Repo:
+        del git_dir
+        return checkouts(path, git_dir=gitdir)
+
+    return GitProfileFiles(slot, pinned)
+
+
 class RealSlotFiles:
     """The slot file port over the real file system: `lstat` never follows a symlink, and a read opens only what `lstat`
     just saw as a regular file within the cap (`O_NOFOLLOW`, non-blocking), so a FIFO or symlink is never opened."""
@@ -303,15 +387,21 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
             con.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
         return con
 
+    evidence = EvidenceFiles(artifacts)
+    ports = EnvironmentPorts(
+        SetupStore(bounded, registration.begin_immediate), checkouts, slot_profiles, RealEnvFiles(), setup_process, setup_seen,
+        group_alive, evidence, time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks,
+    )
     return Attempts(
         AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
-        EvidenceFiles(artifacts),
+        evidence,
         credentials,
         run,
         time.time,
         checkouts,
         RealSlotFiles(),
         registration_store=AttemptStore(bounded, registration.begin_immediate),
+        environment=Preparation(ports),
     )
 
 

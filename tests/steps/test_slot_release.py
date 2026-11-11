@@ -62,6 +62,8 @@ class Ports:
         self.answers: list[bool | BdError] = [True]
         self.unclaimed: list[tuple[str, str]] = []
         self.inside: Callable[[], object] = lambda: None
+        self.living: set[int] = set()  # pids whose process or group the agent observation sees alive
+        self.gone_asked: list[int] = []
 
     def checkouts(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opens += 1
@@ -71,8 +73,9 @@ class Ports:
         self.observed.append(entry)
         return self.seen
 
-    def gone(self, _worker: Worker) -> bool:
-        return not self.alive
+    def gone(self, worker: Worker) -> bool:
+        self.gone_asked.append(worker.pid)
+        return not self.alive and worker.pid not in self.living
 
     @contextmanager
     def hold(self, slot_path: str, attempt_id: str) -> Generator[None]:
@@ -349,3 +352,35 @@ def test_a_clean_detached_slot_moved_off_d_is_parked_back_at_d(
     assert head(slot) != d and slot.branch() is None
     assert Ports(registered, checkouts, slot_files).releaser().release(KEY, True) == Released("s1", d, True, "unclaimed", True)
     assert (head(slot), slot.branch()) == (d, None)
+
+
+SETUP = """INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,pid,pgid,proc_start,boot,
+ended_at,conclusion) VALUES ('attempt',?,'dispatch',1,?,?,1,?,?,'start','boot',?,?)"""
+
+
+@pytest.mark.parametrize("abandon", [True, False], ids=["abandon", "settled"])
+def test_a_release_waits_for_an_unfinished_setup_and_never_stops_it(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, abandon: bool
+) -> None:
+    """An entry killed during setup leaves its command running: both modes refuse `held:setup_running`, nothing changed
+    and no lock or Git touched, until that command and its group are gone. Only the latest run counts."""
+    if not abandon:
+        verified(registered, tmp_path, slot, checkouts, slot_files)
+    registered.execute(SETUP, (1, "b" * 40, "d" * 64, 500, 500, 2.0, "failed"))  # an earlier run's pid lives on: not the setup's
+    registered.execute(SETUP, (2, "b" * 40, "d" * 64, 501, 501, None, None))
+    before, ports = stored(registered), Ports(registered, checkouts, slot_files)
+    ports.living = {500, 501}
+    found = ports.releaser().release(KEY, abandon)
+    assert isinstance(found, NotReleased) and release_word(found) == "held:setup_running" and "pid 501, process group 501" in found.detail
+    assert (stored(registered), ports.opens, ports.holds, ports.unclaimed) == (before, 0, 0, [])
+    ports.living = {500}
+    assert isinstance(ports.releaser().release(KEY, abandon), Released)
+    assert 500 not in ports.gone_asked
+
+
+def test_an_unfinished_setup_that_never_registered_a_command_does_not_hold_the_slot(
+    registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    registered.execute("INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at) "
+                       "VALUES ('attempt',1,'dispatch',1,?,?,1)", ("b" * 40, "d" * 64))
+    assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, True), Released)

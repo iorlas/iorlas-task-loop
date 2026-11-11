@@ -11,7 +11,8 @@ renewed by `claim_lease` while the step runs), then, once the result read back i
 release of its own slot, still under its lock: `released`, `already_released` or why the slot stays held), then, for a verified plan only,
 `branch=` (the publication of `task/<id>` to origin, once, after the lock is released: `published` or `already_published`, or the refusal or
 unknown word; never retried here), never facts, environment, argv or exception text. A claim found lost before the agent
-starts refuses (`refused claim_lost`); one lost later is only recorded. It exits 0 only for a verified plan, new or
+starts refuses (`refused claim_lost`), and so does one lost by the renewal after an implement step's setup (which
+runs first, `environment.Preparation`); one lost later is only recorded. It exits 0 only for a verified plan, new or
 reused (`plan.succeeded`), whatever its publication says. Its stdout and stderr are the attempt's `entry.log`.
 """
 
@@ -52,6 +53,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
 from taskloop.composition import entry_seen, open_attempts, remotes, tracker_claims, tracker_located, worker_gone
+from taskloop.environment import Renew, Renewal
 from taskloop.factory_schema import SCHEMA
 from taskloop.publish import BranchPublish, publish_word
 from taskloop.slot_release import SlotRelease, release_word
@@ -174,11 +176,25 @@ def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[None]:
     return nullcontext()
 
 
-def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float], None], gone: WorkerGone) -> tuple[str, bool, bool]:
+def renewal(alive: KeepAlive) -> Renew:
+    """One renewal now through the keep-alive (an implement step's, after its setup): `lost` and `held` as its word says,
+    anything else `unrenewed`."""
+
+    def renew() -> Renewal:
+        alive.renew()
+        word = alive.word()
+        return "lost" if word == "lost" else "held" if word == "held" else "unrenewed"
+
+    return renew
+
+
+def _step(
+    found: _Registered, clock: Callable[[], float], wait: Callable[[float], None], gone: WorkerGone, renew: Renew
+) -> tuple[str, bool, bool]:
     """Execute once, retry an unavailable capture, verify once: the log words, whether the plan succeeded and whether
     the result read back is collected (terminal)."""
     app, key = found.app, found.key
-    result = app.execute(key, found.me)
+    result = app.execute(key, found.me, renew)
     captured = _capture(app, result, clock, wait)
     accepted = captured is not None and captured.status in ACCEPTED
     verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
@@ -262,7 +278,7 @@ def _claimed(
     if alive.word() == "lost":
         return "refused claim_lost", False
     with keeping(alive):
-        line, ok, collected = _step(found, clock, wait, gone)
+        line, ok, collected = _step(found, clock, wait, gone, renewal(alive))
     line = f"{line} claim={alive.word()}"
     if collected:
         app = found.app

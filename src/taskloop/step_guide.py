@@ -90,6 +90,14 @@ GUIDE = {
     "claim_lost": "The tracker no longer shows the task in progress for taskloop (claim reverted, taken by another actor, or "
     "the task closed): check `bd show <task>`; nothing retakes the claim. `tl step release --abandon` (its claim answers "
     "`not_held`), then `tl step start` admits it afresh at plan.",
+    "environment": "The slot's setup (the profile's `setup`, run before an implement agent) refused or failed; the attempt "
+    "stays admitted and no agent ran. Its output is `setup-<run>.log` beside the attempt's entry.log. `exit` or `lingering`: "
+    "the next relaunch runs it once more, two failed runs refuse `failed`; `dirty`: setup left files in the slot, remove them "
+    "(the `slot_dirty` guide); `running`: a setup from an earlier entry still runs, wait or stop it by verified pid; "
+    "`profile`: fix `.task-loop.json` on the task branch; `platform`: implement runs on Linux only. Otherwise "
+    "`tl step release --abandon`.",
+    "setup_running": "The slot's setup from an entry that died still runs (pid and group named): wait for it, or stop only "
+    "its group by verified pid (`kill -TERM -<pgid>`), then run it again. The factory never stops it.",
     "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl step release --abandon`.",
     "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl step publish`.",
     "diverged": "The remote task/<id> does not contain the verified commit: compare them, then merge or move the remote branch "

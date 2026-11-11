@@ -1,5 +1,5 @@
 {
-  "setup": [["just", "install"]],
+  "setup": [["just", "bootstrap"]],
   "checks": [
     {"name": "check", "argv": ["just", "check"], "timeout": 1800},
     {"name": "test", "argv": ["just", "test"], "timeout": 1800}

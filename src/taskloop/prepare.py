@@ -171,8 +171,19 @@ def _state_refusal(checkouts: Checkouts, record: AttemptRecord, state: SlotState
     return _refused("slot_staged") if staged(checkouts(path, git_dir=state.gitdir), path) else None
 
 
-def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: Callable[[], float]) -> str | AttemptResult:
-    """B: the slot's HEAD on its task branch, prepared and read just before dispatch while the deadline is ahead."""
+@dataclass(frozen=True)
+class Prepared:
+    """The slot on its task branch: `head` is B; `gitdir` the Git directory its verified pointer names (every later Git
+    view of the slot is pinned to it); `root` the person's checkout that pointer names."""
+
+    head: str
+    gitdir: Path
+    root: Path
+
+
+def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: Callable[[], float]) -> Prepared | AttemptResult:
+    """B and the slot's verified Git directory: the slot's HEAD on its task branch, prepared and read just before
+    dispatch while the deadline is ahead."""
     deadline = record.admission.deadline
     if clock() >= deadline:  # crossed while resolving the launch: stays admitted
         return _refused("expired")
@@ -185,4 +196,4 @@ def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: C
     if isinstance(state, AttemptResult) or state.head is None:
         return state if isinstance(state, AttemptResult) else _refused("slot_unborn")
     # the Git reads have no timeout: the deadline is checked again right before the dispatch write
-    return _refused("expired") if clock() >= deadline else state.head
+    return _refused("expired") if clock() >= deadline else Prepared(state.head, state.gitdir, state.root)

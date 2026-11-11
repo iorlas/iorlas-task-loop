@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import FakeSlotFiles, PinnedViews
+from doubles import Environment, FakeSlotFiles, PinnedViews
 from git_porcelain import BranchHeld, GitReadFailure, Recorded, Repo, Sha
 from git_porcelain.api import TakeResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
@@ -105,7 +105,9 @@ def pushed(repo: FakeRepo, tmp_path: Path) -> Sha:
 def execute(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles) -> tuple[str, str, FakeRun]:
     agent = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
     store = AttemptStore(lambda: con)
-    result = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, files).execute(KEY, ENTRY)
+    environment = Environment(con, checkouts, tmp_path).preparation()  # an implement attempt's setup passes
+    result = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, files,
+                      environment=environment).execute(KEY, ENTRY, lambda: "held")
     return result.status, result.reason, agent
 
 

@@ -15,10 +15,36 @@ from taskloop.slot_state import shown
 
 ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
 ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
+SETUP_LOG_CAP: Final = 32 << 20  # bytes of one setup run's log; then one `[truncated]` line
+TRUNCATED: Final = b"[truncated]\n"
 
 
 class EvidenceError(Exception):
     """Unavailable, changed or conflicting artifact bytes; never an empty fallback."""
+
+
+class SetupLog:
+    """One setup run's log, opened 0600 for append and close-on-exec: the commands' merged output and the factory's own
+    frame lines, at most `cap` bytes, then one `[truncated]` line and nothing more. Evidence for a person; nothing reads
+    it for control. A write failure is dropped (the run's record is factory.db's)."""
+
+    def __init__(self, path: Path, cap: int = SETUP_LOG_CAP) -> None:
+        self._fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        self._left, self._cut = cap, False
+
+    def write(self, data: bytes) -> None:
+        if self._cut:
+            return
+        kept = data[: self._left]
+        self._left -= len(kept)
+        self._cut = len(kept) < len(data)
+        try:
+            os.write(self._fd, kept + (TRUNCATED if self._cut else b""))
+        except OSError:
+            self._cut = True
+
+    def close(self) -> None:
+        os.close(self._fd)
 
 
 class EvidenceFiles:
@@ -64,6 +90,16 @@ class EvidenceFiles:
         path = self._path(self.directory(key) + "/entry.log")
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
+
+    def setup_log(self, key: AttemptKey, run: int) -> Path:
+        """Setup run `run`'s log (`setup-<run>.log` in the attempt's key-derived directory), with that directory made."""
+        path = self._path(f"{self.directory(key)}/setup-{run}.log")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def open_setup_log(self, key: AttemptKey, run: int) -> SetupLog:
+        """`setup_log`, opened for append; OSError propagates (nothing has run yet)."""
+        return SetupLog(self.setup_log(key, run))
 
     def round_log(self) -> Path:
         """The scheduling rounds' append-only log (`rounds.log` beside `attempts/`), with the root made. Evidence for a

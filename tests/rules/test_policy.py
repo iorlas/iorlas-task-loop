@@ -69,7 +69,9 @@ WRITERS = {
     ("CREATE TABLE", "verification"): "factory_schema.py",
     ("CREATE TABLE", "slot_release"): "factory_schema.py",
     ("CREATE TABLE", "published_branch"): "factory_schema.py",
-    ("CREATE TABLE", "setup_run"): "factory_schema.py",  # its writer comes with S5e's setup
+    ("CREATE TABLE", "setup_run"): "factory_schema.py",
+    ("INSERT", "setup_run"): "setup_store.py",
+    ("UPDATE", "setup_run"): "setup_store.py",
     ("INSERT", "slot"): "slots.py",
     ("INSERT", "reservation"): "admit.py",
     ("INSERT", "attempt"): "admit.py",
@@ -116,7 +118,7 @@ def test_write_pattern_catches_spelling_variants(statement: str) -> None:
 # The remote and ref writes below (fetch, sync, the other pushes, branch and remote-ref deletion) have no owner: unused.
 GIT_WRITES = frozenset({
     "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
-    "push_request", "push_lease", "delete_branch",
+    "push_request", "push_lease", "delete_branch", "clean",
 })
 
 
@@ -139,10 +141,11 @@ def git_writers() -> set[tuple[str, str]]:
     return found
 
 
-def test_only_the_commit_prepare_release_and_publish_modules_write_git() -> None:
+def test_only_the_commit_prepare_release_publish_and_environment_modules_write_git() -> None:
+    """`clean` is the environment reset's (the slot's ignored files and nested repositories, before each setup)."""
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
-        ("park", "slot_release.py"), ("push", "publish.py"),
+        ("park", "slot_release.py"), ("push", "publish.py"), ("clean", "environment.py"),
     }
     assert git_writers() == expected
 

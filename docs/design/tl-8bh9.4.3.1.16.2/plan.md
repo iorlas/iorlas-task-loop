@@ -401,6 +401,87 @@ An independent review of 01e06b3fe found sixteen points; all are taken.
 
 - `codex sandbox linux` accepting `--ignore-user-config` and the same `-c` keys as `exec` (Run S used an empty
   `CODEX_HOME` instead; the slice copies Run S's argv and checks it).
-- That `git clean -ffdx` through the pinned view removes `.venv` and nested repositories without touching tracked files.
+- ~~That `git clean -ffdx` through the pinned view removes `.venv` and nested repositories without touching tracked
+  files.~~ Verified by S5e-1's real test (section 16).
 - That `just bootstrap` warms everything `just check` needs offline beyond what Run S ran by hand (the same commands).
 - Line estimates, from the counts at this tree.
+
+## 16. As built: S5e-1 (setup, 2026-11-11)
+
+Tracker tl-8bh9.4.3.1.16.2, on S5b (schema v11 with the `setup_run` DDL, no migration) and the S5e-0 pins. The implement
+attempt's entry now resets the slot and runs the profile's `setup` before its agent; the agent still launches with plan's
+access (`CODEX_ACCESS`, no writable roots, no added environment): S5e-2 adds them. Plan attempts are unchanged byte for
+byte (no environment event, no setup row; the S3 constants pass unchanged).
+
+- **`environment.py` (new, 197 code lines).** `Folders(tmp, cache, tools)` and `folders(slot)` (`.t/<slot>`,
+  `.env/<slot>/uv-cache`, `.env/<slot>/uv-tools` beside the slots); `setup_env` (the credentials' scrubbed environment
+  plus `TMPDIR`, `UV_CACHE_DIR`, `UV_TOOL_DIR`, no `UV_OFFLINE`); `setup_digest` (sha256 of the argv list as compact
+  JSON); the ports `SetupProcess`, `EnvFiles`, `SetupSeen` (tri-state `gone`/`alive`/`unknown`), `GroupAlive`,
+  `SlotProfiles`, `Renew`, gathered in `EnvironmentPorts`; and `Preparation.prepare(record, slot: Prepared, renew, env)`
+  in section 4's order. A repeat (`number > 1`) runs steps 1-4 and 9-11. The preflight of S5e-1 is the platform check
+  (`refused environment:platform` off Linux, Q2's recommendation, before any setup), `refused environment:remove_unsafe`
+  and the three folders created (`unavailable environment:files`); `path_long`, `roots` and the sandbox probe are
+  S5e-2's. The reset is `Worktree.clean(ignored=True, nested=True)` on the slot's pinned view, then
+  `dirty(ignored_under=["."]).ignored` must be empty (`refused environment:reset`), then `.env/<slot>` emptied and its two
+  folders made again. Each command is framed in the log (`$ <shlex.join>`, then `exit <rc>`, `timed out`, `not started`,
+  `ended by a signal` or `start uncertain`, and `lingering`); a lingering group is checked before the exit code. After
+  the commands the slot's status through the pinned view must be clean (`dirty`).
+- **Words chosen here (the plan was silent).** A start failing before any registration (`OSError` from the spawn) is a
+  `failed` run like an exec failure (`unavailable environment:exit`); `GitUnavailable` in the reset or the final status
+  read is `unavailable git` with the run left unfinished (the next entry reconciles it `interrupted`); a log that cannot
+  be opened is `unavailable environment:files` before the run row is written (the run number is the latest plus one,
+  so the log is opened first). An environment kind with no wired `Preparation` or no `renew` is `unavailable
+  environment:unwired` (never an implement agent without its setup).
+- **`setup_store.py` (new, 76).** `SetupStore(AttemptReads)`: `latest`, `failures` (`failed`, `timed_out`, `lingering`,
+  `dirty`; `interrupted` is not the setup's fault), `start` (named so because `AttemptReads.begin` is the transaction),
+  `registered`, `conclude`. Every write checks the key against the held reservation of an `admitted` attempt
+  (`StoreRefused("stale_reservation")`); a concluded or existing run is `setup_changed`. `running(con, attempt_id)` is
+  the release's read: the latest run's registered identity while it has no conclusion (none registered: nothing ran).
+  Composition passes the bounded registration connection, so the identity write inside the registered start's window
+  waits at most `REGISTRATION_BUSY_MS`. `test_policy.WRITERS` names it for `INSERT` and `UPDATE setup_run`.
+- **`attempt.py`** (+11): `Attempts(..., environment=None)`; `execute(key, me, renew=None)`; `_prepared` runs
+  `prepare.base`, then the preparation for a kind with `environment`; `_launch` also returns the credentials' env.
+  **`prepare.base`** returns `Prepared(head, gitdir, root)`. **`steps.StepKind.environment`** (implement True).
+  **`attempt_entry.renewal(alive)`** is the `Renew` port: one keep-alive renewal now, then its word.
+- **`composition.py`** (292 to 358): `setup_process` (`stream_proc.run_registered`; `RegisteredStartUncertainError` is
+  `uncertain`), `setup_seen` (`observe_owned`, another boot `gone`, else `group_alive`), `RealEnvFiles` (`mkdir` 0700;
+  `empty` unlinks links and files and removes directories with `shutil.rmtree`, whose `onexc` gives an unreadable
+  directory owner `rwx` and removes it once more), `slot_profiles` (`GitProfileFiles` on the slot's view pinned to its
+  G), wired in `open_attempts`. The chmod follows `lstat`, so a directory swapped for a link between the two is a
+  residual race; no agent runs while setup does.
+- **`evidence_files.py`**: `setup_log(key, run)` and `open_setup_log` (`SetupLog`: 0600, append, close-on-exec, 32 MiB
+  then one `[truncated]` line). **`slot_release.py`**: the stop proof, both modes, ends with the unfinished setup's
+  command through the agent's `gone` rule: `unsettled setup_running` (`held:setup_running`), nothing changed; the
+  plan's `setup_unknown` is folded into it (the `gone` port already counts unknown as alive). Emptying the scratch after
+  the release is S5e-2's. **`step_guide`**: GUIDE `environment` and `setup_running`. No `Setup:` show line (S5e-2).
+- **Policy**: `clean` joins `test_policy.GIT_WRITES`, owned by `environment.py`.
+- **`justfile`**: `bootstrap` as section 4; `.task-loop.json` `setup` is `[["just", "bootstrap"]]` (ran here: it
+  warms ruff, pyrefly and import-linter).
+
+Tests: `test_environment.py` (new, 24 tests): the order as observed events (failure count, preflight, scratch, reset,
+commands with each group check, scratch, renewal, agent), the identity committed before the fake executes, the env,
+cwd, timeout and log; the reset removing ignored files; `environment:reset`; reuse on relaunch after `claim_lost`
+(no reset, no command); another B or setup digest runs again; exit, exec and spawn failures, the second failure then
+`environment:failed` with nothing observed or run; uncertain start, then `running`, `unknown`, and `interrupted` plus a
+new run; an unregistered unfinished run; timeout and a deadline between commands; lingering after the first of two
+commands; `dirty`, then `slot_dirty`; profile missing, not an object, bad value, unavailable; platform, remove_unsafe,
+files; an uncleanable `.env`; unwired; a plan attempt on another platform runs no setup; a repeat. `test_setup_store.py`
+(13): fencing by token, generation and attempt, a released or dispatched attempt, no rewrite of a concluded run,
+"latest" the highest run, the failure count, `running`, the v11 CHECKs. `test_slot_release.py` (+3): both modes
+`held:setup_running` while the latest unfinished run's command lives (an earlier run's live pid is never asked), then
+released; an unregistered run does not hold. `test_attempt_entry.py` (+4): the renewal port. Real:
+`real/test_env_files_real.py` (7: a planted link removed and its target kept, 0o000 directories emptied, a link in place
+of a folder, `setup_process` registering before the command runs with its output and exit, an exec failure, a process
+left in the group seen alive), `real/test_environment_real.py` (1: real Git and a real process: the committed profile
+read through the pinned view while the working tree's differs, `-ffdx` removing an ignored nested repository and files,
+the command run in the slot with the slot's folders, `passed`). `test_admit_chain` and `test_prepare` wire a passing
+fake environment for their implement attempts. Mutations of the failure bound, the reuse key, the repeat rule, the
+reconcile's alive and unfinished checks, the renewal, both scratch emptyings, the lingering, exit and deadline checks,
+the dirty read, the reset's listing and `nested`, the `onexc` retry, the release's setup proof, and the store's phase,
+`conclusion IS NULL` and run ordering each fail a test (run by hand, not kept).
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kept); `just test` 1530 passed. Code lines
+(policy counter): source +408 against the estimate of about +330 (`environment` 197, `setup_store` 76, `composition`
+358, `attempt` 300, `slot_release` 257, `attempt_entry` 225, `evidence_files` 107); tests +567 against about +380
+(`doubles` gained the environment fakes: 90 to 191). Live smoke not run (owner-run, section 10; its steps 3 and 4 need
+S5e-2).

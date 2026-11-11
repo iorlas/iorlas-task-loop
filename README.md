@@ -2,9 +2,10 @@
 
 The successor task factory. Built so far: read-only inspection of Git checkouts and tasks, and the plan step end to
 end, from admitting a ready task into a free slot to publishing its verified plan as `task/<id>` on `origin`; then the
-implement step, advanced by hand (`tl step start`) and published on the same branch. Not built: rounds advancing a
-task, the environment for the agent's tests, the checks, review and land steps, and the dashboard. Nothing merges or
-lands.
+implement step, advanced by hand (`tl step start`) and published on the same branch; before an implement agent starts,
+its entry resets the slot's environment and runs the repository's `setup` (Linux only). Not built: the agent's access to
+that environment (it still has the plan step's sandbox access), rounds advancing a task, the checks, review and land
+steps, and the dashboard. Nothing merges or lands.
 
 - `tl repo inspect PATH [--json]` reports the local repository identity, common directory, selected checkout and origin.
 - `tl task show TASK_ID --backlog BACKLOG --tracker-root PATH [--json]` reads the explicitly configured Beads tracker,
@@ -44,8 +45,8 @@ no old editable install, vendored runtime or baseline source path supplies impor
 `just test` runs the CLI, step and architecture checks. `tests/steps/` holds all the factory tests, including the lock, lease and
 rounds tests (the folder name is historical). No historical test bootstrap or kernel is included.
 The Git, task tracker, agent, SQLite, process-lock and stream boundaries come from released
-[shelf](https://github.com/yoselabs/shelf) libraries (`git-porcelain` 0.13.0, `beads-client` 0.2.0, `any-agent`
-0.4.0, `sqlite-store` 0.1.0, `process-lock` 0.2.1, `stream-proc` 0.5.0), each pinned by Git tag and locked commit
+[shelf](https://github.com/yoselabs/shelf) libraries (`git-porcelain` 0.15.0, `beads-client` 0.2.0, `any-agent`
+0.5.0, `sqlite-store` 0.1.0, `process-lock` 0.2.1, `stream-proc` 0.6.0), each pinned by Git tag and locked commit
 and checked for portable source provenance.
 
 [Design and acceptance](docs/design/tl-8bh9.8.7/plan.md) describe the boundary of this
@@ -53,4 +54,6 @@ foundation. Preserved design documents may describe future behavior or the histo
 they are not additional executable commands.
 
 `.task-loop.json` is this repository's profile (`setup`, `checks`, `required`, `target`), read from Git by
-`tl profile show`; nothing runs its commands yet ([tl-8bh9.14.1](docs/design/tl-8bh9.14.1/plan.md)).
+`tl profile show` ([tl-8bh9.14.1](docs/design/tl-8bh9.14.1/plan.md)). An implement attempt's entry runs its `setup`
+(`just bootstrap`: `just install` plus every pinned check tool warmed in the uv cache) in the slot before the agent
+([S5e](docs/design/tl-8bh9.4.3.1.16.2/plan.md)); nothing runs the checks yet.

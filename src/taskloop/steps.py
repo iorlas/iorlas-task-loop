@@ -26,7 +26,8 @@ class StepKind:
     """`rules`: task id to the step's root, caps and deletions. `input_text`: the admitted input. `answer_schema`: the
     strict JSON schema the harness forwards (`schema.json`). `decode`: every bound and cross-field rule of the answer,
     ValueError otherwise. `artifact`: the kind's own rule at X, a broken rule or the artifact's blob (None: the kind has
-    no artifact). `feedback`: a repeat's input."""
+    no artifact). `feedback`: a repeat's input. `environment`: the entry prepares the slot's environment (the profile's
+    `setup`, `environment.Preparation`) before the agent of attempt 1 starts; a repeat reuses it."""
 
     step: Step
     rules: Callable[[str], StepRules]
@@ -35,6 +36,7 @@ class StepKind:
     decode: Callable[[object, StepRules], Answer]
     artifact: Callable[[Tree, StepRules], Rejected | str | None]
     feedback: Feedback
+    environment: bool = False
 
 
 PLAN: Final = StepKind(
@@ -43,7 +45,7 @@ PLAN: Final = StepKind(
 )
 IMPLEMENT: Final = StepKind(
     "implement", implement_step.step_rules, implement_step.input_text, implement_step.ANSWER_SCHEMA, implement_step.decode,
-    implement_step.artifact, implement_step.feedback,
+    implement_step.artifact, implement_step.feedback, environment=True,
 )
 STEPS: Final[tuple[StepKind, ...]] = (PLAN, IMPLEMENT)  # the fixed step order
 # every verdict word a stored verdict may hold

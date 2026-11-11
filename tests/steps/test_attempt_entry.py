@@ -18,10 +18,10 @@ from sqlite_store import Store
 from stream_proc import ProcessObservation, inspect_process
 
 from taskloop.attempt import Attempts
-from taskloop.attempt_entry import EntryArgs, arguments, enter, main
+from taskloop.attempt_entry import EntryArgs, arguments, enter, main, renewal
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Evidence, SlotFiles
-from taskloop.claim_lease import Beat, Heartbeat
+from taskloop.claim_lease import Beat, Heartbeat, KeepAlive
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.slot_lock import SlotBusy, acquire, lock_path
@@ -426,3 +426,15 @@ def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixtu
     assert "BEADS_DIR" not in os.environ  # dropped first: no bd child of this entry can be pointed at another tracker
     out, err = capfd.readouterr()
     assert (out + err).strip() == "refused usage"
+
+
+@pytest.mark.parametrize(
+    ("beats", "expected"), [(("held",), "held"), (("lost",), "lost"), (("unrenewed",), "unrenewed"), (("held", "lost"), "lost")]
+)
+def test_the_renewal_after_setup_renews_once_more_and_answers_the_keep_alives_word(beats: tuple[Beat, ...], expected: str) -> None:
+    """An implement step's setup may take minutes: the entry renews the claim once more before dispatch (`lost` refuses)."""
+    script = list(beats)
+    alive = KeepAlive(lambda: script.pop(0), Stop(0), lambda: 10)
+    renew = renewal(alive)
+    found = [renew() for _ in beats][-1]
+    assert found == expected and script == []

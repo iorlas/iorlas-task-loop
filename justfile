@@ -6,6 +6,12 @@ test: install
 install:
     uv sync --frozen --no-editable --reinstall-package iorlas-task-loop
 
+# Prepare a slot: the project environment and every pinned check tool in the uv cache (the factory's `setup`).
+bootstrap: install
+    uv tool run "ruff@$(just pin ruff)" --version
+    uv tool run "pyrefly@$(just pin pipx:pyrefly)" --version
+    uv run --frozen --no-sync --with "import-linter==$(just pin pipx:import-linter)" lint-imports --help
+
 check: install lint types rules
 
 lint:

@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import PinnedViews
+from doubles import Environment, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
@@ -53,8 +53,11 @@ def agent(answer: Mapping[str, object], change: Callable[[], None]) -> Agent:
 
 
 def execute(con: sqlite3.Connection, tmp_path: Path, key: AttemptKey, run: Agent, checkouts: Checkouts, files: SlotFiles) -> str:
-    attempts = Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
-    return attempts.execute(key, ENTRY).reason
+    """The entry's execute; an implement attempt first runs its (fake) setup, which passes."""
+    environment = Environment(con, checkouts, tmp_path).preparation()
+    attempts = Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files,
+                        environment=environment)
+    return attempts.execute(key, ENTRY, lambda: "held").reason
 
 
 def finish(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, *, publish: bool = True) -> VerifiedTask:
