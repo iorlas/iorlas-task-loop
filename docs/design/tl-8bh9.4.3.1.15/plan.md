@@ -793,3 +793,8 @@ files keep their cases). Code lines (policy counter): `cli_step` 160 (159), `ste
 (132), `operations` 253 (354), `attempt_status` 116 (new), `round` 214 (213), `result_data` 105 (105), `attempt_reads`
 194 (190); source +21 code lines (5585 to 5606; estimate +30). Live smoke not run (owner: `tl step --help`, one
 `tl step next` round).
+
+S4 review repair (no output word changed except the scope line):
+- `test_round`: the log test's admission seeds a real attempt row, so the start line carries `plan`; `LINE` now requires the step word on every attempt-bearing line (refused/unavailable starts, `claim_leaked` and `round` lines stay without); removing `step=result.step or ""` fails it. `test_operations` pins `Started.step is None` when `step_of` raises `StoreUnavailable`.
+- Naming and prose: the Next word in `attempt_status._show` and in `test_step_cli` is `next_word`, not `step`; `cli_composition` and README say "step" not "plan".
+- Help: "Step commands: steps built: plan; ...." (two colons) is now "Step commands (steps built: plan; publishes task/<id>; no merge or land)." in root help and the `tl step start` line; `STEP_ONLY` unchanged and single-sourced.

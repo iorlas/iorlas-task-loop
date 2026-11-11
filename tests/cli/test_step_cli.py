@@ -284,13 +284,15 @@ def test_verify_prints_the_release_and_publish_guides_only_when_not_done(
     assert (step_guide.GUIDE["release"] in out) is guided and (step_guide.PUBLISH in out) is guided
 
 
-@pytest.mark.parametrize("step", words(Next))
-def test_every_next_step_renders_with_its_guidance(step: Next, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    shown = Shown(AttemptView("tasks", "tl-1", "plan", "a", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, step),
-                  Path("/d"), Path("/d/entry.log"))
+@pytest.mark.parametrize("next_word", words(Next))
+def test_every_next_step_renders_with_its_guidance(
+    next_word: Next, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    shown = Shown(AttemptView("tasks", "tl-1", "plan", "a", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False,
+                              next_word), Path("/d"), Path("/d/entry.log"))
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda _arguments, _loaded: shown)
     assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
-    assert f"Next: {step}\n{step_guide.GUIDE[step]}" in capsys.readouterr().out
+    assert f"Next: {next_word}\n{step_guide.GUIDE[next_word]}" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("entry", words(EntryState))

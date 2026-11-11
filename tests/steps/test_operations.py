@@ -19,7 +19,7 @@ from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, Ad
 from taskloop.attempt import SANDBOX, Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown, StatusPorts, list_attempts, next_action, show_attempt
-from taskloop.attempt_store import AttemptStore
+from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import (
     AttemptKey,
     AttemptResult,
@@ -177,6 +177,24 @@ def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: Attempt
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
     assert (request.model, request.effort, request.sandbox, request.deadline) == ("model-m", "effort-e", SANDBOX, 1000 + 30 * 60)
     assert (launcher.calls, launcher.minutes) == ([("tasks", "tl-1")], [30])
+
+
+class UnreadableStep(AttemptStore):
+    """A store whose step read-back fails, as a malformed stored step would."""
+
+    def step_of(self, attempt_id: str) -> str | None:
+        raise StoreUnavailable("Malformed stored text")
+
+
+def test_a_failed_step_read_back_never_turns_a_launched_start_into_a_failure(tmp_path: Path) -> None:
+    con = Store(SCHEMA).open_rw(tmp_path / "empty.db")
+    assert con is not None
+    launcher = FakeLauncher(Launched(KEY, ENTRY))
+    ports = StartPorts(UnreadableStep(lambda: con), Admission(Admitted(KEY, "s1")), launcher, lambda: 1000, Repeats())
+    started = start(ports, REQUEST)
+    con.close()
+    assert isinstance(started, Started) and started.step is None
+    assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
 
 
 @pytest.mark.parametrize("minutes", [0, -5, MAX_MINUTES + 1, 10**400])

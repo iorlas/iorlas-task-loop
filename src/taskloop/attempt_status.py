@@ -100,16 +100,16 @@ def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> Attempt
     result = collect(reads.store, row.key)
     expired = reads.clock() >= row.deadline
     rebooted = row.entry is not None and reads.boot() not in (None, row.entry[2])
-    step = _released(row, next_action(row.phase, entry, result, expired, rebooted=rebooted), succeeded(result))
+    next_word = _released(row, next_action(row.phase, entry, result, expired, rebooted=rebooted), succeeded(result))
     found = (row.backlog, row.task_id, row.step, row.key.attempt_id, row.slot, row.phase)
-    left = reads.leftovers(row.key) if probe and step == "verify" else None
+    left = reads.leftovers(row.key) if probe and next_word == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
     ended = {"seq": row.seq, "release": row.release, "published": row.published}
     if left is None or left.reason not in REPEATABLE:
-        return AttemptView(*found, entry, result, expired, step, row.entry, row.worker, (), *chain, **ended)
-    step = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
-    held = AttemptResult("pending", step, result.execution)
-    return AttemptView(*found, entry, held, expired, step, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
+        return AttemptView(*found, entry, result, expired, next_word, row.entry, row.worker, (), *chain, **ended)
+    next_word = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
+    held = AttemptResult("pending", next_word, result.execution)
+    return AttemptView(*found, entry, held, expired, next_word, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
 
 
 def _released(row: AttemptRow, step: Next, verified: bool) -> Next:

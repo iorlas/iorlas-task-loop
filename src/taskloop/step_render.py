@@ -70,7 +70,7 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
                 stand = f"attempt {result.number - 1}'s choices stand; deadline from --minutes"
                 lines += [f"attempt {result.number} of at most {ATTEMPTS}; {stand}"]
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
-            return [*lines, f"Step commands: {STEP_ONLY}. Follow it with `tl step show {result.task_id} --backlog {result.backlog}`."]
+            return [*lines, f"Step commands ({STEP_ONLY}). Follow it with `tl step show {result.task_id} --backlog {result.backlog}`."]
         case Shown(view=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             ended = each.release

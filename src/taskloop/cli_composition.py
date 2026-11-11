@@ -1,4 +1,4 @@
-"""Construct the command surface's boundaries: the machine config file, the read-only factory.db guard, and the plan and
+"""Construct the command surface's boundaries: the machine config file, the read-only factory.db guard, and the step and
 slot openers over `composition`'s real wiring. The attempt entry process never imports this module (.importlinter)."""
 
 import os

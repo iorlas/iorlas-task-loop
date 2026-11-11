@@ -64,7 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     tracker_located()  # before any bd call: the given tracker root decides the tracker, never an inherited BEADS_DIR
     parser = argparse.ArgumentParser(
         prog="tl",
-        description=f"Task-loop successor foundation. Step commands: {STEP_ONLY}.",
+        description=f"Task-loop successor foundation. Step commands ({STEP_ONLY}).",
         allow_abbrev=False,
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")

@@ -49,7 +49,9 @@ ENTRY = (7, "entry-start", "boot")
 BEFORE_REBOOT = (7, "entry-start", "old-boot")  # registered in another boot than the bench's "boot"
 HEAD, X = "d" * 40, "x" * 40
 REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "effort-e", 30)
-LINE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks (\S+ )?(plan )?(start|relaunch|repeat|verify|publish|report|skip|round)( \S+)+")
+STAMP = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks "
+STEPPED = r"\S+ plan (start|relaunch|repeat|verify|publish|report|skip)( \S+)+"  # every attempt-bearing move names its step
+LINE = re.compile(STAMP + rf"({STEPPED}|\S+ (start|report) (refused|unavailable|claim_leaked)\S*|round( \S+)+)")
 
 
 def bead(task_id: str, priority: int | None = 2, parent: str = "", assignee: str = "") -> Bead:
@@ -382,12 +384,14 @@ def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admi
 
 def test_the_round_log_holds_fixed_words_one_line_per_move_and_a_closing_line(factory: sqlite3.Connection) -> None:
     ready = FakeTaskReadClient([bead("t-1"), bead("t 2\nforged line")], ready=["t-1", "t 2\nforged line"])
-    admission = Admission({"t-1": AdmitRefused("claimed_elsewhere", detail="/home/person/.secret")})
+    admission = Admission({"t-1": AdmitRefused("claimed_elsewhere", detail="/home/person/.secret")},
+                          effect=lambda task: seed(factory, task, f"a-{task}"))
     bench = Bench(factory, ready, admission)
     found = bench.round()
     assert len(bench.lines) == len(found.moves) + 1 == 3
     assert all(LINE.fullmatch(line) for line in bench.lines), bench.lines
-    assert bench.lines[0].split(" ")[2:] == ["invalid", "start", "started", "invalid"]  # a forged id: one word, never a line
+    # a forged id: one word, never a line; the started attempt's step
+    assert bench.lines[0].split(" ")[2:] == ["invalid", "plan", "start", "started", "invalid"]
     assert not any("secret" in line or "\n" in line for line in bench.lines)
 
 

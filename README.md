@@ -36,7 +36,7 @@ just test
 Both required checks rebuild and install the current project as a wheel in this
 worktree's `.venv`. Tests use that installed package and verify its source provenance;
 no old editable install, vendored runtime or baseline source path supplies imports.
-`just test` runs the CLI, plan and architecture checks. `tests/steps/` holds all the factory tests, including the lock, lease and
+`just test` runs the CLI, step and architecture checks. `tests/steps/` holds all the factory tests, including the lock, lease and
 rounds tests (the folder name is historical). No historical test bootstrap or kernel is included.
 The Git, task tracker, agent, SQLite, process-lock and stream boundaries come from released
 [shelf](https://github.com/yoselabs/shelf) libraries (`git-porcelain` 0.13.0, `beads-client` 0.2.0, `any-agent`
