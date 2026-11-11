@@ -13,7 +13,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from conftest import FakeSlotFiles
+from doubles import FakeSlotFiles
 from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
@@ -88,7 +88,7 @@ class Agent:
         return FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
 
-class Launcher:
+class FakeLauncher:
     """The launcher: registers the current attempt's entry (a new identity per attempt) as the real one does."""
 
     def __init__(self, con: sqlite3.Connection) -> None:
@@ -108,7 +108,7 @@ class Step:
 
     def __init__(self, con: sqlite3.Connection, tmp: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> None:
         self.con, self.tmp, self.slot, self.checkouts, self.files = con, tmp, slot, checkouts, files
-        self.store, self.launcher = AttemptStore(lambda: con), Launcher(con)
+        self.store, self.launcher = AttemptStore(lambda: con), FakeLauncher(con)
         self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold)
 
     def run(self, key: AttemptKey, entry: EntryIdentity, agent: Agent) -> str:
@@ -217,14 +217,14 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     step.run(second, entry, Agent(slot, {}, UNCHANGED))
     reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
     shown_two = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert not isinstance(shown_two, Failed) and (shown_two.status.number, shown_two.status.next) == (2, "repeat")
+    assert not isinstance(shown_two, Failed) and (shown_two.view.number, shown_two.view.next) == (2, "repeat")
     third, entry = step.next_attempt(second)
     text = step.input(third)
     assert text.startswith("Attempt 2 of this step") and text.count("BEGIN SLOT STATUS") == 1 and text.endswith(TASK)
     step.run(third, entry, Agent(slot, {}, UNCHANGED))
     shown_three = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_three, Failed)
-    each = shown_three.status
+    each = shown_three.view
     assert (each.number, each.next, each.result.reason, each.leftovers) == (3, "repeats_exhausted", "repeats_exhausted",
                                                                              ("uncommitted", f"?? {STRAY}"))
     assert [attempt_id for attempt_id, _reason in each.earlier] == [second.attempt_id, "attempt"]
@@ -356,7 +356,7 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
     reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
     shown_now = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_now, Failed)
-    left = shown_now.status.leftovers
+    left = shown_now.view.leftovers
     assert left[0] == reason and not any(ord(c) < 32 or 127 <= ord(c) < 160 for line in left for c in line)
     if reason == "ignored":
         assert len(left) == 52 and left[-1] == "+951 more"
@@ -479,5 +479,5 @@ def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: Fake
     reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
     found = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert not isinstance(found, Failed)
-    assert (found.status.phase, found.status.next, found.status.last_entry) == (
+    assert (found.view.phase, found.view.next, found.view.last_entry) == (
         "admitted", "start", "refused slot_staged verify=refused:not_captured")

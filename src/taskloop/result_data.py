@@ -28,7 +28,7 @@ def _entry_data(entry: EntryIdentity | None) -> dict[str, object] | None:
     return None if entry is None else {"pid": entry[0], "start": entry[1], "boot": entry[2]}
 
 
-def _status_data(each: AttemptView) -> dict[str, object]:
+def _show_data(each: AttemptView) -> dict[str, object]:
     return {
         "backlog": each.backlog, "task": each.task_id, "attempt_id": each.attempt_id, "slot": each.slot, "phase": each.phase,
         "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
@@ -54,7 +54,7 @@ def _published_data(published: PublishedRow | None) -> dict[str, object] | None:
     return {"commit": published.commit, "remote_head": published.remote_head, "published_at": published.published_at}
 
 
-def _freed_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[str, object]:
+def _released_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[str, object]:
     if isinstance(result, PublishedTask):
         return _publish_data(result)
     if isinstance(result, VerifiedTask):
@@ -98,11 +98,11 @@ def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
             return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
                     "existing": result.existing, "entry": _entry_data(result.entry), "number": result.number, "result": result.result}
         case Shown():
-            return _status_data(result.status) | {"directory": str(result.directory), "entry_log": str(result.entry_log)}
+            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log)}
         case Listed() | Round() | Ended():
             return _rows_data(result)
         case VerifiedTask() | ReleasedTask() | PublishedTask():
-            return _freed_data(result)
+            return _released_data(result)
         case Adoption() | Loaded():
             return _setup_data(result)
 
@@ -116,7 +116,7 @@ def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
     """`tl plan list`: every current attempt; `tl plan next`: each move in the order performed and `stopped`, the word that
     ended admission early, or null; `tl plan rounds`: why the rounds ended."""
     if isinstance(result, Listed):
-        return {"attempts": [_status_data(each) for each in result.attempts]}
+        return {"attempts": [_show_data(each) for each in result.attempts]}
     if isinstance(result, Ended):
         return {"status": "ended", "backlog": result.backlog, "reason": result.reason, "detail": result.detail}
     moves = [{"task": each.task_id, "action": each.action, "word": each.word, "attempt_id": each.attempt_id, "detail": each.detail}

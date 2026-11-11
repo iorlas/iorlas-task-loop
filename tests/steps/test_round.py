@@ -70,7 +70,7 @@ class Admission:
         return Admitted(AttemptKey(f"a-{request.task_id}", f"token-{request.task_id}", 1), "s1")
 
 
-class Launcher:
+class FakeLauncher:
     """Launches each task's entry (`results` per task id instead)."""
 
     def __init__(self) -> None:
@@ -126,7 +126,7 @@ class Bench:
         if free:
             con.execute("INSERT OR IGNORE INTO slot (repo_id,name,cwd) VALUES ('other','s1','/other/s1')")
         self.store, self.ready = AttemptStore(lambda: con), ready or FakeTaskReadClient()
-        self.admission, self.launcher, self.repeats, self.recorded = admission or Admission(), Launcher(), Repeats(), Recorded()
+        self.admission, self.launcher, self.repeats, self.recorded = admission or Admission(), FakeLauncher(), Repeats(), Recorded()
         self.now = 10.0
         self.during: Callable[[], object] = lambda: None
         self.seen: Seen = "gone"

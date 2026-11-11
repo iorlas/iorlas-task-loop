@@ -14,7 +14,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError
-from conftest import FakeSlotFiles
+from doubles import FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import begin_immediate

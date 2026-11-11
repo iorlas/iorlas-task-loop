@@ -57,7 +57,7 @@ def never(*_args: object) -> NoReturn:
     raise AssertionError("a repeat reads no tracker and claims nothing")
 
 
-class Launcher:
+class FakeLauncher:
     def __init__(self, store: AttemptStore) -> None:
         self.store = store
 
@@ -101,7 +101,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), never, never, never, never, lambda: 10, never)
-    repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, Launcher(store), lambda _w: True, lambda _e: "gone", lambda: 10,
+    repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, FakeLauncher(store), lambda _w: True, lambda _e: "gone", lambda: 10,
                         repeating)
     started = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(started, Started) and started.status == "repeated"

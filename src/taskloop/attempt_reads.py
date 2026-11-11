@@ -236,7 +236,7 @@ class AttemptReads:
         return tuple(found)
 
     def slot_use(self) -> SlotUse:
-        """The free-slot read's and the slot-freed check's read: two SELECTs, no write."""
+        """Two SELECTs, no write: the free-slot read and the slot-released check both use them."""
         with self._connection() as con:
             free = con.execute(
                 """SELECT count(*) FROM slot s

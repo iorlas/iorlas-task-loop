@@ -14,7 +14,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from conftest import FakeSlotFiles
+from doubles import FakeSlotFiles
 from git_porcelain import Dirty, Recorded, Repo, Tree
 from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
@@ -252,7 +252,7 @@ def test_the_stage_commit_and_verdict_table(
     assert len(stored(registered)) == (1 if final else 0)  # slot state and unknowns are never stored
     if expected != "unavailable:not_listed":
         assert len(made(slot, base)) == commits
-        assert all(attempts == TRAILER for subject, attempts in made(slot, base) if subject == "Plan tl-1")
+        assert all(body == TRAILER for subject, body in made(slot, base) if subject == "Plan tl-1")
     collected = attempts(registered, tmp_path, checkouts, slot_files, agent(slot, {})).collect(KEY)
     assert (collected.status, collected.reason) == (("collected", expected) if final else ("pending", "verification"))
 

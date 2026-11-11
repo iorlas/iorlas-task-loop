@@ -255,10 +255,10 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
     The harness registration write goes through its own store, whose connections wait at most REGISTRATION_BUSY_MS for the
     write lock; every other write keeps the library's 5 s.
     """
-    store, gated = Store(SCHEMA), Store(SCHEMA)
+    store, registration = Store(SCHEMA), Store(SCHEMA)
 
     def bounded() -> sqlite3.Connection | None:
-        con = gated.shared_rw(database)
+        con = registration.shared_rw(database)
         if con is not None:
             con.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
         return con
@@ -271,7 +271,7 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
         time.time,
         checkouts,
         RealSlotFiles(),
-        registration_store=AttemptStore(bounded, gated.begin_immediate),
+        registration_store=AttemptStore(bounded, registration.begin_immediate),
     )
 
 

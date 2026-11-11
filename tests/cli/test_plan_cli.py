@@ -105,7 +105,7 @@ class Admission:
         return Admitted(KEY, "s1")
 
 
-class Launcher:
+class FakeLauncher:
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         return Launched(KEY, ENTRY)
 
@@ -125,7 +125,7 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     @contextmanager
     def opener(database: Path, artifacts: Path) -> Generator[StartPorts | Failed]:
         opened.append((database, artifacts))
-        yield StartPorts(AttemptStore(lambda: con), admission, Launcher(), lambda: 1000, NoRepeat())
+        yield StartPorts(AttemptStore(lambda: con), admission, FakeLauncher(), lambda: 1000, NoRepeat())
 
     monkeypatch.setattr(cli_composition, "open_start", opener)
     config = tmp_path / "scratch.toml"

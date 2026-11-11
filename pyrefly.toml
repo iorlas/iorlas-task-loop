@@ -1,5 +1,6 @@
 python-version = "3.15"
 project-includes = ["src", "tests"]
+# tests/steps: the shared test doubles module (doubles.py), as pytest's pythonpath
 search-path = ["src", "tests/steps"]
 check-unannotated-defs = true
 use-ignore-files = false

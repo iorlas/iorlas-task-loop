@@ -13,7 +13,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from conftest import FakeSlotFiles
+from doubles import FakeSlotFiles
 from git_porcelain import GitTimeout, GitUnavailable, HookRejected, MissingRemote, RefRejected, Rejected, RemoteRejected, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree

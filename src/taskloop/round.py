@@ -221,10 +221,10 @@ def _detail(result: Started | Failed) -> str:
 
 def _verified(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
     """`tl plan verify` as built: the verdict, then the settled release and the publication of a verified plan."""
-    checked = verify_task(ports.reads.store, ports.verifier, ports.releaser, ports.publisher, backlog, each.task_id)
-    if isinstance(checked, VerifiedTask):
-        return Move(each.task_id, "verify", f"{checked.status} release={checked.release} branch={checked.published}", each.attempt_id)
-    return Move(each.task_id, "verify", checked.word, each.attempt_id, checked.detail)
+    verified = verify_task(ports.reads.store, ports.verifier, ports.releaser, ports.publisher, backlog, each.task_id)
+    if isinstance(verified, VerifiedTask):
+        return Move(each.task_id, "verify", f"{verified.status} release={verified.release} branch={verified.published}", each.attempt_id)
+    return Move(each.task_id, "verify", verified.word, each.attempt_id, verified.detail)
 
 
 def _full(store: AttemptStore) -> bool:

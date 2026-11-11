@@ -45,7 +45,7 @@ type Refusal = Literal[
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged",
 ]
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
-# clean completely published answer of effect `commit`/`keep` (the gate of `factory_commit` and the verdict), no verdict, the
+# clean completely published answer of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
 # tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D and step (all carried on).
 PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
 EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),

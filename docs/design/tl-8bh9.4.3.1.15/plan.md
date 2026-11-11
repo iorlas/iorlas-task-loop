@@ -320,7 +320,7 @@ Each slice lands green with `just check` and `just test`, reviewed independently
 | **S1 Renames and moves** | Every rename in 3.6 except S4's; `plan_types` split into `attempt_types` and `plan_step` (moved verbatim: dispositions, `PLAN_NAME`, rules, decoder, `ANSWER_SCHEMA` from `plan_files`, `task_text`'s closing words, the plan.md rule from `plan_verify`, the repeat instructions); `tests/plan` to `tests/steps`; `.importlinter`, `test_policy` (`WRITERS`, `git_writers`), `justfile` updated | none (tables keep `plan_*` names for one slice) | none: `tl plan` and every word unchanged | about +20 code lines (new module headers); about 25 source and 35 test files touched, imports and names only |
 | **S2 factory.db v9** | 3.4 v9: table and column renames, `step` (plan), `effect`, drop `plan_path`, nullable `blob`; `end_commit()`; fences on `effect`; `AttemptRow`/`AttemptRecord`/`Admission` carry `step` | v8 to v9, discard | none | about +15 source; about 230 test SQL references edited |
 | **S3 The step port** | `steps.py` (`StepKind`, `PLAN`, `STEPS`, `kind`, `RULES`); `Answer` with `effect`; the five consumers (`admit` input text, `evidence_files.prepare` schema, `attempt._validate`, `verifier`/`verdict` artifact, `repeat` feedback) call `kind(admission.step)`; `attributes()` derived from the root; import-linter: only `steps` imports `plan_step` | none | none: identical input text and schema bytes | about +45 source |
-| **S4 CLI cut (Q1)** | `tl step` replaces `tl plan`; `cli_guide.py` takes `GUIDE`, `discard`, help strings (generic wording); `attempt_status.py` takes status and `next_step` from `operations`; `step` in rows, JSON and `rounds.log`; .8.7 exception and live-smoke runbook updated | none | the cut | about +30 source |
+| **S4 CLI cut (Q1)** | `tl step` replaces `tl plan`; `cli_guide.py` takes `GUIDE`, `discard`, help strings (generic wording); `attempt_status.py` takes `show_attempt`, `list_attempts` and `next_action` from `operations`; `step` in rows, JSON and `rounds.log`; .8.7 exception and live-smoke runbook updated | none | the cut | about +30 source |
 | **S5 Step sequencing** (lands with the implement kind) | `steps.next_step`; `admit_next` in `admit_chain` (with the repeat takeover moved there); the `after_commit` check in `prepare`; `advance` in status, `tl step start` and the round (3.8); `TaskInspection` status, assignee, labels; the implement `StepKind` per its own design | v9 to v10, discard | `advance` word and GUIDE entry; scope string names implement | about +250 source, +350 test |
 
 **What stays plan-only after S5:** `plan_step.py` (its answer contract, words, input closing words, plan.md rule,
@@ -482,7 +482,7 @@ Deviations from section 3.6 and S1, each to avoid an import cycle (`plan_step` i
   `verifier` and `repeat` call `plan_stage(admission.task.task_id)`, the same value. S3 turns them into
   `kind(admission.step).rules(...)`.
 - `MODE` and `Unreadable` (used by both the chain and the plan.md rule) move to `attempt_types`.
-- The test fake `Verifier` in `tests/steps/test_ops.py` is now `StubVerifier`; `tests/steps/test_slot_lock.py` imports
+- The test fake `Verifier` in `tests/steps/test_operations.py` is now `FakeVerifier`; `tests/steps/test_slot_lock.py` imports
   the `verifier` module as `verifier_module` (its helper function is named `verifier`).
 - `plan_stage` keeps its name (not in the 3.6 table). Table and column names (`plan_attempt`, `plan_commit`,
   `plan_release`, ...) and their mentions in prose wait for S2.
@@ -530,3 +530,25 @@ Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 6 contracts kep
 answer-effect cases + 3 fence cases + the version-10 refusal case). Source code lines +16 over the touched modules
 (2436 to 2452): `admit` 331, `attempt_store` 317, `attempt_types` 226, `attempt_reads` 180, `plan_step` 112,
 `factory_schema` 97; `operations` 382 untouched.
+
+## 12. As built: A1-A3, B (naming review, 2026-11-11)
+
+Four commits after S2, no stored or printed word changed except the B rows below. Counts are `git show --stat`.
+
+- **A1 `53f60dd84`** (47 files, +708/-680): internal renames from the naming review (types, functions, locals, test
+  doubles); no behavior change.
+- **A2 `ac4e92e40`** (20 files, +431/-383): moves, no behavior change: `exit_codes`, `round_log`, `plan_guide` and
+  `plan_render` are new modules (`cli_plan` split); `EvidenceFiles.last_entry` is the entry-log reader;
+  `plan_step.feedback` is the repeat feedback; the justfile recipe `prepare` became `install`.
+- **B `f4e7cfd8e`** (25 files, +86/-64): word changes, before to after:
+  - `tl plan verify` release and branch lines: before `released`/`published` counted as done and `already_*` as held,
+    after `released`/`already_released` and `published`/`already_published` are both done (`publish_word` and
+    `release_word` own the words, shared by verify, publish, release and the round print).
+  - `tl plan start` on an uncertain launch: before `uncertain`, after `uncertain:launch` (`Failed.word` renders
+    `kind:reason` everywhere).
+  - Claim-leak text: before two texts (`GUIDE["claim_leaked"]` and the round's `LEAKED`), after one,
+    `tracker.leaked_claim`.
+  - `stage` became `step` in the agent input and the CLI help text.
+- **A3** (this repair, uncommitted): test doubles moved to `tests/steps/doubles.py`; `gated`, `_freed_*`, `checked`,
+  `Shown.status` (now `view`), `_status*` in `operations`/`plan_render`/`result_data` (now `_show*`) and the test
+  `Launcher` doubles (now `FakeLauncher`) renamed; two prose fixes. No printed or JSON word changed.

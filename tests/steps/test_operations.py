@@ -87,7 +87,7 @@ class Admission:
         return self.result
 
 
-class Launcher:
+class FakeLauncher:
     def __init__(self, result: LaunchResult) -> None:
         self.result = result
         self.calls: list[tuple[str, str]] = []
@@ -178,7 +178,7 @@ def write(path: Path, sql: str, *values: object) -> None:
 
 
 def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: AttemptStore) -> None:
-    admission, launcher = Admission(Admitted(KEY, "s1")), Launcher(Launched(KEY, ENTRY))
+    admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     started = start(StartPorts(empty, admission, launcher, lambda: 1000, Repeats()), REQUEST)
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
     request = admission.requests[0]
@@ -189,7 +189,7 @@ def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: Attempt
 
 @pytest.mark.parametrize("minutes", [0, -5, MAX_MINUTES + 1, 10**400])
 def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int) -> None:
-    admission, launcher = Admission(Admitted(KEY, "s1")), Launcher(Launched(KEY, ENTRY))
+    admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     unread = AttemptStore(lambda: None)  # any read would raise StoreUnavailable
     found = start(StartPorts(unread, admission, launcher, lambda: 1000, Repeats()), replace(REQUEST, minutes=minutes))
     assert found == Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
@@ -197,9 +197,10 @@ def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int
 
 
 def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(empty: AttemptStore, reader: AttemptStore) -> None:
-    fresh = start(StartPorts(empty, Admission(Admitted(KEY, "s1")), Launcher(LaunchUnavailable("start")), lambda: 10, Repeats()), REQUEST)
+    ports = StartPorts(empty, Admission(Admitted(KEY, "s1")), FakeLauncher(LaunchUnavailable("start")), lambda: 10, Repeats())
+    fresh = start(ports, REQUEST)
     assert fresh == Failed("unavailable", "start", admitted=True)
-    failing = Launcher(LaunchUnavailable("start"))
+    failing = FakeLauncher(LaunchUnavailable("start"))
     existing = start(StartPorts(reader, Admission(AdmitRefused("task")), failing, lambda: 10, Repeats()), REQUEST)
     assert existing == Failed("unavailable", "start")
 
@@ -215,7 +216,7 @@ def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(e
 def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
     reader: AttemptStore, launched: LaunchResult, expected: Started | Failed
 ) -> None:
-    admission, launcher = Admission(AdmitRefused("task")), Launcher(launched)
+    admission, launcher = Admission(AdmitRefused("task")), FakeLauncher(launched)
     assert start(StartPorts(reader, admission, launcher, lambda: 10, Repeats()), REQUEST) == expected
     assert admission.requests == []  # the given model, effort and minutes are not applied
     assert launcher.calls == [("tasks", "tl-1")]
@@ -224,7 +225,7 @@ def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
 def test_a_concurrent_start_that_won_is_launched_as_existing(admitted: Path, reader: AttemptStore) -> None:
     write(admitted, "UPDATE attempt SET task_id='hidden'")
     admission = Admission(AdmitRefused("task_attempted"), lambda: write(admitted, "UPDATE attempt SET task_id='tl-1'"))
-    launched = start(StartPorts(reader, admission, Launcher(AlreadyRunning(KEY, ENTRY)), lambda: 10, Repeats()), REQUEST)
+    launched = start(StartPorts(reader, admission, FakeLauncher(AlreadyRunning(KEY, ENTRY)), lambda: 10, Repeats()), REQUEST)
     assert launched == Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY)
     assert len(admission.requests) == 1
 
@@ -240,7 +241,7 @@ VIEW = SlotView("s1", Path("/slots/s1"), "held", attempt_id="other")
     (AdmitUnavailable("store"), Failed("unavailable", "store")),
 ])
 def test_a_refusal_or_unknown_stops_before_any_launch(empty: AttemptStore, admit: AdmitResult, expected: Failed) -> None:
-    launcher = Launcher(Launched(KEY, ENTRY))
+    launcher = FakeLauncher(Launched(KEY, ENTRY))
     assert start(StartPorts(empty, Admission(admit), launcher, lambda: 10, Repeats()), REQUEST) == expected
     assert launcher.calls == []
 
@@ -313,13 +314,13 @@ def test_show_observes_the_registered_entry(
     shown = show_attempt(
         StatusPorts(reader, observe(seen, calls), lambda: now, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown)
-    assert (shown.status.entry, shown.status.next, shown.status.deadline_passed) == (entry, expected, now >= 100)
+    assert (shown.view.entry, shown.view.next, shown.view.deadline_passed) == (entry, expected, now >= 100)
     assert calls == [ENTRY]
-    assert (shown.status.entry_process, shown.status.worker) == (ENTRY, None)
+    assert (shown.view.entry_process, shown.view.worker) == (ENTRY, None)
     write(admitted, "UPDATE attempt SET phase='dispatching',base_commit=?,worker_pid=42,worker_pgid=41", "a" * 40)
     again = show_attempt(
         StatusPorts(reader, observe(seen, calls), lambda: now, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(again, Shown) and again.status.worker == (42, 41)
+    assert isinstance(again, Shown) and again.view.worker == (42, 41)
 
 
 @pytest.mark.parametrize("boot, expected", [("new-boot", "start"), ("boot", "stuck:expired_admitted"), (None, "stuck:expired_admitted")])
@@ -330,7 +331,7 @@ def test_an_expired_admitted_attempt_registered_before_a_reboot_shows_start(
     write(admitted, "UPDATE attempt SET entry_pid=?,entry_start=?,entry_boot=?", *ENTRY)
     reads = StatusPorts(reader, observe("different_process", []), lambda: 200, nothing_left, lambda: boot)
     shown = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(shown, Shown) and (shown.status.deadline_passed, shown.status.next) == (True, expected)
+    assert isinstance(shown, Shown) and (shown.view.deadline_passed, shown.view.next) == (True, expected)
 
 
 def test_show_creates_nothing_and_computes_the_attempt_directory(admitted: Path, reader: AttemptStore, tmp_path: Path) -> None:
@@ -350,7 +351,7 @@ def test_show_creates_nothing_and_computes_the_attempt_directory(admitted: Path,
     assert isinstance(shown, Shown)
     directory = EvidenceFiles(tmp_path / "art").root / EvidenceFiles(tmp_path / "art").directory(KEY)
     assert (shown.directory, shown.entry_log) == (directory, directory / "entry.log")
-    assert (shown.status.entry, shown.status.next, shown.status.result) == ("none", "start", AttemptResult("pending", "admitted"))
+    assert (shown.view.entry, shown.view.next, shown.view.result) == ("none", "start", AttemptResult("pending", "admitted"))
     assert (files(), rows()) == (before, stored)
     assert not (tmp_path / "art").exists()
     reads = StatusPorts(reader, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
@@ -435,13 +436,13 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
     before = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(before, Shown) and (before.status.next, before.status.leftovers) == ("verify", ())  # nothing committed yet
+    assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("verify", ())  # nothing committed yet
     left = Failed("unsettled", "uncommitted", f"?? {stray}")  # as show lists it
     assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == left
     shown = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(shown, Shown) and shown.status.next == "repeat"
-    assert (shown.status.result.status, shown.status.result.reason) == ("pending", "repeat")
-    assert shown.status.leftovers == ("uncommitted", f"?? {stray}")
+    assert isinstance(shown, Shown) and shown.view.next == "repeat"
+    assert (shown.view.result.status, shown.view.result.reason) == ("pending", "repeat")
+    assert shown.view.leftovers == ("uncommitted", f"?? {stray}")
     probed: list[AttemptKey] = []
 
     def counted(key: AttemptKey) -> Unsettled | None:
@@ -454,7 +455,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     assert isinstance(listed, Listed) and [each.next for each in listed.attempts] == ["repeat"] and probed == [KEY]
     slot.remove_file(stray)
     tidied = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(tidied, Shown) and (tidied.status.next, tidied.status.leftovers) == ("verify", ())
+    assert isinstance(tidied, Shown) and (tidied.view.next, tidied.view.leftovers) == ("verify", ())
 
 
 def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
@@ -477,11 +478,11 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
     on = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(on, Shown) and (on.status.next, on.status.leftovers) == ("repeat", ("unsafe", near))
+    assert isinstance(on, Shown) and (on.view.next, on.view.leftovers) == ("repeat", ("unsafe", near))
     slot.checkout_new("other")
     assert verifier.leftovers(KEY) == Unsettled("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(off, Shown) and (off.status.next, off.status.leftovers) == ("verify", ())
+    assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("verify", ())
     assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == Failed("unsettled", "branch")
 
 
@@ -587,7 +588,7 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
     def shown() -> AttemptView:
         found = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
         assert isinstance(found, Shown)
-        return found.status
+        return found.view
 
     assert shown().next == "release"
     held = releaser(store, checkouts, slot_files).release(KEY, False)
@@ -595,7 +596,7 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
     slot.remove_file("docs/design/tl-1/x.md")
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
     assert (shown().next, shown().release is not None) == ("done", True)
-    launcher, repeats = Launcher(Launched(KEY, ENTRY)), Repeats()
+    launcher, repeats = FakeLauncher(Launched(KEY, ENTRY)), Repeats()
     ports = StartPorts(store, Admission(AdmitRefused("task")), launcher, lambda: 10, repeats)
     answered = start(ports, REQUEST)
     assert answered == Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="run:worker_failed")
@@ -605,7 +606,7 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
     assert abandoned.next == "start" and abandoned.release is not None and abandoned.release.abandoned
     fresh = AttemptKey("fresh", "token", 2)
     admission = Admission(Admitted(fresh, "s1"))
-    assert start(StartPorts(store, admission, Launcher(Launched(fresh, ENTRY)), lambda: 10, repeats), REQUEST) == Started(
+    assert start(StartPorts(store, admission, FakeLauncher(Launched(fresh, ENTRY)), lambda: 10, repeats), REQUEST) == Started(
         "started", "tasks", "tl-1", "fresh", False, ENTRY
     )
     assert len(admission.requests) == 1
@@ -626,8 +627,8 @@ def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_aband
     listed = list_attempts(reads)
     assert isinstance(listed, Listed) and [(each.attempt_id, each.seq, each.next) for each in listed.attempts] == [("fresh", 2, "start")]
     found = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(found, Shown) and (found.status.attempt_id, found.status.earlier) == ("fresh", (("attempt", "abandoned"),))
-    assert found.status.release is None and found.status.number == 1
+    assert isinstance(found, Shown) and (found.view.attempt_id, found.view.earlier) == ("fresh", (("attempt", "abandoned"),))
+    assert found.view.release is None and found.view.number == 1
 
 
 def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refuses(registered: sqlite3.Connection, tmp_path: Path) -> None:
@@ -636,8 +637,8 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
     store = AttemptStore(lambda: registered)
     found = show_attempt(
         StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(found, Shown) and found.status.next == "release"
-    admission, launcher = Admission(Admitted(AttemptKey("fresh", "token", 2), "s1")), Launcher(Launched(KEY, ENTRY))
+    assert isinstance(found, Shown) and found.view.next == "release"
+    admission, launcher = Admission(Admitted(AttemptKey("fresh", "token", 2), "s1")), FakeLauncher(Launched(KEY, ENTRY))
     assert start(StartPorts(store, admission, launcher, lambda: 10, Repeats()), REQUEST) == Failed("refused", "release", UNCLAIMING)
     assert (admission.requests, launcher.calls) == ([], [])
 
@@ -682,7 +683,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_done(
     def shown() -> AttemptView:
         found = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
         assert isinstance(found, Shown)
-        return found.status
+        return found.view
 
     held = NotReleased("unavailable", "slot_busy")
     assert verify_task(store, verifier, Releases(held), Publishes(), "tasks", "tl-1") == VerifiedTask(

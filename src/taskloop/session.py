@@ -11,7 +11,7 @@ from taskloop.attempt_types import Admission, ExecutionFacts, SessionInput
 
 
 class RegistrationRefused(Exception):
-    """Registration was refused, so the gated target must not be executed."""
+    """Registration was refused, so the target must not be executed."""
 
     def __init__(self, reason: str) -> None:
         super().__init__(reason)

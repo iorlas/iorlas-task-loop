@@ -38,4 +38,5 @@ test-file = 800
 [tool.pytest.ini_options]
 testpaths = ["tests/cli", "tests/steps", "tests/rules"]
 addopts = "--import-mode=importlib -p no:cacheprovider"
+# importlib mode puts no test directory on sys.path: tests import the shared doubles module (tests/steps/doubles.py)
 pythonpath = ["tests/steps"]

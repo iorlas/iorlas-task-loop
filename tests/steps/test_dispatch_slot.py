@@ -81,8 +81,8 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
 
     agent = run()
     store, files = AttemptStore(lambda: con), EvidenceFiles(tmp_path)
-    attempts = Attempts(store, files, lambda: ("/bin/codex", {}), agent, lambda: now[0], slow, slot_files)
-    result = attempts.execute(KEY, ENTRY)
+    owner = Attempts(store, files, lambda: ("/bin/codex", {}), agent, lambda: now[0], slow, slot_files)
+    result = owner.execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "expired") and agent.calls == [] and CountingHarness.cleanups == [1]
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 

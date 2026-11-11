@@ -269,7 +269,7 @@ class Flaky:
         return None if self.down else self.con
 
 
-def gated(run: FakeRun, flaky: Flaky, *, down_after_start: bool = False, probe: list[object] | None = None) -> Execution:
+def registered_run(run: FakeRun, flaky: Flaky, *, down_after_start: bool = False, probe: list[object] | None = None) -> Execution:
     """Wrap the released fake's hooks to observe live callbacks and to fail storage mid-run."""
 
     def call(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
@@ -297,7 +297,7 @@ def owner(flaky: Flaky, surroundings: AttemptSurroundings, execution: Execution,
 def test_live_ref_is_published_while_running_and_duplicates_are_idempotent(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     flaky, probe = Flaky(database(surroundings)), []
     run = fake(refs=("s", "s"))
-    result = owner(flaky, surroundings, gated(run, flaky, probe=probe)).execute(KEY, ENTRY)
+    result = owner(flaky, surroundings, registered_run(run, flaky, probe=probe)).execute(KEY, ENTRY)
     assert probe == [("s",), ("s",)]
     assert result.reason == "verification" and result.execution is not None and result.execution.publication == "complete"
 
@@ -324,7 +324,7 @@ def test_conflicting_ref_is_recorded_not_overwritten(tmp_path: Path, surrounding
 def test_storage_loss_keeps_first_ref_and_conflict_then_publish_retries(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     flaky = Flaky(database(surroundings))
     execution = fake(refs=("first", "second"))
-    result = owner(flaky, surroundings, gated(execution, flaky, down_after_start=True)).execute(KEY, ENTRY)
+    result = owner(flaky, surroundings, registered_run(execution, flaky, down_after_start=True)).execute(KEY, ENTRY)
     assert (
         result.status == "unavailable"
         and result.pending is not None
@@ -346,7 +346,7 @@ def test_publication_conflicts_on_different_facts_and_stale_publisher_cannot_rew
     tmp_path: Path, surroundings: AttemptSurroundings
 ) -> None:
     flaky = Flaky(database(surroundings))
-    result = owner(flaky, surroundings, gated(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
+    result = owner(flaky, surroundings, registered_run(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
     assert result.pending is not None
     flaky.down = False
     attempts = owner(flaky, surroundings, fake())
@@ -634,7 +634,7 @@ def test_composition_bounds_only_the_registration_connection(tmp_path: Path) -> 
 
 def pending_result(surroundings: AttemptSurroundings) -> tuple[Flaky, Attempts, PendingResult]:
     flaky = Flaky(database(surroundings))
-    result = owner(flaky, surroundings, gated(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
+    result = owner(flaky, surroundings, registered_run(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)
     assert result.pending is not None and result.pending.facts is not None
     flaky.down = False
     return flaky, owner(flaky, surroundings, fake()), result.pending

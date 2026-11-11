@@ -169,7 +169,7 @@ class AttemptView:
 
 @dataclass(frozen=True)
 class Shown:
-    status: AttemptView
+    view: AttemptView
     directory: Path
     entry_log: Path
 
@@ -383,7 +383,7 @@ def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
     return "verify" if result.reason == "verification" else "stuck:unpublished"
 
 
-def _status(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
+def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
     """A task's current attempt. `probe`: read the leftovers of a step still to settle (Git and slot reads); never for
     a listing that keeps only stuck or unknown attempts, which a `verify`, `repeat` or `repeats_exhausted` step never is."""
     entry: EntryState = "none"
@@ -428,7 +428,7 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
     directory = files.root / files.directory(rows[0].key)
     earlier = tuple((older.key.attempt_id, _ended(newer, older)) for newer, older in pairwise(rows))
     last = files.last_entry(rows[0].key)
-    return Shown(replace(_status(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log")
+    return Shown(replace(_show(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log")
 
 
 def _ended(newer: AttemptRow, older: AttemptRow) -> str:
@@ -445,7 +445,7 @@ def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed
         return Failed("unavailable", "store", str(error))
     rows = [row for before, row in zip((None, *every), every, strict=False) if before is None or before.task_id != row.task_id
             or before.backlog != row.backlog]
-    found = (_status(reads, row, probe=not stuck) for row in rows)
+    found = (_show(reads, row, probe=not stuck) for row in rows)
     return Listed(tuple(each for each in found if not stuck or each.next == "unknown" or each.next.startswith("stuck:")))
 
 

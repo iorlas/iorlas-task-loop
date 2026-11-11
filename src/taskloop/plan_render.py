@@ -28,7 +28,7 @@ from taskloop.slot_release import Released
 from taskloop.slots import Adopted
 
 
-def _status_lines(each: AttemptView) -> list[str]:
+def _show_lines(each: AttemptView) -> list[str]:
     entry = "" if each.entry_process is None else f" (pid {each.entry_process[0]}, started {each.entry_process[1]})"
     # the stored registration only: the agent may have exited long ago, so it is never shown as running
     worker = "none" if each.worker is None else f"last known pid {each.worker[0]}, process group {each.worker[1]} (not checked)"
@@ -71,18 +71,18 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
                 lines += [f"attempt {result.number} of at most {ATTEMPTS}; {stand}"]
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
             return [*lines, f"This runs the {PLAN_ONLY}. Follow it with `tl plan show {result.task_id} --backlog {result.backlog}`."]
-        case Shown(status=each):
+        case Shown(view=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             ended = each.release
             guide = GUIDE[each.next] if ended is None or not ended.abandoned else GUIDE["abandoned"] if each.next == "start" else UNCLAIMING
             steps = [guide, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
-            return [*_status_lines(each), *paths, *last, *left, f"Next: {each.next}", *steps]
+            return [*_show_lines(each), *paths, *last, *left, f"Next: {each.next}", *steps]
         case Listed() | Round() | Ended():
             return _rows_lines(command, result, stuck)
         case VerifiedTask() | ReleasedTask() | PublishedTask():
-            return _freed_lines(result)
+            return _released_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
 
@@ -113,7 +113,7 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     return lines + [f"{key}: {GUIDE[key]}" for key in keys]
 
 
-def _freed_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:
+def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:
     """A verdict with the release and the publication that followed it; a release with each change on its own line; a
     publication."""
     if isinstance(result, PublishedTask):
