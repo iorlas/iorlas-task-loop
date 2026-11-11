@@ -10,7 +10,7 @@ from dataclasses import astuple, dataclass
 
 from sqlite_store import begin_immediate
 
-from taskloop.attempt_types import ATTEMPTS, AttemptKey, ChainLink, EntryIdentity, FileRef
+from taskloop.attempt_types import ATTEMPTS, EFFECTS, AttemptKey, ChainLink, Effect, EntryIdentity, FileRef
 from taskloop.factory_schema import current
 
 
@@ -119,7 +119,15 @@ def as_listed(value: object) -> tuple[str, ...]:
     return tuple(str(path) for path in paths)
 
 
-STEP = """SELECT p.number,p.base_commit,p.end_commit,p.input_path,p.input_digest,e.disposition,e.commit_paths,p.previous_attempt_id
+def stored_effect(value: object) -> Effect | None:
+    """A stored answer effect, NULL for no valid answer; any other value is a broken row."""
+    effect = next((effect for effect in EFFECTS if effect == value), None)
+    if (effect is None) != (value is None):
+        raise StoreUnavailable("Invalid stored effect")
+    return effect
+
+
+STEP = """SELECT p.number,p.base_commit,p.end_commit,p.input_path,p.input_digest,e.effect,e.commit_paths,p.previous_attempt_id
 FROM attempt p LEFT JOIN execution e ON e.attempt_id=p.attempt_id"""
 
 
@@ -147,7 +155,7 @@ def _published(row: tuple[object, ...]) -> PublishedRow | None:
 def _step(row: tuple[object, ...]) -> ChainLink:
     """A dispatched attempt: its B is recorded (a broken chain otherwise)."""
     base, commit = as_text(row[1]), as_nullable_text(row[2])
-    return ChainLink(as_int(row[0]), base, commit, as_nullable_text(row[5]), as_listed(row[6]), FileRef(as_text(row[3]), as_text(row[4])))
+    return ChainLink(as_int(row[0]), base, commit, stored_effect(row[5]), as_listed(row[6]), FileRef(as_text(row[3]), as_text(row[4])))
 
 
 class AttemptReads:

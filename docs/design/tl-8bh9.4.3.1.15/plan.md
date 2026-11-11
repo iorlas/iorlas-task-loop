@@ -149,9 +149,12 @@ class StepKind:
     input_text: Callable[[TaskInspection, StepRules], str] # the task prose plus the step's closing words
     answer_schema: Mapping[str, object]                    # the strict JSON schema Codex forwards
     decode: Callable[[object, StepRules], Answer]          # every bound and cross-field rule; ValueError otherwise
-    artifact: Callable[[Tree, StepRules], Rule | str | None]  # the step's own rule at X: broken rule, blob, or nothing
-    feedback: Callable[[RepeatReason, StepRules, bool], str]  # a repeat's fixed instructions (the bool: unrecorded)
+    artifact: Callable[[Tree, StepRules], Rejected | str | None]  # the step's own rule at X: broken rule, blob, or nothing
+    feedback: Feedback  # a repeat's complete input: (found, rules, number, task, nonce, *, unrecorded) -> str
 ```
+
+As built in S3 (section 15): `artifact` returns `Rejected` (not a bare `Rule`, which is also a `str`) and `feedback` is
+`plan_step.feedback`'s full signature as a Protocol (the opening per reason and the instructions are the kind's words).
 
 `steps.py` owns the kinds: `PLAN = StepKind("plan", ...)`, `STEPS: tuple[StepKind, ...] = (PLAN,)` (the fixed order),
 `kind(step) -> StepKind` (a `match`, no lookup table of strings to callables supplied from elsewhere), `RULES` (the
@@ -375,9 +378,10 @@ step. S1 to S4 change no behavior a person sees except S4's spelling.
   **Live smoke after S2 (owner-run, scratch repo and tracker):** the runbook's plan path end to end (start, show,
   verify, release, publish), one repeat with leftovers, one abandon and fresh start, and one `tl plan next` round;
   first, the old v8 file refused `schema`. The runbook's `sqlite3` lines use the new table names.
-- **S3:** `tests/steps/test_steps.py`: the plan kind's input text for a fixed task, and its `schema.json` bytes, equal
-  constants recorded from S2's output (the agent-facing contract did not move); the import-linter contract. The
-  decoder tests in `test_answer_contract.py` call it through `kind("plan")`.
+- **S3:** `tests/steps/test_steps.py`: the plan kind's input text for a fixed task, its `schema.json` bytes and two repeat
+  inputs equal constants recorded before the port, at `ac11e63e4` (the agent-facing contract did not move); the
+  import-linter contract. The decoder tests in `test_answer_contract.py` call it through `kind("plan")`. As built:
+  section 15.
 - **S4:** CLI tests respelled `tl step` (`test_step_cli.py`); `tl plan` exits 2; `step` in JSON and human rows. A short
   owner smoke: `tl step --help`, one `tl step next` round.
 - **S5:** new behavior tests: `next_step` over its cases (pure table test); `admit_next` (no claim call, root copied,
@@ -646,3 +650,52 @@ Docs only; no source or test change.
 - **Known leftover words in code, not changed:** entry.log key `publish=` (capture retry), three "outcome" comments
   (`attempt.py` 71, 82, 83; `attempt_entry.py` 185), "publication" for the branch push in `attempt_entry.py`,
   `publish.py`, `composition.py` comments, and `tl plan release` help saying "parked at its base".
+
+## 15. As built: S3 (step port, 2026-11-11)
+
+Behavior-preserving: no schema, CLI, JSON, log or agent-facing text change.
+
+- **`steps.py` (new, 31 code lines).** `StepKind` (frozen: `step`, `rules`, `input_text`, `answer_schema`, `decode`,
+  `artifact`, `feedback`), `Feedback` (the Protocol of `feedback`'s keyword-only signature), `PLAN`, `STEPS = (PLAN,)`,
+  `kind(step)` (a `match`; an unknown step raises `ValueError`) and `RULES = CHAIN_RULES + plan_step.ARTIFACT_RULES`,
+  read by `attempt_store`'s stored-verdict reader. It re-exports nothing: consumers import types from their owner.
+- **`attempt_types`.** `Answer(disposition, effect, paths, message, explanation)` replaces `PlanAnswer` (no `plan_path`:
+  the decoder still validates it, nothing read it); `Decoder` is gone; `type Step = Literal["plan"]`; `CHAIN_RULES`
+  (the seven generic words) replaces `RULES`; the `Rule` type still lists every word, since `Rejected` lives here
+  (`test_verifier` checks `steps.RULES` equals it); `ChainLink.disposition` became `ChainLink.effect` (the chain query
+  reads `e.effect`; `attempt_reads.stored_effect` is the one effect parser, moved from `attempt_store`);
+  `Verified.blob` is `str | None` and the reader accepts a NULL blob.
+- **`plan_step`** keeps the plan's values only: `DISPOSITIONS`, `EFFECT_OF`, `ANSWER_SCHEMA` (unchanged), `step_rules`
+  (was `plan_stage`), `decode` (was `decode_plan_answer`; same rules, now returns `Answer` with the effect),
+  `input_text` (the task prose plus the closing words, moved from `admit.task_text`), `feedback` with `OPENING` and
+  `repeat_instructions`, `artifact` (was `plan_rule`: the plan.md rule, returning the blob or `Rejected`) and
+  `ARTIFACT_RULES`. `STEP` is gone: a fresh admission writes `admit.FIRST = STEPS[0].step`.
+- **Consumers through `kind(admission.step)`.** `admit.task_text(task, step)`; `EvidenceFiles.prepare(key, schema)`
+  (the attempt passes `kind(admission.step).answer_schema`); `attempt._validate` (`decode`; the `decoder` constructor
+  parameter is gone, the decoder-fault test patches `attempt.kind`); `verifier` passes the kind to `verdict.judge`
+  (`judge(repo, root, commit, step, rules, chain)`), which turns the kind's `artifact` into `Verified(blob, reused)`;
+  `repeat._input` (`feedback`); `factory_commit.refusal` (one `rules` read instead of three `plan_stage` calls).
+  `plan_stage` is removed. `factory_commit.attributes(rules)` is derived from the root: the `.gitattributes` of every
+  folder above it, then the root (for `docs/design/<id>/` exactly the old list; asserted in `test_steps`).
+- **Effect, not disposition words.** `attempt.committing(stored)` (a clean run's valid answer of effect `commit`/`keep`)
+  replaces `("planned", "unchanged")` in `attempt.report` and `verifier.applicable` (`COMMITTING` is gone);
+  `factory_commit.settle`/`leftovers`, `verifier._settle`, `verdict.judge` and `repeat._input` test `effect`.
+  Display still uses the disposition (`end_word`).
+- **Contract.** `.importlinter` `one-step-kind-owner`, type `protected`: `taskloop.plan_step` may be imported only by
+  `taskloop.steps`. A `forbidden` contract with `source_modules = taskloop` was tried first and stayed kept with a
+  probe import in `verdict` (the forbidden module sits inside the source package), so `protected` it is; the probe
+  then broke it (`taskloop.verdict -> taskloop.plan_step`). Tests import `steps` too (`kind("plan")`).
+- **Byte identity.** Before any edit, at `ac11e63e4`, the installed package produced: `admit.task_text` for a fixed
+  `TaskInspection` (tl-1, a two-line requirement and acceptance), the `schema.json` bytes `EvidenceFiles.prepare` wrote,
+  and `plan_step.feedback` for (`uncommitted`, recorded) and (`ignored`, unrecorded). `tests/steps/test_steps.py` holds
+  them as constants and asserts the ported paths return them exactly, plus `kind("plan") is PLAN`, `STEPS == (PLAN,)`,
+  an unknown step refused and the attributes list.
+- **Tests otherwise.** `judge` callers pass the kind; `ChainLink` fixtures say `commit`/`keep`; the repeat feedback and
+  decoder tests go through `kind("plan")`; the decoder test checks `effect` instead of `plan_path`; new
+  `test_verifier.test_a_verified_row_without_a_blob_reads_back`.
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 7 contracts kept); `just test` 1257 passed (1248 + 2
+policy cases for the new files + 6 `test_steps` cases + the NULL-blob case). Code lines: `steps` 31, `plan_step` 132
+(131), `attempt_types` 224 (225), `admit` 332 (331), `attempt` 289 (286), `factory_commit` 136 (134), `verdict` 55 (52),
+`repeat` 141 (139), `attempt_reads` 190 (185), `attempt_store` 312 (318), `evidence_files` 83, `verifier` 129,
+`operations` 354 untouched: +41 source code lines with `steps` (estimate +45). Live smoke not run.

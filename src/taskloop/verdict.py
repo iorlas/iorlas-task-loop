@@ -1,4 +1,5 @@
-"""The verdict over a step's chain: attempt 1's B, each attempt's commit, the step's own rule at the last (the plan blob).
+"""The verdict over a step's chain: attempt 1's B, each attempt's commit, the step kind's own rule at the last (its
+artifact, the plan blob).
 
 Git only, through `git_porcelain`: no Git write, process, lock, ref, push or factory.db access. Every commit read runs
 from the person's checkout (the root the verified slot pointer names). `GitUnavailable` and `Unreadable` propagate: they
@@ -9,24 +10,24 @@ from pathlib import Path
 
 from git_porcelain import Repo, Tree
 
-from taskloop.attempt_types import MODE, ChainLink, Rejected, Rule, StepRules, Unreadable, Verdict, path_allowed
-from taskloop.plan_step import plan_rule
+from taskloop.attempt_types import MODE, ChainLink, Rejected, Rule, StepRules, Unreadable, Verdict, Verified, path_allowed
+from taskloop.steps import StepKind
 
 
-def judge(repo: Repo, root: Path, commit: str, rules: StepRules, steps: tuple[ChainLink, ...]) -> Verdict:
+def judge(repo: Repo, root: Path, commit: str, step: StepKind, rules: StepRules, steps: tuple[ChainLink, ...]) -> Verdict:
     """The rules in order over the step's chain; the first broken one decides. Every read is of content-addressed
-    objects. S: each earlier `planned` attempt's stored X, then `commit` (Xn) when the last attempt is `planned`. Xn is
-    len(S) first-parent commits on attempt 1's B, each S_k one commit on S_k-1 judged against its own attempt's `paths`;
-    then the plan rules at Xn. No commit in the whole step (`commit` is B1): only the plan rules, `reused`. Attempt 1
-    alone is the one-step chain."""
+    objects. S: each earlier attempt of effect `commit`'s stored X, then `commit` (Xn) when the last attempt's effect is
+    `commit`. Xn is len(S) first-parent commits on attempt 1's B, each S_k one commit on S_k-1 judged against its own
+    attempt's `paths`; then the kind's artifact rule at Xn. No commit in the whole step (`commit` is B1): only the
+    artifact rule, `reused`. Attempt 1 alone is the one-step chain."""
     tip = repo.tree(f"{commit}^{{commit}}")
     if tip is None or tip.sha != commit:  # never a tag, tree or abbreviation that resolves to some other commit
         return Rejected("commit_absent")
     *earlier, last = steps
-    chain = [(each.end_commit, each.paths) for each in earlier if each.disposition == "planned" and each.end_commit is not None]
-    chain += [(commit, last.paths)] if last.disposition == "planned" else []
+    chain = [(each.end_commit, each.paths) for each in earlier if each.effect == "commit" and each.end_commit is not None]
+    chain += [(commit, last.paths)] if last.effect == "commit" else []
     if not chain:
-        return plan_rule(tip, rules, reused=True)
+        return _artifact(step, tip, rules, reused=True)
     parent = steps[0].base_commit
     relation = repo.relate(parent, commit)
     if relation.ahead != 0:
@@ -38,7 +39,12 @@ def judge(repo: Repo, root: Path, commit: str, rules: StepRules, steps: tuple[Ch
         if broken is not None:
             return Rejected(broken)
         parent = sha
-    return plan_rule(tip, rules, reused=False)
+    return _artifact(step, tip, rules, reused=False)
+
+
+def _artifact(step: StepKind, tip: Tree, rules: StepRules, *, reused: bool) -> Verdict:
+    found = step.artifact(tip, rules)
+    return found if isinstance(found, Rejected) else Verified(found, reused)
 
 
 def _link(repo: Repo, root: Path, sha: str, parent: str, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:

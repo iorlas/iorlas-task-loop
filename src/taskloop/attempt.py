@@ -16,7 +16,6 @@ from taskloop.attempt_types import (
     AttemptResult,
     CaptureResult,
     Checkouts,
-    Decoder,
     EntryIdentity,
     Evidence,
     PendingResult,
@@ -28,9 +27,9 @@ from taskloop.attempt_types import (
     execution_facts,
 )
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.plan_step import EFFECT_OF, decode_plan_answer, plan_stage
 from taskloop.prepare import base as prepared_base
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
+from taskloop.steps import kind
 
 type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
 type Credentials = Callable[[], tuple[str, dict[str, str]]]
@@ -78,10 +77,17 @@ def end_word(stored: StoredExecution) -> str:
     return answer.disposition
 
 
+def committing(stored: StoredExecution) -> bool:
+    """A clean run's valid answer whose effect the factory commits (`commit`) or keeps (`keep`): only such a result goes
+    on to verification; its end word is its disposition."""
+    facts, answer = stored.facts, stored.answer
+    return not facts.timed_out and facts.rc == 0 and answer.kind == "valid" and answer.effect in ("commit", "keep")
+
+
 def report(stored: StoredExecution) -> AttemptResult:
     """Stored terminal data is collected with its end word; a pending validation, session state or verification is
-    never complete. A `planned` or `unchanged` answer is collected only with its verdict: `verified`, `reused` or
-    `rejected:<rule>`."""
+    never complete. An answer of effect `commit` or `keep` (`planned`, `unchanged`) is collected only with its verdict:
+    `verified`, `reused` or `rejected:<rule>`."""
     if stored.answer.kind == "validation_pending":
         return AttemptResult("pending", "validation_pending", stored)
     if stored.session_state == "conflict":
@@ -89,7 +95,7 @@ def report(stored: StoredExecution) -> AttemptResult:
     if stored.session_state != "complete":
         return AttemptResult("pending", "session_" + stored.session_state, stored)
     reason, verdict = end_word(stored), stored.verification
-    if reason not in ("planned", "unchanged"):
+    if not committing(stored):
         return AttemptResult("collected", reason, stored)
     if verdict is None:
         return AttemptResult("pending", "verification", stored)
@@ -132,13 +138,12 @@ class Attempts:
         clock: Callable[[], float],
         checkouts: Checkouts,
         slot_files: SlotFiles,
-        decoder: Decoder = decode_plan_answer,
         registration_store: AttemptStore | None = None,
     ) -> None:
         """`registration_store` serves only the harness registration write (composition bounds its busy wait); default `store`.
         `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot."""
         self.store, self.files, self.credentials = store, files, credentials
-        self.execution, self.clock, self.checkouts, self.slot_files, self.decoder = execution, clock, checkouts, slot_files, decoder
+        self.execution, self.clock, self.checkouts, self.slot_files = execution, clock, checkouts, slot_files
         self.registration_store = store if registration_store is None else registration_store
 
     def collect(self, key: AttemptKey) -> AttemptResult:
@@ -247,7 +252,7 @@ class Attempts:
         except Exception as error:  # the credential source is injected; its failure is typed, with its cause visible
             return AttemptResult("unavailable", "credentials:" + type(error).__name__)
         try:
-            schema, out_file = self.files.prepare(admission.key)
+            schema, out_file = self.files.prepare(admission.key, kind(admission.step).answer_schema)
         except EvidenceError:
             return AttemptResult("unavailable", "files")
         harness = CodexHarness()
@@ -331,13 +336,15 @@ class Attempts:
         return AttemptResult("unavailable", "collect") if stored is None else report(stored)
 
     def _validate(self, admission: Admission, evidence: Evidence | None, text: str) -> str:
-        """The released strict decoder plus the factory's pure PlanAnswer decoder; decoder faults propagate."""
+        """The released strict decoder plus the step kind's pure decoder; decoder faults propagate."""
         if evidence is None:
             return "conflict"
-        answer = decode_answer(text, lambda value: self.decoder(value, plan_stage(admission.task.task_id)))
+        step = kind(admission.step)
+        rules = step.rules(admission.task.task_id)
+        answer = decode_answer(text, lambda value: step.decode(value, rules))
         if isinstance(answer, DecodedAnswer):
             value = answer.value
-            state = AnswerState("valid", value.disposition, EFFECT_OF[value.disposition], value.paths, value.message)
+            state = AnswerState("valid", value.disposition, value.effect, value.paths, value.message)
         elif isinstance(answer, InvalidAnswer):
             state = AnswerState("json_invalid" if answer.kind == "json" else "schema_invalid")
         else:

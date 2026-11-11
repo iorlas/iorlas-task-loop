@@ -26,6 +26,7 @@ from taskloop.attempt_types import (
     AttemptKey,
     ChainLink,
     Checkouts,
+    Effect,
     EntryIdentity,
     FileRef,
     FileStat,
@@ -42,11 +43,13 @@ from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import Failed, Started, StatusPorts, show_attempt
 from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import hold, repeating
+from taskloop.steps import kind
 from taskloop.verdict import judge
 from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
+STEP = kind("plan")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 P = "docs/design/tl-1/plan.md"
 D = "docs/design/tl-1/"
@@ -279,8 +282,8 @@ def rules() -> StepRules:
     return StepRules(D)
 
 
-def attempt(number: int, base: str, end_commit: str | None, paths: tuple[str, ...], disposition: str = "planned") -> ChainLink:
-    return ChainLink(number, base, end_commit, disposition, paths, FileRef("input.txt", "d"))
+def attempt(number: int, base: str, end_commit: str | None, paths: tuple[str, ...], effect: Effect = "commit") -> ChainLink:
+    return ChainLink(number, base, end_commit, effect, paths, FileRef("input.txt", "d"))
 
 
 def test_judge_holds_each_commit_of_the_chain_to_its_own_attempts_paths(repo: FakeRepo, slot: FakeWorktree) -> None:
@@ -288,10 +291,10 @@ def test_judge_holds_each_commit_of_the_chain_to_its_own_attempts_paths(repo: Fa
     x1 = commit(slot, {P: "# Plan\n", NOTE: "n"})
     x2 = commit(slot, {NOTE: "changed"})
     first = attempt(1, base, x1, (P, NOTE))
-    assert isinstance(judge(repo, repo.path, x2, rules(), (first, attempt(2, x1, None, (P, NOTE)))), Verified)
-    assert judge(repo, repo.path, x2, rules(), (first, attempt(2, x1, None, (P,)))) == Rejected("paths")
-    assert judge(repo, repo.path, x2, rules(), (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P, NOTE)))) == Rejected("paths")
-    unchanged = judge(repo, repo.path, x1, rules(), (first, attempt(2, x1, x1, (), "unchanged")))
+    assert isinstance(judge(repo, repo.path, x2, STEP, rules(), (first, attempt(2, x1, None, (P, NOTE)))), Verified)
+    assert judge(repo, repo.path, x2, STEP, rules(), (first, attempt(2, x1, None, (P,)))) == Rejected("paths")
+    assert judge(repo, repo.path, x2, STEP, rules(), (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P, NOTE)))) == Rejected("paths")
+    unchanged = judge(repo, repo.path, x1, STEP, rules(), (first, attempt(2, x1, x1, (), "keep")))
     assert isinstance(unchanged, Verified) and not unchanged.reused
 
 
@@ -301,9 +304,9 @@ def test_judge_refuses_a_foreign_commit_inside_the_chain(repo: FakeRepo, slot: F
     commit(slot, {"README": "two"}, "someone else")
     x2 = commit(slot, {P: "# Plan v2\n"})
     chain = (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P,)))
-    assert judge(repo, repo.path, x2, rules(), chain) == Rejected("chain_length")
-    assert judge(repo, repo.path, x2, rules(), (attempt(1, base, None, (P,)), attempt(2, x1, None, (P,)))) == Rejected("chain_length")
-    reused = judge(repo, repo.path, base, rules(), (attempt(1, base, base, (), "unchanged"),))
+    assert judge(repo, repo.path, x2, STEP, rules(), chain) == Rejected("chain_length")
+    assert judge(repo, repo.path, x2, STEP, rules(), (attempt(1, base, None, (P,)), attempt(2, x1, None, (P,)))) == Rejected("chain_length")
+    reused = judge(repo, repo.path, base, STEP, rules(), (attempt(1, base, base, (), "keep"),))
     assert reused == Rejected("plan_missing")  # no commit in the whole step: only the plan rules at B1
 
 
@@ -448,7 +451,7 @@ def test_judge_refuses_a_chain_whose_commit_does_not_sit_on_the_stored_one(repo:
     commit(slot, {P: "# Plan\n"}, "other")
     x2 = commit(slot, {P: "# Plan v2\n"})
     chain = (attempt(1, base, side, (P,)), attempt(2, side, None, (P,)))
-    assert judge(repo, repo.path, x2, rules(), chain) == Rejected("not_descendant")
+    assert judge(repo, repo.path, x2, STEP, rules(), chain) == Rejected("not_descendant")
 
 
 def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step: Step, slot: FakeWorktree) -> None:

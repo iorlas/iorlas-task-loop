@@ -1,4 +1,4 @@
-"""Commit, check clean, then judge: the one operation that settles a stored valid `planned` or `unchanged` answer.
+"""Commit, check clean, then judge: the one operation that settles a stored valid answer of effect `commit` or `keep`.
 
 The entry (once, after the run), `tl plan verify` and a repeating `tl plan start` run the same operation; running it
 again finishes a crash at any step. A stored verdict is returned with no Git read; slot state and every unknown store
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from git_porcelain import GitUnavailable
 
-from taskloop.attempt import end_word
+from taskloop.attempt import committing, end_word
 from taskloop.attempt_store import AttemptStore, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import (
     Admission,
@@ -33,13 +33,12 @@ from taskloop.attempt_types import (
     WorkerGone,
 )
 from taskloop.factory_commit import NotSettled, clean_at, leftovers, settle
-from taskloop.plan_step import plan_stage
 from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import bounded, staged
+from taskloop.steps import kind
 from taskloop.verdict import judge
 
 type VerifyHold = Callable[[Admission], AbstractContextManager[None]]
-COMMITTING = ("planned", "unchanged")  # the answers whose step the factory commits and checks
 LOCK_WORDS: dict[type[Exception], str] = {
     SlotBusy: "slot_busy",
     SlotLockUnavailable: "lock",
@@ -55,7 +54,7 @@ def applicable(stored: StoredExecution | None) -> StoredExecution | VerifyResult
         return VerifyUnavailable("validation_pending")
     if stored.verification is not None:
         return stored.verification
-    if end_word(stored) not in COMMITTING:
+    if not committing(stored):
         return NotApplicable(end_word(stored))
     if stored.session_state != "complete":  # the verdict's writer requires a complete session state too
         return VerifyRefused("session") if stored.session_state == "conflict" else VerifyUnavailable("session_" + stored.session_state)
@@ -156,15 +155,16 @@ class Verifier:
                 return settled
             if isinstance(settled, Rejected):  # nothing_written: no commit to bind
                 return self._kept(record, base, None, settled)
-            commit = settled.sha if answer.disposition == "unchanged" else self.store.end_commit(admission, settled.sha)
+            commit = settled.sha if answer.effect == "keep" else self.store.end_commit(admission, settled.sha)
             if commit != settled.sha:
                 return VerifyUnavailable("inconsistent")
         root = clean_at(self.checkouts, self.files, admission, commit)
         if isinstance(root, Unsettled):
             return root
-        if record.end_commit is None and answer.disposition == "unchanged" and self.store.end_commit(admission, commit) != commit:
+        if record.end_commit is None and answer.effect == "keep" and self.store.end_commit(admission, commit) != commit:
             return VerifyUnavailable("inconsistent")
-        found = judge(self.checkouts(root), root, commit, plan_stage(admission.task.task_id), self.store.chain(admission.key))
+        step = kind(admission.step)
+        found = judge(self.checkouts(root), root, commit, step, step.rules(admission.task.task_id), self.store.chain(admission.key))
         return self._kept(record, base, commit, found)
 
     def _kept(self, record: AttemptRecord, base: str, commit: str | None, found: Verdict) -> Verdict | VerifyUnavailable:

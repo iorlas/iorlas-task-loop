@@ -1,6 +1,6 @@
-"""The plan step's own values: its dispositions, rules and answer contract (schema and decoder), its input's closing
-words, its repeat instructions and the plan.md rule at X. Every other module is step machinery; nothing here runs,
-reads a store or writes."""
+"""The plan step's own values: its dispositions and their effects, rules and answer contract (schema and decoder), its
+input, its repeat instructions and feedback, and the plan.md rule at X. Only `steps` imports this module (an import-linter
+contract): the machinery reaches the plan through `steps.kind`. Nothing here runs, reads a store or writes."""
 
 from typing import Final
 
@@ -9,30 +9,29 @@ from git_porcelain import Tree
 from taskloop.attempt_types import (
     MODE,
     TRAILER,
+    Answer,
     Effect,
-    PlanAnswer,
     Rejected,
     RepeatReason,
     Rule,
     StepRules,
     Unreadable,
     Unsettled,
-    Verdict,
-    Verified,
     path_allowed,
 )
 from taskloop.slot_state import shown
+from taskloop.task import TaskInspection
 
-STEP: Final = "plan"  # the step's stored name (`attempt.step`)
 DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
 # Each disposition's effect, stored with it: only `planned` commits and only `unchanged` keeps B; the rest end nothing.
 EFFECT_OF: Final[dict[str, Effect]] = {"planned": "commit", "unchanged": "keep", "incomplete": "none", "needs_owner": "none"}
 PLAN_NAME: Final = "plan.md"
+ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size")  # the plan.md rule's words
 ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
 # The structural answer contract Codex forwards as an OpenAI strict response format: a plain object at the top level (no
 # allOf/anyOf/oneOf/not/enum/if there), every property required, nullable by type list, no composition keywords at all.
 # `paths` and `message` are what the agent asks the factory to commit; the agent never commits. Every bound and every
-# cross-field rule (planned needs the expected path, the listed paths and a message) belong to decode_plan_answer alone.
+# cross-field rule (planned needs the expected path, the listed paths and a message) belong to `decode` alone.
 ANSWER_SCHEMA: Final = {
     "type": "object",
     "additionalProperties": False,
@@ -54,7 +53,7 @@ OPENING: Final[dict[RepeatReason, str]] = {
 }
 
 
-def plan_stage(task_id: str) -> StepRules:
+def step_rules(task_id: str) -> StepRules:
     """The plan step's rules: its files live under `docs/design/<task-id>/`, the plan itself is `plan.md` there."""
     return StepRules(f"docs/design/{task_id}/")
 
@@ -72,7 +71,7 @@ def _paths(paths: object, rules: StepRules) -> tuple[str, ...] | None:
     return found if len(found) == len(paths) and len(set(found)) == len(found) else None
 
 
-def decode_plan_answer(value: object, rules: StepRules) -> PlanAnswer:
+def decode(value: object, rules: StepRules) -> Answer:
     """Validate the factory's plan answer contract, without verifying Git effects; the single owner of its cross-field
     rules and every bound (the strict schema carries none). The expected plan is `<rules.root>plan.md`."""
     if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
@@ -87,12 +86,16 @@ def decode_plan_answer(value: object, rules: StepRules) -> PlanAnswer:
     if not fits or listed is None or not isinstance(explanation, str) or len(explanation) > 2000:
         raise ValueError("Invalid plan answer")
     text = message if isinstance(message, str) else None
-    return PlanAnswer(str(disposition), None if path is None else expected, listed, text, explanation)
+    return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
 
 
-def closing_words(rules: StepRules) -> str:
-    """The plan step's fixed closing words of its admitted input (where the plan goes, `unchanged` or `planned`, no Git
-    write: the factory commits the listed paths)."""
+def input_text(task: TaskInspection, rules: StepRules) -> str:
+    """The plan step's admitted input: the task's own prose, then the fixed closing words (where the plan goes,
+    `unchanged` or `planned`, no Git write: the factory commits the listed paths)."""
+    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{_closing_words(rules)}\n"
+
+
+def _closing_words(rules: StepRules) -> str:
     root = rules.root
     return (
         f"First read `{root}{PLAN_NAME}` if it exists. If it is still valid for the task and the code as they are now, change "
@@ -147,8 +150,9 @@ def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: 
     ])
 
 
-def plan_rule(tip: Tree, rules: StepRules, *, reused: bool) -> Verdict:
-    """The plan at X passes the path and mode rules and the content floor; never a review of what it says."""
+def artifact(tip: Tree, rules: StepRules) -> Rejected | str:
+    """The plan at X passes the path and mode rules and the content floor, giving its blob; never a review of what it
+    says."""
     plan_path = rules.root + PLAN_NAME
     if not path_allowed(plan_path, rules):
         return Rejected("paths")
@@ -161,7 +165,7 @@ def plan_rule(tip: Tree, rules: StepRules, *, reused: bool) -> Verdict:
     if data is None:  # the listing has the plan: an empty read is a failed read
         raise Unreadable("blob")
     broken = _content(data, rules.file_cap)
-    return Verified(entry[1], reused) if broken is None else Rejected(broken)
+    return entry[1] if broken is None else Rejected(broken)
 
 
 def _content(data: bytes, cap: int) -> Rule | None:

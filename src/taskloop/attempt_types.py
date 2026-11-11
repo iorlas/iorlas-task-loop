@@ -28,6 +28,7 @@ REPEATABLE: Final[tuple[RepeatReason, ...]] = ("uncommitted", "unsafe", "ignored
 # What a valid answer does to the slot: `commit` ends at a new commit X != B, `keep` ends at B itself, `none` ends nothing.
 type Effect = Literal["commit", "keep", "none"]
 EFFECTS: Final[tuple[Effect, ...]] = ("commit", "keep", "none")
+type Step = Literal["plan"]  # the built steps (`attempt.step`); each has its kind in `steps`
 
 
 @dataclass(frozen=True)
@@ -126,12 +127,12 @@ class AttemptRecord:
 @dataclass(frozen=True)
 class ChainLink:
     """One dispatched attempt of a step as the chain verdict reads it (frozen once a successor exists): its B, its X
-    (None until stored), its valid answer's disposition and committed paths, and its admitted input."""
+    (None until stored), its valid answer's effect and committed paths, and its admitted input."""
 
     number: int
     base_commit: str
     end_commit: str | None
-    disposition: str | None
+    effect: Effect | None
     paths: tuple[str, ...]
     input_ref: FileRef
 
@@ -170,22 +171,23 @@ class AnswerState:
     message: str | None = None
 
 
+# Every verdict rule word: the chain's (CHAIN_RULES, any step) and each step kind's artifact rules (`steps.RULES` has all).
 type Rule = Literal[
     "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
     "plan_encoding", "plan_empty", "plan_size",
 ]
-RULES: Final[tuple[Rule, ...]] = (
-    "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
-    "plan_encoding", "plan_empty", "plan_size",
+CHAIN_RULES: Final[tuple[Rule, ...]] = (
+    "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written",
 )
 
 
 @dataclass(frozen=True)
 class Verified:
-    """Every rule held over the step's chain (B1, each attempt's commit, the plan blob at Xn); `reused`: no attempt of
-    the step committed anything, the plan at B1 stands."""
+    """Every rule held over the step's chain (B1, each attempt's commit, the step's artifact at Xn); `blob`: that
+    artifact's blob (the plan's), None for a step kind without one; `reused`: no attempt of the step committed anything,
+    what B1 holds stands."""
 
-    blob: str
+    blob: str | None
     reused: bool = False
 
 
@@ -270,17 +272,16 @@ class AttemptResult:
 
 
 @dataclass(frozen=True)
-class PlanAnswer:
-    """`paths` and `message`: what the agent asks the factory to commit (only with `planned`); the agent never commits."""
+class Answer:
+    """A step kind decoder's one result: the step's own `disposition` word (for display), its `effect` (what the factory
+    does), and `paths` and `message`: what the agent asks the factory to commit (only with effect `commit`); the agent
+    never commits."""
 
     disposition: str
-    plan_path: str | None
+    effect: Effect
     paths: tuple[str, ...]
     message: str | None
     explanation: str
-
-
-type Decoder = Callable[[object, StepRules], PlanAnswer]
 
 
 def dot_git(name: str) -> bool:

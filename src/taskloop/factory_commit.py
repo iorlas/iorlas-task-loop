@@ -14,9 +14,9 @@ from pathlib import Path
 from git_porcelain import NothingToRecord, Recorded, Repo, Worktree
 
 from taskloop.attempt_types import TRAILER, Admission, AnswerState, Checkouts, Rejected, SlotFiles, StepRules, Unsettled, dot_git
-from taskloop.plan_step import plan_stage
 from taskloop.prepare import task_branch
 from taskloop.slot_state import SlotState, bounded, listing, observe_slot, pointer, staged
+from taskloop.steps import kind
 
 
 class NotSettled(Exception):
@@ -29,7 +29,7 @@ class NotSettled(Exception):
 
 @dataclass(frozen=True)
 class Committed:
-    """X, the commit the step ends at: the factory's new commit, an adopted crash leftover, or B for `unchanged`."""
+    """X, the commit the step ends at: the factory's new commit, an adopted crash leftover, or B for effect `keep`."""
 
     sha: str
 
@@ -39,8 +39,10 @@ type GitQuiet = Callable[[], Unsettled | None]  # None: the factory may write Gi
 
 
 def attributes(rules: StepRules) -> tuple[str, ...]:
-    """Where an ignored file would change how the listed paths are staged, though status never shows it."""
-    return (".gitattributes", "docs/.gitattributes", "docs/design/.gitattributes", rules.root)
+    """Where an ignored file would change how the listed paths are staged, though status never shows it: the
+    `.gitattributes` of every folder on the way to the step root, then the root itself."""
+    folders = rules.root.rstrip("/").split("/")[:-1]
+    return (*("/".join([*folders[:depth], ".gitattributes"]) for depth in range(len(folders) + 1)), rules.root)
 
 
 def _observed(checkouts: Checkouts, files: SlotFiles, admission: Admission) -> SlotState | Unsettled:
@@ -62,7 +64,7 @@ def trailer(admission: Admission) -> str:
 
 
 def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet) -> Settled:
-    """Steps 2 to 5 of the step commit for a valid `planned` or `unchanged` answer with no stored `end_commit`.
+    """Steps 2 to 5 of the step commit for a valid answer of effect `commit` or `keep` with no stored `end_commit`.
     `quiet` is asked right before each Git write: its answer (`worker_alive`, `superseded`) stops it, nothing written."""
     state = _observed(checkouts, files, admission)
     if isinstance(state, Unsettled):
@@ -70,7 +72,7 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     head = state.head
     if head is None or state.branch != task_branch(admission.task.task_id):
         return Unsettled("unborn" if head is None else "branch")
-    if answer.disposition == "unchanged":  # X is B: an `unchanged` step never adopts a commit
+    if answer.effect == "keep":  # X is B: a `keep` step never adopts a commit
         return Committed(base) if head == base else Unsettled("head_moved")
     if head != base:
         return Committed(head) if _ours(checkouts(state.root), head, base, admission) else Unsettled("head_moved")
@@ -119,11 +121,12 @@ def _foreign(checkouts: Checkouts, admission: Admission, answer: AnswerState) ->
 def refusal(slot: Worktree, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Unsettled | None:
     """Step 4's reads, no Git write: an unsafe listed path, a changed `.git*` file near them, or ignored files under
     them (listed)."""
-    unsafe = unsafe_path(files, Path(admission.slot_path), plan_stage(admission.task.task_id), answer.paths)
+    rules = kind(admission.step).rules(admission.task.task_id)
+    unsafe = unsafe_path(files, Path(admission.slot_path), rules, answer.paths)
     if unsafe is not None:
         return Unsettled("unsafe", bounded((unsafe,)))
-    dirt = slot.dirty(base, ignored_under=attributes(plan_stage(admission.task.task_id)))
-    unsafe = git_file(dirt.tracked + dirt.untracked, plan_stage(admission.task.task_id), answer.paths)
+    dirt = slot.dirty(base, ignored_under=attributes(rules))
+    unsafe = git_file(dirt.tracked + dirt.untracked, rules, answer.paths)
     if unsafe is not None:
         return Unsettled("unsafe", bounded((unsafe,)))
     return Unsettled("ignored", bounded(dirt.ignored)) if dirt.ignored else None
@@ -195,9 +198,9 @@ def leftovers(
     checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, end_commit: str | None
 ) -> Unsettled | None:
     """Read-only, for a person (`tl plan show`): what a verify would report as a step to repeat, read now. Before the
-    factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for `unchanged`, the clean-tree
+    factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for effect `keep`, the clean-tree
     check."""
-    if answer.disposition == "planned" and end_commit is None:
+    if answer.effect == "commit" and end_commit is None:
         state = _observed(checkouts, files, admission)
         if isinstance(state, Unsettled):
             return None

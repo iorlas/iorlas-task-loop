@@ -3,13 +3,13 @@
 import hashlib
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Final
 
 from any_agent import RunOutcome
 
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
-from taskloop.plan_step import ANSWER_SCHEMA
 from taskloop.round_log import WORD
 from taskloop.slot_state import shown
 
@@ -102,10 +102,11 @@ class EvidenceFiles:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
 
-    def prepare(self, key: AttemptKey) -> tuple[str, str]:
-        """Return owned schema and native answer paths, without executing a harness."""
+    def prepare(self, key: AttemptKey, schema: Mapping[str, object]) -> tuple[str, str]:
+        """Write the step kind's answer `schema` (`schema.json`) and return its path and the native answer path, without
+        executing a harness."""
         directory = self.directory(key)
-        ref = self._write(directory + "/schema.json", json.dumps(ANSWER_SCHEMA, sort_keys=True))
+        ref = self._write(directory + "/schema.json", json.dumps(schema, sort_keys=True))
         return str(self._path(ref.path)), str(self._path(directory + "/native-answer.txt"))
 
     def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:

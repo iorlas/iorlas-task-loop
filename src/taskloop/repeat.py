@@ -31,9 +31,9 @@ from taskloop.attempt_types import (
 )
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, launched, verify_failure
-from taskloop.plan_step import feedback, plan_stage
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
+from taskloop.steps import kind
 
 
 class Settle(Protocol):
@@ -116,9 +116,11 @@ class StepRepeat:
             return Failed("unavailable", "store", str(error))
         except EvidenceError as error:
             return Failed("refused", "input", str(error))
-        unrecorded = steps[-1].disposition == "planned" and steps[-1].end_commit is None
-        number = record.admission.number
-        return feedback(found, plan_stage(record.admission.task.task_id), number, task, secrets.token_hex(8), unrecorded=unrecorded)
+        unrecorded = steps[-1].effect == "commit" and steps[-1].end_commit is None
+        admission = record.admission
+        step = kind(admission.step)
+        rules = step.rules(admission.task.task_id)
+        return step.feedback(found, rules, admission.number, task, secrets.token_hex(8), unrecorded=unrecorded)
 
     def _stopped(
         self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int

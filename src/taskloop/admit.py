@@ -31,10 +31,10 @@ from git_porcelain import GitUnavailable, Repo
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.plan_step import STEP, closing_words, plan_stage
 from taskloop.prepare import DIVERGED, branch_refusal
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotsUnavailable, SlotView, observe
+from taskloop.steps import STEPS, kind
 from taskloop.task import TaskInspection, TaskInspectionError
 
 type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, False held elsewhere, BdError unknown
@@ -56,6 +56,7 @@ AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answ
 AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
 p.tracker_root,p.seq,p.slot_head,p.step
 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
+FIRST = STEPS[0].step  # a fresh admission's step: the first one
 NOT_CLAIMED = frozenset({"missing_binary", "version", "not_found", "lint"})  # BdError kinds where the claim certainly did not happen
 
 
@@ -132,11 +133,11 @@ def why(error: BaseException) -> str:
     return f"{type(error).__name__}: {error}"[:300]
 
 
-def task_text(task: TaskInspection) -> str:
-    """The task's own prose, then the fixed closing words of the plan step (where the plan goes, `unchanged` or `planned`,
-    no Git write: the factory commits the listed paths), stored as the admitted input under its digest."""
-    closing = closing_words(plan_stage(task.reference.task_id))
-    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{closing}\n"
+def task_text(task: TaskInspection, step: str) -> str:
+    """The step kind's input for the task (its own prose, then the step's closing words), stored as the admitted input
+    under its digest."""
+    found = kind(step)
+    return found.input_text(task, found.rules(task.reference.task_id))
 
 
 class AttemptAdmission:
@@ -199,7 +200,7 @@ class AttemptAdmission:
         except GitUnavailable as error:
             return AdmitUnavailable("git", detail=why(error))
         # the root as resolved now is the one claimed, stored and renewed (.4.3.1.9)
-        return _Prepared(replace(request, tracker_root=str(tracker)), task_text(task), repo, inspection.repo_id)
+        return _Prepared(replace(request, tracker_root=str(tracker)), task_text(task, FIRST), repo, inspection.repo_id)
 
     def _choices(self, request: AdmitRequest) -> AdmitRefused | None:
         if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
@@ -369,7 +370,7 @@ class AttemptAdmission:
             attempt = {
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
                 "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "tracker_root": request.tracker_root,
-                "repo_id": repo_id, "slot": name, "step": STEP,
+                "repo_id": repo_id, "slot": name, "step": FIRST,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None, "seq": _next_seq(con, request), "slot_head": head,

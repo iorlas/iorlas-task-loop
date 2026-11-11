@@ -23,7 +23,7 @@ from taskloop.attempt_types import (
     Verified,
 )
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.plan_step import decode_plan_answer
+from taskloop.steps import kind
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 EXPECTED = "docs/design/tl-1/plan.md"
@@ -34,7 +34,7 @@ ALLOWED = {"type", "properties", "required", "additionalProperties", "enum", "pa
 
 
 def schema(tmp_path: Path) -> dict[str, object]:
-    path, _answer = EvidenceFiles(tmp_path).prepare(KEY)
+    path, _answer = EvidenceFiles(tmp_path).prepare(KEY, kind("plan").answer_schema)
     loaded = json.loads(Path(path).read_text())
     assert isinstance(loaded, dict)
     return loaded
@@ -69,6 +69,7 @@ def test_no_node_uses_composition_conditionals_or_unlisted_keywords(tmp_path: Pa
 
 
 RULES = StepRules("docs/design/tl-1/")
+decode = kind("plan").decode
 D = "docs/design/tl-1/"
 PLANNED = {"disposition": "planned", "plan_path": EXPECTED, "paths": [EXPECTED], "message": "Plan tl-1", "explanation": "done"}
 UNCHANGED = {"disposition": "unchanged", "plan_path": EXPECTED, "paths": [], "message": None, "explanation": "still valid"}
@@ -113,12 +114,12 @@ BAD_PATHS = [
 )
 def test_the_decoder_alone_owns_the_rules_and_bounds_the_schema_leaves_out(change: dict[str, object]) -> None:
     with pytest.raises(ValueError, match="Invalid plan answer"):
-        decode_plan_answer(PLANNED | change, RULES)
+        decode(PLANNED | change, RULES)
 
 
 def test_an_old_four_key_answer_is_invalid() -> None:
     with pytest.raises(ValueError, match="Invalid plan answer"):
-        decode_plan_answer({"disposition": "planned", "plan_path": EXPECTED, "commit": "a" * 40, "explanation": "x"}, RULES)
+        decode({"disposition": "planned", "plan_path": EXPECTED, "commit": "a" * 40, "explanation": "x"}, RULES)
 
 
 @pytest.mark.parametrize(
@@ -128,21 +129,22 @@ def test_an_old_four_key_answer_is_invalid() -> None:
 )
 def test_unchanged_changes_nothing_and_names_the_expected_plan(change: dict[str, object]) -> None:
     with pytest.raises(ValueError, match="Invalid plan answer"):
-        decode_plan_answer(UNCHANGED | change, RULES)
+        decode(UNCHANGED | change, RULES)
 
 
 def test_the_decoder_accepts_each_disposition_in_its_shape() -> None:
     many = [EXPECTED, *(f"{D}n{i}.md" for i in range(31))]
-    planned = decode_plan_answer(PLANNED | {"paths": many, "message": "x" * 500}, RULES)
+    planned = decode(PLANNED | {"paths": many, "message": "x" * 500}, RULES)
     assert (planned.paths, planned.message) == (tuple(many), "x" * 500)
-    unchanged = decode_plan_answer(UNCHANGED, RULES)
-    assert (unchanged.disposition, unchanged.plan_path, unchanged.paths, unchanged.message) == ("unchanged", EXPECTED, (), None)
+    assert (planned.disposition, planned.effect) == ("planned", "commit")
+    unchanged = decode(UNCHANGED, RULES)
+    assert (unchanged.disposition, unchanged.effect, unchanged.paths, unchanged.message) == ("unchanged", "keep", (), None)
     for disposition in ("incomplete", "needs_owner"):
         for path in (None, EXPECTED):
-            found = decode_plan_answer(UNCHANGED | {"disposition": disposition, "plan_path": path}, RULES)
-            assert (found.disposition, found.plan_path, found.paths) == (disposition, path, ())
+            found = decode(UNCHANGED | {"disposition": disposition, "plan_path": path}, RULES)
+            assert (found.disposition, found.effect, found.paths) == (disposition, "none", ())
     with pytest.raises(ValueError, match="Invalid plan answer"):
-        decode_plan_answer(UNCHANGED | {"disposition": "incomplete", "paths": [EXPECTED]}, RULES)
+        decode(UNCHANGED | {"disposition": "incomplete", "paths": [EXPECTED]}, RULES)
 
 
 def stored(rc: int | None, timed_out: bool, reason: str | None, answer: AnswerState, verdict: Verdict | None = None) -> StoredExecution:

@@ -17,15 +17,13 @@ from taskloop.attempt_reads import (
     as_nullable_int,
     as_nullable_text,
     as_text,
+    stored_effect,
 )
 from taskloop.attempt_types import (
-    EFFECTS,
-    RULES,
     Admission,
     AnswerState,
     AttemptKey,
     AttemptRecord,
-    Effect,
     EntryIdentity,
     Evidence,
     ExecutionFacts,
@@ -38,6 +36,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, prefixed
 from taskloop.repo import RepoId
+from taskloop.steps import RULES
 from taskloop.task import TaskReference, TaskScope
 
 # A registration write (the entry's or the harness's) waits at most this for the write lock, so it finishes well inside
@@ -85,18 +84,11 @@ def _verdict(row: tuple[object, ...]) -> Verdict | None:
     if kind is None:
         return None
     if kind == "verified":
-        return Verified(as_text(blob), bool(as_int(reused)))
+        return Verified(as_nullable_text(blob), bool(as_int(reused)))  # a kind without an artifact stores no blob
     rule = next((rule for rule in RULES if rule == reason), None)
     if kind != "rejected" or rule is None:
         raise StoreUnavailable("Invalid stored verdict")
     return Rejected(rule)
-
-
-def _effect(value: object) -> Effect | None:
-    effect = next((effect for effect in EFFECTS if effect == value), None)
-    if (effect is None) != (value is None):
-        raise StoreUnavailable("Invalid stored effect")
-    return effect
 
 
 class AttemptStore(AttemptReads):
@@ -368,7 +360,7 @@ class AttemptStore(AttemptReads):
             raise StoreUnavailable("Invalid answer phase")
         if session_state not in ("complete", "pending", "conflict", "fault"):
             raise StoreUnavailable("Invalid session state")
-        answer = AnswerState(kind, as_nullable_text(row[26]), _effect(row[27]), as_listed(row[28]), as_nullable_text(row[29]))
+        answer = AnswerState(kind, as_nullable_text(row[26]), stored_effect(row[27]), as_listed(row[28]), as_nullable_text(row[29]))
         return StoredExecution(key, facts, evidence, answer, session_state, _verdict(row[31:35]))
 
     def collect(self, key: AttemptKey) -> StoredExecution | None:

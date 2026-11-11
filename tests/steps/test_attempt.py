@@ -20,6 +20,7 @@ from taskloop.attempt import CODEX_ACCESS, Attempts, Credentials, CredentialsUna
 from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import (
     Admission,
+    Answer,
     AnswerState,
     AttemptKey,
     AttemptRecord,
@@ -28,7 +29,6 @@ from taskloop.attempt_types import (
     EntryIdentity,
     FileRef,
     PendingResult,
-    PlanAnswer,
     Replaced,
     SessionInput,
     SlotFiles,
@@ -38,6 +38,7 @@ from taskloop.composition import open_attempts
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.session import SessionLatch
+from taskloop.steps import kind
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")  # the registered entry seeded below; execute runs only for it
@@ -228,17 +229,20 @@ def test_the_answer_is_stored_with_its_effect(
     assert con.execute("SELECT disposition,effect FROM execution").fetchone() == stored
 
 
-def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(
+    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch
+) -> None:
     con = database(surroundings)
     execution = fake()
     owner = app(con, surroundings, execution)
 
-    def broken(_value: object, _rules: StepRules) -> PlanAnswer:
+    def broken(_value: object, _rules: StepRules) -> Answer:
         raise RuntimeError("decoder bug")
 
-    owner.decoder = broken
-    with pytest.raises(RuntimeError, match="decoder bug"):
-        owner.execute(KEY, ENTRY)
+    with monkeypatch.context() as patch:
+        patch.setattr("taskloop.attempt.kind", lambda step: dataclasses.replace(kind(step), decode=broken))
+        with pytest.raises(RuntimeError, match="decoder bug"):
+            owner.execute(KEY, ENTRY)
     resumed, secrets = fake(), []
     reader = surroundings.attempts(AttemptStore(lambda: con), resumed, credentials=lambda: secrets.append(1) or ("/bin/codex", {}))
     captured = reader.collect(KEY)

@@ -24,7 +24,6 @@ from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_entry import shown
 from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import (
-    RULES,
     Admission,
     AttemptKey,
     ChainLink,
@@ -46,11 +45,13 @@ from taskloop.composition import open_verifier
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.slot_lock import hold
+from taskloop.steps import RULES, kind
 from taskloop.verdict import judge
 from taskloop.verifier import Verifier, VerifyHold
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
+STEP = kind("plan")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 P = "docs/design/tl-1/plan.md"
 D = "docs/design/tl-1/"
@@ -367,7 +368,7 @@ def rules(cap: int = 1 << 20) -> StepRules:
 
 def one(base: str, paths: tuple[str, ...]) -> tuple[ChainLink, ...]:
     """Attempt 1 alone, `planned`: today's one-step chain."""
-    return (ChainLink(1, base, None, "planned", paths, FileRef("input.txt", "d")),)
+    return (ChainLink(1, base, None, "commit", paths, FileRef("input.txt", "d")),)
 
 
 @pytest.mark.parametrize(
@@ -387,18 +388,18 @@ def test_judge_rules_the_verify_path_cannot_reach(
     base = head(slot)
     for files in changes:
         commit(slot, files)
-    found = judge(repo, repo.path, head(slot), rules(cap), one(base, paths))
+    found = judge(repo, repo.path, head(slot), STEP, rules(cap), one(base, paths))
     assert found == expected if expected is not None else isinstance(found, Verified)
 
 
 def test_a_commit_that_does_not_descend_from_b_or_is_no_commit(repo: FakeRepo, slot: FakeWorktree) -> None:
     base = commit(slot, {"notes.txt": "x"})
     slot.checkout("HEAD^")
-    assert judge(repo, repo.path, head(slot), rules(), one(base, (P,))) == Rejected("not_descendant")
+    assert judge(repo, repo.path, head(slot), STEP, rules(), one(base, (P,))) == Rejected("not_descendant")
     tree = slot.snapshot("HEAD").head_tree
     assert tree is not None
     for reported in ("c" * 40, tree, base[:12]):  # an abbreviation resolves to another name of a commit: never X itself
-        assert judge(repo, repo.path, reported, rules(), one(base, (P,))) == Rejected("commit_absent")
+        assert judge(repo, repo.path, reported, STEP, rules(), one(base, (P,))) == Rejected("commit_absent")
 
 
 @pytest.mark.parametrize("unread", ["parent", "blob"])
@@ -601,6 +602,23 @@ def test_the_end_commit_and_verdict_fences_read_the_stored_effect(
     with pytest.raises(StoreRefused, match="changed_answer"):
         store.verdict(record.admission, record.base_commit, end, verdict, 1)
     assert stored(registered) == []
+
+
+def test_a_verified_row_without_a_blob_reads_back(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
+) -> None:
+    """A step kind without an artifact stores a verdict with no blob; the stored-verdict reader returns it as written."""
+    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
+    registered.execute("UPDATE execution SET effect='keep'")
+    store = AttemptStore(lambda: registered)
+    record = store.load(KEY)
+    assert record is not None and record.base_commit is not None
+    assert store.end_commit(record.admission, record.base_commit) == record.base_commit
+    verdict = Verified(None, reused=True)
+    assert store.verdict(record.admission, record.base_commit, record.base_commit, verdict, 1) == verdict
+    assert registered.execute("SELECT verdict,blob FROM verification").fetchall() == [("verified", None)]
+    collected = store.collect(KEY)
+    assert collected is not None and collected.verification == verdict
 
 
 def flip(slot: FakeWorktree, files: FakeSlotFiles) -> None:
