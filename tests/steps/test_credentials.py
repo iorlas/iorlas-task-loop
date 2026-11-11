@@ -10,7 +10,7 @@ from git_porcelain import GitUnavailable, RealRepo
 from stream_proc import OwnedProcess, ProcessObservation
 
 from taskloop import owned_processes
-from taskloop.agent_credentials import codex_machine_credentials
+from taskloop.agent_credentials import codex_machine_credentials, scrubbed
 from taskloop.attempt import CredentialsUnavailable
 from taskloop.git_views import checkouts, hardened
 from taskloop.owned_processes import worker_gone
@@ -137,6 +137,16 @@ def test_any_miss_is_unavailable_with_its_reason(environ: dict[str, str], machin
     with pytest.raises(CredentialsUnavailable) as raised:
         credentials(environ, machine)
     assert raised.value.reason == reason
+
+
+def test_the_checks_environment_is_the_same_scrub_without_any_codex_lookup() -> None:
+    """A checks attempt needs no `codex` on PATH and no login file; it gets exactly what the agent's credentials give."""
+    environ = {**BASE, "PATH": "/venv/bin:/usr/bin", "VIRTUAL_ENV": "/venv", "GH_TOKEN": "t", "CODEX_HOME": "/c", "CLAUDECODE": "1"}
+    assert scrubbed(environ) == credentials(environ, Machine(logins=("/c/auth.json",)))[1]
+    assert scrubbed(environ) == {"PATH": "/usr/bin", "HOME": "/home/me", "CODEX_HOME": "/c"} | BAR
+    with pytest.raises(CredentialsUnavailable) as raised:
+        scrubbed({**BASE, "GIT_CONFIG_COUNT": "x"})
+    assert raised.value.reason == "git_config"
 
 
 def test_the_push_bar_is_appended_after_existing_git_config_entries() -> None:

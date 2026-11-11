@@ -11,14 +11,14 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import Command, Environment, FakeProfiles
+from doubles import CHECKS, Command, Environment, FakeProfiles
 from git_porcelain.testing import FakeWorktree
 
 from taskloop.access import CODEX_ACCESS, SHELL, folders, prepared_access
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, SlotFiles
-from taskloop.environment import Renewal, setup_digest
+from taskloop.environment import Renewal, SetupFor, setup_digest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.prepare import Prepared
 from taskloop.profile import Unavailable
@@ -423,3 +423,90 @@ def test_a_sandbox_that_does_not_work_refuses_after_the_folders_are_made_and_run
     entry.environment.sandbox = False
     assert refused(entry, "refused", "environment:sandbox") == [*ENSURED, "empty .t/s1", "probe"]
     assert rows(entry.environment.con) == []
+
+
+@dataclasses.dataclass
+class ChecksSlot:
+    """A checks attempt's setup (`prepare_for` with X, detached, no probe) over the `checking` fixture's attempt and the
+    Git fake's slot, detached at its HEAD, which stands for X."""
+
+    environment: Environment
+    slot: FakeWorktree
+
+    @property
+    def x(self) -> str:
+        found = next(info.head for info in self.slot.repo.worktrees() if info.path == self.slot.path)
+        assert found is not None
+        return found
+
+    def prepare(self, renewal: Renewal = "held") -> AttemptResult | None:
+        env, gitdir = self.environment, self.slot.repo.identity().common_dir / "worktrees" / self.slot.path.name
+        env.events.clear()
+        target = SetupFor(CHECKS, self.slot.path, self.x, None, 100.0, True)
+        return env.preparation().prepare_for(target, Prepared(self.x, gitdir, self.slot.repo.path), lambda: renewal,
+                                             {"HOME": "/home/p"}, probe=None)
+
+
+@pytest.fixture
+def checks_slot(checking: sqlite3.Connection, checkouts: Checkouts, slot: FakeWorktree, tmp_path: Path) -> ChecksSlot:
+    return ChecksSlot(Environment(checking, checkouts, tmp_path), slot)
+
+
+def test_a_checks_slot_is_reset_hard_to_x_without_a_probe_then_set_up_at_x(checks_slot: ChecksSlot, slot: FakeWorktree) -> None:
+    """A tracked file a killed check rewrote, and what it left untracked or ignored, are gone before setup runs."""
+    slot.repo.exclude_locally([".venv/"])
+    slot.write_file("README", "rewritten by a check")
+    slot.write_file("left", "untracked")
+    slot.write_file(".venv/planted", "ignored")
+    seen: list[object] = []
+    env = checks_slot.environment
+    left = ("README", "left", ".venv/planted")
+    env.process.script = [Command(effect=lambda: seen.append(tuple(slot.read_file(path) for path in left)))]
+    assert checks_slot.prepare() is None
+    assert seen == [("one", None, None)] and env.probes == []
+    assert env.events == [*ENSURED, "empty .t/s1", "empty .env/s1", "ensure s1/uv-cache", "ensure s1/uv-tools",
+                          "exec just bootstrap", "group 501", "empty .t/s1"]
+    assert env.profiles.read == [checks_slot.x] and "UV_OFFLINE" not in env.process.calls[0].env
+    stored = env.con.execute("SELECT attempt_id,run,commit_sha,conclusion FROM setup_run").fetchall()
+    assert stored == [("checks", 1, checks_slot.x, "passed")]
+
+
+def test_a_checks_slot_never_reuses_a_passed_setup(checks_slot: ChecksSlot) -> None:
+    """Every block runs setup again: the one before ran task code on the host."""
+    assert checks_slot.prepare() is None
+    assert checks_slot.prepare() is None
+    assert "exec just bootstrap" in checks_slot.environment.events
+    assert [row[:2] for row in checks_slot.environment.con.execute(ROW).fetchall()] == [(1, "passed"), (2, "passed")]
+
+
+def test_an_implement_slot_is_never_reset_hard(entry: Entry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(FakeWorktree, "reset", lambda *_args, **_options: pytest.fail("an implement slot holds its task branch"))
+    entry.execute()
+    assert entry.environment.events[-1] == "agent"
+
+
+def test_a_checks_setup_must_leave_the_slot_detached_at_x(checks_slot: ChecksSlot, slot: FakeWorktree) -> None:
+    checks_slot.environment.process.script = [Command(effect=lambda: slot.checkout_new("elsewhere"))]
+    assert checks_slot.prepare() == AttemptResult("refused", "environment:moved")
+
+
+def test_failed_checks_setups_count_across_blocks_and_stop_after_two(checks_slot: ChecksSlot) -> None:
+    env = checks_slot.environment
+    env.process.script = [Command(rc=1), Command(rc=None, timed_out=True, survivors=True)]
+    assert checks_slot.prepare() == AttemptResult("unavailable", "environment:exit")
+    assert checks_slot.prepare() == AttemptResult("unavailable", "environment:lingering")  # survivors of the stop
+    assert checks_slot.prepare() == AttemptResult("refused", "environment:failed")
+    assert env.events == []  # counted before anything is observed, made or run
+    assert [row[:2] for row in env.con.execute(ROW).fetchall()] == [(1, "failed"), (2, "lingering")]
+
+
+def test_a_checks_setup_ends_with_the_claim_renewal_and_the_deadline(checks_slot: ChecksSlot) -> None:
+    assert checks_slot.prepare("lost") == AttemptResult("refused", "claim_lost")
+    checks_slot.environment.clock = lambda: 100
+    assert checks_slot.prepare() == AttemptResult("refused", "expired")
+
+
+def test_a_setup_stop_that_left_survivors_is_lingering_for_an_implement_slot_too(entry: Entry) -> None:
+    entry.environment.process.script = [Command(rc=None, timed_out=True, survivors=True)]
+    refused(entry, "unavailable", "environment:lingering")
+    assert rows(entry.environment.con) == [(1, "lingering", None, 0, 501)]

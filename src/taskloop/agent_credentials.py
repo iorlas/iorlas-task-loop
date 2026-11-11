@@ -69,12 +69,19 @@ def codex_machine_credentials(
         raise CredentialsUnavailable("home")
     if not exists(home / "auth.json"):
         raise CredentialsUnavailable("auth")
+    return str(Path(found).absolute()), scrubbed(environ)
+
+
+def scrubbed(environ: Mapping[str, str]) -> dict[str, str]:
+    """The environment minus the baseline scrub and the active virtualenv (its `bin` dropped from PATH), plus the push
+    bar: what an agent and a checks attempt's commands get. No Codex lookup, so checks need no `codex`; it hides no file
+    (Codex's login stays readable to code on the host). A malformed Git config count raises `CredentialsUnavailable`."""
     env = {name: value for name, value in environ.items() if not _dropped(name)}
     venv = environ.get("VIRTUAL_ENV")
     if venv and "PATH" in env:
         venv_bin = os.path.join(venv, "bin")  # compared as text, like the baseline's exact PATH entry match
         env["PATH"] = os.pathsep.join(entry for entry in env["PATH"].split(os.pathsep) if entry != venv_bin)
-    return str(Path(found).absolute()), env | push_bar(env)
+    return env | push_bar(env)
 
 
 def push_bar(env: Mapping[str, str]) -> dict[str, str]:

@@ -122,7 +122,6 @@ def test_write_pattern_catches_spelling_variants(statement: str) -> None:
 
 
 # The remote and ref writes below (fetch, sync, the other pushes, branch and remote-ref deletion) have no owner: unused.
-# `reset` (a checks slot's hard reset to X) gets its one owner, `environment.py`, with the checks block (tl-8bh9.14.6 S6b).
 GIT_WRITES = frozenset({
     "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
     "push_request", "push_lease", "delete_branch", "clean", "reset",
@@ -165,10 +164,11 @@ def test_the_git_write_matcher_sees_uses_and_not_words(source: str, names: set[s
 
 
 def test_only_the_commit_prepare_release_publish_and_environment_modules_write_git() -> None:
-    """`clean` is the environment reset's (the slot's ignored files and nested repositories, before each setup)."""
+    """`clean` is the environment reset's (the slot's ignored files and nested repositories, before each setup); `reset`
+    too (a checks slot's tracked files back to exactly X, tl-8bh9.14.6 section 8). The checks block writes no Git."""
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
-        ("park", "slot_release.py"), ("push", "publish.py"), ("clean", "environment.py"),
+        ("park", "slot_release.py"), ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
     }
     assert git_writers() == expected
 

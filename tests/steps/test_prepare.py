@@ -24,7 +24,7 @@ from taskloop import prepare
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
+from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.prepare import Branch, BranchRefusal, branch_refusal, named
 from taskloop.slots import SlotGit, adopt
@@ -369,3 +369,72 @@ def test_admission_skips_a_free_slot_whose_head_the_branch_does_not_contain(
     assert isinstance(result, Admitted) and result.slot == "s2" and claims.calls == ["input", "claim:tl-1"]
     found = branch_refusal(repo, "tl-1", (head(repo, first.path) or "",))
     assert found == "branch_diverged" and isinstance(branch_refusal(repo, "tl-1", ()), Branch)
+
+
+def on_main(repo: FakeRepo) -> Sha:
+    """X: a commit the slot (detached at D) does not have checked out, made on the person's checkout."""
+    return advance(repo.worktree(repo.identity().root))
+
+
+def detached(checkouts: Checkouts, files: SlotFiles, slot: FakeWorktree, commit: str) -> prepare.Prepared | AttemptResult:
+    return prepare.detach_at(checkouts, files, str(slot.path), slot.repo.identity().key, commit)
+
+
+def test_a_clean_slot_at_d_takes_x_detached_through_its_pinned_view(
+    repo: FakeRepo, slot: FakeWorktree, checkouts: PinnedViews, slot_files: SlotFiles
+) -> None:
+    x, branches = on_main(repo), repo.branches()
+    gitdir = repo.identity().common_dir / "worktrees" / "s1"
+    assert detached(checkouts, slot_files, slot, x) == prepare.Prepared(x, gitdir, repo.identity().root)
+    assert (head(repo, slot.path), slot.branch()) == (x, None) and repo.branches() == branches
+    assert set(checkouts.slot_opens(slot.path)) == {gitdir}
+
+
+def test_a_slot_already_at_x_passes_in_any_state_without_a_write(
+    repo: FakeRepo, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The environment's hard reset makes it exactly X; a relaunch after a killed check finds it so."""
+    x = head(repo, slot.path) or ""
+    slot.write_file("README", "rewritten by a check")
+    monkeypatch.setattr(FakeWorktree, "park", lambda *_args, **_options: pytest.fail("no write"))
+    found = detached(checkouts, slot_files, slot, x)
+    assert isinstance(found, prepare.Prepared) and found.head == x
+
+
+def test_a_slot_on_a_branch_or_without_x_concludes_and_a_dirty_one_elsewhere_relaunches(
+    repo: FakeRepo, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    x = on_main(repo)
+    monkeypatch.setattr(FakeWorktree, "park", lambda *_args, **_options: pytest.fail("no write"))
+    slot.write_file("README", "left")
+    assert detached(checkouts, slot_files, slot, "e" * 40) == AttemptResult("refused", "commit_missing")  # concludes first
+    assert detached(checkouts, slot_files, slot, x) == AttemptResult("refused", "slot_dirty")
+    slot.checkout_new("task/tl-1")
+    assert detached(checkouts, slot_files, slot, x) == AttemptResult("refused", "slot:branch")
+
+
+def test_a_redirected_pointer_takes_nothing(repo: FakeRepo, slot: FakeWorktree, checkouts: Checkouts, slot_files: FakeSlotFiles) -> None:
+    x = on_main(repo)
+    slot_files.contents[slot.path / ".git"] = b"gitdir: /elsewhere/.git/worktrees/s1\n"
+    assert detached(checkouts, slot_files, slot, x) == AttemptResult("refused", "slot:redirected")
+    assert head(repo, slot.path) != x
+
+
+def test_a_take_that_does_not_land_on_x_detached_is_moved(
+    repo: FakeRepo, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    x = on_main(repo)
+    monkeypatch.setattr(FakeWorktree, "park", lambda self, _base, **_options: self.checkout_new("elsewhere"))
+    assert detached(checkouts, slot_files, slot, x) == AttemptResult("refused", "slot:moved")
+
+
+def test_an_unreadable_slot_is_unknown(
+    repo: FakeRepo, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    x = on_main(repo)
+
+    def unreadable(*_args: object) -> bool:
+        raise GitReadFailure("history unreadable")
+
+    monkeypatch.setattr(FakeRepo, "is_ancestor", unreadable)  # never `commit_missing`: only a missing revision is
+    assert detached(checkouts, slot_files, slot, x) == AttemptResult("unavailable", "git")

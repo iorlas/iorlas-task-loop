@@ -705,3 +705,74 @@ without it:
 6. **The letter T**: the glossary's T is the remote tip after a push; `main`'s commit at a checks admission is now "the
    target" everywhere in this plan, the code comments and the test constants (`TARGET`). The glossary says factory.db
    v12 since S6a.
+
+## 22. As built: S6b (tl-8bh9.14.6.2)
+
+The block, the checks slot's setup and its take of X; nothing of S6c-S6e (no entry, launcher, release operation,
+admission, status or round routing; nothing runs a block yet). Code lines by the policy counter: `checks` 159 (new),
+`environment` 245 (+16), `prepare` 154 (+29), `evidence_files` 113 (+6), `agent_credentials` 67 (+2), `slot_env` 97
+(+1); `test_checks` 236 (new), `real/test_checks_real` 63 (new), `test_environment` 381 (+62), `test_prepare` 326
+(+49), `test_credentials` 179 (+7), `doubles` 220 (+1).
+
+- **`checks.py`**: `Block(BlockPorts(process, lingering, clock)).run(BlockTarget(slot, view, commit, required, deadline,
+  env), sink, block, checks)` as section 7; returns None when the block ended (ran through, or stopped by `lingering` or
+  `dirty`: the results decide) or the attempt's word: `refused expired:<name>`, `unavailable checks:uncertain`, `git`,
+  `environment:files`. The readings `completed(results, checks, required)` (section 6 step 7) and `conclusion(results,
+  required)` (step 12), `differs(required, row)` (the `(argv differs from main)` marker), `argv_digest`, `main_seen(view)`
+  (`refs/heads/main` now, None when gone: the entry's before/after comparison), `check_env(scrubbed, slot)`
+  (`environment.setup_env`). `CheckSink(store, key, files, clock)` is the checks attempt's `ResultSink`; its `conclude`
+  is `CheckStore.finish` (S6a deviation 1).
+- **`environment.prepare_for(SetupFor(key, slot, commit, branch, deadline, first), prepared, renew, env, *, probe)`**:
+  `prepare` builds the implement `SetupFor` (commit None, `task/<id>`, `first` = attempt 1) and passes its launch as the
+  probe. A checks slot (`commit` X, `branch` None, `probe=None`): no probe, no reuse of a passed run, `reset(X,
+  mode="hard")` before the existing `clean`, `(X, None)` expected after setup.
+- **`SetupEnded.survivors`** (`bool(Result.survivors)` in `slot_env.setup_process`). Setup's judgment now checks for a
+  process left first, for every end: a timed-out setup command whose stop left survivors (or whose group is alive) is
+  `lingering` (`environment:lingering`), no longer `timed_out`/`expired`.
+- **`prepare.detach_at(checkouts, files, slot_path, repo_id, X)`**: section 6 step 9 through `observe_slot` and the
+  pinned view; `Prepared(X, gitdir, root)`.
+- **`evidence_files`**: `SetupLog` renamed `CappedLog` (`LOG_CAP`), `check_log(key, block, name)`, `open_check_log`.
+- **`agent_credentials.scrubbed(environ)`**: the scrub, the venv drop and the push bar; `codex_machine_credentials`
+  calls it after its Codex lookups.
+- **Policy**: `test_policy` expects `("reset", "environment.py")`; `taskloop.checks` joins the entry's import closure
+  contract (`entry-never-imports-the-command-surface`) now rather than in S6c.
+
+**Deviations and decisions (decided here, open to veto).**
+
+1. `ResultSink` has a fifth method, `log(block, name)`: the log belongs to the record's owner (land keeps its own), so
+   the block knows no key. The log is opened before `start`: a log that cannot be opened is `unavailable
+   environment:files` with no result written (section 7 put `start` first).
+2. A deadline reached between checks is `refused expired:<next name>` with no result for that check (nothing started);
+   section 7 only named the deadline's stop of a running check (`interrupted`).
+3. A command that never ran (exec failed, or the start failed before registration) is `failed` with no group check and
+   no slot read (section 7 step 5 says "every check that ran"); the block goes on.
+4. A supervision failure after registration is judged like setup's: `ended uncertainly`, the group check, then the slot,
+   then `failed`.
+5. The slot unreadable after a check (`GitUnavailable`) is `unavailable git` and leaves that result unfinished with its
+   identity, so the next entry's reconcile makes it `interrupted` and the block repeats.
+6. `conclusion`: a stopping result always gives the reason (`<name>:lingering|dirty`, required or not), even when every
+   required check passed before it (section 7 steps 4-5: the attempt concludes `failed <name>:...`).
+7. `detach_at`'s words: `slot:redirected`, `slot:branch`, `commit_missing` (checked before `slot_dirty`, so a gone X is
+   never a counted relaunch), `slot_dirty`, `slot_unborn`, `unavailable` `repo`, `not_listed`, `git`, and a new
+   **`slot:moved`** when the re-read after the park is not `(X, detached)`. S6c's 6.1 table: `slot:moved` and
+   `slot_unborn` conclude; `repo`, `not_listed` relaunch counted.
+8. Setup's `lingering` now takes precedence over `timed_out` (above); the existing implement-path tests are unchanged.
+
+**Tests**: `test_checks.py` (block over real SQLite through `CheckSink`, the Git fake's slot at X and the scripted
+registered start): order and identity before execution, cwd, the scrubbed environment (push bar, folders, no
+`UV_OFFLINE`, no credential, Codex-companion or venv variable), the nearer wall limit; undefined required names first;
+own timeout (`timed_out`, the block goes on); `lingering` after an exit, a failed exit, a timeout with survivors or an
+alive group, and the deadline with survivors; the deadline without survivors (`interrupted`, `expired:<name>`); a
+deadline between checks; `dirty` for a tracked change, a staged file, a branch and a new commit after exit 0, exit 1 and
+a timeout; untracked files listed (50 and a count, ignored files not), not `dirty`; never-ran commands; supervision
+failure; uncertain start; an unreadable slot; an unopenable log; an interrupted block repeated whole with only the
+latest block concluding; `completed`, `conclusion`, `differs`, `argv_digest`, `main_seen`, `CappedLog`'s cap.
+`test_environment`: the checks slot reset hard (a rewritten tracked file, untracked and ignored files gone before
+setup), no probe, setup at X; no reuse; an implement slot never reset hard; `moved` off X; failed checks setups counted
+to `environment:failed`; renewal and deadline; survivors `lingering` on the implement path. `test_prepare`: `detach_at`
+on the fake. `test_credentials`: `scrubbed`. Real (`real/test_checks_real.py`): a `--detach` slot at D parked at X, then
+real `sh -c` checks pass, leave an untracked file, time out, rewrite a tracked file (`dirty`, block stops); a check
+with a background child is `lingering`.
+
+**Not verified**: a real `setsid` survivor of a stop (smoke step 7); a real deadline stop mid-check; anything of the
+entry around the block (S6c).

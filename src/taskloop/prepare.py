@@ -9,6 +9,7 @@ branch to contain the previous step's published X (`after_commit`, else `branch_
 HEAD on that branch. No fetch: only local refs, including the local remote-tracking ones, are read. Every refusal is one
 fixed word and leaves the attempt `admitted`; `GitUnavailable` (a missing revision or a failed read included) is
 `unavailable:git`, never "absent", except that a missing `after_commit` is `branch_moved` (the branch lost it).
+`detach_at` is a checks slot's preparation: X taken detached (`park`), never a branch.
 """
 
 import re
@@ -179,6 +180,49 @@ class Prepared:
     head: str
     gitdir: Path
     root: Path
+
+
+def detach_at(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str, commit: str) -> Prepared | AttemptResult:
+    """A checks slot takes X detached (the checks entry, under the slot's custody lock; never `task/<id>`). In order: a
+    redirected pointer `slot:redirected`, an unborn slot `slot_unborn`, a slot on a branch `slot:branch`, X gone from the
+    repository `commit_missing`; a slot already detached at X passes in any state (the environment's reset makes it
+    exactly X); a detached slot elsewhere with changes is `slot_dirty` (a free slot is clean at admission); a clean one is
+    parked at X through its pinned view and read again, which must give `(X, detached)` (else `slot:moved`). `prepare`'s
+    other words (`unavailable` `repo`, `not_listed`, `git`) as for an agent slot."""
+    try:
+        state = _listed(checkouts, files, slot_path, repo_id)
+        if isinstance(state, AttemptResult):
+            return state
+        problem = _detached_problem(checkouts, state, commit)
+        if problem is not None or state.head == commit:
+            return problem or Prepared(commit, state.gitdir, state.root)
+        path = Path(slot_path)
+        checkouts(path, git_dir=state.gitdir).worktree(path).park(commit)
+        again = _listed(checkouts, files, slot_path, repo_id)
+    except GitUnavailable:
+        return AttemptResult("unavailable", "git")
+    if isinstance(again, AttemptResult) or (again.head, again.branch) == (commit, None):
+        return again if isinstance(again, AttemptResult) else Prepared(commit, again.gitdir, again.root)
+    return _refused("slot:moved")
+
+
+def _listed(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str) -> SlotState | AttemptResult:
+    """`observe_slot` in `detach_at`'s words."""
+    state = observe_slot(checkouts, files, slot_path, repo_id)
+    if state == "redirected":
+        return _refused("slot:redirected")
+    return AttemptResult("unavailable", state) if isinstance(state, str) else state
+
+
+def _detached_problem(checkouts: Checkouts, state: SlotState, commit: str) -> AttemptResult | None:
+    """`detach_at`'s refusals of a listed slot before any write."""
+    if state.head is None:
+        return _refused("slot_unborn")
+    if state.branch is not None:
+        return _refused("slot:branch")
+    if lacks(checkouts(state.root), commit, commit):
+        return _refused("commit_missing")
+    return _refused("slot_dirty") if state.dirty and state.head != commit else None
 
 
 def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: Callable[[], float]) -> Prepared | AttemptResult:

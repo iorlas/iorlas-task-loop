@@ -175,8 +175,9 @@ class Command:
     uncertain: bool = False
     spawn_error: bool = False  # the start fails before any registration
     lingering: bool = False  # a process stays in its group after it ended
+    survivors: bool = False  # the stop (a timeout) left a process of its tree alive
     supervision_error: bool = False  # the supervision fails (OSError) after the command started
-    effect: Callable[[], None] | None = None
+    effect: Callable[[], object] | None = None
     output: bytes = b"done\n"
 
 
@@ -222,7 +223,7 @@ class FakeSetupProcess:
             self.groups.add(pid)
         if command.supervision_error:
             raise OSError("pump")
-        return SetupEnded(command.rc, command.timed_out, command.exec_failed, pid)
+        return SetupEnded(command.rc, command.timed_out, command.exec_failed, pid, survivors=command.survivors)
 
     def lingering(self, pgid: int) -> bool:
         self.events.append(f"group {pgid}")

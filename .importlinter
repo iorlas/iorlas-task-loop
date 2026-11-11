@@ -52,6 +52,7 @@ source_modules =
     taskloop.tracker_client
     taskloop.slot_env
     taskloop.access
+    taskloop.checks
 forbidden_modules =
     taskloop.cli
     taskloop.cli_step
