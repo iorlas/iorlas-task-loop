@@ -72,13 +72,20 @@ class NotPublished:
     reason: str
     detail: str = NOTHING
 
+    @property
+    def word(self) -> str:
+        return f"{self.kind}:{self.reason}"
+
 
 type PublishResult = BranchPublished | PublishedRow | NotPublished
 
 
 def publish_word(result: PublishResult) -> str:
-    """The one word for a log line or a status: `published`, `refused:<reason>` or `unavailable:<reason>`."""
-    return f"{result.kind}:{result.reason}" if isinstance(result, NotPublished) else "published"
+    """The one word for a log line, a status or a result: `published` (this call pushed it), `already_published` (it was
+    before), `refused:<reason>` or `unavailable:<reason>`."""
+    if isinstance(result, NotPublished):
+        return result.word
+    return "published" if isinstance(result, BranchPublished) else "already_published"
 
 
 @dataclass(frozen=True)

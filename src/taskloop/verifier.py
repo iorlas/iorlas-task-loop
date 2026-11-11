@@ -39,7 +39,7 @@ from taskloop.slot_state import bounded, staged
 from taskloop.verdict import judge
 
 type VerifyHold = Callable[[Admission], AbstractContextManager[None]]
-COMMITTING = ("planned", "unchanged")  # the answers whose stage the factory commits and checks
+COMMITTING = ("planned", "unchanged")  # the answers whose step the factory commits and checks
 LOCK_WORDS: dict[type[Exception], str] = {
     SlotBusy: "slot_busy",
     SlotLockUnavailable: "lock",
@@ -110,7 +110,7 @@ class Verifier:
         return record, record.base_commit, stored
 
     def leftovers(self, key: AttemptKey) -> Unsettled | None:
-        """Read-only: the leftovers a verify would report for a stage still to settle, read now; None when there is
+        """Read-only: the leftovers a verify would report for a step still to settle, read now; None when there is
         nothing to report or it cannot be read (the person runs `tl plan verify` for the reason)."""
         try:
             stored = applicable(self.store.collect(key))

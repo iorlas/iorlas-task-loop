@@ -133,7 +133,7 @@ def why(error: BaseException) -> str:
 
 
 def task_text(task: TaskInspection) -> str:
-    """The task's own prose, then the fixed closing words of the plan stage (where the plan goes, `unchanged` or `planned`,
+    """The task's own prose, then the fixed closing words of the plan step (where the plan goes, `unchanged` or `planned`,
     no Git write: the factory commits the listed paths), stored as the admitted input under its digest."""
     closing = closing_words(plan_stage(task.reference.task_id))
     return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{closing}\n"

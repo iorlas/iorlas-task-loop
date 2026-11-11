@@ -42,11 +42,11 @@ from taskloop.operations import (
     start,
     verify_task,
 )
-from taskloop.publish import BranchPublished
+from taskloop.publish import publish_word
 from taskloop.round_log import INTERRUPTED, fixed, ident, stamped
 from taskloop.selection import order
 from taskloop.task import TaskInspectionError
-from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, ready_rows
+from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, leaked_claim, ready_rows
 
 # A refusal that stops admission for the round: no slot is free, or the round's own inputs or the store are wrong. Any
 # other refusal (a claim elsewhere, a branch rule, a race that found an attempt another start made) is about one task.
@@ -55,7 +55,6 @@ STOPS: Final = frozenset({
 })
 # re-running is safe; a single task's unsettled must not stop admission or back off the loop
 STOPPING_UNKNOWN: Final = frozenset(UNKNOWN_KINDS) - {"unsettled"}
-LEAKED: Final = "the tracker claim may still be held by taskloop: check `bd show {task}`; `bd unclaim {task} --if-assignee taskloop`"
 
 
 def never() -> bool:
@@ -134,7 +133,7 @@ class _Trail:
 
 
 def _word(result: Started | Failed) -> str:
-    return result.status if isinstance(result, Started) else f"{result.kind}:{result.reason}"
+    return result.status if isinstance(result, Started) else result.word
 
 
 def _request(request: NextRequest, task_id: str) -> StartRequest:
@@ -225,7 +224,7 @@ def _verified(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
     checked = verify_task(ports.reads.store, ports.verifier, ports.releaser, ports.publisher, backlog, each.task_id)
     if isinstance(checked, VerifiedTask):
         return Move(each.task_id, "verify", f"{checked.status} release={checked.release} branch={checked.published}", each.attempt_id)
-    return Move(each.task_id, "verify", f"{checked.kind}:{checked.reason}", each.attempt_id, checked.detail)
+    return Move(each.task_id, "verify", checked.word, each.attempt_id, checked.detail)
 
 
 def _full(store: AttemptStore) -> bool:
@@ -268,7 +267,7 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
         if result.reason != "no_free_slot":
             trail.add(Move(row.task_id, "start", _word(result), detail=result.detail))
         if result.claim_leaked:
-            trail.add(Move(row.task_id, "report", "claim_leaked", detail=LEAKED.format(task=row.task_id)))
+            trail.add(Move(row.task_id, "report", "claim_leaked", detail=leaked_claim(row.task_id)))
         if stop:
             return "no_free_slot" if result.reason == "no_free_slot" else _word(result)
     return ""
@@ -284,8 +283,7 @@ def _publish(ports: RoundPorts, backlog: str, verified: Iterable[AttemptView], t
             continue
         found = publish_task(ports.reads.store, ports.publisher, backlog, each.task_id)
         if isinstance(found, PublishedTask):
-            done = "published" if isinstance(found.result, BranchPublished) else "already_published"
-            trail.add(Move(each.task_id, "publish", done, found.attempt_id))
+            trail.add(Move(each.task_id, "publish", publish_word(found.result), found.attempt_id))
         else:
-            trail.add(Move(each.task_id, "publish", f"{found.kind}:{found.reason}", each.attempt_id, found.detail))
+            trail.add(Move(each.task_id, "publish", found.word, each.attempt_id, found.detail))
     return ""

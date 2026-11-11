@@ -19,8 +19,8 @@ from taskloop.operations import (
     Started,
     VerifiedTask,
 )
-from taskloop.publish import BranchPublished
-from taskloop.slot_release import Released
+from taskloop.publish import publish_word
+from taskloop.slot_release import Released, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
 
 
@@ -62,14 +62,14 @@ def _freed_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[str
                 "release": result.release, "published": result.published}
     found = result.result
     changed = (found.parked, found.reservation_removed) if isinstance(found, Released) else (None, False)
-    status = "released" if isinstance(found, Released) else "already_released"
+    status = release_word(found)
     return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id, "slot": found.slot,
             "parked": changed[0], "reservation_removed": changed[1], "claim": found.claim, "abandoned": found.abandoned}
 
 
 def _publish_data(result: PublishedTask) -> dict[str, object]:
     found = result.result
-    status = "published" if isinstance(found, BranchPublished) else "already_published"
+    status = publish_word(found)
     return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
             "commit": found.commit, "remote_head": found.remote_head}
 

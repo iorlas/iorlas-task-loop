@@ -87,7 +87,7 @@ class StepRepeat:
     def _leftovers(
         self, backlog: str, task_id: str, current: AttemptKey, minutes: int
     ) -> tuple[Unsettled, RepeatReason] | Started | Failed:
-        """C's own verify: a stored or new verdict, or no stage to verify, is `already_dispatched` with that result; any
+        """C's own verify: a stored or new verdict, or no step to verify, is `already_dispatched` with that result; any
         other unsettled reason or unknown is that failure, never a repeat."""
         found = self.verifier.verify(current)
         if isinstance(found, (Verified, Rejected, NotApplicable)):

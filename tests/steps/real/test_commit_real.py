@@ -1,4 +1,4 @@
-"""Real layer, one wiring test of the stage commit on the real Git adapter (git_porcelain's own contract suite covers
+"""Real layer, one wiring test of the step commit on the real Git adapter (git_porcelain's own contract suite covers
 `stage`, `record`, `dirty` and `history`): through `composition.checkouts` and `RealSlotFiles` no repository hook runs,
 the commit carries the trailer and the slot ends clean; a symlinked listed path is refused before anything is staged.
 The slot pointer is judged with Git's own resolution: a pointer that names the right Git directory only lexically (a

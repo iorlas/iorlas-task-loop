@@ -81,7 +81,7 @@ def _reader(con: sqlite3.Connection) -> AttemptStore:
 
 @contextmanager
 def open_reads(database: Path) -> Generator[StatusPorts | Failed]:
-    """Read-only factory.db, the native process-table observation, the wall clock and the read-only leftovers of a stage
+    """Read-only factory.db, the native process-table observation, the wall clock and the read-only leftovers of a step
     still to settle (Git and slot reads); writes and creates nothing."""
     with _read_only(database) as con:
         if isinstance(con, Failed):

@@ -14,6 +14,7 @@ from taskloop.plan_guide import HELD, PLAN_ONLY, ROUNDS
 from taskloop.plan_render import human
 from taskloop.round import NextRequest, advance
 from taskloop.rounds import RoundsRequest, run_rounds
+from taskloop.tracker import leaked_claim
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
 COMMANDS = ("config", "slot", "plan")
@@ -58,7 +59,7 @@ def register(commands: Parsers) -> None:
     listing = _add(plan, "list", f"Every task's current attempt with its next action (read-only; {PLAN_ONLY})")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:* or unknown")
     _common(listing, "--db")
-    verify = _add(plan, "verify", f"Commit the stage's listed files and verify them, then release a clean slot and publish a verified "
+    verify = _add(plan, "verify", f"Commit the step's listed files and verify them, then release a clean slot and publish a verified "
                   f"plan ({PLAN_ONLY})")
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
@@ -188,8 +189,7 @@ def run(arguments: argparse.Namespace) -> int:
         print(json.dumps(result_data.as_data(result, admission=admission)), file=stream)
     else:
         if isinstance(result, Failed) and result.claim_leaked:
-            task = arguments.task_id
-            print(f"the tracker claim on {task} may still be held by taskloop; check `bd show {task}`", file=sys.stderr)
+            print(leaked_claim(arguments.task_id), file=sys.stderr)
         db = None if isinstance(loaded, ConfigRefused) else loaded.settings.db.value
         lines = human(f"tl {arguments.command} {arguments.operation}", result, db)
         if isinstance(result, Round) and not result.logged and not isinstance(loaded, ConfigRefused):

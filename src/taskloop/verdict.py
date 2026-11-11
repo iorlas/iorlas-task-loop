@@ -56,7 +56,7 @@ def _link(repo: Repo, root: Path, sha: str, parent: str, rules: StepRules, paths
 
 
 def _changes(repo: Repo, root: Path, tip: Tree, base: str, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:
-    """One diff B..X: each change added or modified (deletions only when the stage allows them), on an allowed path the
+    """One diff B..X: each change added or modified (deletions only when the step allows them), on an allowed path the
     answer listed, mode 100644, and every committed blob at most `file_cap` bytes after the full read."""
     for change in repo.worktree(root).diff(base, tip.sha, cap=0).changes:
         if (change.kind == "D" and not rules.deletions) or not path_allowed(change.path, rules) or change.path not in paths:

@@ -431,7 +431,7 @@ def test_a_candidate_another_start_admitted_meanwhile_is_a_per_task_refusal(
     assert bench.admission.requests == ["t-3"] and found.stopped == "" and exit_code(found) == 0
 
 
-LEAK = "bd unclaim t-1 --if-assignee taskloop"
+LEAK = "the tracker claim on t-1 may still be held by taskloop: check `bd show t-1`; `bd unclaim t-1 --if-assignee taskloop`"
 
 
 @pytest.mark.parametrize("admit, launch, expected, stopped, code", [
@@ -459,7 +459,7 @@ def test_admission_stops_on_unknowns_and_its_own_inputs_and_reports_every_leaked
     found = bench.round()
     assert (moves(found), found.stopped, exit_code(found)) == (expected, stopped, code)
     leaked = [each for each in found.moves if each.word == "claim_leaked"]
-    assert all(LEAK in each.detail for each in leaked)
+    assert all(each.detail == LEAK for each in leaked)
     assert sum(line.endswith(" tasks t-1 report claim_leaked") for line in bench.lines) == len(leaked)
     assert bench.admission.requests == (["t-1", "t-2"] if ("t-2", "start", "started") in expected else ["t-1"])
 

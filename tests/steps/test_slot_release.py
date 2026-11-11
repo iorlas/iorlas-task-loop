@@ -144,7 +144,8 @@ def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then
     assert stored(registered) == ([], [(d, 30.0, 0, "kept")]) and ports.unclaimed == [] and ports.holds == 1
     ports.opens = ports.holds = 0
     again = ports.releaser().release(KEY, False)
-    assert again == AlreadyReleased("s1", "kept", False) and release_word(again) == "released" and (ports.opens, ports.holds) == (0, 0)
+    assert again == AlreadyReleased("s1", "kept", False) and release_word(again) == "already_released"
+    assert (ports.opens, ports.holds) == (0, 0)
 
 
 @pytest.mark.parametrize("phase", ["admitted", "registered", "captured"])

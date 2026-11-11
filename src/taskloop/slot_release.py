@@ -83,18 +83,22 @@ class NotReleased:
     reason: str
     detail: str = NOTHING
 
+    @property
+    def word(self) -> str:
+        return f"{self.kind}:{self.reason}"
+
 
 type ReleaseResult = Released | AlreadyReleased | NotReleased
 
 
 def release_word(result: ReleaseResult) -> str:
-    """The one word for a log line or a status: `released`, `held:<reason>` (the slot's state or a live process keeps it
-    reserved), `refused:<reason>` or `unavailable:<reason>`."""
+    """The one word for a log line, a status or a result: `released` (this call), `already_released` (nothing pending),
+    `held:<reason>` (the slot's state or a live process keeps it reserved), `refused:<reason>` or `unavailable:<reason>`."""
     if not isinstance(result, NotReleased):
-        return "released"
+        return "released" if isinstance(result, Released) else "already_released"
     if result.kind == "unsettled" or (result.kind == "refused" and result.reason.startswith("slot_")):
         return "held:" + result.reason
-    return f"{result.kind}:{result.reason}"
+    return result.word
 
 
 @dataclass(frozen=True)

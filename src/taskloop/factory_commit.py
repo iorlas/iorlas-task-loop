@@ -1,4 +1,4 @@
-"""The factory's commit of what a stage's agent listed, outside the sandbox, and the clean-tree check at its result.
+"""The factory's commit of what a step's agent listed, outside the sandbox, and the clean-tree check at its result.
 
 Git and the slot file port only: no factory.db (the verifier stores what this module finds). The only factory module
 that calls `stage` or `record`. The slot pointer is checked before any Git call on the slot and again right before each
@@ -29,7 +29,7 @@ class NotSettled(Exception):
 
 @dataclass(frozen=True)
 class Committed:
-    """X, the commit the stage ends at: the factory's new commit, an adopted crash leftover, or B for `unchanged`."""
+    """X, the commit the step ends at: the factory's new commit, an adopted crash leftover, or B for `unchanged`."""
 
     sha: str
 
@@ -62,7 +62,7 @@ def trailer(admission: Admission) -> str:
 
 
 def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet) -> Settled:
-    """Steps 2 to 5 of the stage commit for a valid `planned` or `unchanged` answer with no stored `end_commit`.
+    """Steps 2 to 5 of the step commit for a valid `planned` or `unchanged` answer with no stored `end_commit`.
     `quiet` is asked right before each Git write: its answer (`worker_alive`, `superseded`) stops it, nothing written."""
     state = _observed(checkouts, files, admission)
     if isinstance(state, Unsettled):
@@ -70,7 +70,7 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     head = state.head
     if head is None or state.branch != task_branch(admission.task.task_id):
         return Unsettled("unborn" if head is None else "branch")
-    if answer.disposition == "unchanged":  # X is B: an `unchanged` stage never adopts a commit
+    if answer.disposition == "unchanged":  # X is B: an `unchanged` step never adopts a commit
         return Committed(base) if head == base else Unsettled("head_moved")
     if head != base:
         return Committed(head) if _ours(checkouts(state.root), head, base, admission) else Unsettled("head_moved")
@@ -145,7 +145,7 @@ def _unwritten(checkouts: Checkouts, files: SlotFiles, admission: Admission, bas
 
 def git_file(dirty: tuple[str, ...], rules: StepRules, paths: tuple[str, ...]) -> str | None:
     """The first changed path with a component that starts with `.git` (any case: `.gitattributes`, `.gitignore`,
-    `.gitmodules`, ...) sitting in a folder on the way to a listed path or under the stage root: it would change how Git
+    `.gitmodules`, ...) sitting in a folder on the way to a listed path or under the step root: it would change how Git
     stages the listed paths, and status shows it but the agent may not commit it."""
     chain = {"/".join(path.split("/")[:depth]) for path in paths for depth in range(path.count("/") + 1)}
     for found in dirty:
@@ -194,7 +194,7 @@ def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commi
 def leftovers(
     checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, end_commit: str | None
 ) -> Unsettled | None:
-    """Read-only, for a person (`tl plan show`): what a verify would report as a stage to repeat, read now. Before the
+    """Read-only, for a person (`tl plan show`): what a verify would report as a step to repeat, read now. Before the
     factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for `unchanged`, the clean-tree
     check."""
     if answer.disposition == "planned" and end_commit is None:

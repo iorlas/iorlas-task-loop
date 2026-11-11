@@ -8,8 +8,8 @@ once (`Verifier.verify`: commit the listed paths, check the tree is clean, judge
 line of fixed words: status and reason, read back after a stored verdict (a published retry instead keeps the run's
 own words and adds `publish=` and the collected `then=`), always `verify=`, then `claim=` (the tracker claim's lease,
 renewed by `claim_lease` while the step runs), then, once the result read back is collected, `release=` (the settled
-release of its own slot, still under its lock: `released`, or why the slot stays held), then, for a verified plan only,
-`branch=` (the publication of `task/<id>` to origin, once, after the lock is released: `published`, or the refusal or
+release of its own slot, still under its lock: `released`, `already_released` or why the slot stays held), then, for a verified plan only,
+`branch=` (the publication of `task/<id>` to origin, once, after the lock is released: `published` or `already_published`, or the refusal or
 unknown word; never retried here), never facts, environment, argv or exception text. A claim found lost before the agent
 starts refuses (`refused claim_lost`); one lost later is only recorded. It exits 0 only for a verified plan, new or
 reused (`plan.succeeded`), whatever its publication says. Its stdout and stderr are the attempt's `entry.log`.

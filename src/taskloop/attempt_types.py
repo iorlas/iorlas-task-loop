@@ -32,8 +32,8 @@ EFFECTS: Final[tuple[Effect, ...]] = ("commit", "keep", "none")
 
 @dataclass(frozen=True)
 class StepRules:
-    """What one stage may commit: files under `root` (ending in `/`), at most `max_paths` of them, each at most `file_cap`
-    bytes; `deletions` is False for the plan stage (the implementation and review stages bring their own rules)."""
+    """What one step may commit: files under `root` (ending in `/`), at most `max_paths` of them, each at most `file_cap`
+    bytes; `deletions` is False for the plan step (the implementation and review steps bring their own rules)."""
 
     root: str
     max_paths: int = 32
@@ -191,7 +191,7 @@ class Verified:
 
 @dataclass(frozen=True)
 class Rejected:
-    """The first rule the stage's commit broke (or `nothing_written`: no commit at all); terminal for the attempt."""
+    """The first rule the step's commit broke (or `nothing_written`: no commit at all); terminal for the attempt."""
 
     reason: Rule
 
@@ -291,7 +291,7 @@ def dot_git(name: str) -> bool:
 
 
 def path_allowed(path: str, rules: StepRules) -> bool:
-    """A path the stage may commit: at most 255 bytes, relative, under `rules.root`, no NUL, newline or backslash, and no
+    """A path the step may commit: at most 255 bytes, relative, under `rules.root`, no NUL, newline or backslash, and no
     empty, `.` or `..` component nor one that starts with `.git` in any case (macOS file systems ignore case)."""
     if len(path.encode("utf-8", "surrogatepass")) > 255 or any(c in path for c in "\0\n\\") or not path.startswith(rules.root):
         return False

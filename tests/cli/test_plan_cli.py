@@ -172,7 +172,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (START, Failed("unavailable", "start", admitted=True), 3, [f"Admitted: {plan_guide.HELD} Re-run `tl plan start` to retry"],
      ADMISSION_ERROR),
     (START, Failed("unavailable", "tracker", claim_leaked=True), 3, ["unavailable:tracker"], ADMISSION_ERROR),
-    (START, Failed("uncertain", "launch"), 3, ["tl plan start: uncertain"], ADMISSION_ERROR),
+    (START, Failed("uncertain", "launch"), 3, ["tl plan start: uncertain:launch"], ADMISSION_ERROR),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Phase: captured", "Result: pending verification", "Entry log: /a/d/entry.log", "Next: verify", "Run `tl plan verify`."],
      STATUS_KEYS | {"directory", "entry_log"}),
@@ -263,7 +263,8 @@ def test_result_exit_code_text_and_json_keys(
     else:
         assert all(line in data for line in lines), data
         if isinstance(result, Failed) and result.claim_leaked:
-            assert data.startswith("the tracker claim on tl-1 may still be held by taskloop; check `bd show tl-1`\n")
+            assert data.startswith("the tracker claim on tl-1 may still be held by taskloop: check `bd show tl-1`; "
+                                   "`bd unclaim tl-1 --if-assignee taskloop`\n")
 
 
 @pytest.mark.parametrize("step", words(Next))

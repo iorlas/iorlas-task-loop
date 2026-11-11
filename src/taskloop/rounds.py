@@ -100,7 +100,7 @@ class _Backoff:
 
 
 def _unknown(found: Round | Failed) -> str:
-    word = f"{found.kind}:{found.reason}" if isinstance(found, Failed) else found.stopped
+    word = found.word if isinstance(found, Failed) else found.stopped
     return word if word.split(":")[0] in STOPPING_UNKNOWN else ""
 
 
@@ -124,7 +124,7 @@ def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log) -> Ended:
         before = _held(ports)
         found = ports.round(quiet)
         if isinstance(found, Failed) and found.kind not in STOPPING_UNKNOWN:
-            return _end(log, request.backlog, f"{found.kind}:{found.reason}", found.detail)
+            return _end(log, request.backlog, found.word, found.detail)
         if isinstance(found, Round):
             log.seen(found.logged)
             quiet = found.written

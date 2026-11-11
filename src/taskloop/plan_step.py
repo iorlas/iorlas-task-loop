@@ -55,7 +55,7 @@ OPENING: Final[dict[RepeatReason, str]] = {
 
 
 def plan_stage(task_id: str) -> StepRules:
-    """The plan stage's rules: its files live under `docs/design/<task-id>/`, the plan itself is `plan.md` there."""
+    """The plan step's rules: its files live under `docs/design/<task-id>/`, the plan itself is `plan.md` there."""
     return StepRules(f"docs/design/{task_id}/")
 
 
@@ -100,7 +100,7 @@ def closing_words(rules: StepRules) -> str:
         f"`planned`; other files only under `{root}`. You may read Git; do not run `git add`, `git commit`, `git push` or "
         "any other Git write; they will fail. With `planned`, list in `paths` every file you want committed and give a "
         "one-line commit `message`; the factory commits exactly those paths. Remove any other file you created. Anything "
-        "left uncommitted is reported back to you as a failed stage."
+        "left uncommitted is reported back to you as a failed step."
     )
 
 

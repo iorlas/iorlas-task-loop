@@ -411,7 +411,9 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
 
     again = releaser(store, counted, slot_files)  # already released and published: nothing pending, no Git
     verifier = Verifier(store, counted, slot_files, gone, lambda: 20, hold)
-    assert verify_task(store, verifier, again, BranchPublish(store, counted, slot_files, lambda: 50), "tasks", "tl-1") == first
+    second = verify_task(store, verifier, again, BranchPublish(store, counted, slot_files, lambda: 50), "tasks", "tl-1")
+    # the fresh call said released/published; the same verdict again says the already-done words
+    assert second == VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published")
     assert opened == []
 
 

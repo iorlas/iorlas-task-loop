@@ -15,6 +15,11 @@ class ReadyRows(TaskReadClient, ReadyReadClient, Protocol):
     """The tracker's ready set and single-task read: no write verb is reachable through it."""
 
 
+def leaked_claim(task: str) -> str:
+    """The one wording for a start whose compensation could not return the claim: what is true, and the person's check."""
+    return f"the tracker claim on {task} may still be held by taskloop: check `bd show {task}`; `bd unclaim {task} --if-assignee taskloop`"
+
+
 @dataclass(frozen=True)
 class TaskRow:
     """What selection needs of one task: its own priority (None: missing), its containment parent and its assignee."""

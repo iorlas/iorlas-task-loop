@@ -3,6 +3,8 @@ them to do, and the whole-DB discard steps. Text only; `plan_render` places it, 
 
 from pathlib import Path
 
+from taskloop.tracker import leaked_claim
+
 PLAN_ONLY = "plan step only: publishes task/<id>; no merge or land"
 PUBLISH = ("The plan is verified but not on `origin` yet: `tl plan publish`. A `refused` word names what to fix; "
            "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
@@ -53,8 +55,7 @@ GUIDE = {
     "terminal, or stop it there with Ctrl-C first. `tl plan next` runs beside it.",
     "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5.",
     "rounds_lock": "The rounds lock file beside factory.db cannot be created: fix that folder's permissions.",
-    "claim_leaked": "A start's compensation could not return the tracker claim: the task stays in progress for taskloop and is "
-    "not ready again until a person checks `bd show <task>` and runs `bd unclaim <task> --if-assignee taskloop`.",
+    "claim_leaked": leaked_claim("<task>"),
     "stuck:entry_lost": "The agent may still run: if `Worker` names a pid, check its cwd is the slot (`lsof -a -p <pid> -d cwd`) "
     f"and stop only its group (`kill -TERM -<pgid>`); then {ABANDON} With no `Worker` recorded it cannot be shown stopped: "
     "only the whole-DB discard remains.",
@@ -63,7 +64,7 @@ GUIDE = {
     f"taskloop.attempt_entry, then `kill -TERM <entry pid>`. Then {ABANDON}",
     "stuck:unpublished": f"The result is incomplete; keep the evidence. {ABANDON}",
     "stuck:conflict": f"The owner inspects the evidence; then {ABANDON}",
-    "unsettled": "The slot has files the stage did not commit (listed), or the slot pointer or HEAD changed. Remove the "
+    "unsettled": "The slot has files the step did not commit (listed), or the slot pointer or HEAD changed. Remove the "
     "listed files and `tl plan verify`, or run `tl plan start` again to repeat the step; for `redirected` or `head_moved` "
     "inspect first; for `worker_alive` stop the worker first; for `staged` unstage the listed paths first.",
     "registration_conflict": "Another start registered its entry first; `tl plan show` follows that attempt.",

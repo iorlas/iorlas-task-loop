@@ -44,7 +44,7 @@ type Clock = Callable[[], float]
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
 type Stuck = Literal["stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:unpublished", "stuck:conflict"]
 type Next = Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "done", "unknown"] | Stuck
-type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a stage still to settle
+type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a step still to settle
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
 UNCLAIMING: Final = "Abandoned, but the tracker claim is still to be returned: run `tl plan release --abandon` again."
@@ -88,6 +88,10 @@ class Failed:
     claim_leaked: bool = False
     slots: tuple[SlotView, ...] = ()
     admitted: bool = False
+
+    @property
+    def word(self) -> str:
+        return f"{self.kind}:{self.reason}"
 
 
 class Repeat(Protocol):
@@ -380,7 +384,7 @@ def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
 
 
 def _status(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
-    """A task's current attempt. `probe`: read the leftovers of a stage still to settle (Git and slot reads); never for
+    """A task's current attempt. `probe`: read the leftovers of a step still to settle (Git and slot reads); never for
     a listing that keeps only stuck or unknown attempts, which a `verify`, `repeat` or `repeats_exhausted` step never is."""
     entry: EntryState = "none"
     if row.entry is not None:

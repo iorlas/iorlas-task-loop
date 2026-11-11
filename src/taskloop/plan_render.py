@@ -23,7 +23,7 @@ from taskloop.operations import (
     VerifiedTask,
 )
 from taskloop.plan_guide import GUIDE, HELD, PLAN_ONLY, PUBLISH, discard
-from taskloop.publish import BranchPublished
+from taskloop.publish import publish_word
 from taskloop.slot_release import Released
 from taskloop.slots import Adopted
 
@@ -58,8 +58,7 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
     stuck = [] if db is None else [discard(db)]
     match result:
         case Failed(kind=kind, reason=reason):
-            word = "uncertain" if kind == "uncertain" else f"{kind}:{reason}"
-            lines = [f"{command}: {word}", *([result.detail] if result.detail else [])]
+            lines = [f"{command}: {result.word}", *([result.detail] if result.detail else [])]
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
             lines += [GUIDE[each] for each in (kind, reason) if each in GUIDE]
             return lines + ([f"Admitted: {HELD} Re-run `tl plan start` to retry the launch."] if result.admitted else [])
@@ -119,12 +118,12 @@ def _freed_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[st
     publication."""
     if isinstance(result, PublishedTask):
         found = result.result
-        done = "published" if isinstance(found, BranchPublished) else "already_published"
+        done = publish_word(found)
         return [f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
                 *(["Nothing changed: it was published before."] if done == "already_published" else [])]
     if isinstance(result, VerifiedTask):
-        held = [f"Release: {result.release}"] + ([] if result.release == "released" else [GUIDE["release"]])
-        held += [f"Publish: {result.published}"] + ([] if result.published == "published" else [PUBLISH])
+        held = [f"Release: {result.release}"] + ([] if result.release in ("released", "already_released") else [GUIDE["release"]])
+        held += [f"Publish: {result.published}"] + ([] if result.published in ("published", "already_published") else [PUBLISH])
         return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
     found, task = result.result, result.task_id
     if not isinstance(found, Released):
