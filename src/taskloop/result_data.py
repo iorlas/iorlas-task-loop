@@ -1,27 +1,28 @@
-"""The one JSON shape of every plan command result (`as_data`): what the CLI prints with `--json` and a dashboard renders.
+"""The one JSON shape of every step command result (`as_data`): what the CLI prints with `--json` and a dashboard renders.
 It never holds a dispatch token, a remote URL or Git output."""
 
 from taskloop.attempt import succeeded
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
+from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     Adoption,
-    AttemptView,
     Ended,
     Failed,
-    Listed,
     PublishedTask,
     ReleasedTask,
-    Result,
     Round,
-    Shown,
     Started,
     VerifiedTask,
 )
 from taskloop.publish import publish_word
 from taskloop.slot_release import Released, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
+
+# every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
+# `exit_codes`
+type Result = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
 
 
 def _entry_data(entry: EntryIdentity | None) -> dict[str, object] | None:
@@ -30,7 +31,8 @@ def _entry_data(entry: EntryIdentity | None) -> dict[str, object] | None:
 
 def _show_data(each: AttemptView) -> dict[str, object]:
     return {
-        "backlog": each.backlog, "task": each.task_id, "attempt_id": each.attempt_id, "slot": each.slot, "phase": each.phase,
+        "backlog": each.backlog, "task": each.task_id, "step": each.step, "attempt_id": each.attempt_id, "slot": each.slot,
+        "phase": each.phase,
         "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
         "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
         "entry_process": _entry_data(each.entry_process),
@@ -86,7 +88,7 @@ def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
 
 def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
     """The one JSON shape per result (a refusal or unknown is `{"error": {kind, reason, message}}`, plus `claim_leaked`,
-    `admitted` and `slots` for an admission's, `tl plan start`); no dispatch token, no version field. An empty diagnostic
+    `admitted` and `slots` for an admission's, `tl step start`); no dispatch token, no version field. An empty diagnostic
     or result text is null, as every other absent field."""
     match result:
         case Failed():
@@ -96,7 +98,8 @@ def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
                 error |= {"claim_leaked": result.claim_leaked, "admitted": result.admitted, "slots": slots}
             return {"error": error}
         case Started():
-            return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
+            return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "step": result.step,
+                    "attempt_id": result.attempt_id,
                     "existing": result.existing, "entry_process": _entry_data(result.entry), "number": result.number,
                     "result": result.result or None}
         case Shown():
@@ -110,13 +113,13 @@ def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
 
 
 def rounds_data(backlog: str, every: int, log: str) -> dict[str, object]:
-    """`tl plan rounds`'s start, printed before the first round; its end is `as_data(Ended)`."""
+    """`tl step rounds`'s start, printed before the first round; its end is `as_data(Ended)`."""
     return {"status": "rounds", "backlog": backlog, "every": every, "log": log}
 
 
 def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
-    """`tl plan list`: every current attempt; `tl plan next`: each move in the order performed and `stopped`, the word that
-    ended admission early, or null; `tl plan rounds`: why the rounds ended."""
+    """`tl step list`: every current attempt; `tl step next`: each move in the order performed and `stopped`, the word that
+    ended admission early, or null; `tl step rounds`: why the rounds ended."""
     if isinstance(result, Listed):
         return {"attempts": [_show_data(each) for each in result.attempts]}
     if isinstance(result, Ended):

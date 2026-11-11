@@ -1,6 +1,6 @@
 """Commit, check clean, then judge: the one operation that settles a stored valid answer of effect `commit` or `keep`.
 
-The entry (once, after the run), `tl plan verify` and a repeating `tl plan start` run the same operation; running it
+The entry (once, after the run), `tl step verify` and a repeating `tl step start` run the same operation; running it
 again finishes a crash at any step. A stored verdict is returned with no Git read; slot state and every unknown store
 nothing. The commit through the verdict runs under the slot's custody lock (`hold`); a stored verdict, a refusal, the
 leftovers and the staged read take none. Right before each factory Git write the attempt must still hold the
@@ -70,7 +70,7 @@ class Verifier:
     ) -> None:
         """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise).
         `hold` is the slot's custody around the commit through the verdict: the entry already holds it (a no-op here),
-        `tl plan verify` and a repeat take it (`slot_lock.hold`), a read-only verifier refuses it (`slot_lock.refused`).
+        `tl step verify` and a repeat take it (`slot_lock.hold`), a read-only verifier refuses it (`slot_lock.refused`).
         A held slot is `unavailable:slot_busy`, an unopenable lock file `unavailable:lock`, a write asked of a read-only
         verifier `unavailable:read_only`."""
         self.store, self.checkouts, self.files, self.gone, self.clock, self.hold = store, checkouts, files, gone, clock, hold
@@ -110,7 +110,7 @@ class Verifier:
 
     def leftovers(self, key: AttemptKey) -> Unsettled | None:
         """Read-only: the leftovers a verify would report for a step still to settle, read now; None when there is
-        nothing to report or it cannot be read (the person runs `tl plan verify` for the reason)."""
+        nothing to report or it cannot be read (the person runs `tl step verify` for the reason)."""
         try:
             stored = applicable(self.store.collect(key))
             record = self.store.load(key)

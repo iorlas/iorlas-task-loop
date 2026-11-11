@@ -43,14 +43,16 @@ No new kernel, generic operation interface, plugin registry, scheduler, STORE sc
 
 Provide real CLI help and deterministic nonzero rejection of invalid/unsupported commands with useful stderr.
 Do not register plan/implement/check/review/land commands until each has real behavior and completion criteria.
-Exception (owner, 2026-11-10, [.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 2), for that surface only: `tl plan
-start/show/list/verify` are registered before the plan step is complete; root and
-`tl plan` help say "attempt only: no task branch, publication or release"; `tl plan` alone still exits 2. Since
-[.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md) the wording is "plan step only: publishes task/<id>; no merge or land".
-`tl plan next` ([.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md), one scheduling round for the plan step) joins the registered
-plan surface under the same exception and wording.
-`tl plan rounds` ([.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md), rounds one after another in a foreground process until
-Ctrl-C) joins it under the same exception and wording.
+Exception (owner, 2026-11-10, [.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 2, and the owner's Q1 answer in
+[.4.3.1.15](../tl-8bh9.4.3.1.15/plan.md) section 1), for that surface only: `tl step
+start/show/list/verify/release/publish/next/rounds` are registered while only the plan step is built; each follows a
+task's current attempt, whatever its step. Root and `tl step` help say "steps built: plan; publishes task/<id>; no merge
+or land"; `tl step` alone exits 2. `tl step` replaced `tl plan` in one cut with no alias (.4.3.1.15 slice S4): `tl plan`
+now exits 2 like any unknown command. History: the surface began as `tl plan start/show/list/verify` ("attempt only: no
+task branch, publication or release"); [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md) added publish ("plan step only:
+publishes task/<id>; no merge or land"), [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md) `next` (one scheduling round) and
+[.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md) `rounds` (rounds in a foreground process until Ctrl-C), under the same
+exception.
 The foundation is explicitly the exception that establishes build/executable boundaries before the first full slice.
 
 Retain Python 3.15 and existing tool pins/policies. Add no runtime dependency or semantic fake before an actual

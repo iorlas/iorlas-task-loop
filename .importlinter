@@ -8,12 +8,12 @@ root_packages =
 include_external_packages = True
 
 [importlinter:contract:main-depends-on-cli]
-name = The `tl` module entry (`__main__`) delegates to the CLI; the CLI delegates to the plan surface; neither imports upward
+name = The `tl` module entry (`__main__`) delegates to the CLI; the CLI delegates to the step surface; neither imports upward
 type = layers
 layers =
     taskloop.__main__
     taskloop.cli
-    taskloop.cli_plan
+    taskloop.cli_step
     taskloop.cli_composition
 
 [importlinter:contract:cli-never-imports-the-attempt-entry]
@@ -21,12 +21,13 @@ name = The command surface, its operations, their JSON shape and the machine con
 type = forbidden
 source_modules =
     taskloop.cli
-    taskloop.cli_plan
+    taskloop.cli_step
     taskloop.cli_composition
     taskloop.exit_codes
-    taskloop.plan_guide
-    taskloop.plan_render
+    taskloop.step_guide
+    taskloop.step_render
     taskloop.operations
+    taskloop.attempt_status
     taskloop.round
     taskloop.round_log
     taskloop.selection
@@ -46,12 +47,13 @@ source_modules =
     taskloop.composition
 forbidden_modules =
     taskloop.cli
-    taskloop.cli_plan
+    taskloop.cli_step
     taskloop.cli_composition
     taskloop.exit_codes
-    taskloop.plan_guide
-    taskloop.plan_render
+    taskloop.step_guide
+    taskloop.step_render
     taskloop.operations
+    taskloop.attempt_status
     taskloop.round
     taskloop.result_data
     taskloop.machine_config

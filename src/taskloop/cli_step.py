@@ -1,4 +1,4 @@
-"""The `config`, `slot` and `plan` command surface: parsers and rendering only; every decision is an operation's."""
+"""The `config`, `slot` and `step` command surface: parsers and rendering only; every decision is an operation's."""
 
 import argparse
 import json
@@ -6,18 +6,19 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop import cli_composition, operations, result_data
+from taskloop import attempt_status, cli_composition, operations, result_data
 from taskloop.exit_codes import exit_code
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
-from taskloop.operations import Ended, Failed, Result, Round, StartRequest
-from taskloop.plan_guide import HELD, PLAN_ONLY, ROUNDS
-from taskloop.plan_render import human
+from taskloop.operations import Ended, Failed, Round, StartRequest
+from taskloop.result_data import Result
 from taskloop.round import NextRequest, advance
 from taskloop.rounds import RoundsRequest, run_rounds
+from taskloop.step_guide import HELD, ROUNDS, STEP_ONLY
+from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
-COMMANDS = ("config", "slot", "plan")
+COMMANDS = ("config", "slot", "step")
 
 
 def _common(parser: argparse.ArgumentParser, *flags: str) -> None:
@@ -45,39 +46,39 @@ def register(commands: Parsers) -> None:
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
     adopt.add_argument("--count", type=int, help="Slots s1..sN (overrides the machine config's slot_count)")
     _common(adopt, "--root", "--db")
-    plan = _add(commands, "plan", f"Plan attempts ({PLAN_ONLY})").add_subparsers(dest="operation", required=True)
-    start = _add(plan, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim); {PLAN_ONLY}. {HELD}")
+    step = _add(commands, "step", f"Step attempts ({STEP_ONLY})").add_subparsers(dest="operation", required=True)
+    start = _add(step, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim); {STEP_ONLY}. {HELD}")
     start.add_argument("task_id", metavar="TASK")
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _common(start, "--db", "--artifacts")
-    status = _add(plan, "show", f"The task's attempt, its entry, result and next action (read-only; {PLAN_ONLY})")
+    status = _add(step, "show", f"The task's attempt, its entry, result and next action (read-only; {STEP_ONLY})")
     status.add_argument("task_id", metavar="TASK")
     status.add_argument("--backlog", required=True)
     _common(status, "--db", "--artifacts")
-    listing = _add(plan, "list", f"Every task's current attempt with its next action (read-only; {PLAN_ONLY})")
+    listing = _add(step, "list", f"Every task's current attempt with its next action (read-only; {STEP_ONLY})")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:* or unknown")
     _common(listing, "--db")
-    verify = _add(plan, "verify", f"Commit the step's listed files and verify them, then release a clean slot and publish a verified "
-                  f"plan ({PLAN_ONLY})")
+    verify = _add(step, "verify", f"Commit the step's listed files and verify them, then release a clean slot and publish a verified "
+                  f"result ({STEP_ONLY})")
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
     _common(verify, "--db")
-    release = _add(plan, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept); with --abandon, "
-                   f"of any step whose entry and agent are stopped, and return the tracker claim ({PLAN_ONLY})")
+    release = _add(step, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept); with --abandon, "
+                   f"of any step whose entry and agent are stopped, and return the tracker claim ({STEP_ONLY})")
     release.add_argument("task_id", metavar="TASK")
     release.add_argument("--backlog", required=True)
-    release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl plan start` "
+    release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl step start` "
                          "then admits a fresh attempt")
     _common(release, "--db")
-    _round_flags(_add(plan, "next", "Run one scheduling round for the plan step: settle existing attempts, start approved ready tasks "
-                      f"in free slots, publish verified plans; {PLAN_ONLY}. {HELD}"))
-    rounds = _add(plan, "rounds", ROUNDS)
+    _round_flags(_add(step, "next", "Run one scheduling round: settle existing attempts, start approved ready tasks "
+                      f"in free slots, publish verified results; {STEP_ONLY}. {HELD}"))
+    rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
     _round_flags(rounds)
-    publish = _add(plan, "publish", "Push the verified plan commit to origin's task/<id> as you, never forced; nothing merges or lands")
+    publish = _add(step, "publish", "Push the step's verified commit to origin's task/<id> as you, never forced; nothing merges or lands")
     publish.add_argument("task_id", metavar="TASK")
     publish.add_argument("--backlog", required=True)
     _common(publish, "--db")
@@ -129,12 +130,12 @@ def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_reads(loaded.settings.db.value) as reads:
         if isinstance(reads, Failed):
             return reads
-        return operations.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
+        return attempt_status.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
 
 
 def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_reads(loaded.settings.db.value) as reads:
-        return reads if isinstance(reads, Failed) else operations.list_attempts(reads, stuck=arguments.stuck)
+        return reads if isinstance(reads, Failed) else attempt_status.list_attempts(reads, stuck=arguments.stuck)
 
 
 def _verify(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -162,14 +163,14 @@ def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]] = {
     ("config", "show"): lambda _arguments, loaded: loaded,
     ("slot", "adopt"): _adopt,
-    ("plan", "start"): _start,
-    ("plan", "next"): _next,
-    ("plan", "rounds"): _rounds,
-    ("plan", "show"): _show,
-    ("plan", "list"): _list,
-    ("plan", "verify"): _verify,
-    ("plan", "release"): _release,
-    ("plan", "publish"): _publish,
+    ("step", "start"): _start,
+    ("step", "next"): _next,
+    ("step", "rounds"): _rounds,
+    ("step", "show"): _show,
+    ("step", "list"): _list,
+    ("step", "verify"): _verify,
+    ("step", "release"): _release,
+    ("step", "publish"): _publish,
 }
 
 
@@ -185,7 +186,7 @@ def run(arguments: argparse.Namespace) -> int:
     failed = isinstance(result, Failed) or (isinstance(result, Ended) and result.reason != "interrupted")
     stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:
-        admission = (arguments.command, arguments.operation) == ("plan", "start")  # the one command whose refusals carry slots
+        admission = (arguments.command, arguments.operation) == ("step", "start")  # the one command whose refusals carry slots
         print(json.dumps(result_data.as_data(result, admission=admission)), file=stream)
     else:
         if isinstance(result, Failed) and result.claim_leaked:

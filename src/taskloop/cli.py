@@ -8,10 +8,10 @@ from dataclasses import asdict
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
-from taskloop import cli_plan
+from taskloop import cli_step
 from taskloop.composition import inspect_checkout, inspect_tracker_task, tracker_located
-from taskloop.plan_guide import PLAN_ONLY
 from taskloop.repo import UnsupportedCheckout
+from taskloop.step_guide import STEP_ONLY
 from taskloop.task import TaskInspectionError
 
 
@@ -64,7 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     tracker_located()  # before any bd call: the given tracker root decides the tracker, never an inherited BEADS_DIR
     parser = argparse.ArgumentParser(
         prog="tl",
-        description=f"Task-loop successor foundation. Plan commands run the {PLAN_ONLY}.",
+        description=f"Task-loop successor foundation. Step commands: {STEP_ONLY}.",
         allow_abbrev=False,
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")
@@ -81,13 +81,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     show.add_argument("--backlog", required=True, help="Explicit logical backlog key; no identity is inferred")
     show.add_argument("--tracker-root", required=True, help="Explicit directory for the configured tracker")
     show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
-    cli_plan.register(commands)
+    cli_step.register(commands)
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
         return 0
-    if arguments.command in cli_plan.COMMANDS:
-        return cli_plan.run(arguments)
+    if arguments.command in cli_step.COMMANDS:
+        return cli_step.run(arguments)
     if arguments.command == "task":
         return show_task(arguments)
     try:

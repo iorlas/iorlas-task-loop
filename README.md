@@ -10,9 +10,10 @@ Not built: the implement, checks, review and land steps, and the dashboard. Noth
   not inferred from Git. Missing, malformed and unavailable reads are distinct nonzero results; JSON errors go to stderr.
 - `tl config show` prints each effective machine setting and its source.
 - `tl slot adopt CHECKOUT` adopts hand-made detached worktrees as slots and creates `factory.db`.
-- `tl plan start|show|list|verify|release|publish` run, inspect, verify, release (`--abandon` returns the tracker
-  claim) and publish one task's plan attempt. `tl plan next` runs one scheduling round over approved ready tasks;
-  `tl plan rounds` runs rounds in the foreground until Ctrl-C.
+- `tl step start|show|list|verify|release|publish` run, inspect, verify, release (`--abandon` returns the tracker
+  claim) and publish one task's current attempt, whatever its step (only the plan step is built). `tl step next` runs one
+  scheduling round over approved ready tasks; `tl step rounds` runs rounds in the foreground until Ctrl-C. `tl plan` is
+  gone (an unknown command).
 
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to
 `~/.local/state/task-loop`. Other commands are rejected until their behavior is implemented. `tl <command> --help`

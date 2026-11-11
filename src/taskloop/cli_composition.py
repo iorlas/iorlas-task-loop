@@ -14,6 +14,7 @@ from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import Store
 
 from taskloop.attempt_reads import SlotUse
+from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import Checkouts
 from taskloop.composition import (
@@ -34,7 +35,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.interrupts import installed
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
-from taskloop.operations import Adoption, Failed, Quiet, Round, StartPorts, StatusPorts, require_database
+from taskloop.operations import Adoption, Failed, Quiet, Round, StartPorts, require_database
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
 from taskloop.round import NextRequest, RoundPorts, advance
@@ -116,7 +117,7 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
 
 @contextmanager
 def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[RoundPorts | Failed]:
-    """`tl plan next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
+    """`tl step next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
     refuses `tracker_root`), the start, verify, release and publish ports on one shared writer (closed here), the reads
     and the round log appended under the artifacts root."""
     store = Store(SCHEMA)
@@ -140,7 +141,7 @@ def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[R
 
 
 def one_round(database: Path, artifacts: Path, request: NextRequest, stopping: Callable[[], bool]) -> Callable[[Quiet], Round | Failed]:
-    """One `tl plan rounds` round: `open_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
+    """One `tl step rounds` round: `open_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
     that exists but cannot be opened now (locked, busy) is `unavailable:store`, so the rounds back off; an absent one stays
     `refused:database` (a deliberate discard ends the rounds)."""
 
@@ -203,7 +204,7 @@ def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | F
 
 @contextmanager
 def open_rounds(database: Path, artifacts: Path, request: NextRequest) -> Generator[RoundsPorts | Failed]:
-    """`tl plan rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock and
+    """`tl step rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock and
     the SIGINT handler (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
     `time.sleep`, the round log and the `Log: not written` warning on stderr."""
     release = _rounds_lock(database, request)
@@ -235,7 +236,7 @@ def open_verify(database: Path) -> Generator[tuple[AttemptStore, Verifier, SlotR
 
 @contextmanager
 def open_publish(database: Path) -> Generator[tuple[AttemptStore, BranchPublish] | Failed]:
-    """The database guard first, then the publisher's shared writer (`tl plan publish`)."""
+    """The database guard first, then the publisher's shared writer (`tl step publish`)."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
@@ -246,7 +247,7 @@ def open_publish(database: Path) -> Generator[tuple[AttemptStore, BranchPublish]
 
 @contextmanager
 def open_release(database: Path) -> Generator[tuple[AttemptStore, SlotRelease] | Failed]:
-    """The database guard first, then the releaser's shared writer (`tl plan release`)."""
+    """The database guard first, then the releaser's shared writer (`tl step release`)."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:

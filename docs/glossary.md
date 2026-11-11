@@ -95,7 +95,7 @@ logs; use it for nothing else. Words for owner-visible output are listed as the 
 | Term | Meaning | Example / distinction |
 |---|---|---|
 | phase | How far one attempt's launch has got in factory.db: `admitted`, `dispatching`, `registered`, `captured` (`attempt.phase`). | Not a status or a conclusion. `captured` means the result is stored, not that it is verified or published. |
-| admission | The one transaction that reserves a free slot, creates the attempt and takes the tracker claim (`admit.py`). | The record is the attempt row at phase `admitted`; the operation is what `tl plan start` and each round run. A refusal changes nothing, or returns a claim it took. |
+| admission | The one transaction that reserves a free slot, creates the attempt and takes the tracker claim (`admit.py`). | The record is the attempt row at phase `admitted`; the operation is what `tl step start` and each round run. A refusal changes nothing, or returns a claim it took. |
 | reservation | The factory.db row tying one slot to one attempt (`reservation`, unique on the attempt). | A slot with a reservation is `reserved`. Ended by a slot release. Not a lock and not a tracker claim. |
 | slot custody | The per-slot kernel lock (`slot_lock`, label `taskloop-slot`) held around any Git write on a slot by the entry, verify, repeat or release. | Code names: `custody`, `hold`. Held is `locked`; it is never waited for (`slot_busy`). Not a reservation: a reserved slot is not locked while nothing writes. |
 | entry process | The process the factory launches for one attempt, `python -m taskloop.attempt_entry`; its log is `entry.log`. | Distinct from the agent process and from a Git tree entry. Pick this word; do not say "launcher", "runner" or "entry" alone for the process. |
@@ -104,7 +104,7 @@ logs; use it for nothing else. Words for owner-visible output are listed as the 
 | dispatch | The entry's permit to run the agent: it records the base commit B and the phase becomes `dispatching`. | The agent runs at most once per attempt. |
 | claim | The task tracker's claim on a task, taken at admission and renewed (the bd lease, every 100 s) while a step runs. | A slot release keeps it; `--abandon` returns it. Not a reservation. `renew` here means the lease; see `deadline`. |
 | backlog | The configured task scope inside a tracker, named by `--backlog`. | The same as "backlog scope" above. Not inferred from Git. |
-| round | One scheduling pass: settle existing attempts, admit approved ready tasks into free slots, publish verified results. | `tl plan next` runs one; `tl plan rounds` repeats them. Not the dashboard design-round mockups under `docs/design/dashboard/`. |
+| round | One scheduling pass: settle existing attempts, admit approved ready tasks into free slots, publish verified results. | `tl step next` runs one; `tl step rounds` repeats them. Not the dashboard design-round mockups under `docs/design/dashboard/`. |
 | move | One thing a round did or saw for one task: one `rounds.log` line. | A round is a list of moves. |
 | settle | A round's first part: reading each existing attempt's state and doing its next action (verify, release, repeat, publish). | A settled release is the one that follows a collected result. |
 | repeat | A new attempt of the same step after the previous one left the slot unsettled, numbered 1 to 3 within a step (`attempt.number`, `repeat_reason`). | The step-level retry. The CLI, the DB and the log say repeat (`repeat`, `repeats_exhausted`); do not say retry for it. A capture retry (`CAPTURE_RETRIES`) is a DB write retried inside one attempt, not a repeat. |
@@ -122,7 +122,7 @@ logs; use it for nothing else. Words for owner-visible output are listed as the 
 | slot release | Ends an attempt's reservation: parks the slot and keeps the claim (`released`); `--abandon` also returns the claim. | A `held:<reason>` word means the slot stays reserved. Not a distribution `release` (above). |
 | publish | Push of `task/<id>` to origin, once an attempt is verified (`publish.py`, table `published_branch`). | Never forced, and it does not land. The other sense, storing a result, is called capture. |
 | deadline | The instant by which an attempt must end, set by `--minutes` (`attempt.deadline`). | Renewed to now plus `--minutes` once per reboot, at relaunch. Not the claim lease. |
-| stuck | A next-action word meaning only the owner can act: `stuck:expired_admitted`, `stuck:entry_lost`, `stuck:hung`, `stuck:uncollected`, `stuck:conflict`. | The other `Next` words are `start`, `wait`, `verify`, `repeat`, `repeats_exhausted`, `release`, `publish`, `done`, `unknown`. `tl plan list --stuck` shows `stuck:*` and `unknown`. |
+| stuck | A next-action word meaning only the owner can act: `stuck:expired_admitted`, `stuck:entry_lost`, `stuck:hung`, `stuck:uncollected`, `stuck:conflict`. | The other `Next` words are `start`, `wait`, `verify`, `repeat`, `repeats_exhausted`, `release`, `publish`, `done`, `unknown`. `tl step list --stuck` shows `stuck:*` and `unknown`. |
 | reserved / locked / held | `reserved`: a slot with a reservation. `locked`: its custody lock is held. `held:<reason>`: a release word (the slot stays reserved). | A slot can be reserved and not locked. Do not use "held" for the other two. |
 | label | The tracker label approving autonomous execution, `auto` (`--label`). | The lock label strings passed to `process_lock` (`taskloop-slot`, `taskloop-rounds`) are lock labels, not task labels. |
 
@@ -140,22 +140,22 @@ Used in the plan documents and in code comments; read the column, not the letter
 
 ### CLI flags
 
-The meaning of each flag as `tl <command> --help` gives it. Plans use `tl plan` today; the planned S4 cut renames it
-`tl step` (slice S4 of [the generalization plan](design/tl-8bh9.4.3.1.15/plan.md)); the flags stay.
+The meaning of each flag as `tl <command> --help` gives it. Every step runs through `tl step` (slice S4 of
+[the generalization plan](design/tl-8bh9.4.3.1.15/plan.md) replaced `tl plan` in one cut, no alias; the flags stayed).
 
 | Flag | Commands | Meaning |
 |---|---|---|
-| `--backlog KEY` | `plan` (all), `task show` | The task scope inside the tracker; supplied, never inferred. |
-| `--tracker-root PATH` | `plan start\|next\|rounds`, `task show` | The directory of the Beads tracker. |
-| `--checkout PATH` | `plan start\|next\|rounds`, `slot adopt` | The person's checkout of the repository. |
+| `--backlog KEY` | `step` (all), `task show` | The task scope inside the tracker; supplied, never inferred. |
+| `--tracker-root PATH` | `step start\|next\|rounds`, `task show` | The directory of the Beads tracker. |
+| `--checkout PATH` | `step start\|next\|rounds`, `slot adopt` | The person's checkout of the repository. |
 | `--root DIR` | `config show`, `slot adopt` | The slots root (config `slots_root`); slots live at `<root>/<repo_id>/sN`. |
 | `--count N` | `config show`, `slot adopt` | Slot count s1..sN (config `slot_count`). |
-| `--every SECONDS` | `plan rounds` | Seconds between rounds, at least 5 (config `round_seconds`). |
-| `--label LABEL` | `plan next`, `plan rounds` | Required on `next` and `rounds` (approves a task); not on `start`, whose task is named. |
-| `--minutes N` | `plan start\|next\|rounds` | An attempt's deadline from now (and its renewal after a reboot). |
-| `--model`, `--effort` | `plan start\|next\|rounds` | The agent model and effort for the attempt. |
-| `--db`, `--artifacts` | most `plan`, `config show` | factory.db and the artifacts root, overriding the machine config. |
-| `--abandon` | `plan release` | Also return the tracker claim and throw the attempt away. |
+| `--every SECONDS` | `step rounds` | Seconds between rounds, at least 5 (config `round_seconds`). |
+| `--label LABEL` | `step next`, `step rounds` | Required on `next` and `rounds` (approves a task); not on `start`, whose task is named. |
+| `--minutes N` | `step start\|next\|rounds` | An attempt's deadline from now (and its renewal after a reboot). |
+| `--model`, `--effort` | `step start\|next\|rounds` | The agent model and effort for the attempt. |
+| `--db`, `--artifacts` | most `step`, `config show` | factory.db and the artifacts root, overriding the machine config. |
+| `--abandon` | `step release` | Also return the tracker claim and throw the attempt away. |
 
 ## Conversations, evidence and accounts
 

@@ -1,6 +1,6 @@
 """The rounds process's own Ctrl-C: the only signal use in factory source (CLAUDE.md, `.importlinter` one-signal-owner).
 
-While `tl plan rounds` runs, a SIGINT handler sets a flag (`stopping`), puts the previous disposition back (Python's
+While `tl step rounds` runs, a SIGINT handler sets a flag (`stopping`), puts the previous disposition back (Python's
 `default_int_handler` in a terminal, so the next press is the ordinary `KeyboardInterrupt`: the abrupt stop) and says one
 line; on exit the previous disposition is restored. A process started with SIGINT ignored (`SIG_IGN`) keeps it ignored:
 nothing is installed and Ctrl-C is not re-enabled. SIGINT only, this process only: it sends no signal and controls no

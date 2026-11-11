@@ -173,8 +173,8 @@ class BranchPublish:
         if row.verdict == "verified" and row.commit is not None:
             return None
         if row.verdict == "rejected":
-            return _refused("not_verified", f"The plan was rejected ({row.reason}).")
-        return _refused("not_verified", "The plan is not verified yet: `tl plan verify`.")
+            return _refused("not_verified", f"The step's result was rejected ({row.reason}).")
+        return _refused("not_verified", "The step's result is not verified yet: `tl step verify`.")
 
     def _repository(self, row: _Row, x: str) -> tuple[Repo, Path] | NotPublished:
         """The person's checkout through the slot's verified pointer (file reads first), `origin`, then the local branch

@@ -135,7 +135,7 @@ def test_config_show_prints_values_sources_and_the_file(
 
 
 @pytest.mark.parametrize("structured", [False, True])
-@pytest.mark.parametrize("argv", [["config", "show"], ["plan", "list"], ["slot", "adopt", "."], ["plan", "show", "t-1", "--backlog", "b"]])
+@pytest.mark.parametrize("argv", [["config", "show"], ["step", "list"], ["slot", "adopt", "."], ["step", "show", "t-1", "--backlog", "b"]])
 def test_a_bad_config_refuses_every_command_with_exit_1(
     argv: list[str], structured: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

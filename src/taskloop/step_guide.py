@@ -1,56 +1,56 @@
-"""The fixed words a person reads around the plan commands: what the plan step is, what each `Next` word or refusal asks
-them to do, and the whole-DB discard steps. Text only; `plan_render` places it, every decision is an operation's."""
+"""The fixed words a person reads around the step commands: which steps are built, what each `Next` word or refusal asks
+them to do, and the whole-DB discard steps. Text only; `step_render` places it, every decision is an operation's."""
 
 from pathlib import Path
 
-PLAN_ONLY = "plan step only: publishes task/<id>; no merge or land"
-PUBLISH = ("The plan is verified but not on `origin` yet: `tl plan publish`. A `refused` word names what to fix; "
+STEP_ONLY = "steps built: plan; publishes task/<id>; no merge or land"
+PUBLISH = ("The step's result is verified but not on `origin` yet: `tl step publish`. A `refused` word names what to fix; "
            "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
-           "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl plan publish`), rerunning does not "
+           "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl step publish`), rerunning does not "
            "help: fetch `task/<id>`, compare it with the verified commit, then merge or move one branch aside yourself.")
-HELD = ("The tracker claim stays held, and the slot until the step ends on a clean slot (`tl plan release` frees a slot left "
+HELD = ("The tracker claim stays held, and the slot until the step ends on a clean slot (`tl step release` frees a slot left "
         "held; `--abandon` also returns the claim). While a step runs its entry renews the claim's bd lease every 100 s; between "
         "steps nothing does, so a `bd reclaim` run on that tracker can revert the claim once its lease lapses: at the earliest "
         "about 5 minutes after a step ends (bd's default reclaim grace is 10 minutes, so about 15 minutes with a plain `bd reclaim`). "
-        "A round (`tl plan next`) never renews or retakes a claim: a task whose claim lapsed is open again while factory.db holds "
+        "A round (`tl step next`) never renews or retakes a claim: a task whose claim lapsed is open again while factory.db holds "
         "its attempt, and rounds skip it (`attempted`).")
-ABANDON = "`tl plan release --abandon` frees the slot and gives the task back."
+ABANDON = "`tl step release --abandon` frees the slot and gives the task back."
 ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot frees; "
-          f"the tracker is read only when a slot is free; writes `<artifacts>/rounds.log`; {PLAN_ONLY}. Runs in this terminal "
+          f"the tracker is read only when a slot is free; writes `<artifacts>/rounds.log`; {STEP_ONLY}. Runs in this terminal "
           "until stopped: Ctrl-C once stops after the current move, twice exits at once; launched steps keep running. A move "
           "in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
           "no candidate is tried, so a wrong --checkout is refused only once a slot frees.")
 GUIDE = {
-    "start": "Re-run `tl plan start` to relaunch its entry (each `tl plan next` round relaunches it until its deadline; an "
+    "start": "Re-run `tl step start` to relaunch its entry (each `tl step next` round relaunches it until its deadline; an "
     "entry registered before a reboot is relaunched with its deadline renewed from --minutes, once per reboot). "
     "If the last entry says `claim_lost`, the tracker claim is gone (reverted, taken by another actor, or the task closed): "
-    "check `bd show <task>`; relaunching cannot help and nothing retakes the claim. `tl plan release --abandon` (its claim "
-    "answers `not_held`), then `tl plan start` to plan the task again.",
-    "wait": "Its entry runs; wait, then `tl plan show` again.",
-    "verify": "Run `tl plan verify`.",
-    "repeat": "Run `tl plan start` again to repeat it with this listing as feedback, or remove the files and `tl plan verify`.",
-    "repeats_exhausted": "Repeated twice and still unsettled: inspect the slot, tidy it, then `tl plan verify` (which releases "
-    "the slot), or `tl plan release --abandon`.",
-    "release": "The step ended; its slot is still held. Remove the listed files if any, then `tl plan release`; `--abandon` also "
+    "check `bd show <task>`; relaunching cannot help and nothing retakes the claim. `tl step release --abandon` (its claim "
+    "answers `not_held`), then `tl step start` to admit a fresh attempt.",
+    "wait": "Its entry runs; wait, then `tl step show` again.",
+    "verify": "Run `tl step verify`.",
+    "repeat": "Run `tl step start` again to repeat it with this listing as feedback, or remove the files and `tl step verify`.",
+    "repeats_exhausted": "Repeated twice and still unsettled: inspect the slot, tidy it, then `tl step verify` (which releases "
+    "the slot), or `tl step release --abandon`.",
+    "release": "The step ended; its slot is still held. Remove the listed files if any, then `tl step release`; `--abandon` also "
     "gives the task back.",
-    "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl plan start` admits a fresh "
+    "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl step start` admits a fresh "
     "attempt.",
     "publish": PUBLISH,
-    "done": "Collected: `succeeded` tells whether the plan was verified.",
-    "unknown": "The entry or the store could not be read; run `tl plan show` again.",
-    "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl plan start` plans it "
-    "again. Its deadline passed with no relaunchable entry from before a reboot (none registered, one from this boot, or "
+    "done": "Collected: `succeeded` tells whether the step's result was verified.",
+    "unknown": "The entry or the store could not be read; run `tl step show` again.",
+    "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl step start` admits a "
+    "fresh attempt. Its deadline passed with no relaunchable entry from before a reboot (none registered, one from this boot, or "
     "the boot unknown); such an entry would instead be relaunched with the deadline renewed once from --minutes.",
-    "failed": "The step ended without a verified plan; the claim stays held, so rounds never retry it. Read `tl plan show`; "
-    "to plan it again, `tl plan release --abandon` then `tl plan start`.",
+    "failed": "The step ended without a verified result; the claim stays held, so rounds never retry it. Read `tl step show`; "
+    "to try it afresh, `tl step release --abandon` then `tl step start`.",
     "running": "Its entry runs; the round leaves it alone.",
-    "attempted": "Open in the tracker while factory.db holds its attempt: the claim was returned or lapsed. `tl plan show` it; "
+    "attempted": "Open in the tracker while factory.db holds its attempt: the claim was returned or lapsed. `tl step show` it; "
     "rounds never take it again.",
-    "abandoned_skip": "Abandoned here: rounds never re-admit it; `tl plan start` admits a fresh attempt.",
-    "no_free_slot": "Every slot is held: `tl plan rounds` fills it seconds after a slot frees; by hand, the next `tl plan next` "
+    "abandoned_skip": "Abandoned here: rounds never re-admit it; `tl step start` admits a fresh attempt.",
+    "no_free_slot": "Every slot is held: `tl step rounds` fills it seconds after a slot frees; by hand, the next `tl step next` "
     "after a step ends.",
-    "rounds_running": "Another `tl plan rounds` runs for this backlog (the pid is its lock record's, informational): use its "
-    "terminal, or stop it there with Ctrl-C first. `tl plan next` runs beside it.",
+    "rounds_running": "Another `tl step rounds` runs for this backlog (the pid is its lock record's, informational): use its "
+    "terminal, or stop it there with Ctrl-C first. `tl step next` runs beside it.",
     "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5.",
     "rounds_lock": "The rounds lock file beside factory.db cannot be created: fix that folder's permissions.",
     "stuck:entry_lost": "The agent may still run: if `Worker` names a pid, check its cwd is the slot (`lsof -a -p <pid> -d cwd`) "
@@ -63,12 +63,12 @@ GUIDE = {
     f"attempt's entry.log says why), and no verify can judge it. Keep the evidence. {ABANDON}",
     "stuck:conflict": f"The owner inspects the evidence; then {ABANDON}",
     "unsettled": "The slot has files the step did not commit (listed), or the slot pointer or HEAD changed. Remove the "
-    "listed files and `tl plan verify`, or run `tl plan start` again to repeat the step; for `redirected` or `head_moved` "
+    "listed files and `tl step verify`, or run `tl step start` again to repeat the step; for `redirected` or `head_moved` "
     "inspect first; for `worker_alive` stop the worker first; for `staged` unstage the listed paths first.",
-    "registration_conflict": "Another start registered its entry first; `tl plan show` follows that attempt.",
+    "registration_conflict": "Another start registered its entry first; `tl step show` follows that attempt.",
     "slot_busy": "Another entry or verify holds the slot: wait and run it again; if nothing ends, see the `stuck:hung` guide.",
     "lock": "The slot's lock file under `<slots root>/<repo id>/.locks` cannot be created: fix that folder's permissions.",
-    "not_terminal": "The step has not ended: wait for it, `tl plan start` to repeat it, or `tl plan release --abandon`.",
+    "not_terminal": "The step has not ended: wait for it, `tl step start` to repeat it, or `tl step release --abandon`.",
     "entry_running": "Its entry runs: wait, or stop it by verified pid (the `stuck:hung` guide), then run it again.",
     "worker_unknown": "Dispatched with no agent recorded, so it cannot be shown stopped: the whole-DB discard is the only way out.",
     "slot_dirty": "The slot stays held: remove the listed files (nothing is reset for you), then run it again.",
@@ -79,12 +79,12 @@ GUIDE = {
     "publish, `git push` work from this shell, then rerun.",
     "repository": "The slot's `.git` pointer or repository is not the attempt's: inspect the slot (`git -C <slot> rev-parse "
     "--git-common-dir`); nothing was pushed.",
-    "not_verified": "Only a verified plan is published: `tl plan verify` first; a rejected plan has nothing to publish.",
+    "not_verified": "Only a verified step result is published: `tl step verify` first; a rejected result has nothing to publish.",
     "remote_ahead": "The remote task/<id> already holds the verified commit plus later commits: compare them; the factory does "
     "not record it as its publication and never forces.",
-    "no_remote": "Add the remote (`git remote add origin <url>`) in the person's checkout, then rerun `tl plan publish`.",
-    "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl plan release --abandon`.",
-    "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl plan publish`.",
+    "no_remote": "Add the remote (`git remote add origin <url>`) in the person's checkout, then rerun `tl step publish`.",
+    "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl step release --abandon`.",
+    "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl step publish`.",
     "diverged": "The remote task/<id> does not contain the verified commit: compare them, then merge or move the remote branch "
     "aside yourself; the factory never forces.",
     "remote_rejected": "The remote's policy refused it: push the verified commit by hand (`git push origin <commit>:refs/heads/"
@@ -95,8 +95,8 @@ GUIDE = {
 def discard(db: Path) -> str:
     """The last resort, naming this machine config's resolved factory.db, never another factory's."""
     return "\n".join([
-        "Last resort, when `tl plan release --abandon` cannot prove the attempt stopped (`worker_unknown`): the whole-DB discard:",
-        "  1. stop `tl plan rounds` (Ctrl-C in its terminal), then every entry and worker by verified pid (`tl plan show` names them);",
+        "Last resort, when `tl step release --abandon` cannot prove the attempt stopped (`worker_unknown`): the whole-DB discard:",
+        "  1. stop `tl step rounds` (Ctrl-C in its terminal), then every entry and worker by verified pid (`tl step show` names them);",
         f"  2. delete {db} and its -wal/-shm (this machine config's factory.db, never another factory's);",
         "  3. in the tracker, `bd unclaim <task-id> --if-assignee taskloop` for each claimed task;",
         "  4. inspect each slot worktree, then `tl slot adopt` again.",

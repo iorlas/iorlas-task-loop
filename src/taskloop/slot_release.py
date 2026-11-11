@@ -182,8 +182,8 @@ def _row(row: tuple[object, ...], key: AttemptKey) -> _Row:
 
 @dataclass(frozen=True)
 class SlotRelease:
-    """`hold` is the slot's custody around the park and the transaction: `slot_lock.custody` for `tl plan verify` and
-    `tl plan release`, a no-op for the entry, which holds the lock already."""
+    """`hold` is the slot's custody around the park and the transaction: `slot_lock.custody` for `tl step verify` and
+    `tl step release`, a no-op for the entry, which holds the lock already."""
 
     store: AttemptStore
     checkouts: Checkouts
@@ -333,7 +333,7 @@ class SlotRelease:
             back = self.unclaim(row.tracker_root, row.task_id)
         except BdError as error:
             return NotReleased("unavailable", "tracker", f"Released; the tracker claim is still to be returned ({error.kind}): rerun "
-                               "`tl plan release --abandon`.")
+                               "`tl step release --abandon`.")
         claim: Literal["unclaimed", "not_held"] = "unclaimed" if back else "not_held"
         try:
             with self._writing() as con:

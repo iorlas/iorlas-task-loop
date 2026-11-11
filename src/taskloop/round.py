@@ -1,9 +1,9 @@
-"""`tl plan next`: one scheduling round for the plan step over the existing operations, stateless and idempotent.
+"""`tl step next`: one scheduling round over the existing operations, stateless and idempotent.
 
 Settle each existing attempt of the backlog by its `Next` word (relaunch an admitted attempt whose entry is not running,
 verify, repeat; report the rest), admit eligible ready tasks in priority order into free slots, then publish the verified,
-released, unpublished plans read at the start. It adds no state, lock, Git write, tracker write or process of its own: its
-only other output is one append-only round-log line per move, never read back. Plan step only: nothing merges or lands.
+released, unpublished results read at the start. It adds no state, lock, Git write, tracker write or process of its own: its
+only other output is one append-only round-log line per move, never read back. Nothing merges or lands.
 
 Admission reads the tracker only when factory.db has an adopted slot without a reservation row. Repeated rounds
 (`rounds`) pass the previous round's `Round.written` keys as `quiet` (an identical move is not written again) and a
@@ -16,13 +16,12 @@ from pathlib import Path
 from typing import Final
 
 from taskloop.attempt import succeeded
+from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.evidence_files import EvidenceError
 from taskloop.operations import (
     UNKNOWN_KINDS,
-    AttemptView,
     Failed,
-    Listed,
     Move,
     Publish,
     PublishedTask,
@@ -32,11 +31,9 @@ from taskloop.operations import (
     Started,
     StartPorts,
     StartRequest,
-    StatusPorts,
     VerifiedTask,
     Verify,
     launched,
-    list_attempts,
     minutes_refused,
     publish_task,
     start,
@@ -120,7 +117,8 @@ class _Trail:
     def add(self, move: Move) -> None:
         self.moves.append(move)
         words = [fixed(each) for each in move.word.split(" ")]
-        self._write(_key(move), ident(move.task_id), move.action, *words, *([ident(move.attempt_id)] if move.attempt_id else []))
+        step = [fixed(move.step)] if move.step else []  # an attempt-bearing move names its attempt's step after the task
+        self._write(_key(move), ident(move.task_id), *step, move.action, *words, *([ident(move.attempt_id)] if move.attempt_id else []))
 
     def close(self, stopped: str) -> Round:
         """The closing line, unless quiet: no move line written and the same stopped word as the previous round."""
@@ -170,7 +168,7 @@ def _backlog(listed: Listed, backlog: str) -> tuple[AttemptView, ...]:
 
 def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _Trail) -> None:
     """One existing attempt by its `Next` word: an abandoned one is never re-admitted; `publish` waits for step 3."""
-    task, attempt = each.task_id, each.attempt_id
+    task, attempt, step = each.task_id, each.attempt_id, each.step
     abandoned = each.release is not None and each.release.abandoned
     match each.next:
         case "start" if abandoned:
@@ -178,22 +176,23 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _
         case "start" | "repeat":
             result = _resume(ports.starting, request.backlog, request.minutes, each)
             if isinstance(result, Failed) and result.reason == "abandoned":
-                trail.add(Move(task, "skip", "abandoned", attempt))
+                trail.add(Move(task, "skip", "abandoned", attempt, step=step))
             else:
                 action = "relaunch" if each.next == "start" else "repeat"
-                trail.add(Move(task, action, _word(result), result.attempt_id if isinstance(result, Started) else attempt, _detail(result)))
+                found = result.attempt_id if isinstance(result, Started) else attempt
+                trail.add(Move(task, action, _word(result), found, _detail(result), step))  # a repeat stays in its step
         case "verify":
             trail.add(_verified(ports, request.backlog, each))
         case "wait":
-            trail.add(Move(task, "report", "running", attempt))
+            trail.add(Move(task, "report", "running", attempt, step=step))
         case "publish":
             return
         case "done" if succeeded(each.result):
             return
         case "done":
-            trail.add(Move(task, "report", f"failed:{each.result.reason}", attempt))
+            trail.add(Move(task, "report", f"failed:{each.result.reason}", attempt, step=step))
         case _:
-            trail.add(Move(task, "report", each.next, attempt))
+            trail.add(Move(task, "report", each.next, attempt, step=step))
 
 
 def _resume(ports: StartPorts, backlog: str, minutes: int, each: AttemptView) -> Started | Failed:
@@ -220,11 +219,12 @@ def _detail(result: Started | Failed) -> str:
 
 
 def _verified(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
-    """`tl plan verify` as built: the verdict, then the settled release and the publication of a verified plan."""
+    """`tl step verify` as built: the verdict, then the settled release and the publication of a verified result."""
     verified = verify_task(ports.reads.store, ports.verifier, ports.releaser, ports.publisher, backlog, each.task_id)
     if isinstance(verified, VerifiedTask):
-        return Move(each.task_id, "verify", f"{verified.status} release={verified.release} branch={verified.published}", each.attempt_id)
-    return Move(each.task_id, "verify", verified.word, each.attempt_id, verified.detail)
+        word = f"{verified.status} release={verified.release} branch={verified.published}"
+        return Move(each.task_id, "verify", word, each.attempt_id, step=each.step)
+    return Move(each.task_id, "verify", verified.word, each.attempt_id, verified.detail, each.step)
 
 
 def _full(store: AttemptStore) -> bool:
@@ -249,9 +249,10 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
         return "refused:tracker" if error.kind == "malformed" else "unavailable:tracker"
     attempts = {each.task_id: each.release is not None and each.release.abandoned for each in current}
     ordered, skipped = order(rows, ancestry(ports.ready, rows), attempts, ACTOR)
-    ids = {each.task_id: each.attempt_id for each in current}
+    ids = {each.task_id: (each.attempt_id, each.step) for each in current}
     for task_id, reason in skipped:
-        trail.add(Move(task_id, "skip", reason, ids.get(task_id, "")))  # attempted/abandoned: the attempt that holds it
+        attempt, step = ids.get(task_id, ("", ""))
+        trail.add(Move(task_id, "skip", reason, attempt, step=step))  # attempted/abandoned: the attempt that holds it
     return _start_each(ports, request, ordered, trail)
 
 
@@ -261,7 +262,7 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
             return INTERRUPTED
         result = start(ports.starting, _request(request, row.task_id))
         if isinstance(result, Started):
-            trail.add(Move(row.task_id, "start", result.status, result.attempt_id))
+            trail.add(Move(row.task_id, "start", result.status, result.attempt_id, step=result.step or ""))
             continue
         stop = result.kind in STOPPING_UNKNOWN or (result.kind == "refused" and result.reason in STOPS)
         if result.reason != "no_free_slot":
@@ -274,7 +275,7 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
 
 
 def _publish(ports: RoundPorts, backlog: str, verified: Iterable[AttemptView], trail: _Trail) -> str:
-    """The verified, released, unpublished plans read before settling: pushed again every round until one succeeds. One
+    """The verified, released, unpublished results read before settling: pushed again every round until one succeeds. One
     whose entry still runs is left to that entry, which publishes right after its release; `interrupted` on a stop."""
     for each in verified:
         if ports.stopping():
@@ -283,7 +284,7 @@ def _publish(ports: RoundPorts, backlog: str, verified: Iterable[AttemptView], t
             continue
         found = publish_task(ports.reads.store, ports.publisher, backlog, each.task_id)
         if isinstance(found, PublishedTask):
-            trail.add(Move(each.task_id, "publish", publish_word(found.result), found.attempt_id))
+            trail.add(Move(each.task_id, "publish", publish_word(found.result), found.attempt_id, step=each.step))
         else:
-            trail.add(Move(each.task_id, "publish", found.word, each.attempt_id, found.detail))
+            trail.add(Move(each.task_id, "publish", found.word, each.attempt_id, found.detail, each.step))
     return ""

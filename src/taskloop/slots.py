@@ -156,7 +156,7 @@ def observe(con: sqlite3.Connection, repo: Repo, repo_id: RepoId, probe: Probe) 
     clean, detached slot is probed (`probe`), and its reservation is read again after the probe: a slot reserved meanwhile
     is `held`, never `free`. A held slot is never probed, but a probe can race a slot reserved just after the first read:
     if that attempt's entry tries the lock in the instant the probe holds it, the entry refuses `slot_busy` with nothing
-    read or written, and `tl plan start` relaunches it. The probe writes the lock file's holder record only when nobody
+    read or written, and `tl step start` relaunches it. The probe writes the lock file's holder record only when nobody
     held the lock, so it never overwrites a live holder's record; it leaves a stale `probe` record until the next taker
     (the record is informational: who wrote last)."""
     try:

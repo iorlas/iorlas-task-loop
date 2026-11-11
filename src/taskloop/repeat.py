@@ -3,7 +3,7 @@ the current attempt holds, with the leftovers as feedback in a complete input of
 exactly as attempt 1 (no resume). Only Git leftovers repeat (`REPEATABLE`), at most ATTEMPTS attempts per step.
 
 No Git or SQL of its own: the verifier, the store reads, the files, the admission, the launcher, the worker observation
-and the entry observation are injected. `tl plan start` on a captured attempt calls `repeat`; a scheduler would too.
+and the entry observation are injected. `tl step start` on a captured attempt calls `repeat`; a scheduler would too.
 """
 
 import secrets

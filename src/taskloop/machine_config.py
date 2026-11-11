@@ -28,7 +28,7 @@ class Effective:
     artifacts: Setting[Path]
     slots_root: Setting[Path]
     slot_count: Setting[int]
-    round_seconds: Setting[int]  # `tl plan rounds`: seconds from the end of one regular round to the next
+    round_seconds: Setting[int]  # `tl step rounds`: seconds from the end of one regular round to the next
 
     def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int]], ...]:
         """Every key with its setting, in key order."""

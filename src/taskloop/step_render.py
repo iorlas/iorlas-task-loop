@@ -1,31 +1,29 @@
-"""The human rendering of every plan, slot and config result: lines of fixed words around the operations' values. Nothing
+"""The human rendering of every step, slot and config result: lines of fixed words around the operations' values. Nothing
 here decides, reads or writes; `result_data.as_data` is the one JSON shape."""
 
 from datetime import UTC, datetime
 from pathlib import Path
 
 from taskloop.attempt import succeeded
+from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     UNCLAIMING,
     Adoption,
-    AttemptView,
     Ended,
     Failed,
-    Listed,
     PublishedTask,
     ReleasedTask,
-    Result,
     Round,
-    Shown,
     Started,
     VerifiedTask,
 )
-from taskloop.plan_guide import GUIDE, HELD, PLAN_ONLY, PUBLISH, discard
 from taskloop.publish import is_published, publish_word
+from taskloop.result_data import Result
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
+from taskloop.step_guide import GUIDE, HELD, PUBLISH, STEP_ONLY, discard
 from taskloop.tracker import leaked_claim
 
 
@@ -45,7 +43,8 @@ def _show_lines(each: AttemptView) -> list[str]:
         " UTC"
     ]
     return [
-        f"Task: {each.task_id} (backlog {each.backlog})", f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})",
+        f"Task: {each.task_id} (backlog {each.backlog})", f"Step: {each.step}",
+        f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})",
         *(f"Earlier: {attempt_id} " + ("abandoned" if why == "abandoned" else f"repeated ({why})") for attempt_id, why in each.earlier),
         f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}", f"Result: {each.result.status} {each.result.reason}".rstrip(),
@@ -62,7 +61,7 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
             lines = [f"{command}: {result.word}", *([result.detail] if result.detail else [])]
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
             lines += [GUIDE[each] for each in (kind, reason) if each in GUIDE]
-            return lines + ([f"Admitted: {HELD} Re-run `tl plan start` to retry the launch."] if result.admitted else [])
+            return lines + ([f"Admitted: {HELD} Re-run `tl step start` to retry the launch."] if result.admitted else [])
         case Started():
             entry = "" if result.entry is None else f"; entry pid {result.entry[0]}"
             lines = [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog}){entry}"]
@@ -71,7 +70,7 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
                 stand = f"attempt {result.number - 1}'s choices stand; deadline from --minutes"
                 lines += [f"attempt {result.number} of at most {ATTEMPTS}; {stand}"]
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
-            return [*lines, f"This runs the {PLAN_ONLY}. Follow it with `tl plan show {result.task_id} --backlog {result.backlog}`."]
+            return [*lines, f"Step commands: {STEP_ONLY}. Follow it with `tl step show {result.task_id} --backlog {result.backlog}`."]
         case Shown(view=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             ended = each.release
@@ -89,10 +88,10 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
 
 
 def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) -> list[str]:
-    """`tl plan list`: one row per task. `tl plan next`: one line per move as performed, `Stopped:` when admission ended
-    early, then the guide of each distinct reported, skipped or stopping word once. `tl plan rounds`: why it ended."""
+    """`tl step list`: one row per task. `tl step next`: one line per move as performed, `Stopped:` when admission ended
+    early, then the guide of each distinct reported, skipped or stopping word once. `tl step rounds`: why it ended."""
     if isinstance(result, Ended):
-        ended = {"interrupted": "Rounds stopped: interrupted. Launched steps keep running; `tl plan rounds` again continues them.",
+        ended = {"interrupted": "Rounds stopped: interrupted. Launched steps keep running; `tl step rounds` again continues them.",
                  "abrupt": "Stopped at once."}
         if result.reason in ended:
             return [ended[result.reason]]
@@ -100,11 +99,11 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
                 *(GUIDE[each] for each in result.reason.split(":") if each in GUIDE)]
     if isinstance(result, Listed):
         attempts = result.attempts
-        rows = [f"{a.task_id}\t{a.backlog}\t{a.number}/{ATTEMPTS}\t{a.slot}\t{a.phase}\t{a.entry}\t"
+        rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}/{ATTEMPTS}\t{a.slot}\t{a.phase}\t{a.entry}\t"
                 f"{a.result.status} {a.result.reason}\t{a.next}" for a in attempts]
         kinds = dict.fromkeys(a.next for a in attempts if a.next.startswith("stuck:"))
         steps = [f"{kind}: {GUIDE[kind]}" for kind in kinds] + (stuck if kinds else [])
-        return ["task\tbacklog\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
+        return ["task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
     width = max((len(each.task_id) for each in result.moves), default=0)
     lines = [f"{each.task_id:<{width}}  {each.action:<8} {each.word} {each.attempt_id}".rstrip() for each in result.moves]
     lines += [f"Stopped: {result.stopped}"] if result.stopped else []
@@ -137,7 +136,7 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
     claims = {"kept": "Claim kept", "unclaimed": "Claim returned to the tracker",
               "not_held": f"Claim not held by taskloop (reverted, or another actor's): check `bd show {task}`"}
     lines += [claims[found.claim]]
-    return lines + ([f"Abandoned: `tl plan start {task}` admits a fresh attempt"] if found.abandoned else [])
+    return lines + ([f"Abandoned: `tl step start {task}` admits a fresh attempt"] if found.abandoned else [])
 
 
 def _setup_lines(result: Adoption | Loaded) -> list[str]:

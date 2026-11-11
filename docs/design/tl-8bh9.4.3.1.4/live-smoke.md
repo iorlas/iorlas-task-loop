@@ -8,10 +8,10 @@ an agent's own initiative. Scratch repo, scratch tracker and scratch `factory.db
 still-valid plan is reused on the agent's `unchanged`, and (Run C, owner-run) that the sandbox refuses a Git write and a
 `/tmp` write; and, since [.4.3.1.11](../tl-8bh9.4.3.1.11/plan.md), that a step's slot is released and an abandoned task
 starts again (Run E, owner-run, not yet run); and, since [.4.3.1.12](../tl-8bh9.4.3.1.12/plan.md), that a verified plan
-is published to `origin` (the scratch `remote.git` only), retried by `tl plan publish`, and never forced (Run F,
-owner-run); and, since [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md), that a scheduling round (`tl plan next`) takes approved
+is published to `origin` (the scratch `remote.git` only), retried by `tl step publish`, and never forced (Run F,
+owner-run); and, since [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md), that a scheduling round (`tl step next`) takes approved
 ready tasks into the free slot in priority order, never re-admits an abandoned task, and relaunches an entry that exited
-before the agent ran (Run G, owner-run); and, since [.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md), that `tl plan rounds` takes
+before the agent ran (Run G, owner-run); and, since [.4.3.1.14](../tl-8bh9.4.3.1.14/plan.md), that `tl step rounds` takes
 a new task within one interval, fills a freed slot within seconds, stays silent while idle, refuses a second rounds
 process for the backlog, and stops gracefully on one Ctrl-C and at once on two without stopping a launched step (Run H,
 owner-run, not yet run).
@@ -28,7 +28,7 @@ It runs with `tl` commands only ([.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md) section 
 
 macOS, a plain Terminal (two tabs, A and B), `git`, `bd` 1.3.1, `python3`; optionally `sqlite3` and `lsof`; and in this checkout (`$TL`, the
 commit with tl-8bh9.4.3.1.7 (schema v4), or later): `just install` (non-editable install), then
-`uv run --frozen --no-sync python -I -c "import taskloop.attempt_entry, taskloop.launch"` and `.venv/bin/tl plan -h`.
+`uv run --frozen --no-sync python -I -c "import taskloop.attempt_entry, taskloop.launch"` and `.venv/bin/tl step -h`.
 Codex: `command -v codex; codex --version` (paste both); file login: `test -f "${CODEX_HOME:-$HOME/.codex}/auth.json" && echo ok`
 (stat only; never open or paste it). Run every step from a shell where `codex` is on `PATH`: the entry inherits it.
 Portability: `sqlite3` and `lsof` are optional (macOS ships both; run 4's Linux host had neither). Without `sqlite3`,
@@ -102,15 +102,15 @@ A marker that exists before the launch is the owner's (a plain `git` run after t
 which may refresh the index and fire `post-index-change`): note it, `rm "$SMOKE/markers"/*`, and use `G` from then on.
 
 `not_listed`/`other_root` means `$SLOT` differs from what Git lists (symlinked path): keep everything under `pwd -P`.
-`inside_checkout` means `$ROOT` is inside `$REPO`. Admission now happens inside `tl plan start` (section 4): a refused start
+`inside_checkout` means `$ROOT` is inside `$REPO`. Admission now happens inside `tl step start` (section 4): a refused start
 names its reason (`refused:<reason>`, exit 1); fix it and start again (nothing was written).
 
 ## 4. Busy probe (needs an admitted attempt with no live entry)
 
 ```bash
-START=(plan start "$TASK" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30)
+START=(step start "$TASK" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30)
 CODEX_HOME="$SMOKE/no-codex-login" T "${START[@]}"   # `started`; the entry finds no auth.json and exits `unavailable credentials:auth`
-T plan show "$TASK" --backlog "$BACKLOG"     # expect Phase: admitted, Entry: gone, Next: start; entry.log names credentials:auth
+T step show "$TASK" --backlog "$BACKLOG"     # expect Phase: admitted, Entry: gone, Next: start; entry.log names credentials:auth
 ```
 
 The admission itself needs `bd` and `git` on `PATH` (tracker read and claim, checkout read), so the entry is kept from
@@ -119,7 +119,7 @@ the agent by an empty `CODEX_HOME`, not by a bare `PATH=/usr/bin:/bin` (that wou
 Tab B: `source ~/tl-smoke/env.sh; (echo 'BEGIN IMMEDIATE;'; sleep 4; echo 'ROLLBACK;') | sqlite3 "$DB"` (without the CLI:
 `python3 -c 'import sqlite3,sys,time; c=sqlite3.connect(sys.argv[1],isolation_level=None); c.execute("BEGIN IMMEDIATE");
 time.sleep(4); c.execute("ROLLBACK")' "$DB"`). Tab A, within a
-second: `time T "${START[@]}"`. Expect exit 3 `tl plan start: unavailable:store` in ~1.5 s, then `T plan show "$TASK"
+second: `time T "${START[@]}"`. Expect exit 3 `tl step start: unavailable:store` in ~1.5 s, then `T step show "$TASK"
 --backlog "$BACKLOG"` still `Next: start` (nothing registered; the bootstrap child was cleaned up). About 5 s instead means
 something other than the 1.5 s registration wait blocked (e.g. the writer open): paste it.
 
@@ -130,8 +130,8 @@ coordinator's session). Expect `"status": "relaunched"` and the entry's pid (the
 admitted choices stand). Everything below runs in tab B, a fresh shell:
 
 ```bash
-source ~/tl-smoke/env.sh; cat "$SMOKE/launch.txt"; T plan show "$TASK" --backlog "$BACKLOG"   # repeat until Next: done (or verify)
-ATT=$(T plan show "$TASK" --backlog "$BACKLOG" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["directory"])')
+source ~/tl-smoke/env.sh; cat "$SMOKE/launch.txt"; T step show "$TASK" --backlog "$BACKLOG"   # repeat until Next: done (or verify)
+ATT=$(T step show "$TASK" --backlog "$BACKLOG" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["directory"])')
 E=$(sqlite3 -readonly "$DB" "select entry_pid from attempt"); W=$(sqlite3 -readonly "$DB" "select worker_pid from attempt")
 # without sqlite3: E=$(python3 "$SMOKE/q.py" "$DB" "select entry_pid from attempt" | tail -1), W likewise
 ps -o pid,ppid,pgid,stat,tt,lstart,command -p "$E"        # entry: PPID 1, PGID = PID, STAT has s, TT ?? (macOS) or ? (Linux)
@@ -144,10 +144,10 @@ sqlite3 -readonly -header "$DB" "select phase,rev,entry_pid,entry_start,entry_bo
 T "${START[@]}"                             # second start: already_dispatched while the agent runs (dispatching/registered,
                                             # no entry pid); already_running only while the entry itself still runs before
                                             # dispatch or after capture (verifying); never started/relaunched
-T plan show "$TASK" --backlog "$BACKLOG"    # on `Next: verify`: T plan verify "$TASK" --backlog "$BACKLOG" (exit 3 until settled);
+T step show "$TASK" --backlog "$BACKLOG"    # on `Next: verify`: T step verify "$TASK" --backlog "$BACKLOG" (exit 3 until settled);
                                             # `Next: repeat` lists what the step left: remove it and verify, or
                                             # re-run the start to repeat the step (section 6c)
-T plan list --stuck                         # once done: no row; a row names stuck:<kind> and prints its manual step
+T step list --stuck                         # once done: no row; a row names stuck:<kind> and prints its manual step
 ls "$SMOKE/markers"   # first, before any owner Git command
 G -C "$SLOT" log --format='%H %an%n%B' -2; G -C "$SLOT" status --short; G -C "$SMOKE/remote.git" show-ref
 cat "$ATT/answer.txt"
@@ -162,7 +162,7 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInsteadOf G
 | Start/boot identity survives exec | phase leaves `admitted`; no `refused identity` | `refused identity`: macOS start (or boot) changes across exec, or the read was `unknown` | stop; paste `ps lstart` and the row; do not relaunch (a replace fails the same way) |
 | Entry survives coordinator exit | after tab A closed: entry alive, PPID 1, `s`, `??`; run reaches `captured` | entry gone with phase `admitted`/`dispatching`: SIGHUP or session not detached | paste `ps`, `entry.log`, row; reset (section 8) |
 | Gate and registration timing, busy | launch < 5 s; section 4 gives `store` at ~1.5 s; `worker_pid` set, phase `registered` then `captured` | `registration_*` or `unavailable register` in entry.log: harness gate write too slow; ~5 s in section 4 | paste both timings and entry.log |
-| entry.log contents | one line per entry run (O_APPEND): first section 4's `unavailable credentials:auth verify=refused:not_captured`, then exactly one line `<status> <reason>[ publish=... then=...] verify=<v> claim=<w>[ release=<w>][ branch=<w>]` (`release=` only once the result is collected: `released` when the slot was clean (`already_released` when a person's verify/release or a round recorded it first), else `held:<reason>`; `branch=` only for a verified plan, after the slot lock is released: `published` (`already_published` when a person's publish or a round recorded it first), or `refused:<r>`/`unavailable:<r>`, then `T plan publish` retries; `publish=` is a different fact, the capture retry's acceptance of the evidence, facts and session state); success (exit 0) is only `collected verified verify=verified ...` or `collected reused verify=reused ...`; `pending verification verify=unsettled:<r>` (`worker_alive` when the agent or its group still ran at the commit: re-run `tl plan verify` once it is gone; `uncommitted` when the step left files: `T plan show` then says `Next: repeat` with the listing, section 6c)/`unavailable:<r>`, `collected rejected:<rule>`, `collected run:<r>`, `collected answer:<kind>` or `collected incomplete` are not success (exit 1). A pending verification is re-run by hand with `tl plan verify` (exit 3 until it settles) | a traceback: import failure (broken install); env/argv text: a leak | `just install`, reset; paste the log |
+| entry.log contents | one line per entry run (O_APPEND): first section 4's `unavailable credentials:auth verify=refused:not_captured`, then exactly one line `<status> <reason>[ publish=... then=...] verify=<v> claim=<w>[ release=<w>][ branch=<w>]` (`release=` only once the result is collected: `released` when the slot was clean (`already_released` when a person's verify/release or a round recorded it first), else `held:<reason>`; `branch=` only for a verified plan, after the slot lock is released: `published` (`already_published` when a person's publish or a round recorded it first), or `refused:<r>`/`unavailable:<r>`, then `T step publish` retries; `publish=` is a different fact, the capture retry's acceptance of the evidence, facts and session state); success (exit 0) is only `collected verified verify=verified ...` or `collected reused verify=reused ...`; `pending verification verify=unsettled:<r>` (`worker_alive` when the agent or its group still ran at the commit: re-run `tl step verify` once it is gone; `uncommitted` when the step left files: `T step show` then says `Next: repeat` with the listing, section 6c)/`unavailable:<r>`, `collected rejected:<rule>`, `collected run:<r>`, `collected answer:<kind>` or `collected incomplete` are not success (exit 1). A pending verification is re-run by hand with `tl step verify` (exit 3 until it settles) | a traceback: import failure (broken install); env/argv text: a leak | `just install`, reset; paste the log |
 | fd 2 inheritance | entry fd 1,2 = entry.log, fd 0 a pipe; worker fd 0-2 pipes; `lsof entry.log` lists only the entry | the worker or its children hold entry.log | paste the lsof output |
 | Codex accepts CODEX_ACCESS + file login | `rc` 0, `answer_kind` valid | `stderr.txt` names an unknown flag/config key: installed codex rejects CODEX_ACCESS; `http_status` 401: login refused; entry.log `unavailable credentials:<word>`: source refused (`codex` not on PATH, `auth`, `git_config`) | paste `codex --version`, first lines of `stderr.txt` (check them for secrets first) |
 | Push refused | owner probe fails; no `smoke` or `probe` ref in `remote.git` (since .12 the `refs/heads/task/*` refs there are the factory's own publication, not the agent's) | a `smoke` or `probe` ref exists: the push bar does not hold | stop; paste `show-ref` |
@@ -170,7 +170,7 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInsteadOf G
 | Commit in a linked worktree | the slot, on `task/$TASK` (`G -C $SLOT branch --show-current`), shows exactly one new commit, by the person's identity, whose message ends `Task-Loop-Attempt: <attempt_id>`; its sha = `end_commit`; `commit_paths` names the plan; `G -C $SLOT status --short` empty | the agent's commit succeeded (a commit without the trailer, `unsettled:head_moved`): the sandbox did not bound it; leftovers (`unsettled:uncommitted`) | record it; paste answer.txt, the log lines and the row |
 | No hook marker | `ls "$SMOKE/markers"` empty (it was empty before the launch, section 3) | a marker that appeared after the launch: a hook ran under the factory's Git (or the agent's) | paste the marker names and `G -C "$REPO" config --list --local` |
 | Escalations approved | none (`approval_policy=never`: a blocked command fails back to the model) | any approval event in `stdout.txt` | paste the command lines only (check them for secrets) and `G -C "$REPO" config --list --local` |
-| collect from a fresh shell | tab B `T plan show` prints `Result: collected verified` (or `reused`) and `Succeeded: yes`, `Next: done`, the worker as `last known pid` (never as running); `pending verification` with `Next: verify` when the entry's verification was unsettled or unavailable (then `T plan verify`); a `run:`/`answer:`/`rejected:` reason is a failure; the second start is never `started`/`relaunched`; `T plan list --stuck` lists nothing | `Result: unavailable ...`/`pending <phase>` long after codex exited; any `stuck:<kind>` | paste the show and list output and the row |
+| collect from a fresh shell | tab B `T step show` prints `Result: collected verified` (or `reused`) and `Succeeded: yes`, `Next: done`, the worker as `last known pid` (never as running); `pending verification` with `Next: verify` when the entry's verification was unsettled or unavailable (then `T step verify`); a `run:`/`answer:`/`rejected:` reason is a failure; the second start is never `started`/`relaunched`; `T step list --stuck` lists nothing | `Result: unavailable ...`/`pending <phase>` long after codex exited; any `stuck:<kind>` | paste the show and list output and the row |
 
 Exactly one Codex session: `pgrep -P "$E"` shows one child while running; `has_session` 1 and `session_conflict` 0 at the end.
 
@@ -190,9 +190,9 @@ bd update "$TASK2" -d "Read docs/design/$TASK2/plan.md. It is a valid plan for t
 mkdir -p "$SLOT/docs/design/$TASK2" && echo "Smoke reuse plan: nothing to do." > "$SLOT/docs/design/$TASK2/plan.md"
 G -C "$SLOT" add "docs/design/$TASK2/plan.md"
 G -C "$SLOT" commit -qm "seed plan"   # B for the second bead; no hook, so no marker
-T slot adopt "$REPO"; T plan start "$TASK2" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" \
+T slot adopt "$REPO"; T step start "$TASK2" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" \
   --effort "$EFFORT" --minutes 30
-T plan show "$TASK2" --backlog "$BACKLOG"   # repeat until Next: done
+T step show "$TASK2" --backlog "$BACKLOG"   # repeat until Next: done
 ```
 
 Pass: `Result: collected reused`, `Succeeded: yes`; entry.log `collected reused verify=reused`; `end_commit` = the seed
@@ -240,19 +240,19 @@ aside as in 6a (evidence kept), then:
 ```bash
 mkdir "$SMOKE/runB" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runB/"; done
 mkdir "$SMOKE/markers"
-G -C "$SLOT" rev-parse --abbrev-ref HEAD   # HEAD (released, parked at D); a slot left held: tidy, then `T plan release`
+G -C "$SLOT" rev-parse --abbrev-ref HEAD   # HEAD (released, parked at D); a slot left held: tidy, then `T step release`
 cd "$TRACKER" && TASK3=$(bd create "Smoke repeat" --silent) && echo "TASK3=$TASK3" >> "$SMOKE/env.sh"
 bd update "$TASK3" -d "Write docs/design/$TASK3/plan.md with one short paragraph. You may jot scratch notes in \
 docs/design/$TASK3/notes.md while you work. Answer planned and list the plan in paths." \
   --acceptance "The plan is committed on the slot."
-T slot adopt "$REPO"; S3=(plan start "$TASK3" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" \
+T slot adopt "$REPO"; S3=(step start "$TASK3" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" \
   --model "$MODEL" --effort "$EFFORT" --minutes 30)
-T "${S3[@]}"; T plan show "$TASK3" --backlog "$BACKLOG"   # repeat until Next: repeat (or done: see above)
+T "${S3[@]}"; T step show "$TASK3" --backlog "$BACKLOG"   # repeat until Next: repeat (or done: see above)
 G -C "$SLOT" diff --cached --name-only    # must be empty: a staged file refuses the repeat (unsettled:staged, nothing spent)
 T "${S3[@]}" --json                         # status "repeated", number 2: attempt 1's choices stand
-T plan show "$TASK3" --backlog "$BACKLOG"   # Attempt: <id> (2 of at most 3; repeats <id1>, uncommitted); Earlier: <id1> repeated
-cat "$(T plan show "$TASK3" --backlog "$BACKLOG" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["directory"])')/input.txt"
-T plan show "$TASK3" --backlog "$BACKLOG"   # repeat until Next: done (or repeat / repeats_exhausted); `Last entry result:`
+T step show "$TASK3" --backlog "$BACKLOG"   # Attempt: <id> (2 of at most 3; repeats <id1>, uncommitted); Earlier: <id1> repeated
+cat "$(T step show "$TASK3" --backlog "$BACKLOG" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["directory"])')/input.txt"
+T step show "$TASK3" --backlog "$BACKLOG"   # repeat until Next: done (or repeat / repeats_exhausted); `Last entry result:`
                                             # says why an admitted attempt's entry gave up (e.g. `refused slot_staged ...`)
 G -C "$SLOT" log --format='%H %s%n%b' -3; G -C "$SLOT" status --short; ls "$SMOKE/markers"
 ```
@@ -262,7 +262,7 @@ G -C "$SLOT" log --format='%H %s%n%b' -3; G -C "$SLOT" status --short; ls "$SMOK
 | removes the notes, answers `unchanged` (X1 committed) | `collected verified`, no new commit | pass: the step ends at X1 |
 | attempt 1 committed nothing (`unsafe`/`ignored`), lists every file again with `planned` | `collected verified`, one commit | pass |
 | lists the notes too, answers `planned` | `collected verified`, X2 on X1 | pass: two commits, each with its own trailer |
-| keeps the notes again | `Next: repeat`, then `repeats_exhausted` at attempt 3 | dead end by design: tidy the slot, `tl plan verify` |
+| keeps the notes again | `Next: repeat`, then `repeats_exhausted` at attempt 3 | dead end by design: tidy the slot, `tl step verify` |
 | answers `planned` with nothing new | `collected rejected:nothing_written` | terminal: paste its `answer.txt` |
 | the owner staged a file | the start refuses `unsettled:staged` (exit 3), nothing admitted | unstage, start again |
 
@@ -270,14 +270,14 @@ Pass: the second start prints `repeated` with number 2 (`number` is null on `sta
 attempt 2's `input.txt` holds the fixed words, the notes file between `BEGIN SLOT STATUS <nonce>` and `END SLOT STATUS
 <nonce>`, the instructions and the task; at most one factory commit per attempt, each with its own `Task-Loop-Attempt:`
 trailer; `status --short` empty at the end; no marker. Fail: a second start that relaunched attempt 1, any commit
-without a trailer. The exit code of `tl plan start` is 0 for `already_dispatched` even when its `Result:` is
+without a trailer. The exit code of `tl step start` is 0 for `already_dispatched` even when its `Result:` is
 `rejected:<rule>`: read the result word.
 
 ## 6d. Run E: release and abandon, then start again (optional, owner-run; tl-8bh9.4.3.1.11)
 
 Release is automatic when a step ends on a clean slot: the entry parks the slot back at its admission base D (detached)
-and keeps the tracker claim (`release=released`). `tl plan release` frees a slot left held once the person tidied it;
-`--abandon` also returns the claim and lets `tl plan start` admit a fresh attempt. Move the previous run aside as in 6a
+and keeps the tracker claim (`release=released`). `tl step release` frees a slot left held once the person tidied it;
+`--abandon` also returns the claim and lets `tl step start` admit a fresh attempt. Move the previous run aside as in 6a
 (evidence kept; a factory.db from before schema v9 is refused `schema` and must be moved aside), then:
 
 ```bash
@@ -287,29 +287,29 @@ G -C "$SLOT" rev-parse --abbrev-ref HEAD   # must print HEAD (detached); `G -C "
 cd "$TRACKER" && TASK4=$(bd create "Smoke release" --silent) && echo "TASK4=$TASK4" >> "$SMOKE/env.sh"
 bd update "$TASK4" -d "Write docs/design/$TASK4/plan.md with one short paragraph. Answer planned and list the plan in paths." \
   --acceptance "The plan is committed on the task branch."
-T slot adopt "$REPO"; S4=(plan start "$TASK4" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" \
+T slot adopt "$REPO"; S4=(step start "$TASK4" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" \
   --model "$MODEL" --effort "$EFFORT" --minutes 30)
-T "${S4[@]}"; T plan show "$TASK4" --backlog "$BACKLOG"   # repeat until Next: done; `Last entry result:` ends release=released branch=published
-T plan show "$TASK4" --backlog "$BACKLOG"   # Released: <time>, slot parked at <D>; claim kept
+T "${S4[@]}"; T step show "$TASK4" --backlog "$BACKLOG"   # repeat until Next: done; `Last entry result:` ends release=released branch=published
+T step show "$TASK4" --backlog "$BACKLOG"   # Released: <time>, slot parked at <D>; claim kept
 G -C "$SLOT" rev-parse --abbrev-ref HEAD; G -C "$SLOT" rev-parse HEAD; G -C "$REPO" rev-parse "task/$TASK4"   # HEAD, D, X
-T plan release "$TASK4" --backlog "$BACKLOG" --json   # already_released, nothing changed (exit 0)
+T step release "$TASK4" --backlog "$BACKLOG" --json   # already_released, nothing changed (exit 0)
 T "${S4[@]}"                                          # already_dispatched, Result: verified; nothing launched
 (cd "$TRACKER" && bd show "$TASK4")   # still claimed: assignee taskloop, in_progress
-T plan release "$TASK4" --backlog "$BACKLOG" --abandon --json   # released, claim "unclaimed", abandoned (no Git write)
+T step release "$TASK4" --backlog "$BACKLOG" --abandon --json   # released, claim "unclaimed", abandoned (no Git write)
 (cd "$TRACKER" && bd show "$TASK4")   # the claim returned: no longer assigned to taskloop
-T plan show "$TASK4" --backlog "$BACKLOG"   # Next: start; Released: ...; claim unclaimed; abandoned
-T "${S4[@]}"; T plan show "$TASK4" --backlog "$BACKLOG"   # started: a fresh attempt (1 of at most 3); Earlier: <id> abandoned
+T step show "$TASK4" --backlog "$BACKLOG"   # Next: start; Released: ...; claim unclaimed; abandoned
+T "${S4[@]}"; T step show "$TASK4" --backlog "$BACKLOG"   # started: a fresh attempt (1 of at most 3); Earlier: <id> abandoned
 # the fresh attempt resumes task/$TASK4 at X: the agent reads the committed plan and should answer unchanged (`reused`)
-T plan list                                 # one row for $TASK4: the fresh attempt
+T step list                                 # one row for $TASK4: the fresh attempt
 G -C "$SLOT" status --short; ls "$SMOKE/markers"
 ```
 
 Optional, the held case (smoke 5 showed the simple form does not reach it): a stray file written while the agent runs
-gives `unsettled:uncommitted`, `Next: repeat`, and `T plan release` refuses `not_terminal`; the repeat feedback then makes
+gives `unsettled:uncommitted`, `Next: repeat`, and `T step release` refuses `not_terminal`; the repeat feedback then makes
 the agent delete the listed file, so a held slot belongs to the factory and nobody leaves their own files in it.
 `release=held:slot_dirty` needs a file that appears after verification but before the release, or a failed final result
-that left files behind: entry.log ends `release=held:slot_dirty`, `T plan show` says `Next: release`, `T plan release`
-refuses `slot_dirty` with the listing (exit 1, nothing changed); remove the file and `T plan release` parks it.
+that left files behind: entry.log ends `release=held:slot_dirty`, `T step show` says `Next: release`, `T step release`
+refuses `slot_dirty` with the listing (exit 1, nothing changed); remove the file and `T step release` parks it.
 Note: `s1.lock` keeps the last holder's record (dead pid) after release; it is informational only.
 
 | Check | Pass | Fail means |
@@ -323,8 +323,8 @@ Note: `s1.lock` keeps the last holder's record (dead pid) after release; it is i
 ## 6e. Run F: publication, a failed publish and its retry, a diverged remote (optional, owner-run; tl-8bh9.4.3.1.12)
 
 A verified plan is pushed to `origin`'s `task/<id>` by the entry once, after its release and outside the slot lock,
-never forced, as the person (the shell that ran `tl plan start` supplies the credentials; `remote.git` needs none).
-`tl plan publish` is the retry. Pushes run with hooks off, so no `pre-push` hook runs (git-lfs's neither). The push
+never forced, as the person (the shell that ran `tl step start` supplies the credentials; `remote.git` needs none).
+`tl step publish` is the retry. Pushes run with hooks off, so no `pre-push` hook runs (git-lfs's neither). The push
 uploads every ancestor of X that `remote.git` lacks: `$REPO`'s unpushed `main` commit (section 2 never pushes it) goes
 to `remote.git` under `task/<id>`; that is expected here, and is why a real repository's base should hold no unpublished
 work. Only a `Pushed` result is recorded: a remote that already holds X plus later commits is `refused:remote_ahead`.
@@ -341,33 +341,33 @@ cd "$TRACKER" && PUB_BASE=$(bd create "Smoke publish baseline" --silent) && PUB_
 for t in "$PUB_BASE" "$PUB_RETRY" "$PUB_DIVERGED"; do bd update "$t" -d "Write docs/design/$t/plan.md with one short paragraph. \
 Answer planned and list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."; done
 T slot adopt "$REPO"
-start() { T plan start "$1" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30; }
+start() { T step start "$1" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30; }
 # F0, the baseline: the entry publishes on its own
-start "$PUB_BASE"; T plan show "$PUB_BASE" --backlog "$BACKLOG"   # repeat until: ... release=released branch=published; Next: done
+start "$PUB_BASE"; T step show "$PUB_BASE" --backlog "$BACKLOG"   # repeat until: ... release=released branch=published; Next: done
 sqlite3 -readonly "$DB" "SELECT end_commit FROM attempt WHERE task_id='$PUB_BASE'"   # X
 G -C "$SMOKE/remote.git" rev-parse "task/$PUB_BASE"        # the same X
 # F1, a publish that fails, then the retry: origin pointed at a missing path for the run
 G -C "$REPO" remote set-url origin "file://$SMOKE/missing.git"
-start "$PUB_RETRY"; T plan show "$PUB_RETRY" --backlog "$BACKLOG"   # until: ... release=released branch=unavailable:remote; Next: publish
+start "$PUB_RETRY"; T step show "$PUB_RETRY" --backlog "$BACKLOG"   # until: ... release=released branch=unavailable:remote; Next: publish
 G -C "$REPO" remote set-url origin "file://$SMOKE/remote.git"
-T plan publish "$PUB_RETRY" --backlog "$BACKLOG" --json      # published; commit == remote_head
+T step publish "$PUB_RETRY" --backlog "$BACKLOG" --json      # published; commit == remote_head
 G -C "$SMOKE/remote.git" show-ref; G -C "$REPO" rev-parse "task/$PUB_RETRY" "refs/remotes/origin/task/$PUB_RETRY"   # all X
 G -C "$REPO" remote set-url origin "file://$SMOKE/missing.git"
-T plan publish "$PUB_RETRY" --backlog "$BACKLOG" --json      # already_published, exit 0: no network was needed
+T step publish "$PUB_RETRY" --backlog "$BACKLOG" --json      # already_published, exit 0: no network was needed
 G -C "$REPO" remote set-url origin "file://$SMOKE/remote.git"
 # F2, a remote branch someone else made: a scratch clone pushes an unrelated task/$PUB_DIVERGED first
 git clone -q "$SMOKE/remote.git" "$SMOKE/other" && cd "$SMOKE/other" && git switch -q --orphan "task/$PUB_DIVERGED" \
   && git -c user.name=o -c user.email=o@example.invalid commit -q --allow-empty -m other && git push -q origin "task/$PUB_DIVERGED" \
   && cd "$SMOKE"
-start "$PUB_DIVERGED"; T plan show "$PUB_DIVERGED" --backlog "$BACKLOG"   # until: ... branch=refused:remote_moved; Next: publish
+start "$PUB_DIVERGED"; T step show "$PUB_DIVERGED" --backlog "$BACKLOG"   # until: ... branch=refused:remote_moved; Next: publish
 G -C "$SMOKE/remote.git" rev-parse "task/$PUB_DIVERGED"    # still the other clone's commit: nothing forced
-G -C "$REPO" fetch -q origin "task/$PUB_DIVERGED"; T plan publish "$PUB_DIVERGED" --backlog "$BACKLOG"   # refused diverged, exit 1
+G -C "$REPO" fetch -q origin "task/$PUB_DIVERGED"; T step publish "$PUB_DIVERGED" --backlog "$BACKLOG"   # refused diverged, exit 1
 ls "$SMOKE/markers"   # empty: no hook ran
 ```
 
 | Check | Pass | Fail means |
 |---|---|---|
-| F0 baseline | entry.log `... release=released branch=published`; `T plan show` has `Published: task/$PUB_BASE at X on origin, <UTC>` and `Next: done`; `remote.git`'s `task/$PUB_BASE` == the attempt's `end_commit` | another word; a different sha on the remote |
+| F0 baseline | entry.log `... release=released branch=published`; `T step show` has `Published: task/$PUB_BASE at X on origin, <UTC>` and `Next: done`; `remote.git`'s `task/$PUB_BASE` == the attempt's `end_commit` | another word; a different sha on the remote |
 | F1 failure | `branch=unavailable:remote`, `Next: publish`, the slot released, no `task/$PUB_RETRY` in `remote.git` | `branch=published` against a missing path; the release waited on the push |
 | F1 retry | `published`; `remote.git`, local branch and tracking ref all at X | a different sha anywhere; a `+` (forced) update |
 | already published | `already_published` with origin unreachable | any Git error (it touched the network) |
@@ -375,21 +375,21 @@ ls "$SMOKE/markers"   # empty: no hook ran
 | agent push | still no `smoke`/`probe` ref | the push bar does not hold |
 
 `Next: publish` after a refusal. The factory stores only a successful publication, so after `refused:remote_moved`,
-`refused:diverged` or `refused:remote_ahead` `tl plan show` still says `Next: publish` with the generic guide (the last
-word is only in the entry log's `branch=` and in the last `tl plan publish` output, neither a control input). The guide
+`refused:diverged` or `refused:remote_ahead` `tl step show` still says `Next: publish` with the generic guide (the last
+word is only in the entry log's `branch=` and in the last `tl step publish` output, neither a control input). The guide
 says that after those three words rerunning does not help: fetch `task/<id>`, compare it with the verified commit, then
-merge or move one branch aside by hand; then `tl plan publish` again.
+merge or move one branch aside by hand; then `tl step publish` again.
 
 **Observed (smoke 6, Linux/OrbStack, real Codex, 2026-11-10).** F0 baseline: `branch=published`, the `Published:` line,
 the remote ref at `end_commit`; F1: `branch=unavailable:remote`, then `published`, then `already_published` with origin
 unreachable; F2: `branch=refused:remote_moved`, then `refused:diverged` after the fetch, `remote.git` unchanged; no
-marker. Not observed yet: `tl plan verify`'s `Publish:` line; `refused:remote_ahead`, `unavailable:changed`,
+marker. Not observed yet: `tl step verify`'s `Publish:` line; `refused:remote_ahead`, `unavailable:changed`,
 `refused:no_remote`, `refused:branch_moved`, `refused:remote_rejected`, `unavailable:git`; a real SSH/HTTPS
 authentication failure; an abandon after a publication; macOS.
 
 Cleanup: `rm -rf "$SMOKE/other"` with the rest of `~/tl-smoke`. Section 9 is unchanged: push nowhere but `remote.git`.
 
-## 6f. Run G: scheduling rounds, `tl plan next` (optional, owner-run; tl-8bh9.4.3.1.13)
+## 6f. Run G: scheduling rounds, `tl step next` (optional, owner-run; tl-8bh9.4.3.1.13)
 
 One round settles the backlog's existing attempts (relaunch an admitted attempt whose entry is not running, verify,
 repeat; report the rest), starts approved (`--label auto`) ready tasks in priority order into free slots, then publishes
@@ -416,26 +416,27 @@ printf 'G_PARENT=%s\nG_TOP=%s\nG_CHILD=%s\nG_LOW=%s\nG_OFF=%s\nG_WAIT=%s\n' "$G_
 for t in "$G_TOP" "$G_CHILD" "$G_LOW" "$G_OFF" "$G_WAIT"; do bd update "$t" -d "Write docs/design/$t/plan.md with one short \
 paragraph. Answer planned and list the plan in paths." --acceptance "The plan is committed on task/$t and published to origin."; done
 T slot adopt "$REPO"
-NEXT=(plan next --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" --effort "$EFFORT" --minutes 30)
+NEXT=(step next --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" --effort "$EFFORT" --minutes 30)
 T "${NEXT[@]}" --json        # G1: one move, start $G_TOP started; "stopped": "no_free_slot" ($G_CHILD hit it: no move for
                              #     it, never claimed); nothing else claimed (bd show each)
 T "${NEXT[@]}"               # G2, at once: report $G_TOP running; stopped no_free_slot (no move for $G_CHILD); no second entry (ps)
-T plan show "$G_TOP" --backlog "$BACKLOG"   # repeat until Next: done (released, published)
+T step show "$G_TOP" --backlog "$BACKLOG"   # repeat until Next: done (released, published)
 T "${NEXT[@]}"               # G3: start $G_CHILD (P2 under a P0 parent beats P2 alone, though $G_LOW's id sorts first);
                              #     stopped no_free_slot, no move for $G_LOW
-T plan show "$G_CHILD" --backlog "$BACKLOG" # until Next: done
+T step show "$G_CHILD" --backlog "$BACKLOG" # until Next: done
 T "${NEXT[@]}"               # G4: start $G_LOW; no candidate left, so stopped is empty ("stopped": null in JSON, no
                              #     `Stopped:` line); $G_WAIT stays blocked while $G_LOW is open
-T plan show "$G_LOW" --backlog "$BACKLOG"   # until Next: done
-T plan release "$G_LOW" --backlog "$BACKLOG" --abandon   # G5: abandon a finished attempt; $G_LOW is open again
+T step show "$G_LOW" --backlog "$BACKLOG"   # until Next: done
+T step release "$G_LOW" --backlog "$BACKLOG" --abandon   # G5: abandon a finished attempt; $G_LOW is open again
 bd ready -l auto             # lists only $G_LOW (open, unassigned); $G_WAIT is absent: blocked by the open $G_LOW
 T "${NEXT[@]}"               # G5: skip $G_LOW abandoned; nothing started; $G_OFF and $G_WAIT never appear
 # G6, an entry that exits before the agent: no Codex login for that one round's entry
 G_RELAUNCH=$(cd "$TRACKER" && bd create "Smoke relaunch" -p 1 -l auto --silent) && echo "G_RELAUNCH=$G_RELAUNCH" >> "$SMOKE/env.sh"
 CODEX_HOME="$SMOKE/no-codex-login" T "${NEXT[@]}"   # start $G_RELAUNCH started; its entry exits `unavailable credentials:auth`
-T plan show "$G_RELAUNCH" --backlog "$BACKLOG"      # Phase: admitted, Entry: gone, Next: start
+T step show "$G_RELAUNCH" --backlog "$BACKLOG"      # Phase: admitted, Entry: gone, Next: start
 T "${NEXT[@]}"               # relaunch $G_RELAUNCH relaunched (same attempt); the step then runs to Next: done
-cat "$ART/rounds.log"        # one line per move of every round above, fixed words, the relaunch naming the attempt
+cat "$ART/rounds.log"        # one line per move of every round above, fixed words; a move with an attempt names its step
+                             # after the task (`<time> <backlog> <task> plan relaunch relaunched <attempt>`)
 ls "$SMOKE/markers"          # empty: no hook ran
 ```
 
@@ -452,7 +453,7 @@ ls "$SMOKE/markers"          # empty: no hook ran
 G6 stands in for a reboot or network loss mid-start: the entry is gone while the attempt is `admitted`, which is what the
 round decides on. Not covered live: a real reboot, `refused slot_busy` and `refused claim_lost` (tests cover the rule).
 An admitted attempt past its deadline (`stuck:expired_admitted`) is only reported by rounds: abandon it, then
-`tl plan start`. The exception is an entry registered before a reboot (.4.3.1.14 section 16): see the reboot check at the
+`tl step start`. The exception is an entry registered before a reboot (.4.3.1.14 section 16): see the reboot check at the
 end of Run H. Exit codes: 0 for a round whose words are all settled (a per-task
 refusal included), 3 when admission stopped on, or a move says, `unavailable:*`, `uncertain:*`, `unsettled:*` or
 `unknown` (a verify's `branch=` word and `skip unavailable:ancestry` included; rerun), 1 for a refused round (`label`,
@@ -470,9 +471,9 @@ retried by a round, two concurrent rounds, macOS.
 
 **Not run yet.**
 
-## 6g. Run H: rounds by themselves, `tl plan rounds` (optional, owner-run; tl-8bh9.4.3.1.14)
+## 6g. Run H: rounds by themselves, `tl step rounds` (optional, owner-run; tl-8bh9.4.3.1.14)
 
-`tl plan rounds` runs rounds one after another in the foreground of the terminal it was started in until Ctrl-C: a round
+`tl step rounds` runs rounds one after another in the foreground of the terminal it was started in until Ctrl-C: a round
 at once, then a regular round every `--every` seconds (machine config `round_seconds`, default 60, at least 5) and a
 round within about 2 s of a slot's reservation row being removed. Admission reads the tracker only when factory.db has an
 adopted slot without a reservation row. It writes only `$ART/rounds.log` (a move identical to the previous round's is not
@@ -487,7 +488,7 @@ ASIDE="$SMOKE/before-runH-$(date +%Y%m%d%H%M%S)" && mkdir "$ASIDE" \
   && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$ASIDE/"; done
 mkdir "$SMOKE/markers"
 T slot adopt "$REPO"
-ROUNDS=(plan rounds --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" \
+ROUNDS=(step rounds --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" \
   --effort "$EFFORT" --minutes 30)
 # tab B: a long interval, so a start seconds after a slot frees can only be the wake
 T "${ROUNDS[@]}" --every 120          # H1: start line; rounds.log: rounds started every=120, then the first round
@@ -503,9 +504,9 @@ checks), each with a few careful paragraphs. Answer planned and list the plan in
   --acceptance "The plan is committed on task/$H_LONG and published to origin.")
 tail -f "$ART/rounds.log"            # H2: within 120 s `start started` for $H_ONE; then nothing while it runs
 T "${ROUNDS[@]}" --every 120; echo "exit $?"   # H3 (tab C): refused:rounds_running naming tab B's pid, exit 1
-T plan next --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" \
+T step next --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --label auto --model "$MODEL" \
   --effort "$EFFORT" --minutes 30 --json     # H4: works beside it: report running, stopped no_free_slot
-T plan show "$H_ONE" --backlog "$BACKLOG"    # until Released; note its Released time
+T step show "$H_ONE" --backlog "$BACKLOG"    # until Released; note its Released time
 # H5: $H_TWO's `start started` line within ~5 s of $H_ONE's Released time (the interval is 120 s); likewise $H_LONG's
 #   within ~5 s of $H_TWO's Released time
 # H7, graceful, while $H_LONG runs: Ctrl-C ONCE in tab B (the process is between rounds): the terminal says
@@ -515,10 +516,10 @@ T "${ROUNDS[@]}" --every 120          # H8, tab B again: the first round writes 
 # H9, abrupt, $H_LONG still running: Ctrl-C TWICE quickly in tab B: `Stopped at once.`; echo $? -> 130; rounds.log ends
 #   `rounds stopped abrupt` (best effort); `ps` still shows $H_LONG's entry
 T "${ROUNDS[@]}" --every 120          # H10: starts normally, no second entry; keep it running
-T plan show "$H_LONG" --backlog "$BACKLOG"   # until Next: done
+T step show "$H_LONG" --backlog "$BACKLOG"   # until Next: done
 wc -l < "$ART/rounds.log"; sleep 300; wc -l < "$ART/rounds.log"   # H6, last, every task done: no new line while idle
 # then Ctrl-C once in tab B to end the run
-cd "$TRACKER" && bd list --status in_progress --assignee taskloop; T plan list   # every claimed task has its attempt
+cd "$TRACKER" && bd list --status in_progress --assignee taskloop; T step list   # every claimed task has its attempt
 ls "$SMOKE/markers"                   # empty: no hook ran
 ```
 
@@ -535,7 +536,7 @@ the tracker is never read, so run H11 with the slot free.
 | H7 graceful | the notice, `rounds stopped interrupted` within 2 s, exit 0, the entry still running | the stop killed the step, or waited for a full interval |
 | H8 restart | one `report running` line (for whichever task runs then); no second entry, no new attempt row | a restart launched again |
 | H9 abrupt | exit 130, `Stopped at once.`, the entry still running | a second press waited, or the step died |
-| H10 after abrupt | a normal first round, no second entry or attempt row; `bd list` and `tl plan list` agree | the abrupt stop left something a round could not continue |
+| H10 after abrupt | a normal first round, no second entry or attempt row; `bd list` and `tl step list` agree | the abrupt stop left something a round could not continue |
 | H6 quiet | no new line over 5 idle minutes | idle rounds write lines |
 
 Notes. A first Ctrl-C while a move runs waits for that move: a verify finishes its release and publish push first, up to
@@ -562,11 +563,11 @@ live: a real reboot, that wake race, macOS.
 **Reboot renewal (owner-run check, optional; plan section 16).** A reboot cannot be simulated here: the tests stand in
 for it with a stored `entry_boot` other than the current boot id (`tests/steps/test_attempt_store.py`, `test_launch.py`,
 `test_operations.py`, `test_round.py`). What stays unobserved without a real reboot is the whole path on a real machine. If you
-choose to reboot the scratch machine mid-start: before it, `T plan show <task> --backlog "$BACKLOG" --json` for an attempt
+choose to reboot the scratch machine mid-start: before it, `T step show <task> --backlog "$BACKLOG" --json` for an attempt
 still `admitted` with an entry registered (e.g. G6's `unavailable credentials:auth` state), noting `deadline_passed` and
 the entry's identity; after the reboot, past the deadline, `cat /proc/sys/kernel/random/boot_id` differs from the stored
-`entry_boot` (`sqlite3 "$DB" "SELECT entry_boot, deadline FROM attempt WHERE task_id='<task>'"`), `T plan show`
-says `Next: start` (not `stuck:expired_admitted`), and the next round (or `T plan start`) writes `relaunch relaunched`
+`entry_boot` (`sqlite3 "$DB" "SELECT entry_boot, deadline FROM attempt WHERE task_id='<task>'"`), `T step show`
+says `Next: start` (not `stuck:expired_admitted`), and the next round (or `T step start`) writes `relaunch relaunched`
 on the same attempt id, with `deadline` now the relaunch time plus `--minutes` and the new `entry_boot` the current one.
 A second relaunch in the same boot never moves the deadline again. Fail means: `stuck:expired_admitted` after a reboot, a
 new attempt row, or a deadline renewed by a relaunch without a reboot.
@@ -574,15 +575,15 @@ new attempt row, or a deadline renewed by a relaunch without a reboot.
 ## 7. Paste back to the agent
 
 `codex --version`; the `--json` outputs of `T config show`, both `T slot adopt`, section 4's starts (with `time`) and shows,
-`launch.txt`, every `T plan show`, the second start, `T plan verify` (if run) and `T plan list --stuck`; the `ps`, `pgrep`
+`launch.txt`, every `T step show`, the second start, `T step verify` (if run) and `T step list --stuck`; the `ps`, `pgrep`
 and `lsof` lines; `entry.log`; the two `sqlite3` result sets; `ls -la $ATT`; `answer.txt`; heads of `stderr.txt` and
 `diagnostics.txt` after checking them for secrets; slot `git log`/`status`; `show-ref`; the push probe's error line;
 the approved-escalation commands (or "none") and `G -C "$REPO" config --list --local`; for Run C, the `ACCESS`
 listing, the command lines and exit codes from `runC.jsonl` (checked for secrets) and its `ls`/`log`/`show-ref` output;
-for Run F, every `T plan publish --json` and `T plan show` output, the entry.log lines, and the `show-ref`/`rev-parse` lines;
-for Run G, every `T plan next --json` output, `rounds.log`, and `bd show` of each `G_*` task; for Run H, tab B's start and
-end lines with their exit codes, `rounds.log`, `T plan show` of `$H_ONE`, `$H_TWO` and `$H_LONG`, H3's and H4's output, and the
-`bd list --status in_progress --assignee taskloop` and `T plan list` pair.
+for Run F, every `T step publish --json` and `T step show` output, the entry.log lines, and the `show-ref`/`rev-parse` lines;
+for Run G, every `T step next --json` output, `rounds.log`, and `bd show` of each `G_*` task; for Run H, tab B's start and
+end lines with their exit codes, `rounds.log`, `T step show` of `$H_ONE`, `$H_TWO` and `$H_LONG`, H3's and H4's output, and the
+`bd list --status in_progress --assignee taskloop` and `T step list` pair.
 Never paste `auth.json`, `env`, or the agent's environment.
 
 ## 8. Known wedges, reset and cleanup
@@ -590,9 +591,9 @@ Never paste `auth.json`, `env`, or the agent's environment.
 Moving a run's files aside (6a, 6c) keeps the slot; a slot or probe directory moved or deleted by hand leaves a stale
 `git worktree list` registration in `$REPO`: harmless (`G -C "$REPO" worktree prune` clears it; never prune a live slot).
 
-Nothing resumes, retries or stops an attempt; only Git leftovers are repeated, by re-running `tl plan start` (6c). A
+Nothing resumes, retries or stops an attempt; only Git leftovers are repeated, by re-running `tl step start` (6c). A
 step that ended on a clean slot releases it itself (claim kept); every stuck attempt whose entry and agent are shown
-stopped ends with `tl plan release TASK --backlog B --abandon` (6d), which also returns the claim. Phase `dispatching`
+stopped ends with `tl step release TASK --backlog B --abandon` (6d), which also returns the claim. Phase `dispatching`
 with no agent recorded cannot be shown stopped (`unsettled:worker_unknown`): only the reset below remains. Phase
 `dispatching` or `registered` with a dead entry otherwise stays so until abandoned (start: `already_dispatched`; show:
 `stuck:entry_lost`); a live but hung entry gives `already_dispatched` while the
@@ -600,7 +601,7 @@ attempt is `dispatching`/`registered` and `already_running` once it is `captured
 `stuck:expired_admitted`). Until released or abandoned, the reservation and the bead claim stay held by design. Kill only by PID, after checking it:
 `ps -o command= -p "$E"` must show `taskloop.attempt_entry $DB`; for the worker, `lsof -a -p "$W" -d cwd` (Linux without
 lsof: `readlink /proc/$W/cwd`) must show `$SLOT`, then
-`kill -TERM -"$(ps -o pgid= -p "$W" | tr -d ' ')"` (its own group); `plan show` names the worker only as `last known`, so
+`kill -TERM -"$(ps -o pgid= -p "$W" | tr -d ' ')"` (its own group); `step show` names the worker only as `last known`, so
 check it is alive first. Reset for a rerun (also the reset after any schema change: an older `factory.db` is moved aside or
 deleted, never migrated; a slot an older run left on a task branch is detached by hand, `G -C "$SLOT" switch -q --detach`,
 before `T slot adopt`):
@@ -611,10 +612,10 @@ G -C "$REPO" worktree remove --force "$SLOT"; G -C "$REPO" worktree add --detach
 # then a NEW bead (section 2, from `TASK=`), `T slot adopt "$REPO"` and start again; the old bead stays claimed by `taskloop`
 ```
 
-After an abrupt stop (`tl plan rounds` pressed twice, a closed terminal) or a crash, compare
-`bd list --status in_progress --assignee taskloop` in `$TRACKER` with `T plan list`: a stop between a tracker claim's commit
+After an abrupt stop (`tl step rounds` pressed twice, a closed terminal) or a crash, compare
+`bd list --status in_progress --assignee taskloop` in `$TRACKER` with `T step list`: a stop between a tracker claim's commit
 and factory.db's leaves a claim with no attempt; return it with `bd unclaim <task> --if-assignee taskloop`. Stop
-`tl plan rounds` (Ctrl-C in its terminal) before any reset or discard.
+`tl step rounds` (Ctrl-C in its terminal) before any reset or discard.
 
 Cleanup after the smoke: check `ps -ax -o pid,command | grep -F "$SMOKE"` shows nothing of ours running (kill as above), then
 `G -C "$REPO" worktree remove --force "$SLOT"; rm -rf ~/tl-smoke`. This removes only scratch paths.
@@ -625,8 +626,8 @@ Cleanup after the smoke: check `ps -ax -o pid,command | grep -F "$SMOKE"` shows 
 - Create the slot root inside any checkout; run `bd` in a real repo; push anywhere but `remote.git`.
 - Kill by name (`pkill codex`, `killall python`): only verified PIDs (section 8).
 - Edit `factory.db` rows by hand, or rerun `start` in a loop; one launch per admitted attempt plus one check.
-- Run `tl plan next` against the real tracker, or a backlog whose tasks carry the `auto` label outside this scratch tracker.
-- Run `tl plan rounds` against the real tracker or with real paths, under a service manager (systemd's default kills the
+- Run `tl step next` against the real tracker, or a backlog whose tasks carry the `auto` label outside this scratch tracker.
+- Run `tl step rounds` against the real tracker or with real paths, under a service manager (systemd's default kills the
   entries in its cgroup), or at boot; never run the gates (`just check`, `just test`) in `$TL` while it runs from there.
 - Run a bare `tl` or omit `--config`: always `T`, so every path stays under `$SMOKE` (the defaults are `~/.local/...`).
 - Let an agent run this without Denis's authorization for that run; otherwise agents read the pasted output.

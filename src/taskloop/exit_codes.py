@@ -1,4 +1,4 @@
-"""The exit code of every plan command's result: 0 done (a graceful rounds stop too), 1 refused, 3 unknown, 130 an abrupt
+"""The exit code of every step command's result: 0 done (a graceful rounds stop too), 1 refused, 3 unknown, 130 an abrupt
 rounds stop. Command surface policy over operations' values; nothing here runs, reads or writes."""
 
 from typing import Final
@@ -8,9 +8,9 @@ from taskloop.operations import (
     Adoption,
     Ended,
     Failed,
-    Result,
     Round,
 )
+from taskloop.result_data import Result
 from taskloop.slots import NotAdopted
 
 UNKNOWN_WORDS: Final = tuple(kind + ":" for kind in UNKNOWN_KINDS)

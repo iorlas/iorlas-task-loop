@@ -1,31 +1,27 @@
-"""The plan commands' operations over the existing ports: start (admit, launch, or repeat a captured step through the
-`Repeat` port; a released attempt is answered, an abandoned one admitted afresh), status, list, verify (which then releases
-the slot, settled, and publishes a verified plan), release (`Release`: settled or abandon) and publish (`Publish`: push the
-verified plan commit to origin's `task/<id>`), each following a task's current attempt; values in, values out. Plan step
-only: nothing here merges or lands. `result_data.as_data` is the one JSON shape of every result.
+"""The step commands' operations over the existing ports: start (admit, launch, or repeat a captured step through the
+`Repeat` port; a released attempt is answered, an abandoned one admitted afresh), verify (which then releases the slot,
+settled, and publishes a verified result), release (`Release`: settled or abandon) and publish (`Publish`: push the
+verified commit to origin's `task/<id>`), each following a task's current attempt, whatever its step; values in, values
+out. The status reads are `attempt_status`'s. Nothing here merges or lands. `result_data.as_data` is the one JSON shape
+of every result.
 """
 
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from itertools import pairwise
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
 from sqlite_store import SchemaError
 
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
-from taskloop.attempt import SANDBOX, collect, succeeded
-from taskloop.attempt_reads import AttemptRow, PublishedRow, ReleaseRow
+from taskloop.attempt import SANDBOX, collect
+from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import (
-    ATTEMPTS,
-    REPEATABLE,
     AttemptKey,
-    AttemptResult,
     EntryIdentity,
     NotApplicable,
-    Observe,
     Rejected,
     Unsettled,
     Verified,
@@ -33,21 +29,16 @@ from taskloop.attempt_types import (
     VerifyResult,
     VerifyUnavailable,
 )
-from taskloop.evidence_files import EvidenceFiles
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
-from taskloop.machine_config import ConfigRefused, Loaded
+from taskloop.machine_config import ConfigRefused
 from taskloop.publish import BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
 
 type Clock = Callable[[], float]
-type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
-type Stuck = Literal["stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:uncollected", "stuck:conflict"]
-type Next = Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "done", "unknown"] | Stuck
-type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a step still to settle
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
-UNCLAIMING: Final = "Abandoned, but the tracker claim is still to be returned: run `tl plan release --abandon` again."
+UNCLAIMING: Final = "Abandoned, but the tracker claim is still to be returned: run `tl step release --abandon` again."
 VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",
     NotApplicable: "not_applicable",
@@ -80,7 +71,7 @@ class Publish(Protocol):
 @dataclass(frozen=True)
 class Failed:
     """Every refusal and unknown in one shape; `detail` is diagnostic only. `admitted`: this start admitted the attempt
-    before its launch failed, so the tracker claim and the slot are held (re-running `tl plan start` retries the launch)."""
+    before its launch failed, so the tracker claim and the slot are held (re-running `tl step start` retries the launch)."""
 
     kind: FailureKind
     reason: str
@@ -96,15 +87,6 @@ class Failed:
 
 class Repeat(Protocol):
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed: ...
-
-
-@dataclass(frozen=True)
-class StatusPorts:
-    store: AttemptStore
-    observe: Observe
-    clock: Clock
-    leftovers: Leftovers
-    boot: Callable[[], str | None]  # this machine's boot id, None when unknown (then no attempt counts as rebooted)
 
 
 @dataclass(frozen=True)
@@ -131,7 +113,8 @@ class StartRequest:
 class Started:
     """`existing`: the attempt was admitted before; its admitted choices stand, the given ones were not applied.
     `repeated`: the step's next attempt (`number`) was admitted and launched with the previous attempt's choices and a
-    deadline from the given minutes. `result`: the collected outcome a repeating start found instead."""
+    deadline from the given minutes. `result`: the collected outcome a repeating start found instead. `step`: the step
+    the attempt belongs to (`plan`), read back from factory.db; None when that read failed (the start stands)."""
 
     status: Literal["started", "relaunched", "already_running", "already_dispatched", "repeated"]
     backlog: str
@@ -141,42 +124,7 @@ class Started:
     entry: EntryIdentity | None = None
     number: int | None = None
     result: str = ""
-
-
-@dataclass(frozen=True)
-class AttemptView:
-    backlog: str
-    task_id: str
-    attempt_id: str
-    slot: str
-    phase: str
-    entry: EntryState
-    result: AttemptResult
-    deadline_passed: bool
-    next: Next
-    entry_process: EntryIdentity | None = None  # the registered entry's identity, for the manual steps (not secret)
-    worker: tuple[int, int] | None = None  # the agent's last known pid and process group, once registered
-    leftovers: tuple[str, ...] = ()  # with `repeat`: why (REPEATABLE) and the listing, read now, never stored
-    number: int = 1  # in its step; at most ATTEMPTS
-    previous_attempt_id: str | None = None  # the attempt this one repeats
-    repeat_reason: str | None = None
-    earlier: tuple[tuple[str, str], ...] = ()  # each earlier attempt, newest first: its repeat reason, or `abandoned`
-    last_entry: str | None = None  # the entry log's last line of fixed words (`refused slot_staged ...`), read now
-    seq: int = 1  # the attempt's order among its task's attempts
-    release: ReleaseRow | None = None  # how it ended its reservation, once released
-    published: PublishedRow | None = None  # its verified commit on origin's task/<id>, once published
-
-
-@dataclass(frozen=True)
-class Shown:
-    view: AttemptView
-    directory: Path
-    entry_log: Path
-
-
-@dataclass(frozen=True)
-class Listed:
-    attempts: tuple[AttemptView, ...]
+    step: str | None = None
 
 
 @dataclass(frozen=True)
@@ -194,7 +142,7 @@ class VerifiedTask:
 
 @dataclass(frozen=True)
 class ReleasedTask:
-    """`tl plan release`: what this call changed (`released`) or that nothing was pending (`already_released`)."""
+    """`tl step release`: what this call changed (`released`) or that nothing was pending (`already_released`)."""
 
     backlog: str
     task_id: str
@@ -204,7 +152,7 @@ class ReleasedTask:
 
 @dataclass(frozen=True)
 class PublishedTask:
-    """`tl plan publish`: recorded by this call, or before (`PublishedRow`: no Git, no network)."""
+    """`tl step publish`: recorded by this call, or before (`PublishedRow`: no Git, no network)."""
 
     backlog: str
     task_id: str
@@ -224,13 +172,14 @@ type Action = Literal["start", "relaunch", "repeat", "verify", "publish", "repor
 class Move:
     """One thing a scheduling round did or saw for one task (`round`): `word` is an existing fixed word (a start's
     status, `<kind>:<reason>`, a verdict with its release and branch words, a publication, a `Next` word or a skip
-    reason); `detail` is diagnostic only and never logged."""
+    reason); `detail` is diagnostic only and never logged; `step`, the step of the move's attempt (with `attempt_id`)."""
 
     task_id: str
     action: Action
     word: str
     attempt_id: str = ""
     detail: str = ""
+    step: str = ""
 
 
 type Quiet = frozenset[tuple[str, str, str, str]]  # (task, action, word, attempt) keys already in the round log
@@ -238,7 +187,7 @@ type Quiet = frozenset[tuple[str, str, str, str]]  # (task, action, word, attemp
 
 @dataclass(frozen=True)
 class Round:
-    """`tl plan next`: the moves in the order performed; `stopped`, the word that ended admission early; `logged`, False
+    """`tl step next`: the moves in the order performed; `stopped`, the word that ended admission early; `logged`, False
     when a round-log line could not be written; `written`, the keys of its moves and of its stopped word
     (`("", "stopped", word, "")`) now in the round log (written now, or before and unchanged): the next round's `quiet`,
     empty when any write failed so that the next round writes the state again."""
@@ -252,15 +201,12 @@ class Round:
 
 @dataclass(frozen=True)
 class Ended:
-    """`tl plan rounds` stopped: `interrupted` (the first Ctrl-C), `abrupt` (a second Ctrl-C, the surface's) or the
+    """`tl step rounds` stopped: `interrupted` (the first Ctrl-C), `abrupt` (a second Ctrl-C, the surface's) or the
     whole-round refusal that ended it (`<kind>:<reason>`); launched steps keep running in every case."""
 
     backlog: str
     reason: str
     detail: str = ""
-
-
-type Result = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
 
 
 def require_database(open_ro: Callable[[], sqlite3.Connection | None]) -> sqlite3.Connection | Failed:
@@ -285,7 +231,7 @@ MAX_MINUTES = 7 * 24 * 60  # a week: an attempt's deadline (and a renewal after 
 
 
 def minutes_refused(minutes: int) -> Failed | None:
-    """`--minutes` of `tl plan start`, `next` and `rounds`: from 1 to MAX_MINUTES, checked before any
+    """`--minutes` of `tl step start`, `next` and `rounds`: from 1 to MAX_MINUTES, checked before any
     store, tracker or launch call."""
     ok = 1 <= minutes <= MAX_MINUTES
     return None if ok else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
@@ -294,7 +240,17 @@ def minutes_refused(minutes: int) -> Failed | None:
 def start(ports: StartPorts, request: StartRequest) -> Started | Failed:
     """An existing attempt is launched as admitted (no tracker read), a captured one repeated, a released one answered
     with its result; otherwise (none, or the current one abandoned) admit first. A refusal or unknown stops before the
-    launch; a concurrent start that won (`task_attempted`) is launched as existing."""
+    launch; a concurrent start that won (`task_attempted`) is launched as existing. A start names its attempt's step."""
+    found = _start(ports, request)
+    if isinstance(found, Failed):
+        return found
+    try:
+        return replace(found, step=ports.reader.step_of(found.attempt_id))
+    except StoreUnavailable:
+        return found
+
+
+def _start(ports: StartPorts, request: StartRequest) -> Started | Failed:
     refused = minutes_refused(request.minutes)
     if refused is not None:
         return refused
@@ -357,103 +313,14 @@ def launched(result: LaunchResult, backlog: str, task_id: str, key: AttemptKey, 
         case LaunchRefused() | LaunchUnavailable():
             return Failed("refused" if isinstance(result, LaunchRefused) else "unavailable", result.reason)
         case LaunchUncertain():
-            return Failed("uncertain", "launch", "The registered entry may run; `tl plan show` observes it")
-
-
-def next_action(phase: str, entry: EntryState, result: AttemptResult, expired: bool, *, rebooted: bool = False) -> Next:
-    """What a person does next, from the phase, the entry observation, the collected result and the deadline.
-    `rebooted`: the registered entry is from another boot, so its relaunch renews the deadline (`register_entry`)."""
-    if entry == "unknown" or result.status in ("unavailable", "refused"):
-        return "unknown"
-    if result.status == "collected":
-        return "done"
-    if entry == "running":
-        return "stuck:hung" if expired else "wait"
-    return _stopped(phase, result, expired and not rebooted)
-
-
-def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
-    """The entry does not run (none, gone or a different process) and nothing is collected yet."""
-    if result.status == "conflict":
-        return "stuck:conflict"
-    if phase == "admitted":
-        return "stuck:expired_admitted" if expired else "start"
-    if phase in ("dispatching", "registered"):
-        return "stuck:entry_lost"
-    return "verify" if result.reason == "verification" else "stuck:uncollected"
-
-
-def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
-    """A task's current attempt. `probe`: read the leftovers of a step still to settle (Git and slot reads); never for
-    a listing that keeps only stuck or unknown attempts, which a `verify`, `repeat` or `repeats_exhausted` step never is."""
-    entry: EntryState = "none"
-    if row.entry is not None:
-        seen = reads.observe(row.entry)
-        entry = "running" if seen == "matching" else seen
-    result = collect(reads.store, row.key)
-    expired = reads.clock() >= row.deadline
-    rebooted = row.entry is not None and reads.boot() not in (None, row.entry[2])
-    step = _released(row, next_action(row.phase, entry, result, expired, rebooted=rebooted), succeeded(result))
-    found = (row.backlog, row.task_id, row.key.attempt_id, row.slot, row.phase)
-    left = reads.leftovers(row.key) if probe and step == "verify" else None
-    chain = (row.number, row.previous_attempt_id, row.repeat_reason)
-    ended = {"seq": row.seq, "release": row.release, "published": row.published}
-    if left is None or left.reason not in REPEATABLE:
-        return AttemptView(*found, entry, result, expired, step, row.entry, row.worker, (), *chain, **ended)
-    step = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
-    held = AttemptResult("pending", step, result.execution)
-    return AttemptView(*found, entry, held, expired, step, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
-
-
-def _released(row: AttemptRow, step: Next, verified: bool) -> Next:
-    """A released attempt is `start` again (abandoned), `publish` (settled, verified, not yet on origin) or `done`; a
-    collected one still holding its slot is `release` first (the entry or a verify left it held: the slot was not clean)."""
-    if row.release is not None and row.release.claim == "unclaiming":
-        return "release"  # the abandon's claim is still to be returned
-    if row.release is not None:
-        return "start" if row.release.abandoned else "publish" if verified and row.published is None else "done"
-    return "release" if step == "done" and row.held else step
-
-
-def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str) -> Shown | Failed:
-    """The task's current attempt; each earlier one, newest first, was repeated (superseded and fenced: nothing of it is
-    collected or read) or abandoned. Read-only: creates no file or directory (the attempt directory is computed, never made)."""
-    files = EvidenceFiles(artifacts)
-    try:
-        rows = reads.store.attempts(backlog, task_id)
-    except StoreUnavailable as error:
-        return Failed("unavailable", "store", str(error))
-    if not rows:
-        return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
-    directory = files.root / files.directory(rows[0].key)
-    earlier = tuple((older.key.attempt_id, _ended(newer, older)) for newer, older in pairwise(rows))
-    last = files.last_entry(rows[0].key)
-    return Shown(replace(_show(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log")
-
-
-def _ended(newer: AttemptRow, older: AttemptRow) -> str:
-    """Why `older` is not current: `abandoned`, or the reason `newer` repeated it."""
-    return "abandoned" if older.release is not None and older.release.abandoned else newer.repeat_reason or ""
-
-
-def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed:
-    """Every task's current attempt (one row per task: its highest `seq`), or (`stuck`) only those whose next action is
-    `stuck:*` or `unknown`."""
-    try:
-        every = reads.store.attempts()
-    except StoreUnavailable as error:
-        return Failed("unavailable", "store", str(error))
-    rows = [row for before, row in zip((None, *every), every, strict=False) if before is None or before.task_id != row.task_id
-            or before.backlog != row.backlog]
-    found = (_show(reads, row, probe=not stuck) for row in rows)
-    return Listed(tuple(each for each in found if not stuck or each.next == "unknown" or each.next.startswith("stuck:")))
+            return Failed("uncertain", "launch", "The registered entry may run; `tl step show` observes it")
 
 
 def verify_task(
     reader: AttemptStore, verifier: Verify, releaser: Release, publisher: Publish, backlog: str, task_id: str
 ) -> VerifiedTask | Failed:
     """A stored verdict returns with no Git read; otherwise one verification, stored once when it settles. After a
-    verdict (new or stored) the slot is released, settled, and a verified plan published: a held release or a failed
+    verdict (new or stored) the slot is released, settled, and a verified result published: a held release or a failed
     publication does not change the result, its word says so."""
     try:
         found = reader.attempt_of(backlog, task_id)
@@ -472,7 +339,7 @@ def verify_task(
 
 
 def release_task(reader: AttemptStore, releaser: Release, backlog: str, task_id: str, *, abandon: bool) -> ReleasedTask | Failed:
-    """`tl plan release`: the task's current attempt released (settled), or abandoned (`abandon`)."""
+    """`tl step release`: the task's current attempt released (settled), or abandoned (`abandon`)."""
     try:
         found = reader.attempt_of(backlog, task_id)
     except StoreUnavailable as error:
@@ -486,7 +353,7 @@ def release_task(reader: AttemptStore, releaser: Release, backlog: str, task_id:
 
 
 def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id: str) -> PublishedTask | Failed:
-    """`tl plan publish`: the task's current attempt's verified commit pushed to origin's `task/<id>` (first try or retry)."""
+    """`tl step publish`: the task's current attempt's verified commit pushed to origin's `task/<id>` (first try or retry)."""
     try:
         found = reader.attempt_of(backlog, task_id)
     except StoreUnavailable as error:
@@ -500,7 +367,7 @@ def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id
 
 
 def verify_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable) -> Failed:
-    """An unsettled slot carries its listing (`bounded` where it was read) as the detail, as `tl plan show` prints it."""
+    """An unsettled slot carries its listing (`bounded` where it was read) as the detail, as `tl step show` prints it."""
     if isinstance(result, VerifyUnavailable) and result.reason == "inconsistent":  # same inputs, another verdict: a defect
         return Failed("defect", result.reason)
     if isinstance(result, Unsettled):

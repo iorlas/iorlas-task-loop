@@ -21,6 +21,7 @@ from sqlite_store import begin_immediate
 from taskloop.admit import Admitted, AttemptAdmission, RepeatRequest
 from taskloop.attempt import Attempts
 from taskloop.attempt_entry import shown
+from taskloop.attempt_status import StatusPorts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
@@ -40,7 +41,10 @@ from taskloop.attempt_types import (
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.launch import Launched, LaunchResult
-from taskloop.operations import Failed, Started, StatusPorts, show_attempt
+from taskloop.operations import (
+    Failed,
+    Started,
+)
 from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import hold, repeating
 from taskloop.steps import kind

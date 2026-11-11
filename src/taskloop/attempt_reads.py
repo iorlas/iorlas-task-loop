@@ -203,6 +203,12 @@ class AttemptReads:
         entry = None if any(value is None for value in row[4:7]) else (as_int(row[4]), as_text(row[5]), as_text(row[6]))
         return AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), entry
 
+    def step_of(self, attempt_id: str) -> str | None:
+        """The step an attempt belongs to (`plan`); None for an attempt id factory.db does not hold."""
+        with self._connection() as con:
+            row = con.execute("SELECT step FROM attempt WHERE attempt_id=?", (attempt_id,)).fetchone()
+        return None if row is None else as_text(row[0])
+
     def tracker_root(self, key: AttemptKey) -> str | None:
         """The absolute tracker root the attempt's claim was taken at (stored by admission, copied by a repeat)."""
         with self._connection() as con:

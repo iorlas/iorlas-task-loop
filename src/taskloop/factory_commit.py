@@ -197,7 +197,7 @@ def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commi
 def leftovers(
     checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, end_commit: str | None
 ) -> Unsettled | None:
-    """Read-only, for a person (`tl plan show`): what a verify would report as a step to repeat, read now. Before the
+    """Read-only, for a person (`tl step show`): what a verify would report as a step to repeat, read now. Before the
     factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for effect `keep`, the clean-tree
     check."""
     if answer.effect == "commit" and end_commit is None:

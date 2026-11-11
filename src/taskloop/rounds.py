@@ -1,4 +1,4 @@
-"""`tl plan rounds`: scheduling rounds one after another in this foreground process until it is stopped.
+"""`tl step rounds`: scheduling rounds one after another in this foreground process until it is stopped.
 
 A round at once; then the next regular round `every` seconds after the previous one ended, or sooner when a slot frees:
 the reserved slots are read just before and just after each round (their union is the baseline) and every `CHECK`

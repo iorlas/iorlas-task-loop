@@ -276,14 +276,14 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
 
 
 def open_verifier(database: Path, store: Store) -> Verifier:
-    """Real wiring for on-demand verification (`tl plan verify`, a repeat's verify): a shared writer of `store` (the caller
+    """Real wiring for on-demand verification (`tl step verify`, a repeat's verify): a shared writer of `store` (the caller
     closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
     return Verifier(writer, checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold)
 
 
 def open_releaser(database: Path, store: Store) -> SlotRelease:
-    """Real wiring for `tl plan release` and the release after `tl plan verify`: a shared writer of `store` (the caller
+    """Real wiring for `tl step release` and the release after `tl step verify`: a shared writer of `store` (the caller
     closes it) on factory.db, real Git, the entry and worker observations, the park under the slot's custody lock, the
     tracker's fenced unclaim, wall clock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
@@ -291,7 +291,7 @@ def open_releaser(database: Path, store: Store) -> SlotRelease:
 
 
 def open_publisher(database: Path, store: Store) -> BranchPublish:
-    """Real wiring for `tl plan publish` and the publication after `tl plan verify`: a shared writer of `store` (the caller
+    """Real wiring for `tl step publish` and the publication after `tl step verify`: a shared writer of `store` (the caller
     closes it) on factory.db, the remote-capable Git view, the real slot file port, wall clock."""
     return BranchPublish(AttemptStore(lambda: store.shared_rw(database), store.begin_immediate), remotes, RealSlotFiles(), time.time)
 

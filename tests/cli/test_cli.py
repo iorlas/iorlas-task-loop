@@ -18,32 +18,33 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
         assert main(arguments) == 0
     output = capsys.readouterr()
     assert "usage: tl" in output.out
-    assert "plan step only: publishes task/<id>; no merge or land" in " ".join(output.out.split())
+    assert "steps built: plan; publishes task/<id>; no merge or land" in " ".join(output.out.split())
     assert output.err == ""
 
 
 @pytest.mark.parametrize(
     "arguments",
-    [["plan", "-h"], ["plan", "start", "-h"], ["plan", "show", "-h"], ["plan", "list", "-h"], ["plan", "verify", "-h"],
-     ["plan", "release", "-h"]],
+    [["step", "-h"], ["step", "start", "-h"], ["step", "show", "-h"], ["step", "list", "-h"], ["step", "verify", "-h"],
+     ["step", "release", "-h"]],
 )
-def test_plan_help_says_plan_step_only(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+def test_step_help_names_the_steps_built(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:
         main(arguments)
     assert result.value.code == 0
-    assert "plan step only: publishes task/<id>; no merge or land" in " ".join(capsys.readouterr().out.split())
+    assert "steps built: plan; publishes task/<id>; no merge or land" in " ".join(capsys.readouterr().out.split())
 
 
 def test_publish_help_says_it_pushes_as_you_never_forced(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:
-        main(["plan", "publish", "-h"])
+        main(["step", "publish", "-h"])
     assert result.value.code == 0
     text = " ".join(capsys.readouterr().out.split())
-    assert "Push the verified plan commit to origin's task/<id> as you, never forced; nothing merges or lands" in text
+    assert "Push the step's verified commit to origin's task/<id> as you, never forced; nothing merges or lands" in text
 
 
 @pytest.mark.parametrize(
-    "arguments", [["plan"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["plan", "prepare"], ["slot"], ["config"]]
+    "arguments",
+    [["plan"], ["step"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["step", "prepare"], ["slot"], ["config"]],
 )
 def test_invalid_request(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:

@@ -22,6 +22,7 @@ from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission, RepeatRequest
 from taskloop.attempt import Attempts, Execution
+from taskloop.attempt_status import StatusPorts, list_attempts, show_attempt
 from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import (
     AttemptKey,
@@ -42,7 +43,13 @@ from taskloop.attempt_types import (
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import Launched, LaunchResult
-from taskloop.operations import Failed, Started, StartPorts, StartRequest, StatusPorts, list_attempts, show_attempt, start
+from taskloop.operations import (
+    Failed,
+    Started,
+    StartPorts,
+    StartRequest,
+    start,
+)
 from taskloop.repeat import Settle, StepRepeat
 from taskloop.result_data import as_data
 from taskloop.slot_lock import hold, lock_path, repeating
@@ -457,7 +464,7 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
     request = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "other-model", "low", 45)
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
     ports = StartPorts(store, admission(registered, tmp_path), launcher, lambda: 10, repeats)
-    assert start(ports, request) == Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY)
+    assert start(ports, request) == Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     assert start(ports, request) == Failed("refused", "repeats_exhausted")
     assert repeats.calls == [("tasks", "tl-1", KEY, ENTRY, 45)] and launcher.calls == [("tasks", "tl-1")]

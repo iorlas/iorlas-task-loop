@@ -523,7 +523,7 @@ Schema version 9; no migration: `current()` refuses a v8 file (`refused:schema`)
 - **Step.** `plan_step.STEP = "plan"`. A fresh admission writes it, a repeat copies the previous attempt's (`PREVIOUS`
   reads `p.step`). `Admission.step` (loaded by `AttemptStore._load`, so `AttemptRecord` carries it through its
   admission, no second field) and `AttemptRow.step` (`attempts()`). Not displayed: rows, JSON and `rounds.log` gain it
-  in S4.
+  in S4 (section 16).
 - **Names.** `AttemptStore.end_commit()` (was `plan_commit()`); `AttemptRecord.end_commit`, `ChainLink.end_commit`,
   `Verified.blob`, `factory_commit.leftovers(..., end_commit)`.
 - **Tests.** SQL renamed everywhere; every test `INSERT INTO attempt` names `step`. New: `test_attempt.py`
@@ -699,3 +699,97 @@ policy cases for the new files + 6 `test_steps` cases + the NULL-blob case). Cod
 (131), `attempt_types` 224 (225), `admit` 332 (331), `attempt` 289 (286), `factory_commit` 136 (134), `verdict` 55 (52),
 `repeat` 141 (139), `attempt_reads` 190 (185), `attempt_store` 312 (318), `evidence_files` 83, `verifier` 129,
 `operations` 354 untouched: +41 source code lines with `steps` (estimate +45). Live smoke not run.
+
+## 16. As built: S4 (the CLI cut, 2026-11-11)
+
+`tl step` replaces `tl plan` in one cut, no alias (Q1). The verbs and flags are unchanged: `start show list verify release
+publish next rounds`. `tl plan ...` (bare, with a verb, or with `-h`) now exits 2 with argparse's own
+`invalid choice: 'plan'` message, like any unknown command. No schema, agent-facing text or `entry.log` change.
+
+- **Modules (A2 structure kept, renamed with `git mv`).** `cli_plan.py` to `cli_step.py` (parsers, run, wiring;
+  `COMMANDS = ("config", "slot", "step")`, `OPERATIONS` keyed `("step", <verb>)`), `plan_guide.py` to `step_guide.py`
+  (`PLAN_ONLY` to `STEP_ONLY`), `plan_render.py` to `step_render.py`; `tests/cli/test_plan_cli.py` to
+  `tests/cli/test_step_cli.py`. Section 3.6's `cli_guide` name was not used: the guide module already existed as
+  `plan_guide` since A2 and is now `step_guide`.
+- **`attempt_status.py` (new).** `EntryState`, `Stuck`, `Next`, `Leftovers`, `StatusPorts`, `AttemptView`, `Shown`,
+  `Listed`, `next_action`, `_stopped`, `_show`, `_released`, `show_attempt`, `_ended`, `list_attempts`, moved verbatim
+  from `operations` (no word change; it imports `Clock` and `Failed` from `operations`). To avoid an import cycle
+  (`operations`'s `Result` union named `Shown`/`Listed`), the `Result` union moved to `result_data` (the one JSON shape of
+  every result; `exit_codes`, `step_render` and `cli_step` import it there). Importers updated: `round`, `cli_composition`,
+  `result_data`, `step_render`, `cli_step` and five test files. `.importlinter`: `cli_plan`, `plan_guide`, `plan_render`
+  renamed in all three lists, `attempt_status` added to both forbidden lists; 7 contracts kept.
+- **`step` in the data.** `AttemptView.step` (required, after `task_id`, from `AttemptRow.step`); `tl step show` prints
+  `Step: plan` after `Task:`; `tl step list` has a `step` column after `backlog`
+  (`task backlog step attempt slot phase entry result next`); `--json` of show and list gain `"step"`. `Started.step`
+  (`str | None`): `operations.start` reads it back after any start (`AttemptReads.step_of(attempt_id)`, one `SELECT step`),
+  `None` (JSON null) only when that read fails, so a launched start is never turned into a failure by its label;
+  `tl step start --json` gains `"step"`. Its human text is unchanged apart from the scope line below.
+- **`rounds.log`.** `Move.step` (set for every move that carries an attempt: the snapshot's step for relaunch, repeat,
+  verify, report, skip and publish moves; `Started.step` for a round's start). An attempt-bearing move line is now
+  `<time> <backlog> <task> <step> <action> <words> <attempt>`, e.g. `... tasks tl-1 plan relaunch relaunched <id>`; a
+  move without an attempt (a refused start, `claim_leaked`) and the `round`/`rounds` lines are unchanged. It is exactly
+  one more fixed word: `round_log.WORD`/`IDENT` and `fixed()` are unchanged (`plan` passes `WORD`); the round tests'
+  `LINE` grammar gained one optional `(plan )?` group and their expected word lists the step word. The quiet key
+  `(task, action, word, attempt)` is unchanged (the attempt fixes the step). `Move.step` is not in the `tl step next`
+  JSON (not asked for; the dashboard can take it later).
+
+Visible text, before to after:
+
+- **Spelling, every command named:** `tl plan <verb>` to `tl step <verb>` in every help string, `GUIDE` text, `HELD`,
+  `ABANDON`, `ROUNDS`, `discard()`, `UNCLAIMING`, the `Admitted:`/`Abandoned:`/rounds-stopped lines, the uncertain-launch
+  detail, the rounds-lock refusal (`another \`tl step rounds\` runs ...`), the slot release's tracker detail, and
+  docstrings. `tracker.leaked_claim` names no command and is unchanged.
+- **Scope string:** `PLAN_ONLY` "plan step only: publishes task/<id>; no merge or land" to `STEP_ONLY` "steps built:
+  plan; publishes task/<id>; no merge or land" (in the root description, the noun's help and the start, show, list,
+  verify, release, next and rounds help).
+- **Help:** root "Plan commands run the plan step only: ..." to "Step commands: steps built: plan; ..."; noun `plan`
+  "Plan attempts (...)" to `step` "Step attempts (...)"; verify "... publish a verified plan (...)" to "... publish a
+  verified result (...)"; next "Run one scheduling round for the plan step: ..., publish verified plans; ..." to "Run one
+  scheduling round: ..., publish verified results; ..."; publish "Push the verified plan commit to origin's task/<id> ..."
+  to "Push the step's verified commit to origin's task/<id> ..."; release `--abandon` help spelling only.
+- **Start line:** "This runs the plan step only: .... Follow it with `tl plan show ...`" to "Step commands: steps built:
+  plan; .... Follow it with `tl step show ...`".
+- **GUIDE wording (6 of 41 keys):**
+  - `start`: "... then `tl plan start` to plan the task again." to "... then `tl step start` to admit a fresh attempt."
+  - `publish` (`PUBLISH`): "The plan is verified but not on `origin` yet: ..." to "The step's result is verified but not
+    on `origin` yet: ...".
+  - `done`: "Collected: `succeeded` tells whether the plan was verified." to "... whether the step's result was
+    verified."
+  - `stuck:expired_admitted`: "... Then `tl plan start` plans it again. ..." to "... Then `tl step start` admits a fresh
+    attempt. ...".
+  - `failed`: "The step ended without a verified plan; ... to plan it again, `tl plan release --abandon` then `tl plan
+    start`." to "The step ended without a verified result; ... to try it afresh, `tl step release --abandon` then
+    `tl step start`."
+  - `not_verified`: "Only a verified plan is published: `tl plan verify` first; a rejected plan has nothing to publish."
+    to "Only a verified step result is published: `tl step verify` first; a rejected result has nothing to publish."
+  - Spelling only (21): `wait`, `verify`, `repeat`, `repeats_exhausted`, `release`, `abandoned`, `unknown`, `attempted`,
+    `abandoned_skip`, `no_free_slot`, `rounds_running`, `stuck:entry_lost`, `stuck:hung`, `stuck:uncollected`,
+    `stuck:conflict`, `unsettled`, `registration_conflict`, `not_terminal`, `no_remote`, `branch_moved`, `remote_moved`.
+    Unchanged (14): the rest.
+- **Publish refusal details (`not_verified`):** "The plan was rejected (<rule>)." to "The step's result was rejected
+  (<rule>)."; "The plan is not verified yet: `tl plan verify`." to "The step's result is not verified yet: `tl step
+  verify`."
+- **Kept on purpose:** text about the plan artifact (`plan.md`, the plan answer contract, the verdict words
+  `plan_missing` ...), `plan_step` and the `plan` step value; docstrings outside the renamed modules that say "plan"
+  as prose (`attempt_entry`, `attempt`, `launch`, `slot_release`) were not reworded.
+
+Docs: README's command list; glossary admission, round and stuck rows and the CLI-flags table (now `step`, the S4 note
+says done); [.8.7](../tl-8bh9.8.7/plan.md) exception paragraph rewritten for `tl step` (with its history); a one-line
+note in [.3.2.1](../tl-8bh9.3.2.1/plan.md); the live-smoke runbook's commands (`T step ...`, `START=(step start ...)`,
+`NEXT=`, `ROUNDS=`, 83 lines) and its `rounds.log` comment; CLAUDE.md and AGENTS.md (`tl step rounds` in the
+`one-signal-owner` sentence; still byte-identical). The slice documents .1 to .14 (other than that runbook) and the
+history entries in INDEX.md, selection-review and .8.7 implementation.md are history and keep `tl plan`.
+
+Tests: `test_step_cli.py` respelled; new `test_plan_is_an_unknown_command_after_the_cut` (bare `tl plan`, `tl plan
+start ...`, `tl plan show ...`: exit 2, `invalid choice: 'plan'`); `step` asserted in the show/list JSON key sets and the
+start key set, in the real read path (`"step": "plan"` in show and list JSON, the list row `tl-1 tasks plan 1/3 ...`,
+the show lines `Task:`/`Step: plan`/`Attempt:`); `test_cli` checks `tl step` help and that bare `tl plan` and `tl step`
+exit 2; `test_operations`/`test_repeat` expect `Started(..., step="plan")` where the store holds the attempt;
+`test_round` expects the step in moves and log lines.
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 7 contracts kept); `just test` 1262 passed (1257 + the
+3 unknown-command cases + 1 `test_cli` invalid-request case (`step`) + 1 policy case for `attempt_status.py`; the renamed
+files keep their cases). Code lines (policy counter): `cli_step` 160 (159), `step_guide` 97 (97), `step_render` 131
+(132), `operations` 253 (354), `attempt_status` 116 (new), `round` 214 (213), `result_data` 105 (105), `attempt_reads`
+194 (190); source +21 code lines (5585 to 5606; estimate +30). Live smoke not run (owner: `tl step --help`, one
+`tl step next` round).

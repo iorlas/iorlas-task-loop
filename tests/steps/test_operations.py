@@ -18,6 +18,7 @@ from sqlite_store import Store
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.attempt import SANDBOX, Attempts
 from taskloop.attempt_reads import PublishedRow
+from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown, StatusPorts, list_attempts, next_action, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
@@ -43,25 +44,16 @@ from taskloop.operations import (
     MAX_MINUTES,
     UNCLAIMING,
     Adoption,
-    AttemptView,
     Ended,
-    EntryState,
     Failed,
-    Listed,
     Move,
-    Next,
     PublishedTask,
     Round,
-    Shown,
     Started,
     StartPorts,
     StartRequest,
-    StatusPorts,
     VerifiedTask,
-    list_attempts,
-    next_action,
     publish_task,
-    show_attempt,
     start,
     verify_task,
 )
@@ -206,12 +198,12 @@ def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(e
 
 
 @pytest.mark.parametrize("launched, expected", [
-    (Launched(KEY, ENTRY), Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY)),
-    (AlreadyRunning(KEY, ENTRY), Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY)),
-    (LaunchRefused("dispatched"), Started("already_dispatched", "tasks", "tl-1", "attempt", True)),
+    (Launched(KEY, ENTRY), Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")),
+    (AlreadyRunning(KEY, ENTRY), Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")),
+    (LaunchRefused("dispatched"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, step="plan")),
     (LaunchRefused("registration_refused"), Failed("refused", "registration_refused")),
     (LaunchUnavailable("store"), Failed("unavailable", "store")),
-    (LaunchUncertain(KEY, ENTRY), Failed("uncertain", "launch", "The registered entry may run; `tl plan show` observes it")),
+    (LaunchUncertain(KEY, ENTRY), Failed("uncertain", "launch", "The registered entry may run; `tl step show` observes it")),
 ])
 def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
     reader: AttemptStore, launched: LaunchResult, expected: Started | Failed
@@ -226,7 +218,7 @@ def test_a_concurrent_start_that_won_is_launched_as_existing(admitted: Path, rea
     write(admitted, "UPDATE attempt SET task_id='hidden'")
     admission = Admission(AdmitRefused("task_attempted"), lambda: write(admitted, "UPDATE attempt SET task_id='tl-1'"))
     launched = start(StartPorts(reader, admission, FakeLauncher(AlreadyRunning(KEY, ENTRY)), lambda: 10, Repeats()), REQUEST)
-    assert launched == Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY)
+    assert launched == Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     assert len(admission.requests) == 1
 
 
@@ -599,7 +591,7 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
     launcher, repeats = FakeLauncher(Launched(KEY, ENTRY)), Repeats()
     ports = StartPorts(store, Admission(AdmitRefused("task")), launcher, lambda: 10, repeats)
     answered = start(ports, REQUEST)
-    assert answered == Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="run:worker_failed")
+    assert answered == Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="run:worker_failed", step="plan")
     assert (launcher.calls, repeats.calls) == ([], [])
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, True), Released)
     abandoned = shown()

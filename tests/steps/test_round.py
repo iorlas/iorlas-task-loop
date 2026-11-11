@@ -19,6 +19,7 @@ from git_porcelain.testing import FakeWorktree
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.attempt import Attempts
+from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Seen, SlotFiles, Unsettled, Verified, VerifyResult
 from taskloop.evidence_files import EvidenceFiles
@@ -32,7 +33,6 @@ from taskloop.operations import (
     Round,
     Started,
     StartPorts,
-    StatusPorts,
     VerifiedTask,
     Verify,
     verify_task,
@@ -49,7 +49,7 @@ ENTRY = (7, "entry-start", "boot")
 BEFORE_REBOOT = (7, "entry-start", "old-boot")  # registered in another boot than the bench's "boot"
 HEAD, X = "d" * 40, "x" * 40
 REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "effort-e", 30)
-LINE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks (\S+ )?(start|relaunch|repeat|verify|publish|report|skip|round)( \S+)+")
+LINE = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks (\S+ )?(plan )?(start|relaunch|repeat|verify|publish|report|skip|round)( \S+)+")
 
 
 def bead(task_id: str, priority: int | None = 2, parent: str = "", assignee: str = "") -> Bead:
@@ -211,11 +211,11 @@ def test_an_admitted_attempt_is_relaunched_each_round_until_its_deadline(factory
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     bench = Bench(factory)
     first, second = bench.round(), bench.round()
-    assert first.moves == second.moves == (Move("tl-1", "relaunch", "relaunched", "attempt"),)
+    assert first.moves == second.moves == (Move("tl-1", "relaunch", "relaunched", "attempt", step="plan"),)
     bench.now = 200
     assert moves(bench.round()) == [("tl-1", "report", "stuck:expired_admitted")]
     assert bench.launcher.calls == ["tl-1", "tl-1"]
-    assert bench.lines[0].endswith(" tasks tl-1 relaunch relaunched attempt") and bench.lines[1].endswith(" tasks round moves=1")
+    assert bench.lines[0].endswith(" tasks tl-1 plan relaunch relaunched attempt") and bench.lines[1].endswith(" tasks round moves=1")
 
 
 def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, rc: int = 0) -> None:
@@ -285,7 +285,7 @@ def test_a_verified_released_plan_is_published_once_then_done(
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
     bench = Bench(registered)
     bench.publisher = BranchPublish(store, checkouts, slot_files, lambda: 40)
-    assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt"),)
+    assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt", step="plan"),)
     assert registered.execute("SELECT count(*) FROM published_branch").fetchone() == (1,)
     assert bench.round().moves == ()  # done: nothing pushed again
 
@@ -297,7 +297,7 @@ def test_a_failed_publication_is_retried_every_round(
     bench = Bench(registered)
     bench.publisher = Failing()
     rounds = [bench.round(), bench.round()]
-    assert all(each.moves == (Move("tl-1", "publish", "unavailable:remote", "attempt", "no route"),) for each in rounds)
+    assert all(each.moves == (Move("tl-1", "publish", "unavailable:remote", "attempt", "no route", "plan"),) for each in rounds)
     assert all(exit_code(each) == 3 for each in rounds) and bench.publisher.calls == 2
 
 
@@ -374,7 +374,7 @@ def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admi
                             ("t-3", "skip", "assigned"), ("t-4", "skip", "ancestry"), ("t-5", "start", "started")]
     skips = {(each.task_id, each.word): each.attempt_id for each in first.moves if each.action == "skip"}
     assert (skips[("t-1", "abandoned")], skips[("t-2", "attempted")], skips[("t-3", "assigned")]) == ("gone-1", "lapsed", "")
-    assert any(line.endswith(" tasks t-1 skip abandoned gone-1") for line in bench.lines)
+    assert any(line.endswith(" tasks t-1 plan skip abandoned gone-1") for line in bench.lines)
     second = bench.round()
     assert ("t-5", "skip", "attempted") in moves(second) and ("t-5", "report", "running") in moves(second)
     assert admission.requests == ["t-5"] and ready.reads == ["missing", "missing"]  # one show per unique parent per round
@@ -407,9 +407,9 @@ def test_a_log_that_cannot_be_written_changes_nothing_but_logged(factory: sqlite
 def test_an_attempt_abandoned_after_the_snapshot_is_skipped_never_admitted_afresh(factory: sqlite3.Connection) -> None:
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     bench = Bench(factory, FakeTaskReadClient())
-    bench.during = lambda: released(factory, "attempt", "unclaimed")  # a person's `tl plan release --abandon`, racing
+    bench.during = lambda: released(factory, "attempt", "unclaimed")  # a person's `tl step release --abandon`, racing
     found = bench.round()
-    assert found.moves == (Move("tl-1", "skip", "abandoned", "attempt"),) and exit_code(found) == 0
+    assert found.moves == (Move("tl-1", "skip", "abandoned", "attempt", step="plan"),) and exit_code(found) == 0
     assert bench.admission.requests == bench.launcher.calls == []
     bench.during = lambda: None
     assert bench.round().moves == ()  # the next snapshot sees the abandon: nothing
@@ -484,12 +484,12 @@ def test_a_move_identical_to_the_previous_rounds_is_not_written_again(factory: s
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     bench = Bench(factory)
     first = bench.round(replace(REQUEST, quiet=frozenset()))
-    assert [line.split(" ")[2:] for line in bench.lines] == [["tl-1", "relaunch", "relaunched", "attempt"], ["round", "moves=1"]]
+    assert [line.split(" ")[2:] for line in bench.lines] == [["tl-1", "plan", "relaunch", "relaunched", "attempt"], ["round", "moves=1"]]
     second = bench.round(replace(REQUEST, quiet=first.written))
     assert second.moves == first.moves and len(bench.lines) == 2  # still in the result, not in the log
     bench.now = 200
     third = bench.round(replace(REQUEST, quiet=second.written))
-    assert [line.split(" ")[2:] for line in bench.lines[2:]] == [["tl-1", "report", "stuck:expired_admitted", "attempt"],
+    assert [line.split(" ")[2:] for line in bench.lines[2:]] == [["tl-1", "plan", "report", "stuck:expired_admitted", "attempt"],
                                                                 ["round", "moves=1"]]
     bench.round(replace(REQUEST, quiet=third.written))
     assert len(bench.lines) == 4
@@ -518,7 +518,7 @@ def test_after_a_failed_log_write_the_next_round_writes_the_state_again(factory:
     assert failed.logged is False and failed.written == frozenset()
     bench.log = bench.lines.append
     again = bench.round(replace(REQUEST, quiet=failed.written))
-    assert [line.split(" ")[2:] for line in bench.lines] == [["tl-1", "relaunch", "relaunched", "attempt"], ["round", "moves=1"]]
+    assert [line.split(" ")[2:] for line in bench.lines] == [["tl-1", "plan", "relaunch", "relaunched", "attempt"], ["round", "moves=1"]]
     bench.round(replace(REQUEST, quiet=again.written))
     assert len(bench.lines) == 2  # once written, identical rounds stay silent
 
@@ -531,7 +531,7 @@ def test_a_verified_plan_whose_entry_still_runs_is_left_to_that_entry(
     bench.seen = "matching"  # the entry publishes right after its release
     assert bench.round().moves == () and bench.recorded.calls == []
     bench.seen = "gone"
-    assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt"),) and bench.recorded.calls == ["publish"]
+    assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt", step="plan"),) and bench.recorded.calls == ["publish"]
 
 
 def test_a_stop_after_the_first_settle_move_performs_no_further_move(factory: sqlite3.Connection) -> None:

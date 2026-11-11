@@ -1,7 +1,7 @@
 """Slot custody: one kernel `flock` per managed slot, taken without waiting; the only importer of `process_lock`.
 
 The attempt entry holds its slot's lock around its whole body (preparation, the agent run, the publish retries, the
-factory commit, the clean-tree check and the verdict). `tl plan verify` and a repeating `tl plan start` take the same
+factory commit, the clean-tree check and the verdict). `tl step verify` and a repeating `tl step start` take the same
 lock around their Git writes (`hold`), a release around its park and its transaction (`custody`), and admission probes it
 before it counts a slot free (`probe`). A second taker, in this process or another, is refused at once (`SlotBusy`):
 nonreentrant, `timeout=0`. The lock file sits beside the slots (`<slots_root>/<repo_id>/.locks/sN.lock`), outside the
