@@ -107,16 +107,18 @@ def _repository(checkouts: Checkouts, files: SlotFiles, path: Path, repo_id: str
     return (repo, found.root) if identity.common_dir == found.common else "redirected"
 
 
-def repository(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str) -> Path | Literal["repo", "redirected"]:
+def repository(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str) -> Path | Literal["repo", "redirected"]:
     """The person's checkout (the root a verified slot pointer names) of the repository `repo_id`: the first half of
     `observe_slot`, for a caller that then works on the repository, never on the slot."""
-    found = _repository(checkouts, files, Path(cwd), repo_id)
+    found = _repository(checkouts, files, Path(slot_path), repo_id)
     return found if isinstance(found, str) else found[1]
 
 
-def observe_slot(checkouts: Checkouts, files: SlotFiles, cwd: str, repo_id: str) -> SlotState | Literal["repo", "not_listed", "redirected"]:
+def observe_slot(
+    checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str
+) -> SlotState | Literal["repo", "not_listed", "redirected"]:
     """`repository`'s checks, then `not_listed` when Git does not list the slot."""
-    path = Path(cwd)
+    path = Path(slot_path)
     found = _repository(checkouts, files, path, repo_id)
     if isinstance(found, str):
         return found

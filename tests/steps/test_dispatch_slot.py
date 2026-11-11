@@ -129,6 +129,7 @@ def test_an_unusable_slot_never_dispatches_and_the_attempt_stays_admitted(
         assert slot_files.lstat(slot.path / ".git") is not None  # its pointer stays readable: only Git's registration goes
         repo.drop_worktree(slot.path)
     else:
+        con.execute("UPDATE slot SET repo_id='other'")
         con.execute("UPDATE reservation SET repo_id='other'")
         con.execute("UPDATE attempt SET repo_id='other'")
     agent = run()

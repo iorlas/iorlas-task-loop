@@ -45,14 +45,14 @@ type Refusal = Literal[
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged",
 ]
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
-# clean completely published answer of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
+# clean answer with its session complete, of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
 # tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D and step (all carried on).
 PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
 EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),
 p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
- AND e.effect IN ('commit','keep') AND e.publication='complete')
+ AND e.effect IN ('commit','keep') AND e.session_state='complete')
 AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
 p.tracker_root,p.seq,p.slot_head,p.step
 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
@@ -362,8 +362,8 @@ class AttemptAdmission:
             chosen = next((slot for each in free if (slot := _unheld(con, repo_id, each, generation)) is not None), None)
             if chosen is None:
                 return AdmitRefused("no_free_slot")
-            (name, cwd), head = chosen
-            held = {"slot": name, "repo_id": repo_id, "cwd": cwd, "generation": generation, "attempt_id": key.attempt_id}
+            name, head = chosen
+            held = {"slot": name, "repo_id": repo_id, "generation": generation, "attempt_id": key.attempt_id}
             con.execute(f"INSERT INTO reservation ({RESERVATION}) VALUES ({marks(RESERVATION)})", bound(RESERVATION, held))
             con.execute("UPDATE slot SET generation=? WHERE repo_id=? AND name=?", (generation, repo_id, name))
             attempt = {
@@ -393,18 +393,18 @@ def as_count(value: object) -> int:
     raise sqlite3.DatabaseError("Malformed stored integer")
 
 
-def _unheld(con: sqlite3.Connection, repo_id: RepoId, free: _Free, generation: int) -> tuple[tuple[str, str], str] | None:
-    """The slot's name and cwd with its D, when it is unreserved and its counter is below `generation`."""
+def _unheld(con: sqlite3.Connection, repo_id: RepoId, free: _Free, generation: int) -> tuple[str, str] | None:
+    """The slot's name with its D, when it is unreserved and its counter is below `generation`."""
     row: tuple[object, ...] | None = con.execute(
-        "SELECT name,cwd FROM slot s WHERE repo_id=? AND name=? AND generation<? AND NOT EXISTS "
+        "SELECT name FROM slot s WHERE repo_id=? AND name=? AND generation<? AND NOT EXISTS "
         "(SELECT 1 FROM reservation r WHERE r.repo_id=s.repo_id AND r.slot=s.name)",
         (repo_id, free.name, generation),
     ).fetchone()
     if row is None:
         return None
-    if not isinstance(row[0], str) or not isinstance(row[1], str):
+    if not isinstance(row[0], str):
         raise sqlite3.DatabaseError("Malformed slot row")
-    return (row[0], row[1]), free.head
+    return row[0], free.head
 
 
 def _issued(con: sqlite3.Connection, repo_id: RepoId, names: tuple[str, ...]) -> int:
@@ -428,7 +428,7 @@ def _attempted(con: sqlite3.Connection, request: AdmitRequest) -> bool:
     whose claim was returned (`unclaimed`, or found `not_held`) starts the task again. While the claim is `unclaiming`,
     a fresh claim could be undone by the abandon's own unclaim, so the task still counts as attempted."""
     found = con.execute(
-        """SELECT EXISTS (SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id AND r.abandoned=1
+        """SELECT EXISTS (SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id
         AND r.claim IN ('unclaimed','not_held')) FROM attempt p
         WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1""",
         (request.backlog, request.task_id),

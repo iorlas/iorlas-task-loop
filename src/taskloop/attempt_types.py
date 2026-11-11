@@ -91,7 +91,7 @@ class Admission:
     task: TaskReference
     repo_id: RepoId
     slot: str
-    cwd: str
+    slot_path: str
     input_ref: FileRef
     model: str
     effort: str
@@ -235,7 +235,7 @@ class StoredExecution:
     facts: ExecutionFacts
     evidence: Evidence
     answer: AnswerState
-    publication: Literal["complete", "pending", "conflict", "fault"]
+    session_state: Literal["complete", "pending", "conflict", "fault"]  # the session ref's capture, never a git push
     verification: Verdict | None = None
 
 
@@ -256,7 +256,7 @@ class PendingResult:
 
 
 @dataclass(frozen=True)
-class PublicationResult:
+class CaptureResult:
     status: Literal["accepted", "already_same", "conflict", "unavailable"]
     reason: str = ""
 

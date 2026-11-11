@@ -1,4 +1,4 @@
-"""Execute, publish, collect and verify one already admitted plan attempt; it grants no admission and releases nothing."""
+"""Execute, capture, collect and verify one already admitted plan attempt; it grants no admission and releases nothing."""
 
 from collections.abc import Callable
 from contextlib import suppress
@@ -14,12 +14,12 @@ from taskloop.attempt_types import (
     AttemptKey,
     AttemptRecord,
     AttemptResult,
+    CaptureResult,
     Checkouts,
     Decoder,
     EntryIdentity,
     Evidence,
     PendingResult,
-    PublicationResult,
     Rejected,
     SessionInput,
     SlotFiles,
@@ -79,15 +79,15 @@ def end_word(stored: StoredExecution) -> str:
 
 
 def report(stored: StoredExecution) -> AttemptResult:
-    """Stored terminal data is collected with its outcome; a pending validation, session publication or verification is
+    """Stored terminal data is collected with its outcome; a pending validation, session state or verification is
     never complete. A `planned` or `unchanged` outcome is collected only with its verdict: `verified`, `reused` or
     `rejected:<rule>`."""
     if stored.answer.kind == "validation_pending":
         return AttemptResult("pending", "validation_pending", stored)
-    if stored.publication == "conflict":
+    if stored.session_state == "conflict":
         return AttemptResult("conflict", "session", stored)
-    if stored.publication != "complete":
-        return AttemptResult("pending", "session_" + stored.publication, stored)
+    if stored.session_state != "complete":
+        return AttemptResult("pending", "session_" + stored.session_state, stored)
     reason, verdict = end_word(stored), stored.verification
     if reason not in ("planned", "unchanged"):
         return AttemptResult("collected", reason, stored)
@@ -161,9 +161,9 @@ class Attempts:
         except StoreRefused as error:
             return AttemptResult("refused", str(error))
 
-    def publish(self, pending: PendingResult) -> PublicationResult:
-        """Retry the unfinished DB publication of returned facts; never runs the agent."""
-        result, pending = self._publish(pending)
+    def capture(self, pending: PendingResult) -> CaptureResult:
+        """Retry the unfinished DB capture of returned facts; never runs the agent."""
+        result, pending = self._capture(pending)
         if result.status in ACCEPTED:
             # on failure the captured facts stay validation_pending; a later execute finishes the phase without the agent
             with suppress(StoreUnavailable, StoreRefused):
@@ -171,12 +171,12 @@ class Attempts:
         return result
 
     def _resume(self, key: AttemptKey, stored: StoredExecution) -> AttemptResult:
-        if stored.answer.kind != "validation_pending" and stored.publication in ("complete", "conflict"):
+        if stored.answer.kind != "validation_pending" and stored.session_state in ("complete", "conflict"):
             return report(stored)
         record = self.store.load(key)
         if record is None:
             return AttemptResult("refused", "absent")
-        if stored.publication in ("pending", "fault"):
+        if stored.session_state in ("pending", "fault"):
             stored = self._refresh(record, stored)
         if stored.answer.kind != "validation_pending":
             return report(stored)
@@ -187,17 +187,17 @@ class Attempts:
         return self._answered(record.admission, stored.evidence, text)
 
     def _refresh(self, record: AttemptRecord, stored: StoredExecution) -> StoredExecution:
-        """Upgrade a stored pending/fault publication only on evidence: a recorded conflict, a reported session that now
-        publishes, or a session already accepted on the attempt. Otherwise it stays as it was."""
+        """Upgrade a stored pending/fault session state only on evidence: a recorded conflict, a reported session that is
+        now recorded, or a session already accepted on the attempt. Otherwise it stays as it was."""
         if record.session_conflict:
-            publication = "conflict"
+            session_state = "conflict"
         elif stored.facts.session is not None:
-            publication = reconcile(self.store, record.admission, SessionInput(), stored.facts)
+            session_state = reconcile(self.store, record.admission, SessionInput(), stored.facts)
         elif record.session_ref is not None:
-            publication = "complete"
+            session_state = "complete"
         else:
             return stored
-        self.store.capture(record.admission, None, stored.facts, stored.evidence, publication)
+        self.store.capture(record.admission, None, stored.facts, stored.evidence, session_state)
         return self.store.collect(record.admission.key) or stored
 
     def _refusal(self, admission: Admission, me: EntryIdentity) -> str | None:
@@ -253,7 +253,7 @@ class Attempts:
         harness = CodexHarness()
         inputs = LaunchInputs(
             exe=exe,
-            cwd=admission.cwd,
+            cwd=admission.slot_path,
             model=admission.model,
             effort=admission.effort,
             prompt=prompt,
@@ -278,7 +278,7 @@ class Attempts:
         if isinstance(called, AttemptResult):
             return called
         raw, sessions = called
-        result, pending = self._publish(PendingResult(admission, raw, None, sessions))
+        result, pending = self._capture(PendingResult(admission, raw, None, sessions))
         if result.status in ACCEPTED:
             return self._answered(admission, pending.evidence, raw.summary.text)
         return AttemptResult("conflict" if result.status == "conflict" else "unavailable", result.reason, pending=pending)
@@ -301,28 +301,28 @@ class Attempts:
         finally:
             harness.cleanup()
 
-    def _publish(self, pending: PendingResult) -> tuple[PublicationResult, PendingResult]:
+    def _capture(self, pending: PendingResult) -> tuple[CaptureResult, PendingResult]:
         """Capture evidence files, then facts with answer=validation_pending, before any answer decoding."""
         admission, evidence = pending.admission, pending.evidence
         if evidence is None:
             try:
                 evidence = self.files.capture(admission.key, pending.raw)
             except EvidenceError:
-                return PublicationResult("unavailable", "evidence"), pending
+                return CaptureResult("unavailable", "evidence"), pending
             pending = replace(pending, evidence=evidence)
         try:
             facts = pending.facts or execution_facts(pending.raw)
         except Exception as error:  # a projection fault must not lose the returned outcome: its evidence is already written
-            return PublicationResult("unavailable", "projection:" + type(error).__name__), pending
+            return CaptureResult("unavailable", "projection:" + type(error).__name__), pending
         pending = replace(pending, facts=facts)
-        publication = reconcile(self.store, admission, pending.sessions, facts)
+        session_state = reconcile(self.store, admission, pending.sessions, facts)
         try:
-            status = self.store.capture(admission, pending.raw.worker, facts, evidence, publication)
+            status = self.store.capture(admission, pending.raw.worker, facts, evidence, session_state)
         except StoreUnavailable:
-            return PublicationResult("unavailable", "store"), pending
+            return CaptureResult("unavailable", "store"), pending
         except StoreRefused as error:
-            return PublicationResult("conflict", str(error)), pending
-        return PublicationResult(status), pending
+            return CaptureResult("conflict", str(error)), pending
+        return CaptureResult(status), pending
 
     def _answered(self, admission: Admission, evidence: Evidence | None, text: str) -> AttemptResult:
         if self._validate(admission, evidence, text) == "conflict":

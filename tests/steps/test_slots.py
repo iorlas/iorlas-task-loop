@@ -40,7 +40,7 @@ def unavailable(*, with_dirty: bool = False) -> tuple[WorktreeInfo, ...]:
     raise GitUnavailable("git exited 128")
 
 
-def unlocked(_cwd: str) -> bool:
+def unlocked(_slot_path: str) -> bool:
     """The free rule's lock probe: no other holder."""
     return True
 
@@ -117,7 +117,7 @@ def test_observe_reports_free_held_and_unknown_lowest_first(
     names = tuple(f"s{n}" for n in range(1, 11))
     add(repo, root, *names)
     assert all(isinstance(result, Adopted) for result in adopted(factory, repo, root, 10))
-    factory.execute("INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES ('s2',?,?,1,'a')", (rid(repo), "x"))
+    factory.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s2',?,1,'a')", (rid(repo),))
     repo.worktree(derived(repo, root, "s2")).write_file("scratch", "x")  # held wins over dirty
     repo.worktree(derived(repo, root, "s3")).write_file("scratch", "x")
     repo.drop_worktree(derived(repo, root, "s4"))
@@ -159,7 +159,7 @@ def test_two_repos_each_have_their_own_s1(factory: sqlite3.Connection, repo: Fak
     for each in (repo, other):
         add(each, root, "s1")
         assert adopted(factory, each, root, 1) == (Adopted("s1", derived(each, root, "s1")),)
-    factory.execute("INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES ('s1',?,?,1,'a')", (rid(repo), "x"))
+    factory.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s1',?,1,'a')", (rid(repo),))
     assert observe(factory, repo, rid(repo), unlocked)[0].state == "held"
     assert observe(factory, other, rid(other), unlocked)[0].state == "free"
 
@@ -190,7 +190,7 @@ def test_readopting_under_another_root_is_reported_not_moved(
     elsewhere = tmp_path / "elsewhere"
     add(repo, elsewhere, "s1")
     assert adopted(factory, repo, elsewhere, 1) == (NotAdopted("s1", "other_root", derived(repo, elsewhere, "s1")),)
-    assert factory.execute("SELECT cwd FROM slot").fetchall() == [(str(derived(repo, root, "s1")),)]
+    assert factory.execute("SELECT path FROM slot").fetchall() == [(str(derived(repo, root, "s1")),)]
 
 
 def test_a_root_inside_the_main_checkout_is_refused(factory: sqlite3.Connection, repo: FakeRepo) -> None:
@@ -224,11 +224,11 @@ def test_a_free_looking_slot_whose_lock_is_held_or_unknown_is_never_free(
     """A release still parking it holds the lock: admission must not reserve it. Held slots are never probed."""
     add(repo, root, "s1", "s2")
     adopted(factory, repo, root, 2)
-    factory.execute("INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES ('s2',?,?,1,'a')", (rid(repo), "x"))
+    factory.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s2',?,1,'a')", (rid(repo),))
     probed: list[str] = []
 
-    def probe(cwd: str) -> bool | None:
-        probed.append(cwd)
+    def probe(slot_path: str) -> bool | None:
+        probed.append(slot_path)
         return lock
 
     views = observe(factory, repo, rid(repo), probe)
@@ -241,8 +241,8 @@ def test_a_slot_reserved_while_it_was_probed_is_held_not_free(factory: sqlite3.C
     add(repo, root, "s1")
     adopted(factory, repo, root, 1)
 
-    def probe(_cwd: str) -> bool:
-        factory.execute("INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES ('s1',?,?,1,'won')", (rid(repo), "x"))
+    def probe(_slot_path: str) -> bool:
+        factory.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s1',?,1,'won')", (rid(repo),))
         return True
 
     assert observe(factory, repo, rid(repo), probe) == (SlotView("s1", derived(repo, root, "s1"), "held", attempt_id="won"),)
@@ -251,10 +251,10 @@ def test_a_slot_reserved_while_it_was_probed_is_held_not_free(factory: sqlite3.C
 def test_slot_use_counts_the_adopted_slots_without_a_reservation_row_and_lists_every_row(factory: sqlite3.Connection) -> None:
     store = AttemptStore(lambda: factory)
     assert store.slot_use() == SlotUse(0, frozenset())
-    factory.execute("INSERT INTO slot (repo_id,name,cwd) VALUES ('r','s1','/r/s1'),('r','s2','/r/s2'),('q','s1','/q/s1')")
-    factory.execute("INSERT INTO reservation VALUES ('s1','r','/r/s1',1,'a1')")
+    factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('r','s1','/r/s1'),('r','s2','/r/s2'),('q','s1','/q/s1')")
+    factory.execute("INSERT INTO reservation VALUES ('s1','r',1,'a1')")
     assert store.slot_use() == SlotUse(2, frozenset({("r", "s1")}))  # across repos: q's s1 is not r's
-    factory.execute("INSERT INTO reservation VALUES ('s2','r','/r/s2',1,'a2'),('s1','q','/q/s1',3,'a3')")
+    factory.execute("INSERT INTO reservation VALUES ('s2','r',1,'a2'),('s1','q',3,'a3')")
     assert store.slot_use() == SlotUse(0, frozenset({("r", "s1"), ("r", "s2"), ("q", "s1")}))
     with pytest.raises(StoreUnavailable):
         AttemptStore(lambda: None).slot_use()

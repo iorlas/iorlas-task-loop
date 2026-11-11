@@ -42,7 +42,7 @@ from taskloop.slots import Adopted, NotAdopted, SlotView
 
 type Clock = Callable[[], float]
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
-type Stuck = Literal["stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:unpublished", "stuck:conflict"]
+type Stuck = Literal["stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:uncollected", "stuck:conflict"]
 type Next = Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "done", "unknown"] | Stuck
 type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a step still to settle
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
@@ -380,7 +380,7 @@ def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
         return "stuck:expired_admitted" if expired else "start"
     if phase in ("dispatching", "registered"):
         return "stuck:entry_lost"
-    return "verify" if result.reason == "verification" else "stuck:unpublished"
+    return "verify" if result.reason == "verification" else "stuck:uncollected"
 
 
 def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:

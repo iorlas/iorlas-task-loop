@@ -31,7 +31,7 @@ def registration_hook(store: AttemptStore, admission: Admission, clock: Callable
 
 
 class SessionLatch:
-    """Receives refs on the output pump: one conditional publication per callback, never raising into the pump.
+    """Receives refs on the output pump: one conditional session write per callback, never raising into the pump.
 
     Keeps the first ref seen while unaccepted, and a flag when a different ref arrives; never overwrites.
     """
@@ -52,7 +52,7 @@ class SessionLatch:
                 elif ref != self._seen:
                     self._conflict = True
                 if ref == self._seen or self._accepted:
-                    self._publish(ref)
+                    self._record(ref)
             except StoreUnavailable:
                 pass
             except StoreRefused as error:
@@ -60,7 +60,7 @@ class SessionLatch:
             except Exception as error:  # a programming fault is retained with its type, never raised into the output pump
                 self._fault = f"unexpected:{type(error).__name__}"
 
-    def _publish(self, ref: str) -> None:
+    def _record(self, ref: str) -> None:
         status = self._store.session(self._admission, ref)
         if status == "conflict":
             self._conflict = True

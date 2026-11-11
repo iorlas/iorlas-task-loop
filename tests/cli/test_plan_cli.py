@@ -63,7 +63,7 @@ REPEAT = AttemptView(
 D = "d" * 40
 ABANDONED = AttemptView(
     "tasks", "tl-1", "second", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, "start",
-    earlier=(("first", "abandoned"),), seq=2, release=ReleaseRow(D, 30.0, True, "unclaimed"),
+    earlier=(("first", "abandoned"),), seq=2, release=ReleaseRow(D, 30.0, "unclaimed"),
 )
 RELEASE = ["plan", "release", "tl-1", "--backlog", "tasks"]
 FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned"}
@@ -78,7 +78,7 @@ MOVES = (Move("tl-3", "start", "started", "a3"), Move("tl-2", "report", "stuck:h
          Move("tl-4", "report", "failed:rejected:paths", "a4", "never shown"), Move("tl-5", "report", "claim_leaked"))
 DONE = AttemptView(
     "tasks", "tl-1", "attempt", "s1", "captured", "gone", AttemptResult("collected", "verified"), False, "done",
-    release=ReleaseRow(D, 30.0, False, "kept"), published=PublishedRow(X, X, 40.0),
+    release=ReleaseRow(D, 30.0, "kept"), published=PublishedRow(X, X, 40.0),
 )
 
 
@@ -140,14 +140,14 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     output = capsys.readouterr()
     assert json.loads(output.out) == {
         "status": "started", "backlog": "tasks", "task": "tl-1", "attempt_id": "attempt", "existing": False,
-        "entry": {"pid": 7, "start": "entry-start", "boot": "boot"}, "number": None, "result": "",
+        "entry_process": {"pid": 7, "start": "entry-start", "boot": "boot"}, "number": None, "result": None,
     }
     assert "dispatch-token-never-shown" not in output.out + output.err
     assert not home.exists()
 
 
 VIEW = SlotView("s2", Path("/slots/s2"), "unknown", "dirty")
-STARTED = {"status", "backlog", "task", "attempt_id", "existing", "entry", "number", "result"}
+STARTED = {"status", "backlog", "task", "attempt_id", "existing", "entry_process", "number", "result"}
 CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (START, Started("started", "tasks", "tl-1", "attempt", False, ENTRY), 0,
      ["started: attempt attempt for tl-1", plan_guide.HELD], STARTED),
@@ -385,7 +385,8 @@ def admitted(path: Path) -> None:
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
     with begin_immediate(con):
-        con.execute("INSERT INTO reservation VALUES ('s1','repo','/slots/s1',1,'attempt')")
+        con.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','s1','/slots/s1')")
+        con.execute("INSERT INTO reservation VALUES ('s1','repo',1,'attempt')")
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
@@ -478,7 +479,7 @@ def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
     assert requests == [cli_plan.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)]
     assert json.loads(capsys.readouterr().out) == {
         "status": "round", "backlog": "tasks", "stopped": None, "logged": False,
-        "moves": [{"task": "tl-3", "action": "start", "word": "started", "attempt_id": "a3", "detail": ""}],
+        "moves": [{"task": "tl-3", "action": "start", "word": "started", "attempt_id": "a3", "detail": None}],
     }
     assert main([*NEXT, "--artifacts", str(tmp_path / "art")]) == 0
     assert f"Log: not written ({tmp_path / 'art' / 'rounds.log'})" in capsys.readouterr().out
@@ -553,7 +554,7 @@ def test_rounds_flags_reach_the_opener_and_print_a_start_and_an_end(
     assert run.requests[-1] == cli_plan.RoundsRequest("tasks", 30)
     assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [
         {"status": "rounds", "backlog": "tasks", "every": 30, "log": str(art / "rounds.log")},
-        {"status": "ended", "backlog": "tasks", "reason": "interrupted", "detail": ""},
+        {"status": "ended", "backlog": "tasks", "reason": "interrupted", "detail": None},
     ]
 
 
@@ -570,7 +571,7 @@ def test_a_second_ctrl_c_exits_130(structured: bool, monkeypatch: pytest.MonkeyP
     stubbed(monkeypatch, KeyboardInterrupt())
     assert main([*ROUNDS, *(["--json"] if structured else [])]) == 130
     err = capsys.readouterr().err
-    assert json.loads(err) == {"status": "ended", "backlog": "tasks", "reason": "abrupt", "detail": ""} if structured else (
+    assert json.loads(err) == {"status": "ended", "backlog": "tasks", "reason": "abrupt", "detail": None} if structured else (
         err == "Stopped at once.\n")
 
 

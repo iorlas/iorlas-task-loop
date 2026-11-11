@@ -35,14 +35,15 @@ from taskloop.prepare import task_branch
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import listing, observe_slot
 
-type ParkHold = Callable[[str, str], AbstractContextManager[None]]  # (slot cwd, attempt id): the slot's lock, never waiting
+type ParkHold = Callable[[str, str], AbstractContextManager[None]]  # (slot path, attempt id): the slot's lock, never waiting
 type Claimed = Literal["kept", "unclaiming", "unclaimed", "not_held"]
 CLAIMS: Final[tuple[Claimed, ...]] = ("kept", "unclaiming", "unclaimed", "not_held")
 NOTHING: Final = "Nothing changed."
 ROW: Final = """SELECT p.task_id,p.repo_id,p.slot,p.phase,p.rev,p.entry_pid,p.entry_start,p.entry_boot,p.worker_pid,p.worker_pgid,
 p.worker_start,p.worker_boot,p.slot_head,p.tracker_root,
-(SELECT r.cwd FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id AND r.generation=p.generation),
-EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),x.abandoned,x.claim
+(SELECT s.path FROM reservation r JOIN slot s ON s.repo_id=r.repo_id AND s.name=r.slot
+ WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id AND r.generation=p.generation),
+EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),x.claim
 FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 # Inside the write transaction: still the attempt the proof read (same rev and phase), no successor, the reservation held
@@ -158,9 +159,9 @@ class _Row:
     stopping: Stopping
     slot_head: str  # D
     tracker_root: str
-    cwd: str | None  # the held reservation's slot path; None when it is not held at the key's generation
+    slot_path: str | None  # the held reservation's slot path; None when it is not held at the key's generation
     successor: bool
-    released: tuple[bool, Claimed] | None  # (abandoned, claim) of an existing release row
+    released: Claimed | None  # the claim of an existing release row: abandoned unless `kept`
 
 
 def _claim(value: object) -> Claimed:
@@ -173,7 +174,7 @@ def _claim(value: object) -> Claimed:
 def _row(row: tuple[object, ...], key: AttemptKey) -> _Row:
     entry = None if any(value is None for value in row[5:8]) else (as_int(row[5]), as_text(row[6]), as_text(row[7]))
     worker = None if row[8] is None else Worker(pid=as_int(row[8]), pgid=as_int(row[9]), start=as_text(row[10]), boot=as_text(row[11]))
-    released = None if row[16] is None else (bool(as_int(row[16])), _claim(row[17]))
+    released = None if row[16] is None else _claim(row[16])
     stopping = Stopping(as_text(row[3]), entry, worker)
     return _Row(key, as_text(row[0]), as_text(row[1]), as_text(row[2]), as_int(row[4]), stopping, as_text(row[12]), as_text(row[13]),
                 as_nullable_text(row[14]), bool(as_int(row[15])), released)
@@ -235,7 +236,7 @@ class SlotRelease:
 
     def _refusal(self, row: _Row, abandon: bool, me: EntryIdentity | None) -> NotReleased | None:
         """Read before anything changes: the reservation held, the result collected (settled only), the stop proof."""
-        if row.cwd is None or row.successor:
+        if row.slot_path is None or row.successor:
             return NotReleased("unavailable", "changed", f"The attempt no longer holds its reservation. {NOTHING}")
         if not abandon:
             result = collect(self.store, row.key)
@@ -248,25 +249,25 @@ class SlotRelease:
     def _pending(self, row: _Row, abandon: bool) -> ReleaseResult:
         """Released before: only what is pending is finished, with no Git and no lock. Abandoning a settled release flips
         it, then returns the claim; an `unclaiming` claim is retried."""
-        abandoned, claim = row.released or (False, "kept")
-        if abandon and not abandoned:
+        claim = row.released or "kept"
+        if abandon and claim == "kept":
             with self._writing() as con:
                 flipped = con.execute(
-                    "UPDATE slot_release SET abandoned=1,claim='unclaiming' WHERE attempt_id=? AND abandoned=0", (row.key.attempt_id,)
+                    "UPDATE slot_release SET claim='unclaiming' WHERE attempt_id=? AND claim='kept'", (row.key.attempt_id,)
                 ).rowcount
             if flipped != 1:
                 return NotReleased("unavailable", "changed", f"Another release changed it first. {NOTHING}")
-            abandoned, claim = True, "unclaiming"
+            claim = "unclaiming"
         if claim != "unclaiming":
-            return AlreadyReleased(row.slot, claim, abandoned)
+            return AlreadyReleased(row.slot, claim, claim != "kept")
         found = self._unclaim(row)
         return found if isinstance(found, NotReleased) else Released(row.slot, None, False, found, True)
 
     def _held(self, row: _Row, abandon: bool) -> Released | NotReleased:
-        cwd = row.cwd or ""
+        slot_path = row.slot_path or ""
         try:
-            with self.hold(cwd, row.key.attempt_id):
-                return self._parked(row, Path(cwd), abandon)
+            with self.hold(slot_path, row.key.attempt_id):
+                return self._parked(row, Path(slot_path), abandon)
         except SlotBusy:
             return NotReleased("unavailable", "slot_busy", f"Another entry, verify or release holds the slot. {NOTHING}")
         except SlotLockUnavailable:
@@ -317,7 +318,7 @@ class SlotRelease:
         with self._writing() as con:
             if con.execute(FENCE, (*astuple(key), row.rev, row.stopping.phase)).fetchone() is None:
                 return False
-            values = (*astuple(key), head, self.clock(), int(abandon), "unclaiming" if abandon else "kept")
+            values = (*astuple(key), head, self.clock(), "unclaiming" if abandon else "kept")
             con.execute(f"INSERT INTO slot_release ({RELEASE}) VALUES ({marks(RELEASE)})", values)
             con.execute(
                 "DELETE FROM reservation WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",

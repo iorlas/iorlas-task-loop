@@ -257,8 +257,8 @@ NEXT: list[tuple[str, EntryState, AttemptResult, bool, Next]] = [
     ("dispatching", "gone", AttemptResult("pending", "dispatching"), False, "stuck:entry_lost"),
     ("registered", "different_process", AttemptResult("pending", "registered"), True, "stuck:entry_lost"),
     ("captured", "gone", AttemptResult("pending", "verification"), True, "verify"),
-    ("captured", "gone", AttemptResult("pending", "session_pending"), False, "stuck:unpublished"),
-    ("captured", "gone", AttemptResult("pending", "validation_pending"), False, "stuck:unpublished"),
+    ("captured", "gone", AttemptResult("pending", "session_pending"), False, "stuck:uncollected"),
+    ("captured", "gone", AttemptResult("pending", "validation_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("conflict", "session"), False, "stuck:conflict"),
     ("registered", "gone", AttemptResult("conflict", "session"), False, "stuck:conflict"),
     ("captured", "gone", AttemptResult("collected", "verified"), True, "done"),
@@ -498,7 +498,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 8, 10])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 8, 9, 11])
 def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
@@ -534,7 +534,7 @@ def test_adopt_refuses_a_bad_checkout_before_making_anything(
 def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts) -> None:
     foreign = tmp_path / "foreign.db"
     write(foreign, "PRAGMA journal_mode=WAL")
-    write(foreign, "PRAGMA user_version=8")
+    write(foreign, "PRAGMA user_version=9")
     refused = adopt(foreign, tmp_path, tmp_path / "slots", 1, checkouts)
     assert isinstance(refused, Failed) and (refused.kind, refused.reason) == ("refused", "schema")
     database = tmp_path / "state" / "factory.db"
@@ -615,7 +615,7 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
 def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_abandoned_one(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree
 ) -> None:
-    registered.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,5,1,'unclaimed' FROM attempt")
+    registered.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,5,'unclaimed' FROM attempt")
     registered.execute("UPDATE reservation SET attempt_id='fresh',generation=2")
     registered.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
@@ -633,7 +633,7 @@ def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_aband
 
 def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refuses(registered: sqlite3.Connection, tmp_path: Path) -> None:
     registered.execute("DELETE FROM reservation")
-    registered.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,5,1,'unclaiming' FROM attempt")
+    registered.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,5,'unclaiming' FROM attempt")
     store = AttemptStore(lambda: registered)
     found = show_attempt(
         StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")

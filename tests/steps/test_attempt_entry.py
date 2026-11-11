@@ -256,9 +256,9 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
         (9, 10, "unavailable evidence publish=unavailable verify=refused:not_captured claim=held", 3, 4),
         (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
     ],
-    ids=["second_try_publishes", "three_retries_at_most", "never_past_the_deadline"],
+    ids=["second_try_captures", "three_retries_at_most", "never_past_the_deadline"],
 )
-def test_publication_is_retried_only_while_unavailable_and_the_agent_never_again(
+def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
     admitted: Path,
     checkouts: Checkouts,
     slot_files: SlotFiles,

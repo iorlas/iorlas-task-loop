@@ -139,7 +139,7 @@ pgrep -lf -P "$E"; lsof -a -p "$E" -d 0-2; lsof -a -p "$W" -d 0-2; lsof "$ATT/en
 cat "$ATT/entry.log"; ls -la "$ATT"
 sqlite3 -readonly -header "$DB" "select phase,rev,entry_pid,entry_start,entry_boot,worker_pid,worker_pgid,
  session_ref is not null as has_session,session_conflict,round(deadline-strftime('%s','now')) as left_s from attempt;
- select rc,timed_out,stop,watch,reason,http_status,turns,answer_kind,disposition,effect,commit_paths,commit_message,publication
+ select rc,timed_out,stop,watch,reason,http_status,turns,answer_kind,disposition,effect,commit_paths,commit_message,session_state
  from execution; select end_commit from attempt;"
 T "${START[@]}"                             # second start: already_dispatched while the agent runs (dispatching/registered,
                                             # no entry pid); already_running only while the entry itself still runs before

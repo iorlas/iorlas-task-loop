@@ -74,9 +74,9 @@ class Ports:
         return not self.alive
 
     @contextmanager
-    def hold(self, cwd: str, attempt_id: str) -> Generator[None]:
+    def hold(self, slot_path: str, attempt_id: str) -> Generator[None]:
         self.holds += 1
-        with custody(cwd, attempt_id):
+        with custody(slot_path, attempt_id):
             self.inside()
             yield
 
@@ -130,7 +130,7 @@ def nowhere(_admission: object) -> AbstractContextManager[None]:
 def stored(con: sqlite3.Connection) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]:
     """The reservations and the release rows."""
     return (con.execute("SELECT slot,generation,attempt_id FROM reservation").fetchall(),
-            con.execute("SELECT head,released_at,abandoned,claim FROM slot_release").fetchall())
+            con.execute("SELECT head,released_at,claim FROM slot_release").fetchall())
 
 
 def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then_has_nothing_pending(
@@ -141,7 +141,7 @@ def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then
     ports = Ports(registered, checkouts, slot_files)
     assert ports.releaser().release(KEY, False) == Released("s1", d, True, "kept", False)
     assert (slot.branch(), head(slot), tip(slot)) == (None, d, x)  # detached at D; the branch keeps X
-    assert stored(registered) == ([], [(d, 30.0, 0, "kept")]) and ports.unclaimed == [] and ports.holds == 1
+    assert stored(registered) == ([], [(d, 30.0, "kept")]) and ports.unclaimed == [] and ports.holds == 1
     ports.opens = ports.holds = 0
     again = ports.releaser().release(KEY, False)
     assert again == AlreadyReleased("s1", "kept", False) and release_word(again) == "already_released"
@@ -206,7 +206,7 @@ def test_abandon_an_admitted_attempt_on_a_detached_slot_needs_no_git_write(
     con = sqlite3.connect(admitted, isolation_level=None)
     d, ports = head(slot), Ports(con, checkouts, slot_files)
     assert ports.releaser().release(KEY, True) == Released("s1", None, True, "unclaimed", True)
-    assert stored(con) == ([], [(d, 30.0, 1, "unclaimed")]) and ports.unclaimed == [("/tracker", "tl-1")] and slot.branch() is None
+    assert stored(con) == ([], [(d, 30.0, "unclaimed")]) and ports.unclaimed == [("/tracker", "tl-1")] and slot.branch() is None
     con.close()
 
 
@@ -285,12 +285,12 @@ def test_the_claim_is_returned_once_retried_while_bd_fails_and_reported_when_not
     ports.answers = [BdError("other", "down"), True]
     failed = ports.releaser().release(KEY, True)
     assert isinstance(failed, NotReleased) and (failed.kind, failed.reason) == ("unavailable", "tracker")
-    assert stored(registered) == ([], [(d, 30.0, 1, "unclaiming")])  # released; the claim still to return
+    assert stored(registered) == ([], [(d, 30.0, "unclaiming")])  # released; the claim still to return
     assert ports.releaser().release(KEY, True) == Released("s1", None, False, "unclaimed", True)
     assert ports.releaser().release(KEY, True) == AlreadyReleased("s1", "unclaimed", True)
-    assert ports.unclaimed == [("/tracker", "tl-1")] * 2 and stored(registered)[1] == [(d, 30.0, 1, "unclaimed")]
+    assert ports.unclaimed == [("/tracker", "tl-1")] * 2 and stored(registered)[1] == [(d, 30.0, "unclaimed")]
     other = Ports(registered, checkouts, slot_files)
-    registered.execute("UPDATE slot_release SET abandoned=0,claim='kept'")  # as if settled, to abandon again
+    registered.execute("UPDATE slot_release SET claim='kept'")  # as if settled, to abandon again
     other.answers = [False]
     assert other.releaser().release(KEY, True) == Released("s1", None, False, "not_held", True)
 
@@ -304,7 +304,7 @@ def test_abandoning_a_settled_release_flips_it_and_returns_the_claim_with_no_git
     ports = Ports(registered, checkouts, slot_files)
     assert ports.releaser().release(KEY, True) == Released("s1", None, False, "unclaimed", True)
     assert (ports.opens, ports.holds, ports.unclaimed) == (0, 0, [("/tracker", "tl-1")])
-    assert stored(registered) == ([], [(d, 30.0, 1, "unclaimed")])
+    assert stored(registered) == ([], [(d, 30.0, "unclaimed")])
 
 
 def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free_again(

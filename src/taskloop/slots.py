@@ -16,7 +16,7 @@ from taskloop.repo import RepoId
 type Unclean = Literal["not_listed", "main", "unborn", "attached", "dirty", "git_unavailable"]
 type Unknown = Unclean | Literal["store_unavailable", "locked", "lock_unavailable"]
 type Unadoptable = Unclean | Literal["store_unavailable", "other_root", "inside_checkout"]
-type Probe = Callable[[str], bool | None]  # the slot's lock (by its stored cwd): True free now, False held, None unknown
+type Probe = Callable[[str], bool | None]  # the slot's lock (by its stored path): True free now, False held, None unknown
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ def _clean(repo: Repo, listed: tuple[WorktreeInfo, ...], path: Path) -> Unclean 
 
 
 def _adopted(con: sqlite3.Connection, repo_id: str) -> dict[str, str]:
-    rows: list[tuple[str, str]] = con.execute("SELECT name,cwd FROM slot WHERE repo_id=?", (repo_id,)).fetchall()
+    rows: list[tuple[str, str]] = con.execute("SELECT name,path FROM slot WHERE repo_id=?", (repo_id,)).fetchall()
     return dict(rows)
 
 
@@ -139,15 +139,15 @@ def _result(name: str, base: Path, known: dict[str, str], refused: dict[str, Una
     return Adopted(name, base / name) if Path(known[name]) == base / name else NotAdopted(name, "other_root", base / name)
 
 
-def _free(repo: Repo, listed: tuple[WorktreeInfo, ...] | None, cwd: str, probe: Probe) -> Unknown | None:
+def _free(repo: Repo, listed: tuple[WorktreeInfo, ...] | None, slot_path: str, probe: Probe) -> Unknown | None:
     """An unreserved slot is free when Git lists it clean and detached and its lock is free now: a held lock (`locked`:
     a release still parking it) or an unknown one (`lock_unavailable`) is never free."""
     if listed is None:
         return "git_unavailable"
-    found = _clean(repo, listed, Path(cwd))
+    found = _clean(repo, listed, Path(slot_path))
     if found is not None:
         return found
-    lock = probe(cwd)
+    lock = probe(slot_path)
     return None if lock else "locked" if lock is False else "lock_unavailable"
 
 
@@ -166,21 +166,21 @@ def observe(con: sqlite3.Connection, repo: Repo, repo_id: RepoId, probe: Probe) 
     try:
         rows: list[tuple[str, str]] = con.execute("SELECT slot,attempt_id FROM reservation WHERE repo_id=?", (repo_id,)).fetchall()
     except sqlite3.Error:
-        return tuple(SlotView(name, Path(cwd), "unknown", "store_unavailable") for name, cwd in slots)
+        return tuple(SlotView(name, Path(slot_path), "unknown", "store_unavailable") for name, slot_path in slots)
     held = dict(rows)
     listed: tuple[WorktreeInfo, ...] | None = None
-    if any(name not in held for name, _cwd in slots):
+    if any(name not in held for name, _slot_path in slots):
         try:
             listed = repo.worktrees()
         except GitUnavailable:
             listed = None
     views: list[SlotView] = []
-    for name, cwd in slots:
-        path = Path(cwd)
+    for name, slot_path in slots:
+        path = Path(slot_path)
         if name in held:
             views.append(SlotView(name, path, "held", attempt_id=held[name]))
             continue
-        reason = _free(repo, listed, cwd, probe)
+        reason = _free(repo, listed, slot_path, probe)
         views.append(SlotView(name, path, "free") if reason is None else SlotView(name, path, "unknown", reason))
         if reason is None:  # reserved meanwhile: the probe raced another admission, so the slot is not free
             views[-1] = _again(con, repo_id, name, path)

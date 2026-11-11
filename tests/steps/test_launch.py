@@ -230,7 +230,7 @@ def test_a_missing_database_is_refused_and_never_created(tmp_path: Path) -> None
 
 def test_a_foreign_schema_version_is_unavailable(admitted: Path) -> None:
     con = sqlite3.connect(admitted)
-    con.execute("PRAGMA user_version=8")
+    con.execute("PRAGMA user_version=9")
     con.close()
     start = FakeStart()
     assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchUnavailable("store")

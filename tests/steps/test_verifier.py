@@ -178,7 +178,7 @@ LOST = "unavailable:git:MissingRevision"  # B no longer resolves: permanently un
 # B made unresolvable: its first hex digit always changes (fake commit ids hang on one counter shared by every repository
 # in the process, so a fixed replacement digit was a no-op whenever an earlier test left B starting with it)
 LOSE_BASE = "UPDATE attempt SET base_commit=(CASE substr(base_commit,1,1) WHEN 'f' THEN 'e' ELSE 'f' END) || substr(base_commit,2)"
-OTHER_REPO = "UPDATE reservation SET repo_id='other'; UPDATE attempt SET repo_id='other'"
+OTHER_REPO = "UPDATE slot SET repo_id='other'; UPDATE reservation SET repo_id='other'; UPDATE attempt SET repo_id='other'"
 PLANNED = {P: "# Plan\n"}
 # id, files committed before dispatch (B), files the agent writes, its answer, a change after the run, SQL, expected, commits
 CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, str | None, str, int]] = [
@@ -482,19 +482,19 @@ def test_refusals_and_unknowns_before_any_git_read(
 
 
 @pytest.mark.parametrize(
-    ("publication", "expected"), [("pending", VerifyUnavailable("session_pending")), ("conflict", VerifyRefused("session"))]
+    ("session_state", "expected"), [("pending", VerifyUnavailable("session_pending")), ("conflict", VerifyRefused("session"))]
 )
-def test_an_unfinished_session_publication_is_never_verified(
+def test_an_unfinished_session_state_is_never_verified(
     registered: sqlite3.Connection,
     slot: FakeWorktree,
     tmp_path: Path,
     checkouts: Checkouts,
     slot_files: FakeSlotFiles,
-    publication: str,
+    session_state: str,
     expected: object,
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    registered.execute("UPDATE execution SET publication=?", (publication,))
+    registered.execute("UPDATE execution SET session_state=?", (session_state,))
     assert verifier(registered, checkouts, slot_files).verify(KEY) == expected and stored(registered) == []
 
 

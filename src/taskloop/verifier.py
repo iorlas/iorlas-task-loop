@@ -57,8 +57,8 @@ def applicable(stored: StoredExecution | None) -> StoredExecution | VerifyResult
         return stored.verification
     if end_word(stored) not in COMMITTING:
         return NotApplicable(end_word(stored))
-    if stored.publication != "complete":  # the verdict's writer requires a complete session publication too
-        return VerifyRefused("session") if stored.publication == "conflict" else VerifyUnavailable("session_" + stored.publication)
+    if stored.session_state != "complete":  # the verdict's writer requires a complete session state too
+        return VerifyRefused("session") if stored.session_state == "conflict" else VerifyUnavailable("session_" + stored.session_state)
     return stored
 
 
@@ -129,7 +129,7 @@ class Verifier:
             record = self.store.load(key)
             if record is None:
                 return None
-            path = Path(record.admission.cwd)
+            path = Path(record.admission.slot_path)
             return bounded(staged(self.checkouts(path), path))
         except (StoreUnavailable, StoreRefused, GitUnavailable):
             return None

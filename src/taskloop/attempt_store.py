@@ -60,13 +60,17 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
         facts.answered,
         facts.reason,
         facts.http_status,
-        facts.tokens is not None,
-        *(facts.tokens or (None, None, None)),
-        facts.cumulative is not None,
+        *(facts.tokens or (None, None, None)),  # unknown counts stay NULL, never 0
         *(facts.cumulative or (None, None, None)),
         facts.turns,
         facts.session,
     )
+
+
+def _counts(row: tuple[object, ...]) -> tuple[int | None, int | None, int | None] | None:
+    """Stored token counts (in, cached, out): known when any is stored, else None; an unknown count is NULL, never 0."""
+    counts = (as_nullable_int(row[0]), as_nullable_int(row[1]), as_nullable_int(row[2]))
+    return None if counts == (None, None, None) else counts
 
 
 def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:
@@ -102,7 +106,7 @@ class AttemptStore(AttemptReads):
         """The fenced read; `start` (E) is the previous attempt's X, else its B, frozen since this attempt took over."""
         row: tuple[object, ...] | None = con.execute(
             f"""SELECT {prefixed("p", ATTEMPT_LOADED)},
-            (SELECT cwd FROM reservation WHERE slot=p.slot AND repo_id=p.repo_id),
+            (SELECT path FROM slot WHERE name=p.slot AND repo_id=p.repo_id),
             (SELECT coalesce(q.end_commit, q.base_commit) FROM attempt q WHERE q.attempt_id=p.previous_attempt_id)
             FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
             astuple(key),
@@ -229,7 +233,7 @@ class AttemptStore(AttemptReads):
                 return "already_same"
             if current.session_ref is not None:
                 con.execute("UPDATE attempt SET session_conflict=1,rev=rev+1 WHERE attempt_id=?", (admission.key.attempt_id,))
-                con.execute("UPDATE execution SET publication='conflict' WHERE attempt_id=?", (admission.key.attempt_id,))
+                con.execute("UPDATE execution SET session_state='conflict' WHERE attempt_id=?", (admission.key.attempt_id,))
                 return "conflict"
             con.execute("UPDATE attempt SET session_ref=?,rev=rev+1 WHERE attempt_id=?", (ref, admission.key.attempt_id))
             return "accepted"
@@ -240,32 +244,32 @@ class AttemptStore(AttemptReads):
         worker: Worker | None,
         facts: ExecutionFacts,
         evidence: Evidence,
-        publication: Literal["complete", "pending", "conflict", "fault"],
+        session_state: Literal["complete", "pending", "conflict", "fault"],
     ) -> Literal["accepted", "already_same", "conflict"]:
         with self._connection(write=True) as con:
             current = self._fence(con, admission)
             if current.worker is None or (worker is not None and _identity(current.worker) != _identity(worker)):
                 raise StoreRefused("worker_mismatch")
             if current.session_conflict:
-                publication = "conflict"  # a recorded differing session is never published as complete
+                session_state = "conflict"  # a recorded differing session is never stored as complete
             old = self._execution(con, admission.key)
             if old is not None:
                 if old.facts != facts or old.evidence != evidence:
                     return "conflict"
-                if old.publication in ("pending", "fault") and publication in ("complete", "conflict"):
+                if old.session_state in ("pending", "fault") and session_state in ("complete", "conflict"):
                     con.execute(
-                        "UPDATE execution SET publication=? WHERE attempt_id=? AND publication IN ('pending','fault')",
-                        (publication, admission.key.attempt_id),
+                        "UPDATE execution SET session_state=? WHERE attempt_id=? AND session_state IN ('pending','fault')",
+                        (session_state, admission.key.attempt_id),
                     )
                     return "accepted"
                 return "already_same"
             if current.phase != "registered":
                 return "conflict"
             refs = tuple(value for ref in astuple(evidence) for value in ref)
-            values = (*astuple(admission.key), *_facts_values(facts), *refs, publication)
+            values = (*astuple(admission.key), *_facts_values(facts), *refs, session_state)
             marks = ",".join("?" * len(values))
             con.execute(
-                f"INSERT INTO execution (attempt_id,dispatch_token,generation,{FACTS},{EVIDENCE},publication) VALUES ({marks})", values
+                f"INSERT INTO execution (attempt_id,dispatch_token,generation,{FACTS},{EVIDENCE},session_state) VALUES ({marks})", values
             )
             con.execute("UPDATE attempt SET phase='captured',rev=rev+1 WHERE attempt_id=?", (admission.key.attempt_id,))
             return "accepted"
@@ -287,7 +291,7 @@ class AttemptStore(AttemptReads):
 
     def end_commit(self, admission: Admission, commit: str) -> str:
         """Write once the commit the step ends at: X != B for effect `commit`, B itself for `keep`, only for a captured,
-        clean, completely published valid answer with no verdict stored yet (a `nothing_written` verdict has no commit and
+        clean valid answer with its session complete, with no verdict stored yet (a `nothing_written` verdict has no commit and
         is never contradicted afterwards). Returns the value now stored: another one than `commit` is the caller's
         `inconsistent`; a refused registration write is StoreRefused."""
         with self._connection(write=True) as con:
@@ -295,7 +299,7 @@ class AttemptStore(AttemptReads):
             con.execute(
                 """UPDATE attempt SET end_commit=?1,rev=rev+1 WHERE attempt_id=?2 AND end_commit IS NULL AND phase='captured'
                 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=?2 AND e.answer_kind='valid' AND e.rc=0
-                AND e.timed_out=0 AND e.publication='complete' AND ((e.effect='commit' AND ?1<>attempt.base_commit)
+                AND e.timed_out=0 AND e.session_state='complete' AND ((e.effect='commit' AND ?1<>attempt.base_commit)
                 OR (e.effect='keep' AND ?1=attempt.base_commit)))
                 AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=?2)""",
                 (commit, admission.key.attempt_id),
@@ -307,7 +311,7 @@ class AttemptStore(AttemptReads):
         return stored
 
     def verdict(self, admission: Admission, base: str, commit: str | None, result: Verdict, now: float) -> Verdict:
-        """Insert-only: written while the reservation is held, the run was clean, its session publication complete, the
+        """Insert-only: written while the reservation is held, the run was clean, its session state complete, the
         stored valid answer's effect `commit` or `keep`, its base B and its stored `end_commit` exactly the verified ones;
         `nothing_written` alone has no commit (effect `commit`, `end_commit` NULL) and `reused` needs `keep`. An
         existing row is kept, never rewritten. Returns the row now stored."""
@@ -318,7 +322,7 @@ class AttemptStore(AttemptReads):
                 f"""INSERT INTO verification (attempt_id,dispatch_token,generation,{VERDICT},observed_at)
                 SELECT ?,?,?,?,?,?,?,? FROM execution e JOIN attempt p ON p.attempt_id=e.attempt_id
                 WHERE e.attempt_id=? AND e.dispatch_token=? AND e.generation=? AND e.answer_kind='valid'
-                AND e.effect IN ('commit','keep') AND e.rc=0 AND e.timed_out=0 AND e.publication='complete'
+                AND e.effect IN ('commit','keep') AND e.rc=0 AND e.timed_out=0 AND e.session_state='complete'
                 AND p.base_commit=? AND CASE WHEN ?='nothing_written' THEN p.end_commit IS NULL AND e.effect='commit'
                 ELSE p.end_commit=? END AND (?=0 OR e.effect='keep')
                 ON CONFLICT DO NOTHING""",
@@ -342,8 +346,7 @@ class AttemptStore(AttemptReads):
         ).fetchone()
         if row is None:
             return None
-        tokens = tuple(as_nullable_int(v) for v in row[10:13]) if row[9] else None
-        cumulative = tuple(as_nullable_int(v) for v in row[14:17]) if row[13] else None
+        tokens, cumulative = _counts(row[9:12]), _counts(row[12:15])
         facts = ExecutionFacts(
             as_nullable_int(row[0]),
             bool(row[1]),
@@ -354,19 +357,19 @@ class AttemptStore(AttemptReads):
             None if row[6] is None else bool(row[6]),
             as_nullable_text(row[7]),
             as_nullable_int(row[8]),
-            None if tokens is None else (tokens[0], tokens[1], tokens[2]),
-            None if cumulative is None else (cumulative[0], cumulative[1], cumulative[2]),
-            as_nullable_int(row[17]),
-            as_nullable_text(row[18]),
+            tokens,
+            cumulative,
+            as_nullable_int(row[15]),
+            as_nullable_text(row[16]),
         )
-        evidence = Evidence(*(FileRef(as_text(row[i]), as_text(row[i + 1])) for i in (19, 21, 23, 25)))
-        kind, publication = as_text(row[27]), as_text(row[32])
+        evidence = Evidence(*(FileRef(as_text(row[i]), as_text(row[i + 1])) for i in (17, 19, 21, 23)))
+        kind, session_state = as_text(row[25]), as_text(row[30])
         if kind not in ("validation_pending", "valid", "missing", "json_invalid", "schema_invalid"):
             raise StoreUnavailable("Invalid answer phase")
-        if publication not in ("complete", "pending", "conflict", "fault"):
-            raise StoreUnavailable("Invalid publication phase")
-        answer = AnswerState(kind, as_nullable_text(row[28]), _effect(row[29]), as_listed(row[30]), as_nullable_text(row[31]))
-        return StoredExecution(key, facts, evidence, answer, publication, _verdict(row[33:37]))
+        if session_state not in ("complete", "pending", "conflict", "fault"):
+            raise StoreUnavailable("Invalid session state")
+        answer = AnswerState(kind, as_nullable_text(row[26]), _effect(row[27]), as_listed(row[28]), as_nullable_text(row[29]))
+        return StoredExecution(key, facts, evidence, answer, session_state, _verdict(row[31:35]))
 
     def collect(self, key: AttemptKey) -> StoredExecution | None:
         with self._connection() as con:

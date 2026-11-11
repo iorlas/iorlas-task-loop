@@ -93,7 +93,7 @@ def _refused(reason: str) -> AttemptResult:
 def _observed(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord) -> SlotState | AttemptResult:
     """The slot as Git lists it, the pointer checked first (no Git call on `redirected`); born."""
     admission = record.admission
-    state = observe_slot(checkouts, files, admission.cwd, admission.repo_id)
+    state = observe_slot(checkouts, files, admission.slot_path, admission.repo_id)
     if state == "redirected":
         return _refused("slot_redirected")
     if isinstance(state, str):
@@ -111,11 +111,11 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     found = branch_refusal(repo, task_id, (head,))
     if isinstance(found, str):
         return _refused(found)
-    named_root = pointer(files, Path(admission.cwd))
+    named_root = pointer(files, Path(admission.slot_path))
     if named_root is None or named_root.root != state.root:
         return _refused("slot_redirected")
     start = found.remote if found.local is None and found.remote is not None else head
-    slot = Path(admission.cwd)
+    slot = Path(admission.slot_path)
     worktree = checkouts(slot).worktree(slot)
     taken = worktree.take_branch(task_branch(task_id), start, mode="resume")
     if isinstance(taken, BranchHeld):
@@ -148,7 +148,7 @@ def _state_refusal(checkouts: Checkouts, record: AttemptRecord, state: SlotState
     problem = state.problem(task_branch(record.admission.task.task_id), record.start)
     if record.start is None or problem != "dirty":
         return None if problem is None else _refused(f"slot_{problem}")
-    path = Path(record.admission.cwd)
+    path = Path(record.admission.slot_path)
     return _refused("slot_staged") if staged(checkouts(path), path) else None
 
 

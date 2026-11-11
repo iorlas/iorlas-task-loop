@@ -3,9 +3,9 @@
 It runs only as the identity the launcher registered: its own boot-aware identity is read and compared with the stored
 entry before the attempt key is used or any credential is read. It then holds its slot's custody lock (`slot_lock`)
 until it exits; a held lock refuses (`refused slot_busy`) with nothing read or written. It never creates factory.db,
-runs the agent at most once (through `Attempts.execute`), retries only an unavailable publication, then verifies
+runs the agent at most once (through `Attempts.execute`), retries only an unavailable capture, then verifies
 once (`Verifier.verify`: commit the listed paths, check the tree is clean, judge; never retried), and writes one log
-line of fixed words: status and reason, read back after a stored verdict (a published retry instead keeps the run's
+line of fixed words: status and reason, read back after a stored verdict (an accepted capture retry instead keeps the run's
 own words and adds `publish=` and the collected `then=`), always `verify=`, then `claim=` (the tracker claim's lease,
 renewed by `claim_lease` while the step runs), then, once the result read back is collected, `release=` (the settled
 release of its own slot, still under its lock: `released`, `already_released` or why the slot stays held), then, for a verified plan only,
@@ -38,10 +38,10 @@ from taskloop.attempt_types import (
     AttemptKey,
     AttemptRecord,
     AttemptResult,
+    CaptureResult,
     Checkouts,
     EntryIdentity,
     NotApplicable,
-    PublicationResult,
     Rejected,
     Unsettled,
     Verified,
@@ -57,7 +57,7 @@ from taskloop.publish import BranchPublish, publish_word
 from taskloop.slot_release import SlotRelease, release_word
 from taskloop.verifier import Verifier
 
-PUBLISH_RETRIES = 3
+CAPTURE_RETRIES = 3
 RETRY_WAIT = 2.0
 
 
@@ -67,7 +67,7 @@ class _Registered:
     key: AttemptKey
     me: EntryIdentity
     tracker_root: str
-    cwd: str  # the slot, from the stored reservation: its custody lock is beside it
+    slot_path: str  # the slot, from its stored `slot` row: its custody lock is beside it
 
 
 @dataclass(frozen=True)
@@ -97,21 +97,21 @@ def _exists(database: Path) -> bool:
     return True
 
 
-def _publish(
+def _capture(
     app: Attempts, result: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]
-) -> PublicationResult | None:
-    """Retry an unfinished publication only while it is unavailable: at most PUBLISH_RETRIES, never past the deadline."""
-    pending, published = result.pending, None
+) -> CaptureResult | None:
+    """Retry an unfinished capture only while it is unavailable: at most CAPTURE_RETRIES, never past the deadline."""
+    pending, captured = result.pending, None
     if pending is None or result.status != "unavailable":  # a conflict is never retried
         return None
-    for _ in range(PUBLISH_RETRIES):
+    for _ in range(CAPTURE_RETRIES):
         wait(RETRY_WAIT)
         if clock() >= pending.admission.deadline:
             break
-        published = app.publish(pending)
-        if published.status != "unavailable":
+        captured = app.capture(pending)
+        if captured.status != "unavailable":
             break
-    return published
+    return captured
 
 
 def shown(result: VerifyResult) -> str:
@@ -149,7 +149,7 @@ def _registered(
     if me is None or me != entry:
         return "refused identity"
     record = _record(app, key)
-    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.cwd)
+    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path)
 
 
 def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
@@ -169,25 +169,25 @@ def _held(_admission: Admission) -> AbstractContextManager[None]:
     return nullcontext()
 
 
-def _unheld(_cwd: str, _attempt_id: str) -> AbstractContextManager[None]:
+def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[None]:
     """The entry's release runs inside the slot lock the entry already holds."""
     return nullcontext()
 
 
 def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float], None], gone: WorkerGone) -> tuple[str, bool, bool]:
-    """Execute once, retry an unavailable publication, verify once: the log words, whether the plan succeeded and whether
+    """Execute once, retry an unavailable capture, verify once: the log words, whether the plan succeeded and whether
     the result read back is collected (terminal)."""
     app, key = found.app, found.key
     result = app.execute(key, found.me)
-    published = _publish(app, result, clock, wait)
-    accepted = published is not None and published.status in ACCEPTED
+    captured = _capture(app, result, clock, wait)
+    accepted = captured is not None and captured.status in ACCEPTED
     verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
     # newly stored facts or a stored verdict: read the terminal outcome back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
-    if published is not None:
+    if captured is not None:  # `publish=` is the log word of the capture retry's DB acceptance, not the branch push
         then = f" then={latest.status}:{latest.reason}" if accepted else ""
-        line = f"{result.status} {result.reason} publish={published.status}{then}"
+        line = f"{result.status} {result.reason} publish={captured.status}{then}"
     return f"{line} verify={shown(verified)}", succeeded(latest), latest.status == "collected"
 
 
@@ -217,7 +217,7 @@ keep-alive stopped, through `publishing` (the remote-capable Git views); the pus
         log(found)
         return 1
     try:
-        lock = slot_lock.acquire(found.cwd, found.key.attempt_id, "entry")
+        lock = slot_lock.acquire(found.slot_path, found.key.attempt_id, "entry")
     except slot_lock.SlotBusy:
         log("refused slot_busy")
         return 1

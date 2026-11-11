@@ -23,12 +23,12 @@ from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
     AttemptRecord,
+    CaptureResult,
     Checkouts,
     EntryIdentity,
     FileRef,
     PendingResult,
     PlanAnswer,
-    PublicationResult,
     Replaced,
     SessionInput,
     SlotFiles,
@@ -95,7 +95,8 @@ def seed(con: sqlite3.Connection, surroundings: AttemptSurroundings) -> sqlite3.
     """The authoritative prerequisites: an admitted, entry-registered attempt on the clean slot and its held reservation."""
     repo_id = surroundings.slot.repo.identity().key
     with begin_immediate(con):
-        con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(surroundings.slot.path)))
+        con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(surroundings.slot.path)))
+        con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         digest = hashlib.sha256(b"Plan the actual task").hexdigest()
         con.execute(
             """INSERT INTO attempt
@@ -137,6 +138,7 @@ def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_p
     assert result.execution is not None
     assert result.execution.answer.kind == "valid"
     assert result.execution.facts.tokens == (8, None, 3)
+    assert con.execute("SELECT t_in,t_cached,t_out FROM execution").fetchone() == (8, None, 3)  # known: some count stored
     assert con.execute("SELECT session_ref FROM attempt").fetchone() == ("native-session",)
     other = fake()
     reader = app(con, surroundings, other)
@@ -246,7 +248,7 @@ def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(tmp_pa
     assert not resumed.calls and secrets == []
 
 
-def test_dispatch_is_consumed_and_wrong_key_cannot_publish(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_dispatch_is_consumed_and_wrong_key_cannot_capture(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
     store = AttemptStore(lambda: con)
     admitted = store.load(KEY)
@@ -294,15 +296,15 @@ def owner(flaky: Flaky, surroundings: AttemptSurroundings, execution: Execution,
     return surroundings.attempts(AttemptStore(flaky), execution, clock=clock)
 
 
-def test_live_ref_is_published_while_running_and_duplicates_are_idempotent(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_live_ref_is_recorded_while_running_and_duplicates_are_idempotent(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     flaky, probe = Flaky(database(surroundings)), []
     run = fake(refs=("s", "s"))
     result = owner(flaky, surroundings, registered_run(run, flaky, probe=probe)).execute(KEY, ENTRY)
     assert probe == [("s",), ("s",)]
-    assert result.reason == "verification" and result.execution is not None and result.execution.publication == "complete"
+    assert result.reason == "verification" and result.execution is not None and result.execution.session_state == "complete"
 
 
-def test_absent_ref_stays_absent_and_late_reported_ref_is_published(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_absent_ref_stays_absent_and_late_reported_ref_is_recorded(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
     assert app(con, surroundings, fake(refs=())).execute(KEY, ENTRY).execution is not None
     assert con.execute("SELECT session_ref FROM attempt").fetchone() == (None,)
@@ -321,7 +323,7 @@ def test_conflicting_ref_is_recorded_not_overwritten(tmp_path: Path, surrounding
     assert con.execute("SELECT session_ref,session_conflict FROM attempt").fetchone() == ("first", 1)
 
 
-def test_storage_loss_keeps_first_ref_and_conflict_then_publish_retries(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_storage_loss_keeps_first_ref_and_conflict_then_capture_retries(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     flaky = Flaky(database(surroundings))
     execution = fake(refs=("first", "second"))
     result = owner(flaky, surroundings, registered_run(execution, flaky, down_after_start=True)).execute(KEY, ENTRY)
@@ -335,14 +337,14 @@ def test_storage_loss_keeps_first_ref_and_conflict_then_publish_retries(tmp_path
     assert pending.evidence is not None
     flaky.down = False
     retry = owner(flaky, surroundings, fake())
-    assert retry.publish(pending) == PublicationResult("accepted")
-    assert retry.publish(pending) == PublicationResult("already_same")
+    assert retry.capture(pending) == CaptureResult("accepted")
+    assert retry.capture(pending) == CaptureResult("already_same")
     stored = retry.collect(KEY)
     assert stored.status == "conflict" and stored.execution is not None and stored.execution.answer.kind == "valid"
     assert flaky.con.execute("SELECT session_ref FROM attempt").fetchone() == ("first",)
 
 
-def test_publication_conflicts_on_different_facts_and_stale_publisher_cannot_rewrite(
+def test_capture_conflicts_on_different_facts_and_a_stale_capture_cannot_rewrite(
     tmp_path: Path, surroundings: AttemptSurroundings
 ) -> None:
     flaky = Flaky(database(surroundings))
@@ -350,10 +352,10 @@ def test_publication_conflicts_on_different_facts_and_stale_publisher_cannot_rew
     assert result.pending is not None
     flaky.down = False
     attempts = owner(flaky, surroundings, fake())
-    assert attempts.publish(result.pending) == PublicationResult("accepted")
+    assert attempts.capture(result.pending) == CaptureResult("accepted")
     assert result.pending.facts is not None
     different = dataclasses.replace(result.pending, facts=dataclasses.replace(result.pending.facts, rc=9))
-    assert attempts.publish(different) == PublicationResult("conflict")
+    assert attempts.capture(different) == CaptureResult("conflict")
     kept = attempts.collect(KEY).execution
     assert kept is not None and kept.facts.rc == 0
 
@@ -413,6 +415,7 @@ def test_usage_unknown_is_not_zero_and_answer_grace_facts_are_kept(tmp_path: Pat
     grace = FakeRun(RunOutcome(rc=-15, stop="answer", worker=WORKER, summary=Summary(text=json.dumps(PLAN), stands=True, work=True)))
     facts = app(con, surroundings, grace).execute(KEY, ENTRY).execution
     assert facts is not None and facts.facts.tokens is None and facts.facts.turns is None
+    assert con.execute("SELECT t_in,t_cached,t_out,c_in,c_cached,c_out FROM execution").fetchone() == (None,) * 6  # never 0
     assert facts.facts.stop == "answer" and facts.facts.stands and facts.answer.kind == "valid"
 
 
@@ -437,7 +440,7 @@ def test_run_failure_after_registration_is_typed_and_keeps_registered_state(tmp_
     assert app(con, surroundings, fake()).execute(KEY, ENTRY).status == "pending"
 
 
-def test_projection_fault_keeps_evidence_and_publish_retries(
+def test_projection_fault_keeps_evidence_and_capture_retries(
     tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     con = database(surroundings)
@@ -452,15 +455,15 @@ def test_projection_fault_keeps_evidence_and_publish_retries(
     assert result.pending is not None and result.pending.facts is None and result.pending.evidence is not None
     assert (tmp_path / result.pending.evidence.answer.path).exists()
     attempts = app(con, surroundings, fake())
-    assert attempts.publish(result.pending) == PublicationResult("accepted")
+    assert attempts.capture(result.pending) == CaptureResult("accepted")
     assert attempts.collect(KEY).reason == "verification"
 
 
-def test_stored_pending_publication_is_reconciled_by_execute(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_stored_pending_session_state_is_reconciled_by_execute(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
     late = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), res={"ref": "late"})))
     assert app(con, surroundings, late).execute(KEY, ENTRY).reason == "verification"
-    con.execute("UPDATE execution SET publication='fault'")
+    con.execute("UPDATE execution SET session_state='fault'")
     con.execute("UPDATE attempt SET session_ref=NULL")
     again = fake()
     result = app(con, surroundings, again).execute(KEY, ENTRY)
@@ -640,7 +643,7 @@ def pending_result(surroundings: AttemptSurroundings) -> tuple[Flaky, Attempts, 
     return flaky, owner(flaky, surroundings, fake()), result.pending
 
 
-def test_capture_upgrades_pending_publication_once_and_rejects_different_evidence(
+def test_capture_upgrades_pending_session_state_once_and_rejects_different_evidence(
     tmp_path: Path, surroundings: AttemptSurroundings
 ) -> None:
     flaky, _attempts, pending = pending_result(surroundings)
@@ -656,12 +659,12 @@ def test_capture_upgrades_pending_publication_once_and_rejects_different_evidenc
     other = dataclasses.replace(pending.evidence, stdout=FileRef("elsewhere", "0" * 64))
     assert store.capture(admission, None, pending.facts, other, "complete") == "conflict"
     attempts = owner(flaky, surroundings, fake())
-    assert attempts.publish(dataclasses.replace(pending, evidence=other)) == PublicationResult("conflict")
+    assert attempts.capture(dataclasses.replace(pending, evidence=other)) == CaptureResult("conflict")
 
 
 def test_answer_summary_is_idempotent_and_never_replaced(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     flaky, attempts, pending = pending_result(surroundings)
-    assert attempts.publish(pending) == PublicationResult("accepted")
+    assert attempts.capture(pending) == CaptureResult("accepted")
     store = AttemptStore(flaky)
     loaded = store.load(KEY)
     assert loaded is not None and pending.evidence is not None
@@ -720,19 +723,19 @@ def test_two_connections_contend_for_one_dispatch(tmp_path: Path, surroundings: 
     assert sorted(outcomes) == ["accepted", "conflict"]
 
 
-def test_stored_pending_publication_is_not_promoted_without_evidence(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_stored_pending_session_state_is_not_promoted_without_evidence(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
     assert app(con, surroundings, fake()).execute(KEY, ENTRY).reason == "verification"  # the summary reports no ref: facts.session is None
-    con.execute("UPDATE execution SET publication='pending'")
+    con.execute("UPDATE execution SET session_state='pending'")
     again = fake()
     attempts = app(con, surroundings, again)
     for _ in range(2):
         result = attempts.execute(KEY, ENTRY)
         assert (result.status, result.reason) == ("pending", "session_pending") and again.calls == []
-    assert con.execute("SELECT publication FROM execution").fetchone() == ("pending",)
+    assert con.execute("SELECT session_state FROM execution").fetchone() == ("pending",)
     con.execute("UPDATE attempt SET session_ref='accepted'")
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    con.execute("UPDATE execution SET publication='fault'")
+    con.execute("UPDATE execution SET session_state='fault'")
     con.execute("DELETE FROM reservation")  # a released reservation: execute on a non-terminal stored state refuses, collect still reads
     assert (attempts.execute(KEY, ENTRY).status, attempts.execute(KEY, ENTRY).reason) == ("refused", "stale_reservation")
     assert attempts.collect(KEY).reason == "session_fault"
@@ -744,8 +747,8 @@ def test_recorded_session_conflict_is_visible_without_a_result_and_blocks_comple
     flaky, attempts, pending = pending_result(surroundings)
     flaky.con.execute("UPDATE attempt SET session_ref='first',session_conflict=1")
     assert (attempts.collect(KEY).status, attempts.collect(KEY).reason) == ("conflict", "session")
-    assert attempts.publish(pending).status == "accepted"
-    assert flaky.con.execute("SELECT publication FROM execution").fetchone() == ("conflict",)
+    assert attempts.capture(pending).status == "accepted"
+    assert flaky.con.execute("SELECT session_state FROM execution").fetchone() == ("conflict",)
 
 
 def test_registration_conflict_and_same_identity_are_distinguished(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
@@ -797,12 +800,12 @@ def test_report_never_presents_pending_state_as_collected(tmp_path: Path, surrou
     result = app(database(surroundings), surroundings, fake()).execute(KEY, ENTRY)
     stored = result.execution
     assert stored is not None and report(stored).reason == "verification"
-    for publication, status, reason in (
+    for session_state, status, reason in (
         ("pending", "pending", "session_pending"),
         ("fault", "pending", "session_fault"),
         ("conflict", "conflict", "session"),
     ):
-        shown = report(dataclasses.replace(stored, publication=publication))
+        shown = report(dataclasses.replace(stored, session_state=session_state))
         assert (shown.status, shown.reason) == (status, reason)
     waiting = report(dataclasses.replace(stored, answer=AnswerState("validation_pending")))
     assert (waiting.status, waiting.reason) == ("pending", "validation_pending")

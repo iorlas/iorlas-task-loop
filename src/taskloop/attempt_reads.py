@@ -21,8 +21,12 @@ class ReleaseRow:
 
     head: str
     released_at: float
-    abandoned: bool
     claim: str
+
+    @property
+    def abandoned(self) -> bool:
+        """An abandon never keeps the claim; a settled release always does."""
+        return self.claim != "kept"
 
 
 @dataclass(frozen=True)
@@ -119,16 +123,16 @@ STEP = """SELECT p.number,p.base_commit,p.end_commit,p.input_path,p.input_digest
 FROM attempt p LEFT JOIN execution e ON e.attempt_id=p.attempt_id"""
 
 
-RELEASED = "SELECT head,released_at,abandoned,claim FROM slot_release"
+RELEASED = "SELECT head,released_at,claim FROM slot_release"
 
 
 def _released(row: tuple[object, ...]) -> ReleaseRow | None:
-    """A release row (head, released_at, abandoned, claim), None for the all-NULL row of a LEFT JOIN without one."""
+    """A release row (head, released_at, claim), None for the all-NULL row of a LEFT JOIN without one."""
     if row[0] is None:
         return None
     if not isinstance(row[1], (int, float)):
         raise StoreUnavailable("Malformed release time")
-    return ReleaseRow(as_text(row[0]), float(row[1]), bool(as_int(row[2])), as_text(row[3]))
+    return ReleaseRow(as_text(row[0]), float(row[1]), as_text(row[2]))
 
 
 def _published(row: tuple[object, ...]) -> PublishedRow | None:
@@ -214,7 +218,7 @@ class AttemptReads:
                 p.entry_boot,p.deadline,p.worker_pid,p.worker_pgid,p.number,p.previous_attempt_id,p.repeat_reason,
                 EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),p.seq,
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
-                 AND r.generation=p.generation),x.head,x.released_at,x.abandoned,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step
+                 AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step
                 FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
                 WHERE p.adapter='beads' AND (?1 IS NULL OR p.backlog=?1) AND (?2 IS NULL OR p.task_id=?2)
@@ -230,8 +234,8 @@ class AttemptReads:
             worker = None if row[11] is None or row[12] is None else (as_int(row[11]), as_int(row[12]))
             found.append(
                 AttemptRow(key, as_text(row[3]), as_text(row[4]), as_text(row[5]), as_text(row[6]), entry, float(row[10]), worker,
-                           as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[26]),
-                           as_int(row[17]), bool(as_int(row[18])), _released(row[19:23]), _published(row[23:26]))
+                           as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[25]),
+                           as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]))
             )
         return tuple(found)
 

@@ -81,7 +81,7 @@ class StepRepeat:
         text = self._input(current, found[0], stopped)
         if isinstance(text, Failed):
             return text
-        admitted = self._takeover(RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1]), stopped.admission.cwd)
+        admitted = self._takeover(RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1]), stopped.admission.slot_path)
         return self._launch(backlog, task_id, current, admitted, stopped.admission.number + 1, minutes)
 
     def _leftovers(
@@ -141,11 +141,11 @@ class StepRepeat:
         alive = worker_stopped(self.gone, record.phase, record.worker)
         return record if alive is None else Failed("unsettled", alive.reason)
 
-    def _takeover(self, request: RepeatRequest, cwd: str) -> Admitted | AdmitRefused | AdmitUnavailable | Failed:
+    def _takeover(self, request: RepeatRequest, slot_path: str) -> Admitted | AdmitRefused | AdmitUnavailable | Failed:
         """`admit_repeat` under the slot's lock (a release parks only under it); released before the launch, since the
         new attempt's entry takes it."""
         try:
-            with self.hold(cwd, request.previous.attempt_id):
+            with self.hold(slot_path, request.previous.attempt_id):
                 return self.admission.admit_repeat(request)
         except SlotBusy:
             return Failed("unavailable", "slot_busy")

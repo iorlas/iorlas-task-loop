@@ -84,8 +84,8 @@ def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
     text = "Plan the actual task"
     repo_id = slot.repo.identity().key
     with begin_immediate(con):
-        con.execute("INSERT INTO slot (repo_id,name,cwd) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
-        con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
+        con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
+        con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         con.execute(
             """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
@@ -105,8 +105,8 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
     reservation, and its input in the artifacts root `tmp_path`."""
     repo_id = slot.repo.identity().key
     with begin_immediate(factory):
-        factory.execute("INSERT INTO slot (repo_id,name,cwd) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
-        factory.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
+        factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
+        factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         factory.execute(
             """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,

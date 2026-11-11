@@ -34,7 +34,7 @@ from git_porcelain import (
     Transient,
 )
 
-from taskloop.attempt_reads import PublishedRow, StoreUnavailable, as_int, as_nullable_text, as_text
+from taskloop.attempt_reads import PublishedRow, StoreUnavailable, as_nullable_text, as_text
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.factory_schema import PUBLISHED, current, marks
@@ -43,7 +43,7 @@ from taskloop.slot_state import repository
 
 REMOTE: Final = "origin"  # v1: the one remote (owner decision); never stored
 NOTHING: Final = "Nothing was pushed or recorded."
-ROW: Final = """SELECT p.task_id,p.repo_id,p.end_commit,s.cwd,v.verdict,v.reason,x.abandoned,b.commit_sha,b.remote_head,b.published_at
+ROW: Final = """SELECT p.task_id,p.repo_id,p.end_commit,s.path,v.verdict,v.reason,x.claim,b.commit_sha,b.remote_head,b.published_at
 FROM attempt p LEFT JOIN verification v ON v.attempt_id=p.attempt_id
 LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
 LEFT JOIN slot s ON s.repo_id=p.repo_id AND s.name=p.slot
@@ -51,9 +51,9 @@ WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 # Inside the write transaction: still verified at X, not abandoned, not repeated.
 FENCE: Final = """SELECT 1 FROM attempt p JOIN verification v ON v.attempt_id=p.attempt_id
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND v.verdict='verified' AND p.end_commit=?
-AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.abandoned=1)
+AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.claim<>'kept')
 AND NOT EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id)"""
-ABANDONED: Final = "SELECT 1 FROM slot_release WHERE attempt_id=? AND abandoned=1"
+ABANDONED: Final = "SELECT 1 FROM slot_release WHERE attempt_id=? AND claim<>'kept'"
 
 
 @dataclass(frozen=True)
@@ -101,7 +101,7 @@ class _Row:
     task_id: str
     repo_id: str
     commit: str | None  # X, the verified commit (B itself for `reused`)
-    cwd: str | None  # the adopted slot's path; the reservation may already be released
+    slot_path: str | None  # the adopted slot's path; the reservation may already be released
     verdict: str | None
     reason: str | None  # a rejected verdict's rule
     abandoned: bool
@@ -117,7 +117,7 @@ def _already(values: tuple[object, ...]) -> PublishedRow:
 
 def _row(row: tuple[object, ...]) -> _Row:
     published = None if row[7] is None else _already(row[7:10])
-    abandoned = row[6] is not None and bool(as_int(row[6]))
+    abandoned = row[6] is not None and as_text(row[6]) != "kept"  # an abandon never keeps the claim
     return _Row(as_text(row[0]), as_text(row[1]), as_nullable_text(row[2]), as_nullable_text(row[3]), as_nullable_text(row[4]),
                 as_nullable_text(row[5]), abandoned, published)
 
@@ -179,9 +179,9 @@ class BranchPublish:
     def _repository(self, row: _Row, x: str) -> tuple[Repo, Path] | NotPublished:
         """The person's checkout through the slot's verified pointer (file reads first), `origin`, then the local branch
         rule: `task/<id>` exists and contains X. Git calls run on the checkout only, never on the slot."""
-        if row.cwd is None:
+        if row.slot_path is None:
             return _refused("repository", "The attempt's slot is not adopted.")
-        root = repository(self.remotes, self.slot_files, row.cwd, row.repo_id)
+        root = repository(self.remotes, self.slot_files, row.slot_path, row.repo_id)
         if isinstance(root, str):
             return _refused("repository", f"The slot's pointer or repository is not the attempt's ({root}): inspect the slot.")
         repo = self.remotes(root)

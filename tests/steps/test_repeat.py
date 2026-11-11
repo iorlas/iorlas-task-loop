@@ -263,7 +263,7 @@ GATES: list[tuple[str, str, float, str]] = [
      "commit_message=NULL", 1000, "not_repeatable"),
     ("failed_run", "UPDATE execution SET rc=1", 1000, "not_repeatable"),
     ("timed_out", "UPDATE execution SET timed_out=1", 1000, "not_repeatable"),
-    ("pending_publication", "UPDATE execution SET publication='pending'", 1000, "not_repeatable"),
+    ("pending_session", "UPDATE execution SET session_state='pending'", 1000, "not_repeatable"),
     ("no_effect", "UPDATE execution SET effect='none'", 1000, "not_repeatable"),
     ("not_captured", "UPDATE attempt SET phase='registered'", 1000, "not_repeatable"),
     ("not_holder", "UPDATE reservation SET generation=7", 1000, "not_repeatable"),
@@ -323,7 +323,8 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     assert con is not None
     repo_id = slot.repo.identity().key
     with begin_immediate(con):
-        con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
+        con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (repo_id, str(slot.path)))
+        con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)

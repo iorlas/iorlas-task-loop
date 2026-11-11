@@ -223,7 +223,7 @@ every step.
 
 ### 3.4 Schema
 
-Two direct version bumps, no compatibility: `current()` refuses the older file (`refused:schema`), the owner discards
+Direct version bumps, no compatibility: `current()` refuses the older file (`refused:schema`), the owner discards
 factory.db (the existing discard runbook), nothing migrates. Before a bump the owner finishes or abandons the attempts
 in flight.
 
@@ -235,7 +235,9 @@ in flight.
   disposition; every fence that today names `'planned'`/`'unchanged'` (the end-commit write, the verdict insert, the
   repeat's `PREVIOUS`) reads `effect` instead. `plan_path` is dropped (the decoder already validated it; nothing reads
   it). The `UNIQUE(adapter, backlog, task_id, seq)` and every other constraint stay.
-- **v10 (S5): a second step.** `step IN ('plan','implement')`; `attempt.after_commit TEXT` with
+- **v10 (C): schema cleanup** (section 13): `execution.publication` to `session_state`, `slot.cwd` to `path`;
+  `reservation.cwd`, `slot_release.abandoned`, `execution.tokens_known` and `cumulative_known` dropped.
+- **v11 (S5): a second step.** `step IN ('plan','implement')`; `attempt.after_commit TEXT` with
   `CHECK(after_commit IS NULL OR length(after_commit) IN (40,64))` and `CHECK((number = 1 AND step <> 'plan') =
   (after_commit IS NOT NULL))`. Each later step kind (review) is another bump of this kind; that is accepted, not
   avoided with an unchecked column.
@@ -308,7 +310,8 @@ publish** (Q3):
 
 Names in 3.6; `release` kept in its lease sense; the step stored only in factory.db; discard restarts at the first
 step; the stored `effect` instead of disposition words in SQL; `plan_path` dropped; `blob` nullable; the `StepKind`
-fields in 3.1 and nothing more; two version bumps (v9, v10); the step order a fixed tuple in code, never configuration.
+fields in 3.1 and nothing more; two step version bumps (v9, v11; v10 is the C cleanup); the step order a fixed tuple in
+code, never configuration.
 
 ## 4. Migration: bounded slices
 
@@ -321,7 +324,7 @@ Each slice lands green with `just check` and `just test`, reviewed independently
 | **S2 factory.db v9** | 3.4 v9: table and column renames, `step` (plan), `effect`, drop `plan_path`, nullable `blob`; `end_commit()`; fences on `effect`; `AttemptRow`/`AttemptRecord`/`Admission` carry `step` | v8 to v9, discard | none | about +15 source; about 230 test SQL references edited |
 | **S3 The step port** | `steps.py` (`StepKind`, `PLAN`, `STEPS`, `kind`, `RULES`); `Answer` with `effect`; the five consumers (`admit` input text, `evidence_files.prepare` schema, `attempt._validate`, `verifier`/`verdict` artifact, `repeat` feedback) call `kind(admission.step)`; `attributes()` derived from the root; import-linter: only `steps` imports `plan_step` | none | none: identical input text and schema bytes | about +45 source |
 | **S4 CLI cut (Q1)** | `tl step` replaces `tl plan`; `cli_guide.py` takes `GUIDE`, `discard`, help strings (generic wording); `attempt_status.py` takes `show_attempt`, `list_attempts` and `next_action` from `operations`; `step` in rows, JSON and `rounds.log`; .8.7 exception and live-smoke runbook updated | none | the cut | about +30 source |
-| **S5 Step sequencing** (lands with the implement kind) | `steps.next_step`; `admit_next` in `admit_chain` (with the repeat takeover moved there); the `after_commit` check in `prepare`; `advance` in status, `tl step start` and the round (3.8); `TaskInspection` status, assignee, labels; the implement `StepKind` per its own design | v9 to v10, discard | `advance` word and GUIDE entry; scope string names implement | about +250 source, +350 test |
+| **S5 Step sequencing** (lands with the implement kind) | `steps.next_step`; `admit_next` in `admit_chain` (with the repeat takeover moved there); the `after_commit` check in `prepare`; `advance` in status, `tl step start` and the round (3.8); `TaskInspection` status, assignee, labels; the implement `StepKind` per its own design | v10 to v11, discard | `advance` word and GUIDE entry; scope string names implement | about +250 source, +350 test |
 
 **What stays plan-only after S5:** `plan_step.py` (its answer contract, words, input closing words, plan.md rule,
 repeat instructions) and the plan.md artifact rules' verdict words. Nothing else names the plan step.
@@ -360,7 +363,7 @@ step. S1 to S4 change no behavior a person sees except S4's spelling.
   Proof of no behavior change: the existing suites, unchanged except imports and names.
 - **Caps.** `cli_plan` is at 379/400 code lines, `plan_ops` 370, `plan_admit` 338, `plan_store` 302: S4 and S5 split
   them (section 7) before they grow. `test_attempt.py` is at 622/800.
-- **Two discards** (v9, v10) of the owner's smoke factory.db; in-flight attempts must be finished or abandoned first.
+- **Three discards** (v9, v10, v11) of the owner's smoke factory.db; in-flight attempts must be finished or abandoned first.
 
 ## 6. Tests and smoke
 
@@ -557,3 +560,61 @@ Four commits after S2, no stored or printed word changed except the B rows below
 - **A3** (this repair, uncommitted): test doubles moved to `tests/steps/doubles.py`; `gated`, `_freed_*`, `checked`,
   `Shown.status` (now `view`), `_status*` in `operations`/`plan_render`/`result_data` (now `_show*`) and the test
   `Launcher` doubles (now `FakeLauncher`) renamed; two prose fixes. No printed or JSON word changed.
+
+## 13. As built: C, factory.db schema v10 (2026-11-11)
+
+Schema version 10; no migration: `current()` refuses a v9 file (`refused:schema`), the owner discards factory.db. The
+step bump planned as v10 in 3.4 and section 4 (S5) is now v11.
+
+| v9 | v10 |
+|---|---|
+| `execution.publication` (`complete`/`pending`/`conflict`/`fault`) | `execution.session_state`: the session ref's capture, never the Git push |
+| `slot.cwd` | `slot.path` |
+| `reservation.cwd` (a copy of `slot.cwd`; slots never re-path: `adopt` refuses `other_root`) | dropped; the slot path is read by joining `slot` on (repo_id, slot) |
+| `slot_release.abandoned` with `CHECK((abandoned = 0) = (claim = 'kept'))` | dropped with its CHECK; SQL reads `claim<>'kept'` (abandoned) or `claim='kept'` (settled) |
+| `execution.tokens_known`, `execution.cumulative_known` | dropped; counts are known when any of the three is non-NULL, an unknown count stays NULL (never 0) |
+
+- **C1 session state.** `StoredExecution.session_state`; `AttemptStore.capture(..., session_state)`; every fence reads
+  `session_state` (`end_commit`, the verdict insert, `admit.PREVIOUS`, `verifier`). `Attempts.publish`/`_publish` are
+  `Attempts.capture`/`_capture` and `PublicationResult` is `CaptureResult` (the retry stores the evidence files, the facts
+  and the session state, not only the session); `attempt_entry._capture` and `CAPTURE_RETRIES`; `SessionLatch._record`.
+  Unchanged on purpose: the `pending session_<state>` result reason and `verify=unavailable:session_<state>` (logged in
+  `entry.log`) and the entry log key `publish=` (the capture retry's DB acceptance; live-smoke already says it is not the
+  branch push).
+- **C2 abandoned.** `ReleaseRow(head, released_at, claim)` with `abandoned` a property (`claim != 'kept'`);
+  `slot_release._Row.released` is the claim alone; `Released` and `AlreadyReleased` keep their `abandoned` bool. The
+  abandon flip is `UPDATE slot_release SET claim='unclaiming' ... AND claim='kept'`; `admit._attempted` reads
+  `r.claim IN ('unclaimed','not_held')`; `publish` `ROW`/`FENCE`/`ABANDONED` read the claim.
+- **C3 token counts.** `_facts_values` writes the six counts only; `attempt_store._counts` reads (in, cached, out) back as
+  None when all three are NULL. `ExecutionFacts` is unchanged (`_usage` never yields three unknown counts).
+- **C4 slot path.** `Admission.slot_path` (was `cwd`), read in `AttemptStore._load` from `slot.path`; the release's `ROW`
+  joins `reservation` to `slot`; `slot_lock.lock_path/acquire/custody/repeating/probe(slot_path, ...)`, `slots`,
+  `slot_state.repository/observe_slot`, `factory_commit`, `prepare`, `repeat`, `verifier`, `attempt_entry`,
+  `publish._Row.slot_path`. `admit._unheld` returns the slot name only; the reservation insert has no path. Kept as
+  `cwd`: the agent's and the entry's process cwd (`LaunchInputs.cwd`, `launch.py`), bd's cwd (`composition`), and the
+  `lsof ... -d cwd` advice in the guide.
+- **C5, C6 JSON.** See the words below. Human text is unchanged; `rounds.log` never carried `detail`.
+
+Visible words, before to after:
+
+- `Next:`/`stuck` word `stuck:unpublished` to `stuck:uncollected` (show, list, `tl plan list --stuck`, rounds report),
+  with its guide text before "The result is incomplete; keep the evidence. `tl plan release --abandon` ..." and after
+  "The result was captured but never collected: its answer or its session is still pending (the attempt's entry.log
+  says why), and no verify can judge it. Keep the evidence. `tl plan release --abandon` ..." (a verify refuses such a
+  result, `unavailable:validation_pending`/`unavailable:session_<state>`, so the guide does not offer it).
+- `tl plan start --json`: key `entry` (the entry process object) to `entry_process`, as show and list already name it
+  (their `entry` stays the state word).
+- JSON empty strings to null: `tl plan start --json` `result` (`""` to `null` when nothing was found), the error
+  object's `message` of every plan command (`""` to `null` when a refusal has no detail), `tl plan next --json` each
+  move's `detail`, and `tl plan rounds --json`'s end `detail`.
+- `sqlite3` lines of the live-smoke runbook: `publication` to `session_state`.
+
+Tests: SQL renamed; every raw `INSERT INTO reservation` lost its path, and the seeds without a `slot` row
+(`test_attempt`, `test_attempt_store`, `test_repeat`, `test_repeat_real`, `test_plan_cli`) gained one; the other-repo
+cases also move the `slot` row. The refusal tests refuse 1 to 9 and 11 (`test_operations`), 9 (`test_launch`,
+`adopt`). Two stored-count assertions in `test_attempt` (a known partial count is stored as `(8, NULL, 3)`, unknown
+usage as six NULLs). `test_policy` `WRITERS` unchanged.
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 6 contracts kept); `just test` 1248 passed (1247 + the
+version-11 refusal case). Code lines of the big modules: `admit` 331, `operations` 354, `attempt_store` 318,
+`factory_schema` 94 (was 97). Live smoke not run.

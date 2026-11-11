@@ -278,7 +278,7 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
 
     claims = Claims(tmp_path / "artifacts")
     admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, lambda _path: repo, claims.claim, claims.unclaim,
-                              lambda: 10, lambda _cwd: True)
+                              lambda: 10, lambda _slot_path: True)
     return admission.admit(AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, "m", "high", "workspace-write", 100)), claims
 
 

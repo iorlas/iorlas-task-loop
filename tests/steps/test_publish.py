@@ -153,7 +153,7 @@ def test_a_verified_released_plan_is_pushed_from_the_checkout_and_recorded_once(
     slot_files: SlotFiles,
 ) -> None:
     x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
-    registered.execute("INSERT INTO reservation VALUES ('s1',?,?,2,'other')", (repo.identity().key, str(slot.path)))  # taken again
+    registered.execute("INSERT INTO reservation VALUES ('s1',?,2,'other')", (repo.identity().key,))  # taken again
     git = Observed(checkouts)
     found = publisher(registered, git, slot_files).publish(KEY)
     assert found == BranchPublished(x, x) and publish_word(found) == "published"
@@ -173,7 +173,7 @@ def test_a_reused_plan_publishes_b(
 
 
 def abandoned(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushRepo, _files: FakeSlotFiles) -> None:
-    con.execute("UPDATE slot_release SET abandoned=1,claim='unclaimed'")
+    con.execute("UPDATE slot_release SET claim='unclaimed'")
 
 
 def unverified(con: sqlite3.Connection, _slot: FakeWorktree, _repo: ScriptedPushRepo, _files: FakeSlotFiles) -> None:
@@ -185,7 +185,7 @@ def redirected(_con: sqlite3.Connection, slot: FakeWorktree, _repo: ScriptedPush
 
 
 def other_repository(con: sqlite3.Connection, slot: FakeWorktree, _repo: ScriptedPushRepo, _files: FakeSlotFiles) -> None:
-    con.execute("INSERT INTO slot (repo_id,name,cwd) VALUES ('other','s1',?)", (str(slot.path),))
+    con.execute("INSERT INTO slot (repo_id,name,path) VALUES ('other','s1',?)", (str(slot.path),))
     con.execute("UPDATE attempt SET repo_id='other'")
 
 

@@ -44,7 +44,7 @@ def attributes(rules: StepRules) -> tuple[str, ...]:
 
 
 def _observed(checkouts: Checkouts, files: SlotFiles, admission: Admission) -> SlotState | Unsettled:
-    state = observe_slot(checkouts, files, admission.cwd, admission.repo_id)
+    state = observe_slot(checkouts, files, admission.slot_path, admission.repo_id)
     if state == "redirected":
         return Unsettled("redirected")
     if isinstance(state, str):
@@ -53,7 +53,7 @@ def _observed(checkouts: Checkouts, files: SlotFiles, admission: Admission) -> S
 
 
 def _redirected(files: SlotFiles, admission: Admission, root: Path) -> bool:
-    found = pointer(files, Path(admission.cwd))
+    found = pointer(files, Path(admission.slot_path))
     return found is None or found.root != root
 
 
@@ -83,7 +83,7 @@ def _commit(
     """Step 4 (the listed paths, Git's own files near them, ignored files), then step 5: stage exactly the listed paths
     and commit them with the agent's message and this attempt's trailer, `quiet` and the pointer checked before each Git
     write."""
-    slot = checkouts(Path(admission.cwd)).worktree(Path(admission.cwd))  # slot calls run from the slot, under its ceiling
+    slot = checkouts(Path(admission.slot_path)).worktree(Path(admission.slot_path))  # slot calls run from the slot, under its ceiling
     refused = refusal(slot, files, admission, base, answer)
     if refused is not None:
         return refused
@@ -111,7 +111,7 @@ def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, root: Path
 def _foreign(checkouts: Checkouts, admission: Admission, answer: AnswerState) -> Unsettled | None:
     """`record` commits the whole index: any staged path the answer did not list (a person's, or an earlier attempt's
     left staged by a superseded verify) is `staged`, nothing committed."""
-    path = Path(admission.cwd)
+    path = Path(admission.slot_path)
     extra = sorted(set(staged(checkouts(path), path)) - set(answer.paths))
     return Unsettled("staged", bounded(extra)) if extra else None
 
@@ -119,7 +119,7 @@ def _foreign(checkouts: Checkouts, admission: Admission, answer: AnswerState) ->
 def refusal(slot: Worktree, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Unsettled | None:
     """Step 4's reads, no Git write: an unsafe listed path, a changed `.git*` file near them, or ignored files under
     them (listed)."""
-    unsafe = unsafe_path(files, Path(admission.cwd), plan_stage(admission.task.task_id), answer.paths)
+    unsafe = unsafe_path(files, Path(admission.slot_path), plan_stage(admission.task.task_id), answer.paths)
     if unsafe is not None:
         return Unsettled("unsafe", bounded((unsafe,)))
     dirt = slot.dirty(base, ignored_under=attributes(plan_stage(admission.task.task_id)))
@@ -188,7 +188,7 @@ def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commi
         return state.root
     if problem != "dirty":
         return Unsettled(problem)
-    return Unsettled("uncommitted", listing(checkouts(Path(admission.cwd)), Path(admission.cwd)))
+    return Unsettled("uncommitted", listing(checkouts(Path(admission.slot_path)), Path(admission.slot_path)))
 
 
 def leftovers(
@@ -205,6 +205,6 @@ def leftovers(
             return Unsettled("unborn" if state.head is None else "branch")
         if state.head != base:
             return None
-        return refusal(checkouts(Path(admission.cwd)).worktree(Path(admission.cwd)), files, admission, base, answer)
+        return refusal(checkouts(Path(admission.slot_path)).worktree(Path(admission.slot_path)), files, admission, base, answer)
     found = clean_at(checkouts, files, admission, end_commit or base)
     return found if isinstance(found, Unsettled) else None

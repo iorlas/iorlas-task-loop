@@ -81,7 +81,8 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     base = git(slot, "rev-parse", "HEAD").strip()
     with begin_immediate(factory):
-        factory.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (checkouts(main).identity().key, str(slot)))
+        factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (checkouts(main).identity().key, str(slot)))
+        factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (checkouts(main).identity().key,))
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)

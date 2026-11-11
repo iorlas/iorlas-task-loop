@@ -86,17 +86,19 @@ def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
 
 def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
     """The one JSON shape per result (a refusal or unknown is `{"error": {kind, reason, message}}`, plus `claim_leaked`,
-    `admitted` and `slots` for an admission's, `tl plan start`); no dispatch token, no version field."""
+    `admitted` and `slots` for an admission's, `tl plan start`); no dispatch token, no version field. An empty diagnostic
+    or result text is null, as every other absent field."""
     match result:
         case Failed():
-            error: dict[str, object] = {"kind": result.kind, "reason": result.reason, "message": result.detail}
+            error: dict[str, object] = {"kind": result.kind, "reason": result.reason, "message": result.detail or None}
             if admission:
                 slots = [_slot_data(each) for each in result.slots]
                 error |= {"claim_leaked": result.claim_leaked, "admitted": result.admitted, "slots": slots}
             return {"error": error}
         case Started():
             return {"status": result.status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id,
-                    "existing": result.existing, "entry": _entry_data(result.entry), "number": result.number, "result": result.result}
+                    "existing": result.existing, "entry_process": _entry_data(result.entry), "number": result.number,
+                    "result": result.result or None}
         case Shown():
             return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log)}
         case Listed() | Round() | Ended():
@@ -118,8 +120,8 @@ def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
     if isinstance(result, Listed):
         return {"attempts": [_show_data(each) for each in result.attempts]}
     if isinstance(result, Ended):
-        return {"status": "ended", "backlog": result.backlog, "reason": result.reason, "detail": result.detail}
-    moves = [{"task": each.task_id, "action": each.action, "word": each.word, "attempt_id": each.attempt_id, "detail": each.detail}
+        return {"status": "ended", "backlog": result.backlog, "reason": result.reason, "detail": result.detail or None}
+    moves = [{"task": each.task_id, "action": each.action, "word": each.word, "attempt_id": each.attempt_id, "detail": each.detail or None}
              for each in result.moves]
     return {"status": "round", "backlog": result.backlog, "moves": moves, "stopped": result.stopped or None, "logged": result.logged}
 

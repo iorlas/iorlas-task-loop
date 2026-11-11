@@ -125,7 +125,7 @@ class Bench:
         self, con: sqlite3.Connection, ready: FakeTaskReadClient | None = None, admission: Admission | None = None, *, free: bool = True,
     ) -> None:
         if free:
-            con.execute("INSERT OR IGNORE INTO slot (repo_id,name,cwd) VALUES ('other','s1','/other/s1')")
+            con.execute("INSERT OR IGNORE INTO slot (repo_id,name,path) VALUES ('other','s1','/other/s1')")
         self.store, self.ready = AttemptStore(lambda: con), ready or FakeTaskReadClient()
         self.admission, self.launcher, self.repeats, self.recorded = admission or Admission(), FakeLauncher(), Repeats(), Recorded()
         self.now = 10.0
@@ -170,7 +170,7 @@ def seed(con: sqlite3.Connection, task_id: str, attempt_id: str, *, phase: str =
 
 
 def released(con: sqlite3.Connection, attempt_id: str, claim: str) -> None:
-    con.execute("INSERT INTO slot_release VALUES (?,?,1,?,5,?,?)", (attempt_id, f"token-{attempt_id}", HEAD, claim != "kept", claim))
+    con.execute("INSERT INTO slot_release VALUES (?,?,1,?,5,?)", (attempt_id, f"token-{attempt_id}", HEAD, claim))
 
 
 def moves(found: Round) -> list[tuple[str, str, str]]:
@@ -466,8 +466,8 @@ def test_admission_stops_on_unknowns_and_its_own_inputs_and_reports_every_leaked
 
 
 def test_with_every_adopted_slot_reserved_admission_reads_no_tracker(factory: sqlite3.Connection) -> None:
-    factory.execute("INSERT INTO slot (repo_id,name,cwd) VALUES ('repo','s1','/slots/s1')")
-    factory.execute("INSERT INTO reservation VALUES ('s1','repo','/slots/s1',1,'attempt')")
+    factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','s1','/slots/s1')")
+    factory.execute("INSERT INTO reservation VALUES ('s1','repo',1,'attempt')")
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     ready = FakeTaskReadClient([bead("t-1")], ready=["t-1"], ready_fault=BdError("timeout", "never read"))
     bench = Bench(factory, ready, free=False)

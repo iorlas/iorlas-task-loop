@@ -100,7 +100,7 @@ def time() -> float:
     return 10
 
 
-def unlocked(_cwd: str) -> bool:
+def unlocked(_slot_path: str) -> bool:
     """The free rule's lock probe: no other holder."""
     return True
 
@@ -144,8 +144,7 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
     result = admit(factory, tmp_path, repo)
     assert isinstance(result, Admitted) and result.slot == "s1" and result.key.reservation_generation == 1
     key, repo_id = result.key, repo.identity().key
-    cwd = str(root.resolve() / repo_id / "s1")
-    assert factory.execute("SELECT * FROM reservation").fetchall() == [("s1", repo_id, cwd, 1, key.attempt_id)]
+    assert factory.execute("SELECT * FROM reservation").fetchall() == [("s1", repo_id, 1, key.attempt_id)]
     columns = "backlog,task_id,repo_id,slot,model,phase,entry_pid,entry_start,entry_boot"
     stored = factory.execute(f"SELECT {columns} FROM attempt").fetchone()
     assert stored == ("tasks", "tl-1", repo_id, "s1", "chosen", "admitted", None, None, None)
@@ -188,7 +187,7 @@ def test_no_free_slot_refuses_before_any_effect(factory: sqlite3.Connection, rep
         slots(factory, repo, root, 1)
     path = root.resolve() / repo.identity().key / "s1"
     if case == "held":
-        held = "INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES ('s1',?,'x',1,'x')"
+        held = "INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s1',?,1,'x')"
         factory.execute(held, (repo.identity().key,))
     elif case == "dirty":
         repo.worktree(path).write_file("scratch", "x")
@@ -210,7 +209,7 @@ def test_a_slot_taken_between_observe_and_commit_moves_to_the_next_or_refuses(
     slots(factory, repo, root, 2)
     repo_id = repo.identity().key
     tracker = Tracker(factory, tmp_path / "artifacts")
-    taken = "INSERT INTO reservation (slot,repo_id,cwd,generation,attempt_id) VALUES (?,?,'x',1,?)"
+    taken = "INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES (?,?,1,?)"
     tracker.during = lambda: factory.execute(taken, ("s1", repo_id, "other"))
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, Admitted) and result.slot == "s2" and tracker.calls == ["claim:tl-1"]
@@ -510,10 +509,10 @@ def test_a_settled_release_still_answers_the_task(factory: sqlite3.Connection, r
     first = admit(factory, tmp_path, repo)
     assert isinstance(first, Admitted)
     factory.execute("DELETE FROM reservation")
-    factory.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,1,0,'kept' FROM attempt")
+    factory.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,1,'kept' FROM attempt")
     tracker = Tracker(factory, tmp_path / "artifacts")
     assert admit(factory, tmp_path, repo, tracker) == AdmitRefused("task_attempted") and tracker.calls == []
-    factory.execute("UPDATE slot_release SET abandoned=1,claim='unclaimed'")
+    factory.execute("UPDATE slot_release SET claim='unclaimed'")
     assert isinstance(admit(factory, tmp_path, repo, tracker), Admitted)
 
 

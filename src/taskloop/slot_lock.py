@@ -35,17 +35,17 @@ class ReadOnly(Exception):
     """A read-only verifier was asked to write Git: a wiring defect, never contention."""
 
 
-def lock_path(cwd: str) -> Path:
-    """The slot's lock file, from the stored reservation path: `<slots_root>/<repo_id>/.locks/<slot name>.lock`."""
-    slot = Path(cwd)
+def lock_path(slot_path: str) -> Path:
+    """The slot's lock file, from the stored slot path: `<slots_root>/<repo_id>/.locks/<slot name>.lock`."""
+    slot = Path(slot_path)
     return slot.parent / ".locks" / f"{slot.name}.lock"
 
 
-def acquire(cwd: str, attempt_id: str, role: Role) -> ProcessLock:
+def acquire(slot_path: str, attempt_id: str, role: Role) -> ProcessLock:
     """Take the slot's lock now or refuse: `SlotBusy` when held (here or elsewhere), `SlotLockUnavailable` on an OS error."""
     try:
         return ProcessLock.acquire(
-            lock_path(cwd), timeout=0, label=LABEL, meta={"attempt": attempt_id, "role": role}, reentrant=False
+            lock_path(slot_path), timeout=0, label=LABEL, meta={"attempt": attempt_id, "role": role}, reentrant=False
         )
     except LockHeldError as error:
         raise SlotBusy(str(error.path)) from error
@@ -54,8 +54,8 @@ def acquire(cwd: str, attempt_id: str, role: Role) -> ProcessLock:
 
 
 @contextmanager
-def _held(cwd: str, attempt_id: str, role: Role) -> Generator[None]:
-    lock = acquire(cwd, attempt_id, role)
+def _held(slot_path: str, attempt_id: str, role: Role) -> Generator[None]:
+    lock = acquire(slot_path, attempt_id, role)
     try:
         yield
     finally:
@@ -64,24 +64,24 @@ def _held(cwd: str, attempt_id: str, role: Role) -> Generator[None]:
 
 def hold(admission: Admission) -> AbstractContextManager[None]:
     """A verifier's Git writes for `admission`, under its slot's lock; released when the block ends, raised or not."""
-    return _held(admission.cwd, admission.key.attempt_id, "verify")
+    return _held(admission.slot_path, admission.key.attempt_id, "verify")
 
 
-def custody(cwd: str, attempt_id: str) -> AbstractContextManager[None]:
-    """A release's park and transaction for the attempt on the slot at `cwd`, under the slot's lock."""
-    return _held(cwd, attempt_id, "release")
+def custody(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
+    """A release's park and transaction for the attempt on the slot at `slot_path`, under the slot's lock."""
+    return _held(slot_path, attempt_id, "release")
 
 
-def repeating(cwd: str, attempt_id: str) -> AbstractContextManager[None]:
+def repeating(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
     """A repeat's takeover of the reservation (`admit_repeat`), under the slot's lock: no release parks the slot under it."""
-    return _held(cwd, attempt_id, "repeat")
+    return _held(slot_path, attempt_id, "repeat")
 
 
-def probe(cwd: str) -> bool | None:
+def probe(slot_path: str) -> bool | None:
     """Admission's free rule: True when the slot's lock is free now (taken and released at once), False when another
     holder (an entry, a verify, a release still parking) owns it, None when the lock file cannot be opened."""
     try:
-        acquire(cwd, "", "probe").release()
+        acquire(slot_path, "", "probe").release()
     except SlotBusy:
         return False
     except SlotLockUnavailable:
