@@ -73,7 +73,8 @@ def _profile_data(found: Resolved, at: str, target_ref: str) -> dict[str, object
 def _profile_lines(found: Resolved, at: str, target_ref: str) -> list[str]:
     lines = [f"Profile: setup and checks at {at}; required and target from {target_ref}"]
     lines += [f"Setup: {shlex.join(argv)}" for argv in found.setup] or ["Setup: (none)"]
-    lines += [f"Check {check.name}: {shlex.join(check.argv)} (timeout {check.timeout} s)" for check in found.checks]
+    lines += [f"Check {check.name}: {shlex.join(check.argv)} (timeout {check.timeout} s)" for check in found.checks] or [
+        "Checks: (none)"]
     return [*lines, f"Required: {', '.join(found.required) or '(none)'}", f"Target: {found.target}"]
 
 

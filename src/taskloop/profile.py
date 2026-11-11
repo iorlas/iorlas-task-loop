@@ -20,6 +20,9 @@ MAX_ARGV: Final = 64
 MAX_ARG: Final = 4096
 MAX_NAME: Final = 64
 MAX_BRANCH: Final = 255
+MAX_SHOWN: Final = 64
+NAME_CHARS: Final = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
+BRANCH_BAD: Final = frozenset("~^:?*[\\")  # git check-ref-format
 MAX_TIMEOUT: Final = 86400
 DEFAULT_SETUP: Final = (("just", "install"),)
 DEFAULT_TARGET: Final = "main"
@@ -28,7 +31,7 @@ CHECK_KEYS: Final = ("name", "argv", "timeout")
 
 type Reason = Literal[
     "missing", "no_commit", "not_json", "not_object", "unknown_key", "bad_value", "too_large", "duplicate_check",
-    "required_undefined",
+    "required_undefined", "not_a_file",
 ]
 type Side = Literal["commit", "target"]
 type Argv = tuple[str, ...]
@@ -83,9 +86,16 @@ class NoCommit:
     """The revision names no commit."""
 
 
+@dataclass(frozen=True)
+class NotAFile:
+    """The path is in the commit's tree as a symlink, submodule or other non-regular entry: never read as the profile."""
+
+    mode: str
+
+
 class ProfileFiles(Protocol):
-    def blob(self, commit: str, path: str) -> bytes | NoCommit | Unavailable | None:
-        """The file's bytes at `commit` (None: no such file there), never the working tree's."""
+    def blob(self, commit: str, path: str) -> bytes | NoCommit | NotAFile | Unavailable | None:
+        """The regular file's bytes at `commit` (None: no such path there), never the working tree's."""
         ...
 
 
@@ -97,6 +107,13 @@ class _Refusal(Exception):
 
 def _refuse(reason: Reason, key: str, detail: str) -> _Refusal:
     return _Refusal(Refused(reason, key, detail))
+
+
+def shown(text: str) -> str:
+    """Text safe to print in a refusal: as is when short printable ASCII, else escaped and shortened."""
+    if len(text) <= MAX_SHOWN and text.isascii() and text.isprintable():
+        return text
+    return ascii(text[:MAX_SHOWN])
 
 
 def _unique(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -130,15 +147,35 @@ def _word(key: str, value: object, cap: int) -> str:
     return value
 
 
+def _name(key: str, value: object) -> str:
+    """A check name: `[A-Za-z0-9._-]`, not starting with `.` or `-`, at most MAX_NAME characters."""
+    if not isinstance(value, str) or not value or not set(value) <= NAME_CHARS or value[0] in ".-":
+        raise _refuse("bad_value", key, f"{key} must be letters, digits, '.', '_' or '-', not starting with '.' or '-'")
+    if len(value) > MAX_NAME:
+        raise _refuse("too_large", key, f"{key} is longer than {MAX_NAME} characters")
+    return value
+
+
+def _branch(key: str, value: object) -> str:
+    """A branch name by `git check-ref-format`'s rules, so it is never an option or a path trick."""
+    text = _word(key, value, MAX_BRANCH)
+    parts = text.split("/")
+    if (text[0] in "-/" or text[-1] in "/." or text == "@" or "@{" in text or ".." in text or "//" in text
+            or BRANCH_BAD & set(text) or any(each.startswith(".") or each.endswith(".lock") for each in parts)):
+        raise _refuse("bad_value", key, f"{key} is not a valid branch name")
+    return text
+
+
 def _argv(key: str, value: object) -> Argv:
-    """A non-empty argv: strings without NUL, the program non-empty, each at most MAX_ARG characters."""
+    """A non-empty argv of non-empty printable strings (no control character or surrogate), the program not blank,
+    each at most MAX_ARG characters."""
     items = _items(key, value, MAX_ARGV)
     if not items:
         raise _refuse("bad_value", key, f"{key} must name a program")
     argv: list[str] = []
     for index, item in enumerate(items):
-        if not isinstance(item, str) or "\0" in item or (index == 0 and not item):
-            raise _refuse("bad_value", f"{key}[{index}]", f"{key}[{index}] must be a string without NUL")
+        if not isinstance(item, str) or not item.strip(" " if index else None) or not item.isprintable():
+            raise _refuse("bad_value", f"{key}[{index}]", f"{key}[{index}] must be a non-empty printable string")
         if len(item) > MAX_ARG:
             raise _refuse("too_large", f"{key}[{index}]", f"{key}[{index}] is longer than {MAX_ARG} characters")
         argv.append(item)
@@ -154,13 +191,13 @@ def _timeout(key: str, value: object) -> int:
 def _check(key: str, value: object) -> Check:
     if not isinstance(value, dict):
         raise _refuse("bad_value", key, f"{key} must be an object")
-    unknown = sorted(str(each) for each in value if each not in CHECK_KEYS)
+    unknown = sorted(shown(str(each)) for each in value if each not in CHECK_KEYS)
     if unknown:
         raise _refuse("unknown_key", f"{key}.{unknown[0]}", f"Unknown keys in {key}: {', '.join(unknown)}")
     absent = [each for each in CHECK_KEYS if each not in value]
     if absent:
         raise _refuse("bad_value", f"{key}.{absent[0]}", f"{key} needs {', '.join(CHECK_KEYS)}")
-    return Check(_word(f"{key}.name", value["name"], MAX_NAME), _argv(f"{key}.argv", value["argv"]),
+    return Check(_name(f"{key}.name", value["name"]), _argv(f"{key}.argv", value["argv"]),
                  _timeout(f"{key}.timeout", value["timeout"]))
 
 
@@ -174,7 +211,7 @@ def _checks(value: object) -> tuple[Check, ...]:
 
 
 def _required(value: object) -> tuple[str, ...]:
-    names = [_word(f"required[{index}]", each, MAX_NAME) for index, each in enumerate(_items("required", value, MAX_CHECKS))]
+    names = [_name(f"required[{index}]", each) for index, each in enumerate(_items("required", value, MAX_CHECKS))]
     if len(set(names)) != len(names):
         raise _refuse("bad_value", "required", "required names a check more than once")
     return tuple(names)
@@ -190,7 +227,7 @@ def _table(data: bytes) -> dict[str, object]:
     if not isinstance(value, dict):
         raise _refuse("not_object", "", f"{PROFILE_PATH} must be a JSON object")
     table = {str(key): each for key, each in value.items()}
-    unknown = sorted(set(table) - set(KEYS))
+    unknown = sorted(shown(each) for each in set(table) - set(KEYS))
     if unknown:
         raise _refuse("unknown_key", unknown[0], f"Unknown keys: {', '.join(unknown)}")
     return table
@@ -205,7 +242,7 @@ def parse(data: bytes) -> Profile | Refused:
         )
         checks = _checks(table.get("checks", []))
         required = _required(table.get("required", []))
-        target = DEFAULT_TARGET if "target" not in table else _word("target", table["target"], MAX_BRANCH)
+        target = DEFAULT_TARGET if "target" not in table else _branch("target", table["target"])
     except _Refusal as refusal:
         return refusal.refused
     return Profile(setup, checks, required, target)
@@ -213,15 +250,18 @@ def parse(data: bytes) -> Profile | Refused:
 
 def read_profile(files: ProfileFiles, commit: str) -> Profile | Refused | Unavailable:
     """The profile in Git at `commit`: `missing` when that commit has no profile file (no default profile: a default
-    applies only to a key absent from a profile that exists), `no_commit` when the revision names no commit."""
+    applies only to a key absent from a profile that exists), `no_commit` when the revision names no commit,
+    `not_a_file` when the path is a symlink or submodule there."""
     found = files.blob(commit, PROFILE_PATH)
     match found:
         case Unavailable():
             return found
         case NoCommit():
-            return Refused("no_commit", detail=f"{commit} names no commit")
+            return Refused("no_commit", detail=f"{shown(commit)} names no commit")
+        case NotAFile(mode=mode):
+            return Refused("not_a_file", detail=f"{PROFILE_PATH} at {shown(commit)} is not a regular file (mode {mode})")
         case None:
-            return Refused("missing", detail=f"No {PROFILE_PATH} at {commit}")
+            return Refused("missing", detail=f"No {PROFILE_PATH} at {shown(commit)}")
         case bytes():
             return parse(found)
 
@@ -245,5 +285,5 @@ def resolve(files: ProfileFiles, commit: str, target_ref: str) -> Resolved | Ref
     for side, where, checks in sides:
         undefined = _undefined(base.required, checks)
         if undefined:
-            return Refused("required_undefined", "required", f"Required but not defined at {where}: {', '.join(undefined)}", side)
+            return Refused("required_undefined", "required", f"Required but not defined at {shown(where)}: {', '.join(undefined)}", side)
     return Resolved(at.setup, at.checks, base.required, base.target)

@@ -70,3 +70,18 @@ def test_a_refusal_is_exit_1_and_unavailable_exit_3(structured: bool, monkeypatc
     error = capsys.readouterr().err
     assert (json.loads(error) == {"error": {"kind": "unavailable", "message": "git down"}} if structured else
             error == "tl profile show: unavailable: git down\n")
+
+
+def test_zero_checks_print_none_and_a_forged_line_cannot_appear(monkeypatch: pytest.MonkeyPatch,
+                                                               capsys: pytest.CaptureFixture[str]) -> None:
+    wired(monkeypatch, {"HEAD": b"{}", "main": b"{}"})
+    assert main(["profile", "show"]) == 0
+    assert capsys.readouterr().out.splitlines()[1:] == ["Setup: just install", "Checks: (none)", "Required: (none)", "Target: main"]
+    wired(monkeypatch, {"HEAD": json.dumps({"setup": [["just", "x\nRequired: (none)"]]}).encode()})
+    assert main(["profile", "show"]) == 1
+    error = capsys.readouterr().err
+    assert error.count("\n") == 1
+    assert error.startswith("tl profile show: refused bad_value (commit, setup[0][1])")
+    wired(monkeypatch, {"HEAD": b'{"setup": [["just", "\\ud800"]]}'})
+    assert main(["profile", "show"]) == 1
+    assert "refused bad_value" in capsys.readouterr().err

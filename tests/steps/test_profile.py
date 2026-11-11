@@ -16,6 +16,7 @@ from taskloop.profile import (
     PROFILE_PATH,
     Check,
     NoCommit,
+    NotAFile,
     Profile,
     Refused,
     Resolved,
@@ -53,9 +54,9 @@ def test_an_empty_object_takes_every_default() -> None:
 
 
 def test_a_full_profile_is_typed() -> None:
-    data = encoded(setup=[["just", "install"], ["./bootstrap", ""]], checks=[CHECK, TEST], required=["check"], target="trunk")
+    data = encoded(setup=[["just", "install"], ["./bootstrap", "x"]], checks=[CHECK, TEST], required=["check"], target="trunk")
     assert parse(data) == Profile(
-        (("just", "install"), ("./bootstrap", "")),
+        (("just", "install"), ("./bootstrap", "x")),
         (Check("check", ("just", "check"), 1800), Check("test", ("just", "test"), 60)),
         ("check",),
         "trunk",
@@ -82,12 +83,26 @@ REFUSALS = [
     ("not_object", b"[]", ""),
     ("not_object", b'"main"', ""),
     ("unknown_key", encoded(engine={}), "engine"),
+    ("unknown_key", b'{"x\\nRequired: (none)": 1}', "'x\\nRequired: (none)'"),
+    ("unknown_key", b'{"checks": [{"name": "a", "argv": ["x"], "timeout": 1, "\\u001b[2J": 1}]}', "checks[0].'\\x1b[2J'"),
     ("unknown_key", encoded(checks=[check_with(group="tests")]), "checks[0].group"),
     ("bad_value", encoded(setup="just install"), "setup"),
     ("bad_value", encoded(setup=[[]]), "setup[0]"),
     ("bad_value", encoded(setup=[[""]]), "setup[0][0]"),
     ("bad_value", encoded(setup=[["just", 1]]), "setup[0][1]"),
     ("bad_value", encoded(setup=[["just", "a\0b"]]), "setup[0][1]"),
+    ("bad_value", encoded(setup=[["just", ""]]), "setup[0][1]"),
+    ("bad_value", encoded(setup=[["  "]]), "setup[0][0]"),
+    ("bad_value", encoded(setup=[["\t"]]), "setup[0][0]"),
+    ("bad_value", b'{"setup": [["just", "\\ud800"]]}', "setup[0][1]"),
+    ("bad_value", encoded(setup=[["just", "x\nRequired: (none)"]]), "setup[0][1]"),
+    ("bad_value", encoded(setup=[["just", "a\tb"]]), "setup[0][1]"),
+    ("bad_value", encoded(setup=[["just", "\x1b[2J"]]), "setup[0][1]"),
+    ("bad_value", encoded(setup=[["just", "\x7f"]]), "setup[0][1]"),
+    ("bad_value", encoded(setup=[["just", "\x85"]]), "setup[0][1]"),
+    ("bad_value", encoded(checks=[check_with(argv=["x", "a\rb"])]), "checks[0].argv[1]"),
+    ("not_json", b'{"checks": [{"name": "a", "argv": ["x"], "timeout": Infinity}]}', ""),
+    ("not_json", b'{"target": -Infinity}', ""),
     ("bad_value", encoded(checks={"check": CHECK}), "checks"),
     ("bad_value", encoded(checks=["just check"]), "checks[0]"),
     ("bad_value", encoded(checks=[{"name": "check", "argv": ["just"]}]), "checks[0].timeout"),
@@ -103,6 +118,12 @@ REFUSALS = [
     ("bad_value", encoded(required="check"), "required"),
     ("bad_value", encoded(target=""), "target"),
     ("bad_value", encoded(target=None), "target"),
+    *[("bad_value", encoded(target=odd), "target") for odd in (
+        "-x", "--upload-pack=y", "a..b", "a//b", "/a", "a/", "a.", "a.lock", "a/b.lock", "a/.b", ".a", "@", "a@{b", "a~1", "a^",
+        "a:b", "a?", "a*", "a[b", "a\\b", "a b", "a\nb", "a\x1bb", "a\x7f", "\ud800")],
+    *[("bad_value", encoded(checks=[check_with(name=odd)]), "checks[0].name") for odd in (
+        ".hidden", "-flag", "a/b", "a:b", "a\nb", "é", "a\ud800", "a b")],
+    ("bad_value", encoded(checks=[CHECK], required=["-check"]), "required[0]"),
     ("too_large", b" " * (64 * 1024 + 1), ""),
     ("too_large", encoded(checks=[check_with(name=f"c{index}") for index in range(33)]), "checks"),
     ("too_large", encoded(setup=[["just"]] * 33), "setup"),
@@ -123,9 +144,20 @@ def test_each_refusal_has_its_fixed_word_and_key(reason: str, data: bytes, key: 
     assert found.detail
 
 
+def test_a_refusal_never_carries_a_raw_control_character() -> None:
+    found = parse(b'{"a\\nb": 1, "c\\u001bd": 2}')
+    assert isinstance(found, Refused)
+    assert found.detail == "Unknown keys: 'a\\nb', 'c\\x1bd'"
+    assert all(each.isprintable() for each in (found.key, found.detail))
+    long = parse(json.dumps({"k" * 5000: 1}).encode())
+    assert isinstance(long, Refused)
+    assert len(long.key) < 100
+
+
 def test_the_bounds_themselves_are_accepted() -> None:
     data = encoded(setup=[["just"]] * 32, checks=[check_with(name="n" * 64, argv=["x"] * 63 + ["a" * 4096])], target="b" * 255)
     assert isinstance(parse(data), Profile)
+    assert isinstance(parse(encoded(checks=[check_with(name="a.b_C-9")], target="feature/x-1_y.z", required=["a.b_C-9"])), Profile)
     assert isinstance(parse(b" " * (64 * 1024 - 2) + b"{}"), Profile)
 
 
@@ -208,6 +240,19 @@ def test_the_adapter_reads_the_file_at_a_commit(clone: tuple[FakeRepo, str, str]
     assert files.blob(without, PROFILE_PATH) is None
     assert files.blob("0" * 40, PROFILE_PATH) == NoCommit()
     assert files.blob("-x", PROFILE_PATH) == NoCommit()
+
+
+def test_a_symlink_or_submodule_profile_is_refused_not_unavailable() -> None:
+    class Moded:
+        def __init__(self, mode: str) -> None:
+            self.mode = mode
+
+        def blob(self, commit: str, path: str) -> NotAFile:
+            return NotAFile(self.mode)
+
+    assert read_profile(Moded("160000"), "X") == Refused("not_a_file", detail=".task-loop.json at X is not a regular file (mode 160000)")
+    assert resolve(Moded("120000"), "X", "main") == Refused(
+        "not_a_file", detail=".task-loop.json at X is not a regular file (mode 120000)", side="commit")
 
 
 def test_the_adapter_reports_git_failure_as_unavailable(tmp_path: Path) -> None:

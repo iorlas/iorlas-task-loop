@@ -27,7 +27,7 @@ from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import Launcher, entry_process
-from taskloop.profile import NoCommit, Unavailable
+from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.publish import BranchPublish
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.slot_release import SlotRelease
@@ -217,28 +217,35 @@ def remotes(path: Path) -> Repo:
     return RealRepo(path, memoize=False, env=hardened(os.environ) | ceiling(path, os.environ), remote_timeout=PUSH_TIMEOUT)
 
 
+FILE_MODES = ("100644", "100755")  # a tree entry that is a regular file; 120000 is a symlink, 160000 a submodule
+
+
 @dataclass(frozen=True)
 class GitProfileFiles:
     """The profile port over Git objects: a file at a commit through git_porcelain's `Repo.tree(rev).read(path)`
     (`cat-file blob`), never the working tree. The listing decides absence, so a failed read of a listed file is
-    unavailable, not missing; a revision that names no commit (or looks like an option) is `NoCommit`, once the
+    unavailable, not missing; a symlink or submodule entry is `NotAFile`;
+    a revision that names no commit (or looks like an option) is `NoCommit`, once the
     repository itself is readable (a path that is no repository is unavailable)."""
 
     checkout: Path
     repos: Checkouts = checkouts
 
-    def blob(self, commit: str, path: str) -> bytes | NoCommit | Unavailable | None:
+    def blob(self, commit: str, path: str) -> bytes | NoCommit | NotAFile | Unavailable | None:
         try:
             repo = self.repos(self.checkout)
-            tree = repo.tree(f"{commit}^{{commit}}")
+            try:
+                tree = repo.tree(f"{commit}^{{commit}}")
+            except ValueError:  # git_porcelain refuses an option-like revision before running Git
+                return NoCommit()
             if tree is None:
                 repo.identity()  # raises when the checkout is no readable repository: a failed rev-parse proves nothing
                 return NoCommit()
             if path not in tree.files:
                 return None
+            if (mode := tree.files[path][0]) not in FILE_MODES:  # a symlink or submodule is never the profile
+                return NotAFile(mode)
             data = tree.read(path)
-        except ValueError:  # git_porcelain refuses an option-like revision before running Git
-            return NoCommit()
         except GitUnavailable as error:
             return Unavailable(str(error))
         return Unavailable(f"{path} at {commit} is listed but unreadable") if data is None else data
