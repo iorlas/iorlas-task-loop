@@ -55,10 +55,10 @@ class ScriptedPushRepo(FakeRepo):
         return super().is_ancestor(a, b)
 
     @override
-    def remote_url(self, remote: str) -> str:
+    def remote_url(self, remote: str, *, push: bool = False) -> str:
         if not self.origin:
             raise MissingRemote(f"error: No such remote '{remote}'")
-        return super().remote_url(remote)
+        return super().remote_url(remote, push=push)
 
 
 class Pushing(FakeWorktree):
