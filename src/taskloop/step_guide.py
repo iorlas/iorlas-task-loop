@@ -3,7 +3,7 @@ them to do, and the whole-DB discard steps. Text only; `step_render` places it, 
 
 from pathlib import Path
 
-STEP_ONLY = "steps built: plan; publishes task/<id>; no merge or land"
+STEP_ONLY = "steps built: plan, implement; publishes task/<id>; no merge or land"
 PUBLISH = ("The step's result is verified but not on `origin` yet: `tl step publish`. A `refused` word names what to fix; "
            "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
            "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl step publish`), rerunning does not "
@@ -36,6 +36,8 @@ GUIDE = {
     "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl step start` admits a fresh "
     "attempt.",
     "publish": PUBLISH,
+    "advance": "The step is verified and on `origin`. The next step starts with `tl step start <task>` after one tracker read "
+    "confirms the task is in progress for taskloop (no new claim, no label check); it starts from that published commit.",
     "done": "Collected: `succeeded` tells whether the step's result was verified.",
     "unknown": "The entry or the store could not be read; run `tl step show` again.",
     "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl step start` admits a "
@@ -83,6 +85,11 @@ GUIDE = {
     "remote_ahead": "The remote task/<id> already holds the verified commit plus later commits: compare them; the factory does "
     "not record it as its publication and never forces.",
     "no_remote": "Add the remote (`git remote add origin <url>`) in the person's checkout, then rerun `tl step publish`.",
+    "not_advanceable": "Only the task's current attempt advances, once it is verified, released with its claim kept and "
+    "published, and only when its step has a following one: `tl step show` names its `Next`.",
+    "claim_lost": "The tracker no longer shows the task in progress for taskloop (claim reverted, taken by another actor, or "
+    "the task closed): check `bd show <task>`; nothing retakes the claim. `tl step release --abandon` (its claim answers "
+    "`not_held`), then `tl step start` admits it afresh at plan.",
     "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl step release --abandon`.",
     "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl step publish`.",
     "diverged": "The remote task/<id> does not contain the verified commit: compare them, then merge or move the remote branch "

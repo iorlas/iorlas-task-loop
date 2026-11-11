@@ -90,13 +90,13 @@ execution entity.
 
 ## Factory vocabulary as built
 
-Added 2026-11-11 from the successor tree (factory.db v10). Each word has one meaning across the code, CLI, database and
+Added 2026-11-11 from the successor tree (factory.db v11 since S5b). Each word has one meaning across the code, CLI, database and
 logs; use it for nothing else. Words for owner-visible output are listed as the code prints them.
 
 | Term | Meaning | Example / distinction |
 |---|---|---|
 | phase | How far one attempt's launch has got in factory.db: `admitted`, `dispatching`, `registered`, `captured` (`attempt.phase`). | Not a status or a conclusion. `captured` means the result is stored, not that it is verified or published. |
-| admission | The one transaction that reserves a free slot, creates the attempt and takes the tracker claim (`admit.py`); a repeat's takeover of the reservation, which claims nothing, is `admit_chain.py`. | The record is the attempt row at phase `admitted`; the operation is what `tl step start` and each round run. A refusal changes nothing, or returns a claim it took. |
+| admission | The one transaction that reserves a free slot, creates the attempt and takes the tracker claim (`admit.py`); a repeat's takeover of the reservation and an advance, both of which claim nothing, are `admit_chain.py`. | The record is the attempt row at phase `admitted`; the operation is what `tl step start` and each round run. A refusal changes nothing, or returns a claim it took. |
 | reservation | The factory.db row tying one slot to one attempt (`reservation`, unique on the attempt). | A slot with a reservation is `reserved`. Ended by a slot release. Not a lock and not a tracker claim. |
 | slot custody | The per-slot kernel lock (`slot_lock`, label `taskloop-slot`) held around any Git write on a slot by the entry, verify, repeat or release. | Code names: `custody`, `hold`. Held is `locked`; it is never waited for (`slot_busy`). Not a reservation: a reserved slot is not locked while nothing writes. |
 | entry process | The process the factory launches for one attempt, `python -m taskloop.attempt_entry`; its log is `entry.log`. | Distinct from the agent process and from a Git tree entry. Pick this word; do not say "launcher", "runner" or "entry" alone for the process. |
@@ -110,9 +110,10 @@ logs; use it for nothing else. Words for owner-visible output are listed as the 
 | settle | A round's first part: reading each existing attempt's state and doing its next action (verify, release, repeat, publish). | A settled release is the one that follows a collected result. |
 | repeat | A new attempt of the same step after the previous one left the slot unsettled, numbered 1 to 3 within a step (`attempt.number`, `repeat_reason`). | The step-level retry. The CLI, the DB and the log say repeat (`repeat`, `repeats_exhausted`); do not say retry for it. A capture retry (`CAPTURE_RETRIES`) is a DB write retried inside one attempt, not a repeat. |
 | verdict | The verifier's judgment of one attempt: `verified` or `rejected:<rule>`. | Not a check pass. `reused` is a verified verdict for a step that changed nothing (`effect` `keep`), distinct from the reuse of a stored pass. |
-| disposition | The agent's answer word: `planned`, `unchanged`, `incomplete`, `needs_owner`. | A property of the answer. Compare effect. |
-| step kind | The few values and functions that make a step that step (`steps.StepKind`): its rules, input, answer schema and decoder, artifact rule and repeat feedback. | A code concept, not a registry or plugin: the kinds are a fixed tuple (`steps.STEPS`, today only `PLAN`), reached through `steps.kind(step)`. |
-| effect | What the factory does with a disposition: `commit`, `keep` or `none` (`execution.effect`). | `planned` is `commit`, `unchanged` is `keep`, `incomplete` and `needs_owner` are `none`. |
+| disposition | The agent's answer word: plan `planned`, implement `implemented`; both `unchanged`, `incomplete`, `needs_owner`. | A property of the answer. Compare effect. |
+| step kind | The few values and functions that make a step that step (`steps.StepKind`): its rules, input, answer schema and decoder, artifact rule and repeat feedback. | A code concept, not a registry or plugin: the kinds are a fixed tuple in order (`steps.STEPS` is `(PLAN, IMPLEMENT)`), reached through `steps.kind(step)`; `steps.next_step` is the one sequencing rule. |
+| effect | What the factory does with a disposition: `commit`, `keep` or `none` (`execution.effect`). | `planned` and `implemented` are `commit`, `unchanged` is `keep`, `incomplete` and `needs_owner` are `none`. |
+| advance | Admitting attempt 1 of the next step once the task's current attempt is done: verified, released settled (claim kept) and published (`admit_chain.admit_next`); also the `Next` word that asks for it. | One tracker read confirms the task is `in_progress` for `taskloop`; no claim and no label check. The new attempt stores the previous X as `attempt.after_commit`, and its entry refuses `branch_moved` when the task branch no longer contains it. `tl step start` advances by hand. |
 | agent answer | The agent's structured JSON reply, validated by the answer contract. | Not the owner's answer to an `ask`. |
 | execution | One agent run inside an attempt, with its stored facts (`execution` table: exit, usage, evidence paths, answer, session state). | Not an attempt: an attempt has at most one execution. |
 | agent process | The OS process record of a running agent (`worker_pid`, `worker_pgid`, `worker_start`, `worker_boot` on the attempt). | The column names mirror the `any_agent` library's `Worker` type. Distinct from the entry process that launched it. |
@@ -124,7 +125,7 @@ logs; use it for nothing else. Words for owner-visible output are listed as the 
 | abandon | The owner deliberately giving up an attempt with `tl step release --abandon`: the slot is freed, the tracker claim is returned and the task becomes ready again. | Never automatic: a network or agent failure is not an abandon. The next admission is fresh and starts the task at its first step, as after a factory.db discard. |
 | publish | Push of `task/<id>` to origin, once an attempt is verified (`publish.py`, table `published_branch`). | Never forced, and it does not land. The other sense, storing a result, is called capture. |
 | deadline | The instant by which an attempt must end, set by `--minutes` (`attempt.deadline`). | Renewed to now plus `--minutes` once per reboot, at relaunch. Not the claim lease. |
-| stuck | A next-action word meaning only the owner can act: `stuck:expired_admitted`, `stuck:entry_lost`, `stuck:hung`, `stuck:uncollected`, `stuck:conflict`. | The other `Next` words are `start`, `wait`, `verify`, `repeat`, `repeats_exhausted`, `release`, `publish`, `done`, `unknown`. `tl step list --stuck` shows `stuck:*` and `unknown`. |
+| stuck | A next-action word meaning only the owner can act: `stuck:expired_admitted`, `stuck:entry_lost`, `stuck:hung`, `stuck:uncollected`, `stuck:conflict`. | The other `Next` words are `start`, `wait`, `verify`, `repeat`, `repeats_exhausted`, `release`, `publish`, `advance`, `done`, `unknown`. `tl step list --stuck` shows `stuck:*` and `unknown`. |
 | reserved / locked / held | `reserved`: a slot with a reservation. `locked`: its custody lock is held. `held:<reason>`: a release word (the slot stays reserved). | A slot can be reserved and not locked. Do not use "held" for the other two. |
 | label | The tracker label approving autonomous execution, `auto` (`--label`). | The lock label strings passed to `process_lock` (`taskloop-slot`, `taskloop-rounds`) are lock labels, not task labels. |
 

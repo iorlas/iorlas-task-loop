@@ -1,11 +1,15 @@
-"""The one owner of factory.db DDL, its version and every column list of its tables."""
+"""The one owner of factory.db DDL, its version and every column list of its tables.
+
+v11: `attempt.step` admits `implement`; `attempt.after_commit` names, for attempt 1 of every later step, the previous
+step's published X it starts from. `setup_run` is the slot setup's record (S5e; no writer yet): "latest" is always the
+highest `run` of one attempt, never a wall-clock order. No migration: an older factory.db is refused (`schema`)."""
 
 import sqlite3
 
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=10,
+    version=11,
     name="factory",
     steps={},
     ddl="""
@@ -20,7 +24,7 @@ CREATE TABLE reservation (
 );
 CREATE TABLE attempt (
  attempt_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE, generation INTEGER NOT NULL,
- step TEXT NOT NULL CHECK(step IN ('plan')),
+ step TEXT NOT NULL CHECK(step IN ('plan','implement')),
  adapter TEXT NOT NULL CHECK(adapter='beads'), backlog TEXT NOT NULL, task_id TEXT NOT NULL,
  tracker_root TEXT NOT NULL CHECK(substr(tracker_root,1,1)='/'),
  repo_id TEXT NOT NULL, slot TEXT NOT NULL, input_path TEXT NOT NULL, input_digest TEXT NOT NULL,
@@ -35,7 +39,9 @@ CREATE TABLE attempt (
  slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),
  previous_attempt_id TEXT UNIQUE REFERENCES attempt(attempt_id),
  repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored')),
+ after_commit TEXT CHECK(after_commit IS NULL OR length(after_commit) IN (40,64)),
  CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
+ CHECK((number = 1 AND step <> 'plan') = (after_commit IS NOT NULL)),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id, seq)
 );
@@ -68,6 +74,17 @@ CREATE TABLE published_branch (
  remote_head TEXT NOT NULL CHECK(length(remote_head) IN (40,64)),
  published_at REAL NOT NULL
 );
+CREATE TABLE setup_run (
+ attempt_id TEXT NOT NULL REFERENCES attempt(attempt_id), run INTEGER NOT NULL CHECK(run >= 1),
+ dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
+ commit_sha TEXT NOT NULL CHECK(length(commit_sha) IN (40,64)),
+ digest TEXT NOT NULL CHECK(length(digest)=64),
+ command INTEGER NOT NULL DEFAULT 0 CHECK(command >= 0),
+ pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
+ started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
+ conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','interrupted')),
+ CHECK((ended_at IS NULL) = (conclusion IS NULL)), PRIMARY KEY (attempt_id, run)
+);
 """,
 )
 
@@ -75,12 +92,12 @@ SLOT = "repo_id,name,path"
 RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head"
+    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head,after_commit"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
     "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,end_commit,"
-    "number,previous_attempt_id,step"
+    "number,previous_attempt_id,step,after_commit"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,"

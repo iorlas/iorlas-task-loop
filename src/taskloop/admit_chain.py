@@ -1,19 +1,54 @@
-"""Admit an attempt that continues a task's step: a repeat (`admit_repeat`) is the step's next attempt, which takes over
-the reservation its previous attempt holds in the same transaction, so the slot is never released between attempts. It
-claims nothing: the tracker root and D are copied from the previous attempt. The only writer that moves a reservation
-row from one attempt to the next; the attempt row and the slot's counter are written through `admit`'s shared writes.
+"""Admit an attempt that continues a task, claiming nothing (the tracker claim taken at the task's first admission is
+kept, and its root copied).
+
+A repeat (`admit_repeat`) is the step's next attempt, which takes over the reservation its previous attempt holds in the
+same transaction, so the slot is never released between attempts; D is copied too. The only writer that moves a
+reservation row from one attempt to the next.
+
+An advance (`admit_next`) is attempt 1 of the next step (`steps.next_step`) after the task's current attempt is done:
+verified, released settled with its claim kept, and its X published. One tracker read confirms the task is still in
+progress for the factory's actor (no label check: the label is ingestion's); then a free slot whose HEAD (D) passes the
+branch rule is reserved as a fresh admission does, and the new attempt stores the previous X as `after_commit`, which
+the entry requires its task branch to contain. The attempt and reservation rows and the slot's counter are written
+through `admit`'s shared writes.
 """
 
 import secrets
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
+from pathlib import Path
 from uuid import uuid4
 
-from taskloop.admit import AdmitRefused, Admitted, AdmitUnavailable, as_count, deadline_refusal, insert_attempt, issue, open_store, why
-from taskloop.attempt_types import ATTEMPTS, AttemptKey, FileRef, RepeatReason
+from taskloop.admit import (
+    AdmitRefused,
+    Admitted,
+    AdmitUnavailable,
+    Free,
+    Tasks,
+    as_count,
+    branched,
+    checkout_repo,
+    deadline_refusal,
+    free_slots,
+    insert_attempt,
+    issue,
+    issued,
+    open_store,
+    read_task,
+    reserve,
+    task_text,
+    unheld,
+    why,
+)
+from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.repo import RepoId
+from taskloop.slots import Probe, SlotGit
+from taskloop.steps import next_step
+from taskloop.task import TaskInspection
+from taskloop.tracker import ACTOR
 
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
 # clean answer with its session complete, of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
@@ -98,6 +133,7 @@ class ChainAdmission:
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
                 "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": request.reason, "seq": as_count(row[13]) + 1, "slot_head": row[14], "step": row[15],
+                "after_commit": None,  # a repeat starts at E, the chain's own
             })
             moved = con.execute(
                 """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
@@ -108,3 +144,173 @@ class ChainAdmission:
                 raise _Lost
             issue(con, row[5], row[6], key.reservation_generation)
         return Admitted(key, str(row[6]))
+
+
+# The task's current attempt (its highest `seq`) under the write lock: its key, whether it is done (verified, released
+# settled with the claim kept, its X published), its step, X, tracker root and order.
+CURRENT = """SELECT p.attempt_id,p.dispatch_token,p.generation,
+EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id AND v.verdict='verified')
+AND EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.claim='kept')
+AND EXISTS (SELECT 1 FROM published_branch b WHERE b.attempt_id=p.attempt_id AND b.commit_sha=p.end_commit),
+p.step,p.end_commit,p.tracker_root,p.seq
+FROM attempt p WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1"""
+
+
+@dataclass(frozen=True)
+class NextStepRequest:
+    """Attempt 1 of the step after `previous`'s; every choice is the caller's (no label: claimed work is not ingested)."""
+
+    previous: AttemptKey
+    checkout: Path
+    model: str
+    effort: str
+    sandbox: str
+    deadline: float
+
+
+@dataclass(frozen=True)
+class _Task:
+    """The previous attempt's task, read before any effect; `current`: it is still the task's current attempt."""
+
+    backlog: str
+    task_id: str
+    tracker_root: str
+    repo_id: str
+    step: str
+    current: bool
+
+
+@dataclass(frozen=True)
+class _Ready:
+    """Everything an advance read before any effect."""
+
+    con: sqlite3.Connection
+    found: _Task
+    step: str
+    task: TaskInspection
+    free: tuple[Free, ...]
+
+
+class NextAdmission:
+    def __init__(
+        self,
+        connect: Callable[[], sqlite3.Connection | None],
+        begin: Callable[[sqlite3.Connection], AbstractContextManager[None]],
+        files: EvidenceFiles,
+        tasks: Tasks,
+        checkouts: Checkouts,
+        clock: Callable[[], float],
+        probe: Probe,
+        slot_files: SlotFiles,
+    ) -> None:
+        """The ports of a fresh admission (`admit.AttemptAdmission`) without the claim: an advance never claims."""
+        self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
+        self.clock, self.probe, self.slot_files = clock, probe, slot_files
+
+    def admit_next(self, request: NextStepRequest) -> Admitted | AdmitRefused | AdmitUnavailable:
+        """Read-only checks first (`_ready`); then the input under the new key; then one write transaction that re-reads
+        every fact (`_advance`). No claim, so nothing to compensate."""
+        ready = self._ready(request)
+        if not isinstance(ready, _Ready):
+            return ready
+        found, names = ready.found, tuple(each.name for each in ready.free)
+        try:
+            key = AttemptKey(uuid4().hex, secrets.token_hex(16), issued(ready.con, RepoId(found.repo_id), names) + 1)
+            ref = self.files.put_input(key, task_text(ready.task, ready.step))
+        except sqlite3.Error as error:
+            return AdmitUnavailable("store", detail=why(error))
+        except (EvidenceError, UnicodeError, OSError) as error:
+            return AdmitRefused("input", detail=why(error))
+        try:
+            return self._advance(ready, request, key, ref)
+        except sqlite3.IntegrityError as error:  # caught after the rollback: a concurrent advance's UNIQUE seq
+            return AdmitRefused("task_attempted", detail=why(error))
+        except sqlite3.Error as error:
+            return AdmitUnavailable("store", detail=why(error))
+
+    def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, _Task, str] | AdmitRefused | AdmitUnavailable:
+        """The choices, the deadline, then the previous attempt's task and the step after it; a superseded previous
+        attempt is `task_attempted` before any tracker read (the transaction checks it again)."""
+        if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
+            return AdmitRefused("choices")
+        refused = deadline_refusal(self.clock, request.deadline)
+        if refused is not None:
+            return refused
+        try:
+            con = open_store(self.connect)
+            found = _task_of(con, request.previous)
+        except sqlite3.Error as error:
+            return AdmitUnavailable("store", detail=why(error))
+        step = None if found is None else next_step(found.step, True)
+        if found is None or step is None:
+            return AdmitRefused("not_advanceable")
+        return (con, found, step) if found.current else AdmitRefused("task_attempted")
+
+    def _ready(self, request: NextStepRequest) -> _Ready | AdmitRefused | AdmitUnavailable:
+        """Then the one tracker read (still in progress for the factory's actor; no label), the checkout's repository and
+        its free slots passing the branch rule."""
+        previous = self._previous(request)
+        if not isinstance(previous, tuple):
+            return previous
+        con, found, step = previous
+        task = read_task(self.tasks, found.task_id, found.backlog, found.tracker_root)
+        if not isinstance(task, TaskInspection):
+            return task
+        if task.status != "in_progress" or task.assignee != ACTOR:
+            return AdmitRefused("claim_lost", detail=f"The tracker shows {found.task_id} {task.status or 'without status'}, "
+                                f"assigned to {task.assignee or 'nobody'}")
+        free = self._free(con, request, found)
+        return free if not isinstance(free, tuple) else _Ready(con, found, step, task, free)
+
+    def _free(self, con: sqlite3.Connection, request: NextStepRequest, found: _Task) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
+        """The checkout is the previous attempt's repository; its free slots whose D the task branch rule passes."""
+        checked = checkout_repo(self.checkouts, request.checkout)
+        if not isinstance(checked, tuple):
+            return checked
+        repo, repo_id = checked
+        if repo_id != found.repo_id:
+            return AdmitRefused("checkout", detail="The checkout is not the repository of the task's previous step")
+        views = free_slots(con, repo, SlotGit(self.checkouts, self.slot_files), repo_id, self.probe)
+        return views if not isinstance(views, tuple) else branched(repo, found.task_id, views)
+
+    def _advance(self, ready: _Ready, request: NextStepRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
+        """Under the write lock: the task's current attempt is still `previous` and done; the lowest observed-free slot
+        still unheld; then the reservation, the slot's counter and attempt 1 of the next step starting after the previous
+        X."""
+        con, found, step, free = ready.con, ready.found, ready.step, ready.free
+        repo_id, generation = RepoId(found.repo_id), key.reservation_generation
+        with self.begin(con):
+            row: tuple[object, ...] | None = con.execute(CURRENT, (found.backlog, found.task_id)).fetchone()
+            if row is None or row[0:3] != astuple(request.previous):
+                return AdmitRefused("task_attempted")
+            if not row[3] or next_step(str(row[4]), True) != step:
+                return AdmitRefused("not_advanceable")
+            chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, generation)) is not None), None)
+            if chosen is None:
+                return AdmitRefused("no_free_slot")
+            name, head = chosen
+            reserve(con, repo_id, name, key)
+            insert_attempt(con, {
+                "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": generation, "adapter": "beads",
+                "backlog": found.backlog, "task_id": found.task_id, "tracker_root": row[6], "repo_id": repo_id, "slot": name,
+                "step": step, "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
+                "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
+                "previous_attempt_id": None, "repeat_reason": None, "seq": as_count(row[7]) + 1, "slot_head": head,
+                "after_commit": row[5],
+            })
+        return Admitted(key, name)
+
+
+def _task_of(con: sqlite3.Connection, previous: AttemptKey) -> _Task | None:
+    row: tuple[object, ...] | None = con.execute(
+        """SELECT p.backlog,p.task_id,p.tracker_root,p.repo_id,p.step,NOT EXISTS (SELECT 1 FROM attempt q WHERE q.adapter=p.adapter
+        AND q.backlog=p.backlog AND q.task_id=p.task_id AND q.seq>p.seq) FROM attempt p
+        WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
+        astuple(previous),
+    ).fetchone()
+    if row is None:
+        return None
+    backlog, task_id, root, repo_id, step, current = row
+    if not all(isinstance(each, str) for each in row[:5]):
+        raise sqlite3.DatabaseError("Malformed attempt row")
+    return _Task(str(backlog), str(task_id), str(root), str(repo_id), str(step), bool(current))

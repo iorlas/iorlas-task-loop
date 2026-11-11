@@ -597,3 +597,75 @@ Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kep
 (+5), `composition` 283 (+4), `task` 49 (+2), `tracker` 56 (+2), `cli` 142, `cli_composition` 208, `repeat` 142 (+1
 each): +47 source code lines against the estimate of about +12 (the moved class carries its own imports, docstring and
 constructor, and the two shared SQL writes became functions); tests +6. Live smoke not run (no behavior change).
+
+## 12. As built: S5b (implement step kind, hand advance, schema v11, 2026-11-11)
+
+Tracker tl-8bh9.4.3.1.16.3. Built after S5e-0 and before S5e-1/2, so the implement agent runs with plan's sandbox and
+access (section 6, "If S5e slips"): it is for hand advances on scratch tasks until S5e and S5c. Plan's agent-facing
+bytes are unchanged (the S3 constants in `test_steps` pass unchanged).
+
+- **Schema v11** (`factory_schema`, no migration: v10 is refused `refused:schema`). `attempt.step IN ('plan',
+  'implement')`; `attempt.after_commit` (40 or 64 characters) with `CHECK((number = 1 AND step <> 'plan') = (after_commit
+  IS NOT NULL))`; `ATTEMPT_ADMITTED` and `ATTEMPT_LOADED` carry it, `Admission.after_commit` holds it (fresh and repeat
+  write NULL). The `setup_run` table of [S5e](../tl-8bh9.4.3.1.16.2/plan.md) section 4 is in v11 exactly as defined there
+  (without its SQL comments), with no writer yet; `test_policy.WRITERS` names `factory_schema.py` as its CREATE owner.
+  S5e's Q1 is still open: an answer that changes the table costs another discard.
+- **`implement_step.py`** (91 code lines): dispositions and effects as 2.3; the four-key strict schema; the decoder
+  (`implemented` needs at least one listed path and a message; the others list none, message null); `StepRules("",
+  max_paths=96, deletions=True, excluded=(".beads/",))`; no artifact (`ARTIFACT_RULES = ()`, `Verified.blob` NULL); repeat
+  words as 2.7 in the shared `step_text` frame. **Input words are neutral** (S5e section 7): the plan by reference, the
+  scope and caps from the rules, the Git-write sentence, "Do not add or upgrade dependencies", "run the project's static
+  analysis and tests where you can ... after this step the factory's own checks decide", and the `explanation` report;
+  no command name, `$TMPDIR`, offline or network claim (a test asserts their absence). S5e-2 adds the environment words.
+- **`steps`**: `IMPLEMENT`, `STEPS = (PLAN, IMPLEMENT)`, `kind("implement")`, `following(step)` and `next_step(current,
+  done)` (3.1's table); `RULES` adds the implement rules (none). `one-step-kind-owner` protects `implement_step` too.
+- **`attempt_types`**: `Step` gains `implement`; `StepRules.excluded` (checked casefolded, as `.git` is); the plan's
+  message and path-list checks moved here as `commit_message` and `listed_paths` (both kinds use them; plan bytes and
+  behavior unchanged).
+- **Deletions** (`factory_commit`): `refusal` takes the slot's pinned repository view; for a kind with `deletions` it
+  reads B's tree once (`Unreadable("base")` when it cannot) and `unsafe_path` treats an absent listed path as a deletion
+  when it is a 100644 file in B reached through plain or absent folders; any other absent path stays `unsafe`.
+- **`admit_chain.NextAdmission.admit_next(NextStepRequest)`** (chosen here: its own class beside `ChainAdmission`, with
+  the fresh admission's ports minus the claim; `composition.open_advance` wires it). Order: choices and deadline; the
+  previous attempt's task and `next_step` (`not_advanceable`), and **a superseded previous attempt is `task_attempted`
+  before the tracker read** (added here; the transaction checks it again for a race); one `bd show` (`claim_lost` unless
+  `in_progress` and assignee `taskloop`; no label); the checkout's repository must be the previous attempt's
+  (`checkout`); free slots and the branch rule (`admit.free_slots`, `branched`); the input under the new key; then one
+  transaction re-reading the current attempt (`task_attempted`), its done-ness (`verified`, release claim `kept`, a
+  `published_branch` row at its `end_commit`; else `not_advanceable`) and an unheld slot (`no_free_slot`), inserting the
+  reservation (`admit.reserve`, now shared with fresh admission) and attempt 1 (`after_commit` = the previous X,
+  `tracker_root` copied, `seq + 1`, `slot_head` = the new slot's D). `NextStepRequest` carries `sandbox` (the caller's
+  `attempt.SANDBOX`) until S5e moves access to the kind. `admit.read_task` and `admit.checkout_repo` are the shared reads.
+- **`prepare`**: attempt 1 with `after_commit` refuses `branch_moved` before `take_branch` when the tip the slot would
+  take (local `task/<id>`, else the remote-tracking one, else D) does not contain it, or the commit is gone
+  (`MissingRevision`).
+- **Status and start**: `Next` gains `advance` (settled, verified, published, and `following(step)` exists; else `done`;
+  unpublished stays `publish`); `tl step show` prints `Earlier: <id> advanced` for the previous step's attempt.
+  `operations.start` on such an attempt calls `StartPorts.advance` (a new port) and launches the new attempt
+  (`started`, `Step: implement`); every other settled release is `already_dispatched` as before. GUIDE gained `advance`,
+  `not_advanceable` and `claim_lost` (the last existed only as an entry-log word); `environment` waits for S5e.
+  `STEP_ONLY` names `plan, implement`.
+- **Round, until S5c**: a round reports a done plan as `report advance` (its guide says to run `tl step start`); nothing
+  advances automatically.
+
+Tests (pytest functions, fakes through ports): `test_admit_chain.py` (new, 246 code lines): the advance's stored row
+(step, number, `seq`, `after_commit`, copied tracker root, sandbox, D, input naming the plan), `claim_lost` for status
+`open`/`closed` or another assignee with nothing written, `not_advanceable` for unpublished, published at another commit,
+abandoned and unknown previous attempts, a racing advance and a superseded one both `task_attempted` with one implement
+attempt admitted, another repository's checkout refused, the end-to-end chain (plan done, advance, an implement agent
+adding code and a test and deleting a file, verified and published as one commit on the plan commit, `Next: done`,
+`Earlier: advanced`), a repeat of implement (`number` 2, no `after_commit`), an abandoned implement restarting at plan
+(`seq` 3), `tl step start` advancing and then relaunching, and the v11 CHECKs (attempt and `setup_run`). Also
+`test_steps` (kinds, the `next_step` table, the implement input and repeat words), `test_answer_contract` (strict format
+for both schemas; implement decoder: valid shapes, 96 paths, excluded `.beads/` in any case, `.git*`, 97 paths,
+duplicates, `plan_path`), `test_prepare` (`branch_moved` for local, remote, both-with-local-lacking, gone; passes when
+contained), `real/test_commit_real` (a deletion and an addition committed on real Git with an ignored `.venv/` present;
+an absent path never in B and a changed `.gitignore` are `unsafe`), `test_step_cli` (`Earlier: advanced`), and the
+updated round, operations and CLI help expectations. Mutations of the done-ness clauses, the assignee check, the
+`after_commit` value, the transaction's current-attempt check, the repository check, the tip order in `prepare`, the
+deletion rule and the `advance` word each fail a test (run by hand, not kept).
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kept); `just test` 1460 passed. Code lines
+(policy counter): source +360 against the estimate of about +185 (`admit_chain` 85 to 246, `implement_step` 91, `steps`
+45, `factory_commit` 166, `operations` 267, `admit` 280, `attempt_types` 238); tests +364. Live smoke not run (owner-run,
+section 5; the implement agent has no prepared environment until S5e).

@@ -9,7 +9,6 @@ from git_porcelain import Tree
 from taskloop import step_text
 from taskloop.attempt_types import (
     MODE,
-    TRAILER,
     Answer,
     Effect,
     Rejected,
@@ -18,6 +17,8 @@ from taskloop.attempt_types import (
     StepRules,
     Unreadable,
     Unsettled,
+    commit_message,
+    listed_paths,
     path_allowed,
 )
 from taskloop.task import TaskInspection
@@ -58,28 +59,15 @@ def step_rules(task_id: str) -> StepRules:
     return StepRules(f"docs/design/{task_id}/")
 
 
-def _message(message: object) -> bool:
-    return (
-        isinstance(message, str) and 1 <= len(message) <= 500 and "\0" not in message and TRAILER.casefold() + ":" not in message.casefold()
-    )
-
-
-def _paths(paths: object, rules: StepRules) -> tuple[str, ...] | None:
-    if not isinstance(paths, list) or len(paths) > rules.max_paths:
-        return None
-    found = tuple(path for path in paths if isinstance(path, str) and path_allowed(path, rules))
-    return found if len(found) == len(paths) and len(set(found)) == len(found) else None
-
-
 def decode(value: object, rules: StepRules) -> Answer:
     """Validate the factory's plan answer contract, without verifying Git effects; the single owner of its cross-field
     rules and every bound (the strict schema carries none). The expected plan is `<rules.root>plan.md`."""
     if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
         raise ValueError("Invalid plan answer")
     disposition, path, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
-    expected, listed = rules.root + PLAN_NAME, _paths(paths, rules)
+    expected, listed = rules.root + PLAN_NAME, listed_paths(paths, rules)
     if disposition == "planned":
-        fits = path == expected and listed is not None and expected in listed and _message(message)
+        fits = path == expected and listed is not None and expected in listed and commit_message(message)
     else:
         named = path == expected or (path is None and disposition != "unchanged")
         fits = disposition in DISPOSITIONS and named and listed == () and message is None

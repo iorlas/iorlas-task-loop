@@ -1,8 +1,9 @@
 """Admit an attempt: the only writer of the admitted `attempt` row and of a new `reservation` row; it runs nothing.
 
 A task's first attempt takes a free slot and the tracker claim (`admit`), after the task branch rule passed for that
-slot's HEAD (`prepare.branch_refusal`, read-only, before anything is written or claimed); a repeat is admitted by
-`admit_chain`, through the shared pieces here (the deadline check, the store, the attempt row and the slot's counter).
+slot's HEAD (`prepare.branch_refusal`, read-only, before anything is written or claimed); a repeat and an advance to
+the next step are admitted by `admit_chain`, through the shared pieces here (the deadline check, the store, the task and
+checkout reads, the free slots and branch rule, the reservation, the attempt row and the slot's counter).
 An admitted attempt stays unregistered (entry_* NULL): the body refuses it with
 `unregistered_entry` until `AttemptStore.register_entry` registers its entry. The tracker root, resolved, is stored with the
 attempt (a repeat copies it): the entry renews the claim there, an abandon returns it there. The slot's HEAD the attempt
@@ -42,7 +43,7 @@ type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; F
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
 type Refusal = Literal[
     "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
-    "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged",
+    "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged", "claim_lost", "not_advanceable",
 ]
 FIRST = STEPS[0].step  # a fresh admission's step: the first one
 NOT_CLAIMED = frozenset({"missing_binary", "version", "not_found", "lint"})  # BdError kinds where the claim certainly did not happen
@@ -160,36 +161,23 @@ class AttemptAdmission:
         refused = self._choices(request)
         if refused is not None:
             return refused
-        task = self._task(request)
+        task = read_task(self.tasks, request.task_id, request.backlog, request.tracker_root)
         if not isinstance(task, TaskInspection):
             return task
         try:
             tracker = Path(request.tracker_root).expanduser().resolve()
         except (RuntimeError, OSError) as error:
             return AdmitRefused("task", detail=why(error))
-        try:
-            checkout = request.checkout.expanduser().resolve()
-            repo = self.checkouts(checkout)
-            inspection = inspect_repo(repo, checkout)
-        except (UnsupportedCheckout, RuntimeError, OSError) as error:
-            return AdmitRefused("checkout", detail=why(error))
-        except GitUnavailable as error:
-            return AdmitUnavailable("git", detail=why(error))
+        found = checkout_repo(self.checkouts, request.checkout)
+        if not isinstance(found, tuple):
+            return found
         # the root as resolved now is the one claimed, stored and renewed (.4.3.1.9)
-        return _Prepared(replace(request, tracker_root=str(tracker)), task_text(task, FIRST), repo, inspection.repo_id)
+        return _Prepared(replace(request, tracker_root=str(tracker)), task_text(task, FIRST), *found)
 
     def _choices(self, request: AdmitRequest) -> AdmitRefused | None:
         if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
             return AdmitRefused("choices")
         return deadline_refusal(self.clock, request.deadline)
-
-    def _task(self, request: AdmitRequest) -> TaskInspection | AdmitRefused | AdmitUnavailable:
-        try:
-            return self.tasks(request.task_id, request.backlog, request.tracker_root)
-        except TaskInspectionError as error:
-            if error.kind == "tracker_unavailable":
-                return AdmitUnavailable("tracker", detail=why(error))
-            return AdmitRefused("task", detail=f"{error.kind}: {why(error)}")
 
     def _observe(self, prepared: _Prepared) -> tuple[sqlite3.Connection, tuple[SlotView, ...]] | AdmitRefused | AdmitUnavailable:
         """An attempted task, then no free slot, refuse before any effect; store failure never counts as free."""
@@ -254,9 +242,7 @@ class AttemptAdmission:
             if chosen is None:
                 return AdmitRefused("no_free_slot")
             name, head = chosen
-            held = {"slot": name, "repo_id": repo_id, "generation": generation, "attempt_id": key.attempt_id}
-            con.execute(f"INSERT INTO reservation ({RESERVATION}) VALUES ({marks(RESERVATION)})", bound(RESERVATION, held))
-            issue(con, repo_id, name, generation)
+            reserve(con, repo_id, name, key)
             insert_attempt(con, {
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
                 "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "tracker_root": request.tracker_root,
@@ -264,8 +250,31 @@ class AttemptAdmission:
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None, "seq": _next_seq(con, request), "slot_head": head,
+                "after_commit": None,
             })
         return Admitted(key, name)
+
+
+def read_task(tasks: Tasks, task_id: str, backlog: str, tracker_root: str) -> TaskInspection | AdmitRefused | AdmitUnavailable:
+    """The one tracker read of an admission (`bd show`): the task's prose for the input, its status and assignee."""
+    try:
+        return tasks(task_id, backlog, tracker_root)
+    except TaskInspectionError as error:
+        if error.kind == "tracker_unavailable":
+            return AdmitUnavailable("tracker", detail=why(error))
+        return AdmitRefused("task", detail=f"{error.kind}: {why(error)}")
+
+
+def checkout_repo(checkouts: Checkouts, path: Path) -> tuple[Repo, RepoId] | AdmitRefused | AdmitUnavailable:
+    """The person's checkout, resolved, and the repository it belongs to; read-only."""
+    try:
+        checkout = path.expanduser().resolve()
+        repo = checkouts(checkout)
+        return repo, inspect_repo(repo, checkout).repo_id
+    except (UnsupportedCheckout, RuntimeError, OSError) as error:
+        return AdmitRefused("checkout", detail=why(error))
+    except GitUnavailable as error:
+        return AdmitUnavailable("git", detail=why(error))
 
 
 def deadline_refusal(clock: Callable[[], float], deadline: float) -> AdmitRefused | None:
@@ -307,6 +316,14 @@ def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free
         return AdmitRefused(found, detail=DIVERGED.format(task=task_id) if found == "branch_diverged" else "")
     passing = tuple(Free(view.name, head) for view in free if (head := heads.get(view.path)) is not None and head in found.passing)
     return passing or AdmitRefused("no_free_slot")
+
+
+def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey) -> None:
+    """The new reservation of a free slot for the attempt `key`, and the slot's counter, inside the caller's write
+    transaction."""
+    held = {"slot": slot, "repo_id": repo_id, "generation": key.reservation_generation, "attempt_id": key.attempt_id}
+    con.execute(f"INSERT INTO reservation ({RESERVATION}) VALUES ({marks(RESERVATION)})", bound(RESERVATION, held))
+    issue(con, repo_id, slot, key.reservation_generation)
 
 
 def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object]) -> None:

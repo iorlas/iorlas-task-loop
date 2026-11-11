@@ -1,8 +1,10 @@
 # Task-loop successor foundation
 
 The successor task factory. Built so far: read-only inspection of Git checkouts and tasks, and the plan step end to
-end, from admitting a ready task into a free slot to publishing its verified plan as `task/<id>` on `origin`.
-Not built: the implement, checks, review and land steps, and the dashboard. Nothing merges or lands.
+end, from admitting a ready task into a free slot to publishing its verified plan as `task/<id>` on `origin`; then the
+implement step, advanced by hand (`tl step start`) and published on the same branch. Not built: rounds advancing a
+task, the environment for the agent's tests, the checks, review and land steps, and the dashboard. Nothing merges or
+lands.
 
 - `tl repo inspect PATH [--json]` reports the local repository identity, common directory, selected checkout and origin.
 - `tl task show TASK_ID --backlog BACKLOG --tracker-root PATH [--json]` reads the explicitly configured Beads tracker,
@@ -13,7 +15,8 @@ Not built: the implement, checks, review and land steps, and the dashboard. Noth
   checks at the commit `--at`, `required` and `target` from `--target` (read-only).
 - `tl slot adopt CHECKOUT` adopts hand-made detached worktrees as slots and creates `factory.db`.
 - `tl step start|show|list|verify|release|publish` run, inspect, verify, release (`--abandon` returns the tracker
-  claim) and publish one task's current attempt, whatever its step (only the plan step is built). `tl step next` runs one
+  claim) and publish one task's current attempt, whatever its step (plan, then implement: `tl step start` on a done plan
+  admits the implement step). `tl step next` runs one
   scheduling round over approved ready tasks; `tl step rounds` runs rounds in the foreground until Ctrl-C. `tl plan` is
   gone (an unknown command).
 

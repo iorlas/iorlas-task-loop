@@ -177,6 +177,28 @@ def test_a_tip_without_the_slots_commit_is_diverged_and_nothing_runs(
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 
 
+@pytest.mark.parametrize(("where", "contains"), [
+    ("local", True), ("remote", True), ("local", False), ("remote", False), ("gone", False), ("both", False),
+])
+def test_attempt_one_of_a_later_step_needs_the_previous_steps_commit_on_its_branch(
+    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    where: str, contains: bool,
+) -> None:
+    """The tip the slot would take (local, else remote-tracking) must contain `after_commit`; someone reset the branch
+    after the previous step, or its commit is gone: `branch_moved`, nothing taken, the slot still detached."""
+    tip = pushed(repo, tmp_path) if where in ("remote", "both") else leave(repo, tmp_path, BRANCH, extra=contains)
+    if where == "both":  # a local branch at D beside origin's tip, which holds X: the local one is what the slot takes
+        leave(repo, tmp_path, BRANCH)
+    after = tip if contains or where == "both" else "f" * 40 if where == "gone" else leave(repo, tmp_path, "elsewhere", extra=True)
+    con.execute("UPDATE attempt SET step='implement',after_commit=?", (after,))
+    status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
+    if contains:
+        assert len(agent.calls) == 1 and slot.branch() == BRANCH
+    else:
+        assert (status, reason, agent.calls, slot.branch()) == ("refused", "branch_moved", [], None)
+        assert con.execute("SELECT phase,base_commit FROM attempt").fetchone() == ("admitted", None)
+
+
 def test_an_unreadable_branch_is_unknown_never_absent(
     con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
     monkeypatch: pytest.MonkeyPatch,

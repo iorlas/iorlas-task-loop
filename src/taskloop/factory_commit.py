@@ -8,13 +8,25 @@ commit from a crash before its recording. The caller's `quiet` is asked right be
 and this attempt still the reservation's holder. `GitUnavailable` and `Unreadable` propagate.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from git_porcelain import NothingToRecord, Recorded, Repo, Worktree
+from git_porcelain import NothingToRecord, Recorded, Repo
 
-from taskloop.attempt_types import TRAILER, Admission, AnswerState, Checkouts, Rejected, SlotFiles, StepRules, Unsettled, dot_git
+from taskloop.attempt_types import (
+    MODE,
+    TRAILER,
+    Admission,
+    AnswerState,
+    Checkouts,
+    Rejected,
+    SlotFiles,
+    StepRules,
+    Unreadable,
+    Unsettled,
+    dot_git,
+)
 from taskloop.prepare import task_branch
 from taskloop.slot_state import SlotState, bounded, listing, observe_slot, pointer, staged
 from taskloop.steps import kind
@@ -97,8 +109,9 @@ def _commit(
     and commit them with the agent's message and this attempt's trailer, `quiet` and the pointer checked before each Git
     write. Every slot call runs from the slot, under its ceiling, pinned to the Git directory `state` verified."""
     path = Path(admission.slot_path)
-    slot = checkouts(path, git_dir=state.gitdir).worktree(path)
-    refused = refusal(slot, files, admission, base, answer)
+    view = checkouts(path, git_dir=state.gitdir)
+    slot = view.worktree(path)
+    refused = refusal(view, files, admission, base, answer)
     if refused is not None:
         return refused
     blocked = _blocked(quiet, files, admission, state)
@@ -130,14 +143,15 @@ def _foreign(checkouts: Checkouts, admission: Admission, answer: AnswerState, gi
     return Unsettled("staged", bounded(extra)) if extra else None
 
 
-def refusal(slot: Worktree, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Unsettled | None:
-    """Step 4's reads, no Git write: an unsafe listed path, a changed `.git*` file near them, or ignored files under
-    them (listed)."""
+def refusal(view: Repo, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Unsettled | None:
+    """Step 4's reads on the slot's pinned `view`, no Git write: an unsafe listed path, a changed `.git*` file near
+    them, or ignored files under them (listed). A step that may delete reads B's tree once, for the deleted paths."""
     rules = kind(admission.step).rules(admission.task.task_id)
-    unsafe = unsafe_path(files, Path(admission.slot_path), rules, answer.paths)
+    path = Path(admission.slot_path)
+    unsafe = unsafe_path(files, path, rules, answer.paths, _base_files(view, base) if rules.deletions else {})
     if unsafe is not None:
         return Unsettled("unsafe", bounded((unsafe,)))
-    dirt = slot.dirty(base, ignored_under=attributes(rules, answer.paths))
+    dirt = view.worktree(path).dirty(base, ignored_under=attributes(rules, answer.paths))
     unsafe = git_file(dirt.tracked + dirt.untracked, rules, answer.paths)
     if unsafe is not None:
         return Unsettled("unsafe", bounded((unsafe,)))
@@ -178,13 +192,26 @@ def _ours(repo: Repo, head: str, base: str, admission: Admission) -> bool:
     return len(found) == 1 and found[0].sha == head and trailer(admission) in found[0].body.splitlines()
 
 
-def unsafe_path(files: SlotFiles, slot: Path, rules: StepRules, paths: tuple[str, ...]) -> str | None:
+def _base_files(view: Repo, base: str) -> Mapping[str, tuple[str, str]]:
+    tree = view.tree(f"{base}^{{commit}}")
+    if tree is None or tree.sha != base:
+        raise Unreadable("base")
+    return tree.files
+
+
+def unsafe_path(
+    files: SlotFiles, slot: Path, rules: StepRules, paths: tuple[str, ...], committed: Mapping[str, tuple[str, str]]
+) -> str | None:
     """The first listed path that is not a plain regular file reached through plain directories: no component a symlink
-    (`lstat` per component), no execute bit, at most `file_cap` bytes; None when every one is safe."""
+    (`lstat` per component), no execute bit, at most `file_cap` bytes; None when every one is safe. An absent listed path
+    is a deletion only when it is a 100644 file in `committed` (B's files, empty unless the step may delete) reached
+    through plain or absent directories; any other absent path is unsafe."""
     for path in paths:
         parts = path.split("/")
-        folders = (files.lstat(slot.joinpath(*parts[:depth])) for depth in range(1, len(parts)))
+        folders = [files.lstat(slot.joinpath(*parts[:depth])) for depth in range(1, len(parts))]
         entry = files.lstat(slot.joinpath(*parts))
+        if entry is None and committed.get(path, ("",))[0] == MODE and all(each is None or each.kind == "dir" for each in folders):
+            continue
         if not all(folder is not None and folder.kind == "dir" for folder in folders):
             return path
         if entry is None or entry.kind != "file" or entry.executable or entry.size > rules.file_cap:
@@ -221,7 +248,6 @@ def leftovers(
             return Unsettled("unborn" if state.head is None else "branch")
         if state.head != base:
             return None
-        path = Path(admission.slot_path)
-        return refusal(checkouts(path, git_dir=state.gitdir).worktree(path), files, admission, base, answer)
+        return refusal(checkouts(Path(admission.slot_path), git_dir=state.gitdir), files, admission, base, answer)
     found = clean_at(checkouts, files, admission, end_commit or base)
     return found if isinstance(found, Unsettled) else None

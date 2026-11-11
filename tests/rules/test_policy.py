@@ -69,6 +69,7 @@ WRITERS = {
     ("CREATE TABLE", "verification"): "factory_schema.py",
     ("CREATE TABLE", "slot_release"): "factory_schema.py",
     ("CREATE TABLE", "published_branch"): "factory_schema.py",
+    ("CREATE TABLE", "setup_run"): "factory_schema.py",  # its writer comes with S5e's setup
     ("INSERT", "slot"): "slots.py",
     ("INSERT", "reservation"): "admit.py",
     ("INSERT", "attempt"): "admit.py",

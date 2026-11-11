@@ -6,6 +6,8 @@ from pathlib import Path
 from git_porcelain import GitUnavailable, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
 
+from taskloop.admit import AdmitResult
+from taskloop.admit_chain import NextStepRequest
 from taskloop.attempt_types import FileStat
 
 
@@ -117,3 +119,10 @@ def linked_into(files: FakeSlotFiles, slot: Path, other: FakeRepo) -> Path:
     files.contents[gitdir / "commondir"] = b"../..\n"
     files.contents[gitdir / "gitdir"] = f"{slot / '.git'}\n".encode()
     return gitdir
+
+
+class NoAdvance:
+    """The advance port of a start that never finds a done step to advance."""
+
+    def admit_next(self, request: NextStepRequest) -> AdmitResult:
+        raise AssertionError(f"no advance expected: {request.previous}")

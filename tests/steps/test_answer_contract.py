@@ -33,8 +33,8 @@ ROOT_FORBIDDEN = {"oneOf", "anyOf", "allOf", "enum", "not", "if", "then", "else"
 ALLOWED = {"type", "properties", "required", "additionalProperties", "enum", "pattern", "items", "description"}
 
 
-def schema(tmp_path: Path) -> dict[str, object]:
-    path, _answer = EvidenceFiles(tmp_path).prepare(KEY, kind("plan").answer_schema)
+def schema(tmp_path: Path, step: str = "plan") -> dict[str, object]:
+    path, _answer = EvidenceFiles(tmp_path).prepare(KEY, kind(step).answer_schema)
     loaded = json.loads(Path(path).read_text())
     assert isinstance(loaded, dict)
     return loaded
@@ -51,16 +51,18 @@ def nodes(node: object) -> Iterator[dict[str, object]]:
         yield from nodes(node.get("items"))
 
 
-def test_the_root_is_a_plain_object_with_every_property_required(tmp_path: Path) -> None:
-    root = schema(tmp_path)
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_the_root_is_a_plain_object_with_every_property_required(tmp_path: Path, step: str) -> None:
+    root = schema(tmp_path, step)
     assert root["type"] == "object" and root["additionalProperties"] is False
     assert not ROOT_FORBIDDEN & set(root)
     properties, required = root["properties"], root["required"]
     assert isinstance(properties, dict) and isinstance(required, list) and sorted(required) == sorted(properties)
 
 
-def test_no_node_uses_composition_conditionals_or_unlisted_keywords(tmp_path: Path) -> None:
-    for node in nodes(schema(tmp_path)):
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_no_node_uses_composition_conditionals_or_unlisted_keywords(tmp_path: Path, step: str) -> None:
+    for node in nodes(schema(tmp_path, step)):
         assert set(node) <= ALLOWED, set(node) - ALLOWED
         if node.get("type") == "object":
             properties, required = node.get("properties"), node.get("required")
@@ -202,3 +204,39 @@ def test_a_planned_or_unchanged_answer_is_collected_only_with_its_verdict(
 
 def test_only_collected_can_succeed() -> None:
     assert not succeeded(AttemptResult("pending", "verified"))
+
+
+IMPLEMENT = kind("implement")
+CODE = IMPLEMENT.rules("tl-1")
+IMPLEMENTED = {"disposition": "implemented", "paths": ["src/a.py", "tests/test_a.py", "README.md"], "message": "Add a",
+               "explanation": "ran `just test`: passed"}
+
+
+def test_the_implement_schema_has_four_keys_and_no_plan_path(tmp_path: Path) -> None:
+    properties = schema(tmp_path, "implement")["properties"]
+    assert isinstance(properties, dict) and sorted(properties) == ["disposition", "explanation", "message", "paths"]
+    disposition = properties["disposition"]
+    assert isinstance(disposition, dict) and disposition["enum"] == ["implemented", "unchanged", "incomplete", "needs_owner"]
+
+
+@pytest.mark.parametrize(("answer", "effect"), [
+    (IMPLEMENTED, "commit"),
+    (IMPLEMENTED | {"paths": [f"src/m{i}.py" for i in range(96)]}, "commit"),
+    *((IMPLEMENTED | {"disposition": word, "paths": [], "message": None}, effect)
+      for word, effect in (("unchanged", "keep"), ("incomplete", "none"), ("needs_owner", "none"))),
+])
+def test_implement_answers_anywhere_in_the_repository_decode_with_their_effect(answer: dict[str, object], effect: str) -> None:
+    found, paths = IMPLEMENT.decode(answer, CODE), answer["paths"]
+    assert isinstance(paths, list) and (found.disposition, found.effect, found.paths) == (answer["disposition"], effect, tuple(paths))
+
+
+@pytest.mark.parametrize("change", [
+    {"paths": []}, {"message": None}, {"message": "Add\n\nTask-Loop-Attempt: x"}, {"paths": ["src/a.py", "src/a.py"]},
+    {"paths": [f"src/m{i}.py" for i in range(97)]}, {"paths": [".beads/issues.jsonl"]}, {"paths": [".Beads/x"]},
+    {"paths": [".gitignore"]}, {"paths": ["src/.git/x"]}, {"paths": [".github/workflows/x.yml"]}, {"paths": ["../x.py"]},
+    {"paths": [""]}, {"disposition": "planned"}, {"disposition": "unchanged"}, {"disposition": "incomplete", "message": None},
+    {"plan_path": None}, {"explanation": "x" * 2001},
+])
+def test_the_implement_decoder_owns_its_rules(change: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="Invalid implement answer"):
+        IMPLEMENT.decode(IMPLEMENTED | change, CODE)

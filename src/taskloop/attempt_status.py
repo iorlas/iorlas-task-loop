@@ -14,10 +14,13 @@ from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, EntryIdentity, Observe, Unsettled
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.operations import Clock, Failed
+from taskloop.steps import following
 
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
 type Stuck = Literal["stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:uncollected", "stuck:conflict"]
-type Next = Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "done", "unknown"] | Stuck
+type Next = (
+    Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "advance", "done", "unknown"] | Stuck
+)
 type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a step still to settle
 
 
@@ -34,7 +37,7 @@ class StatusPorts:
 class AttemptView:
     backlog: str
     task_id: str
-    step: str  # the step the attempt belongs to (`plan`)
+    step: str  # the step the attempt belongs to (`plan`, `implement`)
     attempt_id: str
     slot: str
     phase: str
@@ -48,7 +51,7 @@ class AttemptView:
     number: int = 1  # in its step; at most ATTEMPTS
     previous_attempt_id: str | None = None  # the attempt this one repeats
     repeat_reason: str | None = None
-    earlier: tuple[tuple[str, str], ...] = ()  # each earlier attempt, newest first: its repeat reason, or `abandoned`
+    earlier: tuple[tuple[str, str], ...] = ()  # each earlier attempt, newest first: its repeat reason, `abandoned` or `advanced`
     last_entry: str | None = None  # the entry log's last line of fixed words (`refused slot_staged ...`), read now
     seq: int = 1  # the attempt's order among its task's attempts
     release: ReleaseRow | None = None  # how it ended its reservation, once released
@@ -113,18 +116,24 @@ def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> Attempt
 
 
 def _released(row: AttemptRow, step: Next, verified: bool) -> Next:
-    """A released attempt is `start` again (abandoned), `publish` (settled, verified, not yet on origin) or `done`; a
-    collected one still holding its slot is `release` first (the entry or a verify left it held: the slot was not clean)."""
+    """A released attempt is `start` again (abandoned), `publish` (settled, verified, not yet on origin: never advanced
+    past), `advance` (settled, verified and published, and its step has a following one) or `done`; a collected one still
+    holding its slot is `release` first (the entry or a verify left it held: the slot was not clean)."""
     if row.release is not None and row.release.claim == "unclaiming":
         return "release"  # the abandon's claim is still to be returned
+    if row.release is not None and row.release.abandoned:
+        return "start"
+    if row.release is not None and verified:
+        return "publish" if row.published is None else "advance" if following(row.step) is not None else "done"
     if row.release is not None:
-        return "start" if row.release.abandoned else "publish" if verified and row.published is None else "done"
+        return "done"
     return "release" if step == "done" and row.held else step
 
 
 def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str) -> Shown | Failed:
     """The task's current attempt; each earlier one, newest first, was repeated (superseded and fenced: nothing of it is
-    collected or read) or abandoned. Read-only: creates no file or directory (the attempt directory is computed, never made)."""
+    collected or read), abandoned, or advanced (done: the next step followed it). Read-only: creates no file or
+    directory (the attempt directory is computed, never made)."""
     files = EvidenceFiles(artifacts)
     try:
         rows = reads.store.attempts(backlog, task_id)
@@ -139,8 +148,11 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
 
 
 def _ended(newer: AttemptRow, older: AttemptRow) -> str:
-    """Why `older` is not current: `abandoned`, or the reason `newer` repeated it."""
-    return "abandoned" if older.release is not None and older.release.abandoned else newer.repeat_reason or ""
+    """Why `older` is not current: `abandoned`, `advanced` (`newer` is attempt 1 of the step after it), or the reason
+    `newer` repeated it."""
+    if older.release is not None and older.release.abandoned:
+        return "abandoned"
+    return "advanced" if newer.previous_attempt_id is None else newer.repeat_reason or ""
 
 
 def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed:

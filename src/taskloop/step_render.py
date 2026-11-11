@@ -45,7 +45,8 @@ def _show_lines(each: AttemptView) -> list[str]:
     return [
         f"Task: {each.task_id} (backlog {each.backlog})", f"Step: {each.step}",
         f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})",
-        *(f"Earlier: {attempt_id} " + ("abandoned" if why == "abandoned" else f"repeated ({why})") for attempt_id, why in each.earlier),
+        *(f"Earlier: {attempt_id} " + (why if why in ("abandoned", "advanced") else f"repeated ({why})")
+          for attempt_id, why in each.earlier),
         f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}", f"Result: {each.result.status} {each.result.reason}".rstrip(),
         f"Succeeded: {'yes' if succeeded(each.result) else 'no'}", f"Deadline passed: {'yes' if each.deadline_passed else 'no'}",

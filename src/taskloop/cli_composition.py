@@ -23,6 +23,7 @@ from taskloop.composition import (
     current_boot,
     entry_seen,
     open_admission,
+    open_advance,
     open_chain,
     open_launcher,
     open_publisher,
@@ -114,7 +115,7 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
     admission, launcher, chain = open_admission(database, artifacts), open_launcher(database, artifacts), open_chain(database, artifacts)
     repeat = StepRepeat(reader, open_verifier(database, store), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
                         time.time, repeating)
-    return StartPorts(reader, admission, launcher, time.time, repeat)
+    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts))
 
 
 @contextmanager

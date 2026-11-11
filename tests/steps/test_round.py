@@ -15,6 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from beads_client.testing import FakeTaskReadClient
+from doubles import NoAdvance
 from git_porcelain.testing import FakeWorktree
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
@@ -151,7 +152,7 @@ class Bench:
 
     def ports(self) -> RoundPorts:
         reads = StatusPorts(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
-        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats)
+        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, NoAdvance())
         return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, self.ready, self.log, self.stopping)
 
     def round(self, request: NextRequest = REQUEST) -> Round:
@@ -281,7 +282,7 @@ def verified_released(
     return store
 
 
-def test_a_verified_released_plan_is_published_once_then_done(
+def test_a_verified_released_plan_is_published_once_then_reported_to_advance(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
@@ -289,7 +290,8 @@ def test_a_verified_released_plan_is_published_once_then_done(
     bench.publisher = BranchPublish(store, checkouts, slot_files, lambda: 40)
     assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt", step="plan"),)
     assert registered.execute("SELECT count(*) FROM published_branch").fetchone() == (1,)
-    assert bench.round().moves == ()  # done: nothing pushed again
+    # nothing pushed again; a round reports the advance, the person runs `tl step start` (rounds advance with S5c)
+    assert bench.round().moves == (Move("tl-1", "report", "advance", "attempt", step="plan"),)
 
 
 def test_a_failed_publication_is_retried_every_round(

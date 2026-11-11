@@ -11,7 +11,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles, PinnedViews
+from doubles import FakeSlotFiles, NoAdvance, PinnedViews
 from git_porcelain import GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store
@@ -173,7 +173,7 @@ def write(path: Path, sql: str, *values: object) -> None:
 
 def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: AttemptStore) -> None:
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
-    started = start(StartPorts(empty, admission, launcher, lambda: 1000, Repeats()), REQUEST)
+    started = start(StartPorts(empty, admission, launcher, lambda: 1000, Repeats(), NoAdvance()), REQUEST)
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
@@ -192,7 +192,7 @@ def test_a_failed_step_read_back_never_turns_a_launched_start_into_a_failure(tmp
     con = Store(SCHEMA).open_rw(tmp_path / "empty.db")
     assert con is not None
     launcher = FakeLauncher(Launched(KEY, ENTRY))
-    ports = StartPorts(UnreadableStep(lambda: con), Admission(Admitted(KEY, "s1")), launcher, lambda: 1000, Repeats())
+    ports = StartPorts(UnreadableStep(lambda: con), Admission(Admitted(KEY, "s1")), launcher, lambda: 1000, Repeats(), NoAdvance())
     started = start(ports, REQUEST)
     con.close()
     assert isinstance(started, Started) and started.step is None
@@ -203,17 +203,17 @@ def test_a_failed_step_read_back_never_turns_a_launched_start_into_a_failure(tmp
 def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int) -> None:
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     unread = AttemptStore(lambda: None)  # any read would raise StoreUnavailable
-    found = start(StartPorts(unread, admission, launcher, lambda: 1000, Repeats()), replace(REQUEST, minutes=minutes))
+    found = start(StartPorts(unread, admission, launcher, lambda: 1000, Repeats(), NoAdvance()), replace(REQUEST, minutes=minutes))
     assert found == Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
     assert admission.requests == [] and launcher.calls == []
 
 
 def test_a_launch_failure_after_a_fresh_admission_says_the_attempt_is_admitted(empty: AttemptStore, reader: AttemptStore) -> None:
-    ports = StartPorts(empty, Admission(Admitted(KEY, "s1")), FakeLauncher(LaunchUnavailable("start")), lambda: 10, Repeats())
+    ports = StartPorts(empty, Admission(Admitted(KEY, "s1")), FakeLauncher(LaunchUnavailable("start")), lambda: 10, Repeats(), NoAdvance())
     fresh = start(ports, REQUEST)
     assert fresh == Failed("unavailable", "start", admitted=True)
     failing = FakeLauncher(LaunchUnavailable("start"))
-    existing = start(StartPorts(reader, Admission(AdmitRefused("task")), failing, lambda: 10, Repeats()), REQUEST)
+    existing = start(StartPorts(reader, Admission(AdmitRefused("task")), failing, lambda: 10, Repeats(), NoAdvance()), REQUEST)
     assert existing == Failed("unavailable", "start")
 
 
@@ -229,7 +229,7 @@ def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
     reader: AttemptStore, launched: LaunchResult, expected: Started | Failed
 ) -> None:
     admission, launcher = Admission(AdmitRefused("task")), FakeLauncher(launched)
-    assert start(StartPorts(reader, admission, launcher, lambda: 10, Repeats()), REQUEST) == expected
+    assert start(StartPorts(reader, admission, launcher, lambda: 10, Repeats(), NoAdvance()), REQUEST) == expected
     assert admission.requests == []  # the given model, effort and minutes are not applied
     assert launcher.calls == [("tasks", "tl-1")]
 
@@ -237,7 +237,7 @@ def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
 def test_a_concurrent_start_that_won_is_launched_as_existing(admitted: Path, reader: AttemptStore) -> None:
     write(admitted, "UPDATE attempt SET task_id='hidden'")
     admission = Admission(AdmitRefused("task_attempted"), lambda: write(admitted, "UPDATE attempt SET task_id='tl-1'"))
-    launched = start(StartPorts(reader, admission, FakeLauncher(AlreadyRunning(KEY, ENTRY)), lambda: 10, Repeats()), REQUEST)
+    launched = start(StartPorts(reader, admission, FakeLauncher(AlreadyRunning(KEY, ENTRY)), lambda: 10, Repeats(), NoAdvance()), REQUEST)
     assert launched == Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     assert len(admission.requests) == 1
 
@@ -254,7 +254,7 @@ VIEW = SlotView("s1", Path("/slots/s1"), "held", attempt_id="other")
 ])
 def test_a_refusal_or_unknown_stops_before_any_launch(empty: AttemptStore, admit: AdmitResult, expected: Failed) -> None:
     launcher = FakeLauncher(Launched(KEY, ENTRY))
-    assert start(StartPorts(empty, Admission(admit), launcher, lambda: 10, Repeats()), REQUEST) == expected
+    assert start(StartPorts(empty, Admission(admit), launcher, lambda: 10, Repeats(), NoAdvance()), REQUEST) == expected
     assert launcher.calls == []
 
 
@@ -510,7 +510,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 8, 9, 11])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12])
 def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
@@ -614,7 +614,7 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
     assert (shown().next, shown().release is not None) == ("done", True)
     launcher, repeats = FakeLauncher(Launched(KEY, ENTRY)), Repeats()
-    ports = StartPorts(store, Admission(AdmitRefused("task")), launcher, lambda: 10, repeats)
+    ports = StartPorts(store, Admission(AdmitRefused("task")), launcher, lambda: 10, repeats, NoAdvance())
     answered = start(ports, REQUEST)
     assert answered == Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="run:worker_failed", step="plan")
     assert (launcher.calls, repeats.calls) == ([], [])
@@ -623,7 +623,7 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
     assert abandoned.next == "start" and abandoned.release is not None and abandoned.release.abandoned
     fresh = AttemptKey("fresh", "token", 2)
     admission = Admission(Admitted(fresh, "s1"))
-    assert start(StartPorts(store, admission, FakeLauncher(Launched(fresh, ENTRY)), lambda: 10, repeats), REQUEST) == Started(
+    assert start(StartPorts(store, admission, FakeLauncher(Launched(fresh, ENTRY)), lambda: 10, repeats, NoAdvance()), REQUEST) == Started(
         "started", "tasks", "tl-1", "fresh", False, ENTRY
     )
     assert len(admission.requests) == 1
@@ -656,7 +656,8 @@ def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refus
         StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
     assert isinstance(found, Shown) and found.view.next == "release"
     admission, launcher = Admission(Admitted(AttemptKey("fresh", "token", 2), "s1")), FakeLauncher(Launched(KEY, ENTRY))
-    assert start(StartPorts(store, admission, launcher, lambda: 10, Repeats()), REQUEST) == Failed("refused", "release", UNCLAIMING)
+    ports = StartPorts(store, admission, launcher, lambda: 10, Repeats(), NoAdvance())
+    assert start(ports, REQUEST) == Failed("refused", "release", UNCLAIMING)
     assert (admission.requests, launcher.calls) == ([], [])
 
 
@@ -680,7 +681,7 @@ def test_publish_task_maps_every_result_and_its_exit_code(
     assert publish_task(reader, publishes, "tasks", "tl-9") == Failed("refused", "absent", "No attempt for tl-9 in backlog tasks")
 
 
-def test_a_verified_plan_is_release_first_then_publish_then_done(
+def test_a_verified_plan_is_release_first_then_publish_then_advance(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     path = "docs/design/tl-1/plan.md"
@@ -711,7 +712,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_done(
     x = next(ref.sha for ref in slot.repo.refs(["refs/heads/task/"]) if ref.name == "refs/heads/task/tl-1")
     found = publish_task(store, BranchPublish(store, checkouts, slot_files, lambda: 40), "tasks", "tl-1")
     assert found == PublishedTask("tasks", "tl-1", "attempt", BranchPublished(x, x))
-    assert (shown().next, shown().published) == ("done", PublishedRow(x, x, 40.0))
+    assert (shown().next, shown().published) == ("advance", PublishedRow(x, x, 40.0))  # implement follows plan
 
 
 @pytest.mark.parametrize("stopped, word, code", [

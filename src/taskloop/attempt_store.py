@@ -110,11 +110,11 @@ class AttemptStore(AttemptReads):
         held = con.execute(
             "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
         ).fetchone()
-        if held != (row[2], key.reservation_generation, key.attempt_id) or row[26] is None:
+        if held != (row[2], key.reservation_generation, key.attempt_id) or row[27] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):
             raise StoreUnavailable("Malformed deadline")
-        start = as_nullable_text(row[27])
+        start = as_nullable_text(row[28])
         if (row[24] is None) != (start is None):  # a later attempt always starts where a captured one ended
             raise StoreUnavailable("Malformed previous attempt")
         admission = Admission(
@@ -122,7 +122,7 @@ class AttemptStore(AttemptReads):
             TaskReference(TaskScope(as_text(row[0])), as_text(row[1])),
             RepoId(as_text(row[2])),
             as_text(row[3]),
-            as_text(row[26]),
+            as_text(row[27]),
             FileRef(as_text(row[4]), as_text(row[5])),
             as_text(row[6]),
             as_text(row[7]),
@@ -131,6 +131,7 @@ class AttemptStore(AttemptReads):
             (as_int(row[10]), as_text(row[11]), as_text(row[12])),
             as_int(row[23]),
             as_text(row[25]),
+            as_nullable_text(row[26]),
         )
         pid, pgid, began, boot = row[15:19]
         worker = None if pid is None else Worker(pid=as_int(pid), pgid=as_int(pgid), start=as_text(began), boot=as_text(boot))

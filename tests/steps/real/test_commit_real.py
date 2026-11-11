@@ -6,6 +6,7 @@ symlink inside the slot redirects it to the person's `.git` or to a fake Git dir
 `redirected` before any Git call, while `git worktree add --relative-paths` is accepted. A crash leftover is adopted
 through real `history` by its trailer. Set-up runs through `git_porcelain.testing`'s runner under tmp_path."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -248,3 +249,41 @@ def test_a_path_with_a_nul_fails_closed_without_raising(tmp_path: Path) -> None:
     slot.mkdir()
     (slot / ".git").write_text("gitdir: a\0b\n")
     assert pointer(files, slot) is None
+
+
+def implementing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Admission, str]:
+    """An implement attempt on a slot whose branch tracks a `.gitignore` naming `.venv/` (its B)."""
+    main, slot, _markers = repository(tmp_path.resolve(), monkeypatch)
+    (slot / ".gitignore").write_text(".venv/\n")
+    git(slot, "add", ".gitignore")
+    git(slot, "commit", "-q", "--no-verify", "-m", "ignore the venv")
+    return main, slot, replace(admission(main, slot), step="implement"), git(slot, "rev-parse", "HEAD").strip()
+
+
+def test_an_implement_commit_deletes_and_adds_anywhere_and_an_ignored_venv_does_not_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main, slot, attempt, base = implementing(tmp_path, monkeypatch)
+    (slot / ".venv/lib").mkdir(parents=True)
+    (slot / ".venv/lib/x.py").write_text("installed\n")
+    (slot / "README").unlink()
+    (slot / "src").mkdir()
+    (slot / "src/a.py").write_text("A = 1\n")
+    answer = AnswerState("valid", "implemented", "commit", ("README", "src/a.py"), "Implement")
+    made = settle(checkouts, RealSlotFiles(), attempt, base, answer, quiet)
+    assert isinstance(made, Committed) and git(slot, "rev-parse", "HEAD^").strip() == base
+    assert git(slot, "show", "--format=", "--name-status", "HEAD").split() == ["D", "README", "A", "src/a.py"]
+    assert clean_at(checkouts, RealSlotFiles(), attempt, made.sha) == main
+
+
+@pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), "gone.py"), (("src/a.py",), ".gitignore")])
+def test_an_absent_path_never_in_b_and_a_changed_gitignore_are_unsafe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paths: tuple[str, ...], unsafe: str
+) -> None:
+    _main, slot, attempt, base = implementing(tmp_path, monkeypatch)
+    (slot / "src").mkdir()
+    (slot / "src/a.py").write_text("A = 1\n")
+    (slot / ".gitignore").write_text(".venv/\nsrc/b.py\n")
+    answer = AnswerState("valid", "implemented", "commit", paths, "Implement")
+    assert settle(checkouts, RealSlotFiles(), attempt, base, answer, quiet) == Unsettled("unsafe", (unsafe,))
+    assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""

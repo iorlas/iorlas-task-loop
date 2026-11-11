@@ -1,5 +1,6 @@
 """The step commands' operations over the existing ports: start (admit, launch, or repeat a captured step through the
-`Repeat` port; a released attempt is answered, an abandoned one admitted afresh), verify (which then releases the slot,
+`Repeat` port; a done step with a following one advances to it through the `Advance` port, any other released attempt is
+answered, an abandoned one admitted afresh at the first step), verify (which then releases the slot,
 settled, and publishes a verified result), release (`Release`: settled or abandon) and publish (`Publish`: push the
 verified commit to origin's `task/<id>`), each following a task's current attempt, whatever its step; values in, values
 out. The status reads are `attempt_status`'s. Nothing here merges or lands. `result_data.as_data` is the one JSON shape
@@ -15,7 +16,8 @@ from typing import Final, Literal, Protocol
 from sqlite_store import SchemaError
 
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
-from taskloop.attempt import SANDBOX, collect
+from taskloop.admit_chain import NextStepRequest
+from taskloop.attempt import SANDBOX, collect, succeeded
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import (
@@ -34,6 +36,7 @@ from taskloop.machine_config import ConfigRefused
 from taskloop.publish import BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
+from taskloop.steps import following
 
 type Clock = Callable[[], float]
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
@@ -50,6 +53,10 @@ VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettl
 
 class Admit(Protocol):
     def admit(self, request: AdmitRequest) -> AdmitResult: ...
+
+
+class Advance(Protocol):
+    def admit_next(self, request: NextStepRequest) -> AdmitResult: ...
 
 
 class Launch(Protocol):
@@ -96,6 +103,7 @@ class StartPorts:
     launcher: Launch
     clock: Clock
     repeat: Repeat
+    advance: Advance
 
 
 @dataclass(frozen=True)
@@ -114,7 +122,8 @@ class Started:
     """`existing`: the attempt was admitted before; its admitted choices stand, the given ones were not applied.
     `repeated`: the step's next attempt (`number`) was admitted and launched with the previous attempt's choices and a
     deadline from the given minutes. `result`: the collected outcome a repeating start found instead. `step`: the step
-    the attempt belongs to (`plan`), read back from factory.db; None when that read failed (the start stands)."""
+    the attempt belongs to (`plan`, `implement`), read back from factory.db; None when that read failed (the start
+    stands)."""
 
     status: Literal["started", "relaunched", "already_running", "already_dispatched", "repeated"]
     backlog: str
@@ -237,10 +246,18 @@ def minutes_refused(minutes: int) -> Failed | None:
     return None if ok else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
 
 
+@dataclass(frozen=True)
+class _Advance:
+    """The task's current attempt is done (verified, released settled, published) and its step has a following one."""
+
+    previous: AttemptKey
+
+
 def start(ports: StartPorts, request: StartRequest) -> Started | Failed:
-    """An existing attempt is launched as admitted (no tracker read), a captured one repeated, a released one answered
-    with its result; otherwise (none, or the current one abandoned) admit first. A refusal or unknown stops before the
-    launch; a concurrent start that won (`task_attempted`) is launched as existing. A start names its attempt's step."""
+    """An existing attempt is launched as admitted (no tracker read), a captured one repeated, a done one advanced to the
+    next step (one tracker read, no claim), another released one answered with its result; otherwise (none, or the
+    current one abandoned) admit first. A refusal or unknown stops before the launch; a concurrent start that won
+    (`task_attempted`) is launched as existing. A start names its attempt's step."""
     found = _start(ports, request)
     if isinstance(found, Failed):
         return found
@@ -258,23 +275,26 @@ def _start(ports: StartPorts, request: StartRequest) -> Started | Failed:
         found = _current(ports, request)
         if isinstance(found, (Started, Failed)):
             return found
-        target = (found[0], True) if found is not None else _admit(ports, request)
+        target = (found[0], True) if isinstance(found, tuple) else _admit(ports, request, found)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     if isinstance(target, Failed):
         return target
     key, existing = target
-    if found is not None and found[1] == "captured":  # the step ran: repeat it when its leftovers are repeatable
+    if isinstance(found, tuple) and found[1] == "captured":  # the step ran: repeat it when its leftovers are repeatable
         return ports.repeat.repeat(request.backlog, request.task_id, key, found[2], request.minutes)
     outcome = ports.launcher.launch(request.backlog, request.task_id, request.minutes)
     result = launched(outcome, request.backlog, request.task_id, key, existing=existing)
     return replace(result, admitted=True) if isinstance(result, Failed) and not existing else result
 
 
-def _current(ports: StartPorts, request: StartRequest) -> tuple[AttemptKey, str, EntryIdentity | None] | Started | Failed | None:
+def _current(
+    ports: StartPorts, request: StartRequest
+) -> tuple[AttemptKey, str, EntryIdentity | None] | _Advance | Started | Failed | None:
     """The task's current attempt; None when there is none or its abandon finished (a fresh attempt is admitted). An
     abandon whose claim is still `unclaiming` refuses `release` (its own unclaim could undo a fresh claim). A settled
-    release is the task's answer: `already_dispatched` with its result, never relaunched or repeated."""
+    release whose step is done and has a following step advances; any other is the task's answer: `already_dispatched`
+    with its result, never relaunched or repeated."""
     found = ports.reader.attempt_of(request.backlog, request.task_id)
     released = None if found is None else ports.reader.release_of(found[0])
     if found is None or released is None:
@@ -282,16 +302,21 @@ def _current(ports: StartPorts, request: StartRequest) -> tuple[AttemptKey, str,
     if released.abandoned:
         return Failed("refused", "release", UNCLAIMING) if released.claim == "unclaiming" else None
     result = collect(ports.reader, found[0])
+    rows = ports.reader.attempts(request.backlog, request.task_id) if succeeded(result) else ()
+    if rows and rows[0].key == found[0] and rows[0].published is not None and following(rows[0].step) is not None:
+        return _Advance(found[0])
     return Started("already_dispatched", request.backlog, request.task_id, found[0].attempt_id, True, result=result.reason)
 
 
-def _admit(ports: StartPorts, request: StartRequest) -> tuple[AttemptKey, bool] | Failed:
-    """The new attempt's key, or the winner's after `task_attempted`; StoreUnavailable propagates."""
+def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -> tuple[AttemptKey, bool] | Failed:
+    """The new attempt's key (a fresh admission, or the next step's after `advance`), or the winner's after
+    `task_attempted`; StoreUnavailable propagates."""
     deadline = deadline_after(request.minutes, ports.clock)
-    admitted = ports.admission.admit(
-        AdmitRequest(
-            request.task_id, request.backlog, request.tracker_root, request.checkout, request.model, request.effort, SANDBOX, deadline
-        )
+    choices = (request.checkout, request.model, request.effort, SANDBOX, deadline)
+    admitted = (
+        ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices))
+        if advance is None
+        else ports.advance.admit_next(NextStepRequest(advance.previous, *choices))
     )
     if isinstance(admitted, Admitted):
         return admitted.key, False

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import get_args
 
 import pytest
+from doubles import NoAdvance
 from sqlite_store import Store, begin_immediate
 
 from taskloop import cli_composition, cli_step, rounds_lock, step_guide
@@ -124,7 +125,7 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     @contextmanager
     def opener(database: Path, artifacts: Path) -> Generator[StartPorts | Failed]:
         opened.append((database, artifacts))
-        yield StartPorts(AttemptStore(lambda: con), admission, FakeLauncher(), lambda: 1000, NoRepeat())
+        yield StartPorts(AttemptStore(lambda: con), admission, FakeLauncher(), lambda: 1000, NoRepeat(), NoAdvance())
 
     monkeypatch.setattr(cli_composition, "open_start", opener)
     config = tmp_path / "scratch.toml"
@@ -293,6 +294,15 @@ def test_every_next_step_renders_with_its_guidance(
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda _arguments, _loaded: shown)
     assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
     assert f"Next: {next_word}\n{step_guide.GUIDE[next_word]}" in capsys.readouterr().out
+
+
+def test_an_implement_attempt_shows_the_plan_it_advanced_from(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    view = AttemptView("tasks", "tl-1", "implement", "i", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False,
+                       "start", earlier=(("r", "uncommitted"), ("p", "advanced"), ("q", "abandoned")))
+    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda _arguments, _loaded: Shown(view, Path("/d"), Path("/d/e")))
+    assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
+    out = capsys.readouterr().out
+    assert "Step: implement\n" in out and "Earlier: r repeated (uncommitted)\nEarlier: p advanced\nEarlier: q abandoned\n" in out
 
 
 @pytest.mark.parametrize("entry", words(EntryState))
@@ -510,7 +520,7 @@ def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, c
         main(["step", "next", "--help"])
     shown = " ".join(capsys.readouterr().out.split())
     assert "Run one scheduling round: settle existing attempts, start approved ready tasks" in shown
-    assert "steps built: plan; publishes task/<id>; no merge or land" in shown
+    assert "steps built: plan, implement; publishes task/<id>; no merge or land" in shown
 
 
 def test_next_refuses_an_unusable_tracker_root_and_a_missing_database(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

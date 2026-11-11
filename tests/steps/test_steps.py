@@ -1,4 +1,4 @@
-"""The step port: the plan is the one built step kind, reached through `kind`, and its agent-facing contract (the
+"""The step port: plan then implement are the built step kinds, reached through `kind`; the plan's agent-facing contract (the
 admitted input, the `schema.json` bytes, a repeat's input) is byte for byte what it was before the port. The constants
 were recorded from the tree before `steps` existed (`admit.task_text`, `EvidenceFiles.prepare`, `plan_step.feedback`)."""
 
@@ -10,7 +10,8 @@ from taskloop.admit import task_text
 from taskloop.attempt_types import AttemptKey, StepRules, Unsettled
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import attributes
-from taskloop.steps import PLAN, STEPS, kind
+from taskloop.step_text import GIT_WRITES
+from taskloop.steps import IMPLEMENT, PLAN, STEPS, following, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 
 TASK = TaskInspection(
@@ -50,10 +51,41 @@ FEEDBACK = {
 }
 
 
-def test_plan_is_the_one_built_step_kind() -> None:
-    assert kind("plan") is PLAN and STEPS == (PLAN,) and PLAN.step == "plan"
+def test_plan_then_implement_are_the_built_step_kinds_in_order() -> None:
+    assert kind("plan") is PLAN and kind("implement") is IMPLEMENT and STEPS == (PLAN, IMPLEMENT)
+    assert (PLAN.step, IMPLEMENT.step) == ("plan", "implement")
     with pytest.raises(ValueError, match="Unknown step"):
-        kind("implement")
+        kind("review")
+
+
+@pytest.mark.parametrize(("current", "done", "expected"), [
+    (None, False, "plan"), (None, True, "plan"), ("plan", True, "implement"), ("implement", True, None), ("plan", False, None),
+    ("implement", False, None),
+])
+def test_next_step_follows_the_fixed_order_only_after_a_done_step(current: str | None, done: bool, expected: str | None) -> None:
+    """None: a fresh start (or after an abandon returned the claim) is the first step; a done step advances; the last
+    built step is done; an attempt not done keeps its own `Next`."""
+    assert next_step(current, done) == expected
+    assert following("plan") == "implement" and following("implement") is None
+
+
+def test_the_implement_input_names_the_committed_plan_its_scope_and_no_environment() -> None:
+    """The task's own prose first, then the plan by reference and the rules' scope; neutral about how checks run (the
+    environment's words come with it, S5e): no command, temporary folder or network claim."""
+    text = task_text(TASK, "implement")
+    assert text.startswith("Add a widget\n\nIt must do X.\nAnd Y.\n\n- X works\n- Y works\n\nThe plan for this task is "
+                           "`docs/design/tl-1/plan.md`, committed on this branch by the plan step.")
+    assert "at most 96 files of at most 1 MiB each" in text and "anything under `.beads/`" in text and GIT_WRITES in text
+    assert "the factory's own checks decide" in text and text.endswith("say why in `explanation`.\n")
+    assert not any(word in text for word in ("just ", "TMPDIR", "offline", "network", "/tmp"))
+
+
+def test_an_implement_repeat_frames_the_listing_with_its_own_words() -> None:
+    found = Unsettled("ignored", ("!! .venv/x",))
+    text = IMPLEMENT.feedback(found, IMPLEMENT.rules("tl-1"), 2, "TASK", "abcd", unrecorded=True)
+    assert text.startswith("These paths are ignored by Git. A listed path Git ignores can never be committed")
+    assert "BEGIN SLOT STATUS abcd\n!! .venv/x\nEND SLOT STATUS abcd" in text and "Nothing of attempt 2 was committed" in text
+    assert "answer `implemented`" in text and text.endswith("The task, for reference:\n\nTASK")
 
 
 def test_the_admitted_input_is_unchanged_by_the_port() -> None:

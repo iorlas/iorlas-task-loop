@@ -36,18 +36,20 @@ REPEATABLE: Final[tuple[RepeatReason, ...]] = ("uncommitted", "unsafe", "ignored
 # What a valid answer does to the slot: `commit` ends at a new commit X != B, `keep` ends at B itself, `none` ends nothing.
 type Effect = Literal["commit", "keep", "none"]
 EFFECTS: Final[tuple[Effect, ...]] = ("commit", "keep", "none")
-type Step = Literal["plan"]  # the built steps (`attempt.step`); each has its kind in `steps`
+type Step = Literal["plan", "implement"]  # the built steps (`attempt.step`), in order; each has its kind in `steps`
 
 
 @dataclass(frozen=True)
 class StepRules:
-    """What one step may commit: files under `root` (ending in `/`), at most `max_paths` of them, each at most `file_cap`
-    bytes; `deletions` is False for the plan step (the implementation and review steps bring their own rules)."""
+    """What one step may commit: files under `root` (ending in `/`, or `""` for the whole repository), at most
+    `max_paths` of them, each at most `file_cap` bytes, none under an `excluded` prefix; `deletions`: a listed path may
+    be a file the step deleted (each kind brings its own rules)."""
 
     root: str
     max_paths: int = 32
     file_cap: int = MiB
     deletions: bool = False
+    excluded: tuple[str, ...] = ()
 
 
 class Unreadable(Exception):
@@ -108,7 +110,8 @@ class Admission:
     deadline: float
     entry: EntryIdentity
     number: int  # the attempt's number in its step (1, 2, 3), admitted with it
-    step: str  # the step the attempt belongs to (`plan`), admitted with it
+    step: str  # the step the attempt belongs to (`plan`, `implement`), admitted with it
+    after_commit: str | None = None  # attempt 1 of a later step: the previous step's published X, which it starts from
 
 
 @dataclass(frozen=True)
@@ -300,12 +303,30 @@ def dot_git(name: str) -> bool:
 
 
 def path_allowed(path: str, rules: StepRules) -> bool:
-    """A path the step may commit: at most 255 bytes, relative, under `rules.root`, no NUL, newline or backslash, and no
-    empty, `.` or `..` component nor one that starts with `.git` in any case (macOS file systems ignore case)."""
+    """A path the step may commit: at most 255 bytes, relative, under `rules.root` and under no `rules.excluded` prefix,
+    no NUL, newline or backslash, and no empty, `.` or `..` component nor one that starts with `.git` in any case (macOS
+    file systems ignore case)."""
     if len(path.encode("utf-8", "surrogatepass")) > 255 or any(c in path for c in "\0\n\\") or not path.startswith(rules.root):
+        return False
+    if any(path.casefold().startswith(prefix.casefold()) for prefix in rules.excluded):  # case: as `.git` above
         return False
     parts = path.split("/")
     return len(path) > len(rules.root) and not any(p in ("", ".", "..") or dot_git(p) for p in parts)
+
+
+def commit_message(message: object) -> bool:
+    """An agent's one-line commit message: 1 to 500 characters, no NUL, never the factory's trailer."""
+    return (
+        isinstance(message, str) and 1 <= len(message) <= 500 and "\0" not in message and TRAILER.casefold() + ":" not in message.casefold()
+    )
+
+
+def listed_paths(paths: object, rules: StepRules) -> tuple[str, ...] | None:
+    """The answer's `paths` when it is a list of at most `max_paths` unique allowed paths; else None."""
+    if not isinstance(paths, list) or len(paths) > rules.max_paths:
+        return None
+    found = tuple(path for path in paths if isinstance(path, str) and path_allowed(path, rules))
+    return found if len(found) == len(paths) and len(set(found)) == len(found) else None
 
 
 def optional_int(value: object) -> int | None:

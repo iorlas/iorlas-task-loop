@@ -88,9 +88,11 @@ ignore_imports =
     taskloop.interrupts -> signal
 
 [importlinter:contract:one-step-kind-owner]
-name = Only the step kinds (`steps`) import the plan step's own module; the machinery reaches it through `steps.kind`
+name = Only the step kinds (`steps`) import a step kind's own module; the machinery reaches each through `steps.kind`
 type = protected
-protected_modules = taskloop.plan_step
+protected_modules =
+    taskloop.plan_step
+    taskloop.implement_step
 allowed_importers = taskloop.steps
 
 [importlinter:contract:profile-is-domain]
