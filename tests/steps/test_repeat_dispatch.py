@@ -7,7 +7,6 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import NoReturn
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
@@ -18,7 +17,8 @@ from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
 
-from taskloop.admit import Admitted, AttemptAdmission, RepeatRequest
+from taskloop.admit import Admitted
+from taskloop.admit_chain import ChainAdmission, RepeatRequest
 from taskloop.attempt import Attempts
 from taskloop.attempt_entry import shown
 from taskloop.attempt_status import StatusPorts, show_attempt
@@ -123,11 +123,8 @@ class Step:
         found = attempts.execute(key, entry)
         return f"{found.status} {found.reason}"
 
-    def admission(self) -> AttemptAdmission:
-        def never(*_args: object, **_options: object) -> NoReturn:
-            raise AssertionError("a repeat reads no tracker and claims nothing")
-
-        return AttemptAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), never, never, never, never, lambda: 10, never)
+    def admission(self) -> ChainAdmission:
+        return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10)
 
     def repeat(self, current: AttemptKey) -> Started | Failed:
         found = self.store.attempt_of("tasks", "tl-1")

@@ -1,9 +1,9 @@
-"""Admit an attempt: the only writer of `reservation` and of the admitted `attempt` row; it runs nothing.
+"""Admit an attempt: the only writer of the admitted `attempt` row and of a new `reservation` row; it runs nothing.
 
 A task's first attempt takes a free slot and the tracker claim (`admit`), after the task branch rule passed for that
-slot's HEAD (`prepare.branch_refusal`, read-only, before anything is written or claimed); a repeat (`admit_repeat`) is the step's next
-attempt, which takes over the reservation its previous attempt holds in the same transaction, so the slot is never
-released between attempts. An admitted attempt stays unregistered (entry_* NULL): the body refuses it with
+slot's HEAD (`prepare.branch_refusal`, read-only, before anything is written or claimed); a repeat is admitted by
+`admit_chain`, through the shared pieces here (the deadline check, the store, the attempt row and the slot's counter).
+An admitted attempt stays unregistered (entry_* NULL): the body refuses it with
 `unregistered_entry` until `AttemptStore.register_entry` registers its entry. The tracker root, resolved, is stored with the
 attempt (a repeat copies it): the entry renews the claim there, an abandon returns it there. The slot's HEAD the attempt
 starts from (D) is stored as `slot_head` (a repeat copies it): a release parks the slot back there.
@@ -28,7 +28,7 @@ from uuid import uuid4
 from beads_client import BdError
 from git_porcelain import GitUnavailable, Repo
 
-from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason
+from taskloop.attempt_types import AttemptKey, Checkouts, FileRef
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
 from taskloop.prepare import DIVERGED, branch_refusal
@@ -44,18 +44,6 @@ type Refusal = Literal[
     "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged",
 ]
-# The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
-# clean answer with its session complete, of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
-# tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D and step (all carried on).
-PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
-EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),
-p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
- AND r.generation=p.generation)
-AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
- AND e.effect IN ('commit','keep') AND e.session_state='complete')
-AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
-p.tracker_root,p.seq,p.slot_head,p.step
-FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 FIRST = STEPS[0].step  # a fresh admission's step: the first one
 NOT_CLAIMED = frozenset({"missing_binary", "version", "not_found", "lint"})  # BdError kinds where the claim certainly did not happen
 
@@ -99,21 +87,7 @@ type AdmitResult = Admitted | AdmitRefused | AdmitUnavailable
 
 
 @dataclass(frozen=True)
-class RepeatRequest:
-    """The step's next attempt: `previous` is the current attempt it repeats, `text` its complete admitted input."""
-
-    previous: AttemptKey
-    text: str
-    deadline: float
-    reason: RepeatReason
-
-
-class _Lost(Exception):
-    """No reservation row moved from the previous attempt: roll the new attempt back."""
-
-
-@dataclass(frozen=True)
-class _Free:
+class Free:
     """An observed-free slot whose HEAD (D) passed the branch rule."""
 
     name: str
@@ -165,11 +139,11 @@ class AttemptAdmission:
         if not isinstance(observed, tuple):
             return observed
         con, views = observed
-        free = self._branched(prepared, views)
+        free = branched(prepared.repo, prepared.request.task_id, views)
         if not isinstance(free, tuple):
             return free
         try:
-            generation = _issued(con, prepared.repo_id, tuple(each.name for each in free)) + 1
+            generation = issued(con, prepared.repo_id, tuple(each.name for each in free)) + 1
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
         key = AttemptKey(uuid4().hex, secrets.token_hex(16), generation)  # the key names the evidence directory
@@ -205,70 +179,7 @@ class AttemptAdmission:
     def _choices(self, request: AdmitRequest) -> AdmitRefused | None:
         if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
             return AdmitRefused("choices")
-        return self._deadline(request.deadline)
-
-    def _deadline(self, deadline: float) -> AdmitRefused | None:
-        if not math.isfinite(deadline):
-            return AdmitRefused("deadline")
-        return AdmitRefused("expired") if self.clock() >= deadline else None
-
-    def admit_repeat(self, request: RepeatRequest) -> Admitted | AdmitRefused | AdmitUnavailable:
-        """The next attempt N of `previous` (P), its input written first under N's key: in one write transaction, every
-        check re-read under the lock, insert N (P's choices, number + 1, generation + 1) and move the held reservation
-        from P to N, fenced on P and its generation. Afterwards every fenced write of P is refused."""
-        refused = self._deadline(request.deadline)
-        if refused is not None:
-            return refused
-        previous = request.previous
-        key = AttemptKey(uuid4().hex, secrets.token_hex(16), previous.reservation_generation + 1)
-        try:
-            ref = self.files.put_input(key, request.text)
-        except (EvidenceError, UnicodeError, OSError) as error:
-            return AdmitRefused("input", detail=why(error))
-        try:
-            return self._takeover(self._open(), request, key, ref)
-        except _Lost:
-            return AdmitRefused("task_attempted")
-        except sqlite3.IntegrityError as error:  # caught after the rollback: a concurrent repeat's UNIQUE number or previous
-            return AdmitRefused("task_attempted", detail=why(error))
-        except sqlite3.Error as error:
-            return AdmitUnavailable("store", detail=why(error))
-
-    def _takeover(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
-        previous = request.previous
-        with self.begin(con):
-            row: tuple[object, ...] | None = con.execute(PREVIOUS, (previous.attempt_id, previous.dispatch_token,
-                                                                    previous.reservation_generation)).fetchone()
-            if row is None:
-                return AdmitRefused("not_repeatable")
-            if row[10]:
-                return AdmitRefused("task_attempted")
-            number = row[1]
-            if not isinstance(number, int) or number >= ATTEMPTS:
-                return AdmitRefused("repeat_cap")
-            if not row[11]:
-                return AdmitRefused("not_repeatable")
-            refused = self._deadline(request.deadline)
-            if refused is not None:
-                return refused
-            attempt = {
-                "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-                "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
-                "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
-                "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
-                "repeat_reason": request.reason, "seq": as_count(row[13]) + 1, "slot_head": row[14], "step": row[15],
-            }
-            values = bound(ATTEMPT_ADMITTED, attempt)
-            con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
-            moved = con.execute(
-                """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
-                AND generation=?""",
-                (key.attempt_id, row[5], row[6], previous.attempt_id, previous.reservation_generation),
-            )
-            if moved.rowcount != 1:
-                raise _Lost
-            con.execute("UPDATE slot SET generation=? WHERE repo_id=? AND name=?", (key.reservation_generation, row[5], row[6]))
-        return Admitted(key, str(row[6]))
+        return deadline_refusal(self.clock, request.deadline)
 
     def _task(self, request: AdmitRequest) -> TaskInspection | AdmitRefused | AdmitUnavailable:
         try:
@@ -278,41 +189,18 @@ class AttemptAdmission:
                 return AdmitUnavailable("tracker", detail=why(error))
             return AdmitRefused("task", detail=f"{error.kind}: {why(error)}")
 
-    def _open(self) -> sqlite3.Connection:
-        con = self.connect()
-        if con is None or not current(con):
-            raise sqlite3.DatabaseError("Factory database unavailable or incompatible")
-        return con
-
     def _observe(self, prepared: _Prepared) -> tuple[sqlite3.Connection, tuple[SlotView, ...]] | AdmitRefused | AdmitUnavailable:
         """An attempted task, then no free slot, refuse before any effect; store failure never counts as free."""
         try:
-            con = self._open()
+            con = open_store(self.connect)
             if _attempted(con, prepared.request):
                 return AdmitRefused("task_attempted")
-            views = observe(con, prepared.repo, prepared.repo_id, self.probe)
-        except (sqlite3.Error, SlotsUnavailable) as error:
+        except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
-        if any(view.reason == "store_unavailable" for view in views):
-            return AdmitUnavailable("store", detail="Reservations unreadable")
-        free = tuple(view for view in views if view.state == "free")
-        return (con, free) if free else AdmitRefused("no_free_slot", views)
+        free = free_slots(con, prepared.repo, prepared.repo_id, self.probe)
+        return (con, free) if isinstance(free, tuple) else free
 
-    def _branched(self, prepared: _Prepared, free: tuple[SlotView, ...]) -> tuple[_Free, ...] | AdmitRefused | AdmitUnavailable:
-        """The task branch rule, read-only, before any file, claim or row: the free slots whose HEAD (D) it passes. The
-        entry checks it again before it creates the branch (`prepare`)."""
-        task_id = prepared.request.task_id
-        try:
-            heads = {info.path: info.head for info in prepared.repo.worktrees()}
-            found = branch_refusal(prepared.repo, task_id, tuple(head for view in free if (head := heads.get(view.path)) is not None))
-        except GitUnavailable as error:
-            return AdmitUnavailable("git", detail=why(error))
-        if isinstance(found, str):
-            return AdmitRefused(found, detail=DIVERGED.format(task=task_id) if found == "branch_diverged" else "")
-        passing = tuple(_Free(view.name, head) for view in free if (head := heads.get(view.path)) is not None and head in found.passing)
-        return passing or AdmitRefused("no_free_slot")
-
-    def _claimed(self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[_Free, ...], key: AttemptKey, ref: FileRef) -> AdmitResult:
+    def _claimed(self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[Free, ...], key: AttemptKey, ref: FileRef) -> AdmitResult:
         """Claim outside any transaction, then commit; a pre-commit failure after a claim is compensated by `_compensate`."""
         request = prepared.request
         try:
@@ -342,7 +230,7 @@ class AttemptAdmission:
         read fails the claim is kept and reported as leaked. The release is fenced to this actor, never forced or retried.
         """
         try:
-            if _attempted(self._open(), request):
+            if _attempted(open_store(self.connect), request):
                 return False
         except sqlite3.Error:
             return True
@@ -352,7 +240,7 @@ class AttemptAdmission:
             return True
 
     def _commit(
-        self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[_Free, ...], key: AttemptKey, ref: FileRef
+        self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[Free, ...], key: AttemptKey, ref: FileRef
     ) -> Admitted | AdmitRefused:
         """Under the write lock the reads are authoritative: the task first, then the observed-free slots (the lowest one
         still unheld whose counter is below the key's generation), then both rows and the slot's counter."""
@@ -360,24 +248,73 @@ class AttemptAdmission:
         with self.begin(con):
             if _attempted(con, request):
                 return AdmitRefused("task_attempted")
-            chosen = next((slot for each in free if (slot := _unheld(con, repo_id, each, generation)) is not None), None)
+            chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, generation)) is not None), None)
             if chosen is None:
                 return AdmitRefused("no_free_slot")
             name, head = chosen
             held = {"slot": name, "repo_id": repo_id, "generation": generation, "attempt_id": key.attempt_id}
             con.execute(f"INSERT INTO reservation ({RESERVATION}) VALUES ({marks(RESERVATION)})", bound(RESERVATION, held))
-            con.execute("UPDATE slot SET generation=? WHERE repo_id=? AND name=?", (generation, repo_id, name))
-            attempt = {
+            issue(con, repo_id, name, generation)
+            insert_attempt(con, {
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
                 "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "tracker_root": request.tracker_root,
                 "repo_id": repo_id, "slot": name, "step": FIRST,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None, "seq": _next_seq(con, request), "slot_head": head,
-            }
-            values = bound(ATTEMPT_ADMITTED, attempt)
-            con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
+            })
         return Admitted(key, name)
+
+
+def deadline_refusal(clock: Callable[[], float], deadline: float) -> AdmitRefused | None:
+    if not math.isfinite(deadline):
+        return AdmitRefused("deadline")
+    return AdmitRefused("expired") if clock() >= deadline else None
+
+
+def open_store(connect: Callable[[], sqlite3.Connection | None]) -> sqlite3.Connection:
+    con = connect()
+    if con is None or not current(con):
+        raise sqlite3.DatabaseError("Factory database unavailable or incompatible")
+    return con
+
+
+def free_slots(
+    con: sqlite3.Connection, repo: Repo, repo_id: RepoId, probe: Probe
+) -> tuple[SlotView, ...] | AdmitRefused | AdmitUnavailable:
+    """The observed-free slots, read-only; a store failure never counts as free."""
+    try:
+        views = observe(con, repo, repo_id, probe)
+    except (sqlite3.Error, SlotsUnavailable) as error:
+        return AdmitUnavailable("store", detail=why(error))
+    if any(view.reason == "store_unavailable" for view in views):
+        return AdmitUnavailable("store", detail="Reservations unreadable")
+    free = tuple(view for view in views if view.state == "free")
+    return free or AdmitRefused("no_free_slot", views)
+
+
+def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
+    """The task branch rule, read-only, before any file, claim or row: the free slots whose HEAD (D) it passes. The
+    entry checks it again before it creates the branch (`prepare`)."""
+    try:
+        heads = {info.path: info.head for info in repo.worktrees()}
+        found = branch_refusal(repo, task_id, tuple(head for view in free if (head := heads.get(view.path)) is not None))
+    except GitUnavailable as error:
+        return AdmitUnavailable("git", detail=why(error))
+    if isinstance(found, str):
+        return AdmitRefused(found, detail=DIVERGED.format(task=task_id) if found == "branch_diverged" else "")
+    passing = tuple(Free(view.name, head) for view in free if (head := heads.get(view.path)) is not None and head in found.passing)
+    return passing or AdmitRefused("no_free_slot")
+
+
+def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object]) -> None:
+    """The admitted attempt row, inside the caller's write transaction."""
+    con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", bound(ATTEMPT_ADMITTED, attempt))
+
+
+def issue(con: sqlite3.Connection, repo_id: object, slot: object, generation: int) -> None:
+    """The slot's counter: the last reservation generation issued for it."""
+    con.execute("UPDATE slot SET generation=? WHERE repo_id=? AND name=?", (generation, repo_id, slot))
 
 
 def bound(columns: str, values: Mapping[str, object]) -> tuple[object, ...]:
@@ -394,7 +331,7 @@ def as_count(value: object) -> int:
     raise sqlite3.DatabaseError("Malformed stored integer")
 
 
-def _unheld(con: sqlite3.Connection, repo_id: RepoId, free: _Free, generation: int) -> tuple[str, str] | None:
+def unheld(con: sqlite3.Connection, repo_id: RepoId, free: Free, generation: int) -> tuple[str, str] | None:
     """The slot's name with its D, when it is unreserved and its counter is below `generation`."""
     row: tuple[object, ...] | None = con.execute(
         "SELECT name FROM slot s WHERE repo_id=? AND name=? AND generation<? AND NOT EXISTS "
@@ -408,7 +345,7 @@ def _unheld(con: sqlite3.Connection, repo_id: RepoId, free: _Free, generation: i
     return row[0], free.head
 
 
-def _issued(con: sqlite3.Connection, repo_id: RepoId, names: tuple[str, ...]) -> int:
+def issued(con: sqlite3.Connection, repo_id: RepoId, names: tuple[str, ...]) -> int:
     """The highest generation issued for any of the named slots (0 when none was)."""
     marked = ",".join("?" * len(names))
     found = f"SELECT coalesce(max(generation),0) FROM slot WHERE repo_id=? AND name IN ({marked})"

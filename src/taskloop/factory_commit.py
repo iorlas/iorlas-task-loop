@@ -8,7 +8,7 @@ commit from a crash before its recording. The caller's `quiet` is asked right be
 and this attempt still the reservation's holder. `GitUnavailable` and `Unreadable` propagate.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,11 +39,21 @@ type Settled = Committed | Unsettled | Rejected
 type GitQuiet = Callable[[], Unsettled | None]  # None: the factory may write Git in the slot now; else why not
 
 
-def attributes(rules: StepRules) -> tuple[str, ...]:
+def attributes(rules: StepRules, paths: Sequence[str]) -> tuple[str, ...]:
     """Where an ignored file would change how the listed paths are staged, though status never shows it: the
-    `.gitattributes` of every folder on the way to the step root, then the root itself."""
-    folders = rules.root.rstrip("/").split("/")[:-1]
-    return (*("/".join([*folders[:depth], ".gitattributes"]) for depth in range(len(folders) + 1)), rules.root)
+    `.gitattributes` of every folder on the way to the step root, then the root itself (only when the root is not the
+    repository, `""`); then, for each listed path, the `.gitattributes` of every folder on its way and the path itself,
+    skipping what the root already covers. Each once, in that order."""
+    root = rules.root
+    found = [*_way(root), root] if root else []
+    found += [each for path in paths for each in (*_way(path), path) if not (root and each.startswith(root))]
+    return tuple(dict.fromkeys(found))
+
+
+def _way(path: str) -> tuple[str, ...]:
+    """The `.gitattributes` of every folder on the way to `path` (a file, or a folder ending in `/`), the top first."""
+    folders = path.rstrip("/").split("/")[:-1]
+    return tuple("/".join([*folders[:depth], ".gitattributes"]) for depth in range(len(folders) + 1))
 
 
 def _observed(checkouts: Checkouts, files: SlotFiles, admission: Admission) -> SlotState | Unsettled:
@@ -127,7 +137,7 @@ def refusal(slot: Worktree, files: SlotFiles, admission: Admission, base: str, a
     unsafe = unsafe_path(files, Path(admission.slot_path), rules, answer.paths)
     if unsafe is not None:
         return Unsettled("unsafe", bounded((unsafe,)))
-    dirt = slot.dirty(base, ignored_under=attributes(rules))
+    dirt = slot.dirty(base, ignored_under=attributes(rules, answer.paths))
     unsafe = git_file(dirt.tracked + dirt.untracked, rules, answer.paths)
     if unsafe is not None:
         return Unsettled("unsafe", bounded((unsafe,)))

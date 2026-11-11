@@ -41,7 +41,7 @@ section 2.9 and its decision 8.7 now run `setup` from the task branch.
 | Slot release and abandon; publish `task/<id>` to origin, never forced | built, gated, live smoke | e6f567929, 2f2c3b900, a2c7a47ed |
 | Scheduling: `tl step next` (one round); `tl step rounds` (foreground, Ctrl-C); deadline renewal once per reboot | built, gated, live smoke (Runs F-H) | 35bf31804, c26fb0643, 283ae2271, 5ec5fe9c9 |
 | Step generalization S1-S4: generic tables (factory.db v10), step port, `tl step` replaces `tl plan` | built, gated | 43616e040, d2f41da10, cf4df5cff, 9c1cbe426, edc4e31e2, 0304f0abf |
-| Implement step and step chaining (S5) | design ([.16](tl-8bh9.4.3.1.16/plan.md), proposed; under revision) | none |
+| Implement step and step chaining (S5) | design ([.16](tl-8bh9.4.3.1.16/plan.md)); S5a (preparation, no behavior change) built, gated | S5a: see .16 section 11 |
 | Test environment inside the agent sandbox | not built, no design | none |
 | Repository profile reader (`.task-loop.json` successor) | not built; the file in the tree is baseline-only, nothing reads it | none |
 | Checks step, review step, land (merge, close, sync) | not built; contracts agreed in candidate-checks and delivery-publication | none |

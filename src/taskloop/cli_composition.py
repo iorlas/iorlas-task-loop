@@ -24,6 +24,7 @@ from taskloop.composition import (
     current_boot,
     entry_seen,
     open_admission,
+    open_chain,
     open_launcher,
     open_publisher,
     open_releaser,
@@ -109,8 +110,8 @@ def open_start(database: Path, artifacts: Path) -> Generator[StartPorts | Failed
 
 
 def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Store) -> StartPorts:
-    admission, launcher = open_admission(database, artifacts), open_launcher(database, artifacts)
-    repeat = StepRepeat(reader, open_verifier(database, store), EvidenceFiles(artifacts), admission, launcher, worker_gone, entry_seen,
+    admission, launcher, chain = open_admission(database, artifacts), open_launcher(database, artifacts), open_chain(database, artifacts)
+    repeat = StepRepeat(reader, open_verifier(database, store), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
                         time.time, repeating)
     return StartPorts(reader, admission, launcher, time.time, repeat)
 

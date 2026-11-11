@@ -20,7 +20,8 @@ from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store, begin_immediate
 
-from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission, RepeatRequest
+from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission
+from taskloop.admit_chain import ChainAdmission, RepeatRequest
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_status import StatusPorts, list_attempts, show_attempt
 from taskloop.attempt_store import AttemptStore, StoreRefused
@@ -96,8 +97,8 @@ def never(*_args: object, **_options: object) -> NoReturn:
     raise AssertionError("a repeat reads no tracker, opens no checkout and claims nothing")
 
 
-def admission(con: sqlite3.Connection, tmp_path: Path, clock: Callable[[], float] = lambda: 10) -> AttemptAdmission:
-    return AttemptAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, clock, never)
+def admission(con: sqlite3.Connection, tmp_path: Path, clock: Callable[[], float] = lambda: 10) -> ChainAdmission:
+    return ChainAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), clock)
 
 
 def gone(_worker: Worker) -> bool:
@@ -352,7 +353,7 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     def contender() -> None:
         store = Store(SCHEMA)
         mine = store.open_rw(path)
-        admit = AttemptAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), never, never, never, never, lambda: 10, never)
+        admit = ChainAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), lambda: 10)
         outcomes.append(admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")))
 
     threads = [threading.Thread(target=contender) for _ in range(2)]
@@ -463,7 +464,8 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 ) -> None:
     request = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "other-model", "low", 45)
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
-    ports = StartPorts(store, admission(registered, tmp_path), launcher, lambda: 10, repeats)
+    fresh = AttemptAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, lambda: 10, never)
+    ports = StartPorts(store, fresh, launcher, lambda: 10, repeats)
     assert start(ports, request) == Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     assert start(ports, request) == Failed("refused", "repeats_exhausted")

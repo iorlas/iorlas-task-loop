@@ -20,6 +20,7 @@ from stream_proc import OwnedProcess, group_alive, inspect_process, observe_owne
 
 from taskloop import slot_lock
 from taskloop.admit import AttemptAdmission, Claim, Unclaim
+from taskloop.admit_chain import ChainAdmission
 from taskloop.attempt import Attempts, Credentials, CredentialsUnavailable
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
 from taskloop.attempt_types import Checkouts, EntryIdentity, FileStat, Seen
@@ -430,3 +431,9 @@ def open_admission(database: Path, artifacts: Path) -> AttemptAdmission:
         time.time,
         slot_lock.probe,
     )
+
+
+def open_chain(database: Path, artifacts: Path) -> ChainAdmission:
+    """Real wiring of the admissions that continue a task: per-thread shared writers on factory.db, wall-clock deadlines."""
+    store = Store(SCHEMA)
+    return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time)

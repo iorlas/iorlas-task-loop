@@ -72,7 +72,7 @@ WRITERS = {
     ("INSERT", "slot"): "slots.py",
     ("INSERT", "reservation"): "admit.py",
     ("INSERT", "attempt"): "admit.py",
-    ("UPDATE", "reservation"): "admit.py",
+    ("UPDATE", "reservation"): "admit_chain.py",  # a repeat's takeover
     ("UPDATE", "slot"): "admit.py",
     ("INSERT", "slot_release"): "slot_release.py",
     ("UPDATE", "slot_release"): "slot_release.py",

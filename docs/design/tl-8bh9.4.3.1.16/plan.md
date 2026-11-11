@@ -554,3 +554,46 @@ S5e only for hand advances.
   agent; the one-shot shape is not read).
 - Everything in 2.9's unknowns list: the S5e spike settles them.
 - Line estimates: from the counter at this tree; S5a's diff is the first check.
+
+## 11. As built: S5a (preparation, 2026-11-11)
+
+Tracker tl-8bh9.4.3.1.16.1. Behavior-preserving: no schema, CLI word, exit code, JSON key, log line or agent-facing
+byte changes (the S3 constants in `test_steps` still pass unchanged).
+
+- **`admit_chain.py` (new, 85 code lines).** `PREVIOUS`, `RepeatRequest`, `_Lost`, and `ChainAdmission(connect, begin,
+  files, clock)` with `admit_repeat` and `_takeover`, moved verbatim except for the calls into `admit`'s shared pieces.
+  `composition.open_chain(database, artifacts)` wires it (its own `Store`, as `open_admission` has);
+  `cli_composition._starting` passes it to `StepRepeat` instead of the `AttemptAdmission`. `repeat`, `composition`,
+  `cli_composition` and five test files (`test_repeat`, `test_repeat_dispatch`, `test_slot_release`, `test_slot_lock`,
+  `real/test_repeat_real`) changed imports and constructors only; the repeat tests construct `ChainAdmission` with its
+  four ports (the `never` tracker/checkout/claim stubs they passed are gone). `operations` needed no change.
+- **`admit`'s shared pieces, module functions (`admit` 332 to 272 code lines).** `deadline_refusal(clock, deadline)`
+  (was `_deadline`), `open_store(connect)` (was `_open`), `free_slots(con, repo, repo_id, probe)` and `branched(repo,
+  task_id, free)` (the free-slot observation and the branch rule, were `_observe`'s second half and `_branched`; the
+  task-attempted check stays in `AttemptAdmission._observe`), `Free` (was `_Free`), `unheld`, `issued`, plus the
+  existing `bound`, `as_count`, `why`. Chosen here (the plan was silent): the two SQL writes both admissions make are
+  `admit` functions too, `insert_attempt(con, attempt)` and `issue(con, repo_id, slot, generation)` (the slot's
+  counter), so each (verb, table) keeps one owner in `test_policy.WRITERS`; the reservation takeover (`UPDATE
+  reservation`) moved with `_takeover`, so its owner there is now `admit_chain.py`. `admit_chain` imports only
+  `deadline_refusal`, `open_store`, `insert_attempt`, `issue`, `as_count`, `why` and the result types; `free_slots`,
+  `branched`, `unheld` and `issued` are public for `admit_next` (S5b) and used only by `admit` until then.
+- **`step_text.py` (new leaf, 19 code lines).** `GIT_WRITES`, the one sentence about Git writes, and `feedback(opening,
+  listing, instructions, task, nonce)`, the repeat frame (markers, `shown` listing, instructions, the task).
+  `plan_step._closing_words` and `plan_step.feedback` call them (`plan_step` 132 to 119). No import-linter contract
+  added for it (the plan names none; it is a leaf any kind may import).
+- **`factory_commit.attributes(rules, paths)`.** The root's chain and the root (only when the root is not `""`), then
+  each listed path's chain and the path, **skipping entries under the root** and each entry once, in order. The
+  skipping is chosen here so the pathspecs for plan are byte-identical to before (section 2.4 says "meaning
+  unchanged"; this makes the argv unchanged too). `refusal` passes `answer.paths`.
+- **`TaskInspection.status` and `.assignee`** (required, the tracker's words as read; `tracker.inspect_task` maps
+  `Bead.status` and `Bead.assignee`). `tl task show --json` printed `asdict(TaskInspection)`; it now leaves the two new
+  keys out, so its JSON keys are unchanged. Nothing reads the two fields yet (`admit_next`, S5b).
+- **Tests.** `test_steps`: the attributes case passes listed paths (plan with two listed paths equals the old list;
+  root `""` gives only the listed paths' chains); `test_task_inspection`: one mapping case (status `in_progress`,
+  assignee `taskloop`); `test_policy.WRITERS`: `UPDATE reservation` owned by `admit_chain.py`.
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kept); `just test` 1380 passed. Code lines
+(policy counter): `admit` 272 (-60), `admit_chain` 85, `step_text` 19, `plan_step` 119 (-13), `factory_commit` 144
+(+5), `composition` 283 (+4), `task` 49 (+2), `tracker` 56 (+2), `cli` 142, `cli_composition` 208, `repeat` 142 (+1
+each): +47 source code lines against the estimate of about +12 (the moved class carries its own imports, docstring and
+constructor, and the two shared SQL writes became functions); tests +6. Live smoke not run (no behavior change).

@@ -43,11 +43,15 @@ class TaskDependency:
 
 @dataclass(frozen=True)
 class TaskInspection:
+    """`status` and `assignee` are the tracker's words as read (empty when it has none): what an advance confirms."""
+
     reference: TaskReference
     title: str
     requirements: str
     acceptance: str
     dependencies: tuple[TaskDependency, ...]
+    status: str
+    assignee: str
 
 
 class TaskInspectionError(Exception):

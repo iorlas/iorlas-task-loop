@@ -7,13 +7,16 @@ from pathlib import Path
 import pytest
 
 from taskloop.admit import task_text
-from taskloop.attempt_types import AttemptKey, Unsettled
+from taskloop.attempt_types import AttemptKey, StepRules, Unsettled
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import attributes
 from taskloop.steps import PLAN, STEPS, kind
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 
-TASK = TaskInspection(TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.\nAnd Y.", "- X works\n- Y works", ())
+TASK = TaskInspection(
+    TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.\nAnd Y.", "- X works\n- Y works", (), "in_progress",
+    "taskloop",
+)
 INPUT = (
     "Add a widget\n\nIt must do X.\nAnd Y.\n\n- X works\n- Y works\n\nFirst read `docs/design/tl-1/plan.md` if it exists. If it "
     "is still valid for the task and the code as they are now, change nothing and answer `unchanged`. Otherwise write the "
@@ -69,5 +72,7 @@ def test_a_repeat_input_is_unchanged_by_the_port(reason: str, unrecorded: bool) 
     assert text == FEEDBACK[reason, unrecorded]
 
 
-def test_the_attributes_files_follow_the_step_root() -> None:
-    assert attributes(PLAN.rules("tl-1")) == (".gitattributes", "docs/.gitattributes", "docs/design/.gitattributes", "docs/design/tl-1/")
+def test_the_attributes_files_follow_the_step_root_and_the_listed_paths() -> None:
+    old = (".gitattributes", "docs/.gitattributes", "docs/design/.gitattributes", "docs/design/tl-1/")
+    assert attributes(PLAN.rules("tl-1"), ("docs/design/tl-1/plan.md", "docs/design/tl-1/notes/a.md")) == old
+    assert attributes(StepRules(""), ("src/a.py", "README.md")) == (".gitattributes", "src/.gitattributes", "src/a.py", "README.md")

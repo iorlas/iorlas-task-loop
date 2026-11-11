@@ -19,7 +19,8 @@ from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import begin_immediate
 
-from taskloop.admit import AdmitRefused, AttemptAdmission, RepeatRequest
+from taskloop.admit import AdmitRefused
+from taskloop.admit_chain import ChainAdmission, RepeatRequest
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat, Seen, SlotFiles, Verified
@@ -317,9 +318,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     with pytest.raises(StoreRefused, match="stale_reservation"):
         store.load(KEY)
     assert store.register_entry(KEY, (8, "later", "boot"), 10) == "refused"
-    admission = AttemptAdmission(
-        lambda: registered, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, lambda: 10, never
-    )
+    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10)
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
 

@@ -17,7 +17,8 @@ from any_agent.testing import FakeRun
 from git_porcelain.testing import FakeWorktree
 
 from taskloop import verifier as verifier_module
-from taskloop.admit import AdmitRefused, Admitted, AdmitUnavailable, RepeatRequest
+from taskloop.admit import AdmitRefused, Admitted, AdmitUnavailable
+from taskloop.admit_chain import RepeatRequest
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (

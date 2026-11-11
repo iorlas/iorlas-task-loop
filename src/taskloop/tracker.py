@@ -54,7 +54,9 @@ def inspect_task(binding: TaskBinding, client: TaskReadClient, task_id: str) -> 
         TaskDependency(TaskReference(binding.scope, dependency.id), dependency.type, dependency.title, dependency.status)
         for dependency in record.dependencies
     )
-    return TaskInspection(reference, record.title, record.description, record.acceptance_criteria, dependencies)
+    return TaskInspection(
+        reference, record.title, record.description, record.acceptance_criteria, dependencies, record.status, record.assignee
+    )
 
 
 def ready_rows(client: ReadyRows, label: str) -> tuple[TaskRow, ...]:

@@ -51,7 +51,8 @@ def show_task(arguments: argparse.Namespace) -> int:
             print(f"tl task show: {error}", file=sys.stderr)
         return 1
     if arguments.json_output:
-        print(json.dumps(asdict(result)))
+        shown = {key: value for key, value in asdict(result).items() if key not in {"status", "assignee"}}  # its keys as they were
+        print(json.dumps(shown))
     else:
         scope = result.reference.scope
         print(f"Task: {result.reference.task_id}\nBacklog: {scope.adapter}/{scope.backlog}\nTitle: {result.title}")

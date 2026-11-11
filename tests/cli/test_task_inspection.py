@@ -26,6 +26,12 @@ def test_equal_task_ids_keep_their_explicit_backlog_and_requirements(tmp_path: P
     assert first.reads == second.reads == ["t-1"]
 
 
+def test_the_tracker_status_and_assignee_are_mapped(tmp_path: Path) -> None:
+    client = FakeTaskReadClient((Bead("t-1", status="in_progress", assignee="taskloop"),))
+    result = inspect_task(TaskBinding(TaskScope("configured"), tmp_path), client, "t-1")
+    assert (result.status, result.assignee) == ("in_progress", "taskloop")
+
+
 def test_dependency_relationships_keep_scoped_targets(tmp_path: Path) -> None:
     client = FakeTaskReadClient((Bead("t-1", dependencies=(Dep("t-0", "blocks", "Earlier", "closed"), Dep("t-parent", "parent-child"))),))
     scope = TaskScope("configured")

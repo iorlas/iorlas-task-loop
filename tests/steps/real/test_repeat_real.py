@@ -8,7 +8,6 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import NoReturn
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
@@ -18,7 +17,7 @@ from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from sqlite_store import begin_immediate
 
-from taskloop.admit import AttemptAdmission
+from taskloop.admit_chain import ChainAdmission
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Unsettled, Verified
@@ -51,10 +50,6 @@ def agent(slot: Path, written: Mapping[str, str], removed: Sequence[str], paths:
         return FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     return call
-
-
-def never(*_args: object, **_options: object) -> NoReturn:
-    raise AssertionError("a repeat reads no tracker and claims nothing")
 
 
 class FakeLauncher:
@@ -101,7 +96,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     assert attempts(agent(slot, {P: "# Plan\n", "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
-    admission = AttemptAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), never, never, never, never, lambda: 10, never)
+    admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10)
     repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, FakeLauncher(store), lambda _w: True, lambda _e: "gone", lambda: 10,
                         repeating)
     started = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)
