@@ -21,6 +21,7 @@ from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_nul
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
 from taskloop.check_store import (
     Outcome,
+    Recorded,
     Required,
     required_json,
     stored_entry,
@@ -171,24 +172,27 @@ def insert(con: sqlite3.Connection, admitted: LandAdmitted) -> None:
 
 def record_release(
     con: sqlite3.Connection, key: AttemptKey, read: tuple[int, Validation | None], parked: str, now: float, abandoned: bool,
-) -> bool:
+) -> Recorded:
     """The release's record, in the release's transaction: fenced on the `rev` and validation its stop proof `read`, the
-    held reservation and no earlier release; settled (not `abandoned`) only once validated. An abandon releases any
-    candidate that is neither pushable nor delivered (pending, failed, or superseded while it still holds its slot) and
-    marks it superseded `abandoned` unless it already is superseded. False off the fence."""
+    held reservation and no earlier release; settled (`released`) only once validated. An abandon (`abandoned`) releases
+    any candidate that is neither pushable nor delivered (pending, failed, or superseded while it still holds its slot)
+    and marks it superseded `abandoned` unless it already is; a delivered one is `landed`, a pushable one `landing` (the
+    checks record's words). `changed` off the fence."""
     fenced = con.execute("SELECT l.rev,l.validation,l.released_at,l.superseded,l.delivery " + CANDIDATE_RESERVED, astuple(key)).fetchone()
     if fenced is None or (fenced[0], fenced[1]) != read or fenced[2] is not None:
-        return False
+        return "changed"
     if not abandoned:
         if read[1] is None:
-            return False
+            return "changed"
         con.execute("UPDATE land_candidate SET released_at=?,parked=? WHERE candidate_id=?", (now, parked, key.attempt_id))
-        return True
-    if (read[1] in PUSHABLE and fenced[3] is None) or fenced[4] is not None:
-        return False
+        return "released"
+    if fenced[4] is not None:
+        return "landed"
+    if read[1] in PUSHABLE and fenced[3] is None:
+        return "landing"
     con.execute("""UPDATE land_candidate SET released_at=?,parked=?,superseded=coalesce(superseded,'abandoned'),
     superseded_at=coalesce(superseded_at,?) WHERE candidate_id=?""", (now, parked, now, key.attempt_id))
-    return True
+    return "abandoned"
 
 
 class LandStore(StoreConnection):

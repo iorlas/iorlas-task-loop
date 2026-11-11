@@ -11,8 +11,9 @@ target's own refusals (the reservation no longer held is `unavailable changed`; 
 `landed`, a pushable one `landing`), the stop proof (the registered entry or the land process stored on the candidate,
 `me` passing; the latest setup run's unsettled command; every unsettled result of the latest block, each through
 `setup_seen`, boot-aware: alive `held:setup_running` / `held:check_running`, unknown `unavailable setup_unknown` /
-`check_unknown`; never signalled), then the slot's lock (`hold`, never waiting), then the reset of a slot listed detached
-at the commit (X, or S) back to exactly it (`environment.reset_to`: the untracked leftovers of a passed block would
+`check_unknown`; never signalled), then the slot's lock (`hold`, never waiting) and under it the read, the refusals
+and the proof again (any other change since is `unavailable changed`), then the reset of a slot listed detached at
+the commit (X, or S) back to exactly it (`environment.reset_to`: the untracked leftovers of a passed block would
 otherwise refuse the park), then the park at D (`held:slot_dirty`, `held:slot_branch` and the other refusals of
 `park_slot` stand), then one write transaction fenced on the `rev` and phase (or validation) the proof read, the held
 reservation and no earlier release, then the scratch emptied, best effort. A released checks attempt is only flipped to
@@ -62,7 +63,8 @@ class Holding[R]:
     """What the release reads before anything changes, of a checks attempt or a land candidate (`row`, as read): its key,
     repository, slot and D, the commit a slot listed detached is reset to (X or S), its registered entry or land process,
     its held reservation's slot path (None when not held at the key's generation), the latest setup run's unsettled
-    command and the latest block's unsettled results; `what` names it in a detail."""
+    command and the latest block's unsettled results; `what` names it in a detail, `process` its entry in the stop proof's
+    (None: the attempt's entry)."""
 
     row: R
     key: AttemptKey
@@ -75,6 +77,7 @@ class Holding[R]:
     setup: OwnedProcess | None
     results: tuple[ResultRow, ...]
     what: str
+    process: str | None = None
 
 
 class ReleaseTarget[R](Protocol):
@@ -189,12 +192,14 @@ class CandidateTarget:
         with _connected(self.lands) as con:
             slot_path = land_store.held_slot(con, key)
             return Holding(found, key, found.repo_id, found.slot, found.slot_head, found.commit, found.entry, slot_path,
-                           running(con, key.attempt_id), unsettled(con, key.attempt_id), "land candidate")
+                           running(con, key.attempt_id), unsettled(con, key.attempt_id), "land candidate", "land process")
 
     def released(self, held: Holding[LandRow], abandon: bool) -> ReleaseResult | None:
-        del abandon
+        """Released before: settled changes nothing; an abandon still refuses a delivered or pushable candidate."""
         found = held.row
-        return None if found.released_at is None else AlreadyReleased(held.slot, "kept", found.superseded == "abandoned")
+        if found.released_at is None:
+            return None
+        return _landing_of(found, abandon) or AlreadyReleased(held.slot, "kept", found.superseded == "abandoned")
 
     def refusal(self, held: Holding[LandRow], abandon: bool) -> NotReleased | None:
         found = held.row
@@ -203,13 +208,17 @@ class CandidateTarget:
         if not abandon and found.validation is None:
             unfinished = "The land's validation has not concluded: rerun `tl step land`, or abandon."
             return NotReleased("refused", "not_terminal", f"{unfinished} {NOTHING}")
-        if abandon and found.delivery is not None:
-            return NotReleased("refused", "landed", f"{LANDED} {NOTHING}")
-        return NotReleased("refused", "landing", f"{LANDING} {NOTHING}") if abandon and found.pushable else None
+        return _landing_of(found, abandon)
 
     def record_release(self, con: sqlite3.Connection, held: Holding[LandRow], parked: str, now: float, abandon: bool) -> Recorded:
-        recorded = land_store.record_release(con, held.key, (held.row.rev, held.row.validation), parked, now, abandon)
-        return "changed" if not recorded else "abandoned" if abandon else "released"
+        return land_store.record_release(con, held.key, (held.row.rev, held.row.validation), parked, now, abandon)
+
+
+def _landing_of(found: LandRow, abandon: bool) -> NotReleased | None:
+    """An abandon of a delivered (`landed`) or pushable (`landing`) candidate: S is, or may be, on origin's `main`."""
+    if not abandon:
+        return None
+    return _refused_by_land("landed" if found.delivery is not None else "landing" if found.pushable else "changed", NOTHING)
 
 
 @dataclass(frozen=True)
@@ -243,19 +252,33 @@ class ChecksRelease:
         except (sqlite3.Error, StoreUnavailable) as error:
             return NotReleased("unavailable", "store", f"{type(error).__name__}. {NOTHING}")
         refused = target.refusal(held, abandon) or self._stopped(held, me)
-        return refused or self._held(target, held, abandon)
+        return refused or self._held(target, held, abandon, me)
 
     def _stopped[R](self, held: Holding[R], me: EntryIdentity | None) -> NotReleased | None:
         """The stop proof, read before anything changes: the registered entry or land process (`me` passing), the
         latest setup run's unsettled command, every unsettled result of the latest block."""
-        return (entry_stopped(self.observe, me, held.entry) or setup_stopped(self.setup_seen, held.setup)
+        return (entry_stopped(self.observe, me, held.entry, held.process) or setup_stopped(self.setup_seen, held.setup)
                 or checks_stopped(self.setup_seen, held.results))
 
-    def _held[R](self, target: ReleaseTarget[R], held: Holding[R], abandon: bool) -> Released | NotReleased:
+    def _again[R](self, target: ReleaseTarget[R], held: Holding[R], abandon: bool, me: EntryIdentity | None) -> NotReleased | None:
+        """Under the lock, before any Git write: read again and prove again (a land process may have taken the custody,
+        started a check and died between the first proof and the lock); any other change since is `changed`."""
+        try:
+            fresh = target.read(held.key)
+        except (sqlite3.Error, StoreUnavailable) as error:
+            return NotReleased("unavailable", "store", f"{type(error).__name__}. {NOTHING}")
+        if isinstance(fresh, NotReleased):
+            return fresh
+        refused = target.refusal(fresh, abandon) or self._stopped(fresh, me)
+        if refused is None and fresh != held:
+            return NotReleased("unavailable", "changed", f"The {held.what} changed before the slot's lock was taken. {NOTHING}")
+        return refused
+
+    def _held[R](self, target: ReleaseTarget[R], held: Holding[R], abandon: bool, me: EntryIdentity | None) -> Released | NotReleased:
         slot_path = held.slot_path or ""
         try:
             with self.hold(slot_path, held.key.attempt_id):
-                return self._parked(target, held, Path(slot_path), abandon)
+                return self._again(target, held, abandon, me) or self._parked(target, held, Path(slot_path), abandon)
         except SlotBusy:
             return NotReleased("unavailable", "slot_busy", f"Another entry or release holds the slot. {NOTHING}")
         except SlotLockUnavailable:

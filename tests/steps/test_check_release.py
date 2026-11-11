@@ -386,3 +386,61 @@ def test_an_unknown_candidate_is_absent_and_a_closed_store_unavailable(lands: Be
     assert release_word(lands.candidate()) == "refused:absent"
     lands.con.close()
     assert release_word(lands.candidate()) == "unavailable:store"
+
+
+def releasing(request: pytest.FixtureRequest, target: str) -> tuple[Bench, Callable[..., ReleaseResult]]:
+    """The checks attempt (`bench`) or the candidate (`lands`) of one factory.db, and its release."""
+    found: Bench = request.getfixturevalue(target)
+    return found, found.release if target == "bench" else found.candidate
+
+
+@pytest.mark.parametrize("target", ["bench", "lands"])
+def test_a_check_started_between_the_proof_and_the_lock_holds_the_slot_with_nothing_reset(
+    request: pytest.FixtureRequest, target: str
+) -> None:
+    """A new land process (or entry) takes the custody, starts a check and is killed: the release proves again under the
+    lock, before any Git write, for either target."""
+    each, release = releasing(request, target)
+    each.at_x()
+    each.slot.write_file("left", "untracked")
+    start = running_check if target == "bench" else running_land_check
+    each.inside = lambda: (start(each), each.seen.update({600: "alive"}))
+    assert release_word(release(abandon=True)) == "held:check_running" and each.holds == 1
+    assert (each.head(), each.slot.read_file("left")) == (each.x, "untracked")
+    assert (each.stored() if target == "bench" else candidate_columns(each)) == (UNRELEASED if target == "bench" else CANDIDATE_HELD)
+
+
+def test_a_change_between_the_proof_and_the_lock_is_changed_before_any_git_write(lands: Bench) -> None:
+    lands.at_x()
+    lands.slot.write_file("left", "untracked")
+    lands.inside = lambda: lands.con.execute("UPDATE land_candidate SET rev=rev+1")
+    found = lands.candidate(abandon=True)
+    assert isinstance(found, NotReleased) and found.word == "unavailable:changed" and "before the slot's lock" in found.detail
+    assert lands.slot.read_file("left") == "untracked" and candidate_columns(lands) == CANDIDATE_HELD
+
+
+@pytest.mark.parametrize("seen", ["matching", "unknown"])
+@pytest.mark.parametrize(("target", "named"), [("bench", ("attempt's entry", "registered entry")), ("lands", ("land process",) * 2)])
+def test_the_stop_proof_names_the_land_process_of_a_candidate_and_the_entry_of_a_checks_attempt(
+    request: pytest.FixtureRequest, target: str, named: tuple[str, str], seen: Seen
+) -> None:
+    each, release = releasing(request, target)
+    if target == "bench":
+        each.store.register_entry(CHECKS, ENTRY, 10)
+    else:
+        LandStore(lambda: each.con).hold(CANDIDATE, ENTRY)
+    each.entry = seen
+    found = release(abandon=True)
+    assert isinstance(found, NotReleased) and named[0 if seen == "matching" else 1] in found.detail
+
+
+def test_the_abandon_of_a_released_pushable_or_delivered_candidate_is_refused_and_settled_is_already_released(lands: Bench) -> None:
+    candidates = LandStore(lambda: lands.con)
+    candidates.conclude(CANDIDATE, "passed", None, 20)
+    assert release_word(lands.candidate()) == "released"
+    assert release_word(lands.candidate(abandon=True)) == "refused:landing"
+    candidates.record_delivery(CANDIDATE, lands.x, 25)
+    found = lands.candidate(abandon=True)
+    assert isinstance(found, NotReleased) and found.word == "refused:landed" and "tl step land" in found.detail
+    assert lands.candidate() == AlreadyReleased("s1", "kept", False)
+    assert candidate_columns(lands) == ([], (30.0, lands.d, None))

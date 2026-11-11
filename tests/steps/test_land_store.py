@@ -14,7 +14,7 @@ from sqlite_store import begin_immediate
 from taskloop import land_store
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Replaced
-from taskloop.check_store import Outcome, required_json
+from taskloop.check_store import Outcome, Recorded, required_json
 from taskloop.factory_schema import SCHEMA, current
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, Validation
 
@@ -310,6 +310,11 @@ def test_renew_profiled_and_conclude_write_a_pending_candidate(landing: sqlite3.
 
 
 def released(con: sqlite3.Connection, read: tuple[int, Validation | None], abandoned: bool, key: AttemptKey = CANDIDATE) -> bool:
+    """Whether the record released it (`released` or `abandoned`); `recorded` gives the word."""
+    return recorded(con, read, abandoned, key) in ("released", "abandoned")
+
+
+def recorded(con: sqlite3.Connection, read: tuple[int, Validation | None], abandoned: bool, key: AttemptKey = CANDIDATE) -> Recorded:
     with begin_immediate(con):
         return land_store.record_release(con, key, read, D, 30, abandoned)
 
@@ -340,15 +345,18 @@ def test_an_abandon_releases_a_pending_or_failed_candidate_and_supersedes_it(
     assert release_columns(landing) == (30.0, D, "abandoned", 30.0) and not released(landing, read, True)
 
 
-@pytest.mark.parametrize("change", ["UPDATE land_candidate SET validation='passed',validated_at=20",
-                                    "UPDATE land_candidate SET validation='passed',validated_at=20,delivery='pushed',delivered_at=21,"
-                                    "remote_head=commit_sha", "DELETE FROM reservation"], ids=["pushable", "delivered", "unreserved"])
+@pytest.mark.parametrize(("change", "word"), [
+    ("UPDATE land_candidate SET validation='passed',validated_at=20", "landing"),
+    ("UPDATE land_candidate SET validation='passed',validated_at=20,delivery='pushed',delivered_at=21,remote_head=commit_sha", "landed"),
+    ("DELETE FROM reservation", "changed"),
+], ids=["pushable", "delivered", "unreserved"])
 def test_an_abandon_never_releases_a_pushable_delivered_or_unreserved_candidate(
-    landing: sqlite3.Connection, change: str
+    landing: sqlite3.Connection, change: str, word: str
 ) -> None:
+    """The checks record's words: `landing` (S may be on origin), `landed` (it is), `changed` off the fence."""
     landing.execute(change)
     validation = latest(landing).validation
-    assert not released(landing, (0, validation), True)
+    assert recorded(landing, (0, validation), True) == word
     assert release_columns(landing)[0] is None
 
 

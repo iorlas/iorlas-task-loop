@@ -848,8 +848,9 @@ counter: `validate` 104 (new), `check_entry` 131 (-83), `check_release` 203 (+61
 3. A settled release of a candidate needs a validation (`refused not_terminal` while pending); a pushable or delivered
    candidate still holding its slot is released settled (the land's own release after a pass).
 4. A candidate validated with no slot (`same_tree`, `no_change`) reads as `refused absent` ("No such land candidate
-   holding a slot"); a released candidate answers `AlreadyReleased` in both modes (`abandoned` when superseded
-   `abandoned`): the checks attempt's abandon that follows carries `LANDING`.
+   holding a slot"). A released candidate answers `AlreadyReleased` to a settled release (`abandoned` when superseded
+   `abandoned`); its abandon refuses `landed` when delivered and `landing` when pushable (section 26.1, repair 4), else
+   `AlreadyReleased`.
 5. The protocol's record method is `record_release`: the policy's Git-write matcher counts any `.record` attribute as a
    Git write (`record` is `Worktree.record`).
 
@@ -870,3 +871,32 @@ entry stop proof, the candidate's `landing` and `landed` refusals, its `not_term
 covers the checks target only); `validate` and `CandidateTarget` have no production caller until L3; whether
 import-linter accepts a forbidden contract naming modules that do not exist yet (not tried: L3 adds them with the
 modules).
+
+### 26.1 Review repairs to L2 (2026-11-11)
+
+An independent review of d7e972a6a and 205347ba1 found the checks path equivalent and four low defects; all repaired,
+each with a test that fails without it (five hand mutations, each failing a test):
+
+1. **The stop proof was not re-read under the custody lock** (as in the checks release before L2, now also for
+   candidates): a land process (or entry) could take the custody, start a check and die between the proof and the lock,
+   and the release would reset the slot under the live check. Now, under the lock and before any Git write, the release
+   reads its target again and runs the target's refusals and the stop proof again (`ChecksRelease._again`), for both
+   targets; any other change since the first read is `unavailable changed` before the reset (the checks test whose rev
+   moves after the proof now answers `changed` before any Git write instead of after the park: same word, nothing
+   recorded). This is the one behavior change for checks attempts in L2, asked for by the review. Test: a check started
+   and alive between the proof and the lock holds the slot (`held:check_running`) with nothing reset, for each target; a
+   rev change there is `changed` with nothing reset.
+2. **`land_store.record_release` answered a bool**: a delivery between the refusal and the record would read
+   `unavailable changed` after the park. It now returns the checks record's words: `released`, `abandoned`, `landed`
+   (delivered), `landing` (pushable), `changed`; the release maps `landed` and `landing` to their refusals. Tests:
+   `test_land_store`'s abandon of a pushable, delivered or unreserved candidate records `landing`, `landed`,
+   `changed` (its helper `released` keeps the bool for the other tests).
+3. **The stop proof worded a land refusal as an attempt's entry**: `slot_release.entry_stopped` takes `process` (None:
+   the old texts), `Holding.process` is `land process` for a candidate. Test: the running and unknown details name the
+   land process for a candidate and the entry for a checks attempt.
+4. **The abandon of a released pushable or delivered candidate looked like success** (`AlreadyReleased`): it now refuses
+   `landing` or `landed` with the guide; settled still answers `already_released`. Test: a released `passed`
+   candidate's abandon is `landing`, after its delivery `landed`, its settled release `AlreadyReleased`.
+
+Code lines after the repairs: `check_release` 217, `land_store` 211, `slot_release` 269 (+4); `test_check_release` 336,
+`test_land_store` 377.

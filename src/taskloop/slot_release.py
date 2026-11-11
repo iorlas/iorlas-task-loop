@@ -131,17 +131,20 @@ class Stopping:
     worker: Worker | None
 
 
-def entry_stopped(observe: Observe, me: EntryIdentity | None, entry: EntryIdentity | None) -> NotReleased | None:
+def entry_stopped(
+    observe: Observe, me: EntryIdentity | None, entry: EntryIdentity | None, process: str | None = None,
+) -> NotReleased | None:
     """The registered entry, by its boot-aware identity (a native process-table read, never by name): running refuses
     unless it is `me` (the entry releasing itself after its own verify); unknown is unavailable; gone, a different process
-    or no registered entry passes."""
+    or no registered entry passes. `process` names it in the detail (a land candidate's `land process`)."""
     if entry is None or entry == me:
         return None
     seen = observe(entry)
     if seen == "matching":
-        running = f"The attempt's entry runs as pid {entry[0]}: wait, or stop it by verified pid. {NOTHING}"
+        running = f"The {process or "attempt's entry"} runs as pid {entry[0]}: wait, or stop it by verified pid. {NOTHING}"
         return NotReleased("refused", "entry_running", running)
-    return NotReleased("unavailable", "observe", f"The registered entry could not be observed. {NOTHING}") if seen == "unknown" else None
+    unknown = f"The {process or 'registered entry'} could not be observed. {NOTHING}"
+    return NotReleased("unavailable", "observe", unknown) if seen == "unknown" else None
 
 
 def worker_stopped(gone: WorkerGone, phase: str, worker: Worker | None) -> NotReleased | None:
