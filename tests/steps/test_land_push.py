@@ -6,7 +6,7 @@ candidate; a delivery recorded by a concurrent land."""
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS
+from doubles import CHECKS, Command
 from git_porcelain import HookRejected, RemoteRejected, Transient
 from land_bench import RUN, LandBench, bench
 
@@ -14,8 +14,8 @@ from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import CheckStore
 from taskloop.land import Landed
-from taskloop.land_push import Withdrawn
-from taskloop.land_store import LandStore
+from taskloop.land_push import Delivered, Origin, Withdrawn, deliver
+from taskloop.land_store import LandRow, LandStore
 from taskloop.operations import Failed
 
 
@@ -186,3 +186,73 @@ def test_a_pruned_s_is_superseded_gone_and_candidate_two_lands(b: LandBench) -> 
     found = b.land()
     assert isinstance(found, Landed) and found.row.number == 2 and b.origin_main() == found.row.commit
     assert (b.rows()[0].superseded, b.rows()[0].delivery) == ("gone", None)
+
+
+def test_no_change_after_a_hand_land_supersedes_the_pushable_candidate_and_pushes_nothing(b: LandBench) -> None:
+    """The review's repro: `--no-change` never pushes, even when an earlier candidate is pushable."""
+    pushable(b)
+    main = b.advance({"src/x.py": "X = 1\n"}, "a hand land")
+    found = b.land(no_change=True)
+    assert isinstance(found, Landed) and found.how == "no_change" and b.repo.pushes == 1 and b.origin_main() == main
+    assert [(row.number, row.superseded, row.delivery) for row in b.rows()] == [(1, "moved", None), (2, None, "no_change")]
+
+
+def test_no_change_with_a_pushable_candidate_onto_origin_s_main_is_changes(b: LandBench) -> None:
+    pushable(b)
+    assert word(b.land(no_change=True)) == ("refused", "changes")
+    assert b.repo.pushes == 1 and b.origin_main() == b.base and b.rows()[0].pushable and len(b.rows()) == 1
+
+
+def test_no_change_with_a_pushable_candidate_already_on_origin_records_it(b: LandBench) -> None:
+    s = lost(b)
+    found = b.land(no_change=True)
+    assert isinstance(found, Landed) and found.how == "already_pushed" and found.row.remote_head == s and b.repo.pushes == 1
+
+
+def test_a_no_change_candidate_made_during_a_delivery_is_never_pushed(b: LandBench) -> None:
+    """`deliver` returns as soon as its new candidate is the no-change one (delivered at insert): no empty push."""
+    pushable(b)
+    b.advance({"src/x.py": "X = 1\n"}, "a hand land")
+
+    def again() -> LandRow | Failed:
+        made = b.land(no_change=True)
+        assert isinstance(made, Landed)
+        return made.row
+
+    found = deliver(b.lands, lambda: 20.0, Origin(b.repo, b.repo.path), b.rows()[0], again)
+    assert isinstance(found, Delivered) and found.how == "no_change" and b.repo.pushes == 1
+
+
+def test_withdraw_is_not_blocked_by_a_moved_task_branch(b: LandBench) -> None:
+    """The review's repro: abandon refuses `landing`, so `--withdraw` must work whatever the branch holds."""
+    pushable(b)
+    b.remote.advance("task/tl-1", {"later.txt": "after X\n"})
+    found = b.land("withdraw")
+    assert isinstance(found, Withdrawn) and found.row.superseded == "withdrawn"
+
+
+def test_an_unreadable_remote_url_is_unavailable_git(b: LandBench) -> None:
+    b.repo.url_fault = True
+    assert word(b.land()) == ("unavailable", "git") and b.rows() == ()
+
+
+def test_a_pruned_s_already_on_origin_is_delivered_not_gone(b: LandBench) -> None:
+    s = lost(b)
+    b.repo.prune(s)
+    found = b.land()
+    assert isinstance(found, Landed) and found.how == "already_pushed" and found.row.remote_head == s and len(b.rows()) == 1
+
+
+def test_withdraw_of_a_pruned_s_onto_a_moved_main_supersedes_it(b: LandBench) -> None:
+    s = pushable(b)
+    b.repo.prune(s)
+    b.advance({"OTHER": "another task\n"})
+    found = b.land("withdraw")
+    assert isinstance(found, Withdrawn) and found.row.superseded == "withdrawn"
+
+
+def test_an_unreadable_remote_url_at_the_push_s_recheck_is_unavailable_git(b: LandBench) -> None:
+    """The recheck right before the push runs outside the reads' handler: its fault is a word, never a crash."""
+    b.advance({"OTHER": "another task\n"})
+    b.environment.process.script = [Command(effect=lambda: setattr(b.repo, "url_fault", True))]
+    assert word(b.land()) == ("unavailable", "git") and b.rows()[0].pushable and b.repo.pushes == 0

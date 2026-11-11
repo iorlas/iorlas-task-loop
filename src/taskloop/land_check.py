@@ -16,6 +16,7 @@ supervision stops the running check's tree, and the rerun's reconcile marks it `
 
 import contextlib
 import secrets
+import sqlite3
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ from taskloop.check_release import CandidateTarget, ChecksRelease
 from taskloop.check_store import ChecksRow, Required
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import Checking
+from taskloop.factory_schema import LANDING
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, insert
 from taskloop.operations import Failed
 from taskloop.profile import ProfileFiles
@@ -41,6 +43,7 @@ from taskloop.slot_release import NotReleased, release_word
 from taskloop.slots import Probe, SlotGit
 from taskloop.validate import Ended, Target, Verdict, concluded, reconcile, validate
 
+RACED = "Another land of the task, or a change of its attempts, came first: `tl step show TASK`."
 type Squash = tuple[int, str, str, bool, Required]  # number, O, S, S's tree is X's, the required names at O
 
 
@@ -102,6 +105,8 @@ def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, d
         raise StoreUnavailable("Factory database unavailable")
     views = free_slots(con, repo, SlotGit(ports.work.checkouts, ports.work.slot_files), repo_id, ports.probe)
     free = views if not isinstance(views, tuple) else heads(repo, views)
+    if isinstance(free, AdmitRefused) and (found := _held(ports, checks)) is not None:
+        return found
     if not isinstance(free, tuple):
         detail = "Every slot is in use: rerun when one is free, or stop rounds." if isinstance(free, AdmitRefused) else free.detail
         return Failed("unavailable", free.reason if isinstance(free, AdmitRefused) else free.what, detail)
@@ -109,11 +114,21 @@ def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, d
     with ports.lands.begin(con):
         chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, key.reservation_generation)) is not None), None)
         if chosen is None:
-            return Failed("unavailable", "no_free_slot", "Every slot is in use: rerun when one is free, or stop rounds.")
+            return _raced(con, checks, number)
         reserve(con, repo_id, chosen[0], key)
         insert(con, LandAdmitted(key, checks.key.attempt_id, number, o, s, same, required, chosen[0], chosen[1], deadline, None,
                                  ports.work.clock()))
     return ports.lands.row(key) or Failed("unavailable", "changed")
+
+
+def _raced(con: sqlite3.Connection, checks: ChecksRow, number: int) -> Failed:
+    """No slot left at this candidate's generation: another land of the task came first (a candidate numbered this one or
+    later, or `LANDING`), else every slot is in use."""
+    found = con.execute(f"SELECT (SELECT coalesce(max(number),0) FROM land_candidate WHERE checks_attempt_id=c.attempt_id),{LANDING} "
+                        "FROM checks_attempt c WHERE c.attempt_id=?", (checks.key.attempt_id,)).fetchone()
+    if found is not None and (int(found[0]) >= number or found[1]):
+        return Failed("refused", "landing", f"{RACED} Nothing was recorded.")
+    return Failed("unavailable", "no_free_slot", "Every slot is in use: rerun when one is free, or stop rounds.")
 
 
 def inserted(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, settled: Settled | None, deadline: float) -> LandRow | Failed:
@@ -122,8 +137,17 @@ def inserted(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, se
     try:
         return _reserved(ports, repo, checks, squash, deadline) if settled is None else _settled(ports, checks, squash, settled)
     except StoreRefused as refused:
-        return Failed("refused", refused.reason, "Another land of the task, or a change of its attempts, came first: "
-                      "`tl step show TASK`. Nothing was recorded.")
+        return (_held(ports, checks) if refused.reason == "landing" else None) or Failed(
+            "refused", refused.reason, f"{RACED} Nothing was recorded.")
+
+
+def _held(ports: LandPorts, checks: ChecksRow) -> Failed | None:
+    """The latest candidate, validated, still holds its slot (its release was held): `Next: release`, not another land."""
+    held = ports.lands.latest(checks.key.attempt_id)
+    if held is None or not held.holds_slot or held.pending:
+        return None
+    return Failed("refused", "landing", f"The land candidate {held.number} still holds its slot {held.slot} (its release was "
+                  "held): rerun `tl step land`, which retries the release first, or `tl step release TASK`. Nothing was recorded.")
 
 
 def _unheld(_slot_path: str, _candidate_id: str) -> AbstractContextManager[None]:

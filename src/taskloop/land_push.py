@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
 
-from git_porcelain import GitUnavailable, HookRejected, MissingRemote, Pushed, RefRejected, Repo, Sha, Transient
+from git_porcelain import GitUnavailable, HookRejected, MissingRemote, MissingRevision, Pushed, RefRejected, Repo, Sha, Transient
 
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.git_views import PUSH_TIMEOUT
@@ -49,11 +49,12 @@ class Origin:
 @dataclass(frozen=True)
 class Delivered:
     """The candidate delivered: `remote_head` is S, or origin's later tip containing it; `how` is `pushed` (this call's
-    push) or `already_pushed` (origin was found to hold it)."""
+    push) or `already_pushed` (origin was found to hold it); `no_change` when the new candidate made after a moved `main`
+    found main already holding X's changes (delivered at insert, `remote_head` its O: nothing is pushed)."""
 
     row: LandRow
     remote_head: str
-    how: Literal["pushed", "already_pushed"]
+    how: Literal["pushed", "already_pushed", "no_change"]
 
 
 @dataclass(frozen=True)
@@ -64,16 +65,21 @@ class Withdrawn:
 
 
 type Again = Callable[[], LandRow | Failed]  # candidate N+1 onto origin's moved `main`, validated when its tree differs
+type Undelivered = Literal["at_origin", "moved"]
 type _Seen = tuple[Literal["delivered", "at_origin", "moved"], str]
 
 
 def same_url(repo: Repo) -> Failed | None:
     """`origin` exists and pushes where it fetches from (Git's `remote get-url --push`, with `pushurl` and
-    `pushInsteadOf`, against `remote get-url`, with `insteadOf`): the land reads origin to decide what was delivered."""
+    `pushInsteadOf`, against `remote get-url`, with `insteadOf`): the land reads origin to decide what was delivered.
+    Both read only the first URL; a second `url` or `pushurl` is not seen yet (section 27.1: git-porcelain 0.17.0's
+    `remote_urls`, unreleased)."""
     try:
         fetch, push = repo.remote_url(REMOTE), repo.remote_url(REMOTE, push=True)
     except MissingRemote:
         return Failed("refused", "no_remote", f"The checkout has no `{REMOTE}` remote: nothing was fetched or pushed.")
+    except GitUnavailable as error:
+        return Failed("unavailable", "git", f"Git could not read `{REMOTE}`'s URLs ({type(error).__name__}): rerun.")
     if fetch == push:
         return None
     return Failed("refused", "push_url", f"`{REMOTE}` pushes elsewhere than it fetches from; the land reads origin to decide "
@@ -109,6 +115,8 @@ def _seen(origin: Origin, row: LandRow) -> _Seen | Failed:
         return Failed("refused", "target", f"`{REMOTE}` has no branch `main`. Nothing was pushed.")
     try:
         contained = f == row.commit or origin.repo.is_ancestor(row.commit, f)
+    except MissingRevision:  # S no longer here (pruned): origin's tip, known here after the fetch, cannot contain it
+        contained = False
     except GitUnavailable as error:
         return Failed("unavailable", "git", f"Git could not compare S with origin's main ({type(error).__name__}): rerun.")
     return ("delivered" if contained else "moved"), f
@@ -157,20 +165,19 @@ def _refusal(result: object, s: str) -> Failed:
 
 
 def _step(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Failed | str:
-    """One pass of the rule: delivered, a refusal, `rejected` (read origin again), `moved` or `gone` (superseded)."""
-    try:
-        gone = origin.repo.tree(f"{row.commit}^{{commit}}") is None
-    except GitUnavailable as error:
-        return Failed("unavailable", "git", f"Git could not read S ({type(error).__name__}): rerun.")
-    if gone:
-        return "gone"
+    """One pass of the rule: delivered, a refusal, `rejected` (read origin again), `moved` or `gone` (superseded). Origin
+    is read first: an S pruned here after it reached origin is still delivered."""
     seen = _seen(origin, row)
     if isinstance(seen, Failed):
         return seen
     if seen[0] == "delivered":
         return _recorded(lands, clock(), row, seen[1], "already_pushed")
-    if seen[0] == "moved":
-        return "moved"
+    try:
+        gone = origin.repo.tree(f"{row.commit}^{{commit}}") is None
+    except GitUnavailable as error:
+        return Failed("unavailable", "git", f"Git could not read S ({type(error).__name__}): rerun.")
+    if gone or seen[0] == "moved":
+        return "gone" if gone else "moved"
     pushed = _pushed(origin, row.commit)
     return _recorded(lands, clock(), row, row.commit, "pushed") if pushed == "pushed" else pushed
 
@@ -187,24 +194,28 @@ def deliver(lands: LandStore, clock: Callable[[], float], origin: Origin, row: L
         if again is None:
             return Failed("unavailable", "target_moved", MOVED)
         made, again = again(), None
-        if isinstance(made, Failed):
-            return made
+        if isinstance(made, Failed) or made.delivery == "no_change":  # main already holds X's changes: nothing to push
+            return made if isinstance(made, Failed) else Delivered(made, made.origin, "no_change")
         row = made
     return Failed("unavailable", "target_moved", MOVED)
 
 
-def observed(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Failed | None:
-    """Origin read by the rule, never pushed: delivered is recorded; None when S is not on origin's `main`."""
+def observed(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Failed | Undelivered:
+    """Origin read by the rule, never pushed: delivered is recorded; else `at_origin` (origin's `main` is still O) or
+    `moved` (S not in origin's moved `main`)."""
     seen = _seen(origin, row)
-    if isinstance(seen, Failed) or seen[0] != "delivered":
-        return seen if isinstance(seen, Failed) else None
-    return _recorded(lands, clock(), row, seen[1], "already_pushed")
+    if isinstance(seen, Failed):
+        return seen
+    kind, head = seen
+    if kind == "delivered":
+        return _recorded(lands, clock(), row, head, "already_pushed")
+    return kind
 
 
 def withdraw(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Withdrawn | Failed:
     """`--withdraw`: delivered is recorded (nothing to withdraw), else the candidate is superseded `withdrawn`."""
     found = observed(lands, clock, origin, row)
-    if found is not None:
+    if isinstance(found, (Delivered, Failed)):
         return found
     if not lands.supersede(row.key, "withdrawn", clock()):
         return Failed("unavailable", "changed", "The land candidate changed meanwhile: rerun.")

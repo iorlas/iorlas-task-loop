@@ -95,16 +95,16 @@ def test_a_second_land_while_the_first_holds_the_slot_is_slot_busy(
     assert b.rows()[0].pending and b.con.execute(RESULTS).fetchall()[-1] == (1, "test", None)
 
 
-@pytest.mark.parametrize(("moved", "refused"), [(False, "landing"), (True, "no_free_slot")], ids=["same_tree", "validated"])
-def test_a_concurrent_land_winning_the_insert_refuses_the_other(tmp_path: Path, moved: bool, refused: str) -> None:
-    """Another `tl step land` of the task runs to its end right before this one's insert: the insert's fence (`landing`),
-    or, when S validates, the slot's reservation counter first (the winner's generation)."""
+@pytest.mark.parametrize("moved", [False, True], ids=["same_tree", "validated"])
+def test_a_concurrent_land_winning_the_insert_refuses_the_other_landing(tmp_path: Path, moved: bool) -> None:
+    """Another `tl step land` of the task runs to its end right before this one's insert: the insert's fence, or, when S
+    validates, the slot taken at the winner's generation read again as the winner's candidate: `landing` either way."""
     b = bench(tmp_path)
     if moved:
         b.advance({"OTHER": "another task\n"})
     winner: list[Landed | Withdrawn | Failed] = []
     b.racing = lambda: winner.append(b.land())
-    assert word(b.land())[1] == refused
+    assert word(b.land()) == ("refused", "landing")
     assert isinstance(winner[0], Landed) and len(b.rows()) == 1
     found = b.land()
     assert isinstance(found, Landed) and found.how == "delivered" and found.row.key == winner[0].row.key
@@ -140,3 +140,20 @@ def test_no_free_slot_is_unavailable_and_writes_nothing(b: LandBench) -> None:
     b.con.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) SELECT 's1',repo_id,9,'other' FROM slot "
                   "WHERE name='s1'")
     assert word(b.land()) == ("unavailable", "no_free_slot") and b.rows() == ()
+
+
+def test_no_change_while_a_candidate_validates_is_landing(b: LandBench) -> None:
+    interrupted(b)
+    b.advance({"src/x.py": "X = 1\n"}, "a hand land")
+    assert word(b.land(no_change=True)) == ("refused", "landing") and b.rows()[0].pending and len(b.rows()) == 1
+
+
+def test_a_held_pushable_candidate_onto_a_moved_main_says_its_slot_is_held(b: LandBench) -> None:
+    """Its release was held and origin's `main` moved: the new candidate is refused for the held slot, `Next: release`."""
+    pointer = b.slot.path / ".git"
+    b.environment.process.script = [Command(), Command(), Command(effect=lambda: b.files.contents.update({pointer: b"gitdir: /x\n"}))]
+    b.repo.answer = Transient("connection reset")
+    assert word(b.land()) == ("unavailable", "remote") and b.rows()[0].holds_slot and b.rows()[0].pushable
+    b.advance({"MORE": "a third task\n"})
+    found = b.land()
+    assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", "landing") and "still holds its slot" in found.detail

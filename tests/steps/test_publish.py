@@ -3,6 +3,7 @@ clock: what a publish pushes and records, every precondition refused before any 
 the push results the fake cannot produce (a scripted worktree), the fence lost during the push, and a failed record."""
 
 import json
+import re
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
@@ -338,7 +339,8 @@ def test_a_push_that_does_not_land_records_nothing_and_prints_no_git_output(
     repo.answer = answer
     found = publisher(registered, checkouts, slot_files).publish(KEY)
     assert isinstance(found, NotPublished) and (found.kind, found.reason) == expected and rows(registered) == []
-    assert all(text not in found.detail for text in ("protected", "128", "Could not resolve host"))  # no Git output carried
+    shown = re.sub(r"[0-9a-f]{40}", "<sha>", found.detail)  # a sha may contain "128": only Git's own words count
+    assert all(text not in shown for text in ("protected", "128", "Could not resolve host"))  # no Git output carried
 
 
 def test_an_abandon_committed_during_the_push_is_refused_and_records_nothing(

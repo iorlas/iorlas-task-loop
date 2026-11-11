@@ -21,7 +21,7 @@ reservation in one transaction (`land_store.insert`: `landing` when another land
 """
 
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
@@ -156,7 +156,8 @@ def _origin(ports: LandPorts, request: LandRequest, task: _Task) -> Origin | Fai
 
 
 def _remote(origin: Origin, request: LandRequest, task: _Task) -> Failed | None:
-    """Steps 6-7: the push URL is the fetch URL, origin has `main`, and (without `--no-change`) the branch rule."""
+    """Steps 6-7: one push URL, the fetch URL; origin has `main`; the branch rule, except with `--no-change` (whatever
+    the branch holds) and `--withdraw` (it pushes nothing: a moved branch must not block giving the candidate up)."""
     refused = same_url(origin.repo)
     if refused is not None:
         return refused
@@ -166,7 +167,7 @@ def _remote(origin: Origin, request: LandRequest, task: _Task) -> Failed | None:
         return Failed("unavailable", "remote", f"`origin` could not be read ({type(error).__name__}): rerun.")
     if main is None:
         return Failed("refused", "target", "`origin` has no branch `main` to land on.")
-    return None if request.no_change else _branch(origin, task, task_tip)
+    return None if request.no_change or request.mode == "withdraw" else _branch(origin, task, task_tip)
 
 
 def _tracker(ports: LandPorts, origin: Origin, task: _Task) -> TaskInspection | Landed | Failed:
@@ -179,9 +180,9 @@ def _tracker(ports: LandPorts, origin: Origin, task: _Task) -> TaskInspection | 
     if read.status == "closed":
         found = None if task.candidate is None or not task.candidate.pushable else observed(
             ports.lands, ports.work.clock, origin, task.candidate)
-        if isinstance(found, Delivered):
-            return Landed(found.row, "already_pushed")
-        return found or Failed("refused", "closed", f"{checks.task_id} is closed in the tracker without a land.")
+        if isinstance(found, (Delivered, Failed)):
+            return Landed(found.row, "already_pushed") if isinstance(found, Delivered) else found
+        return Failed("refused", "closed", f"{checks.task_id} is closed in the tracker without a land.")
     if read.status != "in_progress" or read.assignee != ACTOR:
         return Failed("refused", "claim_lost", f"The tracker shows {checks.task_id} {read.status or 'without status'}, assigned "
                       f"to {read.assignee or 'nobody'}.")
@@ -257,6 +258,25 @@ def _checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
                   "logs, then rerun `tl step land` (flaky) or abandon. Nothing was pushed.")
 
 
+def _no_change(ports: LandPorts, origin: Origin, current: LandRow | None, again: Callable[[], LandRow | Failed]) -> LandResult:
+    """`--no-change` never validates or pushes: a pending candidate is `landing`; a pushable one is read by the rule
+    without a push (on origin: delivered; origin still at its O: `changes`, S is what to land; moved past it:
+    superseded `moved`); then the no-change candidate (`changes` when S's tree is not O's)."""
+    if current is not None and current.pending:
+        return Failed("refused", "landing", "A land candidate of the task is being validated: rerun `tl step land` without "
+                      "--no-change, or abandon. Nothing was recorded.")
+    if current is not None and current.pushable:
+        seen = observed(ports.lands, ports.work.clock, origin, current)
+        if isinstance(seen, (Delivered, Failed)):
+            return Landed(seen.row, "already_pushed") if isinstance(seen, Delivered) else seen
+        if seen == "at_origin":
+            return Failed("refused", "changes", f"The validated candidate S ({current.commit}) onto origin's main is still "
+                          "to land: drop --no-change. Nothing was pushed.")
+        ports.lands.supersede(current.key, "moved", ports.work.clock())
+    made = again()
+    return made if isinstance(made, Failed) else Landed(made, "no_change")
+
+
 def _landed(found: Delivered | Failed, release: str | None) -> Landed | Failed:
     return found if isinstance(found, Failed) else Landed(found.row, found.how, release)
 
@@ -268,6 +288,8 @@ def _delivered(ports: LandPorts, request: LandRequest, task: _Task, origin: Orig
     def again() -> LandRow | Failed:
         return _made(ports, request, task, origin, (0 if current is None else current.number) + 1)
 
+    if request.no_change:
+        return _no_change(ports, origin, current, again)
     if current is not None and current.pending:
         try:
             ports.lands.renew(current.key, deadline_after(request.minutes, clock))

@@ -430,7 +430,8 @@ record follows the observation.
   a fresh plan.
 - **A pushable candidate** (validated, not delivered, not superseded) refuses the abandon **`landing`**: S may already be
   on origin. The person runs `tl step land` (which delivers and closes) or `tl step land --withdraw` (which reads origin:
-  delivered is recorded, else the candidate is superseded `withdrawn`); then the abandon proceeds.
+  delivered is recorded, else the candidate is superseded `withdrawn`); then the abandon proceeds. `--withdraw` pushes
+  nothing, so it skips the branch rule (section 4 step 7): a moved `task/<id>` never blocks the way out (L3 review).
 - **After a delivery**: the abandon refuses **`landed`**: the code is on `main`; `tl step land` finishes the close.
 - **Scope (L1 review repair)**: `LANDING` and `LANDED` look at every candidate of the checks attempt's implement attempt
   (of any of its checks attempts), and the checks admission refuses a re-run (`landed`, `landing`) while one is
@@ -448,7 +449,10 @@ record follows the observation.
   (each answers `unchanged` or commits), and the checks run on the new X. That costs two agent runs; a merge step is
   deliberately not built.
 - **A hand land** (the M2 way) is reported by the next `tl step land` as `no_change`; `--no-change` records it and
-  closes the task, whatever the task branch holds.
+  closes the task, whatever the task branch holds. `--no-change` never validates or pushes (L3 review): a pending
+  candidate refuses it `landing`; a pushable one is read by section 7's rule without a push (on origin: delivered is
+  recorded; origin's `main` still its O: `changes`, S is what to land; moved past it: superseded `moved`), then the
+  no-change candidate is made (`changes` when S's tree is not O's).
 
 ## 14. Status: `tl step show`, `list`, `Next`; rounds untouched
 
@@ -499,7 +503,10 @@ word only. GUIDE gains `land` ("read the diff and `tl step land TASK --summary`,
 - **Partly mitigated residual (D10)**: code run by a block shares the repository's Git directory with the person's
   checkout and could edit `.git/config` before the land pushes with the person's credentials. A `pushurl` or
   `pushInsteadOf` that sends the push elsewhere than origin's fetch URL is refused (`push_url`, checked before the reads
-  and again right before the push). An `insteadOf` that moves both URLs, or `core.sshCommand`, is not detected: accepted
+  and again right before the push). **Open (L3 review, finding 4):** `remote get-url [--push]` prints only the first
+  value, but `git push` sends to every `pushurl` (or every `url`): a second `pushurl` or `url` is not seen yet. The repair
+  compares every URL (`remote get-url --all [--push]`, exactly one on each side, the same) through git-porcelain 0.17.0's
+  `Repo.remote_urls` (section 27.1); until that is released and pinned, this residual stands. An `insteadOf` that moves both URLs, or `core.sshCommand`, is not detected: accepted
   under D10; a later review of the change set for suspicious code (roadmap section 6, deferred) is the place for it.
 - **Remote truth, not local refs**: O and every delivery decision come from `ls_remote` and the bounded fetch of the one
   repository the push goes to; the required names from O's objects; a block rewriting a local ref changes nothing land
@@ -999,3 +1006,39 @@ release, the checkout's repository, the relaunchable words, the delivered and no
 **Not verified**: no command calls the operation (L5); the close (L4); a real `RefRejected` race and a real
 `RemoteRejected` (the fake and a scripted answer only); a real Ctrl-C through `stream_proc`'s supervision (the fake
 raises `KeyboardInterrupt` from a check); a pruned S on real Git; the land on a remote other than `file://`.
+
+### 27.1 Review repairs to L3 (2026-11-11)
+
+An independent review of 990266c12 reproduced three defects and found four more; six are repaired here, each with a
+test that fails without it (nine hand mutations, each failing a test). One is open.
+
+1. **(high) `--no-change` after an earlier pushable candidate pushed an empty commit.** `deliver` superseded S `moved`,
+   its `again` inserted the no-change candidate (delivered at insert) and the loop then pushed it. Now `deliver` returns
+   at once when its new candidate is the no-change one (`Delivered(..., "no_change")`), and (2) keeps `--no-change` out
+   of `deliver` entirely. Tests: the review's repro; `deliver` with an `again` that makes the no-change candidate.
+2. **(medium) `--no-change` still validated or pushed an existing candidate.** `land._no_change`: never `validate` or
+   `deliver`; pending refuses `landing`; pushable is read by the rule without a push (`land_push.observed` now answers
+   `at_origin` or `moved` when not delivered): delivered is recorded, `at_origin` is `changes` (the candidate stays
+   pushable), `moved` supersedes it and makes the no-change candidate (section 13). Tests: each case.
+3. **(medium) `--withdraw` ran the branch rule**, so a moved task branch left no way out (the abandon refuses
+   `landing`). `--withdraw` skips it (section 13). Test: the review's repro (origin's `task/<id>` moved).
+4. **(medium, security, OPEN) only the first URL was compared.** git-porcelain 0.17.0 adds `Repo.remote_urls(remote, *,
+   push=False)` (`remote get-url --all [--push]`; `FakeRepo.add_config` for a second value), committed locally in a
+   new shelf worktree (`/home/iorlas/Workspaces/shelf-wt-l3`, branch `git-porcelain-remote-urls`, f6f7901; shelf
+   `just check` and `check-all` green). Pushing the branch and opening the PR were refused by this session's
+   permission system, so it is not merged, tagged or pinned; `same_url` still reads `remote_url` (now catching
+   `GitUnavailable`, see 6). The land's side is written and waits for the pin: `fetch, push =
+   repo.remote_urls(REMOTE), repo.remote_urls(REMOTE, push=True)`, passing only when `len(fetch) == 1 and fetch ==
+   push`, with a real-Git test of two `pushurl` and of two `url` refused with nothing pushed.
+5. **(low) A pruned S was superseded `gone` before origin was read.** `_step` reads origin first (R is S: delivered
+   although S is gone here); `_seen` treats a missing S as not contained (`MissingRevision`), so `--withdraw` of a
+   pruned S supersedes it. Tests: a pruned S already on origin is delivered; `--withdraw` of a pruned S onto a moved main.
+6. **(low) `same_url` let `GitReadFailure` escape** at the push's recheck (outside the reads' handler). It answers
+   `unavailable git`. Tests: at the reads, and set by a check before the recheck.
+7. **(low, wording)** A concurrent land that took the one free slot first now reads as `landing` (`land_check._raced`:
+   a candidate numbered this one or later, or `LANDING`), not `no_free_slot`. A pushable candidate whose release was
+   held, met by a moved `main`, refuses the new candidate `landing` saying the old one still holds its slot (rerun, which
+   retries the release first, or `tl step release`), both at the insert's fence and when no slot is free.
+
+Code lines after the repairs: `land` 238, `land_check` 155, `land_push` 144; `land_bench` 182, `test_land_push` 178,
+`test_land_resume` 112.
