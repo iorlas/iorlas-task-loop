@@ -63,7 +63,7 @@ The proposed shape holds; no redesign before building. Amend the B2 plan with:
    per-attempt scratch (`TMPDIR`). A root that does not exist is dropped by Codex without error.
 2. The scratch path is short and outside the hashed attempt evidence path (Unix socket limit; macOS later).
 3. Linux preflight is "bubblewrap usable", not Landlock; Codex 0.167.0 has no Landlock fallback for this mode.
-4. mise trust is a precondition of every shim, including `codex` itself: either the slots root lives under a trusted
+4. **Decided by the owner (D14, 2026-11-11):** slots stay under the hidden per-user folder; mise trust is a machine prerequisite, the factory does nothing about it, and a task-changed `mise.toml` is `setup`'s concern. (Original question follows.) mise trust is a precondition of every shim, including `codex` itself: either the slots root lives under a trusted
    path (owner machine config) or the factory launches real binaries. Decide which, and what a task-changed `mise.toml`
    means offline (`setup` installs the tools it names).
 5. Process containment for the stop proof comes from bwrap's PID namespace and `--die-with-parent`; record that, since
