@@ -1,0 +1,1808 @@
+{
+  "date": "2026-11-09",
+  "revision": "731b7c76ef214ce35229f77814f98b6e1d6d5c0f",
+  "adapters": [
+    {
+      "file": "src/taskloop/adapters/__init__.py",
+      "sha256": "b91a7beea79a2ab3cb4cd252cc65df34275c1ef0bd5980c7c9535e45d692a24d",
+      "lines": 1,
+      "imports": []
+    },
+    {
+      "file": "src/taskloop/adapters/agent.py",
+      "sha256": "40795d20278b971b7ee54501dbfd0779d97241bd4333e6459eb147c332b4976b",
+      "lines": 139,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/runner.py",
+          "line": 17
+        },
+        {
+          "file": "src/taskloop/app/run/parts_run.py",
+          "line": 22
+        },
+        {
+          "file": "src/taskloop/app/wire/slotfx.py",
+          "line": 4
+        },
+        {
+          "file": "tests/adapters/test_agent_live.py",
+          "line": 6
+        },
+        {
+          "file": "tests/dashwire/test_dash_live.py",
+          "line": 19
+        },
+        {
+          "file": "tests/land/test_push_timing.py",
+          "line": 10
+        },
+        {
+          "file": "tests/run/test_engine_facts.py",
+          "line": 10
+        },
+        {
+          "file": "tests/slots/test_effects.py",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/bd.py",
+      "sha256": "b652f9780a834202c4519a0552f5a9600fc4f80e626ae97787180fa7d442afa4",
+      "lines": 187,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/beadtools.py",
+          "line": 5
+        },
+        {
+          "file": "src/taskloop/app/launch/dash_ports.py",
+          "line": 27
+        },
+        {
+          "file": "src/taskloop/app/launch/loop.py",
+          "line": 29
+        },
+        {
+          "file": "src/taskloop/app/launch/loop_ops.py",
+          "line": 23
+        },
+        {
+          "file": "src/taskloop/app/track/verbs.py",
+          "line": 25
+        },
+        {
+          "file": "tests/adapters/test_bd.py",
+          "line": 20
+        },
+        {
+          "file": "tests/adapters/test_bd.py",
+          "line": 21
+        },
+        {
+          "file": "tests/adapters/test_bd_lint_list.py",
+          "line": 4
+        },
+        {
+          "file": "tests/adapters/test_bd_version.py",
+          "line": 4
+        },
+        {
+          "file": "tests/asks/test_app.py",
+          "line": 18
+        },
+        {
+          "file": "tests/contracts/test_typed_edges.py",
+          "line": 7
+        },
+        {
+          "file": "tests/land/test_followup_outbox.py",
+          "line": 18
+        },
+        {
+          "file": "tests/land/test_stages_land.py",
+          "line": 27
+        },
+        {
+          "file": "tests/support/dashes.py",
+          "line": 8
+        },
+        {
+          "file": "tests/support/fakes.py",
+          "line": 15
+        },
+        {
+          "file": "tests/support/tlbd.py",
+          "line": 13
+        },
+        {
+          "file": "tests/support/tlbd.py",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/bdbackup.py",
+      "sha256": "6b8fbffca37e8be589613f43918e7af75e758453f3f98a7b123df89b2ba0a424",
+      "lines": 97,
+      "imports": [
+        {
+          "file": "src/taskloop/app/launch/loop_ops.py",
+          "line": 22
+        },
+        {
+          "file": "tests/adapters/test_bdbackup.py",
+          "line": 6
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/beadtools.py",
+      "sha256": "621c6d366a86e829e2c18ac6a830c23e25451361307a364bd2d6a4143ddf575f",
+      "lines": 25,
+      "imports": [
+        {
+          "file": "src/taskloop/app/launch/loop.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/launch/loop_ops.py",
+          "line": 22
+        },
+        {
+          "file": "src/taskloop/app/launch/release_host.py",
+          "line": 6
+        },
+        {
+          "file": "src/taskloop/app/report/card.py",
+          "line": 30
+        },
+        {
+          "file": "src/taskloop/app/report/inputs.py",
+          "line": 18
+        },
+        {
+          "file": "src/taskloop/app/report/reflect.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/run/closer_ports.py",
+          "line": 13
+        },
+        {
+          "file": "src/taskloop/app/run/entry.py",
+          "line": 33
+        },
+        {
+          "file": "src/taskloop/app/run/fields.py",
+          "line": 31
+        },
+        {
+          "file": "src/taskloop/app/run/plumbing.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/app/run/run_once.py",
+          "line": 10
+        },
+        {
+          "file": "src/taskloop/app/run/running.py",
+          "line": 17
+        },
+        {
+          "file": "src/taskloop/app/run/stages.py",
+          "line": 10
+        },
+        {
+          "file": "src/taskloop/app/track/verbs.py",
+          "line": 26
+        },
+        {
+          "file": "src/taskloop/app/wire/asks.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/app/wire/asks.py",
+          "line": 17
+        },
+        {
+          "file": "src/taskloop/app/wire/doctor.py",
+          "line": 22
+        },
+        {
+          "file": "src/taskloop/app/wire/slots.py",
+          "line": 14
+        },
+        {
+          "file": "tests/adapters/test_beadtools.py",
+          "line": 6
+        },
+        {
+          "file": "tests/cli/test_bd.py",
+          "line": 9
+        },
+        {
+          "file": "tests/doctor/test_doctor.py",
+          "line": 19
+        },
+        {
+          "file": "tests/land/test_followup_outbox.py",
+          "line": 10
+        },
+        {
+          "file": "tests/land/test_race_invariants.py",
+          "line": 54
+        },
+        {
+          "file": "tests/loop/real/test_loop_more.py",
+          "line": 32
+        },
+        {
+          "file": "tests/pipeline/test_closing_notes.py",
+          "line": 7
+        },
+        {
+          "file": "tests/pipeline/test_closing_settle.py",
+          "line": 5
+        },
+        {
+          "file": "tests/pipeline/test_run.py",
+          "line": 8
+        },
+        {
+          "file": "tests/pipeline/test_standalone.py",
+          "line": 8
+        },
+        {
+          "file": "tests/report/real/test_report.py",
+          "line": 32
+        },
+        {
+          "file": "tests/run/test_closer_small.py",
+          "line": 6
+        },
+        {
+          "file": "tests/run/test_delegate_pause_facts.py",
+          "line": 7
+        },
+        {
+          "file": "tests/run/test_effect_idempotency.py",
+          "line": 11
+        },
+        {
+          "file": "tests/run/test_engine_crash_cap.py",
+          "line": 8
+        },
+        {
+          "file": "tests/run/test_pause_compatibility.py",
+          "line": 9
+        },
+        {
+          "file": "tests/support/narrow_hosts.py",
+          "line": 13
+        },
+        {
+          "file": "tests/support/release_world.py",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/check_net.py",
+      "sha256": "da1d3f5d6b9a11beb1630cda4e567b039fb454f30f7f29615855c2221ac737a8",
+      "lines": 56,
+      "imports": [
+        {
+          "file": "src/taskloop/app/checks/shell.py",
+          "line": 18
+        },
+        {
+          "file": "tests/checks/real/test_check_net_real.py",
+          "line": 9
+        },
+        {
+          "file": "tests/checks/test_check_net.py",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/check_probe.py",
+      "sha256": "cdeb1a03a064f838e18fda63c280d873a65bbadce0783ea52670d56229d0d542",
+      "lines": 56,
+      "imports": [
+        {
+          "file": "src/taskloop/app/run/fields.py",
+          "line": 32
+        },
+        {
+          "file": "src/taskloop/app/run/parts_run.py",
+          "line": 23
+        },
+        {
+          "file": "tests/adapters/test_check_probe_paths.py",
+          "line": 10
+        },
+        {
+          "file": "tests/checks/test_engine_checks.py",
+          "line": 22
+        },
+        {
+          "file": "tests/run/real/test_stages.py",
+          "line": 12
+        },
+        {
+          "file": "tests/run/test_checks_engine_checks.py",
+          "line": 32
+        },
+        {
+          "file": "tests/run/test_stages.py",
+          "line": 26
+        },
+        {
+          "file": "tests/support/plan_host.py",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/closes.py",
+      "sha256": "0a55594f667d79c45022c95cfe5265ce8c5a5385bf67e5ffbbbde360e226a22e",
+      "lines": 25,
+      "imports": [
+        {
+          "file": "src/taskloop/app/run/closer_ports.py",
+          "line": 13
+        },
+        {
+          "file": "tests/adapters/test_retry_history_errors.py",
+          "line": 12
+        },
+        {
+          "file": "tests/run/test_failure_logging.py",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/deadline.py",
+      "sha256": "0b05e02ba3f3823ce53df765e28df927ce8835b2955f1c66bcc1153a15bc847a",
+      "lines": 69,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/halt.py",
+          "line": 12
+        },
+        {
+          "file": "src/taskloop/adapters/procs.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/adapters/runner.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/adapters/spawner.py",
+          "line": 9
+        },
+        {
+          "file": "src/taskloop/app/launch/selftest.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/app/run/entry.py",
+          "line": 35
+        },
+        {
+          "file": "src/taskloop/app/run/parts_run.py",
+          "line": 21
+        },
+        {
+          "file": "src/taskloop/app/run/run_once.py",
+          "line": 10
+        },
+        {
+          "file": "tests/adapters/test_deadline.py",
+          "line": 13
+        },
+        {
+          "file": "tests/land/test_liveness.py",
+          "line": 10
+        },
+        {
+          "file": "tests/land/test_race_invariants.py",
+          "line": 54
+        },
+        {
+          "file": "tests/pipeline/test_lifecycle.py",
+          "line": 8
+        },
+        {
+          "file": "tests/pipeline/test_waits.py",
+          "line": 10
+        },
+        {
+          "file": "tests/run/test_liveness.py",
+          "line": 14
+        },
+        {
+          "file": "tests/run/test_token_cap.py",
+          "line": 9
+        },
+        {
+          "file": "tests/support/engine_land.py",
+          "line": 16
+        },
+        {
+          "file": "tests/support/fake_deadline.py",
+          "line": 6
+        },
+        {
+          "file": "tests/support/lifecycle.py",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/delegate.py",
+      "sha256": "be72b1eb5696817b7c8da0f8ac1ff1a11133b96a607e68b5eb7bf9dec61af2e3",
+      "lines": 252,
+      "imports": [
+        {
+          "file": "src/taskloop/stores/delegate.py",
+          "line": 2
+        },
+        {
+          "file": "tests/adapters/real/test_slot_git.py",
+          "line": 30
+        },
+        {
+          "file": "tests/adapters/test_pause_producers.py",
+          "line": 12
+        },
+        {
+          "file": "tests/checks/test_evidence.py",
+          "line": 14
+        },
+        {
+          "file": "tests/cli/test_tl.py",
+          "line": 24
+        },
+        {
+          "file": "tests/contracts/test_delegate_wire.py",
+          "line": 5
+        },
+        {
+          "file": "tests/dashwire/test_dash_live.py",
+          "line": 20
+        },
+        {
+          "file": "tests/launch/test_reload.py",
+          "line": 33
+        },
+        {
+          "file": "tests/ports/test_fake_route.py",
+          "line": 25
+        },
+        {
+          "file": "tests/run/real/test_engine_units.py",
+          "line": 29
+        },
+        {
+          "file": "tests/run/real/test_halt.py",
+          "line": 22
+        },
+        {
+          "file": "tests/run/test_engine_run.py",
+          "line": 38
+        },
+        {
+          "file": "tests/run/test_engine_units.py",
+          "line": 27
+        },
+        {
+          "file": "tests/run/test_engine_units.py",
+          "line": 47
+        },
+        {
+          "file": "tests/run/test_lifecycle_trace.py",
+          "line": 15
+        },
+        {
+          "file": "tests/run/test_worker_calls.py",
+          "line": 19
+        },
+        {
+          "file": "tests/run/test_worker_calls.py",
+          "line": 20
+        },
+        {
+          "file": "tests/run/test_writer_exec_allow.py",
+          "line": 6
+        },
+        {
+          "file": "tests/support/argv_of.py",
+          "line": 3
+        },
+        {
+          "file": "tests/support/dlcall.py",
+          "line": 6
+        },
+        {
+          "file": "tests/support/engine_case.py",
+          "line": 29
+        },
+        {
+          "file": "tests/support/engine_case.py",
+          "line": 30
+        },
+        {
+          "file": "tests/support/fakes.py",
+          "line": 16
+        },
+        {
+          "file": "tests/support/fakes.py",
+          "line": 17
+        },
+        {
+          "file": "tests/wire/test_accounts.py",
+          "line": 8
+        },
+        {
+          "file": "tests/workers/test_call_state.py",
+          "line": 12
+        },
+        {
+          "file": "tests/workers/test_thread_cut.py",
+          "line": 9
+        },
+        {
+          "file": "tests/write/real/test_write_idle.py",
+          "line": 29
+        },
+        {
+          "file": "tests/write/test_write_idle.py",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/delegate_wire.py",
+      "sha256": "43eef1a6c9c76418fcb939b1c40c1fb8d020e337572a05b318da8972754b411e",
+      "lines": 190,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/delegate.py",
+          "line": 18
+        },
+        {
+          "file": "src/taskloop/app/workers/worker_call.py",
+          "line": 25
+        },
+        {
+          "file": "tests/adapters/test_pause_producers.py",
+          "line": 12
+        },
+        {
+          "file": "tests/contracts/test_delegate_wire.py",
+          "line": 6
+        },
+        {
+          "file": "tests/contracts/test_typed_edges.py",
+          "line": 7
+        },
+        {
+          "file": "tests/contracts/test_usage_vendors.py",
+          "line": 5
+        },
+        {
+          "file": "tests/ports/delegate_contract.py",
+          "line": 7
+        },
+        {
+          "file": "tests/ports/test_fake_route.py",
+          "line": 26
+        },
+        {
+          "file": "tests/run/test_denied_rows.py",
+          "line": 3
+        },
+        {
+          "file": "tests/run/test_writer_exec_allow.py",
+          "line": 7
+        },
+        {
+          "file": "tests/support/fake_delegate.py",
+          "line": 6
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/factory.py",
+      "sha256": "52d1f32861f034cc6a40d3cf73e38596bb68abc343cc1200d6037d2a8ed14d82",
+      "lines": 8,
+      "imports": [
+        {
+          "file": "src/taskloop/app/launch/factory.py",
+          "line": 2
+        },
+        {
+          "file": "tests/launch/test_factory.py",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/factorybackup.py",
+      "sha256": "44e1b7768fae7c1f11ee4bfc9b37df5cf24aa2ea0ba9298af87bfa7da90f6016",
+      "lines": 108,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/bdbackup.py",
+          "line": 11
+        },
+        {
+          "file": "src/taskloop/app/launch/loop_ops.py",
+          "line": 22
+        },
+        {
+          "file": "src/taskloop/app/launch/reindex.py",
+          "line": 5
+        },
+        {
+          "file": "tests/adapters/test_factorybackup.py",
+          "line": 10
+        },
+        {
+          "file": "tests/launch/test_reindex.py",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/git.py",
+      "sha256": "f130f33f086ad708a64108aae10a2adeaa5272d9056436245b5ba18058febe69",
+      "lines": 368,
+      "imports": [
+        {
+          "file": "src/taskloop/app/wire/real.py",
+          "line": 6
+        },
+        {
+          "file": "tests/adapters/real/test_git_checkout_rebase.py",
+          "line": 9
+        },
+        {
+          "file": "tests/adapters/real/test_git_memo.py",
+          "line": 18
+        },
+        {
+          "file": "tests/adapters/real/test_git_no_fsmonitor.py",
+          "line": 7
+        },
+        {
+          "file": "tests/adapters/real/test_git_pool.py",
+          "line": 14
+        },
+        {
+          "file": "tests/adapters/real/test_git_push_env.py",
+          "line": 9
+        },
+        {
+          "file": "tests/adapters/real/test_git_push_refuses_stale.py",
+          "line": 11
+        },
+        {
+          "file": "tests/adapters/real/test_git_remote.py",
+          "line": 10
+        },
+        {
+          "file": "tests/adapters/real/test_symlinked_repo.py",
+          "line": 5
+        },
+        {
+          "file": "tests/adapters/test_check_env.py",
+          "line": 6
+        },
+        {
+          "file": "tests/adapters/test_git_checkout_rebase.py",
+          "line": 14
+        },
+        {
+          "file": "tests/adapters/test_git_pool.py",
+          "line": 11
+        },
+        {
+          "file": "tests/adapters/test_git_preserve.py",
+          "line": 11
+        },
+        {
+          "file": "tests/adapters/test_git_read_failures.py",
+          "line": 13
+        },
+        {
+          "file": "tests/adapters/test_git_status.py",
+          "line": 5
+        },
+        {
+          "file": "tests/checks/real/test_check_hooks.py",
+          "line": 8
+        },
+        {
+          "file": "tests/checks/test_childenv.py",
+          "line": 8
+        },
+        {
+          "file": "tests/doctor/real/test_doctor.py",
+          "line": 21
+        },
+        {
+          "file": "tests/doctor/test_profiles_sim.py",
+          "line": 15
+        },
+        {
+          "file": "tests/hook/real/test_prepush.py",
+          "line": 17
+        },
+        {
+          "file": "tests/land/real/test_push_policy.py",
+          "line": 14
+        },
+        {
+          "file": "tests/land/real/test_stack_git.py",
+          "line": 18
+        },
+        {
+          "file": "tests/land/test_race_invariants.py",
+          "line": 60
+        },
+        {
+          "file": "tests/land/test_wip_push.py",
+          "line": 16
+        },
+        {
+          "file": "tests/live/test_bead_run.py",
+          "line": 4
+        },
+        {
+          "file": "tests/ports/real/test_git.py",
+          "line": 13
+        },
+        {
+          "file": "tests/ports/test_git.py",
+          "line": 9
+        },
+        {
+          "file": "tests/prune/real/test_prune.py",
+          "line": 17
+        },
+        {
+          "file": "tests/prune/real/test_strays.py",
+          "line": 15
+        },
+        {
+          "file": "tests/prune/test_apply.py",
+          "line": 8
+        },
+        {
+          "file": "tests/prune/test_prune.py",
+          "line": 19
+        },
+        {
+          "file": "tests/release/real/test_suite_once.py",
+          "line": 17
+        },
+        {
+          "file": "tests/release/real/test_suite_receipt.py",
+          "line": 9
+        },
+        {
+          "file": "tests/release/real/test_tidy.py",
+          "line": 12
+        },
+        {
+          "file": "tests/report/real/test_report.py",
+          "line": 36
+        },
+        {
+          "file": "tests/slots/test_reset_ownership.py",
+          "line": 9
+        },
+        {
+          "file": "tests/slots/test_slot_pool.py",
+          "line": 10
+        },
+        {
+          "file": "tests/support/fakegit.py",
+          "line": 13
+        },
+        {
+          "file": "tests/support/push_race.py",
+          "line": 10
+        },
+        {
+          "file": "tests/support/release_world.py",
+          "line": 26
+        },
+        {
+          "file": "tests/support/shells.py",
+          "line": 5
+        },
+        {
+          "file": "tests/support/spawn.py",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/git_base.py",
+      "sha256": "d92fe1a225146f852efcb88dda19ed4f97aab5559ddd1bb6715213d816d0066f",
+      "lines": 163,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/git.py",
+          "line": 13
+        },
+        {
+          "file": "src/taskloop/adapters/git_ops.py",
+          "line": 10
+        },
+        {
+          "file": "src/taskloop/adapters/git_pool.py",
+          "line": 12
+        },
+        {
+          "file": "tests/adapters/test_git_push_tail.py",
+          "line": 3
+        },
+        {
+          "file": "tests/adapters/test_git_read_failures.py",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/git_ops.py",
+      "sha256": "4c351f9af507883aff519be7efbf8e86da11924dd1c4845e38c4f7fedc25799e",
+      "lines": 138,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/git.py",
+          "line": 14
+        },
+        {
+          "file": "tests/adapters/real/test_git_remote.py",
+          "line": 9
+        },
+        {
+          "file": "tests/ports/real/test_git.py",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/git_pool.py",
+      "sha256": "36132db935393fc02de22a428063eb51268651a4256874d1ec523040494a2176",
+      "lines": 88,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/git.py",
+          "line": 15
+        },
+        {
+          "file": "src/taskloop/adapters/git_ops.py",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/gitmemo.py",
+      "sha256": "7a8de62eed72ae2e5e155ca89630db4d30366bf820b14ebacb997abce604e8f9",
+      "lines": 100,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/git_base.py",
+          "line": 11
+        },
+        {
+          "file": "src/taskloop/adapters/slotcheck.py",
+          "line": 6
+        },
+        {
+          "file": "src/taskloop/app/doctor/profiles.py",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/gitrepo.py",
+      "sha256": "dc3dce3b8ae588cbde22657ac6ff02faddbe4c5b376bdb688e4d90f84c830464",
+      "lines": 95,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/git_base.py",
+          "line": 12
+        },
+        {
+          "file": "src/taskloop/adapters/gitmemo.py",
+          "line": 10
+        },
+        {
+          "file": "src/taskloop/adapters/ident.py",
+          "line": 8
+        },
+        {
+          "file": "src/taskloop/adapters/slotcheck.py",
+          "line": 6
+        },
+        {
+          "file": "src/taskloop/app/checks/shell.py",
+          "line": 19
+        },
+        {
+          "file": "src/taskloop/app/doctor/install.py",
+          "line": 11
+        },
+        {
+          "file": "src/taskloop/app/doctor/profiles.py",
+          "line": 12
+        },
+        {
+          "file": "src/taskloop/app/launch/release_host.py",
+          "line": 6
+        },
+        {
+          "file": "src/taskloop/app/launch/repos.py",
+          "line": 5
+        },
+        {
+          "file": "src/taskloop/app/report/card.py",
+          "line": 30
+        },
+        {
+          "file": "src/taskloop/app/report/window.py",
+          "line": 9
+        },
+        {
+          "file": "src/taskloop/app/run/entry.py",
+          "line": 33
+        },
+        {
+          "file": "src/taskloop/app/track/trail.py",
+          "line": 23
+        },
+        {
+          "file": "src/taskloop/app/track/verbs.py",
+          "line": 27
+        },
+        {
+          "file": "src/taskloop/app/wire/slots.py",
+          "line": 15
+        },
+        {
+          "file": "tests/adapters/real/test_slot_git.py",
+          "line": 31
+        },
+        {
+          "file": "tests/adapters/real/test_slot_git.py",
+          "line": 34
+        },
+        {
+          "file": "tests/adapters/test_gitrepo.py",
+          "line": 3
+        },
+        {
+          "file": "tests/report/real/test_report.py",
+          "line": 32
+        },
+        {
+          "file": "tests/support/gitq.py",
+          "line": 6
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/halt.py",
+      "sha256": "213dcfd9c9859fd1114571bc5ed25e9fae39803c02563ee9a294ca26bf9c0d0e",
+      "lines": 54,
+      "imports": [
+        {
+          "file": "src/taskloop/app/run/entry.py",
+          "line": 34
+        },
+        {
+          "file": "src/taskloop/app/run/plumbing.py",
+          "line": 17
+        },
+        {
+          "file": "tests/run/real/test_checks_engine_checks.py",
+          "line": 26
+        },
+        {
+          "file": "tests/run/real/test_halt.py",
+          "line": 23
+        },
+        {
+          "file": "tests/support/interrupts.py",
+          "line": 14
+        },
+        {
+          "file": "tests/support/push_retry.py",
+          "line": 7
+        },
+        {
+          "file": "tests/support/world.py",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/ident.py",
+      "sha256": "ca19f992857b6dda9e298042073e841b0fdc05cbb133c4c83fb45f9cf4af75a8",
+      "lines": 59,
+      "imports": [
+        {
+          "file": "dev/race.py",
+          "line": 59
+        },
+        {
+          "file": "src/taskloop/app/doctor/install.py",
+          "line": 12
+        },
+        {
+          "file": "src/taskloop/app/launch/accounts.py",
+          "line": 5
+        },
+        {
+          "file": "src/taskloop/app/launch/check_host.py",
+          "line": 22
+        },
+        {
+          "file": "src/taskloop/app/launch/dash.py",
+          "line": 10
+        },
+        {
+          "file": "src/taskloop/app/launch/dash_ports.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/launch/factory.py",
+          "line": 3
+        },
+        {
+          "file": "src/taskloop/app/launch/loop.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/launch/loop_ops.py",
+          "line": 22
+        },
+        {
+          "file": "src/taskloop/app/launch/loop_start.py",
+          "line": 19
+        },
+        {
+          "file": "src/taskloop/app/launch/release_host.py",
+          "line": 6
+        },
+        {
+          "file": "src/taskloop/app/launch/selftest.py",
+          "line": 15
+        },
+        {
+          "file": "src/taskloop/app/launch/setup_ports.py",
+          "line": 6
+        },
+        {
+          "file": "src/taskloop/app/prune/verb.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/app/report/reflect.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/run/entry.py",
+          "line": 33
+        },
+        {
+          "file": "src/taskloop/app/run/fields.py",
+          "line": 31
+        },
+        {
+          "file": "src/taskloop/app/run/parts_run.py",
+          "line": 21
+        },
+        {
+          "file": "src/taskloop/app/run/reload_ports.py",
+          "line": 10
+        },
+        {
+          "file": "src/taskloop/app/run/run_once.py",
+          "line": 10
+        },
+        {
+          "file": "src/taskloop/app/track/verbs.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/wire/asks.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/app/wire/brief.py",
+          "line": 18
+        },
+        {
+          "file": "src/taskloop/app/wire/doctor.py",
+          "line": 23
+        },
+        {
+          "file": "src/taskloop/app/wire/slotfx.py",
+          "line": 4
+        },
+        {
+          "file": "src/taskloop/app/wire/slots.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/app/wire/usage.py",
+          "line": 7
+        },
+        {
+          "file": "src/taskloop/app/workers/worker_request.py",
+          "line": 23
+        },
+        {
+          "file": "tests/dashwire/real/test_dash_stamps.py",
+          "line": 10
+        },
+        {
+          "file": "tests/land/test_engine_land_1.py",
+          "line": 31
+        },
+        {
+          "file": "tests/launch/test_reload.py",
+          "line": 34
+        },
+        {
+          "file": "tests/loop/real/test_loop.py",
+          "line": 34
+        },
+        {
+          "file": "tests/loop/test_loop.py",
+          "line": 30
+        },
+        {
+          "file": "tests/pipeline/test_reload.py",
+          "line": 7
+        },
+        {
+          "file": "tests/pipeline/test_run.py",
+          "line": 8
+        },
+        {
+          "file": "tests/release/test_manifest.py",
+          "line": 14
+        },
+        {
+          "file": "tests/run/test_done_memo_carry.py",
+          "line": 8
+        },
+        {
+          "file": "tests/run/test_failure_logging.py",
+          "line": 4
+        },
+        {
+          "file": "tests/slots/test_effects.py",
+          "line": 5
+        },
+        {
+          "file": "tests/support/homes.py",
+          "line": 5
+        },
+        {
+          "file": "tests/support/who.py",
+          "line": 11
+        },
+        {
+          "file": "tests/support/world.py",
+          "line": 15
+        },
+        {
+          "file": "tests/wire/test_accounts.py",
+          "line": 9
+        },
+        {
+          "file": "tests/wire/test_setup_apply.py",
+          "line": 7
+        },
+        {
+          "file": "tests/wire/test_slot_table.py",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/ignored.py",
+      "sha256": "7cf6b36a3c6b7d86b83377999590ed465d7b4e9d7bc3cfee6e8e7a7259cf30d5",
+      "lines": 23,
+      "imports": [
+        {
+          "file": "src/taskloop/app/launch/check_host.py",
+          "line": 23
+        },
+        {
+          "file": "src/taskloop/app/run/parts_land.py",
+          "line": 22
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/key_migrate.py",
+      "sha256": "0e080872ea6da37538c62dfda4e986c7c0cf3a1c43d7b5e253ca93eefc1f11ef",
+      "lines": 103,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/layout_migrate.py",
+          "line": 15
+        },
+        {
+          "file": "tests/adapters/test_key_migrate.py",
+          "line": 6
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/land_probe.py",
+      "sha256": "2f4aeb5b525f230285b755ec62e91357a2b08827f147ff73fc99b3401c5b9ede",
+      "lines": 19,
+      "imports": [
+        {
+          "file": "src/taskloop/app/launch/push_judge.py",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/landlock.py",
+      "sha256": "0e0b19b8f7cfc712f75b6f7f0e15293add62850a983e4accb30ba7496c4f4fa3",
+      "lines": 92,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/land_probe.py",
+          "line": 2
+        },
+        {
+          "file": "src/taskloop/app/doctor/rails.py",
+          "line": 13
+        },
+        {
+          "file": "src/taskloop/app/launch/release_host.py",
+          "line": 6
+        },
+        {
+          "file": "src/taskloop/app/report/reflect.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/run/engine.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/run/parts_land.py",
+          "line": 21
+        },
+        {
+          "file": "src/taskloop/app/wire/landfx.py",
+          "line": 2
+        },
+        {
+          "file": "src/taskloop/app/wire/slots.py",
+          "line": 17
+        },
+        {
+          "file": "tests/adapters/real/test_land_lock.py",
+          "line": 19
+        },
+        {
+          "file": "tests/adapters/test_remote_lock_key.py",
+          "line": 11
+        },
+        {
+          "file": "tests/e2e/test_release.py",
+          "line": 26
+        },
+        {
+          "file": "tests/land/real/test_stack_git.py",
+          "line": 17
+        },
+        {
+          "file": "tests/land/test_engine_land_2.py",
+          "line": 17
+        },
+        {
+          "file": "tests/land/test_land_tree_assertion.py",
+          "line": 9
+        },
+        {
+          "file": "tests/land/test_race_invariants.py",
+          "line": 54
+        },
+        {
+          "file": "tests/land/test_stack.py",
+          "line": 27
+        },
+        {
+          "file": "tests/support/interrupts.py",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/layout_migrate.py",
+      "sha256": "be5272e2b9f895e6d7bd400fe39e1a3c430ae4610cf218d72f2e7211a21237cd",
+      "lines": 173,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/ident.py",
+          "line": 7
+        },
+        {
+          "file": "src/taskloop/app/track/verbs.py",
+          "line": 24
+        },
+        {
+          "file": "src/taskloop/app/wire/doctor.py",
+          "line": 21
+        },
+        {
+          "file": "tests/adapters/test_key_migrate.py",
+          "line": 7
+        },
+        {
+          "file": "tests/adapters/test_layout_migrate.py",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/layout_paths.py",
+      "sha256": "6b048c14435d79076b7ee2a9ea20ffae6c3f94fc478f8c576f21596b818c108e",
+      "lines": 14,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/key_migrate.py",
+          "line": 11
+        },
+        {
+          "file": "src/taskloop/adapters/layout_migrate.py",
+          "line": 16
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/links.py",
+      "sha256": "f67398d90a4121093b944afcbe7494d4c4c2b276ac74966d1b0124e8c6ade45d",
+      "lines": 177,
+      "imports": [
+        {
+          "file": "src/taskloop/app/run/host.py",
+          "line": 12
+        },
+        {
+          "file": "tests/adapters/real/test_links.py",
+          "line": 15
+        },
+        {
+          "file": "tests/adapters/test_links.py",
+          "line": 15
+        },
+        {
+          "file": "tests/asks/test_engine_asks.py",
+          "line": 15
+        },
+        {
+          "file": "tests/support/review_host.py",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/locks.py",
+      "sha256": "e0fd1e3611287181c2e105ce2ade1dc0dba833ef157f0fdf1eb119f318344184",
+      "lines": 127,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/land_probe.py",
+          "line": 2
+        },
+        {
+          "file": "src/taskloop/adapters/landlock.py",
+          "line": 13
+        },
+        {
+          "file": "src/taskloop/adapters/layout_migrate.py",
+          "line": 15
+        },
+        {
+          "file": "src/taskloop/app/launch/dash_ports.py",
+          "line": 29
+        },
+        {
+          "file": "src/taskloop/app/launch/loop.py",
+          "line": 30
+        },
+        {
+          "file": "src/taskloop/app/loop/files.py",
+          "line": 20
+        },
+        {
+          "file": "src/taskloop/app/run/running.py",
+          "line": 18
+        },
+        {
+          "file": "src/taskloop/app/wire/brief.py",
+          "line": 19
+        },
+        {
+          "file": "src/taskloop/app/wire/slotfx.py",
+          "line": 4
+        },
+        {
+          "file": "src/taskloop/stores/real.py",
+          "line": 4
+        },
+        {
+          "file": "tests/adapters/test_locks_mutex.py",
+          "line": 14
+        },
+        {
+          "file": "tests/adapters/test_locks_mutex.py",
+          "line": 15
+        },
+        {
+          "file": "tests/land/test_stack.py",
+          "line": 27
+        },
+        {
+          "file": "tests/slots/test_effects.py",
+          "line": 5
+        },
+        {
+          "file": "tests/stores/test_contract.py",
+          "line": 24
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/looks.py",
+      "sha256": "9d1442e438c9fa5686f142ea4c907cabae2a6cca3383d9554fdd256064eb2d92",
+      "lines": 27,
+      "imports": [
+        {
+          "file": "src/taskloop/app/run/host.py",
+          "line": 12
+        },
+        {
+          "file": "tests/adapters/test_looks.py",
+          "line": 16
+        },
+        {
+          "file": "tests/support/look_host.py",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/markers.py",
+      "sha256": "8dcfb2a91cc611ced3639675c01c5216bf41a9f6463aa529439a2fa62e0805e4",
+      "lines": 21,
+      "imports": []
+    },
+    {
+      "file": "src/taskloop/adapters/pidcheck.py",
+      "sha256": "6503b6a6f0e334b4ba458782d5c1325072aed6ea6ee21dcc38ed9be6f20bb4b8",
+      "lines": 16,
+      "imports": [
+        {
+          "file": "src/taskloop/app/launch/loop.py",
+          "line": 28
+        },
+        {
+          "file": "src/taskloop/app/wire/brief.py",
+          "line": 17
+        },
+        {
+          "file": "src/taskloop/app/wire/slotfx.py",
+          "line": 4
+        },
+        {
+          "file": "tests/cli/real/test_tl.py",
+          "line": 32
+        },
+        {
+          "file": "tests/land/test_race_invariants.py",
+          "line": 54
+        },
+        {
+          "file": "tests/loop/real/test_held_branch.py",
+          "line": 33
+        },
+        {
+          "file": "tests/run/test_stages.py",
+          "line": 25
+        },
+        {
+          "file": "tests/slots/real/test_slots.py",
+          "line": 32
+        },
+        {
+          "file": "tests/slots/test_effects.py",
+          "line": 5
+        },
+        {
+          "file": "tests/slots/test_slots.py",
+          "line": 31
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/procs.py",
+      "sha256": "d82389109e1b3ef03e923d403e3504c3747b8b14956b9523ce3f5d925fea3106",
+      "lines": 108,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/agent.py",
+          "line": 11
+        },
+        {
+          "file": "src/taskloop/adapters/bd.py",
+          "line": 19
+        },
+        {
+          "file": "src/taskloop/adapters/check_net.py",
+          "line": 12
+        },
+        {
+          "file": "src/taskloop/adapters/check_probe.py",
+          "line": 9
+        },
+        {
+          "file": "src/taskloop/adapters/git_base.py",
+          "line": 11
+        },
+        {
+          "file": "src/taskloop/adapters/landlock.py",
+          "line": 13
+        },
+        {
+          "file": "src/taskloop/adapters/looks.py",
+          "line": 6
+        },
+        {
+          "file": "src/taskloop/adapters/markers.py",
+          "line": 8
+        },
+        {
+          "file": "src/taskloop/adapters/pidcheck.py",
+          "line": 2
+        },
+        {
+          "file": "src/taskloop/adapters/runner.py",
+          "line": 16
+        },
+        {
+          "file": "src/taskloop/adapters/spawner.py",
+          "line": 9
+        },
+        {
+          "file": "tests/adapters/real/test_kill_tree.py",
+          "line": 15
+        },
+        {
+          "file": "tests/adapters/real/test_land_lock.py",
+          "line": 19
+        },
+        {
+          "file": "tests/adapters/real/test_procs.py",
+          "line": 13
+        },
+        {
+          "file": "tests/adapters/real/test_spawner_capture.py",
+          "line": 10
+        },
+        {
+          "file": "tests/adapters/test_capture_runner.py",
+          "line": 8
+        },
+        {
+          "file": "tests/adapters/test_check_env.py",
+          "line": 7
+        },
+        {
+          "file": "tests/adapters/test_deadline.py",
+          "line": 12
+        },
+        {
+          "file": "tests/checks/test_checks_speed.py",
+          "line": 13
+        },
+        {
+          "file": "tests/conftest.py",
+          "line": 52
+        },
+        {
+          "file": "tests/dashwire/test_dash_ensure.py",
+          "line": 18
+        },
+        {
+          "file": "tests/launch/real/test_factory.py",
+          "line": 9
+        },
+        {
+          "file": "tests/live/test_stop_tree.py",
+          "line": 9
+        },
+        {
+          "file": "tests/support/argv_checks.py",
+          "line": 3
+        },
+        {
+          "file": "tests/support/gitsim/__init__.py",
+          "line": 20
+        },
+        {
+          "file": "tests/write/real/test_write_idle.py",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/ram.py",
+      "sha256": "aa60c46047451ea3b73028db0718011bc118bba98ebdde2ef540423a2bdd0bb6",
+      "lines": 18,
+      "imports": [
+        {
+          "file": "src/taskloop/app/launch/loop_ops.py",
+          "line": 22
+        },
+        {
+          "file": "tests/adapters/test_ram.py",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/runner.py",
+      "sha256": "81b1b4c36d84057b235ea0a006cc25c51e0713bd3a01a9ae13ea481ea22c4d36",
+      "lines": 96,
+      "imports": [
+        {
+          "file": "src/taskloop/adapters/delegate.py",
+          "line": 19
+        },
+        {
+          "file": "tests/adapters/test_deadline.py",
+          "line": 12
+        },
+        {
+          "file": "tests/adapters/test_seam_survivors.py",
+          "line": 2
+        },
+        {
+          "file": "tests/run/real/test_halt.py",
+          "line": 22
+        },
+        {
+          "file": "tests/support/fake_api.py",
+          "line": 18
+        },
+        {
+          "file": "tests/write/real/test_write_idle.py",
+          "line": 28
+        },
+        {
+          "file": "tests/write/test_write_idle.py",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/slotcheck.py",
+      "sha256": "e3a31e8f9a768ea4e1dbe840b0dbe6aecbaaf7cf25fc24941f2ff44761eb0e74",
+      "lines": 54,
+      "imports": [
+        {
+          "file": "src/taskloop/app/run/parts_run.py",
+          "line": 21
+        },
+        {
+          "file": "tests/adapters/real/test_git_memo.py",
+          "line": 17
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/spawner.py",
+      "sha256": "b74d9b6c453c8e6741decd99c360beb39172925d2ea7dcb3e07c7efaa5dbef4b",
+      "lines": 97,
+      "imports": [
+        {
+          "file": "src/taskloop/app/wire/real.py",
+          "line": 7
+        },
+        {
+          "file": "tests/adapters/real/test_spawner_capture.py",
+          "line": 11
+        },
+        {
+          "file": "tests/adapters/real/test_spawner_real.py",
+          "line": 9
+        },
+        {
+          "file": "tests/adapters/test_deadline.py",
+          "line": 14
+        },
+        {
+          "file": "tests/adapters/test_spawner.py",
+          "line": 10
+        },
+        {
+          "file": "tests/checks/real/test_childenv.py",
+          "line": 12
+        },
+        {
+          "file": "tests/doctor/test_guard_rails.py",
+          "line": 10
+        },
+        {
+          "file": "tests/land/real/test_queue_refs.py",
+          "line": 9
+        },
+        {
+          "file": "tests/ports/spawner_contract.py",
+          "line": 7
+        },
+        {
+          "file": "tests/prune/real/test_prune.py",
+          "line": 18
+        },
+        {
+          "file": "tests/release/real/test_suite_once.py",
+          "line": 18
+        },
+        {
+          "file": "tests/release/real/test_suite_receipt.py",
+          "line": 10
+        },
+        {
+          "file": "tests/support/shells.py",
+          "line": 6
+        },
+        {
+          "file": "tests/support/spawn.py",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "file": "src/taskloop/adapters/threadflag.py",
+      "sha256": "c14e9f257c9285c68b0f965f3136831f37d767fac9f826f553e2743d631b038a",
+      "lines": 23,
+      "imports": [
+        {
+          "file": "src/taskloop/app/launch/check_host.py",
+          "line": 24
+        },
+        {
+          "file": "src/taskloop/app/run/fields.py",
+          "line": 33
+        }
+      ]
+    }
+  ],
+  "method": "AST import sites across src, packages, tests and dev; dynamic/path launches require source tracing. Hashes cover adapters only, not every transitive consumer.",
+  "revision_note": "Recorded after owner authorized local Git; audit read the unchanged baseline source in the original review worktree, not successor source."
+}

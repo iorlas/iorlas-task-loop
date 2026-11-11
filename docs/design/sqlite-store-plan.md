@@ -1,5 +1,14 @@
 # One SQLite execution store: the plan (tl-sqd3.26 STORE)
 
+> STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
+> [reconciled STORE slices](tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
+> Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.
+
+> Historical migration plan. Its dual-read/import/export/compatibility and old task-slice ordering are superseded by
+> the owner's no-fallback/disposable-DB strategy. STORE remains held. Use the
+> [consolidated identity/store contract](tl-8bh9.1/identity-store-contract.md) for the proposed retained scope and
+> outstanding owner decision. Preserve this note as source evidence, not authorization to execute old slices.
+
 Owner decision (Denis, 2026-11-06): SQLite for all, as soon as possible. This note is the plan; each slice below is its own PR. The
 design lives in `docs/architecture/zoom-out-review.md` (R1) and `docs/design/durable-factory*.md`; this note adds the inventory the
 migration needs, the order, the kill test and the rollback.
@@ -78,7 +87,7 @@ dropped by the schema step that follows the importer.
 - Worker answers, `runs/<run>/<node>-<n>.json`, `.raw.json`, `replan.md`, `brief.md`, artifacts, screenshots, `.task/` scratch, `slot-state/`.
 - Kernel locks (`flock`, `any_lease`): the kernel drops them when a process dies; a DB row cannot. The `.holder` hint files go.
 - `.task-loop.json` (in git at the base commit).
-- Delegate's private state under `<cfg>/delegate/`: task-loop never reads it (`docs/dev/integrations.md`); delegate keeps its own `StateStore`.
+- Delegate's private state under `<cfg>/delegate/`: task-loop never reads it (`docs/dev/integrations.md`, a baseline document not in this tree); delegate keeps its own `StateStore`.
 - Legacy import-only files (`runs/<run>/manifest.json`, `done*.json`, `asks/*.json`, `ask-ledger.jsonl`, `results/**`) keep their importers until slice 9.
 
 ## 3. Target

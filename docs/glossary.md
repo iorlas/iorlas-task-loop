@@ -1,117 +1,237 @@
 # Glossary
 
-One canonical name per concept. A word in the "Not" column is not used for that concept in code, docs, beads or chat.
-`planned` = decided, not yet in code (the rename is a hard cut, no alias, filed as beads; see docs/design/topology.md).
-Each entry: one plain sentence, an example, and what it is not. Last audited against code and docs: 2026-11-07.
+Canonical language for the redesign, new documentation and conversation. Updated 2026-11-11.
+Use short, familiar GitHub and Git terms where their meanings fit. Keep a factory term when its meaning differs;
+do not invent an extra entity to match GitHub's hierarchy. `task` is the owner's choice instead of `issue`.
 
-## Work and repos
+These definitions name the target concepts. They do not assert that the existing code, CLI, database or dashboard
+already uses them. Literal existing identifiers may be cited when discussing that code. A future rename is a hard
+cut, with no aliases or old-format readers; coordinate it with the owning redesign task rather than renaming twice.
+Ordinary verbs such as "run the checks" remain ordinary English, not additional execution entities.
 
-| Term | Means | Example | Not |
-|---|---|---|---|
-| piece | A segregated unit: own folder or repo, own tests, one written interface, contract tests on both sides, no imports across. | task-loop, delegate, lifesim and each shelf package are pieces. | module, component |
-| factory | The machine's task-loop installation: one config folder, one `factory.db`, one dashboard, one lease table, many repos. | `tl factory start` brings up the loops and the dashboard of the whole machine. | instance (per repo), server |
-| repo | A registered git repository with its own backlog (`.beads/`) and profile, known by its canonical name (origin `owner/name`; folder name when there is no remote). One home clone per machine; extra worktrees are slots. | `iorlas/iorlas-task-loop`. | project, clone (as an identity) |
-| profile | `.task-loop.json` as committed on the base branch: the repo's rules for the engine (checks, land mode, limits). | The `checks` list, `land_mode` and `engine.merge` live in the profile. `merge` defaults to `wait`; `auto` requires `land_mode: pr` and merges after the gate at the unchanged head. | config (that is machine-level, in `~/.config/task-loop`) |
-| bead | One task in a repo's bd store. `planned`: it becomes "task" everywhere (epic tl-lkj2, lowest priority; bd stays one backend behind a port). | `tl-7s2f.14`. | ticket, issue (in task-loop docs) |
-| epic | A bead that groups child beads; its children are scheduled by their own dependencies. | `tl-7s2f` (the merge queue) has children `.1` to `.18`. | branch (an epic gets no integration branch) |
-| owner | Denis. Merge approval, profile-change approval and `owner-approved` are his. | Only his label lets a bead change a trust-root file. | user, admin |
-| trust root | The files whose change parks a bead unless it carries `owner-approved` (`AGENTS.md`, `CLAUDE.md`, `.claude/`, `mise.toml`, `.codex/`, `.task-loop.json`, `githooks/`). | A bead that edits `.task-loop.json` waits for the owner. | |
-| ask | A question the engine parks a bead on until the owner answers. | "Tree mismatch twice: which fix?" shows on the Decisions tab. | prompt |
+## Work and execution
 
-## Running work
+| Term | Meaning | Example / distinction |
+|---|---|---|
+| task | Work to accomplish, with a description, acceptance criteria and status, tracked in the repository's task tracker. | `tl-123`. The tracker backend may be bd; its product name does not name our work. |
+| task tracker | The system storing tasks, requirements, dependencies, questions, answers and task discussion. | Currently Beads, accessed through `bd`. A replaceable backend, not another factory service, ChatGPT component or execution queue. |
+| design | The decisions about the intended behavior and structure of the system. | A versioned design document records what was chosen and why. |
+| plan | The work proposed to accomplish a task and the conditions for completing it. | Planning produces a usable plan committed at `docs/design/<task-id>/plan.md` on the task branch. It is an input to later attempts, not proof that implementation is complete. |
+| step | One bounded operation on a task, with inputs, a result and a completion condition. | Plan, implement, check, review, land. Its code is also the step implementation, not a separate "stage" concept. |
+| attempt | One concrete execution try at an operation, such as a step or an individual check. | A repeat (the step-level retry) makes another attempt. A coordinator restart observing the same surviving execution does not. A new execution continuing the same conversation is another attempt. An attempt can fail before launch. |
+| session | A conversation with an agent, identified by its harness or chat application. | A step can own several sessions. Each agent execution attempt uses one session, which may serve several attempts. Non-agent checks need none. A process ID is not a session ID. |
+| agent | The coding assistant asked to perform work through the agent interface. | An agent can plan or implement. An attempt is its execution record; a session is its conversation. |
+| harness | The program that runs an agent and exposes its conversation and tools. | Codex CLI, Claude Code or OpenCode. Launching it is an ordinary action, not another product entity named "harness invocation". |
+| ask | A question requiring the owner's answer before the task can proceed. | An unclear change needs a decision. The prompt sent to an agent is input, not an ask. |
 
-| Term | Means | Example | Not |
-|---|---|---|---|
-| loop | One process that takes one bead at a time into a free slot for one repo. A repo runs up to its wanted count of loops (`tl factory start` tops up to it). Numbered launcher logs are `factory-loop-K.log`; status prints "LOOPS running=". | Two loops on one repo work two beads at once. | lane, worker, daemon |
-| slot | A persistent worktree set up once and reused task after task; its count is the repo's own concurrency. | A repo with 3 slots runs at most 3 beads at once; a heavy setup is paid once per slot. | floor, workspace |
-| run | One engine pass over one bead, step by step. | `tl run-task tl-abc --worktree DIR` is one run. | job |
-| step | One thing the engine does in a run, named by the `Step` enum: reset, plan, replan, write, checks, review, verify, look, gate, land, close, reflect. | After `write` the engine runs `checks`, then `review`. | task |
-| stage | The code that does a step, one folder under `src/taskloop/app/` (plan, write, review, look, land, ...). Architecture notes say "stage packages". | `app/land` is the land stage. | step (the thing done) |
-| gate | The checks that must be green before land. A single run of the gate on one tree is "a gate". | The gate runs `just check` and `just test` on a clean checkout. | review |
-| land | The merge or push of a finished bead to the base branch (modes `pr` and `push`). | In `pr` mode the loop opens a PR; `tl land-stack` merges it. | deploy, release |
-| land-stack | The command `tl land-stack ITEM...`: it gates open PRs in parallel (prewarm), then merges them one at a time under the land lock, lowest first. The merge queue replaces its serial core. | `tl land-stack 12 13 14` gates three PRs, merges 12, then 13, then 14. | queue (a queue keeps state across calls) |
-| check | One command of the gate with an id, a cache key and a verdict (`just check`, a test run). | `ruff` on the changed files. | test (a check may run many tests) |
-| RunKey | The identity of one run of a check: the check, its command, settings, toolchain, tree, base, inputs, selected tests and env. Equal keys mean the same fact, so the second run is never made. | Same tree, same base, same command: the green result is reused. | cache key of a build tool |
-| receipt | The stored green result of one check under its RunKey, kept with who made it and where its output is. A failure is never a receipt. | A receipt from the owner's gate lets the land gate skip that check. | log, artifact |
-| Carry | The rule that keeps a receipt valid when only the base moved: if the files the check depends on (its closure) are unchanged in the branch merged into the new base, the receipt is stored again under the new key. | Main gains an unrelated file; the PR's receipt is carried, not rerun. | cache hit (a hit needs the same key) |
-| worker | One headless model call, made through the `delegate.api` library. | A `write` step calls one worker; its answer is schema-checked. | agent (ambiguous) |
-| role | The kind of worker job delegate routes (planner, reviewer, worker, hard, light). | The reviewer role goes to the other model family from the writer. | persona |
-| facts | `RunFacts`: the frozen data every stage of a run reads and nobody changes after the engine opens it (env, config, worktree, bead). Live objects are ports, not facts. | A stage test builds `fake_facts(...)`. | state (state changes) |
-| Asked | The result of one worker call: the answer's data and family, and `updates` to the run's threads that the host applies. `AskAi` is the one verb a stage uses to make the call. | `ask_ai("review", ...)` returns an `Asked`. | ask (that is the question to the owner) |
+At the factory level the execution picture is `task -> step -> attempt`. Inside the checks step, individual checks
+may also have attempts. The word has one meaning: a try at the named operation, not a new workflow tier.
+The record identifies its operation and context; a step attempt can group the results of its internal check attempts.
+An attempt refers to its conversation, usage, logs and artifacts where applicable. Sessions may be reused.
+Tool calls are actions inside a conversation; they do not automatically become step attempts.
+If the agent implementation launches a harness again internally, that try must remain inspectable rather than
+being hidden in an aggregate. How those launch records attach is part of the step-attempt design, not a new public noun.
 
-## Structure of the code
+`run` is reserved for literal existing code/CLI names, ordinary English and GitHub's own workflow runs until the
+redesign demonstrates a distinct factory concept that needs it. Do not introduce a second name for an attempt.
+`job` and `workflow` retain their GitHub meanings when discussing GitHub Actions; they do not add factory entities.
 
-| Term | Means | Example | Not |
-|---|---|---|---|
-| port | A small Protocol for something outside the code: git, a process, the clock, the forge. One contract suite per port runs against the real adapter and its fake. | `Git`, `Clock`, `Spawner`. | interface (generic), API |
-| adapter | The real implementation of a port (it touches git, processes, sockets). | `adapters/` holds real git and the real clock. | driver |
-| host | The typed Protocol a stage takes of its caller, naming only what it needs, instead of the engine. | `CheckHost`, `LandHost`. | the machine (that is the factory or the executor) |
-| node | A stage's logic: imports only the kernel, lower layers and its declared neighbours; never the engine. | `app/land`, `app/checks`. | module |
-| composition root | Code that only builds nodes and hands them to each other (`launch`, `wire`, the engine's construction). Nothing imports a root. | `app/wire`. | main (it holds no rules) |
-| kernel | The contracts every node shares (`packages/kernel/src/tlkernel/`). Also, in lock talk, the OS: a kernel flock is dropped when its process dies. | `RunKey` is in the kernel. | core |
-| part | One small class of a stage with one job, built by the engine and handed what it needs. | The review stage has four parts (docs/design/b-review.md). | stage |
-| ratchet | A rule test that counts offenders on the files a change touches and fails if the count rises. No stored baseline; the way down is free. | A new `time.sleep` in a unit test trips the layer ratchet. | threshold |
-| Ratchet-allow | The commit-message line that lets a deliberate rise through: `Ratchet-allow: <layer\|temp\|needs\|root> +N <reason in words>`. | `Ratchet-allow: needs +1 uses a real git`. | `--no-verify` (forbidden) |
-| lease | One held unit of a resource, in the machine's lease table; freed when the holder dies. | Two Unity checks hold two of three `unity` leases. | lock (a lock is a mutex on one thing; a lease counts units) |
-| resource | A scarce machine tool a check declares it needs (`unity`); its limit is in the profile. | `resources: {unity: 1}`. | |
-| executor `planned` | The machine side of a split factory: process spawn, slots, leases, `host.json`. Today the factory and the executor are one machine. | | node, agent |
+## Repository and machine
 
-## Accounts and checks
+| Term | Meaning | Example / distinction |
+|---|---|---|
+| repo | A registered local Git repository binding, shared by its linked worktrees. | RepoId resolves canonical Git common-directory identity. Remote host/project is display/delivery information; task identity has its own configured backlog scope. Independent clones have separate local bindings. |
+| task branch | The Git reference retaining a task's committed plan and code. | Derived as task/<task-id> within its selected repository. It is not a directory, slot or execution; publishing it does not land the task. |
+| worktree | A Git checkout linked to a repository, sharing its commits and branches. | Committing in one linked worktree makes the commit available to the others locally; no push is needed for that sharing. |
+| workspace | An external or generic name for an execution's working directory; no separate factory entity. | Use worktree for a Git checkout and slot for a reusable managed worktree. Preserve literal names used by external APIs such as GitHub workspace. |
+| slot | A managed, reusable worktree reserved for one independently scheduled step attempt at a time. | `s1`. Internal checks may run concurrently. Reservations are local factory state in factory.db; slots are not tracker tasks. Current internal slot tasks are to be retired. |
+| factory | The installation that schedules tasks and executes their steps. | It has a dashboard and local execution state; it can serve several repos. |
+| host | The machine on which an execution happens. | Do not use this product word for a bundle of collaborators. The successor tree has no `*Host` Protocols; the ports are named for what they do (`StatusPorts`, `EvidenceFiles`, ...). |
+| profile | The repo's factory settings in `.task-loop.json`, read by `profile.py` from Git at a commit, never the working tree ([tl-8bh9.14.1](design/tl-8bh9.14.1/plan.md)); `tl profile show` prints it. | Strict keys `setup`, `checks` (name, argv, timeout), `required`, `target`. `setup` and the checks are read at the commit under test (the task branch), like a GitHub `push`/`pull_request` workflow; `required` and `target` from the target (`main`), like branch protection (O1, [self-hosting roadmap](design/self-hosting-roadmap.md) section 7). Only `setup` runs so far (before an implement agent); the implement agent is told to run every command under `checks` itself, offline; the factory does not run the checks yet. |
+| setup | The repo's own command(s), named in the profile, that prepare a slot's environment before the agent starts. | Decided 2026-11-11: run by the factory outside the agent's sandbox, with network, from the same ref as the checks. `just install` when the profile names none (this repository: `just bootstrap`). Not a step. Built (S5e-1): the implement attempt's entry runs it after resetting the slot's ignored files and uv folders (`environment.py`); `tl step show` prints its `Setup:` line. |
+| agent folders | The three folders an implement agent may write outside its slot (`access.Folders`), beside the slots under `<slots_root>/<repo_id>/`: the scratch `.t/<slot>` (its `TMPDIR`, at most 64 bytes), `.env/<slot>/uv-cache` (`UV_CACHE_DIR`) and `.env/<slot>/uv-tools` (`UV_TOOL_DIR`). Made (or made 0700 again) by the factory before launch, Codex `writable_roots`; the variables and `UV_OFFLINE=1` go to the agent's shell only (`shell_environment_policy.set`), Codex's own process keeps the person's `TMPDIR`. | Built (S5e-2). Not evidence and not the slot. Each must resolve exactly to its place beside the slot (no link). The scratch is emptied before and after setup and after a slot release (only where it belongs); the uv folders by every reset. A plan agent gets none (`writable_roots=[]`). The preflight's `codex sandbox` probe, run in the emptied scratch, checks the shell gets its variables, the folders are writable and `/tmp` is not. |
+| config | Machine-level settings. | Local paths and account settings. Use `profile` for repo settings. |
 
-| Term | Means | Example | Not |
-|---|---|---|---|
-| account | A metered connection to a model vendor: a subscription or API key with usage windows, reset times and models. Delegate owns it. Dashboard panel: Accounts. | A Codex subscription and a Claude subscription are two accounts. | lane, license, supplier, provider, token source |
-| track | Within one gate block, a parallel sequence of checks; the first red cancels the other tracks. The profile key is `checks[].track`. | A `build` track and a `test` track run side by side. | lane |
-| lane | Purged word (hard cut: purged from code in steps 1–4; docs/design prose is purged in step 5; this row stays as the record, docs/design/lanepurge.md). It names no concept; use account, track or loop. | | everything |
+A GitHub **runner** executes jobs; a slot is not a runner. A separate clone is not a linked worktree.
+One primary checkout per repo per machine remains the recorded direction; release and cross-machine behavior are
+assessed in the repo/store review. A glossary definition does not introduce a new executor service or process model.
 
-## Merge queue (design: docs/design/merge-queue.md)
+## Checks and delivery
 
-All `planned`. Running example: five PRs A, B, C, D, E wait to land on main (call it M0).
+| Term | Meaning | Example / distinction |
+|---|---|---|
+| check | A named automated validation of the work. | A build, lint command or test command. One check may execute many tests. Decided 2026-11-11: the factory runs checks on the host, before any review, with the agent's scrubbed environment and push bar. |
+| required checks | The checks that must pass before merging. | Use this phrase instead of a separate "gate" concept. A failed required check prevents the merge. |
+| pass | A stored successful check result for its recorded code and inputs. | A failure is a result, never a pass. A missing pass means the check can run again. |
+| check key | The inputs that determine whether a stored pass applies. | Code, command, toolchain and relevant environment/inputs; the exact fields belong to the check design. |
+| reuse | Use an existing pass when its validity conditions hold. | An optimization, not required recovery state. Do not give it a separate capitalized name such as `Carry`. The verdict `reused` (below) is a different thing: it names a step whose answer changed nothing. |
+| push | Transfer Git objects and update refs on a remote. | Publish `task/tl-123` so another PC can fetch it. `publish` (below) names the factory operation that pushes `task/<id>`; the push itself is the transport. This does not merge it into `main`. |
+| merge | Integrate a branch into its base branch. | Squash-merge a completed task into `main`. A direct push is still called a push. |
+| land | Finish the task's delivery operation: accepted integration, confirmed task completion and any required task synchronization. | Retry unfinished required actions only. Code can be delivered while task completion remains pending. Merge is integration; push is transport. Publishing an unfinished task branch does not land it. |
+| PR | A pull request proposing changes to a base branch. | Use the short form after "pull request" on first use when the audience needs it. |
+| merge queue | PRs waiting to merge after their required checks pass. | Detailed queue policy belongs in [its design](design/merge-queue.md), not in vocabulary definitions. The speculative queue remains held. |
+| release | A versioned distribution of the software. For freeing a slot see `slot release` (Factory vocabulary as built). | Merging source and publishing a release are different actions. A release candidate is the version being evaluated before release. |
 
-| Term | Means | Example | Not |
-|---|---|---|---|
-| merge queue | The ordered list of PRs waiting to land, tested ahead of time and landed in order, each on exactly the main it was tested on. | A, B, C, D, E in that order. | `land-stack` (one call, no memory) |
-| queue depth | How many PRs are waiting. In code: `queue_depth`. | A to E waiting: depth 5. After A lands: depth 4. | gates in flight |
-| gates in flight | How many PRs are being tested at the same time, each on main plus the PRs ahead of it. 1 is today's serial landing. It starts at 1, grows by 1 after each success, halves after a failure, and stays between the floor and the cap. In code and config: `in_flight`, `in_flight_floor`, `max_in_flight` (key `engine.land_queue_max_in_flight`); tests/rules/test_queue_terms.py fails on `window` or `lookahead` in the queue modules. | At 1: A is tested on M0; B waits; when A lands, B is tested on the new main. At 3: A on M0+A, B on M0+A+B, C on M0+A+B+C all at once; D and E wait. If A fails: A is thrown out, the tests of B and C (which contained A) are dropped and redone without A, D and E keep waiting, and the number halves. | window, lookahead, depth, `--jobs` |
-| floor | The fewest gates in flight: 1. | After a failure at 1, it stays 1. | the dashboard's Slots tab |
-| cap | The most gates in flight. Default 4; 3 if over half of gate time was wasted in shadow mode. Config key `engine.land_queue_max_in_flight`. | At cap 4, E waits until A lands. | slot count |
-| speculative build | A PR tested on a local queue ref made of main plus the PRs ahead of it, assuming they pass. | C's build is main+A+B+C. | a PR, a branch |
-| eject | Removing a PR from the queue because its own gate failed or it conflicts; only the PRs behind it are rebuilt. | B fails: A keeps its build, C and D are rebuilt without B. | revert |
-| wasted gate | Gate seconds whose result was thrown away (cancelled or invalidated). The ratio wasted / useful decides whether the cap drops. | A's failure wastes the builds of B and C. | a failed gate |
-| tested-tree assertion | The check, under the land lock, that the tree that landed equals the tree that was tested and its parent is the main the test assumed. Layers: before the merge, match-head, after the merge. | A lands: its tree equals the tested tree, or the queue freezes. | `--match-head-commit` (checks the head, not the base) |
-| freeze | The queue stops merging and starting gates; running gates finish. Set by the owner or by a tree mismatch. | | pause |
-| repair | After a tree mismatch: an agent, dispatched automatically, lands a revert, a fix-forward or a re-merge through the queue; a human is asked only after two failed repairs. | The bad commit is reverted by a normal PR that passes the same gates. | auto-revert (it is a PR, not a blind push) |
-| shadow mode | The queue builds and gates in parallel and records what it would have done; the old path still lands. | Compare the predicted tree with the one that landed, at no risk. | dry run (it does real gates) |
-| flake score | Per test, how often it failed and then passed on retry or on clean main. Over 3 rows a week files a fix bead; nothing is skipped or hidden. | One test with 4 rows in a week gets a bead. | quarantine (refused) |
-| guard rails | The settings that keep main safe: a GitHub ruleset against force-push and deletion, and the pre-push judge. `tl doctor` fails when either drifts. | Hook missing in a worktree: doctor fails. | branch protection requiring PRs (not used: push mode would break) |
+A step may own several actions: land owns merge and push. Naming those actions does not make them separate steps
+or independent scheduling units. Define a step by its purpose and completion condition, not by every command it runs.
+The checks step owns individual checks such as lint, type checking and tests. Those are checks, not a new tier of
+"sub-steps" requiring a "stage" above them. Each check still has its own result, timing, output and retry history.
+The check implementation may coordinate those operations; the factory sees the step's completion condition.
+Action and operation are ordinary descriptions of behavior, not extra mandatory entities, tables or scheduling levels.
+Likewise, tool calls inside a session do not become workflow steps merely because they are observable.
 
-## Tests (design: docs/design/test-tiers.md)
+**Status** says where execution is: queued, in progress or completed. **Conclusion** says how a completed execution
+ended: success, failure, cancelled, timed out or skipped. Completed does not mean successful. Use **result** for
+the returned data, including any conclusion and outputs; avoid a competing product term "outcome" for that conclusion.
+This distinction guides future contracts; it does not silently change the values of existing enums or tracker statuses.
+Task statuses describe the task's lifecycle; an execution status describes an attempt. A task's **labels** classify
+it; **metadata** holds structured task facts; **comments** hold discussion and owner answers. Do not call task labels
+Git tags or treat an execution log as task discussion. A parent task can group child tasks without adding another
+execution entity.
 
-| Term | Means | Example | Not |
-|---|---|---|---|
-| behavioral test `planned` | A test that runs the real thing: the `real` and `e2e` layers (a real git, process or socket, or a whole flow), plus `tests/delegate` and `tests/live`. | `tests/land/real/`, `tests/e2e/`. | unit test (fakes, in memory), integration test |
-| test tier `planned` | When a set of tests runs: T1 unit + contract on every PR, T2 behavioral near the change on every PR, T3 the full behavioral suite on main and on a release candidate. | A hub change runs T1 in full, T2 by distance, and T3 later. | test layer (a layer is what a test may touch, by path) |
-| distance cut `planned` | The T2 rule that runs a behavioral test on a PR only when the PR changed it, it imports a changed file directly, it sits in a changed file's slice, or it is a wiring or e2e test. The rest of the closure waits for T3. | `contracts/paths.py` changes: tests that import it run on the PR; the far closure runs in T3. | closure (the closure is every test that reaches the file) |
-| main sweep `planned` | A T3 run of the full behavioral suite on the newest main tip by an idle slot, skipped for a tree that already has a green receipt. | A landing moves main; the next idle slot runs the main sweep on the new tip. | gate (a gate judges one PR before land), devbox canary (an acknowledgement for the Mac pin) |
-| release candidate `planned` | The tree `dev/release.py` is about to bump: origin/main's tip before the version-bump commit. | The tree hash the release caches its gate by. | release (a candidate is not yet released) |
-| release | A release candidate that passed T3 and `just check` + `just test`, then got the version bump, the tag `v<version>` and the install. | `v0.9.12` tagged and installed. | land, a merge to main |
+## Factory vocabulary as built
 
-## Dashboard
+Added 2026-11-11 from the successor tree (factory.db v11 since S5b). Each word has one meaning across the code, CLI, database and
+logs; use it for nothing else. Words for owner-visible output are listed as the code prints them.
 
-| Term | Means | Example | Not |
-|---|---|---|---|
-| Board | The tab with every bead by state (Flow) or by goal (Goals). | A bead waiting on an ask sits in its column with a badge. | Slots |
-| Slots | The tab with time on one axis and slots on the other: what each slot is doing and where it is stuck. | A red segment is a stuck bead. | floor (queue's fewest gates in flight) |
-| Decisions | The tab with the owner's open asks. | | |
-| Landing strip | `planned`: one strip under Slots, queue order left to right, one chip per PR with its gate state and wait. | | |
+| Term | Meaning | Example / distinction |
+|---|---|---|
+| phase | How far one attempt's launch has got in factory.db: `admitted`, `dispatching`, `registered`, `captured` (`attempt.phase`). | Not a status or a conclusion. `captured` means the result is stored, not that it is verified or published. |
+| admission | The one transaction that reserves a free slot, creates the attempt and takes the tracker claim (`admit.py`); a repeat's takeover of the reservation and an advance, both of which claim nothing, are `admit_chain.py`. | The record is the attempt row at phase `admitted`; the operation is what `tl step start` and each round run. A refusal changes nothing, or returns a claim it took. |
+| reservation | The factory.db row tying one slot to one attempt (`reservation`, unique on the attempt). | A slot with a reservation is `reserved`. Ended by a slot release. Not a lock and not a tracker claim. |
+| slot custody | The per-slot kernel lock (`slot_lock`, label `taskloop-slot`) held around any Git write on a slot by the entry, verify, repeat or release. | Code names: `custody`, `hold`. Held is `locked`; it is never waited for (`slot_busy`). Not a reservation: a reserved slot is not locked while nothing writes. |
+| entry process | The process the factory launches for one attempt, `python -m taskloop.attempt_entry`; its log is `entry.log`. | Distinct from the agent process and from a Git tree entry. Pick this word; do not say "launcher", "runner" or "entry" alone for the process. |
+| launch | Start the entry process (`launch.py`). | Distinct from dispatch. |
+| relaunch | Start the entry process again for the same attempt, after it was lost or the machine rebooted. | Not a new attempt: same attempt id, same reservation. |
+| dispatch | The entry's permit to run the agent: it records the base commit B and the phase becomes `dispatching`. | The agent runs at most once per attempt. |
+| claim | The task tracker's claim on a task, taken at admission and renewed (the bd lease, every 100 s) while a step runs. | A slot release keeps it; `--abandon` returns it. Not a reservation. `renew` here means the lease; see `deadline`. |
+| backlog | The configured task scope inside a tracker, named by `--backlog`. | The same as "backlog scope" above. Not inferred from Git. |
+| round | One scheduling pass: settle existing attempts, advance claimed tasks whose step is done, admit approved ready tasks into the slots left free, publish verified results. | `tl step next` runs one; `tl step rounds` repeats them. Not the dashboard design-round mockups under `docs/design/dashboard/`. |
+| move | One thing a round did or saw for one task: one `rounds.log` line. | A round is a list of moves. |
+| settle | A round's first part: reading each existing attempt's state and doing its next action (verify, release, repeat, publish). | A settled release is the one that follows a collected result. |
+| repeat | A new attempt of the same step after the previous one left the slot unsettled, numbered 1 to 3 within a step (`attempt.number`, `repeat_reason`). | The step-level retry. The CLI, the DB and the log say repeat (`repeat`, `repeats_exhausted`); do not say retry for it. A capture retry (`CAPTURE_RETRIES`) is a DB write retried inside one attempt, not a repeat. |
+| verdict | The verifier's judgment of one attempt: `verified` or `rejected:<rule>`. | Not a check pass. `reused` is a verified verdict for a step that changed nothing (`effect` `keep`), distinct from the reuse of a stored pass. |
+| disposition | The agent's answer word: plan `planned`, implement `implemented`; both `unchanged`, `incomplete`, `needs_owner`. | A property of the answer. Compare effect. |
+| step kind | The few values and functions that make a step that step (`steps.StepKind`): its rules, input, answer schema and decoder, artifact rule and repeat feedback. | A code concept, not a registry or plugin: the kinds are a fixed tuple in order (`steps.STEPS` is `(PLAN, IMPLEMENT)`), reached through `steps.kind(step)`; `steps.next_step` is the one sequencing rule. |
+| effect | What the factory does with a disposition: `commit`, `keep` or `none` (`execution.effect`). | `planned` and `implemented` are `commit`, `unchanged` is `keep`, `incomplete` and `needs_owner` are `none`. |
+| advance | Admitting attempt 1 of the next step once the task's current attempt is done: verified, released settled (claim kept) and published (`admit_chain.admit_next`); also the `Next` word that asks for it. | One tracker read confirms the task is `in_progress` for `taskloop`; no claim and no label check. The new attempt stores the previous X as `attempt.after_commit`, and its entry refuses `branch_moved` when the task branch no longer contains it. Each round advances automatically, before admitting new tasks, oldest settled release first (`rounds.log`: `<task> implement advance started <attempt>`; a refusal about the task is `<task> plan skip <word> <attempt>`); `tl step start` advances by hand. |
+| agent answer | The agent's structured JSON reply, validated by the answer contract. | Not the owner's answer to an `ask`. |
+| execution | One agent run inside an attempt, with its stored facts (`execution` table: exit, usage, evidence paths, answer, session state). | Not an attempt: an attempt has at most one execution. |
+| agent process | The OS process record of a running agent (`worker_pid`, `worker_pgid`, `worker_start`, `worker_boot` on the attempt). | The column names mirror the `any_agent` library's `Worker` type. Distinct from the entry process that launched it. Its shell commands run outside its process group by design, each in a new session under `bwrap --unshare-pid --as-pid-1 --die-with-parent`: that PID namespace contains them and ends with its parent (Run S finding 6, Linux), so "the agent is gone and its group is empty" is their stop proof too. Setup processes are never in its group. |
+| session state | Whether the agent session reference was captured: `complete`, `pending`, `conflict`, `fault` (`execution.session_state`). | Never the Git push. Not a conversation or a harness. |
+| capture | Store the run's result, evidence and session state in factory.db (`Attempts.capture`). | Distinct from publish. Entry.log's `publish=` is the capture retry's DB acceptance, a known leftover word. |
+| evidence files | The files kept per attempt behind `EvidenceFiles`: stdout, stderr, answer, diagnostic, `entry.log` and each setup run's `setup-<run>.log`. | Control state is never read from them. |
+| setup run | One run of the profile's `setup` for an implement attempt, before its agent (`setup_run`, numbered per attempt; the latest is the highest number): its B, the setup digest, the registered command and its conclusion `passed`, `failed`, `timed_out`, `lingering`, `dirty` or `interrupted`. | Not an attempt and not a step. A passed run is reused only by a relaunch of the same, still admitted attempt; two failed runs refuse `environment:failed`. The entry and the slot release never signal it. |
+| park | Return a released slot to a detached HEAD at the attempt's start (D in Commit letters). | The slot release's one Git write. |
+| slot release | Ends an attempt's reservation: parks the slot and keeps the claim (`released`); `--abandon` also returns the claim. | A `held:<reason>` word means the slot stays reserved (`held:setup_running`: the latest setup run, unfinished or concluded `lingering`/`timed_out`, still has a process in its command's group). Not a distribution `release` (above). |
+| abandon | The owner deliberately giving up an attempt with `tl step release --abandon`: the slot is freed, the tracker claim is returned and the task becomes ready again. | Never automatic: a network or agent failure is not an abandon. The next admission is fresh and starts the task at its first step, as after a factory.db discard. |
+| publish | Push of `task/<id>` to origin, once an attempt is verified (`publish.py`, table `published_branch`). | Never forced, and it does not land. The other sense, storing a result, is called capture. |
+| deadline | The instant by which an attempt must end, set by `--minutes` (`attempt.deadline`). | Renewed to now plus `--minutes` once per reboot, at relaunch. Not the claim lease. |
+| stuck | A next-action word meaning only the owner can act: `stuck:expired_admitted`, `stuck:entry_lost`, `stuck:hung`, `stuck:uncollected`, `stuck:conflict`, `stuck:setup_failed` (an admitted attempt 1 whose setup failed twice: rounds report it and never relaunch it). | The other `Next` words are `start`, `wait`, `verify`, `repeat`, `repeats_exhausted`, `release`, `publish`, `advance`, `done`, `unknown`. `tl step list --stuck` shows `stuck:*` and `unknown`. |
+| reserved / locked / held | `reserved`: a slot with a reservation. `locked`: its custody lock is held. `held:<reason>`: a release word (the slot stays reserved). | A slot can be reserved and not locked. Do not use "held" for the other two. |
+| label | The tracker label approving autonomous execution, `auto` (`--label`): checked only when a round ingests a new ready task, never on a claimed task's advance. | The lock label strings passed to `process_lock` (`taskloop-slot`, `taskloop-rounds`) are lock labels, not task labels. |
 
-## Rename plan (hard cut, one bead each)
+### Commit letters
 
-0. Purge: three meanings have three names, with no alias: delegate account; check track; factory loop process. Historical occurrence counts are in the naming audit (docs/design/naming-audit.md: about 1,760 lines in task-loop and 2,019 in delegate).
-1. Delegate: `account` is the name in routing.json, status/run output, docs and skills. The interface is the typed `delegate.api` (docs/design/topology.md), so there is no wire contract to version. The task-loop side was the larger edit, spanning 122 files at the audit.
-2. Dashboard: the panel is "Accounts"; the tab is "Slots".
-3. `tl accounts` shows the status snapshot; `tl setup` stops asking about accounts; `checks[].track` names a check track (hard cut: the former key is refused as unknown, per CLAUDE.md); `tl factory status` prints loops.
+Used in the plan documents and in code comments; read the column, not the letter, when the two disagree.
 
-## Visuals rename (with the visuals epic, hard cut)
+| Letter | Meaning | Column / field |
+|---|---|---|
+| B | The base commit the entry reads before dispatch. | `attempt.base_commit` |
+| D | The slot's HEAD at admission; a released slot parks here. | `attempt.slot_head` (`slot_release.head` once parked) |
+| E | Where the previous attempt ended; a repeat starts here. | the previous attempt's `end_commit` |
+| X | The attempt's end commit. | `attempt.end_commit` |
+| T | The remote tip after a push. | `published_branch.remote_head` (with `commit_sha`, the X pushed) |
 
-`shots` (ask field) becomes `artifacts`; "shot" survives only as lifesim's own `shot` request method. `earlier_pictures`, `IMAGE_NAME`, `writer_names`, `same_defect` and `words` are deleted, not renamed.
+### CLI flags
+
+The meaning of each flag as `tl <command> --help` gives it. Every step runs through `tl step` (slice S4 of
+[the generalization plan](design/tl-8bh9.4.3.1.15/plan.md) replaced `tl plan` in one cut, no alias; the flags stayed).
+
+| Flag | Commands | Meaning |
+|---|---|---|
+| `--backlog KEY` | `step` (all), `task show` | The task scope inside the tracker; supplied, never inferred. |
+| `--tracker-root PATH` | `step start\|next\|rounds`, `task show` | The directory of the Beads tracker. |
+| `--checkout PATH` | `step start\|next\|rounds`, `slot adopt`, `profile show` | The person's checkout of the repository (`profile show`: default `.`). |
+| `--at REV` | `profile show` | The commit under test whose `setup` and checks are read (default `HEAD`). |
+| `--target REF` | `profile show` | The target ref whose `required` and `target` are read (default `main`). |
+| `--root DIR` | `config show`, `slot adopt` | The slots root (config `slots_root`); slots live at `<root>/<repo_id>/sN`. |
+| `--count N` | `config show`, `slot adopt` | Slot count s1..sN (config `slot_count`). |
+| `--every SECONDS` | `step rounds` | Seconds between rounds, at least 5 (config `round_seconds`). |
+| `--label LABEL` | `step next`, `step rounds` | Required on `next` and `rounds` (approves a task); not on `start`, whose task is named. |
+| `--minutes N` | `step start\|next\|rounds` | An attempt's deadline from now (and its renewal after a reboot). |
+| `--model`, `--effort` | `step start\|next\|rounds` | The agent model and effort for the attempt. |
+| `--db`, `--artifacts` | most `step`, `config show` | factory.db and the artifacts root, overriding the machine config. |
+| `--abandon` | `step release` | Also return the tracker claim and throw the attempt away. |
+
+## Conversations, evidence and accounts
+
+| Term | Meaning | Example / distinction |
+|---|---|---|
+| transcript | The retained record of a conversation, including every message, tool input/result and reasoning output the harness exposes. | A compact dashboard view may collapse content; it must not be mistaken for the retained transcript. |
+| log | The chronological record of execution events and diagnostics. | Preparation, a command's output, a retry and the attempt's conclusion. Logs and transcripts remain files behind their readers. |
+| artifact | A retained output produced by the work. | A screenshot, PDF, video or report, associated with its producing attempt. A vendor's transcript file is not a screenshot. |
+| design artifact | Supporting material deliberately retained with a versioned design. | A selected diagram or screenshot under `docs/design/<task-id>/`; ordinary execution artifacts do not all belong in Git. |
+| account | A configured connection with credentials and applicable usage limits. | A subscription or API account. It is not a vendor or a model. |
+| vendor | The service supplying models and their usage limits. | OpenAI or Anthropic. One harness may support several vendors. |
+| model | The selected model offered by a vendor. | Distinct from the account paying for it and the harness running it. |
+
+Use **live** and **retained** for viewing time, not two competing kinds of conversation. **Normalization** translates
+formats into a common representation; it does not authorize truncating the retained content. A native session ref is
+opaque to the factory; the agent library provides readable content without exposing its storage format.
+Unknown cost is unknown, not zero. A dashboard total is derived from individual attempt records, not a replacement for them.
+
+## Storage ownership
+
+Owner agreed 2026-11-09. This is the target division, not a claim that current source already implements it.
+
+| Owner / location | What belongs there |
+|---|---|
+| Task tracker | Requirements, task status, dependencies, questions, linked answers and task discussion. An answer that changes requirements must update the task or its linked design, not remain buried in comments. |
+| Git | Code, design documents, plans and selected supporting design artifacts. Task design material belongs under `docs/design/<task-id>/`, with the plan at `plan.md`. |
+| `factory.db` | Local execution progress, steps/attempts, session references, reservations and pending local operations. Disposable on deliberate discard; intact-DB restart must continue unfinished work. |
+| Local evidence storage, behind readers | Transcripts, command output, execution logs and artifacts associated with their attempts. A reference in the database does not move their contents into it. |
+
+The task tracker's maintenance tooling owns protection and recovery of its durable data. The factory does not own
+a second task-backup subsystem. Existing task exports remain protected until actual coverage and recovery have
+been verified; accepting this responsibility boundary does not prove that current tracker tooling supplies it.
+Factory database disposability does not make task records disposable.
+
+Email and other external messages can supply requirements or decisions. Capture the relevant information on the
+task or in its linked design; an inbox is not an additional authoritative work store. No email integration is required.
+
+## Retired names and remaining implementation gaps
+
+| Existing wording | Use in new work | Scope / remaining question |
+|---|---|---|
+| bead, ticket or issue for our work | task | GitHub's actual Issues and the bd backend retain their proper names. Task IDs do not change merely because the noun changes. |
+| task service in product/design prose | task tracker | No new service or queue is implied. Literal external API identifiers can retain their actual spelling. |
+| stage for an engine operation or its code | step | The code says step (`StepRules`, `attempt.step`, the agent input and CLI help); a Git `stage` of files is ordinary Git. A numbered item in an old multi-stage plan needs its meaning checked; do not mechanically equate it with an engine step. |
+| run, call or harness invocation for a step execution | attempt | The retired `step run` is an attempt. The agent run inside an attempt is an `execution` (below). A tool call remains a tool call. Existing whole-task `run_id`, process take-up counts and hidden harness retries need explicit mapping before schema changes. |
+| worker for the coding assistant | agent | Keep attempt, session, harness and agent distinct. The code says agent (`agent process`); `worker_pid`/`worker_pgid`/`worker_start`/`worker_boot` columns remain and mirror the `any_agent` library's `Worker` type, whose name stays where it is that library's type. |
+| gate | required checks, or checks when the context is clear | The code says `checked` and `verdict`; no `gate` identifier remains in this tree. "In flight" counts must state whether they count PRs or individual checks. Do not change queue concurrency semantics with a word replacement. |
+| outcome | result (the returned data), conclusion (how it ended) or verdict (the verifier's judgment) | Three comments in `attempt.py` and `attempt_entry.py` still say "outcome"; no identifier does. |
+| receipt for successful check evidence | pass | Existing owner-command receipts are idempotent replies, not check passes. Reassess the need for those records separately. |
+| RunKey, Carry | check key, reuse | `RunKey` and `Carry` are reference-implementation identifiers; neither exists in this tree. They can be cited literally when discussing that code; a vocabulary change does not authorize weaker pass validity. |
+| lane | account, concurrent check group, or scheduler process, according to meaning | The earlier purge had three meanings. Do not introduce the old word again or silently merge its three concepts. |
+| piece, node, part, facts, Asked as public entities | ordinary package/module, input, result, as appropriate | These are implementation labels, not additional concepts users need to learn. |
+
+Standard engineering terms such as API, protocol, adapter, lock, lease and cache keep their usual meanings. A lock
+serializes access; a lease reserves a resource. Do not collapse the behaviors merely to remove a word.
+`Board`, `Slots` and `Decisions` are existing screen names, not extra domain entities. Proposed test tiers and speculative
+queue behavior stay in their design notes; including a word here does not approve or implement a feature.
+
+## GitHub references and intentional differences
+
+- [Actions concepts](https://docs.github.com/en/actions/get-started/understand-github-actions): workflows contain jobs,
+  jobs contain steps, and runners execute jobs. We borrow familiar words without copying that hierarchy.
+- [Run attempts](https://docs.github.com/en/actions/reference/workflows-and-actions/variables): GitHub numbers re-runs
+  with `GITHUB_RUN_ATTEMPT`. Our attempt applies to a step, not to a whole GitHub workflow.
+- [Check status and conclusion](https://docs.github.com/en/pull-requests/reference/status-checks): lifecycle and terminal
+  result are separate. We say check, not "check run", in ordinary product prose.
+- [Artifacts](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts): retained outputs
+  differ from caches, which can be regenerated.
+
+Task, factory, slot, profile, session, harness, pass and land are intentional short local terms where GitHub's words do not
+express this system's meaning. See [the earlier vocabulary discussion](https://github.com/iorlas/iorlas-task-loop/blob/claude/adapter-justifications-73e7b1/docs/design/slot-lifecycle.md)
+for its recorded owner choices. The glossary names the concepts; the redesign and TASKNAME tasks own implementation.

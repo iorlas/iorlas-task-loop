@@ -1,6 +1,6 @@
 # Slot grant: deterministic prevention of the 2026-11-03 stall (design only)
 
-Verdicts: ✅ do, ❌ refuse. Cost = rough size. Incident: docs/incidents/2026-11-03-slot-queue-deadlock.md.
+Verdicts: ✅ do, ❌ refuse. Cost = rough size. Incident: the 2026-11-03 slot queue deadlock (its write-up, `docs/incidents/2026-11-03-slot-queue-deadlock.md`, is not in this tree).
 
 | Item | Verdict | Cost | Note |
 |---|---|---|---|

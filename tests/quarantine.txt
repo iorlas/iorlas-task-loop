@@ -1,2 +1,0 @@
-# Quarantined tests: they run apart (dev/runtests.py) and cannot block. One test id a line; the list may only shrink.
-# Candidates: python3 dev/flakes.py

@@ -1,45 +1,12 @@
-# Type checking (88 sec 6). `just check` runs `pyrefly check`; there is no baseline (tests/rules/gate_rules.py).
 python-version = "3.15"
-project-includes = ["src", "packages/land/src", "packages", "skills", "tests", "dev"]
-# Vendored copies are byte-identical to their source repos and checked there; this repo only imports them.
-project-excludes = ["**/_vendor/**"]
-# `import tl` (the launcher, in tests) resolves through skills/task-loop; tests import their own helpers by bare name.
-search-path = ["src", "packages/land/src", "packages/delegate/src", "packages/dash/src", "packages/kernel/src", "packages/testkit/src", "packages/artifacts/src", "packages/pipeline/src", "packages/gate/src", "packages/work/src", "packages/slots/src", "packages/areas/src", "packages/asks/src", "packages/release/src", "skills/task-loop", "skills/task-loop/_vendor", "tests", "packages/work/tests/plan", "tests/stores", "packages/delegate/tests", "dev"]
+project-includes = ["src", "tests"]
+# tests/steps: the shared test doubles module (doubles.py), as pytest's pythonpath
+search-path = ["src", "tests/steps"]
 check-unannotated-defs = true
-# Off: pyrefly matches .gitignore against absolute paths, so under .claude/worktrees/ it would match no file and pass.
 use-ignore-files = false
 
-# playwright is installed only on a machine that runs the cockpit screenshot scenario; it is the one real third-party import.
-[[sub-config]]
-matches = "tests/cockpit_scenario.py"
-[sub-config.errors]
-missing-import = false
-
-# Two plan-area signatures keep a bare `dict`/`list` until PLANREF types them (TYPED2 left that area alone); delete this block then.
-[[sub-config]]
-matches = "src/taskloop/app/plan/briefs.py"
-[sub-config.errors]
-implicit-any-type-argument = "ignore"
-
-# New code is strict from its first commit (88 D10); A sub-config cannot take
-# `preset`, so the kinds the strict preset adds are spelled out.
 [[sub-config]]
 matches = "src/**"
-[sub-config.errors]
-implicit-any-parameter = "error"
-implicit-any-empty-container = "error"
-implicit-any-lambda = "error"
-implicit-any-attribute = "error"
-missing-override-decorator = "error"
-method-assign = "error"
-non-exhaustive-match = "error"
-unnecessary-type-conversion = "error"
-deprecated = "error"
-implicit-any-type-argument = "error"
-
-# delegate was under src/** and keeps the strict kinds in its member folder.
-[[sub-config]]
-matches = "packages/delegate/src/**"
 [sub-config.errors]
 implicit-any-parameter = "error"
 implicit-any-empty-container = "error"

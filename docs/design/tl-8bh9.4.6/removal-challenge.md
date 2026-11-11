@@ -1,0 +1,145 @@
+# Removing adapters: behavior counterfactuals
+
+Owner sharpened the review on 2026-11-09: what if the behavior disappears, what breaks, is that loss acceptable,
+and what simpler system remains? Astra challenged all 38 modules against the frozen baseline source. This is
+source reasoning, not a production incident or a claim that the successor already supplies the guarantees.
+
+Deleting a wrapper, deleting its feature and preserving its invariant through a simpler owner are different choices.
+An existing caller is evidence of use, not a reason to retain behavior. Moving code to shelf is not a justification.
+The [original audit](plan.md) supplies purpose/cost/callers; this supplement supplies the removal consequences.
+
+| Baseline adapter | What is lost if behavior disappears | Decision / minimal retained behavior |
+|---|---|---|
+| `__init__.py` | No behavior is lost. | Packaging only; no extracted utility. |
+| `agent.py` | Execution handle, live progress and surviving-worker discovery disappear; unsafe reuse becomes possible. | Remove implementation, retain truthful execution/liveness in shared agent owner; test survivor plus query failure. |
+| `delegate.py` | Agent calls, model/account controls, continuation and normalized failure information disappear. | Retain required execution contract directly; separately question account-management UI and network pre-probes. No temp-file/argv/JSON in-process transport. |
+| `delegate_wire.py` | Malformed result and stop/usage distinctions can reach workflow unchecked. | Shared agent contract validates them; delete duplicate coercion, including unknown worker end becoming ok. |
+| `runner.py` | Outer cancellation, bounded execution and survivor reporting disappear. | Keep guarantees in shared agent lifecycle; delete polling and synthetic subprocess wrapper. |
+| `spawner.py` | Repository commands and external tools no longer execute, or timeout cleanup is lost. | Keep only necessary external execution through owning library; remove self-CLI calls for native operations. |
+| `procs.py` | Capture/stream/output/process-tree cleanup disappears. | Shared process API owns required behavior; not every old launch is worth retaining. |
+| `pidcheck.py` | PID reuse may be mistaken for original-holder liveness. | Keep identity-aware liveness where required in process owner; avoid competing probes for agent workers. |
+| `threadflag.py` | Naively shared flags mix timeout/success across concurrent commands. | Delete ambient flags; typed per-invocation result preserves isolation. |
+| `halt.py` | Shutdown may abandon workers or interrupt state transitions. | Keep scoped internal cancellation and safe boundaries; delete duplicate global signal plumbing. |
+| `deadline.py` | Commands, nested retries or waits can exceed the admitted budget. | Keep explicit per-execution remaining time; remove process-global budget list. |
+| `locks.py` | All-exclusion removal permits competing writers; deleting holder hints only loses diagnostics. | Separate correctness-critical reservation/critical sections from optional display sidecars; test two threads as well as processes. |
+| `landlock.py` | Same-host delivery contenders may race/retry more; no distributed exclusion is lost because none existed. | Keep custody and safe conditional delivery; justify local serialization separately. Arbitrary-command launcher is not required. |
+| `ram.py` | Admission no longer waits below configured available RAM (default 1024 MB). | Owner accepted: omit proactive RAM threshold initially; use bounded slots and actual failure evidence. Automatic low-memory throttling is deliberately lost; no new resource-prediction framework. |
+| `factory.py` | Detached loops can sleep with an idle Mac, delaying unattended work. | Owner accepted: retain lifetime-scoped keep-awake while the factory runs, including timed waits. Use a small justified OS capability; no new host framework or complex native binding solely for this. |
+| `git.py` | Checkout/ref/commit/worktree/delivery behavior disappears. | Shared Git owner supplies only required operations. Do not carry automatic cleanup/reset/commit-all solely because callers exist. |
+| `git_base.py` | Checkout pinning, failure-versus-absence and fsmonitor policy can disappear. | Retain justified semantics in Git owner; remove duplicate runner/classifier. |
+| `git_ops.py` | Diff/index/delivery observations disappear; deleting history rewriting also removes rebase/amend/lease-force workflows. | Keep required observation/conditional delivery; rejected task-history rewriting is deliberately lost. |
+| `git_pool.py` | Library errors may lose domain distinctions/full diagnostics. | Consume shared typed failures; retain only necessary factory interpretation, not generic reclassification. |
+| `gitrepo.py` | Repository and checkout topology can bind work to the wrong place. | Shared Git API owns topology and pinning; no handwritten factory .git readers. |
+| `gitmemo.py` | Repeated Git observations may cost more; fresh reads do not inherently lose correctness. | Settled direction: remove cache AND redundant caller queries. Pass operation inputs/results; fresh reads only at boundaries requiring current state. No relocation of the memo layer. |
+| `ignored.py` | Custom dirty-path suppression and factory-selected commit filtering disappear. | Challenge auto-staging policy itself. Agent resolves committed-step edits; shared ignore query only for a real retained consumer, with explicit failure. |
+| `slotcheck.py` | Worker/check Git may target a different checkout even if factory Git is pinned. | Retain actual checkout/custody invariant; preparation suffices only if later operations stay bound. Delete redundant probes/policy, not protection. |
+| `ident.py` | Configuration placement and actor/session attribution become ambiguous. | Minimal explicit roots and execution identity at composition; delete historical fallbacks/layout gates. |
+| `land_probe.py` | No current default protection is lost (GUARD_MAIN is false); future hook convenience is lost. | Exclude disabled feature; a lock observation never authorizes a push. |
+| `check_probe.py` | Early missing-command/recipe/path/order diagnostics disappear, along with base-check probes and planner rewrite overhead. | Accept loss with retired planner DSL; actual commands fail truthfully and semantic task acceptance remains reviewed. |
+| `check_net.py` | An enabled restriction disappears and checks may access external network. | Owner accepted normal host networking; remove factory-managed restriction, probes and per-check exceptions. Harness sandbox is a separate boundary. |
+| `links.py` | Automatic host-side URL reachability/filtering is lost. | Accepted feature removal. Repo/task-specific link validation can still be requested; no replacement service. |
+| `bd.py` | Task admission/context/claims/mutation/settlement disappear. | Thin replaceable task-tracker adapter; preserve typed failure/uncertainty and actual conditional semantics. |
+| `beadtools.py` | Construction/PATH/error-rendering convenience disappears. | Use composition/CLI directly; deleting failure-as-empty helpers improves truthfulness. |
+| `bdbackup.py` | Existing daily exports are lost before maintenance protection is verified. | Tracker-maintenance ownership agreed; preserve exports until real coverage/recovery is verified. Count check is not restore proof. |
+| `closes.py` | Blind deletion resets failure streaks/deduplication and may permit more retries. | Replace accepted retry accounting with actual DB attempts, then delete log-derived control; rotation cannot reset policy. |
+| `factorybackup.py` | Recovery of local execution state from old snapshots is lost. | Accepted tradeoff: deliberate DB discard repeats ordinary steps; intact DB still resumes unfinished work. |
+| `layout_paths.py` | Migration journal/retired-path naming disappears. | Accepted compatibility removal; no independent capability. |
+| `layout_migrate.py` | Old-layout conversion/detection and command gating disappear. | Accepted compatibility removal. Startup must not move/delete prior user work or evidence. |
+| `key_migrate.py` | Historical-key discovery/rekey/retirement disappears. | Accepted compatibility removal; current identity has one owner. |
+| `looks.py` | Screenshot conversion/copy for old visual review disappears. | Accepted visual-only workflow removal; no invented generic artifact consumer. |
+| `markers.py` | Textual markers in otherwise merged files can escape this extra scan; unmerged-index checks do not replace it. | Delete script/process hop. Prefer repo-owned marker policy if needed; retain unresolved Git-conflict refusal and distinguish scan failure if scan remains. |
+
+## Changes to the earlier recommendations
+
+1. Checkout correctness is stronger than pinning factory Git. `RunParts.assert_tree` requests unpinned/ambient
+   Git; workers/checks may resolve a different checkout. A preparation-only assertion is sufficient only if later
+   execution remains bound to that checkout. Keep this invariant before removing the eleven-probe implementation.
+2. RAM and idle prevention are real unattended-operation behavior, not incidental adapters. Their removal needs
+   an explicit product choice; do not automatically extract a host-observation framework or native power binding.
+3. Remote-keyed land locks serialize local contenders. They never fenced remote writers. Correct expected-head/
+   non-force publication and shared-checkout custody remain required even if optional local serialization is cut.
+4. Git memoization is an observation cache, not an operation snapshot. Its fixed config-file list misses included
+   configuration dependencies (source inference, not a reproduced incident). Removing it favors fresh observation;
+   replacing all live reads with an old admitted snapshot would be wrong too.
+5. Marker scanning, dirty-path suppression, account-management UI and network pre-probing each need a concrete
+   retained purpose. They do not all become new shelf APIs merely because they exist in the baseline.
+
+## Source traces for controversial cuts
+
+- Ambient checkout: `app/run/parts_run.py:106` -> `adapters/slotcheck.py:37`; check actual worker/check environment.
+- Planner convenience and duplicate work: `parts_run.py:115` -> `tlwork/plan/probe.py:37` and `tlgate/domain/lint.py:90`.
+- Mutable config cache: `adapters/gitmemo.py:19`; fixed signatures do not enumerate include/includeIf targets.
+- Host policy: `app/loop/waits.py:8` consumes RAM; `app/loop/factory_verbs.py:164` attaches keep-awake to loops.
+- Lock scope: `tlland/lander.py:120` and `tlrelease/push.py:19`; remote advancement still needs independent handling.
+- Routing policy: `app/workers/account_acts.py:90` and `app/loop/settle.py:89` use network/offline facts. Remove
+  pre-probing only with a clear policy for actual typed provider failures, not blind launches or unlimited retries.
+
+These paths name baseline code retained at commit `731b7c76ef214ce35229f77814f98b6e1d6d5c0f` and in the original
+review worktree. The source foundation introduces none of these mechanisms. Concrete implementation tasks retain
+invariants; Git memo retirement/query consolidation is now settled direction. RAM-threshold removal and keep-awake retention are now accepted. Normal host networking for checks is now accepted. Unresolved delivery convenience cuts stay proposed until selected. Do not turn this
+analysis into a new runtime monitoring system or file one task per adapter.
+
+
+## How recommendations are presented
+
+Owner clarification, 2026-11-09: prepare an engineering judgment before asking for approval. For each proposed
+behavior cut, state the user-visible loss, whether I judge that loss acceptable, the concrete reason/risk and the
+simpler retained behavior. Ask for a product choice only after that recommendation is concrete. Do not reopen
+already accepted cuts. "There are callers" and "we can move it to shelf" are not recommendations.
+
+For Git memoization the chosen strategy removes unnecessary observations, rather than accepting extra Git
+processes as the inevitable cost of deletion. See ../tl-8bh9.9/plan.md for the exact operation-data-flow contract.
+
+
+## Owner clarification: purpose before implementation
+
+Git branch context can be held in normal operation memory and passed around; branch names are deterministic.
+That does not authorize a factory-lifetime snapshot of mutable HEAD/remote/config. Fresh verification occurs only
+at boundaries requiring it, and restart retains required unfinished-operation references through factory.db.
+
+Retiring planner probes does not remove the already agreed minimum completion contract when the plan step is
+implemented: valid structured completion and the required committed docs/design/<task-id>/plan.md. No new dynamic
+DoD framework or extracted-command preflight is needed. Further task-specific validation can be added only when
+its purpose is demonstrated. Passing a generic check is not proof that the requested behavior is delivered.
+
+Checkout guard's actual purpose is preventing an agent/check or Git operation from acting on another checkout
+(for example the person's main tree) when path/config/environment is redirected. Keep owned-checkout binding at
+actual execution boundaries; do not carry the standalone old guard, eleven repeated probes, or blanket rejection
+of every core.worktree setting. Factory Git pinning alone does not bind the harness's own Git tools.
+
+RAM admission is only a heuristic threshold before starting more work; it is not a memory reservation or an OOM
+guarantee. My recommendation remains to omit it initially and use bounded slots/actual failure evidence, with the
+loss of proactive throttling explicitly acknowledged. Keep-awake prevents idle Mac sleep during unattended work,
+including capacity/owner waits; it does not change concurrency or task policy. My recommendation remains a small
+lifetime-scoped OS capability for a running unattended factory. Owner subsequently accepted both host choices, 2026-11-09. These are target contracts, not implemented source behavior.
+
+
+## Plain names for active values
+
+"Ordinary memory" means Python variables or fields on the current operation, for example branch_name (derived
+from task ID), checkout_path (the selected managed worktree) and candidate_oid (the exact commit being checked).
+"Facts" was shorthand for these specific values, not another entity, cache or storage system. Pass the values
+as function arguments rather than repeatedly asking Git for them. Persist required unfinished-operation references
+in factory.db for restart; refresh mutable observations only where the operation requires current state.
+
+
+## Final behavior cuts — owner accepted, 2026-11-09
+
+The owner accepted all three recommendations, 2026-11-09. Their losses are deliberate; retained safety and
+bounded retries remain required. Source implementations enter only through their existing owning tasks.
+
+| Behavior | Recommendation | Lost behavior / tradeoff | Why I judge the loss acceptable |
+|---|---|---|---|
+| Separate online/offline probes and global offline gate | Remove socket-probe polling as a second network-state authority; actual typed agent/Git errors use the single bounded wait/retry owner. | Lose early confirmation of connectivity and global suppression of launches until a probe passes. A later admitted request may fail before connectivity recovers. | Probe success does not prove the needed endpoint works; probe failure should not stop unrelated work. Actual operation results are better evidence; bounded retries remain mandatory. This is unrelated to check sandbox removal. |
+| Factory whole-tree textual conflict-marker scan | Remove the dedicated factory scan; rely on unresolved-index refusal and configured repository validation. | Lose the extra scan that may find literal markers in otherwise merged files if repository checks do not catch them. | Factory should enforce completion/integration contracts while repository checks own source validation. A repo can include marker detection in its normal checks without another factory script/process hop. |
+| Human-readable lock-holder .holder JSON files | Remove diagnostic sidecar writes/reads; retain real shared locks and DB-owned reservations. Show an unknown external holder honestly. | Wait messages may lack a task/check label for holders not represented in factory.db. | A best-effort diagnostic hint does not justify another local state path. Existing runtime ownership records can explain known factory work; do not invent a new DB ledger solely to reproduce sidecar labels. |
+
+Evidence rechecked for these proposals: app/workers/account_acts.py:90–116 polls a network probe; loop/settle.py:89–104
+sets global NETWORK DOWN and suppresses claims; adapters/locks.py:1–6 calls holder records hints, with reads/writes
+at :35–44 and :99–104. Marker behavior and later full-check distinction are traced in the main audit. Removing
+pre-probes must preserve actual typed failure evidence and bounded waiting, not permit uncontrolled launch loops.
+
+Keep local checkout custody, identity-aware liveness, cancellation/time limits and conditional task/Git mutations.
+Local delivery serialization should stay narrow while the first complete flow is built; there is insufficient reason
+to remove a correctness-relevant critical section merely to reduce the number of adapters. Account status/limits
+remain required; separate account-management UI is not a prerequisite for the first CLI task flow.

@@ -1,103 +1,59 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
-
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [sync-concepts](https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
+This branch is the curated successor foundation. The reference implementation is commit
+`731b7c76ef214ce35229f77814f98b6e1d6d5c0f`; its source remains in Git history and the original review worktree.
+Read `docs/design/tl-8bh9.8.7/plan.md` and `docs/glossary.md`. Only implemented commands are available;
+foundation completion is not completion of the task factory. Carry retained behavior in bounded tasks, not
+whole old packages, test bootstraps or unused abstractions. No baseline runtime imports or fallback.
 
 ## Ownership
 
-`tl doctor` fails when this section is missing from the installed plugin's AGENTS.md.
-
 | what | who may write it | never |
 |---|---|---|
-| the main checkout of a repo | the person; `dev/release.py` never touches it | an agent's hand edit, a release |
-| a plugin cache dir (`~/.claude/plugins/cache/...`) | `claude plugin update`, driven by `dev/release.py` | any edit, by anyone: a flipped byte shows in `tl doctor` against MANIFEST.sha256 |
-| the release clone (`<config>/release/`) | `dev/release.py` | anything else |
-| `pinned.json` | `tl pin` and `tl rollback`, the owner's override | the loop, an engine, an agent |
-| ports (slots, worktrees, the dashboard server) | `tl slot`, `tl worktree`, `tl worktrees`, `tl dash` | killing a process by name: no `pkill`/`killall`, only a PID you confirmed is yours |
-| a bead's state | `tl` (the actor) | prose in a comment; only typed verbs act |
+| main checkout | the person | agent hand edits or release tooling |
+| managed task worktree | its assigned implementing agent and coordinator | unrelated or competing source writers |
+| installed plugin/cache | the normal installation/release operation | hand edits |
+| owner pin | explicit owner operation | automatic version switching |
+| task state | typed task-tracker operations through the actor | treating a comment as a state mutation |
+| existing worktrees, evidence and user data | explicitly authorized owning operation | deletion based only on age or presumed staleness |
 
-Work in a worktree. Fork a session only for read-only work of 4 hours or less; otherwise start a fresh one with a written brief.
+Work in a worktree. Preserve unrelated edits and task claims. Git operations follow active user/session authority;
+local Git authorization does not authorize remote publication, merge, installation or release.
+Never kill processes by name; act only on a confirmed owned process identity.
 
-## Build & Test
+## Build and verification
 
-```bash
-just test                      # THE test command: runs only the tests this change can break (dev/affected.py: the diff against origin/main followed up the import graph; tests/rules always), all kinds, once per tree, in at most 4 workers; the gate and the release run this and nothing else
-uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test) while you edit; the tests are plain pytest classes: `assert`, `setup_method`, fixtures; `tltestkit.case.Case` still gives `addCleanup` and `subTest`; write new tests as pytest functions or classes, never `unittest`
-just check                     # ruff on the changed .py files only (`just lint-all`: whole tree), pyrefly on the whole tree (a signature change breaks unchanged callers), then import-linter (tools pinned in mise.toml; `mise install`)
-just test-pkg <stage>          # stage tests + its dependencies' contract tests; inner loop only, `just test` stays the gate. Workspace members run in their isolated package environment.
-just test-delegate            # packages/delegate/tests (real processes, minutes): collected by no other run unless the change touches packages/delegate, skills/task-loop/_vendor or packages/testkit (dev/packages.py); a task-loop or dashboard change never runs them
-```
+Python 3.15+. `just check` and `just test` are the required focused gates. Read the justfile before running them.
+The successor has its own declared environment and installed package; baseline editable installs or PYTHONPATH
+must not supply missing code. Do not copy the old conftest/runners: they load the old application and kernel.
+Do not run whole-suite/live tests as an agent. Use focused behavior/contract tests; new tests are pytest functions
+or classes, never unittest. No test for every private helper or a test that merely repeats its implementation.
+Retain caps: 400 source lines per file, 80 per function and 800 per test file. No new Any, cast or ignore escape.
 
-Never run pytest over the whole suite; for broad coverage run `just test` (affected-only).
-Whole-suite runs (`just test-full`) and `just test-live` (tests/live: scenarios that run the real pieces) are started by a person, never by an agent, the gate, a release, a cron or a background job.
+## Architecture and design
 
-Tests live in `tests/<slice>/`, mirroring `src/taskloop/app/<slice>` (a test's home is the slice whose code changes if its assertion breaks);
-the other layers have their own folders (`contracts`, `stores`, `adapters`, `ports`, `domain`, `cli`, `hook`, `dash`, `rules` for the gate).
-A test's kind comes from its path (tests/conftest.py), never from a hand marker: unmarked = logic (fakes, in process, fast);
-`tests/<slice>/real/` = real (real git, processes, sockets; only where one exists; `@real_proc` / `@real_git` on a single test also mean real);
-`tests/e2e/` = a whole flow (selftest, release). `serial` stays a marker (shared clock, port or lock). Guards (tests/support/procsim.py): a
-logic test that spawns, forks or runs real git fails; a real test that never spawns fails. A test over its kind's limit fails (LIMITS_S in
-conftest).
-
-Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
-`just check` and `just test` are the gates.
-Caps (tests/rules/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; no exceptions table: an oversize file or function is split. No SLOC total and no `Any` count is stored (parallel releases would conflict on it): the caps are per file, and tests/rules/real/test_changed_files.py compares the files a change touches with the merge base on origin/main (no new `Any`, `cast` or ignore on net).
-
-## Conventions
-
-- Every module with state, time or IO takes it through a narrow port passed in (store, clock, spawner, forge, tasks). Adapters implement ports; only adapters (and the kernel's DB modules) import sqlite3, open paths or sleep; domain code takes values and returns values. A new durable thing = a port + adapters (in-memory, file, SQLite). Enforced for sqlite3 and time.sleep by tests/rules/test_ports_only.py (its table of known exceptions only shrinks); subprocess is covered elsewhere and time.time is deferred.
-- Decisions live in docs (the design note's Decisions recorded table or the repo's ADR); beads are work only; a decision bead is closed the moment it is decided.
-
-- "We need to use only our database": factory.db is for state, with no file fallback. Logs (engine, worker console, transcripts) stay files behind a log reader, rotated by age.
-
-- Python 3.15+; macOS only, POSIX. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
-  (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/rules/test_pep723.py holds them equal) and run with `uv run --script`: the
-  `tl` shim, the loop's own spawns, and dev/release.py. Dev and test tools live in pyproject.toml's `dev` group. The
-  PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/hook/test_hook.py).
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
-
-## Non-Interactive Shell Commands
-
-**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
-
-Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
-
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
-
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
-```
-
-**Other commands that may prompt:**
-- `scp` - use `-o BatchMode=yes` for non-interactive
-- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
-- `apt-get` - use `-y` flag
-- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
+- Use the glossary: task, task tracker, step, attempt, session, slot and land have distinct meanings.
+- Task tracker owns requirements, dependencies, questions, linked answers and discussion; Git owns code,
+  plans and selected design artifacts. Plans belong at `docs/design/<task-id>/plan.md`.
+- factory.db owns local execution state and reservations. Deliberate discard permits normal reevaluation;
+  intact-DB restart must continue unfinished work/session after liveness reconciliation. No backup/restore,
+  compatibility reader, history reconstruction or file fallback for factory state.
+- Logs, transcripts and execution artifacts remain files behind owning readers. Do not derive control state
+  from logs. Tracker maintenance owns durable task-data protection; preserve exports until recovery is verified.
+- One owner per fact and one application operation shared by CLI, dashboard and agent consumers.
+- State/time/IO enter through narrow explicit ports. Use owning shelf Git/process/agent/lock APIs and semantic
+  fakes. Factory source and tests have no subprocess imports/usage or direct spawn/signal/wait escape hatch. The only
+  signal use is `interrupts.py`'s SIGINT handler while `tl step rounds` runs (sets a flag, signals no process), enforced
+  by the import-linter contract `one-signal-owner` and the policy AST test.
+- Prefer native Python even in libraries. A subprocess needs a concrete external-tool or lifecycle reason;
+  moving a wrapper to shelf does not justify it. Retain safety behavior, not every existing mechanism.
+- Typed inputs/results in process; validated structured interchange where needed across boundaries. No regex
+  over display text/logs for workflow control and no JSON roundtrip just to make an in-process call look remote.
+- No backward compatibility, dual readers or unused speculative features. Proposed decisions remain proposed.
+  Explicitly held work stays held. Do not carry adapter behavior until its deletion consequences are assessed.
+- Runtime version stays fixed until restart. Skills are lightweight explicit helpers, not another scheduler,
+  policy/state owner or a prerequisite for factory correctness.
+- Run commands non-interactively. AGENTS.md and CLAUDE.md are separate files: mirror substantive instruction edits.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
 ## Beads Issue Tracker
@@ -154,27 +110,3 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - Do not commit or push without clear authority from the active profile or the current user request.
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
-
-<!-- BEGIN BEADS CODEX SETUP: generated by bd setup codex -->
-## Beads Issue Tracker
-
-Use Beads (`bd`) for durable task tracking in repositories that include it. Use the `beads` skill at `.agents/skills/beads/SKILL.md` (project install) or `~/.agents/skills/beads/SKILL.md` (global install) for Beads workflow guidance, then use the `bd` CLI for issue operations.
-
-### Quick Reference
-
-```bash
-bd ready                # Find available work
-bd show <id>            # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>           # Complete work
-bd prime                # Refresh Beads context
-```
-
-### Rules
-
-- Use `bd` for all task tracking; do not create markdown TODO lists.
-- Run `bd prime` when Beads context is missing or stale. Codex 0.129.0+ can load Beads context automatically through native hooks; use `/hooks` to inspect or toggle them.
-- Keep persistent project memory in Beads via `bd remember`; do not create ad hoc memory files.
-
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md for details and anti-patterns.
-<!-- END BEADS CODEX SETUP -->

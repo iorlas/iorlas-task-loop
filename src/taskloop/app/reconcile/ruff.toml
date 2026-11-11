@@ -1,5 +1,0 @@
-# reconcile is a converted stage (tests/rules/test_host_ban.py): it takes ports and values, never an engine or a host typed Any.
-extend = "../ruff.toml"
-
-[lint]
-extend-select = ["ANN401"]

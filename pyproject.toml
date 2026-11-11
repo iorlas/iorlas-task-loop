@@ -1,45 +1,42 @@
+[build-system]
+requires = ["hatchling==1.33.0"]
+build-backend = "hatchling.build"
+
 [project]
 name = "iorlas-task-loop"
 version = "0"
-description = "Task loop engine: the dependencies of tl.py (PEP 723 header, same pin) and the dev and test tooling."
+description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
-dependencies = [
-    "msgspec==0.22.0",
-]
+dependencies = ["any-agent==0.5.0", "beads-client==0.2.0", "git-porcelain==0.15.0", "process-lock==0.2.1", "sqlite-store==0.1.0", "stream-proc==0.6.0"]
+
+[tool.uv.sources]
+any-agent = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-agent", tag = "any-agent-v0.5.0" }
+sqlite-store = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/sqlite-store", tag = "sqlite-store-v0.1.0" }
+git-porcelain = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/git-porcelain", tag = "git-porcelain-v0.15.0" }
+process-lock = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/process-lock", tag = "process-lock-v0.2.1" }
+beads-client = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/beads-client", tag = "beads-client-v0.2.0" }
+# Same tag and commit as any-agent's own stream-proc: the two must come from one shelf commit.
+stream-proc = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/stream-proc", tag = "any-agent-v0.5.0" }
+
+[project.scripts]
+tl = "taskloop.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/taskloop"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/taskloop", "pyproject.toml", "README.md", "LICENSE"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-xdist", "tltestkit"]
+dev = ["pytest==9.2.0", "pytest-xdist==3.8.0"]
 
-[tool.uv]
-package = false
-
-# Shared SLOC caps, copied from the shelf linting preset
 [tool.shelf-size]
 code-file = 400
 function = 80
 test-file = 800
 
-[tool.uv.workspace]
-members = ["packages/*"]
-
-[tool.uv.sources]
-tltestkit = { workspace = true }
-
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-# Plain classes, any name: tests/conftest.py collects only the classes a module defines
-python_classes = ["*"]
-filterwarnings = ["ignore::pytest.PytestCollectionWarning"]
-# maxschedchunk: xdist hands out at most 4 tests at a time, so the slow modules (test_release, land) spread over the workers: 2x faster than the default
-# -m: the default run is the logic kind only; `just test` (dev/runtests.py: -m "not serial", then -m serial), `just test-full` and any -m of yours run real and e2e
-addopts = "-p no:cacheprovider --maxschedchunk=4 -m 'not real and not e2e'"
-markers = [
-    "serial: runs alone, after the parallel workers (tests/conftest.py SERIAL)",
-    "quarantine: a flaky test listed in tests/quarantine.txt; runs apart (dev/runtests.py) and cannot block",
-    "live: a scenario that runs the real pieces (git remote, processes, dashboard); only `just test-live` / `pytest -m live` collects tests/live",
-    "real: real git, processes or sockets; set by a real/ folder, or by @real_proc(reason) / @real_git(reason) on one test (tests/conftest.py)",
-    "e2e: a whole flow (tests/e2e/); set by the folder",
-    "needs(capability, reason): one test needs a capability a logic test lacks (process, git, real_clock, long_run, network, thread_race); folds into real (packages/testkit/src/tltestkit/procsim.py)",
-    "real_proc(reason): one test starts real processes; folds into real (packages/testkit/src/tltestkit/procsim.py)",
-]
+testpaths = ["tests/cli", "tests/steps", "tests/rules"]
+addopts = "--import-mode=importlib -p no:cacheprovider"
+# importlib mode puts no test directory on sys.path: tests import the shared doubles module (tests/steps/doubles.py)
+pythonpath = ["tests/steps"]
