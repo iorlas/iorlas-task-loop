@@ -2,8 +2,8 @@
 published to origin) and its checks attempt 1 concluded `passed` and released; the semantic Git fake's origin (`main`
 at the base B with the profile `PROFILE`) and the person's clone with one adopted, free slot s1 detached at B (D); the
 real profile reader on the person's checkout, the slot environment and block over `doubles`' scripted registered start,
-the real slot lock under the bench's folder, and a tracker double. `test_land`, `test_land_resume` and `test_land_push`
-drive it; nothing here runs a process."""
+the real slot lock under the bench's folder, and a tracker double (its read, heartbeat and close). `test_land`,
+`test_land_resume`, `test_land_push`, `test_land_close` and `test_land_summary` drive it; nothing here runs a process."""
 
 import json
 import sqlite3
@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import override
+from typing import Literal, override
 
 from beads_client import Bead
 from doubles import CHECKS, Environment, FakeProfiles, FakeSlotFiles, PinnedViews
@@ -36,6 +36,7 @@ from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import landing
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
+from taskloop.tracker_client import Closed
 
 PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"], "checks": [
     {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 600}]}
@@ -115,7 +116,10 @@ class NoBeats:
 class LandBench:
     """One land's collaborators. `status`/`assignee` are the task in the tracker; `beats` the claim's answers; `environ`
     this process's environment; `seen` the process-table answer per stored land process; `racing` runs once right before
-    the next write transaction of the candidates' store (another actor's commit)."""
+    the next write transaction of the candidates' store (another actor's commit). The tracker's close is semantic: found
+    closed is `already_closed`, another assignee `claim_lost`, else the task becomes `closed` with the reason; `closing`
+    answers the next closes instead (`missing`, `unavailable`, ...); `on_close` runs first (a crash); `tracker` logs each
+    close with origin's `main` at that moment."""
 
     root: Path
     remote: FakeRemote
@@ -132,6 +136,11 @@ class LandBench:
     now: float = 10.0
     me: EntryIdentity = ME
     racing: Callable[[], object] = lambda: None
+    title: str = "Widget"
+    reason: str | None = None
+    closing: list[Closed] = field(default_factory=list)
+    tracker: list[tuple[str, str]] = field(default_factory=list)
+    on_close: Callable[[], object] = lambda: None
 
     def __post_init__(self) -> None:
         self.views, self.files = PinnedViews(self.repo), FakeSlotFiles(self.repo)
@@ -152,7 +161,19 @@ class LandBench:
         return begin_immediate(con)
 
     def show(self, task_id: str) -> Bead:
-        return Bead(task_id, title="Widget", description="It must do X", status=self.status, assignee=self.assignee)
+        return Bead(task_id, title=self.title, description="It must do X", status=self.status, assignee=self.assignee)
+
+    def close(self, _root: str, task_id: str, reason: str) -> Closed:
+        self.on_close()
+        self.tracker.append((task_id, self.remote.branches().get("main", "")))
+        if self.closing:
+            return self.closing.pop(0)
+        if self.status == "closed":
+            return "already_closed"
+        if self.assignee != "taskloop":
+            return "claim_lost"
+        self.status, self.reason = "closed", reason
+        return "closed"
 
     def inspect(self, task_id: str, backlog: str, root: str) -> TaskInspection:
         return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self, task_id)
@@ -172,11 +193,11 @@ class LandBench:
 
     def ports(self) -> LandPorts:
         return LandPorts(self.checking(), self.lands, self.views, lambda path: GitProfileFiles(path, self.views), self.inspect,
-                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing, self.environ)
+                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing, self.environ, self.close)
 
     def land(self, mode: str = "land", *, no_change: bool = False, minutes: int = 5, checkout: Path | None = None) -> LandResult:
-        request = LandRequest("tasks", "tl-1", checkout or self.repo.path, minutes, "withdraw" if mode == "withdraw" else "land",
-                              no_change)
+        modes: dict[str, Literal["land", "summary", "withdraw"]] = {"withdraw": "withdraw", "summary": "summary"}
+        request = LandRequest("tasks", "tl-1", checkout or self.repo.path, minutes, modes.get(mode, "land"), no_change)
         return land(self.ports(), request)
 
     def rows(self) -> tuple[LandRow, ...]:

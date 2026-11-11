@@ -1042,3 +1042,84 @@ test that fails without it (nine hand mutations, each failing a test). One is op
 
 Code lines after the repairs: `land` 238, `land_check` 155, `land_push` 144; `land_bench` 182, `test_land_push` 178,
 `test_land_resume` 112.
+
+## 28. As built: L4 (tl-8bh9.14.8.5)
+
+The tracker close and its record, S's commit message, and the land summary with `--summary`; nothing of L5 (no `tl step
+land` subcommand, status lines, `Next` words, guide, glossary beyond the L4 words, runbook). Code lines by the policy
+counter: `land` 280 (+42), `land_close` 44 (new), `land_summary` 158 (new), `land_check` 157 (+2), `tracker_client` 78
+(+21), `cli_composition` 230 (+1); `test_land_close` 148, `test_land_summary` 156 (both new), `land_bench` 199 (+17),
+`real/test_land_real` 158 (+21), `test_land_resume` 111. Largest new function: `land_summary.lines` (21).
+
+- **The tracker port** (`tracker_client`): `TrackerClaims.close(tracker_root, task_id, reason) -> Closed`, a word:
+  `closed`, `already_closed`, `claim_lost`, `missing`, `unavailable`. One `Bd.show` as `taskloop`: none is `missing`,
+  `closed` is `already_closed`, another assignee `claim_lost`; else `Bd.close(task, reason, if_assignee="taskloop")` (its
+  same-value assignee update is the fence). A `BdError` of kind `precondition`/`not_claimable` is `claim_lost`, bd's
+  deleted-bead text `missing`, anything else `unavailable`. Nothing unclaims. `LandPorts.close` carries it; `open_land`
+  wires `tracker_claims().close`.
+- **The close step** (`land_close.closed`, called by `land._closing` on every `Landed` but `--withdraw`'s): after the
+  push (or the no-change disposition), the port with the reason `Landed <S> on main (task/<id> at <X>)` or `Already on
+  main at <O>`; `closed`/`already_closed` recorded by `LandStore.record_close` (a record refused because a concurrent land
+  recorded it first answers that row; a store fault is `unavailable store`, "the task is closed; rerun to record it").
+  Refused: `claim_lost` is `refused claim_lost` ("close it by hand with `bd close <id>`; a rerun records it
+  `already_closed`"), `missing` is `refused task`, `unavailable` is `unavailable tracker`; the task stays open and
+  claimed. `land_close.NOT_SYNCED` is the line every land answer ends with (L5 prints it); nothing runs `bd dolt push`.
+- **Resume** (section 12's close rows): a delivered candidate goes straight to the close (no fetch, squash, check, push or
+  step 8 read): `Landed.how` `delivered`; delivered and closed answers `already_landed` with no Git or tracker call (after
+  a held release is retried). A closed task whose pushable candidate is on origin records the delivery, then
+  `already_closed` (`Landed.how` `already_pushed`); without it, `refused closed` as in L3.
+- **The message** (`land_summary.message`, `message_at`), section 9's shape: `<title> (<task-id>)`; `Squashed from
+  task/<id> at <X>:` and one `- <subject> (<12-char sha>)` per commit of X not on O (`Repo.history([X], not_on=[O])`, the
+  same set as merge-base(O, X)..X), oldest first, at most 50 then `- ... and <n> more` (a bare `Squashed from ... .` when
+  none); then the trailers `Task:`, `Plan:` (when `docs/design/<id>/plan.md` is in X's tree) and `Checked: <checks
+  attempt id> <its conclusion> at <X>`. `one_line` turns every Unicode control, format, surrogate, private-use or
+  unassigned character into a space and collapses whitespace (line and paragraph separators, NEL included), then cuts to
+  72: a title or subject can add no line, paragraph or trailer (the trailers are always the last paragraph). Author and
+  committer are the person (real Git: verified by `%an`/`%cn` and Git's own trailer parser in `test_land_real`).
+- **The summary** (`land.land` with `mode="summary"`): section 4 steps 1-4 (any concluded checks attempt: the summary
+  reports the conclusion), step 6-7 (the checkout, `push_url`, `ls_remote`, the branch rule), one tracker read for the
+  title (no status refusal), the fetch, the profile at O (`target_profile`, `target`, `no_required` as the land), S in
+  Git objects; no step 5 release, no candidate, reservation, push or close. `LandSummary` (typed facts, section 10's
+  seven items: `results`, `added`/`removed`, `argv`, `checks`, `setup`, `files`, `state` `same_tree`/`moved`/`conflict`/
+  `no_change`, `again`, `conflicts`, `message`, `base`) and `land_summary.lines` (one printable line per fact).
+  Configuration files are found by comparing the tree listings of merge-base(O, X) and X (no diff API); an argv element
+  names a tracked file exactly or a folder by prefix.
+
+**Deviations (decided here, open to veto).**
+
+1. The close is its own module `land_close` (the plan put it in `land.py`, +45): `land.py` keeps only `_closing`. Both
+   join the `rounds-never-land` forbidden list and the `cli-never-imports-the-attempt-entry` sources with `land_summary`.
+2. The port answers a word, not four result classes (`Closed | ClosedBefore | CloseLost | CloseUnavailable`), and adds
+   `missing` (no such task: `refused task`, the admission's word for it).
+3. `--withdraw` never closes: finding S on origin it records the delivery and answers `Landed` with `close` None (it
+   reads no tracker, L3 deviation 7); the next `tl step land` closes.
+4. `Checked:` names the checks attempt's own conclusion (a no-change S on a failed checks attempt is never pushed, but
+   its message states no false pass); an empty title is `Untitled task`; listed subjects are cut to 72 like the title.
+5. `--summary` is a mode of `LandRequest` (`land`, `summary`, `withdraw`); with `--no-change` it is `refused choices`.
+   The summary is not computed inside a land: "printed before every land" is L5's (it may run the summary mode first;
+   that costs a second fetch).
+6. The summary runs the branch rule (a moved branch is refused as the land would) and reads the profile at O twice
+   (once through `_required`, once with X's).
+
+**Tests**: `test_land_close` (the push, then one close as `taskloop` with origin already at S, the reason; a crash
+(`BaseException`) before the close, the rerun closing with origin offline; a lost close record, the rerun recording
+`already_closed` with the first reason kept; a concurrent close record; a claim taken during the push, `claim_lost`, the
+rerun refused again, then closed by hand and recorded; `unavailable`, `claim_lost`, `missing` each leaving the task open
+and claimed, the rerun closing; `already_landed` with origin offline and the tracker never asked; the no-change reason; a
+closed task whose candidate is on origin; `--withdraw` never closing; the real port's argv over beads_client's `Script`
+and its seven bd answers, never `unclaim`). `test_land_summary` (the message exactly; nine hostile titles and subjects:
+newlines, CRLF, ANSI, U+2028/2029, NEL, NUL/BEL/TAB, zero-width and bidi format, VT/FF; the 72 cut, `Untitled task`; 53
+commits; the conclusion trailer; `message_at` oldest first and the plan; S's message from the tracker title; `--summary`
+changing nothing; a moved main; a conflict and no change as facts; a target profile with added and removed required
+names, changed argv, a removed and a changed check, a changed setup; changed required names on the same tree; failed
+checks reported and `--no-change` refused; configuration files; results and printable conflict paths).
+`real/test_land_real` (S's message, the person as author and committer, Git's trailers `Task` and `Checked` only, the
+close; a hostile title adding no trailer Git reads). Forty-one hand mutations (each reinstalled and run against the six
+land test files): thirty-nine failed a test at once; `again` on the same tree with changed names survived the first run
+and a test was added for it (now failing); the title passed to the summary mode's squash is an equivalent mutation (the
+summary recomputes the message; that S object is never shown or recorded).
+
+**Not verified**: no command calls the operation (L5); `bd close` against a real tracker (the port's argv and answers are
+pinned over `Script` with bd 1.3.1's measured texts); the close of a claim whose lease lapsed between commands (`claim_lost`
+from bd's fence, by the double only); the summary on a real repository (fake Git only; the message on real Git is
+covered); the open push URL residual of section 27.1 item 4 is unchanged.

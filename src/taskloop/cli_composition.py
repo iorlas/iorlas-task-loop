@@ -300,12 +300,13 @@ def open_land(database: Path, artifacts: Path) -> Generator[LandPorts | Failed]:
     real wiring (the validation's), the candidates' store on its connections, the person's checkout through the
     remote-capable view (`remotes`: hooks off, bounded transport, the person's credentials), the tracker read and claim
     heartbeat, a new stop event per keep-alive, this process's identity, the slot lock's probe and custody (`landing`),
-    and this process's environment. Here, never in `composition`: neither entry may import the land
+    this process's environment, and the tracker's close. Here, never in `composition`: neither entry may import the land
     (`rounds-never-land`)."""
     with _read_only(database) as con:
         if isinstance(con, Failed):
             yield con
             return
         work = open_checking(database, artifacts)
+        claims = tracker_claims()
         yield LandPorts(work, LandStore(work.store.connect, work.store.begin), remotes, _land_profiles, inspect_tracker_task,
-                        tracker_claims().heartbeat_for, threading.Event, this_process, probe, landing, os.environ)
+                        claims.heartbeat_for, threading.Event, this_process, probe, landing, os.environ, claims.close)

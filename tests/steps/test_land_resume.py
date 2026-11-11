@@ -13,8 +13,7 @@ from git_porcelain import Transient
 from land_bench import ME, RUN, LandBench, bench
 
 from taskloop.check_store import CheckStore
-from taskloop.land import Landed
-from taskloop.land_push import Withdrawn
+from taskloop.land import Landed, LandResult
 from taskloop.operations import Failed
 from taskloop.slot_lock import lock_path
 
@@ -28,7 +27,7 @@ def b(tmp_path: Path) -> LandBench:
     return found
 
 
-def word(found: Landed | Withdrawn | Failed) -> tuple[str, str]:
+def word(found: LandResult) -> tuple[str, str]:
     assert isinstance(found, Failed), found
     return found.kind, found.reason
 
@@ -102,12 +101,12 @@ def test_a_concurrent_land_winning_the_insert_refuses_the_other_landing(tmp_path
     b = bench(tmp_path)
     if moved:
         b.advance({"OTHER": "another task\n"})
-    winner: list[Landed | Withdrawn | Failed] = []
+    winner: list[LandResult] = []
     b.racing = lambda: winner.append(b.land())
     assert word(b.land()) == ("refused", "landing")
     assert isinstance(winner[0], Landed) and len(b.rows()) == 1
     found = b.land()
-    assert isinstance(found, Landed) and found.how == "delivered" and found.row.key == winner[0].row.key
+    assert isinstance(found, Landed) and found.how == "already_landed" and found.row.key == winner[0].row.key
 
 
 def test_a_held_release_is_retried_first_by_every_rerun_and_the_land_still_pushes(b: LandBench) -> None:
@@ -117,10 +116,10 @@ def test_a_held_release_is_retried_first_by_every_rerun_and_the_land_still_pushe
     found = b.land()
     assert isinstance(found, Landed) and found.how == "pushed" and found.row.holds_slot
     again = b.land()
-    assert isinstance(again, Landed) and again.how == "delivered" and again.release == "held:slot_redirected"
+    assert isinstance(again, Landed) and again.how == "already_landed" and again.release == "held:slot_redirected"
     del b.files.contents[pointer]
     done = b.land()
-    assert isinstance(done, Landed) and (done.how, done.release) == ("delivered", "released") and b.reservations() == []
+    assert isinstance(done, Landed) and (done.how, done.release) == ("already_landed", "released") and b.reservations() == []
     assert b.slot_head() == b.d and b.repo.pushes == 1
 
 

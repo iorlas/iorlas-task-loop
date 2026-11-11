@@ -13,7 +13,7 @@ from land_bench import RUN, LandBench, bench
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import CheckStore
-from taskloop.land import Landed
+from taskloop.land import Landed, LandResult
 from taskloop.land_push import Delivered, Origin, Withdrawn, deliver
 from taskloop.land_store import LandRow, LandStore
 from taskloop.operations import Failed
@@ -36,7 +36,7 @@ def b(tmp_path: Path) -> LandBench:
     return bench(tmp_path)
 
 
-def word(found: Landed | Withdrawn | Failed) -> tuple[str, str]:
+def word(found: LandResult) -> tuple[str, str]:
     assert isinstance(found, Failed), found
     return found.kind, found.reason
 

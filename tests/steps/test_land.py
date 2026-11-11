@@ -11,8 +11,7 @@ import pytest
 from doubles import Command
 from land_bench import BAR, ME, RUN, LandBench, bench
 
-from taskloop.land import Landed
-from taskloop.land_push import Withdrawn
+from taskloop.land import Landed, LandResult
 from taskloop.operations import Failed
 
 
@@ -21,7 +20,7 @@ def b(tmp_path: Path) -> LandBench:
     return bench(tmp_path)
 
 
-def failed(found: Landed | Withdrawn | Failed) -> tuple[str, str]:
+def failed(found: LandResult) -> tuple[str, str]:
     assert isinstance(found, Failed), found
     return found.kind, found.reason
 

@@ -41,6 +41,7 @@ from taskloop.repo import RepoId
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import NotReleased, release_word
 from taskloop.slots import Probe, SlotGit
+from taskloop.tracker_client import Close
 from taskloop.validate import Ended, Target, Verdict, concluded, reconcile, validate
 
 RACED = "Another land of the task, or a change of its attempts, came first: `tl step show TASK`."
@@ -52,8 +53,8 @@ class LandPorts:
     """The land's ports: the validation's (`work`: the checks store, setup runs, evidence, slot views and files, the slot
     environment, the block, the process observations, the scratch, the clock, the scrubbed environment), the candidates'
     store, the person's checkout's remote-capable view and its profile port, the tracker read and claim heartbeat, a new
-    stop event per keep-alive, this process's identity, the slot lock's probe and custody, and this process's environment
-    (read for the push bar only)."""
+    stop event per keep-alive, this process's identity, the slot lock's probe and custody, this process's environment
+    (read for the push bar only), and the tracker's close (`tracker_client`: as `taskloop`, fenced on the assignee)."""
 
     work: Checking
     lands: LandStore
@@ -66,6 +67,7 @@ class LandPorts:
     probe: Probe
     custody: Callable[[str, str], AbstractContextManager[None]]
     environ: Mapping[str, str]
+    close: Close
 
 
 def _release(ports: LandPorts, hold: Callable[[str, str], AbstractContextManager[None]]) -> ChecksRelease:

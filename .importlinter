@@ -41,6 +41,8 @@ source_modules =
     taskloop.land
     taskloop.land_check
     taskloop.land_push
+    taskloop.land_close
+    taskloop.land_summary
 forbidden_modules =
     taskloop.attempt_entry
     taskloop.check_entry
@@ -62,6 +64,8 @@ forbidden_modules =
     taskloop.land
     taskloop.land_check
     taskloop.land_push
+    taskloop.land_close
+    taskloop.land_summary
 
 [importlinter:contract:entry-never-imports-the-command-surface]
 name = The attempt and checks entry processes import no command surface, operations or machine config (their import closure stays small)

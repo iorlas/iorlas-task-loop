@@ -39,18 +39,17 @@ from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import landing
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
+from taskloop.tracker_client import Closed
 
 CHECK = ["/bin/sh", "-c", "test -f src/x.py"]
 PROFILE = {"setup": [["/bin/sh", "-c", "true"]], "required": ["has-x"], "checks": [{"name": "has-x", "argv": CHECK, "timeout": 60}]}
 
 
 class Tracker:
+    title = "Widget"
+
     def show(self, task_id: str) -> Bead:
-        return Bead(task_id, title="Widget", description="It must do X", status="in_progress", assignee="taskloop")
-
-
-def tasks(task_id: str, backlog: str, root: str) -> TaskInspection:
-    return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), Tracker(), task_id)
+        return Bead(task_id, title=self.title, description="It must do X", status="in_progress", assignee="taskloop")
 
 
 def heartbeat_for(_root: str, _task: str) -> Heartbeat:
@@ -65,6 +64,8 @@ class Real:
 
     def __init__(self, root: Path) -> None:
         self.root, self.remote, self.main = root, root / "remote.git", root / "repo"
+        self.closed: list[tuple[str, str]] = []
+        self.tracker = Tracker()
         git(root, "init", "-q", "--bare", "-b", "main", str(self.remote))
         self.main.mkdir()
         git(self.main, "init", "-q", "-b", "main")
@@ -122,8 +123,15 @@ class Real:
         work = Checking(CheckStore(lambda: con), setup, EvidenceFiles(art), checkouts, RealSlotFiles(), slot_profiles, preparation,
                         Block(BlockPorts(setup_process, group_alive, time.time)), setup_seen, entry_seen,
                         RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(environ))
-        return LandPorts(work, LandStore(lambda: con), remotes, lambda path: GitProfileFiles(path, remotes), tasks, heartbeat_for,
-                         NoBeats, this_process, lambda _path: True, landing, dict(os.environ))
+        return LandPorts(work, LandStore(lambda: con), remotes, lambda path: GitProfileFiles(path, remotes), self.tasks, heartbeat_for,
+                         NoBeats, this_process, lambda _path: True, landing, dict(os.environ), self.close)
+
+    def tasks(self, task_id: str, backlog: str, root: str) -> TaskInspection:
+        return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self.tracker, task_id)
+
+    def close(self, _root: str, task_id: str, reason: str) -> Closed:
+        self.closed.append((task_id, reason))
+        return "closed"
 
     def land(self) -> LandResult:
         return land(self.ports(), LandRequest("tasks", "tl-1", self.main, 5))
@@ -157,7 +165,13 @@ def test_the_same_tree_lands_with_x_s_tree_and_no_slot(real: Real) -> None:
     assert real.origin() == s and real.rev(real.main, f"{s}^") == real.base
     assert real.rev(real.main, f"{s}^{{tree}}") == real.rev(real.main, f"{real.x}^{{tree}}") and s != real.x
     assert real.person() == before
-    assert git(real.main, "log", "-1", "--format=%an <%ae>", s).strip() == "Person <person@example.invalid>"
+    assert git(real.main, "log", "-1", "--format=%an <%ae> %cn <%ce>", s).strip() == (
+        "Person <person@example.invalid> Person <person@example.invalid>")
+    text = git(real.main, "log", "-1", "--format=%B", s)
+    assert text.startswith(f"Widget (tl-1)\n\nSquashed from task/tl-1 at {real.x}:\n- the task's commit ({real.x[:12]})\n")
+    assert git(real.main, "log", "-1", "--format=%(trailers:only,unfold)", s).split() == [
+        "Task:", "tl-1", "Checked:", "checks", "passed", "at", real.x]
+    assert found.row.close == "closed" and real.closed == [("tl-1", f"Landed {s} on main (task/tl-1 at {real.x})")]
 
 
 def test_a_pushurl_elsewhere_is_refused_and_nothing_is_pushed_anywhere(real: Real) -> None:
@@ -174,3 +188,14 @@ def test_no_origin_is_refused_no_remote(real: Real) -> None:
     git(real.main, "remote", "remove", "origin")
     found = real.land()
     assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", "no_remote")
+
+
+def test_a_hostile_title_adds_no_trailer_that_git_reads(real: Real) -> None:
+    """Git's own trailer parser over S: a title carrying newlines and trailer lines stays the subject."""
+    real.tracker.title = "Fix\n\nTask: tl-9\nCo-Authored-By: Mallory <m@example.invalid>\x1b[31m"
+    found = real.land()
+    assert isinstance(found, Landed)
+    s = found.row.commit
+    assert git(real.main, "log", "-1", "--format=%s", s).strip() == "Fix Task: tl-9 Co-Authored-By: Mallory <m@example.invalid> [31m (tl-1)"
+    assert git(real.main, "log", "-1", "--format=%(trailers:key=Task,valueonly)", s).split() == ["tl-1"]
+    assert git(real.main, "log", "-1", "--format=%(trailers:key=Co-Authored-By)", s).strip() == ""

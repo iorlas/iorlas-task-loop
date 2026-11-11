@@ -1,11 +1,12 @@
 """Construct the real tracker client (beads_client `Bd`): the task read at an explicit tracker root, the round's reads,
-the claim, fenced unclaim and heartbeat, and the process-wide drop of bd's location overrides. The one module that
-constructs a `Bd`. Wired by `composition`."""
+the claim, fenced unclaim, heartbeat and the land's close, and the process-wide drop of bd's location overrides. The one
+module that constructs a `Bd`. Wired by `composition` and `cli_composition`."""
 
 import os
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from beads_client import Bd, BdError, Runner
 
@@ -41,13 +42,21 @@ def tracker_reads(tracker_root: str) -> ReadyRows:
     return Bd(ACTOR, cwd=str(_tracker_root(tracker_root)))
 
 
+# The land's close (tl-8bh9.14.8 section 8): `closed` by this call, `already_closed` (found closed: never closed twice),
+# `claim_lost` (another assignee, or bd's fence refused), `missing` (no such task), `unavailable` (bd could not be asked).
+type Closed = Literal["closed", "already_closed", "claim_lost", "missing", "unavailable"]
+type Close = Callable[[str, str, str], Closed]  # (tracker root, task id, reason)
+
+
 @dataclass(frozen=True)
 class TrackerClaims:
-    """The tracker's three write operations on a task's claim, each bound per tracker root."""
+    """The tracker's write operations on a task's claim, each bound per tracker root: the claim, the fenced unclaim, the
+    heartbeat, and the land's close."""
 
     claim: Claim
     unclaim: Unclaim
     heartbeat_for: HeartbeatFor
+    close: Close
 
 
 LOST = frozenset({"not_claimable", "precondition"})  # bd's words for a claim taken, reverted or closed
@@ -70,10 +79,31 @@ def beat_of(error: BdError) -> Beat:
     return "lost" if error.kind in LOST or (error.kind == "other" and GONE in error.text) else "unrenewed"
 
 
+def _closed(bd: Bd, task_id: str, reason: str) -> Closed:
+    """One read (`Bd.show`): closed is `already_closed`, another assignee `claim_lost`; else `Bd.close` as this actor,
+    fenced by a same-value assignee update (bd 1.3.1 refuses a close by an actor other than the assignee, and closing a
+    closed task as its assignee changes nothing: measured). The claim is never returned: the close ends it."""
+    try:
+        found = bd.show(task_id)
+        if found is None:
+            return "missing"
+        if found.status == "closed":
+            return "already_closed"
+        if found.assignee != ACTOR:
+            return "claim_lost"
+        bd.close(task_id, reason, if_assignee=ACTOR)
+    except BdError as error:
+        if error.kind in LOST:
+            return "claim_lost"
+        return "missing" if error.kind == "other" and GONE in error.text else "unavailable"
+    return "closed"
+
+
 def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerClaims:
-    """`Bd.claim`, the compensating `Bd.unclaim` fenced to this actor (never forced), and `Bd.heartbeat` mapped to a `Beat`:
-    one bd call capped at BD_TIMEOUT_S, no lock retry (a refused beat is retried by the next interval). The one place a
-    `Bd` is constructed for a write; `client` is the seam a test checks the construction through."""
+    """`Bd.claim`, the compensating `Bd.unclaim` fenced to this actor (never forced), `Bd.heartbeat` mapped to a `Beat`
+    (one bd call capped at BD_TIMEOUT_S, no lock retry: a refused beat is retried by the next interval), and the land's
+    close (`_closed`). The one place a `Bd` is constructed for a write; `client` is the seam a test checks the
+    construction through."""
 
     def located(tracker_root: str) -> str:
         return str(Path(tracker_root).expanduser().resolve())
@@ -99,4 +129,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
 
         return beat
 
-    return TrackerClaims(claim, unclaim, heartbeat_for)
+    def close(tracker_root: str, task_id: str, reason: str) -> Closed:
+        return _closed(bd(tracker_root), task_id, reason)
+
+    return TrackerClaims(claim, unclaim, heartbeat_for, close)
