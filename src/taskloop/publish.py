@@ -37,7 +37,7 @@ from git_porcelain import (
 from taskloop.attempt_reads import PublishedRow, StoreUnavailable, as_nullable_text, as_text
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
-from taskloop.factory_schema import PUBLISHED, current, marks
+from taskloop.factory_schema import LATER, PUBLISHED, current, marks
 from taskloop.prepare import task_branch
 from taskloop.slot_state import repository
 
@@ -48,11 +48,11 @@ FROM attempt p LEFT JOIN verification v ON v.attempt_id=p.attempt_id
 LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
 LEFT JOIN slot s ON s.repo_id=p.repo_id AND s.name=p.slot
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
-# Inside the write transaction: still verified at X, not abandoned, not repeated.
+# Inside the write transaction: still verified at X, not abandoned, still the task's current attempt.
 FENCE: Final = """SELECT 1 FROM attempt p JOIN verification v ON v.attempt_id=p.attempt_id
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND v.verdict='verified' AND p.end_commit=?
 AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.claim<>'kept')
-AND NOT EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id)"""
+AND NOT """ + LATER
 ABANDONED: Final = "SELECT 1 FROM slot_release WHERE attempt_id=? AND claim<>'kept'"
 
 

@@ -58,15 +58,23 @@ def _link(repo: Repo, root: Path, sha: str, parent: str, rules: StepRules, paths
         raise Unreadable("parent")
     if up.sha != parent:
         return "not_descendant"
-    return _changes(repo, root, tree, parent, rules, paths)
+    return _changes(repo, root, tree, up, rules, paths)
 
 
-def _changes(repo: Repo, root: Path, tip: Tree, base: str, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:
+def _changes(repo: Repo, root: Path, tip: Tree, base: Tree, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:
     """One diff B..X: each change added or modified (deletions only when the step allows them), on an allowed path the
-    answer listed, mode 100644, and every committed blob at most `file_cap` bytes after the full read."""
-    for change in repo.worktree(root).diff(base, tip.sha, cap=0).changes:
+    answer listed, mode 100644 at X and, for a change or deletion, at B too (a type change, which the diff reports as a
+    change, never turns a symlink, gitlink or executable into a plain file), and every committed blob at most
+    `file_cap` bytes after the full read."""
+    for change in repo.worktree(root).diff(base.sha, tip.sha, cap=0).changes:
         if (change.kind == "D" and not rules.deletions) or not path_allowed(change.path, rules) or change.path not in paths:
             return "paths"
+        if change.kind != "A":
+            before = base.files.get(change.path)
+            if before is None:
+                raise Unreadable("entry")
+            if before[0] != MODE:
+                return "mode"
         if change.kind == "D":
             continue
         entry = tip.files.get(change.path)

@@ -138,7 +138,7 @@ def _request(request: NextRequest, task_id: str) -> StartRequest:
     return StartRequest(task_id, request.backlog, request.tracker_root, request.checkout, request.model, request.effort, request.minutes)
 
 
-def advance(ports: RoundPorts, request: NextRequest) -> Round | Failed:
+def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     """One round: settle, admit, publish. A whole-round refusal (empty label, unreadable store) is `Failed`."""
     label = request.label.strip()
     if not label:

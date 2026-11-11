@@ -498,7 +498,7 @@ def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
         return Round("tasks", (MOVES[0],), logged=False)
 
     monkeypatch.setattr(cli_composition, "open_next", opener)
-    monkeypatch.setattr(cli_step, "advance", advanced)
+    monkeypatch.setattr(cli_step, "run_round", advanced)
     assert main([*NEXT, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art"), "--json"]) == 0
     assert opened == [(tmp_path / "f.db", tmp_path / "art", "/tracker")]
     assert requests == [cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)]

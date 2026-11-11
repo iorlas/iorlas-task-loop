@@ -8,7 +8,7 @@ to D when a branch made after the rule turns out not to contain D); attempt 1 of
 branch to contain the previous step's published X (`after_commit`, else `branch_moved`); B is then the
 HEAD on that branch. No fetch: only local refs, including the local remote-tracking ones, are read. Every refusal is one
 fixed word and leaves the attempt `admitted`; `GitUnavailable` (a missing revision or a failed read included) is
-`unavailable:git`, never "absent".
+`unavailable:git`, never "absent", except that a missing `after_commit` is `branch_moved` (the branch lost it).
 """
 
 import re
@@ -113,7 +113,7 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     if isinstance(found, str):
         return _refused(found)
     after = admission.after_commit
-    if after is not None and _lacks(repo, after, found.local or found.remote or head):
+    if after is not None and lacks(repo, after, found.local or found.remote or head):
         return _refused("branch_moved")
     named = pointer(files, Path(admission.slot_path))
     if named is None or named.root != state.root or named.gitdir != state.gitdir:
@@ -124,15 +124,17 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     taken = worktree.take_branch(task_branch(task_id), start, mode="resume")
     if isinstance(taken, BranchHeld):
         return _refused("branch_held")
-    if repo.is_ancestor(head, taken.head):
+    diverged = not repo.is_ancestor(head, taken.head)
+    moved = after is not None and lacks(repo, after, taken.head)
+    if not diverged and not moved:
         return None
-    # a branch made between the rule and the take was checked out as it is, without D: back to D, detached, so the next
-    # entry refuses it again instead of starting from that tip (a slot on its branch is never checked for history)
+    # a branch made or moved between the rule and the take was checked out as it is, without D or without the previous
+    # step's X: back to D, detached, so the next entry refuses it again instead of starting from that tip
     worktree.park(head)
-    return _refused("branch_diverged")
+    return _refused("branch_diverged" if diverged else "branch_moved")
 
 
-def _lacks(repo: Repo, after: str, tip: str) -> bool:
+def lacks(repo: Repo, after: str, tip: str) -> bool:
     """The tip the slot would take (the local branch, else the remote-tracking one, else D) does not contain the previous
     step's published X, or X is gone from the repository: someone reset or deleted the branch after that step."""
     try:
@@ -154,11 +156,15 @@ def _prepared(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord) -> 
 
 
 def _state_refusal(checkouts: Checkouts, record: AttemptRecord, state: SlotState) -> AttemptResult | None:
-    """The base check: on exactly `task/<task-id>`; clean for attempt 1, or at E with nothing staged for a repeat (its
-    leftovers are its feedback, but the factory's commit records the whole index)."""
+    """The base check: on exactly `task/<task-id>`; clean for attempt 1 and, for attempt 1 of a later step, containing
+    the previous step's X (a relaunch finds the slot on its branch already), or at E with nothing staged for a repeat
+    (its leftovers are its feedback, but the factory's commit records the whole index)."""
     if state.branch is None:
         return _refused("slot_detached")
     problem = state.problem(task_branch(record.admission.task.task_id), record.start)
+    after = record.admission.after_commit
+    if record.start is None and problem is None and after is not None and lacks(checkouts(state.root), after, state.head or ""):
+        return _refused("branch_moved")
     if record.start is None or problem != "dirty":
         return None if problem is None else _refused(f"slot_{problem}")
     path = Path(record.admission.slot_path)

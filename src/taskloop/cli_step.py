@@ -11,7 +11,7 @@ from taskloop.exit_codes import exit_code
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
-from taskloop.round import NextRequest, advance
+from taskloop.round import NextRequest, run_round
 from taskloop.rounds import RoundsRequest, run_rounds
 from taskloop.step_guide import HELD, ROUNDS, STEP_ONLY
 from taskloop.step_render import human
@@ -106,7 +106,7 @@ def _next_request(arguments: argparse.Namespace) -> NextRequest:
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_next(loaded.settings.db.value, loaded.settings.artifacts.value, arguments.tracker_root) as ports:
-        return ports if isinstance(ports, Failed) else advance(ports, _next_request(arguments))
+        return ports if isinstance(ports, Failed) else run_round(ports, _next_request(arguments))
 
 
 def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:

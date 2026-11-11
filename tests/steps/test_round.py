@@ -1,4 +1,4 @@
-"""One scheduling round (`round.advance`) over a real in-memory factory.db: recording admission, launch, repeat,
+"""One scheduling round (`round.run_round`) over a real in-memory factory.db: recording admission, launch, repeat,
 verify, release and publish ports where the round itself is under test (the real ones where a row needs a stored verdict),
 beads-client's seeded ready set, a fake clock and entry observation, and a list as the round log. No process starts."""
 
@@ -39,7 +39,7 @@ from taskloop.operations import (
     verify_task,
 )
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
-from taskloop.round import NextRequest, RoundPorts, advance, never
+from taskloop.round import NextRequest, RoundPorts, never, run_round
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
 from taskloop.tracker import leaked_claim
@@ -156,7 +156,7 @@ class Bench:
         return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, self.ready, self.log, self.stopping)
 
     def round(self, request: NextRequest = REQUEST) -> Round:
-        found = advance(self.ports(), request)
+        found = run_round(self.ports(), request)
         assert isinstance(found, Round)
         return found
 
@@ -357,7 +357,7 @@ def test_an_empty_label_or_minutes_out_of_range_are_refused_before_any_read(
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     ready = FakeTaskReadClient([bead("t-1")], ready=["t-1"])
     bench = Bench(factory, ready)
-    found = advance(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, "m", "e", minutes))
+    found = run_round(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, "m", "e", minutes))
     assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", reason) and exit_code(found) == 1
     assert ready.ready_reads == [] and bench.lines == [] and bench.launcher.calls == []
 

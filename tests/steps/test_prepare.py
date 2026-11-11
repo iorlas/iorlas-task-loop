@@ -268,6 +268,36 @@ def test_a_branch_without_d_made_during_the_take_is_diverged_and_the_slot_parked
     assert execute(con, tmp_path, checkouts, slot_files)[:2] == ("refused", "branch_diverged")
 
 
+def test_a_branch_moved_off_the_previous_commit_during_the_take_is_parked_back(
+    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rule saw `task/<id>` holding X; someone reset it to D before the take: the slot goes back to D, detached."""
+    d, x = head(repo, slot.path), leave(repo, tmp_path, BRANCH, extra=True)
+    con.execute("UPDATE attempt SET step='implement',after_commit=?", (x,))
+    take = FakeWorktree.take_branch
+
+    def racing(self: FakeWorktree, branch: str, base: str, **options: Literal["resume"]) -> TakeResult:
+        repo.delete_branch(BRANCH, expected=x)
+        leave(repo, tmp_path / "reset", BRANCH)
+        return take(self, branch, base, **options)
+
+    monkeypatch.setattr(FakeWorktree, "take_branch", racing)
+    refused_untouched(con, tmp_path, checkouts, slot_files, "branch_moved")
+    assert (slot.branch(), head(repo, slot.path)) == (None, d)
+
+
+def test_a_relaunch_on_its_branch_without_the_previous_commit_is_branch_moved(
+    con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    """Attempt 1 relaunched after its branch was taken: the slot is already on `task/<id>`, which lacks X."""
+    x = leave(repo, tmp_path, "elsewhere", extra=True)
+    con.execute("UPDATE attempt SET step='implement',after_commit=?", (x,))
+    slot.checkout_new(BRANCH)
+    status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
+    assert (status, reason, agent.calls) == ("refused", "branch_moved", [])
+
+
 class Claims:
     """The claim double and the input writer, recording what admission did."""
 

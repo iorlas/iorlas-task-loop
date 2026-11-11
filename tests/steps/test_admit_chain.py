@@ -15,6 +15,7 @@ from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from doubles import PinnedViews
+from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
 
@@ -29,7 +30,7 @@ from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import Started, StartPorts, StartRequest, VerifiedTask, start, verify_task
 from taskloop.publish import BranchPublish, NotPublished, PublishResult
 from taskloop.slot_lock import custody, hold
-from taskloop.slot_release import Released, SlotRelease
+from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -249,6 +250,44 @@ def test_an_abandoned_implement_restarts_the_task_at_plan(
     assert isinstance(admitted, Admitted)
     row = registered.execute("SELECT step,number,seq,after_commit FROM attempt WHERE attempt_id=?", (admitted.key.attempt_id,)).fetchone()
     assert row == ("plan", 1, 3, None)
+
+
+def test_abandoning_the_done_plan_while_implement_holds_the_claim_is_refused(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    """The plan's settled release is no longer current once implement is admitted (no `previous_attempt_id` links them):
+    its abandon must not return the claim implement holds."""
+    implement(registered, tmp_path, slot.repo, checkouts, slot_files)
+    returned: list[str] = []
+    release = SlotRelease(AttemptStore(lambda: registered), checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody,
+                          lambda _root, task: returned.append(task) is None, lambda: 50)
+    found = release.release(KEY, True)
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("refused", "changed") and returned == []
+    assert registered.execute("SELECT claim FROM slot_release WHERE attempt_id='attempt'").fetchone() == ("kept",)
+
+
+def test_a_constraint_failure_inside_the_advance_is_constraint_not_a_lost_race(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    registered.execute("CREATE TRIGGER refuse BEFORE INSERT ON attempt BEGIN SELECT RAISE(ABORT, 'schema mismatch'); END")
+    found = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(slot.repo))
+    assert isinstance(found, AdmitRefused) and found.reason == "constraint"
+    assert registered.execute("SELECT (SELECT count(*) FROM attempt),(SELECT count(*) FROM reservation)").fetchone() == (1, 0)
+
+
+def test_a_task_branch_reset_after_the_plan_is_branch_moved_before_anything_is_reserved(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    repo = slot.repo
+    d = registered.execute("SELECT slot_head FROM attempt").fetchone()[0]
+    repo.delete_branch("task/tl-1", expected=Sha(planned))
+    other = repo.add_worktree(tmp_path / "reset", d)
+    other.checkout_new("task/tl-1", d)
+    other.park(d)
+    repo.drop_worktree(other.path)
+    found = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(repo))
+    assert isinstance(found, AdmitRefused) and found.reason == "branch_moved"
+    assert registered.execute("SELECT (SELECT count(*) FROM attempt),(SELECT count(*) FROM reservation)").fetchone() == (1, 0)
 
 
 class Launcher:

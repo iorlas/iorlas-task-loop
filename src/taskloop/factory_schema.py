@@ -110,6 +110,12 @@ RELEASE = "attempt_id,dispatch_token,generation,head,released_at,claim"
 PUBLISHED = "attempt_id,dispatch_token,generation,commit_sha,remote_head,published_at"  # X pushed; the remote tip confirmed
 
 
+# A later attempt of the same task exists (a repeat, the next step or a fresh start): attempt `p` is no longer the current
+# one. The one "not current" rule of every read and fence; `previous_attempt_id` links only a step's repeats.
+LATER = """EXISTS (SELECT 1 FROM attempt later WHERE later.adapter=p.adapter AND later.backlog=p.backlog
+AND later.task_id=p.task_id AND later.seq>p.seq)"""
+
+
 def marks(columns: str) -> str:
     """One `?` per column of a column list."""
     return ",".join("?" * len(columns.split(",")))

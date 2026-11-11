@@ -145,10 +145,10 @@ def _foreign(checkouts: Checkouts, admission: Admission, answer: AnswerState, gi
 
 def refusal(view: Repo, files: SlotFiles, admission: Admission, base: str, answer: AnswerState) -> Unsettled | None:
     """Step 4's reads on the slot's pinned `view`, no Git write: an unsafe listed path, a changed `.git*` file near
-    them, or ignored files under them (listed). A step that may delete reads B's tree once, for the deleted paths."""
+    them, or ignored files under them (listed). B's tree is read once: what each listed path was before."""
     rules = kind(admission.step).rules(admission.task.task_id)
     path = Path(admission.slot_path)
-    unsafe = unsafe_path(files, path, rules, answer.paths, _base_files(view, base) if rules.deletions else {})
+    unsafe = unsafe_path(files, path, rules, answer.paths, _base_files(view, base))
     if unsafe is not None:
         return Unsettled("unsafe", bounded((unsafe,)))
     dirt = view.worktree(path).dirty(base, ignored_under=attributes(rules, answer.paths))
@@ -203,14 +203,18 @@ def unsafe_path(
     files: SlotFiles, slot: Path, rules: StepRules, paths: tuple[str, ...], committed: Mapping[str, tuple[str, str]]
 ) -> str | None:
     """The first listed path that is not a plain regular file reached through plain directories: no component a symlink
-    (`lstat` per component), no execute bit, at most `file_cap` bytes; None when every one is safe. An absent listed path
-    is a deletion only when it is a 100644 file in `committed` (B's files, empty unless the step may delete) reached
-    through plain or absent directories; any other absent path is unsafe."""
+    (`lstat` per component), no execute bit, at most `file_cap` bytes; None when every one is safe. In `committed` (B's
+    files) the path is absent or a 100644 file, and none of its folders is a file there (a symlink, gitlink or executable
+    replaced by a plain file is a type change the step may not make). An absent listed path is a deletion only when the
+    step may delete and it is a 100644 file in B reached through plain or absent directories; any other is unsafe."""
     for path in paths:
         parts = path.split("/")
+        was = committed.get(path)
+        if (was is not None and was[0] != MODE) or any("/".join(parts[:depth]) in committed for depth in range(1, len(parts))):
+            return path
         folders = [files.lstat(slot.joinpath(*parts[:depth])) for depth in range(1, len(parts))]
         entry = files.lstat(slot.joinpath(*parts))
-        if entry is None and committed.get(path, ("",))[0] == MODE and all(each is None or each.kind == "dir" for each in folders):
+        if entry is None and rules.deletions and was is not None and all(each is None or each.kind == "dir" for each in folders):
             continue
         if not all(folder is not None and folder.kind == "dir" for folder in folders):
             return path

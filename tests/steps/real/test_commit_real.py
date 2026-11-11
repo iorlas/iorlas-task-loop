@@ -14,12 +14,14 @@ from git_porcelain import GitUnavailable
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 
-from taskloop.attempt_types import Admission, AnswerState, AttemptKey, FileRef, Unsettled
+from taskloop.attempt_types import Admission, AnswerState, AttemptKey, ChainLink, FileRef, Rejected, Unsettled
 from taskloop.composition import RealSlotFiles, checkouts
 from taskloop.factory_commit import Committed, clean_at, settle
 from taskloop.repo import RepoId
 from taskloop.slot_state import pointer
+from taskloop.steps import IMPLEMENT
 from taskloop.task import TaskReference, TaskScope
+from taskloop.verdict import judge
 
 P = "docs/design/tl-1/plan.md"
 HOOKS = ("pre-commit", "commit-msg", "prepare-commit-msg", "post-commit", "post-index-change", "reference-transaction")
@@ -287,3 +289,55 @@ def test_an_absent_path_never_in_b_and_a_changed_gitignore_are_unsafe(
     answer = AnswerState("valid", "implemented", "commit", paths, "Implement")
     assert settle(checkouts, RealSlotFiles(), attempt, base, answer, quiet) == Unsettled("unsafe", (unsafe,))
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
+
+
+def typed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Admission, str]:
+    """An implement attempt whose B holds an executable `run.sh`, a symlink `link`, a symlinked folder `lib` and a gitlink
+    `sub` (its folder empty, as an uninitialised submodule)."""
+    main, slot, _attempt, _base = implementing(tmp_path, monkeypatch)
+    (slot / "run.sh").write_text("#!/bin/sh\n")
+    (slot / "run.sh").chmod(0o755)
+    (slot / "link").symlink_to("README")
+    (slot / "lib").symlink_to("docs")
+    git(slot, "add", "run.sh", "link", "lib")
+    head = git(slot, "rev-parse", "HEAD").strip()
+    git(slot, "update-index", "--add", "--cacheinfo", f"160000,{head},sub")
+    (slot / "sub").mkdir()
+    git(slot, "commit", "-q", "--no-verify", "-m", "typed entries")
+    return main, slot, replace(admission(main, slot), step="implement"), git(slot, "rev-parse", "HEAD").strip()
+
+
+def plain(slot: Path, path: str) -> None:
+    """The agent's type change: the entry at `path` replaced by a plain 0644 file (a folder `lib/` for `lib/a.py`)."""
+    first = slot / path.split("/", maxsplit=1)[0]
+    if first.is_symlink():
+        first.unlink()
+    elif first.is_dir():
+        first.rmdir()
+    if "/" in path:
+        first.mkdir()
+    (slot / path).write_text("plain\n")
+    (slot / path).chmod(0o644)
+
+
+@pytest.mark.parametrize("path", ["run.sh", "link", "sub", "lib/a.py"])
+def test_a_typed_entry_of_b_replaced_by_a_plain_file_is_unsafe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path: str) -> None:
+    _main, slot, attempt, base = typed(tmp_path, monkeypatch)
+    plain(slot, path)
+    answer = AnswerState("valid", "implemented", "commit", (path,), "Implement")
+    assert settle(checkouts, RealSlotFiles(), attempt, base, answer, quiet) == Unsettled("unsafe", (path,))
+    assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
+
+
+@pytest.mark.parametrize("path", ["run.sh", "link", "sub"])
+def test_the_verdict_rejects_a_type_change_to_a_plain_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path: str) -> None:
+    """Committed behind the factory's back: the diff reports it as a change; B's entry was not a plain file."""
+    main, slot, _attempt, base = typed(tmp_path, monkeypatch)
+    plain(slot, path)
+    if path == "sub":
+        git(slot, "rm", "-q", "--cached", "sub")
+    git(slot, "add", path)
+    git(slot, "commit", "-q", "--no-verify", "-m", "type change")
+    x = git(slot, "rev-parse", "HEAD").strip()
+    link = ChainLink(1, base, x, "commit", (path,), FileRef("i", "d"))
+    assert judge(checkouts(main), main, x, IMPLEMENT, IMPLEMENT.rules("tl-1"), (link,)) == Rejected("mode")

@@ -5,7 +5,7 @@ the reserved slots are read just before and just after each round (their union i
 seconds after it, and when a slot of the baseline is no longer reserved the next round starts at once (a release during
 the round, and the end of a step the round itself started, included). The baseline
 is every backlog's reservations: another backlog's release also wakes a round, which then finds nothing to do. Each
-round is `round.advance` as built (it reads the tracker only when a slot may be free). A round that
+round is `round.run_round` as built (it reads the tracker only when a slot may be free). A round that
 ends on an unknown (`unavailable`/`uncertain`, whole-round or admission's stop word) backs the regular rounds off,
 doubling from the interval up to `CAP`; nothing is stored. It ends gracefully when `stopping` turns True (the first
 Ctrl-C) and on a whole-round refusal; a `KeyboardInterrupt` (the second Ctrl-C) passes through as the abrupt stop, after

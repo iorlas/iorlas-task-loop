@@ -40,7 +40,7 @@ from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, r
 from taskloop.operations import Adoption, Failed, Quiet, Round, StartPorts, require_database
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
-from taskloop.round import NextRequest, RoundPorts, advance
+from taskloop.round import NextRequest, RoundPorts, run_round
 from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
 from taskloop.slot_lock import refused, repeating
@@ -152,7 +152,7 @@ def one_round(database: Path, artifacts: Path, request: NextRequest, stopping: C
         with open_next(database, artifacts, request.tracker_root) as ports:
             if isinstance(ports, Failed):
                 return _transient(ports, database)
-            return advance(replace(ports, stopping=stopping), replace(request, quiet=quiet))
+            return run_round(replace(ports, stopping=stopping), replace(request, quiet=quiet))
 
     return once
 

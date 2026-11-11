@@ -609,7 +609,9 @@ bytes are unchanged (the S3 constants in `test_steps` pass unchanged).
   IS NOT NULL))`; `ATTEMPT_ADMITTED` and `ATTEMPT_LOADED` carry it, `Admission.after_commit` holds it (fresh and repeat
   write NULL). The `setup_run` table of [S5e](../tl-8bh9.4.3.1.16.2/plan.md) section 4 is in v11 exactly as defined there
   (without its SQL comments), with no writer yet; `test_policy.WRITERS` names `factory_schema.py` as its CREATE owner.
-  S5e's Q1 is still open: an answer that changes the table costs another discard.
+  **Process deviation:** the S5e plan says S5b's DDL waits until its Q1 is answered; Q1 is still open, and the table
+  shipped anyway at the coordinator's instruction, so that the person discards factory.db once. If Q1's answer changes
+  the table, that is one more v12 discard.
 - **`implement_step.py`** (91 code lines): dispositions and effects as 2.3; the four-key strict schema; the decoder
   (`implemented` needs at least one listed path and a message; the others list none, message null); `StepRules("",
   max_paths=96, deletions=True, excluded=(".beads/",))`; no artifact (`ARTIFACT_RULES = ()`, `Verified.blob` NULL); repeat
@@ -669,3 +671,16 @@ Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kep
 (policy counter): source +360 against the estimate of about +185 (`admit_chain` 85 to 246, `implement_step` 91, `steps`
 45, `factory_commit` 166, `operations` 267, `admit` 280, `attempt_types` 238); tests +364. Live smoke not run (owner-run,
 section 5; the implement agent has no prepared environment until S5e).
+
+## 13. Review repairs: S5b (2026-11-11)
+
+An independent review of 872e6d2c9 found six defects; all are repaired, each with a test that fails without it.
+
+| # | Finding | Repair |
+|---|---|---|
+| 1 | Implement could replace a symlink, gitlink or executable of B with a plain file and still verify (the working-tree check saw only the new file; Git reports a type change as a change; the verdict checked only the mode at X) | `factory_commit.refusal` always reads B's tree: a listed path whose B entry is not 100644, or whose folder is a file in B, is `unsafe`; `verdict._changes` requires B's entry of every changed or deleted path to be 100644 (`mode`). Real-Git tests: `chmod -x` of a 100755 file, a symlink and a gitlink each replaced by a plain file, and a file under a former symlinked folder |
+| 2 | Abandoning the done plan's settled release returned the claim the implement attempt holds (an advance sets no `previous_attempt_id`, so the release saw no successor) | `factory_schema.LATER` ("an attempt of the same task with a higher `seq`") is the one not-current rule: the release's read and fence, the abandon's flip (`refused changed` before it, fenced again in it) and the publish fence use it instead of `previous_attempt_id` |
+| 3 | Any `IntegrityError` in the advance was `task_attempted` | `constraint`, as fresh admission (a lost race is already caught by the re-read) |
+| 4 | The entry checked `after_commit` only before the take | Also after the take (park back to D, `branch_moved`) and in the base check of a relaunched attempt 1 already on its branch |
+| 5 | The advance reserved a slot although the branch had lost X | `admit_next` checks read-only, before the input or any row, that the start each free slot would take (local, else remote-tracking, else D) contains X: `branch_moved` |
+| 6 | Doc drift; `round.advance` collided with the glossary's `advance` | `prepare` docstring (a missing `after_commit` is `branch_moved`); the round's operation is `round.run_round`; the Q1 process deviation above |

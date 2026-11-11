@@ -21,6 +21,8 @@ from dataclasses import astuple, dataclass
 from pathlib import Path
 from uuid import uuid4
 
+from git_porcelain import GitUnavailable, Repo
+
 from taskloop.admit import (
     AdmitRefused,
     Admitted,
@@ -44,6 +46,8 @@ from taskloop.admit import (
 )
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.factory_schema import LATER
+from taskloop.prepare import HEADS, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
 from taskloop.steps import next_step
@@ -178,6 +182,7 @@ class _Task:
     repo_id: str
     step: str
     current: bool
+    end_commit: str | None  # X: the commit the next step starts from
 
 
 @dataclass(frozen=True)
@@ -223,8 +228,8 @@ class NextAdmission:
             return AdmitRefused("input", detail=why(error))
         try:
             return self._advance(ready, request, key, ref)
-        except sqlite3.IntegrityError as error:  # caught after the rollback: a concurrent advance's UNIQUE seq
-            return AdmitRefused("task_attempted", detail=why(error))
+        except sqlite3.IntegrityError as error:  # caught after the rollback; every constraint is pre-checked: a schema mismatch
+            return AdmitRefused("constraint", detail=why(error))
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
 
@@ -242,7 +247,7 @@ class NextAdmission:
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
         step = None if found is None else next_step(found.step, True)
-        if found is None or step is None:
+        if found is None or step is None or found.end_commit is None:
             return AdmitRefused("not_advanceable")
         return (con, found, step) if found.current else AdmitRefused("task_attempted")
 
@@ -263,7 +268,8 @@ class NextAdmission:
         return free if not isinstance(free, tuple) else _Ready(con, found, step, task, free)
 
     def _free(self, con: sqlite3.Connection, request: NextStepRequest, found: _Task) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
-        """The checkout is the previous attempt's repository; its free slots whose D the task branch rule passes."""
+        """The checkout is the previous attempt's repository; its free slots whose D the task branch rule passes and
+        whose start (as the entry takes it) contains the previous X."""
         checked = checkout_repo(self.checkouts, request.checkout)
         if not isinstance(checked, tuple):
             return checked
@@ -271,7 +277,8 @@ class NextAdmission:
         if repo_id != found.repo_id:
             return AdmitRefused("checkout", detail="The checkout is not the repository of the task's previous step")
         views = free_slots(con, repo, SlotGit(self.checkouts, self.slot_files), repo_id, self.probe)
-        return views if not isinstance(views, tuple) else branched(repo, found.task_id, views)
+        free = views if not isinstance(views, tuple) else branched(repo, found.task_id, views)
+        return free if not isinstance(free, tuple) else _containing(repo, found, free)
 
     def _advance(self, ready: _Ready, request: NextStepRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
         """Under the write lock: the task's current attempt is still `previous` and done; the lowest observed-free slot
@@ -303,14 +310,26 @@ class NextAdmission:
 
 def _task_of(con: sqlite3.Connection, previous: AttemptKey) -> _Task | None:
     row: tuple[object, ...] | None = con.execute(
-        """SELECT p.backlog,p.task_id,p.tracker_root,p.repo_id,p.step,NOT EXISTS (SELECT 1 FROM attempt q WHERE q.adapter=p.adapter
-        AND q.backlog=p.backlog AND q.task_id=p.task_id AND q.seq>p.seq) FROM attempt p
-        WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
+        "SELECT p.backlog,p.task_id,p.tracker_root,p.repo_id,p.step,NOT " + LATER + ",p.end_commit FROM attempt p "
+        "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?",
         astuple(previous),
     ).fetchone()
     if row is None:
         return None
-    backlog, task_id, root, repo_id, step, current = row
-    if not all(isinstance(each, str) for each in row[:5]):
+    backlog, task_id, root, repo_id, step, current, end = row
+    if not all(isinstance(each, str) for each in row[:5]) or not isinstance(end, (str, type(None))):
         raise sqlite3.DatabaseError("Malformed attempt row")
-    return _Task(str(backlog), str(task_id), str(root), str(repo_id), str(step), bool(current))
+    return _Task(str(backlog), str(task_id), str(root), str(repo_id), str(step), bool(current), end)
+
+
+def _containing(repo: Repo, found: _Task, free: tuple[Free, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
+    """Read-only, before anything is reserved (the entry checks it again): the free slots whose start, the local
+    `task/<id>`, else origin's remote-tracking one, else the slot's D, contains the previous X."""
+    after, task_id = found.end_commit or "", found.task_id
+    try:
+        tips = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES])}
+        tip = tips.get(f"{HEADS}/{task_id}") or tips.get(f"{REMOTES}/{task_id}")
+        keep = tuple(each for each in free if not lacks(repo, after, tip or each.head))
+    except GitUnavailable as error:
+        return AdmitUnavailable("git", detail=why(error))
+    return keep or AdmitRefused("branch_moved", detail=f"task/{task_id} does not contain the previous step's commit {after}")
