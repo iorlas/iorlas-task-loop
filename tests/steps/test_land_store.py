@@ -2,6 +2,7 @@
 expression (each nullable operand's NULL case included), the keys and the partial unique `land_delivered` index; the
 store's insert fences, its validation writes off `HELD`, the release's record, supersede, delivery and close."""
 
+import dataclasses
 import re
 import sqlite3
 from collections.abc import Callable
@@ -13,7 +14,7 @@ from sqlite_store import begin_immediate
 from taskloop import land_store
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Replaced
-from taskloop.check_store import required_json
+from taskloop.check_store import Outcome, required_json
 from taskloop.factory_schema import SCHEMA, current
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, Validation
 
@@ -341,15 +342,46 @@ def test_an_abandon_releases_a_pending_or_failed_candidate_and_supersedes_it(
 
 @pytest.mark.parametrize("change", ["UPDATE land_candidate SET validation='passed',validated_at=20",
                                     "UPDATE land_candidate SET validation='passed',validated_at=20,delivery='pushed',delivered_at=21,"
-                                    "remote_head=commit_sha", "UPDATE land_candidate SET superseded='moved',superseded_at=20",
-                                    "DELETE FROM reservation"], ids=["pushable", "delivered", "superseded", "unreserved"])
-def test_an_abandon_never_releases_a_pushable_delivered_superseded_or_unreserved_candidate(
+                                    "remote_head=commit_sha", "DELETE FROM reservation"], ids=["pushable", "delivered", "unreserved"])
+def test_an_abandon_never_releases_a_pushable_delivered_or_unreserved_candidate(
     landing: sqlite3.Connection, change: str
 ) -> None:
     landing.execute(change)
     validation = latest(landing).validation
     assert not released(landing, (0, validation), True)
     assert release_columns(landing)[0] is None
+
+
+def test_a_pending_candidate_is_never_superseded_but_by_its_abandon_release(landing: sqlite3.Connection) -> None:
+    """Superseded while it holds its slot unvalidated, it could neither conclude (`HELD`) nor be released settled: its
+    reservation would be held for ever. Only the abandon release supersedes it (`abandoned`)."""
+    lands = store(landing)
+    assert not lands.supersede(CANDIDATE, "moved", 7) and not lands.supersede(CANDIDATE, "withdrawn", 7)
+    assert not lands.supersede(CANDIDATE, "gone", 7)
+    assert latest(landing).pending
+    assert released(landing, (0, None), True) and release_columns(landing) == (30.0, D, "abandoned", 30.0)
+
+
+@pytest.mark.parametrize(("outcome", "reason"), [("passed", None), ("failed", "test:failed")], ids=["passed", "failed"])
+@pytest.mark.parametrize("abandon", [False, True], ids=["settled", "abandon"])
+def test_a_superseded_validated_candidate_still_holding_its_slot_is_released_by_either_mode(
+    landing: sqlite3.Connection, outcome: Outcome, reason: str | None, abandon: bool
+) -> None:
+    """A rerun of the land finds its passed candidate's release held, then origin moved: superseded `moved` with the slot
+    still reserved; the release (`Next: release`, or the task's abandon) frees it and keeps the reason."""
+    lands = store(landing)
+    lands.conclude(CANDIDATE, outcome, reason, 20)
+    assert lands.supersede(CANDIDATE, "moved", 25)
+    assert latest(landing).holds_slot and not latest(landing).pushable
+    assert released(landing, (1, outcome), abandon)
+    assert release_columns(landing) == (30.0, D, "moved", 25.0)
+    assert landing.execute("SELECT count(*) FROM reservation").fetchone() == (1,)  # the reservation is the caller's `free`
+
+
+def test_a_pending_candidate_superseded_past_the_fences_is_still_released_by_the_abandon(landing: sqlite3.Connection) -> None:
+    landing.execute("UPDATE land_candidate SET superseded='moved',superseded_at=20")
+    assert not released(landing, (0, None), False)  # not validated: no settled release
+    assert released(landing, (0, None), True) and release_columns(landing) == (30.0, D, "moved", 20.0)
 
 
 def test_supersede_is_fenced_not_delivered_and_once(checking: sqlite3.Connection) -> None:
@@ -412,3 +444,24 @@ def test_a_malformed_stored_candidate_is_unavailable(landing: sqlite3.Connection
     landing.execute(f"UPDATE land_candidate SET {column}")
     with pytest.raises(StoreUnavailable):
         store(landing).latest("checks")
+
+
+def rerun(con: sqlite3.Connection) -> None:
+    """`CHECKS` failed and released, then its re-run `rerun` (number 2) passed and released: candidates put directly."""
+    checked(con, "failed")
+    con.execute("""INSERT INTO checks_attempt (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,
+    required,deadline,phase,conclusion,concluded_at,released_at,parked) VALUES ('rerun','rerun-token',1,'implement',2,'s2',?,?,?,100,
+    'concluded','passed',7,8,?)""", (D, ORIGIN, required_json(REQUIRED), D))
+
+
+def test_one_delivery_per_task_across_a_checks_re_run(checking: sqlite3.Connection) -> None:
+    """A no-change land delivered on the failed checks attempt 1 (its close failed), then checks re-run (only past the
+    admission's fence): neither a new candidate of the re-run nor a delivery of one put anyway is accepted."""
+    rerun(checking)
+    put(checking, NO_CHANGE)
+    with pytest.raises(StoreRefused, match="landing"):
+        insert(checking, dataclasses.replace(admitted(), checks="rerun"))
+    put(checking, numbered(SAME, 2) | {"checks_attempt_id": "rerun", "number": 1})
+    with pytest.raises(StoreRefused, match="land_changed"):
+        store(checking).record_delivery(AttemptKey("c2", "c2-token", 1), SQUASH, 9)
+    assert [row.delivery for row in store(checking).of_checks("rerun")] == [None]

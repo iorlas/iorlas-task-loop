@@ -432,6 +432,14 @@ record follows the observation.
   on origin. The person runs `tl step land` (which delivers and closes) or `tl step land --withdraw` (which reads origin:
   delivered is recorded, else the candidate is superseded `withdrawn`); then the abandon proceeds.
 - **After a delivery**: the abandon refuses **`landed`**: the code is on `main`; `tl step land` finishes the close.
+- **Scope (L1 review repair)**: `LANDING` and `LANDED` look at every candidate of the checks attempt's implement attempt
+  (of any of its checks attempts), and the checks admission refuses a re-run (`landed`, `landing`) while one is
+  delivered, holds its slot or is pushable. Otherwise a no-change land delivered on a failed checks attempt whose close
+  failed, followed by a checks re-run, would let the re-run's abandon return the claim with the code on `main`, and a
+  candidate of the re-run could be delivered a second time. `--no-change` stays allowed on a failed checks attempt.
+- **A superseded candidate** is always validated first (`supersede` is fenced on a validation): a pending candidate is
+  superseded only `abandoned`, by its abandon release. A superseded candidate still holding its slot is released by
+  either release mode (`tl step release`, or the abandon, which keeps its reason).
 - **`tl step release TASK`** (settled) with a concluded candidate still holding its slot releases it, so a person can
   free a slot a land left held without landing (a candidate whose land process still runs is `held` by its identity).
 - **A failed land validation** leaves the task `Next: land`: rerun (flaky: a new candidate runs the block again), or
@@ -764,3 +772,27 @@ delivery's abandoned and delivered fences) each fail a test.
 
 **Not verified**: nothing creates, validates or delivers a candidate yet (L3); `land_store.record_release` has no
 caller until L2.
+
+### 25.1 Review repairs to L1 (2026-11-11)
+
+An independent review of 9d70fc375 found the DDL identical to section 11 and NULL-safe, and two defects; both repaired,
+each with tests that fail without it (seven hand mutations, each failing a test):
+
+1. **(medium) A delivered land stopped blocking the abandon after a checks re-run.** `LANDING` and `LANDED` were scoped
+   to one checks attempt, `insert` accepts `no_change` on a failed checks attempt (kept: sections 5 and 24), and
+   `check_admit` re-ran a failed checks attempt without looking at candidates. Now `factory_schema.OF_TASK` scopes
+   `LANDED` and `LANDING` to every checks attempt of the implement attempt; `land_store.insert` refuses `landing` by
+   that `LANDING`; `record_delivery` refuses `land_changed` while any candidate of the implement attempt is delivered
+   (the partial unique index covers only one checks attempt); `check_admit.next_number` refuses the re-run `landed` or
+   `landing` with a guide (`admit.Refusal` gains both words; `step_guide` entries stay L5). Tests: the re-run's abandon
+   (both release paths) refuses `landed`; the re-run is refused for a delivered no-change and a pushable candidate and
+   admitted after a withdrawal; a candidate of the re-run is neither inserted nor delivered.
+2. **(medium-low) A pending candidate could be superseded and then never released.** `supersede` is fenced on
+   `validation IS NOT NULL`; `land_store.record_release`'s abandon mode now releases any candidate that is neither
+   pushable nor delivered, keeping an existing superseded reason (`coalesce`), so a superseded validated candidate that
+   still holds its slot is released by both modes. Tests: no `moved`/`withdrawn`/`gone` for a pending candidate, its
+   abandon release; a superseded `passed` or `failed` candidate released settled and abandoned with its reason kept; a
+   pending one superseded past the fences still released by the abandon.
+
+Code lines after the repairs: `land_store` 200, `factory_schema` 208, `check_admit` 209 (+8), `admit` 283 (+1);
+`test_land_store` 373, `test_check_store` 470, `test_check_admit` 159 (+21).

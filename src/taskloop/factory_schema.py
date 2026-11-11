@@ -219,11 +219,15 @@ JOIN attempt i ON i.attempt_id=k.after_attempt_id
 JOIN reservation q ON q.repo_id=i.repo_id AND q.slot=l.slot AND q.attempt_id=l.candidate_id AND q.generation=l.generation
 WHERE l.candidate_id=? AND l.dispatch_token=? AND l.generation=?"""
 CANDIDATE_HELD = "SELECT 1 " + CANDIDATE_RESERVED + " AND l.validation IS NULL AND l.superseded IS NULL"
-# A candidate of checks attempt `c` is delivered: its code is on origin's `main` (the abandon's word `landed`).
-LANDED = "EXISTS (SELECT 1 FROM land_candidate l WHERE l.checks_attempt_id=c.attempt_id AND l.delivery IS NOT NULL)"
-# The abandon fence of checks attempt `c`: a candidate of it is delivered, holds its slot, or is pushable (validated
-# `same_tree` or `passed`, not superseded: S may already be on origin). Words `landed`, else `landing`.
-LANDING = """EXISTS (SELECT 1 FROM land_candidate l WHERE l.checks_attempt_id=c.attempt_id AND (l.delivery IS NOT NULL
+# The candidates of checks attempt `c`'s task: those of every checks attempt of its implement attempt (a re-run of the
+# checks never hides a delivered or pushable candidate of an earlier one).
+OF_TASK = "l.checks_attempt_id IN (SELECT e.attempt_id FROM checks_attempt e WHERE e.after_attempt_id=c.after_attempt_id)"
+# A candidate of `c`'s implement attempt is delivered: its code is on origin's `main` (the word `landed`).
+LANDED = "EXISTS (SELECT 1 FROM land_candidate l WHERE " + OF_TASK + " AND l.delivery IS NOT NULL)"
+# The abandon, re-run and insert fence of checks attempt `c`: a candidate of its implement attempt is delivered, holds its
+# slot, or is pushable (validated `same_tree` or `passed`, not superseded: S may already be on origin). Words `landed`,
+# else `landing`.
+LANDING = "EXISTS (SELECT 1 FROM land_candidate l WHERE " + OF_TASK + """ AND (l.delivery IS NOT NULL
 OR (l.slot IS NOT NULL AND l.released_at IS NULL)
 OR (l.superseded IS NULL AND l.validation IS NOT NULL AND l.validation IN ('same_tree','passed'))))"""
 

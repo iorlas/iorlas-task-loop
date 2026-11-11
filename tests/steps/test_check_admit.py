@@ -140,6 +140,33 @@ def test_a_passed_or_abandoned_latest_attempt_is_never_re_run(bench: ChecksBench
     assert isinstance(found, AdmitRefused) and found.reason == word and bench.stored() == before
 
 
+CANDIDATE_COLUMNS = "candidate_id,dispatch_token,generation,checks_attempt_id,number,origin_commit,commit_sha,tree_same,required"
+
+
+@pytest.mark.parametrize(("change", "word"), [
+    ("validation='no_change',validated_at=3,delivery='no_change',delivered_at=3", "landed"),  # the close failed: task still open
+    ("validation='same_tree',validated_at=3", "landing"),
+    ("validation='same_tree',validated_at=3,superseded='withdrawn',superseded_at=4", None),
+], ids=["no_change_delivered", "pushable", "withdrawn"])
+def test_a_re_run_is_refused_while_a_land_candidate_of_the_task_is_delivered_or_pushable(
+    bench: ChecksBench, change: str, word: str | None
+) -> None:
+    """A re-run would leave the delivered or pushable candidate behind an earlier checks attempt, where the abandon fence
+    of the new one could not see it (tl-8bh9.14.8 section 13)."""
+    first = bench.admit()
+    assert isinstance(first, Admitted)
+    bench.concluded("failed")
+    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},slot,slot_head,deadline) VALUES
+    ('candidate','candidate-token',1,?,1,?,?,1,'[]','s9',?,300)""", (first.key.attempt_id, bench.done.target, bench.done.x, bench.done.d))
+    bench.con.execute(f"UPDATE land_candidate SET slot=NULL,slot_head=NULL,deadline=NULL,{change}")
+    before = bench.stored()
+    found = bench.admit(2)
+    if word is None:
+        assert isinstance(found, Admitted)
+        return
+    assert isinstance(found, AdmitRefused) and found.reason == word and "tl step land" in found.detail and bench.stored() == before
+
+
 def test_a_number_other_than_the_store_s_is_task_attempted(bench: ChecksBench) -> None:
     """The caller read the task before another start admitted or concluded a checks attempt."""
     found = bench.admit(2)

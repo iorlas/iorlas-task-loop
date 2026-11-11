@@ -584,3 +584,21 @@ def test_the_abandon_first_then_no_candidate_is_inserted_or_delivered(checking: 
     with pytest.raises(StoreRefused, match="abandoned"):
         land_store.LandStore(lambda: checking).record_delivery(AttemptKey("c1", "c1-token", 1), SQUASH, 10)
     assert columns(checking, "SELECT number,delivery FROM land_candidate") == [(1, None)]
+
+
+def test_the_abandon_of_a_checks_re_run_sees_the_land_candidates_of_the_earlier_checks_attempts(checking: sqlite3.Connection) -> None:
+    """A no-change land delivered on the failed checks attempt 1, the close failed, checks re-run (2): the re-run's abandon
+    still refuses `landed`, so the claim is not returned while the code is on `main`."""
+    checks = store(checking)
+    checks.conclude(CHECKS, "failed", "test:failed", 5)
+    assert released(checking, (1, "concluded"), False) == "released"
+    candidate(checking, 1, validation="no_change", delivery="no_change", delivered_at=1)
+    with begin_immediate(checking):
+        check_store.insert(checking, admitted(2))
+        checking.execute("INSERT INTO reservation VALUES ('s1','r',1,'next')")
+    later = AttemptKey("next", "next-token", 1)
+    assert released(checking, (0, "admitted"), True, later) == "landed"
+    checks.conclude(later, "failed", "test:failed", 6)
+    assert released(checking, (1, "concluded"), False, later) == "released"
+    assert checks.abandon_released(later) == "landed"
+    assert [row.abandoned for row in checks.of_attempt("implement")] == [False, False]

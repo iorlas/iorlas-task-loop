@@ -46,6 +46,7 @@ from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.check_status import HALF_DONE
 from taskloop.check_store import ChecksAdmitted, Required, insert
 from taskloop.checks import argv_digest, main_seen
+from taskloop.factory_schema import LANDED, LANDING
 from taskloop.prepare import HEADS, REMOTES, lacks
 from taskloop.profile import Profile, ProfileFiles, Refused, Unavailable, read_profile
 from taskloop.repo import RepoId
@@ -57,8 +58,13 @@ from taskloop.tracker import ACTOR
 type Profiles = Callable[[Path], ProfileFiles]  # the person's checkout: a file at a commit (`git_views.GitProfileFiles`)
 TARGET = "main"  # the only land target M2 checks against (another one is B6's)
 # The latest checks attempt of one implement attempt: what decides the number the next one takes.
-LATEST = """SELECT number,phase,conclusion,released_at IS NOT NULL,abandoned FROM checks_attempt WHERE after_attempt_id=?
-ORDER BY number DESC LIMIT 1"""
+LATEST = f"""SELECT number,phase,conclusion,released_at IS NOT NULL,abandoned,{LANDED},{LANDING} FROM checks_attempt c
+WHERE after_attempt_id=? ORDER BY number DESC LIMIT 1"""
+LAND_GUIDE = {
+    "landed": "A land of the task delivered its code to origin's main: rerun `tl step land` to finish the close; checks do not re-run.",
+    "landing": "A land candidate of the task holds its slot or may already be on origin's main: run `tl step land` to land it, "
+    "or `tl step land --withdraw`; checks do not re-run meanwhile.",
+}
 
 
 @dataclass(frozen=True)
@@ -85,7 +91,9 @@ class _Ready:
 def next_number(con: sqlite3.Connection, previous: AttemptKey) -> int | AdmitRefused:
     """Under any read: the implement attempt `previous` is the task's current attempt and done, and the number of its
     next checks attempt: 1 when it has none, the latest + 1 after a concluded `failed`, released, not abandoned one.
-    A latest one abandoned is `not_advanceable` (the abandon is half done); any other is `task_attempted`."""
+    A latest one abandoned is `not_advanceable` (the abandon is half done); a land candidate of the implement attempt
+    delivered (`landed`), holding its slot or pushable (`landing`) refuses the re-run (`factory_schema.LANDING`, as the
+    abandon); any other is `task_attempted`."""
     found = task_of(con, previous)
     row = None if found is None else con.execute(CURRENT, (found.backlog, found.task_id)).fetchone()
     if row is None or row[0:3] != astuple(previous) or not row[3] or following(str(row[4])) != CHECK:
@@ -94,9 +102,11 @@ def next_number(con: sqlite3.Connection, previous: AttemptKey) -> int | AdmitRef
     latest: tuple[object, ...] | None = con.execute(LATEST, (previous.attempt_id,)).fetchone()
     if latest is None:
         return 1
-    number, phase, conclusion, released, abandoned = latest
+    number, phase, conclusion, released, abandoned, landed, landing = latest
     if abandoned:
         return AdmitRefused("not_advanceable", detail=HALF_DONE)
+    if landed or landing:
+        return AdmitRefused("landed", detail=LAND_GUIDE["landed"]) if landed else AdmitRefused("landing", detail=LAND_GUIDE["landing"])
     if phase == "concluded" and conclusion == "failed" and released and isinstance(number, int):
         return number + 1
     return AdmitRefused("task_attempted", detail="The task's latest checks attempt is current")
