@@ -94,7 +94,7 @@ def arguments(argv: Sequence[str]) -> EntryArgs | None:
     return EntryArgs(database, artifacts, argv[2], argv[3])
 
 
-def _exists(database: Path) -> bool:
+def database_exists(database: Path) -> bool:
     """factory.db is opened read-only first, so a missing file is refused, never created."""
     con = open_ro(database, SCHEMA)
     if con is None:
@@ -140,7 +140,7 @@ def _registered(
 ) -> _Registered | str:
     """The attempt this process is the registered entry of, with its tracker root; otherwise the refusal's log words."""
     try:
-        if not _exists(args.database):
+        if not database_exists(args.database):
             return "refused database"
         app = attempts(args.database, args.artifacts)
         seen = inspect(os.getpid())

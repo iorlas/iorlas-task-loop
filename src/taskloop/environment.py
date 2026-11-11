@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
 
-from git_porcelain import GitUnavailable
+from git_porcelain import GitUnavailable, Repo
 from stream_proc import OwnedProcess
 
 from taskloop.access import TMP_BYTES, Folders, folders
@@ -107,6 +107,21 @@ def _ending(ended: SetupEnded) -> bytes:
     if ended.exec_failed:
         return b"not started\n"
     return b"ended by a signal\n" if ended.rc is None else f"exit {ended.rc}\n".encode()
+
+
+def reset_to(view: Repo, path: Path, commit: str) -> bool:
+    """A checks slot back to exactly `commit` through its pinned `view`: tracked files and index (`git reset --hard`),
+    then untracked and ignored files and nested repositories (`git clean -ffdx`); only while the view lists it detached
+    at `commit` (an attached HEAD would carry its branch to it): False, and nothing written, otherwise. The checks
+    setup's first step, and the checks release's before its park (the untracked leftovers of a passed block would
+    otherwise refuse the park, `held:slot_dirty`). The one owner of `reset` and `clean`."""
+    listed = next((info for info in view.worktrees() if info.path == path), None)
+    if listed is None or (listed.head, listed.branch) != (commit, None):
+        return False
+    worktree = view.worktree(path)
+    worktree.reset(commit, mode="hard")
+    worktree.clean(ignored=True, nested=True)
+    return True
 
 
 def _nested(one: Path, other: Path) -> bool:
@@ -298,12 +313,10 @@ class Preparation:
         folders made again."""
         view = self.ports.checkouts(path, git_dir=gitdir)
         worktree = view.worktree(path)
-        if commit is not None:
-            listed = next((info for info in view.worktrees() if info.path == path), None)
-            if listed is None or (listed.head, listed.branch) != (commit, None):
-                return _refused("environment:moved")
-            worktree.reset(commit, mode="hard")
-        worktree.clean(ignored=True, nested=True)
+        if commit is None:
+            worktree.clean(ignored=True, nested=True)
+        elif not reset_to(view, path, commit):
+            return _refused("environment:moved")
         if worktree.dirty(ignored_under=["."]).ignored:
             return _refused("environment:reset")
         files = self.ports.files

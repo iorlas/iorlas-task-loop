@@ -17,7 +17,7 @@ layers =
     taskloop.cli_composition
 
 [importlinter:contract:cli-never-imports-the-attempt-entry]
-name = The command surface, its operations, their JSON shape and the machine config never import the attempt entry process
+name = The command surface, its operations, their JSON shape and the machine config never import an entry process (agent or checks)
 type = forbidden
 source_modules =
     taskloop.cli
@@ -38,12 +38,16 @@ source_modules =
     taskloop.interrupts
 forbidden_modules =
     taskloop.attempt_entry
+    taskloop.check_entry
 
 [importlinter:contract:entry-never-imports-the-command-surface]
-name = The attempt entry process imports no command surface, operations or machine config (its import closure stays small)
+name = The attempt and checks entry processes import no command surface, operations or machine config (their import closure stays small)
 type = forbidden
 source_modules =
     taskloop.attempt_entry
+    taskloop.check_entry
+    taskloop.check_release
+    taskloop.check_store
     taskloop.composition
     taskloop.git_views
     taskloop.agent_credentials

@@ -1,14 +1,18 @@
-"""Launch an admitted plan attempt into its own surviving entry process, registered before the entry may run.
+"""Launch an admitted attempt into its own surviving entry process, registered before the entry may run.
 
-The launcher starts `python -I -m taskloop.attempt_entry` through the injected registered start: the start calls back
-with the child's boot-aware identity, and the target runs only after `AttemptStore.register_entry` committed it. The
-launcher never writes to, waits on, signals or kills the child; it closes its pipes and leaves it in its own session.
+The launcher starts the entry module (`python -I -m taskloop.attempt_entry` for an agent attempt, `taskloop.check_entry`
+for a checks attempt) through the injected registered start: the start calls back with the child's boot-aware identity,
+and the target runs only after its store's `register_entry` committed it. The store is the `EntryTargets` port
+(`AttemptStore`, or `CheckStore`, whose registration has no deadline refusal: an expired checks attempt is launched to
+conclude `expired` and release its slot). The launcher never writes to, waits on, signals or kills the child; it closes
+its pipes and leaves it in its own session.
 """
 
 import math
 import os
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
@@ -23,6 +27,7 @@ from taskloop.factory_schema import SCHEMA
 
 REGISTRATION_TIMEOUT = 5.0  # stated, not padded: the callback is bounded at REGISTRATION_BUSY_MS plus one short write
 ENTRY_MODULE = "taskloop.attempt_entry"
+CHECK_ENTRY_MODULE = "taskloop.check_entry"
 
 
 class Pipe(Protocol):
@@ -56,6 +61,22 @@ class Start(Protocol):
 
 
 type ObserveProcess = Callable[[OwnedProcess], ProcessObservation]
+
+
+class EntryTargets(Protocol):
+    """The store whose attempts the launcher starts: the task's current attempt with its state (only `admitted`
+    launches) and registered entry, and the entry's one registration write."""
+
+    def attempt_of(self, backlog: str, task_id: str) -> tuple[AttemptKey, str, EntryIdentity | None] | None: ...
+
+    def register_entry(
+        self, key: AttemptKey, entry: EntryIdentity, now: float, replacing: Replaced | None = None, renewed: float | None = None,
+    ) -> Literal["accepted", "conflict", "refused"]: ...
+
+
+type Connect = Callable[[], sqlite3.Connection | None]
+type Begin = Callable[[sqlite3.Connection], AbstractContextManager[None]]
+type Targets = Callable[[Connect, Begin], EntryTargets]  # the store over one connection: `AttemptStore` or `CheckStore` itself
 
 
 @dataclass(frozen=True)
@@ -111,17 +132,21 @@ def _entry(identity: OwnedProcess) -> EntryIdentity:
 
 class Launcher:
     def __init__(
-        self, database: Path, files: EvidenceFiles, clock: Callable[[], float], start: Start, observe: ObserveProcess, executable: str
+        self, database: Path, files: EvidenceFiles, clock: Callable[[], float], start: Start, observe: ObserveProcess, executable: str,
+        targets: Targets = AttemptStore, module: str = ENTRY_MODULE,
     ) -> None:
+        """`targets` and `module`: the agent attempts' store and entry by default, `CheckStore` and `CHECK_ENTRY_MODULE`
+        for checks attempts."""
         self.database, self.files, self.clock = database, files, clock
         self.start, self.observe, self.executable = start, observe, executable
+        self.targets, self.module = targets, module
 
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         """Start the task's admitted attempt unless its registered entry still runs; never creates factory.db.
 
         A relative database path is refused before anything is read: the entry would refuse it after registration.
         `minutes`: a replacement of an entry registered in another boot renews the deadline to now plus these minutes in
-        the registration's own write (`AttemptStore.register_entry`), so a reboot mid-start continues with its full time."""
+        the registration's own write (`register_entry`), so a reboot mid-start continues with its full time."""
         if not self.database.is_absolute():
             return LaunchRefused("database")
         store = Store(SCHEMA)
@@ -130,14 +155,14 @@ class Launcher:
             reader = store.open_ro(self.database)
             if reader is None:
                 return LaunchRefused("database")
-            target = self._target(AttemptStore(lambda: reader), backlog, task_id)
+            target = self._target(self.targets(lambda: reader, store.begin_immediate), backlog, task_id)
             if not isinstance(target, tuple):
                 return target
             writer = store.open_rw(self.database)  # a file removed since the read-only open would be created here
             if writer is None:
                 return LaunchUnavailable("store")
             writer.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
-            return self._start(target[0], (backlog, task_id), AttemptStore(lambda: writer, store.begin_immediate), target[1], minutes)
+            return self._start(target[0], (backlog, task_id), self.targets(lambda: writer, store.begin_immediate), target[1], minutes)
         except (sqlite3.Error, StoreUnavailable):
             return LaunchUnavailable("store")
         finally:
@@ -145,7 +170,7 @@ class Launcher:
                 if con is not None:
                     con.close()
 
-    def _target(self, reader: AttemptStore, backlog: str, task_id: str) -> tuple[AttemptKey, Replaced | None] | LaunchResult:
+    def _target(self, reader: EntryTargets, backlog: str, task_id: str) -> tuple[AttemptKey, Replaced | None] | LaunchResult:
         """The admitted attempt to start, and the stored entry it replaces once that is observed not to run."""
         found = reader.attempt_of(backlog, task_id)
         if found is None:
@@ -163,7 +188,7 @@ class Launcher:
         return key, Replaced(stored, seen.kind)
 
     def _start(
-        self, key: AttemptKey, task: tuple[str, str], writer: AttemptStore, replacing: Replaced | None, minutes: int
+        self, key: AttemptKey, task: tuple[str, str], writer: EntryTargets, replacing: Replaced | None, minutes: int
     ) -> LaunchResult:
         """`task` (backlog, task id) names the attempt to the entry; the dispatch token never enters argv."""
         committed = False
@@ -180,7 +205,7 @@ class Launcher:
                 raise _CallbackRefused("registration_conflict" if answer == "conflict" else "registration_refused")
             committed = True
 
-        argv = [self.executable, "-I", "-m", ENTRY_MODULE, str(self.database), str(self.files.root), *task]
+        argv = [self.executable, "-I", "-m", self.module, str(self.database), str(self.files.root), *task]
         try:
             log = os.open(self.files.entry_log(key), os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o600)
         except (EvidenceError, OSError):

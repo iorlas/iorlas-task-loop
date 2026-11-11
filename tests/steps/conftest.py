@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 from doubles import CHECKS, REQUIRED, TARGET, D, FakeSlotFiles, PinnedViews, X
+from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
 
@@ -129,6 +130,32 @@ def checking(factory: sqlite3.Connection) -> sqlite3.Connection:
         factory.execute("INSERT INTO reservation VALUES ('s2','r',1,'checks')")
         check_store.insert(factory, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s2", D, TARGET, REQUIRED, 100.0))
     return factory
+
+
+@pytest.fixture
+def on_slot(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Path:
+    """`<tmp>/factory.db`: tl-1's done implement attempt `implement` (X: a commit made on the person's `main`, which is
+    therefore the target) released `kept` from slot s0, and its checks attempt 1 `CHECKS` admitted on the Git fake's
+    slot s1 (still detached at D), deadline 100, required `REQUIRED`, with its held reservation; no entry registered."""
+    root = repo.worktree(repo.identity().root)
+    root.write_file("README", "X")
+    made = root.record("the task's commit", paths="all")
+    assert isinstance(made, Recorded)
+    path, repo_id, d = tmp_path / "factory.db", repo.identity().key, head(slot)
+    con = Store(SCHEMA).open_rw(path)
+    assert con is not None
+    with begin_immediate(con):
+        con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot.path)))
+        con.execute(
+            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
+            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, "b" * 40, made.sha, d, "a" * 40))
+        con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (d,))
+        con.execute("INSERT INTO reservation VALUES ('s1',?,1,'checks')", (repo_id,))
+        check_store.insert(con, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s1", d, made.sha, REQUIRED, 100.0))
+    con.close()
+    return path
 
 
 @contextmanager

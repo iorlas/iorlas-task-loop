@@ -190,7 +190,7 @@ def detach_at(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: s
     parked at X through its pinned view and read again, which must give `(X, detached)` (else `slot:moved`). `prepare`'s
     other words (`unavailable` `repo`, `not_listed`, `git`) as for an agent slot."""
     try:
-        state = _listed(checkouts, files, slot_path, repo_id)
+        state = slot_listed(checkouts, files, slot_path, repo_id)
         if isinstance(state, AttemptResult):
             return state
         problem = _detached_problem(checkouts, state, commit)
@@ -198,7 +198,7 @@ def detach_at(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: s
             return problem or Prepared(commit, state.gitdir, state.root)
         path = Path(slot_path)
         checkouts(path, git_dir=state.gitdir).worktree(path).park(commit)
-        again = _listed(checkouts, files, slot_path, repo_id)
+        again = slot_listed(checkouts, files, slot_path, repo_id)
     except GitUnavailable:
         return AttemptResult("unavailable", "git")
     if isinstance(again, AttemptResult) or (again.head, again.branch) == (commit, None):
@@ -206,8 +206,8 @@ def detach_at(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: s
     return _refused("slot:moved")
 
 
-def _listed(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str) -> SlotState | AttemptResult:
-    """`observe_slot` in `detach_at`'s words."""
+def slot_listed(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str) -> SlotState | AttemptResult:
+    """`observe_slot` in `detach_at`'s words (also the checks entry's read of the slot's pinned Git directory before X is taken)."""
     state = observe_slot(checkouts, files, slot_path, repo_id)
     if state == "redirected":
         return _refused("slot:redirected")

@@ -2,10 +2,13 @@
 real Git views (`git_views`), the slot file port (`slot_files`), owned-process observations (`owned_processes`), the
 tracker client (`tracker_client`), the agent run and wall clock."""
 
+import os
 import shutil
 import sqlite3
 import sys
 import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from any_agent import run
@@ -15,33 +18,33 @@ from stream_proc import group_alive, observe_owned, popen_registered
 from taskloop import slot_lock
 from taskloop.admit import AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, NextAdmission
-from taskloop.agent_credentials import codex_machine_credentials
+from taskloop.agent_credentials import codex_machine_credentials, scrubbed
 from taskloop.attempt import Attempts, Credentials
-from taskloop.attempt_reads import AttemptReads
+from taskloop.attempt_reads import AttemptReads, StoreConnection
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
-from taskloop.environment import EnvironmentPorts, Preparation
+from taskloop.attempt_types import Checkouts, Observe, SlotFiles
+from taskloop.check_store import CheckStore
+from taskloop.checks import Block, BlockPorts
+from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import checkouts, remotes, slot_profiles
-from taskloop.launch import Launcher
+from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
-from taskloop.setup_store import SetupStore
+from taskloop.setup_store import SetupSeen, SetupStore
 from taskloop.slot_env import RealEnvFiles, sandbox_probe, setup_process
 from taskloop.slot_files import RealSlotFiles
-from taskloop.slot_release import SlotRelease
+from taskloop.slot_release import Scratch, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
 from taskloop.tracker_client import inspect_tracker_task, tracker_claims
 from taskloop.verifier import Verifier
 
 
-def open_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> Attempts:
-    """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
-
-    The harness registration write goes through its own store, whose connections wait at most REGISTRATION_BUSY_MS for the
-    write lock; every other write keeps the library's 5 s.
-    """
-    store, registration = Store(SCHEMA), Store(SCHEMA)
+def _registration(database: Path) -> tuple[Store, Callable[[], sqlite3.Connection | None]]:
+    """The registration store, whose connections wait at most REGISTRATION_BUSY_MS for the write lock (every other write
+    keeps the library's 5 s), and its connection."""
+    registration = Store(SCHEMA)
 
     def bounded() -> sqlite3.Connection | None:
         con = registration.shared_rw(database)
@@ -49,23 +52,70 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
             con.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
         return con
 
-    evidence = EvidenceFiles(artifacts)
-    setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
-    ports = EnvironmentPorts(
+    return registration, bounded
+
+
+def _environment(setup: SetupStore, database: Path, artifacts: Path) -> Preparation:
+    """The slot environment's real ports: real Git, files, the registered start, the process table and the probe."""
+    return Preparation(EnvironmentPorts(
         setup, checkouts, slot_profiles, RealEnvFiles(), setup_process, setup_seen,
-        group_alive, evidence, time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks, sandbox_probe,
+        group_alive, EvidenceFiles(artifacts), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks, sandbox_probe,
         (artifacts.absolute(), database.absolute().parent),
-    )
+    ))
+
+
+def open_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> Attempts:
+    """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
+
+    The harness registration write goes through its own store's bounded connections (`_registration`)."""
+    store, (registration, bounded) = Store(SCHEMA), _registration(database)
+    setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
     return Attempts(
         AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
-        evidence,
+        EvidenceFiles(artifacts),
         credentials,
         run,
         time.time,
         checkouts,
         RealSlotFiles(),
         registration_store=AttemptStore(bounded, registration.begin_immediate),
-        environment=Preparation(ports),
+        environment=_environment(setup, database, artifacts),
+    )
+
+
+@dataclass(frozen=True)
+class Checking:
+    """What a checks attempt's entry (`check_entry`) works with: its store and its setup runs' store, its evidence, the
+    Git views and slot file port, the profile port on a slot's pinned view, the slot environment (setup without a
+    probe), the block, the process-table observations of a registered command and entry, the scratch's emptying, the
+    clock and the scrubbed environment every setup and check command gets (`agent_credentials.scrubbed`)."""
+
+    store: CheckStore
+    setups: SetupStore
+    files: EvidenceFiles
+    checkouts: Checkouts
+    slot_files: SlotFiles
+    profiles: SlotProfiles
+    preparation: Preparation
+    block: Block
+    seen: SetupSeen
+    entry_seen: Observe
+    scratch: Scratch
+    clock: Callable[[], float]
+    environ: Mapping[str, str]
+
+
+def open_checking(database: Path, artifacts: Path) -> Checking:
+    """Real wiring of the checks entry: per-thread shared writers on factory.db (each command's identity through the
+    bounded registration connections), real Git, files and processes, wall clock; the environment scrubbed once here
+    (`CredentialsUnavailable` on a malformed Git config count)."""
+    store, (registration, bounded) = Store(SCHEMA), _registration(database)
+    registering = StoreConnection(bounded, registration.begin_immediate)
+    setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
+    return Checking(
+        CheckStore(lambda: store.shared_rw(database), store.begin_immediate, registering), setup, EvidenceFiles(artifacts), checkouts,
+        RealSlotFiles(), slot_profiles, _environment(setup, database, artifacts), Block(BlockPorts(setup_process, group_alive, time.time)),
+        setup_seen, entry_seen, RealEnvFiles().empty_scratch, time.time, scrubbed(os.environ),
     )
 
 
@@ -101,6 +151,12 @@ def open_launcher(database: Path, artifacts: Path) -> Launcher:
 
     The database path is made absolute here: the entry refuses a relative one, after its registration would commit."""
     return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable)
+
+
+def open_checks_launcher(database: Path, artifacts: Path) -> Launcher:
+    """`open_launcher` for checks attempts: `CheckStore`'s attempts and registration, the checks entry module."""
+    return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable,
+                    CheckStore, CHECK_ENTRY_MODULE)
 
 
 def adopt_slots(

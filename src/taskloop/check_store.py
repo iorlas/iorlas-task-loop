@@ -34,9 +34,10 @@ CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "
 # relaunched or released (`interrupted`: its entry died, and nothing proved the command's group gone).
 LIVE_AFTER: Final[tuple[Conclusion, ...]] = ("lingering", "timed_out", "interrupted")
 REQUIRED_MAX: Final = 32
-RESERVED: Final = """FROM checks_attempt c JOIN attempt a ON a.attempt_id=c.after_attempt_id
-JOIN reservation r ON r.repo_id=a.repo_id AND r.slot=c.slot AND r.attempt_id=c.attempt_id AND r.generation=c.generation
-WHERE c.attempt_id=? AND c.dispatch_token=? AND c.generation=?"""
+JOINED: Final = """FROM checks_attempt c JOIN attempt a ON a.attempt_id=c.after_attempt_id
+JOIN reservation r ON r.repo_id=a.repo_id AND r.slot=c.slot AND r.attempt_id=c.attempt_id AND r.generation=c.generation"""
+KEYED: Final = "\nWHERE c.attempt_id=? AND c.dispatch_token=? AND c.generation=?"
+RESERVED: Final = JOINED + KEYED
 HELD: Final = "SELECT 1 " + RESERVED + " AND c.phase='admitted'"  # also the checks half of `setup_store.HELD`
 LOADED: Final = (f"SELECT {prefixed('c', CHECKS_LOADED)},a.backlog,a.task_id,a.repo_id,a.tracker_root,a.end_commit "
                  "FROM checks_attempt c JOIN attempt a ON a.attempt_id=c.after_attempt_id")
@@ -201,6 +202,13 @@ def unsettled(con: sqlite3.Connection, attempt_id: str) -> tuple[ResultRow, ...]
     return tuple(row for row in latest_results(con, attempt_id) if row.unsettled)
 
 
+def held_slot(con: sqlite3.Connection, key: AttemptKey) -> str | None:
+    """The slot path of the reservation the checks attempt holds at its key's generation (in any phase); None when it
+    holds none (released, or never this key's)."""
+    found = con.execute(f"SELECT s.path {JOINED} JOIN slot s ON s.repo_id=r.repo_id AND s.name=r.slot{KEYED}", astuple(key)).fetchone()
+    return None if found is None else as_text(found[0])
+
+
 def insert(con: sqlite3.Connection, admitted: ChecksAdmitted) -> None:
     """The admission's row, in the admission's own write transaction (after `admit.reserve`); a checks attempt with the
     same number for the implement attempt is a lost race: `StoreRefused("task_attempted")`."""
@@ -262,6 +270,11 @@ class CheckStore(StoreConnection):
         with self._connection() as con:
             rows = con.execute(LOADED + " WHERE c.after_attempt_id=? ORDER BY c.number", (after,)).fetchall()
         return tuple(_checks(row) for row in rows)
+
+    def slot_path(self, key: AttemptKey) -> str | None:
+        """The entry's read of its slot (`held_slot`): its custody lock is beside it."""
+        with self._connection() as con:
+            return held_slot(con, key)
 
     def results(self, key: AttemptKey) -> tuple[ResultRow, ...]:
         with self._connection() as con:

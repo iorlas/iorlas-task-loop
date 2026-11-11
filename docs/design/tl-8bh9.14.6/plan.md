@@ -797,3 +797,87 @@ An independent review of 89a4a0608 found no defect in the block; three repairs:
    the deadline) and no longer promises a relaunch runs setup again after the deadline.
 3. **The checks release resets the slot to X before the park** (a design gap of S6c, recorded, not built): section 10
    and the S6c slice row; also in the S6c tracker issue's notes.
+
+## 23. As built: S6c (tl-8bh9.14.6.3)
+
+The checks entry, the launcher port and the checks release; nothing of S6d-S6e (no admission, `steps.ORDER`, operations
+routing, status `Next` table, `tl step` show/list/release/start for checks, round routing or `rounds.log` words: nothing
+admits or launches a checks attempt yet). Code lines by the policy counter: `check_entry` 209 (new), `check_release` 129
+(new), `composition` 136 (+36), `launch` 162 (+12), `environment` 255 (+10), `check_store` 273 (+7), `slot_release` 266
+(+2), `prepare` 154 and `attempt_entry` 230 (renames only); `test_check_entry` 263 (new), `test_check_release` 194 (new),
+`real/test_check_release_real` 66 (new), `test_launch` 252 (+35), `conftest` 129 (+22).
+
+- **`check_entry.py`**: section 6's order and 6.1's table. `enter(args, opened, inspect, log, heartbeat_for, stop)`; the
+  collaborators are `composition.Checking` (`open_checking`: the stores, evidence, Git views, slot file port, profile port,
+  `Preparation`, `Block`, the command and entry observations, the scratch, the clock and the scrubbed environment). Exit 0
+  only for `collected passed`.
+- **The 6.1 rule as built** (`check_entry.concluded`): every `unavailable` word relaunches and counts; every `refused`
+  word concludes `failed` with that word, except `RELAUNCHED` (`slot_busy`, `lock`, `slot_dirty`, and the store fences
+  `stale_reservation`, `check_changed`, `setup_changed`). So S6b's `slot:moved` and `slot_unborn` conclude, `unavailable
+  repo`, `not_listed`, `environment:files` count; `refused environment:profile` concludes and `unavailable
+  environment:profile` (a Git read) counts; `refused environment:failed` concludes `setup:<the latest run's conclusion>`.
+- **`launch.EntryTargets`** (`attempt_of`, `register_entry`) and `Targets` (the store over one connection): `Launcher(...,
+  targets=AttemptStore, module=ENTRY_MODULE)` by default; `composition.open_checks_launcher` passes `CheckStore` and
+  `CHECK_ENTRY_MODULE`. A concluded or released checks attempt is `refused dispatched`.
+- **`check_release.ChecksRelease`**: section 10. The stop proof (`entry_stopped`, `slot_release.setup_stopped`, and
+  `checks_stopped` over `check_store.unsettled`), then under the lock `environment.reset_to(view, slot, X)` only for a slot
+  listed `(X, detached)`, then `slot_release.park_slot(..., branch=None)`, then `check_store.record_release` and
+  `slot_release.free` in one transaction, then the scratch. Abandon of a released attempt: `abandon_released`.
+- **Shared, extracted**: `slot_release.park_slot(checkouts, files, path, repo_id, D, branch)`, `free(con, ...)` (the one
+  `DELETE FROM reservation`) and `setup_stopped(seen, setup)` are module functions used by both releases;
+  `environment.reset_to` is the one owner of `reset` and `clean` (the checks setup's reset uses it too);
+  `check_store.held_slot` / `CheckStore.slot_path` read the held reservation's slot path.
+- **Policy**: `WRITERS` and `GIT_WRITES` unchanged (the owners did not move). `.importlinter`: `check_entry`,
+  `check_release`, `check_store` join the entry closure contract; `check_entry` joins the command surface's forbidden list.
+
+**Deviations and decisions (decided here, open to veto).**
+
+1. `slot_unborn` concludes with the reason `slot:unborn` (the `slot:<word>` family of section 15).
+2. `RELAUNCHED` adds `lock` (the slot's lock file cannot be opened) and the three store fences to the table's relaunch
+   column. `stale_reservation` cannot be counted (the attempt no longer holds its reservation) and the launcher will not
+   launch it again either.
+3. Before the attempt is its own the entry refuses without counting: `refused database|absent|identity`, `refused
+   concluded|released` (the task's latest checks attempt is not admitted), `refused stale_reservation` (its reservation is
+   not held), `unavailable store`.
+4. The log line of a counted relaunch is `<status> <reason> claim=<word>` (no count: it is factory.db's); `refused
+   slot_busy` and `refused lock` have no `claim=` (the claim was not read). A conclusion the store refuses is logged
+   `refused <fence>` or counted `unavailable store`, and nothing is released.
+5. The entry reads the slot's pinned Git directory before X is taken through `prepare.slot_listed` (S6b's `_listed`, made
+   public), so the profile at X and `main` are read on the pinned view; its words are `detach_at`'s.
+6. The scrubbed environment is computed once by `open_checking`: a malformed `GIT_CONFIG_COUNT` is `failed
+   CredentialsUnavailable` from `main`, not a counted refusal (it would relaunch until the person fixes the environment;
+   S6e's round should treat a `failed` entry log like any lost entry).
+7. A claim lost at the renewal after setup (`environment`'s) concludes `claim_lost` before the block; lost later by the
+   keep-alive thread it is only `claim=lost`, and a passed block still exits 0.
+8. `main` gone (no `refs/heads/main`) is `main_moved` with `target_seen` NULL.
+9. A checks release never touches the tracker claim; its `Released`/`AlreadyReleased` say `kept` (the claim is the
+   implement attempt's; the implement abandon that follows returns it).
+10. `attempt_entry._exists` is now `database_exists`; the checks entry imports `EntryArgs`, `arguments`,
+    `database_exists` and `renewal` from it (one argv shape and one renewal rule for both entries).
+11. No `open_checks_releaser` yet: `tl step release` for a checks attempt is S6d's.
+
+**Tests**: `test_check_entry.py` (a factory.db file with the entry registered as this process's real identity, the Git
+fake's slot, `doubles`' environment and scripted start, the real slot lock, a scripted claim): the passing order (renewal,
+X taken, reset and setup at X, renewal, block, release parked at D), a failed required check, the claim lost before the
+block, at the setup's renewal and later (recorded, results stand); the reconcile before any slot read (a live or unknown
+orphan with a dirty slot: `checks:running|unknown`, counted twice; a live setup command); an interrupted block repeated
+whole; a completed block concluded without running or taking X; expired only after the proof, with no X and no setup run;
+`main_moved` before and after the block; the profile at X refused; a dirty slot counted, then a branch concluded (the count
+cleared); the environment's refusals concluded and its unavailable words counted; two failed setups concluding
+`setup:lingering`; a lingering check holding the release (`held:check_running`); the deadline mid-block (`expired:check`);
+an uncertain start counted and reconciled; identity, concluded and missing-database refusals; a busy lock counted; the
+6.1 table. `test_check_release.py`: the reset to X then park at D (untracked, ignored and tracked leftovers), no Git write
+at D, `not_terminal`, every stop-proof refusal in both modes with nothing changed, the passing proofs (`me`, settled, never
+registered, gone), a slot on a branch not reset, a busy lock and a changed rev, absent and closed store, the task's abandon
+in both orders (implement first refused `changed`, then checks, then implement returns the claim; and the implement flip
+first, a checks row anyway, both finished by the reruns), the abandon of a released attempt once and only of the latest.
+`test_launch`: a checks attempt past its deadline still launched with `taskloop.check_entry`, concluded and released ones
+refused `dispatched`, the composition. Real (`real/test_check_release_real.py`): a real `--detach` slot at X with an
+untracked report, an ignored `build/` and a rewritten tracked file, released to a clean D. Mutation-checked: removing the
+reset, the checks stop proof, the setup stop proof, the settled check, the free, the reconcile, the expiry, the
+interrupted marking, the completed-block reading, either `main` read, a `RELAUNCHED` word, the counter, the identity
+state check or the exit code each fails a test.
+
+**Not verified**: a real launched `taskloop.check_entry` process (only the body runs in tests; the launcher's start is the
+fake); a real block run by the entry end to end (S6b's real test runs the block alone); `bd`'s heartbeat after a lapsed
+lease (section 19); everything S6d-S6e route.

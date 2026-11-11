@@ -22,10 +22,11 @@ from stream_proc import (
 
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, EntryIdentity
-from taskloop.composition import open_launcher
+from taskloop.check_store import CheckStore
+from taskloop.composition import open_checks_launcher, open_launcher
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
-from taskloop.launch import AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
+from taskloop.launch import CHECK_ENTRY_MODULE, AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
 from taskloop.owned_processes import current_boot
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -278,3 +279,50 @@ def test_the_registration_write_waits_briefly_and_a_busy_store_registers_nothing
     start = FakeStart()
     assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchUnavailable("store")
     assert waits == [REGISTRATION_BUSY_MS] and not start.permitted and stored(admitted) == (None, None, None, "admitted")
+
+
+CHECKS = AttemptKey("checks", "checks-token", 1)
+
+
+def checks_launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:
+    return Launcher(db, EvidenceFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python", CheckStore,
+                    CHECK_ENTRY_MODULE)
+
+
+def checks_row(db: Path) -> tuple[object, ...]:
+    con = sqlite3.connect(db)
+    try:
+        return con.execute("SELECT entry_pid,entry_start,entry_boot,deadline FROM checks_attempt").fetchone()
+    finally:
+        con.close()
+
+
+def test_a_checks_attempt_past_its_deadline_is_still_launched_to_conclude_expired(on_slot: Path) -> None:
+    """`CheckStore`'s registration has no deadline refusal; the agent attempts' launcher keeps its own."""
+    start = FakeStart()
+    assert checks_launcher(on_slot, start, now=500).launch("tasks", "tl-1", 30) == Launched(CHECKS, (9, "new-start", "boot"))
+    assert start.permitted and checks_row(on_slot) == (9, "new-start", "boot", 100.0)
+    argv = start.calls[0]["argv"]
+    assert argv == ["/venv/bin/python", "-I", "-m", "taskloop.check_entry", str(on_slot), str(on_slot.parent), "tasks", "tl-1"]
+    log = on_slot.parent / EvidenceFiles(on_slot.parent).directory(CHECKS) / "entry.log"
+    assert log.exists()  # the checks attempt's own entry log
+    observe = Observe("matching")
+    assert checks_launcher(on_slot, FakeStart(), observe).launch("tasks", "tl-1", 30) == AlreadyRunning(CHECKS, (9, "new-start", "boot"))
+
+
+@pytest.mark.parametrize("change", ["UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=1",
+                                    "UPDATE checks_attempt SET released_at=1,parked=slot_head,abandoned=1"], ids=["concluded", "released"])
+def test_only_an_admitted_unreleased_checks_attempt_launches(on_slot: Path, change: str) -> None:
+    start = FakeStart()
+    assert checks_launcher(on_slot, start).launch("tasks", "tl-9", 30) == LaunchRefused("absent")
+    con = sqlite3.connect(on_slot)
+    con.execute(change)
+    con.commit()
+    con.close()
+    assert checks_launcher(on_slot, start).launch("tasks", "tl-1", 30) == LaunchRefused("dispatched") and start.calls == []
+
+
+def test_composition_launches_checks_attempts_with_their_store_and_entry(tmp_path: Path) -> None:
+    built = open_checks_launcher(tmp_path / "factory.db", tmp_path)
+    assert (built.targets, built.module, built.start) == (CheckStore, CHECK_ENTRY_MODULE, popen_registered)
+    assert open_launcher(tmp_path / "factory.db", tmp_path).module == "taskloop.attempt_entry"
