@@ -28,6 +28,7 @@ from taskloop.land_summary import LandSummary
 from taskloop.operations import Failed
 from taskloop.result_data import Result
 from taskloop.step_guide import GUIDE
+from taskloop.validate import RELAUNCHED
 
 LAND = ["step", "land", "tl-1", "--backlog", "tasks", "--checkout", "/checkout", "--minutes", "20"]
 SOURCES = Path(__file__).resolve().parents[2] / "src" / "taskloop"
@@ -195,21 +196,40 @@ def test_a_detail_is_printed_as_printable_lines(capsys: pytest.CaptureFixture[st
     assert lines[1:3] == ["bd says: [31m cannot close", "Next: landed forged"] and all(line.isprintable() for line in lines)
 
 
-def _words() -> set[str]:
-    """Every literal refusal or unknown word a land module writes: `Failed("<kind>", "<word>", ...)`."""
+def _literals(names: tuple[str, ...], call: str, position: int) -> set[str]:
+    """The literal word at `position` of every `call(...)` in the named modules (both branches of a conditional)."""
     found: set[str] = set()
-    for path in SOURCES.glob("land*.py"):
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Failed" and len(node.args) >= 2:
-                word = node.args[1]
+    for name in names:
+        for node in ast.walk(ast.parse((SOURCES / f"{name}.py").read_text())):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == call and len(node.args) > position:
+                word = node.args[position]
                 choices = (word.body, word.orelse) if isinstance(word, ast.IfExp) else (word,)
                 found |= {each.value for each in choices if isinstance(each, ast.Constant) and isinstance(each.value, str)}
     return found
 
 
-def test_every_word_the_land_writes_has_a_guide() -> None:
+LANDS = ("land", "land_check", "land_push", "land_close", "land_summary", "land_store")
+# The words a land passes through from its collaborators (the `Failed(kind, reason)` built from another value): the
+# candidate release's (`NotReleased`, the park's `slot_<state>`, `repo`, `not_listed`), the stores' fences
+# (`StoreRefused`), the slot choice and the checkout (`AdmitRefused`/`AdmitUnavailable`), the profile at O, the
+# validation's relaunchable words, and the kinds. An agent attempt's release words (`worker_*`) and the checks
+# admission's `task_attempted` never reach it.
+PASSED = {"slot_redirected", "repo", "not_listed", "checkout", "deadline", "expired", "no_free_slot", "git", "store", "target",
+          "target_profile", "no_required", "checks", "environment", "refused", "unavailable", "unsettled"}
+AGENT_ONLY = {"worker_alive", "worker_unknown", "task_attempted"}
+
+
+def _words() -> set[str]:
+    """Every refusal or unknown word a land answers, written by its modules or passed through from its collaborators."""
+    written = _literals(LANDS, "Failed", 1)
+    released = _literals(("slot_release", "check_release"), "NotReleased", 1)
+    fenced = _literals(("land_store", "check_store", "setup_store"), "StoreRefused", 0)
+    return (written | released | fenced | PASSED | set(RELAUNCHED)) - AGENT_ONLY
+
+
+def test_every_word_the_land_answers_has_the_land_s_own_guide() -> None:
     words = _words()
-    assert {"push_barred", "landing", "not_landing", "land_running", "target_moved", "push_url", "blocked"} <= words  # the scan sees them
-    assert sorted(word for word in words if word not in LAND_GUIDE and word not in GUIDE) == []
+    assert {"push_barred", "land_running", "slot_branch", "slot_unborn", "absent", "land_changed", "stale_reservation"} <= words
+    assert sorted(words - LAND_GUIDE.keys()) == []
     assert sorted(word for word in ("checks", "slot_busy", "claim_lost", "remote_rejected", "target", "no_required", "branch_moved",
                                     "commit_missing", "remote", "changed", "no_free_slot") if LAND_GUIDE[word] == GUIDE.get(word)) == []

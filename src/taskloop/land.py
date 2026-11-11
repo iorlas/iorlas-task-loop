@@ -124,7 +124,11 @@ def _task(ports: LandPorts, request: LandRequest) -> _Task | Failed:
     refused = _not_checked(checks, request.no_change or request.mode == "summary")  # the summary reports any conclusion
     if refused is not None or checks is None:
         return refused or Failed("refused", "not_checked")
-    return _Task(key, checks, ports.lands.latest(checks.key.attempt_id))
+    candidate = ports.lands.latest(checks.key.attempt_id)
+    if candidate is not None and candidate.superseded == "abandoned":  # only `tl step release --abandon` marks it so
+        return Failed("refused", "abandoning", "The task's abandon stopped after its land candidate: rerun `tl step release "
+                      "--abandon` to finish it. Nothing was landed.")
+    return _Task(key, checks, candidate)
 
 
 def _branch(origin: Origin, task: _Task, task_tip: str | None) -> Failed | None:

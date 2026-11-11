@@ -20,10 +20,10 @@ function `TL`. Every `tl step land` runs in the person's own shell (never one ca
 ```bash
 M3=$HOME/tl-smoke/m3; mkdir -p "$M3" && cd "$M3"
 SRC=$HOME/PATH/TO/a-checkout-of-this-repository             # edit
-SHA=<the L5 commit or a later one>                           # edit: the successor commit under test
+SHA=<the L5 commit d1aca1601 or a later one>                 # edit: the successor commit under test
 G() { git --no-optional-locks -c core.hooksPath=/dev/null "$@"; }
-G -C "$SRC" cat-file -e "$SHA:docs/design/tl-8bh9.14.8/live-smoke.md" && G -C "$SRC" merge-base --is-ancestor 1f0912818 "$SHA" \
-  && echo "SHA has L5"
+G -C "$SRC" merge-base --is-ancestor d1aca1601 "$SHA" && G -C "$SRC" grep -q '"abandoning"' "$SHA" -- src/taskloop/land_guide.py \
+  && echo "SHA has L5 and its review repairs"
 mise settings add trusted_config_paths "$M3"                 # before any `just` under $M3 (M1 finding 1)
 G -C "$SRC" worktree add --detach "$M3/runner" "$SHA"       # the runner: the factory version under test, never edited
 (cd "$M3/runner" && just install)

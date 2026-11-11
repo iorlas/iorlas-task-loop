@@ -60,7 +60,8 @@ LAND_GUIDE: Final = {
     "commits, a hook): land by hand to see why (`git push origin <S>:refs/heads/main`, never `--force`); PR mode is held.",
     "remote": "origin could not be fetched or pushed (often credentials): check that `git fetch` and `git push` work from this "
     f"shell. {RERUN}",
-    "git": f"Git could not read the checkout or make S: check that `git` works in your checkout. {RERUN}",
+    "git": "Git could not answer (reading your checkout, making S, or resetting the candidate's slot): check that `git` works "
+    f"in your checkout and the slot. {RERUN}",
     "tracker": f"The tracker could not be read or could not close the task. {RERUN}",
     "store": f"factory.db could not be read or written now. {RERUN}",
     "claim_lost": "The tracker no longer shows the task in progress for taskloop (another actor took it, or its claim "
@@ -86,4 +87,47 @@ LAND_GUIDE: Final = {
     "--abandon`.",
     "profile": "The profile at S is refused (the detail says why): fix `.task-loop.json` on the task branch (abandon and "
     "restart) or on main.",
+    "refused": "The land refused to go on; the detail and the guide above say what to fix, then rerun `tl step land`.",
+    "abandoning": "The task's abandon stopped half way (its land candidate is abandoned, its checks attempt not yet): rerun "
+    "`tl step release TASK --abandon` to finish it; `tl step land` refuses until then, so nothing lands against it.",
+    "absent": "The land candidate's slot is no longer held by it (released or never reserved): `tl step show TASK`, then rerun.",
+    "land_changed": f"Another land of the task recorded its delivery or close first. {RERUN}",
+    "stale_reservation": f"The candidate's slot reservation changed meanwhile (released or taken over). {RERUN}",
+    "check_changed": f"A check result of the validation was written by another process meanwhile. {RERUN}",
+    "setup_changed": f"The validation's setup run was written by another process meanwhile. {RERUN}",
+    "lock": "The slot's lock file under `<slots root>/<repo id>/.locks` cannot be created: fix that folder's permissions, then "
+    "rerun.",
+    "slot_dirty": "The candidate's slot has files the release will not remove (listed): remove them, then rerun `tl step land` "
+    "(it retries the release first) or `tl step release TASK`.",
+    "slot_branch": "The candidate's slot is on a branch, not detached: `git -C <slot> switch --detach`, then rerun.",
+    "slot_unborn": "The candidate's slot has no commit: inspect it (`git -C <slot> log -1`), then rerun.",
+    "slot_redirected": "The candidate's slot `.git` pointer was rewritten (by a check's code, say): inspect and restore it, then "
+    "rerun; nothing was reset.",
+    "repo": "The candidate's slot is not a worktree of the task's repository: inspect it (`git -C <slot> rev-parse "
+    "--git-common-dir`), then rerun.",
+    "not_listed": "The candidate's slot is not listed by `git worktree list` any more: restore it, then rerun.",
+    "deadline": "--minutes is out of range: from 1 to the maximum.",
+    "expired": "The validation's deadline passed: rerun `tl step land` (a rerun renews it from --minutes).",
+    "environment": "S's `setup` refused or failed in the slot (its `setup-<run>.log` beside the candidate's check logs says why): "
+    "fix it on the task branch or main, then rerun.",
+    "check_running": "A check of the land's validation still runs in the process group named: wait for it (or stop only its "
+    "verified pids), then rerun.",
+    "setup_running": "The validation's setup still runs in the process group named: wait for it (or stop only its verified "
+    "pids), then rerun.",
+    "check_unknown": f"The process table could not be read to show a check stopped. {RERUN}",
+    "setup_unknown": f"The process table could not be read to show the setup stopped. {RERUN}",
+}
+
+RELEASE_RERUN: Final = "Nothing changed: rerun `tl step release` (with `--abandon` if you were abandoning)."
+
+# A land candidate's release by `tl step release` (`--abandon` or not): its words where the step commands' would mislead.
+CANDIDATE_RELEASE: Final = {
+    "unavailable": RELEASE_RERUN,
+    "entry_running": "The candidate's land process (`tl step land`) still runs: wait for it to end, or stop it by verified pid "
+    "(`ps -o command= -p <pid>` shows `tl ... step land`), then rerun `tl step release`.",
+    "not_terminal": "The land's validation has not concluded: rerun `tl step land` to finish it, or `tl step release --abandon` "
+    "to give the task back.",
+    "unsettled": "A process of the land's validation still holds the candidate's slot (named after `unsettled:`): wait for it, "
+    "then rerun `tl step release`.",
+    "changed": "The land candidate changed meanwhile (a land or another release): rerun `tl step release`.",
 }

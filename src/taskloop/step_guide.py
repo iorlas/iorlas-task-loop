@@ -35,7 +35,8 @@ GUIDE = {
     "repeats_exhausted": "Repeated twice and still unsettled: inspect the slot, tidy it, then `tl step verify` (which releases "
     "the slot), or `tl step release --abandon`.",
     "release": "The step ended; its slot is still held. Remove the listed files if any, then `tl step release`; `--abandon` also "
-    "gives the task back.",
+    "gives the task back (not once a land's S is, or may be, on origin's main: then `tl step land`, which retries its "
+    "candidate's release first).",
     "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl step start` admits a fresh "
     "attempt.",
     "publish": PUBLISH,

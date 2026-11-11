@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from doubles import Command
 from git_porcelain import Transient
-from land_bench import ME, LandBench, bench
+from land_bench import ME, RUN, LandBench, bench
 
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, list_attempts, show_attempt
 from taskloop.attempt_store import AttemptStore
@@ -19,10 +19,10 @@ from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_release import ChecksRelease
 from taskloop.land import Landed
 from taskloop.land_close import NOT_SYNCED
-from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
+from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE, LAND_NEXT
 from taskloop.operations import Failed, ReleasedTask, release_task
 from taskloop.result_data import as_data
-from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
+from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
 from taskloop.step_render import human
 from taskloop.tracker_client import CloseAnswer
 
@@ -181,14 +181,31 @@ class Implement:
         return self.result
 
 
-def release(b: LandBench, abandon: bool, implement: Implement, alive: set[EntryIdentity] | None = None) -> ReleasedTask | Failed:
+@dataclasses.dataclass(frozen=True)
+class HalfWay:
+    """The real candidate release, then a checks attempt's release that fails (`unavailable store`): an abandon stopping
+    half way."""
+
+    real: ChecksRelease
+
+    def release_candidate(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        return self.real.release_candidate(key, abandon, me)
+
+    def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        del key, abandon, me
+        return NotReleased("unavailable", "store", "OperationalError. Nothing changed.")
+
+
+def release(b: LandBench, abandon: bool, implement: Implement, alive: set[EntryIdentity] | None = None, *,
+            halfway: bool = False) -> ReleasedTask | Failed:
     work = b.checking()
 
     def seen(entry: EntryIdentity) -> Seen:
         return "matching" if entry in (alive or set()) else "gone"
 
     checks = ChecksRelease(work.store, work.checkouts, work.slot_files, seen, b.ports().custody, work.clock, work.seen, work.scratch)
-    return release_task(AttemptStore(lambda: b.con), implement, checks, "tasks", "tl-1", abandon=abandon)
+    ports = HalfWay(checks) if halfway else checks
+    return release_task(AttemptStore(lambda: b.con), implement, ports, "tasks", "tl-1", abandon=abandon)
 
 
 def test_a_settled_release_frees_a_held_land_slot_alone(b: LandBench) -> None:
@@ -228,7 +245,39 @@ def test_the_abandon_of_a_live_land_is_held_and_guided_as_a_land(b: LandBench) -
     found = release(b, True, implement, {ME})
     assert isinstance(found, Failed) and found.land and found.word == "refused:entry_running" and implement.calls == []
     assert b.rows()[0].pending and "land process" in found.detail
-    assert human("tl step release", found, None)[0] == "tl step release: refused:entry_running"
+    rendered = human("tl step release", found, None)
+    assert rendered[0] == "tl step release: refused:entry_running" and CANDIDATE_RELEASE["entry_running"] in rendered
+    assert LAND_GUIDE["unavailable"] not in rendered and LAND_GUIDE["entry_running"] not in rendered
+
+
+def test_a_release_unknown_of_a_candidate_says_rerun_the_release_never_the_land() -> None:
+    failed = Failed("unavailable", "changed", "The land candidate no longer holds its reservation.", land=True)
+    rendered = human("tl step release", failed, None)
+    assert CANDIDATE_RELEASE["unavailable"] in rendered and CANDIDATE_RELEASE["changed"] in rendered
+    assert LAND_GUIDE["unavailable"] not in rendered and LAND_GUIDE["changed"] not in rendered
+
+
+def test_an_abandon_stopping_after_the_candidate_is_next_release_and_the_land_refuses_until_it_finished(b: LandBench) -> None:
+    interrupted(b)
+    implement = Implement()
+    found = release(b, True, implement, halfway=True)
+    assert isinstance(found, Failed) and found.word == "unavailable:store" and found.checks and implement.calls == []
+    assert found.detail.endswith("The land candidate was released first.") and b.rows()[0].superseded == "abandoned"
+    assert lines(b)[-2:] == ["Next: release", LAND_GUIDE["abandoning"]] and view(b).next == "release"
+    pushes, main = b.repo.pushes, b.origin_main()
+    refused = b.land()
+    assert isinstance(refused, Failed) and refused.word == "refused:abandoning" and len(b.rows()) == 1
+    assert (b.repo.pushes, b.origin_main(), b.execs()) == (pushes, main, RUN)
+    assert isinstance(b.land("withdraw"), Failed) and isinstance(b.land(no_change=True), Failed)
+    done = release(b, True, implement)
+    assert isinstance(done, ReleasedTask) and done.land is None and implement.calls == [("implement", True)]
+
+
+def test_a_pending_candidate_whose_land_process_cannot_be_observed_is_unknown_and_listed_stuck(b: LandBench) -> None:
+    interrupted(b)
+    reads = dataclasses.replace(_observe(b, set()), observe=lambda _entry: "unknown")
+    listed = list_attempts(reads, stuck=True)
+    assert isinstance(listed, Listed) and [each.next for each in listed.attempts] == ["unknown"]
 
 
 @pytest.mark.parametrize(("arrange", "word"), [

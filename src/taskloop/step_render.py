@@ -6,6 +6,7 @@ from pathlib import Path
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.land import Landed
+from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.land_push import Withdrawn
 from taskloop.land_render import COMMAND, land_lines
 from taskloop.land_summary import LandSummary
@@ -31,9 +32,9 @@ from taskloop.tracker import leaked_claim
 
 
 def human(command: str, result: Result, db: Path | None) -> list[str]:
-    """`tl step land`'s answers and refusals, and a land candidate's refused release, are `land_render`'s; the rest
-    `_step_lines`'."""
-    if isinstance(result, Landed | Withdrawn | LandSummary) or (isinstance(result, Failed) and (command == COMMAND or result.land)):
+    """`tl step land`'s answers and refusals are `land_render`'s; the rest (a land candidate's refused release too, with
+    its own guide) `_step_lines`'."""
+    if isinstance(result, Landed | Withdrawn | LandSummary) or (isinstance(result, Failed) and command == COMMAND):
         return land_lines(command, result)
     return _step_lines(command, result, db)
 
@@ -42,11 +43,11 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
     """`db` (the resolved factory.db) goes into the discard steps; None only when the config itself was refused."""
     stuck = [] if db is None else [discard(db)]
     match result:
-        case Failed(kind=kind, reason=reason):
+        case Failed():
             lines = [f"{command}: {result.word}", *([result.detail] if result.detail else [])]
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
             named = "`tl step release --abandon`" in result.detail  # the detail names the action (`HALF_DONE`, `UNCLAIMING`)
-            lines += [] if named else [guide(each, checks=result.checks) for each in (kind, reason) if each in GUIDE]
+            lines += [] if named else _guides(result)
             return lines + ([f"Admitted: {HELD} Re-run `tl step start` to retry the launch."] if result.admitted else [])
         case Started():
             entry = "" if result.entry is None else f"; entry pid {result.entry[0]}"
@@ -60,7 +61,9 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
         case Shown(view=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             ended = each.release
+            abandoning = each.next == "release" and each.land is not None and each.land.row.superseded == "abandoned"
             told = guide(each.next, checks=each.checks is not None, land=each.land is not None)
+            told = LAND_GUIDE["abandoning"] if abandoning else told
             told = told if ended is None or not ended.abandoned else GUIDE["abandoned"] if each.next == "start" else UNCLAIMING
             steps = [told, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
@@ -72,6 +75,13 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             return _released_lines(result)
         case Adoption() | Loaded():
             return _setup_lines(result)
+
+
+def _guides(result: Failed) -> list[str]:
+    """The guide of the kind and the reason: a land candidate's release (`result.land`) has its own words first."""
+    found = [CANDIDATE_RELEASE.get(each) if result.land else None for each in (result.kind, result.reason)]
+    return [text or guide(each, checks=result.checks) for each, text in zip((result.kind, result.reason), found, strict=True)
+            if text is not None or each in GUIDE]
 
 
 def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) -> list[str]:

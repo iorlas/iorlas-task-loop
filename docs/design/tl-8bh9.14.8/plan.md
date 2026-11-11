@@ -464,6 +464,7 @@ block's results fill `AttemptView.land: LandView | None`. `Next` (the checks vie
 | the latest candidate still holds its slot, delivered or closed or not | `release` (`tl step land` retries it, or `tl step release TASK`) |
 | passed checks: no candidate, the latest superseded, pending, pushable, failed, or delivered and not closed | `land` |
 | delivered and closed, slot released | `landed` |
+| superseded `abandoned`, the checks attempt not abandoned (an abandon stopped half way; section 29.1) | `release` |
 | failed checks attempt, no candidate | `done` (unchanged) |
 
 `round._settle` treats `land` and `landed` as silent (`case "land" | "landed": return`). A land's `release` reaches the
@@ -1271,3 +1272,43 @@ assertion that an abandoned candidate shows as history).
 answers beyond the tests' text; the multi-URL push guard (section 27.1 item 4, open: git-porcelain 0.17.0 unreleased);
 whether a remote `pre-receive` refusal maps to `remote_rejected` or `unavailable git` (git-porcelain's classification,
 the runbook records it).
+
+### 29.1 Review repairs to L5 (2026-11-12)
+
+An independent review of d1aca1601 found the `Next` words, JSON keys, exit codes, runbook flags and escaping sound, and
+four defects plus two wordings; all repaired, each with a test that fails without it (six hand mutations, each failing a
+test).
+
+1. **(medium) An abandon stopping half way steered the person into landing.** `release_task` abandons the candidate
+   first (released, superseded `abandoned`); when the checks half then failed (`unavailable store`, `changed`), the view
+   read `Next: land` and `tl step land` would make candidate 2 and could push against the abandon. Now a latest candidate
+   superseded `abandoned` on a checks attempt that is not abandoned (only the abandon marks it so) is `Next: release`
+   with the guide `abandoning` ("rerun `tl step release --abandon`"), and `tl step land` (every mode) refuses
+   `abandoning` at section 4 step 5, before any remote read or write. The `release_task` docstring says so. Test: the
+   real candidate release, then a checks release failing `unavailable store`: `Next: release` with that guide; the land,
+   `--withdraw` and `--no-change` refused with nothing pushed or run; the rerun of the abandon finishes.
+2. **(low-medium) A candidate's refused release was guided as a land** (`LAND_GUIDE` and "rerun `tl step land`"). Only
+   `tl step land`'s own refusals go to `land_render` now; a `tl step release` refusal with `land` set reads
+   `land_guide.CANDIDATE_RELEASE` first (`unavailable`: rerun `tl step release`; `entry_running`, `not_terminal`,
+   `unsettled`, `changed`), then the step commands' guide. `LAND_GUIDE["git"]` names the slot reset too. Tests: a live
+   land process's `refused:entry_running` and an `unavailable:changed` render the release's words, never the land's.
+3. **(low) The guide-coverage test saw only literal `Failed(kind, word)`.** It now enumerates every word a land answers:
+   its modules' `Failed` words (both branches of a conditional), the candidate release's `NotReleased` words and the
+   park's `slot_redirected`, `repo`, `not_listed`, the `StoreRefused` words of `land_store`, `check_store` and
+   `setup_store`, the checkout's and slot choice's `AdmitRefused`/`AdmitUnavailable` words, the profile at O, the
+   validation's `RELAUNCHED` words and `checks`/`environment`, and the kinds (agent-only `worker_*` and the checks
+   admission's `task_attempted` excluded), and requires a `LAND_GUIDE` entry for each. Added: `refused`, `abandoning`,
+   `absent`, `land_changed`, `stale_reservation`, `check_changed`, `setup_changed`, `lock`, `slot_dirty`, `slot_branch`,
+   `slot_unborn`, `slot_redirected`, `repo`, `not_listed`, `deadline`, `expired`, `environment`, `check_running`,
+   `setup_running`, `check_unknown`, `setup_unknown`.
+4. **(low) An unobservable land process read `Next: land`.** A pending candidate whose stored land process observes
+   `unknown` is `Next: unknown`, so `tl step list --stuck` lists it (as the agent and checks paths do). Test: listed
+   `--stuck` with `unknown`.
+5. **Wording.** `GUIDE["release"]` (the round prints it for a land's `release` too) says `--abandon` does not give the
+   task back once a land's S is or may be on origin's `main`. The runbook's precondition names the L5 commit
+   (`merge-base --is-ancestor d1aca1601`) and the repairs (`git grep '"abandoning"'` in `land_guide.py` at `SHA`), not
+   L4.
+
+Code lines after the repairs: `land_status` 43, `land_guide` 121, `step_render` 129, `land` 287, `step_guide` 191,
+`operations` 366; `test_land_cli` 182, `test_land_status` 228. **Not verified**: as in section 29 (the M3 live smoke, the
+multi-URL guard, the remote `pre-receive` classification).

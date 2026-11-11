@@ -8,6 +8,8 @@ land's own modules are never imported: `rounds-never-land`); `attempt_status` pl
 | the latest candidate | `Next` |
 |---|---|
 | validated or superseded, still holding its slot (delivered or closed or not) | `release` |
+| superseded `abandoned` (the checks attempt not abandoned: an abandon stopped half way) | `release` (`--abandon` again) |
+| pending, its land process unobservable | `unknown` |
 | none: the checks passed | `land` (failed checks: `done`, unchanged) |
 | pending (validating in its slot), pushable, failed, superseded, or delivered and not closed | `land` |
 | delivered and closed, its slot released | `landed` |
@@ -25,7 +27,7 @@ from taskloop.attempt_types import EntryIdentity, Observe
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.land_store import LandRow, LandStore
 
-type LandNext = Literal["land", "landed", "release"]
+type LandNext = Literal["land", "landed", "release", "unknown"]
 type Process = Literal["none", "running", "gone", "different_process", "unknown"]
 
 
@@ -68,8 +70,10 @@ def land_next[W: str](word: W, checks: ChecksRow, land: LandView | None) -> W | 
     if land is None:
         return "land" if checks.conclusion == "passed" else word
     row = land.row
-    if row.holds_slot and not row.pending:
+    if (row.holds_slot and not row.pending) or row.superseded == "abandoned":  # the abandon's own candidate: it goes on
         return "release"
+    if row.pending and land.process == "unknown":
+        return "unknown"
     return "landed" if row.delivery is not None and row.close is not None else "land"
 
 

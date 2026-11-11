@@ -42,7 +42,7 @@ def landed_lines(found: Landed) -> list[str]:
 
 
 def land_lines(command: str, found: Landed | Withdrawn | LandSummary | Failed) -> list[str]:
-    """`tl step land`'s answer, or a refusal of it (or of a land candidate's release by `command`)."""
+    """`tl step land`'s answer, or a refusal of it."""
     if isinstance(found, Landed):
         return landed_lines(found)
     if isinstance(found, Failed):
@@ -62,9 +62,8 @@ def summary_lines(found: LandSummary) -> list[str]:
 
 
 def failed_lines(command: str, found: Failed) -> list[str]:
-    """A refusal (exit 1) or unknown (exit 3) of `tl step land`, or of a land candidate's release: its word, its detail as
-    printable lines, then each guide once: the reason, its first word and the kind, each from the land's table
-    before the step commands'."""
+    """A refusal (exit 1) or unknown (exit 3) of `tl step land`: its word, its detail as printable lines, then each guide
+    once: the reason, its first word and the kind, each from the land's table before the step commands'."""
     detail = [one_line(line, 2000) for line in found.detail.split("\n") if one_line(line, 2000)]
     keys = dict.fromkeys((found.reason, found.reason.split(":")[0], found.kind))
     guides = dict.fromkeys(text for key in keys if (text := LAND_GUIDE.get(key) or GUIDE.get(key)) is not None)
