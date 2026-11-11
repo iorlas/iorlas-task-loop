@@ -182,7 +182,7 @@ def _step(found: _Registered, clock: Callable[[], float], wait: Callable[[float]
     captured = _capture(app, result, clock, wait)
     accepted = captured is not None and captured.status in ACCEPTED
     verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
-    # newly stored facts or a stored verdict: read the terminal outcome back
+    # newly stored facts or a stored verdict: read the terminal result back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
     if captured is not None:  # `publish=` is the log word of the capture retry's DB acceptance, not the branch push

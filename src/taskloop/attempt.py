@@ -68,7 +68,7 @@ class CredentialsUnavailable(Exception):
 
 
 def end_word(stored: StoredExecution) -> str:
-    """The run's own outcome, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
+    """The run's own end word, fixed words only: `run:<classified reason>` for a failed or timed-out run, else `answer:<kind>`
     for an unusable answer, else the valid answer's disposition (`planned` and `unchanged` go on to verification)."""
     facts, answer = stored.facts, stored.answer
     if facts.timed_out or facts.rc != 0:
@@ -79,8 +79,8 @@ def end_word(stored: StoredExecution) -> str:
 
 
 def report(stored: StoredExecution) -> AttemptResult:
-    """Stored terminal data is collected with its outcome; a pending validation, session state or verification is
-    never complete. A `planned` or `unchanged` outcome is collected only with its verdict: `verified`, `reused` or
+    """Stored terminal data is collected with its end word; a pending validation, session state or verification is
+    never complete. A `planned` or `unchanged` answer is collected only with its verdict: `verified`, `reused` or
     `rejected:<rule>`."""
     if stored.answer.kind == "validation_pending":
         return AttemptResult("pending", "validation_pending", stored)

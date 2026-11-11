@@ -64,7 +64,7 @@ def register(commands: Parsers) -> None:
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
     _common(verify, "--db")
-    release = _add(plan, "release", "Release the slot of a step that ended (parked at its base, the claim kept); with --abandon, "
+    release = _add(plan, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept); with --abandon, "
                    f"of any step whose entry and agent are stopped, and return the tracker claim ({PLAN_ONLY})")
     release.add_argument("task_id", metavar="TASK")
     release.add_argument("--backlog", required=True)

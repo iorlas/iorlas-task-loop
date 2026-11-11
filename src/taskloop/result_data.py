@@ -121,8 +121,8 @@ def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
         return {"attempts": [_show_data(each) for each in result.attempts]}
     if isinstance(result, Ended):
         return {"status": "ended", "backlog": result.backlog, "reason": result.reason, "detail": result.detail or None}
-    moves = [{"task": each.task_id, "action": each.action, "word": each.word, "attempt_id": each.attempt_id, "detail": each.detail or None}
-             for each in result.moves]
+    moves = [{"task": each.task_id, "action": each.action, "word": each.word, "attempt_id": each.attempt_id or None,
+              "detail": each.detail or None} for each in result.moves]
     return {"status": "round", "backlog": result.backlog, "moves": moves, "stopped": result.stopped or None, "logged": result.logged}
 
 

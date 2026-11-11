@@ -599,9 +599,11 @@ Visible words, before to after:
 
 - `Next:`/`stuck` word `stuck:unpublished` to `stuck:uncollected` (show, list, `tl plan list --stuck`, rounds report),
   with its guide text before "The result is incomplete; keep the evidence. `tl plan release --abandon` ..." and after
-  "The result was captured but never collected: its answer or its session is still pending (the attempt's entry.log
-  says why), and no verify can judge it. Keep the evidence. `tl plan release --abandon` ..." (a verify refuses such a
-  result, `unavailable:validation_pending`/`unavailable:session_<state>`, so the guide does not offer it).
+  "The result was captured but never collected: its answer or its session is still pending or faulted (the attempt's entry.log
+  says why), and no verify can judge it. Keep the evidence. `tl plan release --abandon` ..." (a verify cannot judge such a
+  result: it answers `unavailable:validation_pending`/`unavailable:session_<state>` for a planned or unchanged answer
+  and `not_applicable:<end word>` otherwise, so the guide does not offer it).
+- `tl plan next --json`: a move's `attempt_id` is `null` (was `""`) when the move has none, like `detail`.
 - `tl plan start --json`: key `entry` (the entry process object) to `entry_process`, as show and list already name it
   (their `entry` stays the state word).
 - JSON empty strings to null: `tl plan start --json` `result` (`""` to `null` when nothing was found), the error

@@ -59,7 +59,7 @@ GUIDE = {
     "stuck:hung": "Stop the worker first, the agent may keep editing the slot: check the `Worker` pid's cwd is the slot "
     "(`lsof -a -p <pid> -d cwd`), then `kill -TERM -<pgid>`. Then the entry: `ps -o command= -p <entry pid>` must show "
     f"taskloop.attempt_entry, then `kill -TERM <entry pid>`. Then {ABANDON}",
-    "stuck:uncollected": "The result was captured but never collected: its answer or its session is still pending (the "
+    "stuck:uncollected": "The result was captured but never collected: its answer or its session is still pending or faulted (the "
     f"attempt's entry.log says why), and no verify can judge it. Keep the evidence. {ABANDON}",
     "stuck:conflict": f"The owner inspects the evidence; then {ABANDON}",
     "unsettled": "The slot has files the step did not commit (listed), or the slot pointer or HEAD changed. Remove the "
