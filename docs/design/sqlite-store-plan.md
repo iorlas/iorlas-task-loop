@@ -87,7 +87,7 @@ dropped by the schema step that follows the importer.
 - Worker answers, `runs/<run>/<node>-<n>.json`, `.raw.json`, `replan.md`, `brief.md`, artifacts, screenshots, `.task/` scratch, `slot-state/`.
 - Kernel locks (`flock`, `any_lease`): the kernel drops them when a process dies; a DB row cannot. The `.holder` hint files go.
 - `.task-loop.json` (in git at the base commit).
-- Delegate's private state under `<cfg>/delegate/`: task-loop never reads it (`docs/dev/integrations.md`); delegate keeps its own `StateStore`.
+- Delegate's private state under `<cfg>/delegate/`: task-loop never reads it (`docs/dev/integrations.md`, a baseline document not in this tree); delegate keeps its own `StateStore`.
 - Legacy import-only files (`runs/<run>/manifest.json`, `done*.json`, `asks/*.json`, `ask-ledger.jsonl`, `results/**`) keep their importers until slice 9.
 
 ## 3. Target

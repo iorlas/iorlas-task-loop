@@ -17,7 +17,8 @@ Not built: the implement, checks, review and land steps, and the dashboard. Noth
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to
 `~/.local/state/task-loop`. Other commands are rejected until their behavior is implemented. `tl <command> --help`
 is the reference; the slice plans under `docs/design/tl-8bh9.4.3.1.*` record each step's design and acceptance.
-The previous implementation remains in Git history.
+The previous implementation remains in Git history. [docs/design/INDEX.md](docs/design/INDEX.md) lists every design folder
+and document; [docs/glossary.md](docs/glossary.md) holds the vocabulary, the commit letters and the CLI flag table.
 
 Python 3.15 and the tool versions in `mise.toml` are required. Run `mise install` after
 trusting the repository configuration through normal mise setup.
@@ -34,7 +35,8 @@ just test
 Both required checks rebuild and install the current project as a wheel in this
 worktree's `.venv`. Tests use that installed package and verify its source provenance;
 no old editable install, vendored runtime or baseline source path supplies imports.
-`just test` runs the CLI, plan and architecture checks. No historical test bootstrap or kernel is included.
+`just test` runs the CLI, plan and architecture checks. `tests/steps/` holds all the factory tests, including the lock, lease and
+rounds tests (the folder name is historical). No historical test bootstrap or kernel is included.
 The Git, task tracker, agent, SQLite, process-lock and stream boundaries come from released
 [shelf](https://github.com/yoselabs/shelf) libraries (`git-porcelain` 0.13.0, `beads-client` 0.2.0, `any-agent`
 0.4.0, `sqlite-store` 0.1.0, `process-lock` 0.2.1, `stream-proc` 0.5.0), each pinned by Git tag and locked commit

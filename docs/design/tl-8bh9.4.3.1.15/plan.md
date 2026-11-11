@@ -618,3 +618,29 @@ usage as six NULLs). `test_policy` `WRITERS` unchanged.
 Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 6 contracts kept); `just test` 1248 passed (1247 + the
 version-11 refusal case). Code lines of the big modules: `admit` 331, `operations` 354, `attempt_store` 318,
 `factory_schema` 94 (was 97). Live smoke not run.
+
+## 14. As built: D (glossary and docs, 2026-11-11)
+
+Docs only; no source or test change.
+
+- **New glossary section** "Factory vocabulary as built" (30 rows): phase, admission, reservation, slot custody, entry
+  process, launch, relaunch, dispatch, claim, backlog, round, move, settle, repeat, verdict, disposition, effect, agent
+  answer, execution, agent process, session state, capture, evidence files, park, slot release, publish, deadline, stuck,
+  reserved/locked/held, label. Plus the tables "Commit letters" (B, D, E, X, T and their columns) and "CLI flags"
+  (11 rows; notes the S4 `tl plan` to `tl step` cut).
+- **Fixed rows:** `RunKey`/`Carry` (reference-implementation identifiers, absent here), `host` (no `*Host` Protocols),
+  `profile` (target concept; `.task-loop.json` unread), `push` (points to publish), `reuse` (versus the `reused` verdict),
+  `release` (points to slot release), `attempt` (a repeat is the step-level retry), retired `gate`, `outcome` (new row),
+  `worker`, `stage`, and `run, call or harness invocation` (names the retired `step run`).
+- **New files:** `docs/design/INDEX.md`. README links it and states that `tests/steps` holds all factory tests.
+- **Dangling links:** `slot-grant.md` (incident path now plain text, marked absent), `dashboard/README.md` (design-only
+  note, two links de-linked), `sqlite-store-plan.md` (`docs/dev/integrations.md` marked a baseline document).
+- **Decisions (the five word picks):** `repeat` is the step-level retry (CLI, DB and log say repeat); `slot release` is
+  the glossary term and cross-refers the distribution `release`; `entry process` (not launcher or runner); `slot custody`
+  (code: `custody`, `hold`); `agent answer` versus the owner's answer to an `ask`.
+- **Retired words:** `step run` (say attempt), `publication` for the session capture (say session state), the `publish`
+  sense of storing a result (say capture), `stage` (step), `worker` for the agent (agent; library `Worker` type excepted),
+  `outcome` (result, conclusion or verdict).
+- **Known leftover words in code, not changed:** entry.log key `publish=` (capture retry), three "outcome" comments
+  (`attempt.py` 71, 82, 83; `attempt_entry.py` 185), "publication" for the branch push in `attempt_entry.py`,
+  `publish.py`, `composition.py` comments, and `tl plan release` help saying "parked at its base".

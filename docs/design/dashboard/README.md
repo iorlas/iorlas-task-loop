@@ -1,14 +1,18 @@
 # task-loop dashboard
 
+> **Design only: none of this exists in the successor tree yet.** `tldash`, `tl dash ensure`, `packages/dash`, `docs/contracts/dash-api.md`,
+> `docs/dev/integrations.md` and `tests/dash` are baseline code and documents kept in Git history; the successor builds no dashboard.
+> The design files beside this README (`dash-*.md`, the mockups) are the only parts present.
+
 One server per machine, reading state and taking the owner's commands through its write verbs (`contracts.dash.WRITES`) (`python3 -m tldash` on the interpreter `tl dash ensure` runs on, so it has msgspec), one page, one API.
 
 - **The rule:** [dash-spec.md](dash-spec.md). Owner decisions: [dash-decisions.md](dash-decisions.md). The mocks it names
   (`dash-round-*.html`) show the result; older mocks are history.
-- **The API:** [docs/contracts/dash-api.md](../../contracts/dash-api.md), records in `packages/kernel/src/tlkernel/dash.py`.
+- **The API:** `docs/contracts/dash-api.md` (baseline, absent here), records in `packages/kernel/src/tlkernel/dash.py`.
 - **What it reads:** run state from `factory.db`; engine and worker logs through `readers/logs.py`; asks, the ask ledger,
   decisions, loop state and account status under `~/.config/task-loop`, and bd through the typed `Beads` port.
   The index thread writes derived state; owner actions write through `Ports`. Every format
-  it does not own is in [docs/dev/integrations.md](../../dev/integrations.md).
+  it does not own is in `docs/dev/integrations.md` (baseline, absent here).
 
 ## Code
 
