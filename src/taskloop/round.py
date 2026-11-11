@@ -1,7 +1,8 @@
 """`tl step next`: one scheduling round over the existing operations, stateless and idempotent.
 
 Settle each existing attempt of the backlog by its `Next` word (relaunch an admitted attempt whose entry is not running,
-verify, repeat; report the rest), advance each claimed task whose step is done (`Next: advance`) to its next step, oldest
+a checks attempt with the checks launcher; verify, repeat; report the rest: a failed checks attempt is reported, never
+re-run), advance each claimed task whose step is done (`Next: advance`) to its next step, oldest
 release first, then admit eligible ready tasks in priority order into the slots left free, then publish the verified,
 released, unpublished results read at the start. It adds no state, lock, Git write, tracker write or process of its own: its
 only other output is one append-only round-log line per move, never read back. Nothing merges or lands.
@@ -40,6 +41,7 @@ from taskloop.operations import (
     launched,
     minutes_refused,
     publish_task,
+    relaunch_checks,
     start,
     verify_task,
 )
@@ -198,8 +200,9 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _
             return
         case "done" if succeeded(each.result):
             return
-        case "done":
-            trail.add(Move(task, "report", f"failed:{each.result.reason}", attempt, step=step))
+        case "done":  # a checks attempt's reason is already `failed:<reason>` (`check report failed:test:failed`)
+            word = each.result.reason if each.checks is not None else f"failed:{each.result.reason}"
+            trail.add(Move(task, "report", word, attempt, step=step))
         case _:
             trail.add(Move(task, "report", each.next, attempt, step=step))
 
@@ -207,7 +210,10 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _
 def _resume(ports: StartPorts, backlog: str, minutes: int, each: AttemptView) -> Started | Failed:
     """The snapshot's own attempt only, never an admission: relaunch its entry (`start`) or repeat its step (`repeat`).
     An attempt abandoned or released since the snapshot is `refused:abandoned`/`released`; another current attempt is
-    `refused:changed`; the launcher's and the repeat's own fences decide the rest."""
+    `refused:changed`; the launcher's and the repeat's own fences decide the rest. A checks attempt goes to the checks
+    launcher (`relaunch_checks`), fenced on its own store; it is never re-run here."""
+    if each.checks is not None:
+        return relaunch_checks(ports, backlog, each.task_id, each.attempt_id, minutes)
     try:
         found = ports.reader.attempt_of(backlog, each.task_id)
         ended = None if found is None else ports.reader.release_of(found[0])
@@ -291,7 +297,8 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
         rows = ready_rows(ports.ready, request.label)
     except TaskInspectionError as error:
         return "refused:tracker" if error.kind == "malformed" else "unavailable:tracker"
-    attempts = {each.task_id: each.release is not None and each.release.abandoned for each in current}
+    # abandoned once its claim is no longer kept: a half-done checks abandon (claim still kept) is `attempted`
+    attempts = {each.task_id: each.release is not None and each.release.claim != "kept" for each in current}
     ordered, skipped = order(rows, ancestry(ports.ready, rows), attempts, ACTOR)
     ids = {each.task_id: (each.attempt_id, each.step) for each in current}
     for task_id, reason in skipped:

@@ -126,9 +126,10 @@ GUIDE = {
     "(`ps -o pid=,lstart=,command= -g <pgid>`), check each member's working directory is the slot (`lsof -a -p <pid> -d "
     "cwd`), stop only those pids, then run it again. The factory never stops it.",
     "setup_unknown": "The process table could not be read to show the slot's setup stopped: run it again.",
-    "stuck:checks_refused": "The checks were relaunched twice without concluding (every relaunch counts; `Refused:` names the "
-    "last word, the entry log says why), so rounds no longer relaunch them. Fix the cause (a check's process still running, a "
-    "busy slot, the store), then `tl step start` relaunches them by hand; or `tl step release --abandon`.",
+    "stuck:checks_refused": "The checks were relaunched twice without concluding (every relaunch the entry counts, and each "
+    "round's relaunch past the deadline, `late_relaunch`; `Refused:` names the last word, the entry log says why), so rounds no "
+    "longer relaunch them. Fix the cause (a check's process still running, a busy slot, the store, an entry that cannot start: "
+    "its `entry.log`), then `tl step start` relaunches them by hand; or `tl step release --abandon`.",
     "check_running": "A check's process still runs in the process group named (from an entry that died, or left behind by a "
     "check: `lingering`). Wait for it. To stop it yourself, list the group (`ps -o pid=,lstart=,command= -g <pgid>`), check each "
     "member's working directory is the slot (`lsof -a -p <pid> -d cwd`), stop only those pids, then run it again. The factory "
@@ -156,13 +157,13 @@ GUIDE = {
 }
 
 # A checks attempt's own words for the `Next` words whose agent text would mislead (S6d): its entry is
-# `taskloop.check_entry`, its commands are check process groups, and until S6e routes the round only `tl step start`
-# relaunches it.
+# `taskloop.check_entry` and its commands are check process groups.
 CHECKS_GUIDE = {
-    "start": "Run `tl step start` to relaunch the checks entry (`taskloop.check_entry`); rounds do not relaunch a checks "
-    "attempt yet. Past its deadline the relaunched entry concludes `expired` once nothing of the attempt still runs. If the "
-    "last entry says `checks:running`, a check's process group from an earlier entry still runs: wait for it (`check_running`). "
-    "`tl step release --abandon` gives the task back.",
+    "start": "Each `tl step next` round relaunches the checks entry (`taskloop.check_entry`), and so does `tl step start`; "
+    "every relaunch the entry cannot finish counts, and past the deadline each round's relaunch counts too (`late_relaunch`), "
+    "so two make it `stuck:checks_refused`. Past its deadline the relaunched entry concludes `expired` once nothing of the "
+    "attempt still runs. If the last entry says `checks:running`, a check's process group from an earlier entry still runs: "
+    "wait for it (`check_running`). `tl step release --abandon` gives the task back.",
     "stuck:hung": "The checks entry runs past its deadline. Verify before stopping anything: `ps -o command= -p <entry pid>` must "
     "show taskloop.check_entry, and each process group a `Check:` line names (`ps -o pid=,lstart=,command= -g <pgid>`) must work "
     "in the slot (`lsof -a -p <pid> -d cwd`). Stop only the pids you verified, the check groups first, then the entry; then "

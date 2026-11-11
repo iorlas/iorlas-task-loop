@@ -18,6 +18,7 @@ from taskloop.attempt_types import AttemptKey, EntryIdentity, Verified, VerifyRe
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable
 from taskloop.operations import (
+    LATE,
     ChecksPorts,
     Failed,
     ReleasedTask,
@@ -25,6 +26,7 @@ from taskloop.operations import (
     StartPorts,
     StartRequest,
     VerifiedTask,
+    relaunch_checks,
     release_task,
     start,
     verify_task,
@@ -260,3 +262,39 @@ def test_a_checks_attempt_admitted_after_the_implement_flip_is_still_released_fi
     implement, checks = Releases(results=[Released("s0", None, False, "unclaimed", True)]), Releases()
     found = release(rig, True, implement, checks)
     assert checks.calls == [(started.attempt_id, True)] and isinstance(found, ReleasedTask) and found.checks is not None
+
+
+def relaunch(rig: Rig, attempt_id: str, now: float = 10) -> Started | Failed:
+    return relaunch_checks(dataclasses.replace(rig.ports(), clock=lambda: now), "tasks", "tl-1", attempt_id, 30)
+
+
+def test_the_round_s_relaunch_launches_the_snapshot_s_admitted_checks_attempt_with_the_checks_launcher(rig: Rig) -> None:
+    first = rig.start()
+    assert isinstance(first, Started)
+    found = relaunch(rig, first.attempt_id)
+    assert isinstance(found, Started) and (found.status, found.step, found.attempt_id) == ("relaunched", "check", first.attempt_id)
+    assert len(rig.launcher.calls) == 2 and rig.bench.con.execute("SELECT refusals FROM checks_attempt").fetchone() == (0,)
+
+
+@pytest.mark.parametrize(("state", "word"), [
+    ("other", "refused:changed"), ("concluded", "refused:concluded"), ("released", "refused:released"),
+    ("abandoned", "refused:abandoned"), ("unreserved", "refused:stale_reservation"),
+])
+def test_the_round_s_relaunch_is_fenced_on_the_checks_store_and_launches_nothing_else(rig: Rig, state: str, word: str) -> None:
+    first = rig.start()
+    assert isinstance(first, Started)
+    if state in ("concluded", "released", "abandoned"):
+        rig.bench.concluded("passed", released=state != "concluded", abandoned=state == "abandoned")
+    if state == "unreserved":
+        rig.bench.con.execute("DELETE FROM reservation")
+    found = relaunch(rig, "another" if state == "other" else first.attempt_id, now=10_000)  # past the deadline
+    assert isinstance(found, Failed) and found.word == word and len(rig.launcher.calls) == 1
+
+
+def test_a_relaunch_past_the_deadline_is_counted_before_the_launch_whatever_the_launch_does(rig: Rig) -> None:
+    first = rig.start()
+    assert isinstance(first, Started)
+    rig.launcher.failing = LaunchUnavailable("start")
+    found = relaunch(rig, first.attempt_id, now=10_000)
+    assert isinstance(found, Failed) and found.word == "unavailable:start"
+    assert rig.bench.con.execute("SELECT refusal,refusals FROM checks_attempt").fetchone() == (LATE, 1)

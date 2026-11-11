@@ -159,7 +159,8 @@ def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
     out = run(SHOW, Shown(view, LOGS, LOGS / "entry.log"), capsys, monkeypatch)
     assert CHECKS_GUIDE[word] in out and GUIDE[word] not in out and "attempt_entry" not in out and "Worker" not in out
     assert "Check: check unfinished, process group 601" in out.splitlines()  # the group the hung guide verifies
-    assert "rounds do not relaunch" in CHECKS_GUIDE["start"] and "taskloop.check_entry" in CHECKS_GUIDE["stuck:hung"]
+    assert "round relaunches the checks entry" in CHECKS_GUIDE["start"] and "late_relaunch" in CHECKS_GUIDE["start"]
+    assert "taskloop.check_entry" in CHECKS_GUIDE["stuck:hung"]
     listed = run(["step", "list", "--stuck"], Listed((replace(view, next="stuck:hung"),)), capsys, monkeypatch)
     assert f"stuck:hung: {CHECKS_GUIDE['stuck:hung']}" in listed.splitlines()
 

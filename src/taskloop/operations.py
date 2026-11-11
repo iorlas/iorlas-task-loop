@@ -8,8 +8,9 @@ of every result.
 
 A done implement attempt goes to the check step (tl-8bh9.14.6 sections 5, 9, 10; `check_status.route`): advanced, or
 re-run after a failed checks attempt, through the `ChecksPorts` admission; an admitted checks attempt, and a racing
-winner, are launched with the checks launcher, never the agent's. A task's release goes to its latest checks attempt
-first; its abandon releases that, then abandons the implement attempt (whose claim it returns).
+winner, are launched with the checks launcher, never the agent's; so is a round's relaunch (`relaunch_checks`). A task's
+release goes to its latest checks attempt first; its abandon releases that, then abandons the implement attempt (whose
+claim it returns).
 """
 
 import sqlite3
@@ -24,7 +25,7 @@ from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
 from taskloop.attempt import collect, succeeded
-from taskloop.attempt_reads import PublishedRow
+from taskloop.attempt_reads import PublishedRow, StoreRefused
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import (
     AttemptKey,
@@ -51,6 +52,7 @@ type Clock = Callable[[], float]
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
 UNCLAIMING: Final = "Abandoned, but the tracker claim is still to be returned: run `tl step release --abandon` again."
+LATE: Final = "late_relaunch"  # the counted word of a round's relaunch of a checks attempt past its deadline
 VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",
     NotApplicable: "not_applicable",
@@ -374,6 +376,31 @@ def _checked(ports: StartPorts, request: StartRequest, implement: AttemptKey) ->
         case "answer":
             answer = checks_result(row).reason
             return Started("already_dispatched", request.backlog, request.task_id, row.key.attempt_id, True, result=answer, step=CHECK)
+
+
+def relaunch_checks(ports: StartPorts, backlog: str, task_id: str, attempt_id: str, minutes: int) -> Started | Failed:
+    """A round's relaunch of the snapshot's checks attempt `attempt_id` with the checks launcher, never an admission or a
+    re-run: only while it is still the task's latest checks attempt (`CheckStore.attempt_of`, the launcher's own read),
+    `admitted` and not released; else `refused:changed`, `abandoned`, `released` or `concluded`. Past its deadline the
+    relaunch is counted first (`LATE`, one more toward `stuck:checks_refused`), so a relaunch that never reaches the
+    entry's own count (a failed or uncertain launch, an entry refusing before the attempt is its own, a crash) stops after
+    at most two; before the deadline such relaunches repeat each round, as an agent attempt's do until its deadline."""
+    store = CheckStore(ports.reader.connect, ports.reader.begin)
+    try:
+        found = store.attempt_of(backlog, task_id)
+        row = None if found is None else store.row(found[0])
+        if found is None or row is None or found[0].attempt_id != attempt_id:
+            return Failed("refused", "changed", "Another attempt is current since this round read the store")
+        if found[1] != "admitted":
+            return Failed("refused", "abandoned" if row.abandoned else found[1])
+        if ports.clock() >= row.deadline:
+            store.refused(found[0], LATE)
+    except StoreUnavailable as error:
+        return Failed("unavailable", "store", str(error))
+    except StoreRefused as error:
+        return Failed("refused", error.reason, "The checks attempt no longer holds its reservation")
+    result = launched(ports.checks.launcher.launch(backlog, task_id, minutes), backlog, task_id, found[0], existing=True)
+    return replace(result, step=CHECK) if isinstance(result, Started) else result
 
 
 def _not_advanced(found: _Found) -> Failed:
