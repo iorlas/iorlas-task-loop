@@ -25,7 +25,7 @@ from taskloop.attempt_types import Verified
 from taskloop.composition import RealSlotFiles, checkouts
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.slot_lock import hold, lock_path, probe
-from taskloop.slots import adopt
+from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -59,9 +59,9 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     slot = slots / checkouts(main).identity().key / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
-    adopt(lambda: factory, begin_immediate, checkouts(main), slots, 1)
+    adopt(lambda: factory, begin_immediate, checkouts(main), SlotGit(checkouts, RealSlotFiles()), slots, 1)
     admission = AttemptAdmission(
-        lambda: factory, begin_immediate, EvidenceFiles(art), tasks, checkouts, claimed, claimed, lambda: 10, probe
+        lambda: factory, begin_immediate, EvidenceFiles(art), tasks, checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
     )
     admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), main, "m", "high", "workspace-write", 100))
     assert isinstance(admitted, Admitted) and admitted.slot == "s1"

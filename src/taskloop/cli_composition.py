@@ -16,7 +16,6 @@ from sqlite_store import Store
 from taskloop.attempt_reads import SlotUse
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
-from taskloop.attempt_types import Checkouts
 from taskloop.composition import (
     RealSlotFiles,
     adopt_slots,
@@ -29,6 +28,7 @@ from taskloop.composition import (
     open_publisher,
     open_releaser,
     open_verifier,
+    real_slots,
     tracker_reads,
     worker_gone,
 )
@@ -44,6 +44,7 @@ from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
 from taskloop.slot_lock import refused, repeating
 from taskloop.slot_release import SlotRelease
+from taskloop.slots import SlotGit
 from taskloop.task import TaskInspectionError
 from taskloop.verifier import Verifier
 
@@ -257,14 +258,15 @@ def open_release(database: Path) -> Generator[tuple[AttemptStore, SlotRelease] |
             store.close_shared()
 
 
-def adopt(database: Path, checkout: Path, root: Path, count: int, repos: Checkouts = checkouts) -> Adoption | Failed:
+def adopt(database: Path, checkout: Path, root: Path, count: int, git: SlotGit | None = None) -> Adoption | Failed:
     """The only command that creates factory.db, and only after the checkout is a repository and an existing factory.db
-    is this schema: a missing or non-repository checkout refuses `checkout`, another schema `schema`; nothing is made."""
-    path = checkout.expanduser().absolute()
+    is this schema: a missing or non-repository checkout refuses `checkout`, another schema `schema`; nothing is made.
+    `git` defaults to real Git and the real slot file port (`real_slots`)."""
+    path, git = checkout.expanduser().absolute(), git or real_slots()
     if not path.is_dir():
         return Failed("refused", "checkout", f"No checkout directory at {path}")
     try:
-        repos(path.resolve()).identity()
+        git.checkouts(path.resolve()).identity()
     except NotARepo as error:
         return Failed("refused", "checkout", str(error))
     except GitUnavailable as error:
@@ -274,4 +276,4 @@ def adopt(database: Path, checkout: Path, root: Path, count: int, repos: Checkou
             if isinstance(con, Failed):
                 return con
     database.parent.mkdir(parents=True, exist_ok=True)
-    return Adoption(adopt_slots(database, path, root, count, repos))
+    return Adoption(adopt_slots(database, path, root, count, git))

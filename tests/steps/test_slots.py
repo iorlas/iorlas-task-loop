@@ -5,6 +5,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 
 import pytest
+from doubles import FakeSlotFiles, PinnedViews, linked_into
 from git_porcelain import GitUnavailable, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
@@ -15,7 +16,7 @@ from taskloop.attempt_types import AttemptKey
 from taskloop.composition import open_attempts
 from taskloop.factory_schema import SCHEMA
 from taskloop.repo import RepoId
-from taskloop.slots import Adopted, NotAdopted, SlotsUnavailable, SlotView, Unclean, adopt, observe, slot_names
+from taskloop.slots import Adopted, NotAdopted, SlotGit, SlotsUnavailable, SlotView, Unclean, adopt, observe, slot_names
 
 
 def derived(repo: FakeRepo, root: Path, name: str) -> Path:
@@ -29,7 +30,12 @@ def add(repo: FakeRepo, root: Path, *names: str) -> None:
 
 
 def adopted(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> tuple[Adopted | NotAdopted, ...]:
-    return adopt(lambda: con, begin_immediate, repo, root, count)
+    return adopt(lambda: con, begin_immediate, repo, viewed(repo), root, count)
+
+
+def viewed(repo: FakeRepo) -> SlotGit:
+    """The slot views the body opens on the fake: the person's checkout unpinned, a slot only pinned to its pointer's G."""
+    return SlotGit(PinnedViews(repo), FakeSlotFiles(repo))
 
 
 def rid(repo: FakeRepo) -> RepoId:
@@ -101,14 +107,14 @@ def test_unusable_worktree_is_refused_with_its_reason(
 def test_adopt_refuses_without_a_current_store(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
     add(repo, root, "s1")
     path = derived(repo, root, "s1")
-    assert adopt(lambda: None, begin_immediate, repo, root, 1) == (NotAdopted("s1", "store_unavailable", path),)
+    assert adopt(lambda: None, begin_immediate, repo, viewed(repo), root, 1) == (NotAdopted("s1", "store_unavailable", path),)
     factory.execute("PRAGMA user_version=1")
     assert adopted(factory, repo, root, 1) == (NotAdopted("s1", "store_unavailable", path),)
 
 
 def test_without_a_slot_row_a_clean_derived_worktree_is_no_slot(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
     add(repo, root, "s1")  # after a DB discard: the worktree is there, its provenance is not
-    assert observe(factory, repo, rid(repo), unlocked) == ()
+    assert observe(factory, repo, viewed(repo), rid(repo), unlocked) == ()
 
 
 def test_observe_reports_free_held_and_unknown_lowest_first(
@@ -122,13 +128,13 @@ def test_observe_reports_free_held_and_unknown_lowest_first(
     repo.worktree(derived(repo, root, "s3")).write_file("scratch", "x")
     repo.drop_worktree(derived(repo, root, "s4"))
     repo.drop_checkout(derived(repo, root, "s5"))
-    views = observe(factory, repo, rid(repo), unlocked)
+    views = observe(factory, repo, viewed(repo), rid(repo), unlocked)
     assert [view.name for view in views] == list(names)
     assert views[0] == SlotView("s1", derived(repo, root, "s1"), "free")
     assert views[1] == SlotView("s2", derived(repo, root, "s2"), "held", attempt_id="a")
     assert [(v.state, v.reason) for v in views[2:5]] == [("unknown", "dirty"), ("unknown", "not_listed"), ("unknown", "git_unavailable")]
     monkeypatch.setattr(repo, "worktrees", unavailable)
-    after = observe(factory, repo, rid(repo), unlocked)
+    after = observe(factory, repo, viewed(repo), rid(repo), unlocked)
     assert after[1].state == "held" and {(v.state, v.reason) for v in after if v.name != "s2"} == {("unknown", "git_unavailable")}
 
 
@@ -139,17 +145,18 @@ def test_main_checkout_at_a_slot_path_is_never_free(
     adopted(factory, repo, root, 1)
     path = derived(repo, root, "s1")
     monkeypatch.setattr(repo, "worktrees", lambda *, with_dirty=False: (WorktreeInfo(path, None, "main", True, None),))
-    assert observe(factory, repo, rid(repo), unlocked) == (SlotView("s1", path, "unknown", "main"),)
+    assert observe(factory, repo, viewed(repo), rid(repo), unlocked) == (SlotView("s1", path, "unknown", "main"),)
 
 
 def test_store_failure_never_shows_a_free_slot(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
     add(repo, root, "s1")
     adopted(factory, repo, root, 1)
     factory.execute("DROP TABLE reservation")
-    assert observe(factory, repo, rid(repo), unlocked) == (SlotView("s1", derived(repo, root, "s1"), "unknown", "store_unavailable"),)
+    unknown = SlotView("s1", derived(repo, root, "s1"), "unknown", "store_unavailable")
+    assert observe(factory, repo, viewed(repo), rid(repo), unlocked) == (unknown,)
     factory.execute("DROP TABLE slot")
     with pytest.raises(SlotsUnavailable):
-        observe(factory, repo, rid(repo), unlocked)
+        observe(factory, repo, viewed(repo), rid(repo), unlocked)
 
 
 def test_two_repos_each_have_their_own_s1(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
@@ -160,8 +167,8 @@ def test_two_repos_each_have_their_own_s1(factory: sqlite3.Connection, repo: Fak
         add(each, root, "s1")
         assert adopted(factory, each, root, 1) == (Adopted("s1", derived(each, root, "s1")),)
     factory.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s1',?,1,'a')", (rid(repo),))
-    assert observe(factory, repo, rid(repo), unlocked)[0].state == "held"
-    assert observe(factory, other, rid(other), unlocked)[0].state == "free"
+    assert observe(factory, repo, viewed(repo), rid(repo), unlocked)[0].state == "held"
+    assert observe(factory, other, viewed(other), rid(other), unlocked)[0].state == "free"
 
 
 def test_v1_factory_database_is_refused_loudly(tmp_path: Path) -> None:
@@ -177,7 +184,7 @@ def test_v1_factory_database_is_refused_loudly(tmp_path: Path) -> None:
     assert (executed.status, executed.reason) == ("unavailable", "store")
     store = Store(SCHEMA)
     repo = FakeRepo.init(tmp_path / "repo")
-    refused = adopt(lambda: store.shared_rw(path), store.begin_immediate, repo, tmp_path / "slots", 1)
+    refused = adopt(lambda: store.shared_rw(path), store.begin_immediate, repo, viewed(repo), tmp_path / "slots", 1)
     assert refused == (NotAdopted("s1", "store_unavailable", derived(repo, tmp_path / "slots", "s1")),)
     store.close_shared()
 
@@ -209,10 +216,10 @@ def test_nothing_pending_takes_no_write_lock(factory: sqlite3.Connection, repo: 
         taken.append(1)
         return begin_immediate(con)
 
-    assert adopt(lambda: factory, begin, repo, root, 1) == (Adopted("s1", derived(repo, root, "s1")),)
+    assert adopt(lambda: factory, begin, repo, viewed(repo), root, 1) == (Adopted("s1", derived(repo, root, "s1")),)
     repo.worktree(derived(repo, root, "s1")).write_file("dirty", "x")
     s1, s2 = derived(repo, root, "s1"), derived(repo, root, "s2")
-    assert adopt(lambda: factory, begin, repo, root, 2) == (Adopted("s1", s1), NotAdopted("s2", "not_listed", s2))
+    assert adopt(lambda: factory, begin, repo, viewed(repo), root, 2) == (Adopted("s1", s1), NotAdopted("s2", "not_listed", s2))
     assert taken == []
 
 
@@ -231,7 +238,7 @@ def test_a_free_looking_slot_whose_lock_is_held_or_unknown_is_never_free(
         probed.append(slot_path)
         return lock
 
-    views = observe(factory, repo, rid(repo), probe)
+    views = observe(factory, repo, viewed(repo), rid(repo), probe)
     assert [(view.state, view.reason) for view in views] == [("unknown", reason), ("held", None)]
     assert probed == [str(derived(repo, root, "s1"))]
 
@@ -245,7 +252,7 @@ def test_a_slot_reserved_while_it_was_probed_is_held_not_free(factory: sqlite3.C
         factory.execute("INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s1',?,1,'won')", (rid(repo),))
         return True
 
-    assert observe(factory, repo, rid(repo), probe) == (SlotView("s1", derived(repo, root, "s1"), "held", attempt_id="won"),)
+    assert observe(factory, repo, viewed(repo), rid(repo), probe) == (SlotView("s1", derived(repo, root, "s1"), "held", attempt_id="won"),)
 
 
 def test_slot_use_counts_the_adopted_slots_without_a_reservation_row_and_lists_every_row(factory: sqlite3.Connection) -> None:
@@ -258,3 +265,24 @@ def test_slot_use_counts_the_adopted_slots_without_a_reservation_row_and_lists_e
     assert store.slot_use() == SlotUse(0, frozenset({("r", "s1"), ("r", "s2"), ("q", "s1")}))
     with pytest.raises(StoreUnavailable):
         AttemptStore(lambda: None).slot_use()
+
+
+def test_a_slot_is_read_only_through_its_verified_pinned_view_and_a_redirected_one_is_never_read(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path
+) -> None:
+    """Adoption and observation run the pointer check and bind its common directory to this repository before the one
+    status read, which opens the slot pinned to the verified G; a pointer rewritten to another Git directory, or to a
+    well-formed linked Git directory of another repository, is `redirected` with no open of the slot at all."""
+    other = FakeRepo.init(root.parent / "other")
+    views, files = PinnedViews(repo, other), FakeSlotFiles(repo)
+    add(repo, root, "s1", "s2", "s3")
+    s1, s2, s3 = (derived(repo, root, name) for name in ("s1", "s2", "s3"))
+    files.contents[s2 / ".git"] = b"gitdir: /elsewhere/.git/worktrees/s2\n"
+    linked_into(files, s3, other)
+    found = adopt(lambda: factory, begin_immediate, repo, SlotGit(views, files), root, 3)
+    assert found == (Adopted("s1", s1), NotAdopted("s2", "redirected", s2), NotAdopted("s3", "redirected", s3))
+    assert (views.slot_opens(s1), views.slot_opens(s2), views.slot_opens(s3)) == ([files.common / "worktrees/s1"], [], [])
+    views.opened.clear()
+    linked_into(files, s1, other)  # after adoption: the free slot's pointer now names the other repository
+    assert observe(factory, repo, SlotGit(views, files), rid(repo), unlocked) == (SlotView("s1", s1, "unknown", "redirected"),)
+    assert views.slot_opens(s1) == [] and (other.identity().root, None) in views.opened  # its identity was read, not the slot

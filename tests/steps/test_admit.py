@@ -12,6 +12,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
+from doubles import FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
 
@@ -25,7 +26,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
-from taskloop.slots import adopt
+from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 
@@ -89,7 +90,7 @@ def slots(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> No
     """A person's `git worktree add --detach` at each derived path, then adoption."""
     for number in range(1, count + 1):
         repo.add_worktree(root.resolve() / repo.identity().key / f"s{number}", "HEAD")
-    adopt(lambda: con, begin_immediate, repo, root, count)
+    adopt(lambda: con, begin_immediate, repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
 
 
 def request(tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str = "chosen", task_id: str = "tl-1") -> AdmitRequest:
@@ -105,11 +106,10 @@ def unlocked(_slot_path: str) -> bool:
     return True
 
 
-def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, *repos: FakeRepo) -> AttemptAdmission:
-    by_path = {repo.path: repo for repo in repos}
+def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, repo: FakeRepo) -> AttemptAdmission:
     return AttemptAdmission(
-        lambda: con, begin_immediate, tracker.files, tasks, lambda path, /, *, git_dir=None: by_path[path], tracker.claim,
-        tracker.unclaim, time, unlocked,
+        lambda: con, begin_immediate, tracker.files, tasks, PinnedViews(repo), tracker.claim, tracker.unclaim, time, unlocked,
+        FakeSlotFiles(repo),
     )
 
 
@@ -367,7 +367,6 @@ def test_invalid_request_or_store_refuses_before_any_claim(
     admitter = admission(factory, tmp_path, tracker, repo)
     if change == "store":
         admitter.connect = lambda: None
-    admitter.checkouts = lambda _path, /, *, git_dir=None: repo
     result = admitter.admit(wanted)
     assert (result.reason if isinstance(result, AdmitRefused) else getattr(result, "what", None)) == expected
     assert tracker.calls == [] and tracker.files.inputs == []

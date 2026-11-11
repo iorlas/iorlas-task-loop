@@ -28,12 +28,12 @@ from uuid import uuid4
 from beads_client import BdError
 from git_porcelain import GitUnavailable, Repo
 
-from taskloop.attempt_types import AttemptKey, Checkouts, FileRef
+from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
 from taskloop.prepare import DIVERGED, branch_refusal
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
-from taskloop.slots import Probe, SlotsUnavailable, SlotView, observe
+from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe
 from taskloop.steps import STEPS, kind
 from taskloop.task import TaskInspection, TaskInspectionError
 
@@ -126,10 +126,12 @@ class AttemptAdmission:
         unclaim: Unclaim,
         clock: Callable[[], float],
         probe: Probe,
+        slot_files: SlotFiles,
     ) -> None:
-        """`probe` reads a free-looking slot's lock (`slot_lock.probe`): a slot a release is still parking is not free."""
+        """`probe` reads a free-looking slot's lock (`slot_lock.probe`): a slot a release is still parking is not free.
+        `slot_files` is the pointer check's port: a slot is observed free only through its verified, pinned view."""
         self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
-        self.claim, self.unclaim, self.clock, self.probe = claim, unclaim, clock, probe
+        self.claim, self.unclaim, self.clock, self.probe, self.slot_files = claim, unclaim, clock, probe, slot_files
 
     def admit(self, request: AdmitRequest) -> AdmitResult:
         prepared = self._prepare(request)
@@ -197,7 +199,7 @@ class AttemptAdmission:
                 return AdmitRefused("task_attempted")
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
-        free = free_slots(con, prepared.repo, prepared.repo_id, self.probe)
+        free = free_slots(con, prepared.repo, SlotGit(self.checkouts, self.slot_files), prepared.repo_id, self.probe)
         return (con, free) if isinstance(free, tuple) else free
 
     def _claimed(self, con: sqlite3.Connection, prepared: _Prepared, free: tuple[Free, ...], key: AttemptKey, ref: FileRef) -> AdmitResult:
@@ -280,11 +282,11 @@ def open_store(connect: Callable[[], sqlite3.Connection | None]) -> sqlite3.Conn
 
 
 def free_slots(
-    con: sqlite3.Connection, repo: Repo, repo_id: RepoId, probe: Probe
+    con: sqlite3.Connection, repo: Repo, git: SlotGit, repo_id: RepoId, probe: Probe
 ) -> tuple[SlotView, ...] | AdmitRefused | AdmitUnavailable:
     """The observed-free slots, read-only; a store failure never counts as free."""
     try:
-        views = observe(con, repo, repo_id, probe)
+        views = observe(con, repo, git, repo_id, probe)
     except (sqlite3.Error, SlotsUnavailable) as error:
         return AdmitUnavailable("store", detail=why(error))
     if any(view.reason == "store_unavailable" for view in views):

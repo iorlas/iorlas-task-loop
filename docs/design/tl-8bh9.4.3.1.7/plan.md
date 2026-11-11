@@ -112,9 +112,15 @@ a process still running in the slot could swap the pointer after the check (repr
 tries, and the swapped-in Git directory's `clean` filter ran). The library now takes `RealRepo(path, pins={checkout:
 git_dir})`: every call in a pinned checkout sets `GIT_DIR=<git_dir>` and `GIT_WORK_TREE=<checkout>` from the caller's
 value and never reads `<checkout>/.git`, and a call in a checkout with no pin raises `NotARepo` before any Git process
-(no discovery either). The factory passes the G its check verified: `SlotState.gitdir`, and `Checkouts`' `git_dir` for
-every Git view of the slot (status, stage, record, the listing, take, park, the staged read); the re-checks before
-`stage` and `record` also require the same G. Kept as defence in depth: no Git write unless the registered worker and
+(no discovery either). The factory passes the G its full check verified (`observe_slot`: the pointer layout, then from the
+root it names the identity bound to the attempt's or the adopted checkout's repository and its common directory):
+`SlotState.gitdir`, as `Checkouts`' `git_dir` for every Git view of the slot: the status read of dispatch, verify,
+commit and `plan show`; the free-slot observation (admission) and `tl slot adopt`'s status read, where a failed check is
+`unknown(redirected)` or the refusal `redirected` with no Git call on the slot; prepare's take and staged read; the
+commit's refusal, stage, record, foreign check and clean listing; release's listing and park; a repeat's staged read
+(unknown when the check fails). The re-checks before `stage` and `record` also require the same G. Only the person's
+checkout opens unpinned; the shared test fake (`PinnedViews`) fails any unpinned slot open or a pin to another G, and
+dropping `git_dir` at any of these sites fails the focused tests. Kept as defence in depth: no Git write unless the registered worker and
 its process group are observed gone (`unsettled:worker_alive`, a narrow `WorkerGone` port, real
 `stream_proc.observe_owned` plus `group_alive`; not stop proof for descendants that left the group, .4.4) and the
 discovery ceiling (point 7). Real-Git test: `.git` swapped right after the pre-stage check to a fake Git directory with

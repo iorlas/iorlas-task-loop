@@ -31,7 +31,7 @@ from taskloop.publish import BranchPublish, BranchPublished, NotPublished, Publi
 from taskloop.repo import RepoId
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
-from taskloop.slots import adopt
+from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -83,10 +83,10 @@ class Published:
         self.slot = root / "slots" / repo_id / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev(self.slot, "HEAD")
-        adopt(lambda: factory, begin_immediate, checkouts(self.main), root / "slots", 1)
+        adopt(lambda: factory, begin_immediate, checkouts(self.main), SlotGit(checkouts, RealSlotFiles()), root / "slots", 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         admission = AttemptAdmission(
-            lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, checkouts, yes, yes, lambda: 10, probe
+            lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
         )
         admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), self.main, "m", "high", "workspace-write", 100))
         assert isinstance(admitted, Admitted) and self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"

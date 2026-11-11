@@ -32,7 +32,7 @@ from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.publish import BranchPublish
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.slot_release import SlotRelease
-from taskloop.slots import Adopted, NotAdopted, adopt
+from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import ACTOR, ReadyRows, inspect_task
 from taskloop.verifier import Verifier
@@ -315,6 +315,11 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
     )
 
 
+def real_slots() -> SlotGit:
+    """Real Git views and the real slot file port: how a slot is observed and adopted."""
+    return SlotGit(checkouts, RealSlotFiles())
+
+
 def open_verifier(database: Path, store: Store) -> Verifier:
     """Real wiring for on-demand verification (`tl step verify`, a repeat's verify): a shared writer of `store` (the caller
     closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
@@ -344,13 +349,14 @@ def open_launcher(database: Path, artifacts: Path) -> Launcher:
 
 
 def adopt_slots(
-    database: Path, checkout: Path, root: Path, count: int, repos: Checkouts = checkouts
+    database: Path, checkout: Path, root: Path, count: int, git: SlotGit | None = None
 ) -> tuple[Adopted | NotAdopted, ...]:
-    """Adopt worktrees a person already made with `git worktree add --detach <root>/<repo_id>/sN`; creates none."""
-    store = Store(SCHEMA)
+    """Adopt worktrees a person already made with `git worktree add --detach <root>/<repo_id>/sN`; creates none. `git`
+    defaults to real Git and the real slot file port (`real_slots`)."""
+    store, git = Store(SCHEMA), git or real_slots()
     try:
-        repo = repos(checkout.expanduser().resolve())
-        return adopt(lambda: store.shared_rw(database), store.begin_immediate, repo, root, count)
+        repo = git.checkouts(checkout.expanduser().resolve())
+        return adopt(lambda: store.shared_rw(database), store.begin_immediate, repo, git, root, count)
     finally:
         store.close_shared()
 
@@ -430,6 +436,7 @@ def open_admission(database: Path, artifacts: Path) -> AttemptAdmission:
         claims.unclaim,
         time.time,
         slot_lock.probe,
+        RealSlotFiles(),
     )
 
 

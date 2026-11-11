@@ -11,6 +11,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
+from doubles import FakeSlotFiles, PinnedViews
 from git_porcelain import GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store
@@ -36,6 +37,7 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
 )
 from taskloop.cli_composition import adopt, open_reads, open_start, open_verify
+from taskloop.composition import RealSlotFiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
@@ -60,7 +62,7 @@ from taskloop.operations import (
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
-from taskloop.slots import Adopted, SlotView
+from taskloop.slots import Adopted, SlotGit, SlotView
 from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -536,19 +538,24 @@ def test_adopt_refuses_a_bad_checkout_before_making_anything(
     tmp_path: Path, checkout: str, repos: Checkouts | None, kind: str, reason: str
 ) -> None:
     database = tmp_path / "state" / "factory.db"
-    found = adopt(database, tmp_path / checkout if checkout != "." else tmp_path, tmp_path / "slots", 1, repos or fail(AssertionError()))
+    views = SlotGit(repos or fail(AssertionError()), RealSlotFiles())  # no file is read: the checkout is refused first
+    found = adopt(database, tmp_path / checkout if checkout != "." else tmp_path, tmp_path / "slots", 1, views)
     assert isinstance(found, Failed) and (found.kind, found.reason) == (kind, reason)
     assert not (tmp_path / "state").exists()
 
 
-def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts) -> None:
-    foreign = tmp_path / "foreign.db"
+def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(
+    tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: FakeSlotFiles
+) -> None:
+    foreign, main, git = tmp_path / "foreign.db", slot.repo.path, SlotGit(checkouts, slot_files)
+    main.mkdir()  # the person's checkout directory (the fake keeps no files on disk)
     write(foreign, "PRAGMA journal_mode=WAL")
     write(foreign, "PRAGMA user_version=9")
-    refused = adopt(foreign, tmp_path, tmp_path / "slots", 1, checkouts)
+    refused = adopt(foreign, main, tmp_path / "slots", 1, git)
     assert isinstance(refused, Failed) and (refused.kind, refused.reason) == ("refused", "schema")
     database = tmp_path / "state" / "factory.db"
-    assert adopt(database, tmp_path, tmp_path / "slots", 1, checkouts) == Adoption((Adopted("s1", slot.path),))
+    assert adopt(database, main, tmp_path / "slots", 1, git) == Adoption((Adopted("s1", slot.path),))
+    assert checkouts.slot_opens(slot.path) == [slot_files.common / "worktrees/s1"]  # its status read, pinned
     assert database.exists()
 
 

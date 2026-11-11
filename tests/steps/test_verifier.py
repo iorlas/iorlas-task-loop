@@ -14,7 +14,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles
+from doubles import FakeSlotFiles, PinnedViews, linked_into
 from git_porcelain import Dirty, Recorded, Repo, Tree
 from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
@@ -45,6 +45,7 @@ from taskloop.composition import open_verifier
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.slot_lock import hold
+from taskloop.slot_state import pointer
 from taskloop.steps import RULES, kind
 from taskloop.verdict import judge
 from taskloop.verifier import Verifier, VerifyHold
@@ -360,6 +361,23 @@ def test_a_rewritten_pointer_refuses_dispatch(
     slot_files.entries[slot.path / ".git"] = FileStat("dir", 0, False)
     result = attempts(registered, tmp_path, checkouts, slot_files, agent(slot, PLANNED)).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "slot_redirected")
+
+
+def test_the_staged_read_is_pinned_and_unknown_when_the_pointer_names_another_repository(
+    registered: sqlite3.Connection, slot: FakeWorktree, repo: FakeRepo, tmp_path: Path, slot_files: FakeSlotFiles
+) -> None:
+    """A repeat's staged read runs the full slot check (`observe_slot`): read pinned to the verified G; a pointer that is
+    well-formed by layout but names a linked Git directory of another repository is unknown, the slot never opened."""
+    other = FakeRepo.init(tmp_path / "other")
+    views = PinnedViews(repo, other)
+    slot.write_file(P, "# Plan\n")
+    slot.stage([P], literal=True)
+    assert verifier(registered, views, slot_files).staged(KEY) == (P,)
+    assert views.slot_opens(slot.path) == [slot_files.common / "worktrees/s1"] * 2  # the status read and the staged read
+    views.opened.clear()
+    linked_into(slot_files, slot.path, other)
+    assert pointer(slot_files, slot.path) is not None  # the layout check alone passes
+    assert verifier(registered, views, slot_files).staged(KEY) is None and views.slot_opens(slot.path) == []
 
 
 def rules(cap: int = 1 << 20) -> StepRules:

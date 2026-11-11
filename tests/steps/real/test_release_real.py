@@ -28,7 +28,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.repo import RepoId
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
-from taskloop.slots import adopt, observe
+from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, observe
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -77,11 +77,11 @@ class Repository:
         self.slot = slots / self.repo_id / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev("HEAD")
-        adopt(lambda: factory, begin_immediate, checkouts(self.main), slots, 1)
+        adopt(lambda: factory, begin_immediate, checkouts(self.main), SlotGit(checkouts, RealSlotFiles()), slots, 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         self.releaser = SlotRelease(self.store, checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30)
         self.admission = AttemptAdmission(
-            lambda: factory, begin_immediate, EvidenceFiles(self.art), tasks, checkouts, yes, yes, lambda: 10, probe
+            lambda: factory, begin_immediate, EvidenceFiles(self.art), tasks, checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
         )
         self.root = root
 
@@ -119,7 +119,7 @@ def test_a_verified_slot_is_parked_at_d_detached_and_clean_and_is_free_again(rea
     assert git(real.slot, "rev-parse", "--abbrev-ref", "HEAD").strip() == "HEAD"  # detached
     assert (real.rev("HEAD"), real.rev("refs/heads/task/tl-1")) == (real.d, x)
     assert git(real.slot, "status", "--porcelain").strip() == ""
-    views = observe(real.factory, checkouts(real.main), real.repo_id, probe)
+    views = observe(real.factory, checkouts(real.main), SlotGit(checkouts, RealSlotFiles()), real.repo_id, probe)
     assert [(view.name, view.state) for view in views] == [("s1", "free")]
 
 
@@ -134,3 +134,18 @@ def test_after_an_abandon_a_fresh_attempt_resumes_the_task_branch_at_x(real: Rep
     unchanged = {"disposition": "unchanged", "plan_path": P, "paths": [], "message": None, "explanation": "still valid"}
     fresh = real.run(answered(unchanged, look))
     assert fresh.reservation_generation == 2 and seen == [("task/tl-1", x)]  # resumed as it is, the committed plan kept
+
+
+def test_a_slot_whose_pointer_names_another_git_directory_is_never_free_nor_adopted(real: Repository) -> None:
+    """Real Git and the real slot file port: a free slot's `.git` rewritten to a Git directory of the agent's making is
+    `unknown(redirected)`, and a person's new worktree so rewritten is refused at adoption."""
+    fake, slots = real.root / "fake", SlotGit(checkouts, RealSlotFiles())
+    git(real.root, "init", "-q", "--bare", str(fake))
+    (real.slot / ".git").write_text(f"gitdir: {fake}\n")
+    views = observe(real.factory, checkouts(real.main), slots, real.repo_id, probe)
+    assert [(view.name, view.state, view.reason) for view in views] == [("s1", "unknown", "redirected")]
+    s2 = real.slot.parent / "s2"
+    git(real.main, "worktree", "add", "-q", "--detach", str(s2), "HEAD")
+    (s2 / ".git").write_text(f"gitdir: {fake}\n")
+    found = adopt(lambda: real.factory, begin_immediate, checkouts(real.main), slots, real.slot.parent.parent, 2)
+    assert found == (Adopted("s1", real.slot), NotAdopted("s2", "redirected", s2))

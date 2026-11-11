@@ -464,7 +464,9 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 ) -> None:
     request = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "other-model", "low", 45)
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
-    fresh = AttemptAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, lambda: 10, never)
+    fresh = AttemptAdmission(
+        lambda: registered, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, lambda: 10, never, slot_files
+    )
     ports = StartPorts(store, fresh, launcher, lambda: 10, repeats)
     assert start(ports, request) == Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     unsafe(registered, tmp_path, slot, checkouts, slot_files)

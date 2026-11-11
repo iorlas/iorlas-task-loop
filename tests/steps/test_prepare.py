@@ -14,6 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
+from doubles import FakeSlotFiles, PinnedViews
 from git_porcelain import BranchHeld, GitReadFailure, Recorded, Repo, Sha
 from git_porcelain.api import TakeResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
@@ -26,7 +27,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.prepare import Branch, BranchRefusal, branch_refusal, named
-from taskloop.slots import adopt
+from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 
@@ -277,14 +278,14 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
         return inspect_task(TaskBinding(TaskScope(backlog), Path(tracker_root)), client, task)
 
     claims = Claims(tmp_path / "artifacts")
-    admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, lambda _path, /, *, git_dir=None: repo,
-                              claims.claim, claims.unclaim, lambda: 10, lambda _slot_path: True)
+    admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, PinnedViews(repo),
+                              claims.claim, claims.unclaim, lambda: 10, lambda _slot_path: True, FakeSlotFiles(repo))
     return admission.admit(AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, "m", "high", "workspace-write", 100)), claims
 
 
 def slots(factory: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> list[FakeWorktree]:
     made = [repo.add_worktree(root.resolve() / repo.identity().key / f"s{n}", "HEAD") for n in range(1, count + 1)]
-    adopt(lambda: factory, begin_immediate, repo, root, count)
+    adopt(lambda: factory, begin_immediate, repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
     return made
 
 

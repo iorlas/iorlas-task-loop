@@ -11,12 +11,10 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
-from doubles import FakeSlotFiles
-from git_porcelain import Repo
+from doubles import FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
 
-from taskloop.attempt_types import Checkouts
 from taskloop.factory_schema import SCHEMA
 
 
@@ -52,14 +50,10 @@ def slot(repo: FakeRepo, root: Path) -> FakeWorktree:
 
 
 @pytest.fixture
-def checkouts(repo: FakeRepo) -> Checkouts:
+def checkouts(repo: FakeRepo) -> PinnedViews:
     """The body's Git view of every checkout path: the fake clone, which finds a worktree by its path, as the real Git
-    does from any checkout of the repository."""
-
-    def opened(_path: Path, /, *, git_dir: Path | None = None) -> Repo:
-        return repo
-
-    return opened
+    does from any checkout of the repository; a slot opens only pinned to its pointer's G (`PinnedViews`)."""
+    return PinnedViews(repo)
 
 
 @pytest.fixture

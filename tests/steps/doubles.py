@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from git_porcelain import GitUnavailable
+from git_porcelain import GitUnavailable, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
 
 from taskloop.attempt_types import FileStat
@@ -81,3 +81,39 @@ class FakeSlotFiles:
     def read(self, path: Path, cap: int) -> bytes | None:
         entry = self.lstat(path)
         return None if entry is None or entry.kind != "file" or entry.size > cap else self._data(path)
+
+
+class PinnedViews:
+    """`Checkouts` over the Git fake that holds every consumer to the pin rule (design .7 section 4(a)): the person's
+    checkout (the fake's root, or a directory in it) opens unpinned, any other path only with `git_dir` equal to the G
+    its slot pointer names (`FakeSlotFiles`' `<common>/worktrees/<name>`); anything else fails the test at the open. The
+    root of another repository in `others` opens unpinned as that repository (a pointer may name it). `opened` records
+    every (path, git_dir)."""
+
+    def __init__(self, repo: FakeRepo, *others: FakeRepo) -> None:
+        self.repo, self.root, self.common = repo, repo.identity().root, repo.identity().common_dir
+        self.others = {other.identity().root: other for other in others}
+        self.opened: list[tuple[Path, Path | None]] = []
+
+    def __call__(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
+        self.opened.append((path, git_dir))
+        if git_dir is None and path in self.others:
+            return self.others[path]
+        expected = None if path.is_relative_to(self.root) else self.common / "worktrees" / path.name
+        assert git_dir == expected, f"{path} opened with git_dir={git_dir}, not {expected}"
+        return self.repo
+
+    def slot_opens(self, path: Path) -> list[Path | None]:
+        """The `git_dir` of every open of `path`."""
+        return [git_dir for where, git_dir in self.opened if where == path]
+
+
+def linked_into(files: FakeSlotFiles, slot: Path, other: FakeRepo) -> Path:
+    """Rewrite `<slot>/.git` to a well-formed linked Git directory of `other` (G under `<C>/worktrees`, `commondir`, a
+    back-pointer to the slot): the layout check alone passes, only the repository binding refuses it. Returns G."""
+    gitdir = other.identity().common_dir / "worktrees" / slot.name
+    files.contents[slot / ".git"] = f"gitdir: {gitdir}\n".encode()
+    files.entries[gitdir] = FileStat("dir", 0, False)
+    files.contents[gitdir / "commondir"] = b"../..\n"
+    files.contents[gitdir / "gitdir"] = f"{slot / '.git'}\n".encode()
+    return gitdir
