@@ -19,6 +19,7 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.4.3.1.13](tl-8bh9.4.3.1.13/plan.md) | Scheduling: the factory takes ready tasks into free slots (`tl plan next`) | built |
 | [tl-8bh9.4.3.1.14](tl-8bh9.4.3.1.14/plan.md) | Trigger: rounds start by themselves (`tl plan rounds`) | built |
 | [tl-8bh9.4.3.1.15](tl-8bh9.4.3.1.15/plan.md) | Generalize the step machinery once: plan becomes the first step kind | built |
+| [tl-8bh9.4.3.1.16](tl-8bh9.4.3.1.16/plan.md) | Step sequencing and the implement step kind (slice S5) | design |
 | [tl-8bh9.4.3.1.2](tl-8bh9.4.3.1.2/plan.md) | Admit one plan attempt (admission only) | built |
 | [tl-8bh9.4.3.1.3](tl-8bh9.4.3.1.3/plan.md) | Managed slots: the smallest slot state admission needs | built |
 | [tl-8bh9.4.3.1.4](tl-8bh9.4.3.1.4/plan.md) | Registered attempt entry: launch an admitted attempt into a surviving process | built |
@@ -50,6 +51,7 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [execution-terms.md](execution-terms.md) | Execution terms: steps, actions and attempts |
 | [merge-queue.md](merge-queue.md) | Merge queue: speculative, serial in meaning, parallel in execution (held) |
 | [roadmap.md](roadmap.md) | Roadmap: speed and less code (2026-11-06) |
+| [self-hosting-roadmap.md](self-hosting-roadmap.md) | Roadmap to self-hosting: the factory develops itself (2026-11-11, proposed) |
 | [slot-grant.md](slot-grant.md) | Slot grant: deterministic prevention of the 2026-11-03 stall |
 | [slots-carve.md](slots-carve.md) | Slots carve plan (baseline code carve) |
 | [sqlite-store-plan.md](sqlite-store-plan.md) | SQLite store plan (baseline migration; STORE slices reconciled in tl-sqd3.26) |
