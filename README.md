@@ -9,6 +9,8 @@ Not built: the implement, checks, review and land steps, and the dashboard. Noth
   preserving requirements, acceptance and dependency relationships. The backlog key is supplied configuration; it is
   not inferred from Git. Missing, malformed and unavailable reads are distinct nonzero results; JSON errors go to stderr.
 - `tl config show` prints each effective machine setting and its source.
+- `tl profile show [--checkout PATH] [--at REV] [--target REF] [--json]` prints the repository profile: `setup` and
+  checks at the commit `--at`, `required` and `target` from `--target` (read-only).
 - `tl slot adopt CHECKOUT` adopts hand-made detached worktrees as slots and creates `factory.db`.
 - `tl step start|show|list|verify|release|publish` run, inspect, verify, release (`--abandon` returns the tracker
   claim) and publish one task's current attempt, whatever its step (only the plan step is built). `tl step next` runs one
@@ -47,4 +49,5 @@ and checked for portable source provenance.
 foundation. Preserved design documents may describe future behavior or the historical implementation;
 they are not additional executable commands.
 
-The preserved `.task-loop.json` describes baseline behavior; no successor code reads it.
+`.task-loop.json` is this repository's profile (`setup`, `checks`, `required`, `target`), read from Git by
+`tl profile show`; nothing runs its commands yet ([tl-8bh9.14.1](docs/design/tl-8bh9.14.1/plan.md)).

@@ -47,7 +47,7 @@ redesign demonstrates a distinct factory concept that needs it. Do not introduce
 | slot | A managed, reusable worktree reserved for one independently scheduled step attempt at a time. | `s1`. Internal checks may run concurrently. Reservations are local factory state in factory.db; slots are not tracker tasks. Current internal slot tasks are to be retired. |
 | factory | The installation that schedules tasks and executes their steps. | It has a dashboard and local execution state; it can serve several repos. |
 | host | The machine on which an execution happens. | Do not use this product word for a bundle of collaborators. The successor tree has no `*Host` Protocols; the ports are named for what they do (`StatusPorts`, `EvidenceFiles`, ...). |
-| profile | Target concept: the repo's factory settings in `.task-loop.json`; no reader exists in this tree yet (the file in the tree is baseline-only). | Holds `setup` and the check commands, read at the commit under test (the task branch), like a GitHub `push`/`pull_request` workflow; which checks are required is configured on `main`, like branch protection (proposed, [self-hosting roadmap](design/self-hosting-roadmap.md) section 7). |
+| profile | The repo's factory settings in `.task-loop.json`, read by `profile.py` from Git at a commit, never the working tree ([tl-8bh9.14.1](design/tl-8bh9.14.1/plan.md)); `tl profile show` prints it. | Strict keys `setup`, `checks` (name, argv, timeout), `required`, `target`. `setup` and the checks are read at the commit under test (the task branch), like a GitHub `push`/`pull_request` workflow; `required` and `target` from the target (`main`), like branch protection (O1, [self-hosting roadmap](design/self-hosting-roadmap.md) section 7). Nothing runs what it names yet. |
 | setup | The repo's own command(s), named in the profile, that prepare a slot's environment before the agent starts. | Decided 2026-11-11: run by the factory outside the agent's sandbox, with network, from the same ref as the checks. `just install` when the profile names none. Not a step. |
 | config | Machine-level settings. | Local paths and account settings. Use `profile` for repo settings. |
 
@@ -149,7 +149,9 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 |---|---|---|
 | `--backlog KEY` | `step` (all), `task show` | The task scope inside the tracker; supplied, never inferred. |
 | `--tracker-root PATH` | `step start\|next\|rounds`, `task show` | The directory of the Beads tracker. |
-| `--checkout PATH` | `step start\|next\|rounds`, `slot adopt` | The person's checkout of the repository. |
+| `--checkout PATH` | `step start\|next\|rounds`, `slot adopt`, `profile show` | The person's checkout of the repository (`profile show`: default `.`). |
+| `--at REV` | `profile show` | The commit under test whose `setup` and checks are read (default `HEAD`). |
+| `--target REF` | `profile show` | The target ref whose `required` and `target` are read (default `main`). |
 | `--root DIR` | `config show`, `slot adopt` | The slots root (config `slots_root`); slots live at `<root>/<repo_id>/sN`. |
 | `--count N` | `config show`, `slot adopt` | Slot count s1..sN (config `slot_count`). |
 | `--every SECONDS` | `step rounds` | Seconds between rounds, at least 5 (config `round_seconds`). |

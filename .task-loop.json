@@ -1,29 +1,9 @@
 {
-  "engine": {
-    "owner_author": "Denis Tomilin",
-    "land": [
-      "git",
-      "push",
-      "origin",
-      "HEAD:main"
-    ],
-    "pick_label": "auto",
-    "needs_info_label": "needs-info",
-    "checks": [
-      {
-        "id": "suite",
-        "argv": [
-          "just",
-          "gate"
-        ],
-        "group": "tests",
-        "run": "gate",
-        "closure_cmd": [
-          "python3",
-          "dev/affected.py",
-          "--closure"
-        ]
-      }
-    ]
-  }
+  "setup": [["just", "install"]],
+  "checks": [
+    {"name": "check", "argv": ["just", "check"], "timeout": 1800},
+    {"name": "test", "argv": ["just", "test"], "timeout": 1800}
+  ],
+  "required": ["check", "test"],
+  "target": "main"
 }
