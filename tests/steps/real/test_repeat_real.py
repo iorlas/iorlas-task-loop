@@ -53,7 +53,7 @@ def agent(slot: Path, written: Mapping[str, str], removed: Sequence[str], paths:
     return call
 
 
-def never(*_args: object) -> NoReturn:
+def never(*_args: object, **_options: object) -> NoReturn:
     raise AssertionError("a repeat reads no tracker and claims nothing")
 
 

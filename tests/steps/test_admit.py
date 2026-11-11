@@ -108,7 +108,8 @@ def unlocked(_slot_path: str) -> bool:
 def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, *repos: FakeRepo) -> AttemptAdmission:
     by_path = {repo.path: repo for repo in repos}
     return AttemptAdmission(
-        lambda: con, begin_immediate, tracker.files, tasks, by_path.__getitem__, tracker.claim, tracker.unclaim, time, unlocked
+        lambda: con, begin_immediate, tracker.files, tasks, lambda path, /, *, git_dir=None: by_path[path], tracker.claim,
+        tracker.unclaim, time, unlocked,
     )
 
 
@@ -366,7 +367,7 @@ def test_invalid_request_or_store_refuses_before_any_claim(
     admitter = admission(factory, tmp_path, tracker, repo)
     if change == "store":
         admitter.connect = lambda: None
-    admitter.checkouts = lambda _path: repo
+    admitter.checkouts = lambda _path, /, *, git_dir=None: repo
     result = admitter.admit(wanted)
     assert (result.reason if isinstance(result, AdmitRefused) else getattr(result, "what", None)) == expected
     assert tracker.calls == [] and tracker.files.inputs == []

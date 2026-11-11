@@ -94,9 +94,9 @@ class Observed:
     def __init__(self, checkouts: Checkouts) -> None:
         self.checkouts, self.opened = checkouts, list[Path]()
 
-    def __call__(self, path: Path) -> Repo:
+    def __call__(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opened.append(path)
-        return self.checkouts(path)
+        return self.checkouts(path, git_dir=git_dir)
 
 
 def agent(slot: FakeWorktree, files: dict[str, str], disposition: str = "planned") -> Callable[..., RunOutcome]:

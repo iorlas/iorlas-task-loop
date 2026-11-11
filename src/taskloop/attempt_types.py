@@ -13,7 +13,15 @@ from git_porcelain import Repo
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference
 
-type Checkouts = Callable[[Path], Repo]  # a fresh Git view from one checkout path
+
+class Checkouts(Protocol):
+    """A fresh Git view from one checkout path. On a slot, `git_dir` is the Git directory its pointer check verified:
+    every call of that view then uses it and never reads `<slot>/.git` again (a pointer swapped after the check is not
+    followed), and a call on any other path is `NotARepo`; without it (the person's checkout) `.git` is read per call."""
+
+    def __call__(self, path: Path, /, *, git_dir: Path | None = None) -> Repo: ...
+
+
 # The registered worker and its process group observed gone (True), or alive/unknown (False); never descendant proof.
 type WorkerGone = Callable[[Worker], bool]
 type Seen = Literal["matching", "gone", "different_process", "unknown"]

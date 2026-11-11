@@ -111,12 +111,12 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     found = branch_refusal(repo, task_id, (head,))
     if isinstance(found, str):
         return _refused(found)
-    named_root = pointer(files, Path(admission.slot_path))
-    if named_root is None or named_root.root != state.root:
+    named = pointer(files, Path(admission.slot_path))
+    if named is None or named.root != state.root or named.gitdir != state.gitdir:
         return _refused("slot_redirected")
     start = found.remote if found.local is None and found.remote is not None else head
     slot = Path(admission.slot_path)
-    worktree = checkouts(slot).worktree(slot)
+    worktree = checkouts(slot, git_dir=state.gitdir).worktree(slot)
     taken = worktree.take_branch(task_branch(task_id), start, mode="resume")
     if isinstance(taken, BranchHeld):
         return _refused("branch_held")
@@ -149,7 +149,7 @@ def _state_refusal(checkouts: Checkouts, record: AttemptRecord, state: SlotState
     if record.start is None or problem != "dirty":
         return None if problem is None else _refused(f"slot_{problem}")
     path = Path(record.admission.slot_path)
-    return _refused("slot_staged") if staged(checkouts(path), path) else None
+    return _refused("slot_staged") if staged(checkouts(path, git_dir=state.gitdir), path) else None
 
 
 def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: Callable[[], float]) -> str | AttemptResult:

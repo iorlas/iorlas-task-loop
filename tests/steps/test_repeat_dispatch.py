@@ -124,7 +124,7 @@ class Step:
         return f"{found.status} {found.reason}"
 
     def admission(self) -> AttemptAdmission:
-        def never(*_args: object) -> NoReturn:
+        def never(*_args: object, **_options: object) -> NoReturn:
             raise AssertionError("a repeat reads no tracker and claims nothing")
 
         return AttemptAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), never, never, never, never, lambda: 10, never)

@@ -137,6 +137,44 @@ def test_a_fake_git_directory_in_the_slot_whose_filter_would_run_is_redirected(
     assert git(slot, "--git-dir", str(main / ".git/worktrees/s1"), "rev-parse", "HEAD").strip() == base
 
 
+
+class SwappedAfter(RealSlotFiles):
+    """The slot file port while a process still runs in the slot: right after the `check`-th pointer check has read the
+    back-pointer (that check passed), `.git` is rewritten to name `target`."""
+
+    def __init__(self, slot: Path, target: Path, check: int) -> None:
+        self.slot, self.target, self.check, self.seen = slot, target, check, 0
+
+    def resolve(self, path: Path) -> Path | None:
+        found = super().resolve(path)
+        if path == self.slot / ".git":
+            self.seen += 1
+            if self.seen == self.check:
+                (self.slot / ".git").write_text(f"gitdir: {self.target}\n")
+        return found
+
+
+def test_a_pointer_swapped_after_the_check_before_the_stage_does_not_change_the_git_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second pointer check (right before `stage`) passes, then `.git` names a fake Git directory whose `clean`
+    filter would run outside the sandbox: `stage` still runs on the verified Git directory (the view is pinned to it),
+    the filter never runs, and the check before `record` finds the swap (`redirected`, nothing committed)."""
+    main, slot, markers = repository(tmp_path.resolve(), monkeypatch)
+    base = git(slot, "rev-parse", "HEAD").strip()
+    attempt = admission(main, slot)
+    plan(slot)
+    fake = tmp_path.resolve() / "fake"
+    git(tmp_path, "init", "-q", "--bare", str(fake))
+    git(tmp_path, "config", "--file", str(fake / "config"), "filter.x.clean", f"touch '{markers / 'filter'}' && cat")
+    (fake / "info/attributes").write_text("* filter=x\n")
+    files = SwappedAfter(slot, fake, check=2)
+    assert settle(checkouts, files, attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert files.seen == 2 and list(markers.iterdir()) == []  # the third check fails before its back-pointer read
+    verified = ("--git-dir", str(main / ".git/worktrees/s1"), "--work-tree", str(slot))
+    assert git(slot, *verified, "diff", "--cached", "--name-only").strip() == P
+    assert git(slot, *verified, "rev-parse", "HEAD").strip() == base
+
 def test_a_relative_paths_worktree_is_accepted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     main, slot, markers = repository(tmp_path.resolve(), monkeypatch, "--relative-paths")
     assert not (slot / ".git").read_text().startswith("gitdir: /")  # the pointer and its back-pointer are relative

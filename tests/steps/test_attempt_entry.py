@@ -114,14 +114,14 @@ class Entry:
         self.credential_calls += 1
         return "/bin/codex", {"SECRET": "credential"}
 
-    def checkouts(self, path: Path) -> Repo:
+    def checkouts(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.git_opens += 1
-        return self.git(path)
+        return self.git(path, git_dir=git_dir)
 
-    def remotes(self, path: Path) -> Repo:
+    def remotes(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.remote_opens += 1
         self.pushing()
-        return self.git(path)
+        return self.git(path, git_dir=git_dir)
 
     def execution(self, harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         if self.written is not None:

@@ -27,10 +27,14 @@ GITDIR: Final = re.compile(r"gitdir:\s*(.+)")  # git_porcelain's `real_env.git_d
 
 @dataclass(frozen=True)
 class SlotState:
+    """The slot as Git lists it, from the root its verified pointer names; `gitdir` is that pointer's Git directory,
+    which every later Git view of the slot is pinned to (`Checkouts`' `git_dir`)."""
+
     root: Path
     head: str | None
     branch: str | None
     dirty: bool
+    gitdir: Path
 
     def problem(self, branch: str, at: str | None = None) -> Problem | None:
         """None when the slot is born, on exactly `branch` (its task branch), clean and (given `at`) at that commit;
@@ -72,8 +76,9 @@ def pointer(files: SlotFiles, slot: Path) -> Pointer | None:
     the slot; and G's back-pointer `G/gitdir` resolves to exactly `<slot>/.git`. G and C must also resolve to the very
     path written (no symlink on the way, so no agent-made link can steer them). Else None (`redirected`). Relative
     pointers (`git worktree add --relative-paths`) resolve against the slot and G as Git resolves them. Plain reads only:
-    a directory, symlink or FIFO at `.git` is refused before any open. The library re-reads `.git` on each later Git
-    call: a swap after this check is the named residual (design section 4)."""
+    a directory, symlink or FIFO at `.git` is refused before any open. Every later Git view of the slot is pinned to the
+    G returned here (`Checkouts`' `git_dir`), so a pointer swapped after this check is never followed (design section
+    4(a))."""
     if files.resolve(slot) != slot:
         return None
     dotgit = slot / ".git"
@@ -94,9 +99,9 @@ def pointer(files: SlotFiles, slot: Path) -> Pointer | None:
     return Pointer(gitdir, shared) if back is not None and files.resolve(gitdir / back) == dotgit else None
 
 
-def _repository(checkouts: Checkouts, files: SlotFiles, path: Path, repo_id: str) -> tuple[Repo, Path] | Literal["repo", "redirected"]:
+def _repository(checkouts: Checkouts, files: SlotFiles, path: Path, repo_id: str) -> tuple[Repo, Pointer] | Literal["repo", "redirected"]:
     """The pointer check first (`redirected`, no Git call); then, from the root it names, `repo` when the repository is
-    not `repo_id`, `redirected` when Git's common directory is not the one the pointer names. The view and its root."""
+    not `repo_id`, `redirected` when Git's common directory is not the one the pointer names. The view and the pointer."""
     found = pointer(files, path)
     if found is None:
         return "redirected"
@@ -104,14 +109,14 @@ def _repository(checkouts: Checkouts, files: SlotFiles, path: Path, repo_id: str
     identity = repo.identity()
     if identity.key != repo_id:
         return "repo"
-    return (repo, found.root) if identity.common_dir == found.common else "redirected"
+    return (repo, found) if identity.common_dir == found.common else "redirected"
 
 
 def repository(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str) -> Path | Literal["repo", "redirected"]:
     """The person's checkout (the root a verified slot pointer names) of the repository `repo_id`: the first half of
     `observe_slot`, for a caller that then works on the repository, never on the slot."""
     found = _repository(checkouts, files, Path(slot_path), repo_id)
-    return found if isinstance(found, str) else found[1]
+    return found if isinstance(found, str) else found[1].root
 
 
 def observe_slot(
@@ -122,11 +127,12 @@ def observe_slot(
     found = _repository(checkouts, files, path, repo_id)
     if isinstance(found, str):
         return found
-    repo, root = found
+    repo, named = found
     info = next((worktree for worktree in repo.worktrees() if worktree.path == path), None)
     if info is None:
         return "not_listed"
-    return SlotState(root, info.head, info.branch, checkouts(path).worktree(path).dirty().raw)
+    dirty = checkouts(path, git_dir=named.gitdir).worktree(path).dirty().raw
+    return SlotState(named.root, info.head, info.branch, dirty, named.gitdir)
 
 
 def _status(repo: Repo, slot: Path) -> tuple[tuple[str, str], ...] | None:

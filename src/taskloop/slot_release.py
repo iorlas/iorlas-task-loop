@@ -304,13 +304,13 @@ class SlotRelease:
         if state.head is None:
             return NotReleased("refused", "slot_unborn", f"The slot has no commit. {NOTHING}")
         if state.dirty:
-            left = listing(self.checkouts(path), path)
+            left = listing(self.checkouts(path, git_dir=state.gitdir), path)
             return NotReleased("refused", "slot_dirty", "\n".join([*left, f"Remove the listed files. {NOTHING}"]))
         if state.branch is None and state.head == row.slot_head:
             return state.head, None
         if state.branch not in (None, task_branch(row.task_id)):
             return NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}")
-        return row.slot_head, str(self.checkouts(path).worktree(path).park(row.slot_head))
+        return row.slot_head, str(self.checkouts(path, git_dir=state.gitdir).worktree(path).park(row.slot_head))
 
     def _record(self, row: _Row, head: str, abandon: bool) -> bool:
         """One write transaction, fenced on what the proof read: the release row in, the reservation out."""

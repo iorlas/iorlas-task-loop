@@ -108,9 +108,9 @@ class Published:
         found = git(self.remote, "for-each-ref", "--format=%(objectname)", BRANCH).strip()
         return found or None
 
-    def counted(self, path: Path) -> Repo:
+    def counted(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opened.append(path)
-        return remotes(path)
+        return remotes(path, git_dir=git_dir)
 
     def publish(self) -> PublishResult:
         return BranchPublish(self.store, self.counted, self.files, lambda: 40).publish(self.key)

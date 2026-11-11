@@ -92,7 +92,7 @@ def agent(slot: FakeWorktree, files: Files, answer: Mapping[str, object] = PLAN)
     return call
 
 
-def never(*_args: object) -> NoReturn:
+def never(*_args: object, **_options: object) -> NoReturn:
     raise AssertionError("a repeat reads no tracker, opens no checkout and claims nothing")
 
 

@@ -75,9 +75,9 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
 ) -> None:
     now = [10.0]
 
-    def slow(path: Path) -> Repo:
+    def slow(path: Path, /, *, git_dir: Path | None = None) -> Repo:
         now[0] = 100.0  # the untimed Git reads outlast the deadline
-        return checkouts(path)
+        return checkouts(path, git_dir=git_dir)
 
     agent = run()
     store, files = AttemptStore(lambda: con), EvidenceFiles(tmp_path)

@@ -106,19 +106,22 @@ Failure: `unsettled:redirected` (before dispatch `refused:slot_redirected`), not
 `observe_slot` (dispatch, verify, commit and `plan show` all get it) and **again right before `stage` and before
 `record`**.
 
-**Residuals.** (a) **HIGH, open: a swap between a check and the Git call.** git_porcelain re-reads `<slot>/.git` on every
-call (`real_env.pinned`), so a process still running in the slot can swap the pointer after the check (reproduced in
-review: about 1 in 940 blind tries, and the swapped-in Git directory's `clean` filter ran). This repo shrinks the
-precondition, it does not close it: no Git write happens unless the registered worker and its process group are
-observed gone (`unsettled:worker_alive` otherwise, nothing staged; through a narrow `WorkerGone` port, real
-`stream_proc.observe_owned` plus `group_alive`); that is **not** stop proof for descendants that left the group (.4.4).
-The pointer is checked again before `stage` and before `record`. **Shelf follow-up (exact API):**
-`RealRepo.worktree(path, *, git_dir: Path)` (or `RealRepo(..., pins={checkout: git_dir})`) that pins
-`GIT_DIR=<git_dir>` and `GIT_WORK_TREE=<path>` from the caller's verified value on every call, never re-reading
-`<path>/.git`, and raises `NotARepo` instead of running unpinned when no pin is known (so discovery can never happen
-either); the factory would pass the G it verified. (b) A FIFO (or a slow
-file system) put at `.git`, `G/commondir` or `G/gitdir` between the `lstat` and Git's own read makes the Git call hang:
-local Git reads have no timeout. Accepted for v1; the bound belongs in git_porcelain (a per-call timeout), with (a).
+**Residuals.** (a) **Closed by git-porcelain 0.14.0 (`git-porcelain-v0.14.0`, shelf PR #76; tl-8bh9.14.2): a swap
+between a check and the Git call.** Until then git_porcelain re-read `<slot>/.git` on every call (`real_env.pinned`), so
+a process still running in the slot could swap the pointer after the check (reproduced in review: about 1 in 940 blind
+tries, and the swapped-in Git directory's `clean` filter ran). The library now takes `RealRepo(path, pins={checkout:
+git_dir})`: every call in a pinned checkout sets `GIT_DIR=<git_dir>` and `GIT_WORK_TREE=<checkout>` from the caller's
+value and never reads `<checkout>/.git`, and a call in a checkout with no pin raises `NotARepo` before any Git process
+(no discovery either). The factory passes the G its check verified: `SlotState.gitdir`, and `Checkouts`' `git_dir` for
+every Git view of the slot (status, stage, record, the listing, take, park, the staged read); the re-checks before
+`stage` and `record` also require the same G. Kept as defence in depth: no Git write unless the registered worker and
+its process group are observed gone (`unsettled:worker_alive`, a narrow `WorkerGone` port, real
+`stream_proc.observe_owned` plus `group_alive`; not stop proof for descendants that left the group, .4.4) and the
+discovery ceiling (point 7). Real-Git test: `.git` swapped right after the pre-stage check to a fake Git directory with
+a `clean` filter; `stage` still lands in the verified index and the filter never runs (it runs without the pin).
+(b) A FIFO (or a slow file system) put at `.git`, `G/commondir` or `G/gitdir` between the `lstat` and Git's own read
+makes the Git call hang: local Git reads have no timeout. Accepted for v1; the bound belongs in git_porcelain (a
+per-call timeout, still open). With (a) closed, a pinned view no longer reads `<slot>/.git`; `G/commondir` still is.
 (c) Whether codex protects a `.git` file inside the writable root was not observed (the binary has gitdir-pointer code).
 (d) Names: a `.git*` component is recognised after removing Unicode format characters (category Cf: zero-width and
 bidi marks, BOM, which HFS+ ignores) and case folding, in the answer decoder and in the pre-stage `.git*` rule; other
@@ -373,8 +376,7 @@ the trailer as written, and that `--relative-paths` pointers pass the check. Sti
 root; that `git commit` refuses to move a HEAD changed since it read it (git's ref transaction, believed); whether strict
 mode accepts `maxItems` (bounds therefore live in the decoder only); how a resume launch behaves; macOS (Seatbelt,
 `/private` paths); whether codex accepts the two `exclude_*` keys and still runs without `/tmp`. **Residual risk
-classes:** (1) HIGH: the pointer swap race of section 4(a), narrowed to "a process that outlives the worker's group"
-until the shelf follow-up lands; (2) a clean/smudge/textconv driver or other command from the person's own Git config
+classes:** (1) closed: the pointer swap race of section 4(a), by git-porcelain 0.14.0's pinned `git_dir`; (2) a clean/smudge/textconv driver or other command from the person's own Git config
 (or a repository config the person wrote) still runs during `status`/`add`/`diff` (section 5), unobserved; (3) the FIFO
 hang of section 4(b); (4) everything codex-dependent and unobserved: whether the sandbox actually bounds the agent,
 whether codex protects `<slot>/.git`, macOS Seatbelt.

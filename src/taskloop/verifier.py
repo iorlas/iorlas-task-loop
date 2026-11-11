@@ -34,7 +34,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.factory_commit import NotSettled, clean_at, leftovers, settle
 from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
-from taskloop.slot_state import bounded, staged
+from taskloop.slot_state import bounded, pointer, staged
 from taskloop.steps import kind
 from taskloop.verdict import judge
 
@@ -129,7 +129,8 @@ class Verifier:
             if record is None:
                 return None
             path = Path(record.admission.slot_path)
-            return bounded(staged(self.checkouts(path), path))
+            named = pointer(self.files, path)  # a redirected slot is unknown; else its view is pinned to the checked G
+            return None if named is None else bounded(staged(self.checkouts(path, git_dir=named.gitdir), path))
         except (StoreUnavailable, StoreRefused, GitUnavailable):
             return None
 

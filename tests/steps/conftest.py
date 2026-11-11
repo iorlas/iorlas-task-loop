@@ -56,7 +56,7 @@ def checkouts(repo: FakeRepo) -> Checkouts:
     """The body's Git view of every checkout path: the fake clone, which finds a worktree by its path, as the real Git
     does from any checkout of the repository."""
 
-    def opened(_path: Path) -> Repo:
+    def opened(_path: Path, /, *, git_dir: Path | None = None) -> Repo:
         return repo
 
     return opened

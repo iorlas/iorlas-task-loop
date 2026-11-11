@@ -416,9 +416,9 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
 
-    def counted(where: Path) -> Repo:
+    def counted(where: Path, /, *, git_dir: Path | None = None) -> Repo:
         opened.append(where)
-        return checkouts(where)
+        return checkouts(where, git_dir=git_dir)
 
     again = releaser(store, counted, slot_files)  # already released and published: nothing pending, no Git
     verifier = Verifier(store, counted, slot_files, gone, lambda: 20, hold)
@@ -521,7 +521,7 @@ def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) 
 
 
 def fail(error: Exception) -> Checkouts:
-    def opened(_path: Path) -> Repo:
+    def opened(_path: Path, /, *, git_dir: Path | None = None) -> Repo:
         raise error
 
     return opened

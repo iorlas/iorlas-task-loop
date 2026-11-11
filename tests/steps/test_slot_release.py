@@ -47,7 +47,7 @@ def tip(slot: FakeWorktree) -> str:
     return next(entry.sha for entry in slot.repo.refs(["refs/heads/task"]) if entry.name == "refs/heads/task/tl-1")
 
 
-def never(*_args: object) -> NoReturn:
+def never(*_args: object, **_options: object) -> NoReturn:
     raise AssertionError("not reached")
 
 
@@ -62,9 +62,9 @@ class Ports:
         self.unclaimed: list[tuple[str, str]] = []
         self.inside: Callable[[], object] = lambda: None
 
-    def checkouts(self, path: Path) -> Repo:
+    def checkouts(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opens += 1
-        return self.git(path)
+        return self.git(path, git_dir=git_dir)
 
     def observe(self, entry: EntryIdentity) -> Seen:
         self.observed.append(entry)
@@ -323,9 +323,9 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
 
-    def counted(path: Path) -> Repo:
+    def counted(path: Path, /, *, git_dir: Path | None = None) -> Repo:
         opened.append(path)
-        return checkouts(path)
+        return checkouts(path, git_dir=git_dir)
 
     assert isinstance(Verifier(store, counted, slot_files, never, lambda: 20, never).verify(KEY), Verified) and opened == []
     adopt(lambda: registered, begin_immediate, slot.repo, root, 1)  # the freed slot, detached and clean, is free again

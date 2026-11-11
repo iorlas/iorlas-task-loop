@@ -102,9 +102,9 @@ class Counted:
     def __init__(self, checkouts: Checkouts) -> None:
         self.checkouts, self.opens = checkouts, 0
 
-    def __call__(self, path: Path) -> Repo:
+    def __call__(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opens += 1
-        return self.checkouts(path)
+        return self.checkouts(path, git_dir=git_dir)
 
 
 def attempts(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: FakeSlotFiles, run: Execution) -> Attempts:

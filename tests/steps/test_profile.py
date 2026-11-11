@@ -232,7 +232,7 @@ def clone(tmp_path: Path) -> tuple[FakeRepo, str, str]:
 def test_the_adapter_reads_the_file_at_a_commit(clone: tuple[FakeRepo, str, str]) -> None:
     repo, without, with_profile = clone
 
-    def views(_path: Path) -> Repo:
+    def views(_path: Path, /, *, git_dir: Path | None = None) -> Repo:
         return repo
 
     files = GitProfileFiles(repo.path, views)
@@ -256,7 +256,7 @@ def test_a_symlink_or_submodule_profile_is_refused_not_unavailable() -> None:
 
 
 def test_the_adapter_reports_git_failure_as_unavailable(tmp_path: Path) -> None:
-    def broken(_path: Path) -> Repo:
+    def broken(_path: Path, /, *, git_dir: Path | None = None) -> Repo:
         raise GitUnavailable("Malformed GIT_CONFIG_COUNT", hint="git_config")
 
     assert GitProfileFiles(tmp_path, broken).blob("HEAD", PROFILE_PATH) == Unavailable("Malformed GIT_CONFIG_COUNT")

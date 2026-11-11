@@ -204,17 +204,21 @@ def current_boot() -> str | None:
     return None if seen is None else seen.boot
 
 
-def checkouts(path: Path) -> Repo:
+def checkouts(path: Path, *, git_dir: Path | None = None) -> Repo:
     """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment, its discovery ceiling
-    at that path: calls that run on a slot open their view from the slot itself."""
-    return RealRepo(path, memoize=False, env=hardened(os.environ) | ceiling(path, os.environ))
+    at that path: calls that run on a slot open their view from the slot itself, pinned to the verified `git_dir`
+    (git_porcelain's `pins`: `<slot>/.git` is never read again, any other path is `NotARepo`)."""
+    pins = None if git_dir is None else {path: git_dir}
+    return RealRepo(path, memoize=False, env=hardened(os.environ) | ceiling(path, os.environ), pins=pins)
 
 
-def remotes(path: Path) -> Repo:
+def remotes(path: Path, *, git_dir: Path | None = None) -> Repo:
     """`checkouts` with a bounded transport (PUSH_TIMEOUT): the publication's view of the person's checkout. Hooks stay
     off (no `pre-push`), no push bar is added, and the person's own Git config and credentials apply; git_porcelain's base
     environment never prompts, so a locked key fails instead of hanging."""
-    return RealRepo(path, memoize=False, env=hardened(os.environ) | ceiling(path, os.environ), remote_timeout=PUSH_TIMEOUT)
+    pins = None if git_dir is None else {path: git_dir}
+    env = hardened(os.environ) | ceiling(path, os.environ)
+    return RealRepo(path, memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, pins=pins)
 
 
 FILE_MODES = ("100644", "100755")  # a tree entry that is a regular file; 120000 is a symlink, 160000 a submodule

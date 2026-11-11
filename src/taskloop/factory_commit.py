@@ -2,9 +2,10 @@
 
 Git and the slot file port only: no factory.db (the verifier stores what this module finds). The only factory module
 that calls `stage` or `record`. The slot pointer is checked before any Git call on the slot and again right before each
-of the two Git writes; the agent's own commit cannot happen under the sandbox, so a moved HEAD is adopted only when it is
-this attempt's own trailer commit from a crash before its recording. The caller's `quiet` is asked right before each Git
-write too: the worker gone and this attempt still the reservation's holder. `GitUnavailable` and `Unreadable` propagate.
+of the two Git writes, and every Git view of the slot is pinned to the Git directory that first check verified; the
+agent's own commit cannot happen under the sandbox, so a moved HEAD is adopted only when it is this attempt's own trailer
+commit from a crash before its recording. The caller's `quiet` is asked right before each Git write too: the worker gone
+and this attempt still the reservation's holder. `GitUnavailable` and `Unreadable` propagate.
 """
 
 from collections.abc import Callable
@@ -54,9 +55,9 @@ def _observed(checkouts: Checkouts, files: SlotFiles, admission: Admission) -> S
     return state
 
 
-def _redirected(files: SlotFiles, admission: Admission, root: Path) -> bool:
+def _redirected(files: SlotFiles, admission: Admission, state: SlotState) -> bool:
     found = pointer(files, Path(admission.slot_path))
-    return found is None or found.root != root
+    return found is None or found.root != state.root or found.gitdir != state.gitdir
 
 
 def trailer(admission: Admission) -> str:
@@ -76,24 +77,25 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
         return Committed(base) if head == base else Unsettled("head_moved")
     if head != base:
         return Committed(head) if _ours(checkouts(state.root), head, base, admission) else Unsettled("head_moved")
-    return _commit(checkouts, files, admission, state.root, base, answer, quiet)
+    return _commit(checkouts, files, admission, state, base, answer, quiet)
 
 
 def _commit(
-    checkouts: Checkouts, files: SlotFiles, admission: Admission, root: Path, base: str, answer: AnswerState, quiet: GitQuiet
+    checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, answer: AnswerState, quiet: GitQuiet
 ) -> Settled:
     """Step 4 (the listed paths, Git's own files near them, ignored files), then step 5: stage exactly the listed paths
     and commit them with the agent's message and this attempt's trailer, `quiet` and the pointer checked before each Git
-    write."""
-    slot = checkouts(Path(admission.slot_path)).worktree(Path(admission.slot_path))  # slot calls run from the slot, under its ceiling
+    write. Every slot call runs from the slot, under its ceiling, pinned to the Git directory `state` verified."""
+    path = Path(admission.slot_path)
+    slot = checkouts(path, git_dir=state.gitdir).worktree(path)
     refused = refusal(slot, files, admission, base, answer)
     if refused is not None:
         return refused
-    blocked = _blocked(quiet, files, admission, root)
+    blocked = _blocked(quiet, files, admission, state)
     if blocked is not None:
         return blocked
     slot.stage(answer.paths, literal=True)
-    blocked = _blocked(quiet, files, admission, root) or _foreign(checkouts, admission, answer)
+    blocked = _blocked(quiet, files, admission, state) or _foreign(checkouts, admission, answer, state.gitdir)
     if blocked is not None:
         return blocked
     made = slot.record(f"{answer.message}\n\n{trailer(admission)}", paths="staged", hooks=False)
@@ -104,17 +106,17 @@ def _commit(
     raise NotSettled("git:HookRejected")  # cannot happen with hooks off: unknown, never a verdict
 
 
-def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, root: Path) -> Unsettled | None:
+def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, state: SlotState) -> Unsettled | None:
     """Why the next Git write may not run: the caller's `quiet` (a live worker could rewrite `.git` between the check
     and the write; another attempt took the reservation over), then the slot pointer."""
-    return quiet() or (Unsettled("redirected") if _redirected(files, admission, root) else None)
+    return quiet() or (Unsettled("redirected") if _redirected(files, admission, state) else None)
 
 
-def _foreign(checkouts: Checkouts, admission: Admission, answer: AnswerState) -> Unsettled | None:
+def _foreign(checkouts: Checkouts, admission: Admission, answer: AnswerState, gitdir: Path) -> Unsettled | None:
     """`record` commits the whole index: any staged path the answer did not list (a person's, or an earlier attempt's
     left staged by a superseded verify) is `staged`, nothing committed."""
     path = Path(admission.slot_path)
-    extra = sorted(set(staged(checkouts(path), path)) - set(answer.paths))
+    extra = sorted(set(staged(checkouts(path, git_dir=gitdir), path)) - set(answer.paths))
     return Unsettled("staged", bounded(extra)) if extra else None
 
 
@@ -191,7 +193,8 @@ def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commi
         return state.root
     if problem != "dirty":
         return Unsettled(problem)
-    return Unsettled("uncommitted", listing(checkouts(Path(admission.slot_path)), Path(admission.slot_path)))
+    path = Path(admission.slot_path)
+    return Unsettled("uncommitted", listing(checkouts(path, git_dir=state.gitdir), path))
 
 
 def leftovers(
@@ -208,6 +211,7 @@ def leftovers(
             return Unsettled("unborn" if state.head is None else "branch")
         if state.head != base:
             return None
-        return refusal(checkouts(Path(admission.slot_path)).worktree(Path(admission.slot_path)), files, admission, base, answer)
+        path = Path(admission.slot_path)
+        return refusal(checkouts(path, git_dir=state.gitdir).worktree(path), files, admission, base, answer)
     found = clean_at(checkouts, files, admission, end_commit or base)
     return found if isinstance(found, Unsettled) else None

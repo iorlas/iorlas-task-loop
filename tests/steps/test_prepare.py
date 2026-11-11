@@ -277,8 +277,8 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
         return inspect_task(TaskBinding(TaskScope(backlog), Path(tracker_root)), client, task)
 
     claims = Claims(tmp_path / "artifacts")
-    admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, lambda _path: repo, claims.claim, claims.unclaim,
-                              lambda: 10, lambda _slot_path: True)
+    admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, lambda _path, /, *, git_dir=None: repo,
+                              claims.claim, claims.unclaim, lambda: 10, lambda _slot_path: True)
     return admission.admit(AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, "m", "high", "workspace-write", 100)), claims
 
 

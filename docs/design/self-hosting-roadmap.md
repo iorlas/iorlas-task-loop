@@ -91,7 +91,7 @@ remote.
 
 | Item | Why for self-hosting | Needed by |
 |---|---|---|
-| **Pinned `git_dir`** in `git_porcelain` ([.7](tl-8bh9.4.3.1.7/plan.md) section 4(a), HIGH residual): pin `GIT_DIR`/`GIT_WORK_TREE` from the verified value, never re-read `<slot>/.git` | B2 adds a writable root outside the slot. That reopens the place `/tmp` was excluded to remove: a Git directory the agent can create outside the slot, swapped into the pointer between check and Git call. Running tests also means more background processes. | B2 |
+| **Pinned `git_dir`** in `git_porcelain` ([.7](tl-8bh9.4.3.1.7/plan.md) section 4(a), HIGH residual): pin `GIT_DIR`/`GIT_WORK_TREE` from the verified value, never re-read `<slot>/.git`. **Closed** (tl-8bh9.14.2): git-porcelain 0.14.0 (`git-porcelain-v0.14.0`, `RealRepo(pins=...)`), pinned here; every slot view uses the verified G | B2 adds a writable root outside the slot. That reopens the place `/tmp` was excluded to remove: a Git directory the agent can create outside the slot, swapped into the pointer between check and Git call. Running tests also means more background processes. | B2 |
 | **Git read timeout** per call (.7 section 4(b), [.5](tl-8bh9.4.3.1.5/plan.md)) | A FIFO or a stuck file system hangs a local Git read with no bound; an unattended loop must not hang. | M4 |
 | `core.sshCommand` honoured ([.12](tl-8bh9.4.3.1.12/plan.md) finding 3) | Only if the person's push key is selected by `core.sshCommand`. | when needed |
 | beads-client child env per call ([.9](tl-8bh9.4.3.1.9/plan.md)) and a `ClaimClient` contract fake | Hygiene; the per-process scrub works today. | later |
