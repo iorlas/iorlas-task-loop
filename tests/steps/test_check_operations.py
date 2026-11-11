@@ -33,6 +33,8 @@ from taskloop.operations import (
 )
 from taskloop.publish import PublishResult
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
+from taskloop.step_guide import CHECKS_GUIDE, GUIDE
+from taskloop.step_render import human
 
 ENTRY = (7, "entry-start", "boot")
 REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/unused"), "m", "high", 30)
@@ -212,6 +214,15 @@ def test_an_abandon_that_stops_half_way_says_so_and_its_rerun_finishes(
     assert implement_result is None or found.detail.endswith("The checks attempt was released first.")
     rerun = release(rig, True, Releases(results=[AlreadyReleased("s0", "unclaimed", True)]), Releases())
     assert isinstance(rerun, ReleasedTask) and rerun.checks is not None
+
+
+def test_a_check_still_running_is_guided_as_a_checks_attempt_never_with_the_agent_slot_guide(rig: Rig) -> None:
+    rig.start()
+    held = NotReleased("unsettled", "check_running", "The check slow (process group 9) still runs")
+    found = release(rig, False, Releases(), Releases(results=[held]))
+    assert isinstance(found, Failed) and found.word == "unsettled:check_running" and found.checks
+    lines = human("release", found, None)
+    assert CHECKS_GUIDE["unsettled"] in lines and GUIDE["check_running"] in lines and GUIDE["unsettled"] not in lines
 
 
 def test_without_a_checks_attempt_the_release_is_the_implement_attempt_s(rig: Rig) -> None:

@@ -172,6 +172,8 @@ CHECKS_GUIDE = {
     "group a `Check:` line names (`ps -o pid=,lstart=,command= -g <pgid>`) must work in the slot (`lsof -a -p <pid> -d cwd`). "
     "Stop only the pids you verified, the check groups first, then the entry; then rounds or `tl step start` relaunch it (it "
     "concludes `expired`), or `tl step release --abandon`.",
+    "unsettled": "A process of the checks attempt still holds its slot (the word after `unsettled:` names it); nothing "
+    "changed. Once it ends, `tl step release` again.",
     "release": "The checks concluded; their slot is still held (the last entry or `tl step release` says why: `held:check_running` "
     "waits for a check's process group, `held:slot_dirty` for files a person removes). Once the entry is gone each round "
     "retries the settled release (`check release ...`); `tl step release` does it by hand; `--abandon` also gives the task back.",

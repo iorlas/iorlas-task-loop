@@ -93,7 +93,8 @@ class Publish(Protocol):
 @dataclass(frozen=True)
 class Failed:
     """Every refusal and unknown in one shape; `detail` is diagnostic only. `admitted`: this start admitted the attempt
-    before its launch failed, so the tracker claim and the slot are held (re-running `tl step start` retries the launch)."""
+    before its launch failed, so the tracker claim and the slot are held (re-running `tl step start` retries the launch).
+    `checks`: a checks attempt's refusal (its words are guided by `step_guide.CHECKS_GUIDE` where they differ)."""
 
     kind: FailureKind
     reason: str
@@ -101,6 +102,7 @@ class Failed:
     claim_leaked: bool = False
     slots: tuple[SlotView, ...] = ()
     admitted: bool = False
+    checks: bool = False
 
     @property
     def word(self) -> str:
@@ -226,7 +228,7 @@ type Quiet = frozenset[tuple[str, str, str, str]]  # (task, action, word, attemp
 class Round:
     """`tl step next`: the moves in the order performed; `stopped`, the word that ended admission early; `logged`, False
     when a round-log line could not be written; `written`, the keys of its moves and of its stopped word
-    (`("", "stopped", word, "")`) now in the round log (written now, or before and unchanged): the next round's `quiet`,
+    (`("", "stopped", word, "moves=<n>")`) now in the round log (written now, or before and unchanged): the next round's `quiet`,
     empty when any write failed so that the next round writes the state again."""
 
     backlog: str
@@ -491,7 +493,7 @@ def release_task(
     row = None if ended is not None and ended.claim != "kept" else row  # the abandon went past its checks half
     first = None if row is None else checks.release(row.key, abandon)
     if isinstance(first, NotReleased):
-        return Failed(first.kind, first.reason, first.detail)
+        return Failed(first.kind, first.reason, first.detail, checks=True)
     went = None if row is None or first is None else ReleasedTask(backlog, task_id, row.key.attempt_id, first)
     if went is not None and not abandon:
         return went

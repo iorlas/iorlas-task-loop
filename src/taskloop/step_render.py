@@ -34,7 +34,7 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
             lines = [f"{command}: {result.word}", *([result.detail] if result.detail else [])]
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
             named = "`tl step release --abandon`" in result.detail  # the detail names the action (`HALF_DONE`, `UNCLAIMING`)
-            lines += [] if named else [GUIDE[each] for each in (kind, reason) if each in GUIDE]
+            lines += [] if named else [guide(each, checks=result.checks) for each in (kind, reason) if each in GUIDE]
             return lines + ([f"Admitted: {HELD} Re-run `tl step start` to retry the launch."] if result.admitted else [])
         case Started():
             entry = "" if result.entry is None else f"; entry pid {result.entry[0]}"

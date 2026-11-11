@@ -11,14 +11,15 @@ Claimed work goes before new work (.16 3.6): the advance takes free slots before
 admission's ready read carries it; an advance checks no label, takes no claim, and reads the tracker once per task (still
 in progress for the factory's actor). Advance and admission read the tracker only when factory.db has an adopted slot
 without a reservation row. Repeated rounds
-(`rounds`) pass the previous round's `Round.written` keys as `quiet` (an identical move is not written again) and a
-`stopping` port asked before each move (the graceful stop: no further move, `stopped=interrupted`).
+(`rounds`) pass the previous round's `Round.written` keys as `quiet` (an identical move is not written again; the skip
+lines of an admission that did not read the ready rows this round stay quiet too) and a `stopping` port asked before each
+move (the graceful stop: no further move, `stopped=interrupted`).
 """
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Final
+from typing import Final, get_args
 
 from taskloop.attempt import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
@@ -48,7 +49,7 @@ from taskloop.operations import (
 )
 from taskloop.publish import publish_word
 from taskloop.round_log import INTERRUPTED, fixed, ident, stamped
-from taskloop.selection import order
+from taskloop.selection import Skip, order
 from taskloop.slot_release import NotReleased, release_word
 from taskloop.task import TaskInspectionError
 from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, leaked_claim, ready_rows
@@ -61,6 +62,8 @@ STOPS: Final = frozenset({
 # The advance's own stop: only words about the round's inputs, store or slots. `task`, `input`, `checkout` and
 # `constraint` come from one claimed task's stored facts (its tracker root, its repository, its row) and are its skip.
 ADVANCE_STOPS: Final = frozenset({"no_free_slot", "choices", "deadline", "expired", "database", "schema"})
+# The admission phase's own skip words (`selection.order`): their lines stand while a round does not read the ready rows.
+RANKED_SKIPS: Final = frozenset(get_args(Skip.__value__))
 # re-running is safe; a single task's unsettled must not stop admission or back off the loop
 STOPPING_UNKNOWN: Final = frozenset(UNKNOWN_KINDS) - {"unsettled"}
 
@@ -105,13 +108,14 @@ def _key(move: Move) -> tuple[str, str, str, str]:
 
 class _Trail:
     """The round's moves in the order performed, each also appended to the round log as fixed words only, unless it is
-    in `quiet`; a failed write never changes the round, it only clears `logged`."""
+    in `quiet`; a failed write never changes the round, it only clears `logged`. `ranked`: admission read and ordered the
+    ready rows this round (else the previous round's admission skips are carried on as written, unchanged)."""
 
     def __init__(self, ports: RoundPorts, backlog: str, quiet: Quiet | None) -> None:
         self.ports, self.backlog, self.quiet = ports, backlog, quiet
         self.moves: list[Move] = []
         self.written: set[tuple[str, str, str, str]] = set()
-        self.logged, self.wrote = True, False
+        self.logged, self.wrote, self.ranked = True, False, False
 
     def _write(self, key: tuple[str, str, str, str], *words: str) -> None:
         if self.quiet is not None and key in self.quiet:
@@ -132,8 +136,11 @@ class _Trail:
         self._write(_key(move), ident(move.task_id), *step, move.action, *words, *([ident(move.attempt_id)] if move.attempt_id else []))
 
     def close(self, stopped: str) -> Round:
-        """The closing line, unless quiet: no move line written and the same stopped word as the previous round."""
-        key = ("", "stopped", stopped, "")
+        """The closing line, unless quiet: no move line written and the same line (move count and stopped word) as the
+        previous round's."""
+        if not self.ranked and self.quiet is not None:  # a round with no free slot never reaches the ready rows
+            self.written |= {key for key in self.quiet if key[1] == "skip" and key[2] in RANKED_SKIPS}
+        key = ("", "stopped", stopped, f"moves={len(self.moves)}")
         if self.wrote and self.quiet is not None and key in self.quiet:
             self.quiet = self.quiet - {key}  # a round that wrote a move line always closes it
         self._write(key, "round", f"moves={len(self.moves)}", *([f"stopped={fixed(stopped)}"] if stopped else []))
@@ -312,6 +319,7 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
     # abandoned once its claim is no longer kept: a half-done checks abandon (claim still kept) is `attempted`
     attempts = {each.task_id: each.release is not None and each.release.claim != "kept" for each in current}
     ordered, skipped = order(rows, ancestry(ports.ready, rows), attempts, ACTOR)
+    trail.ranked = True
     ids = {each.task_id: (each.attempt_id, each.step) for each in current}
     for task_id, reason in skipped:
         attempt, step = ids.get(task_id, ("", ""))

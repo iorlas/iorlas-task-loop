@@ -158,6 +158,21 @@ The plan agent answered `unchanged` (`collected reused`); B was abandoned again.
 6. `check` takes about 1 s on this machine (cached ruff/pyrefly/import-linter; log file times agree). `lsof` is not
    installed on this host: `readlink /proc/<pid>/cwd` served.
 
+## Resolutions (2026-11-11, after the smoke)
+
+1. Fixed: a new task branch is cut at the plan attempt from the local `main`'s tip (no fetch; `target` without a local
+   `main`); an existing branch is resumed as it is; D stays the park point and must be in the branch
+   ([.15 section 17](../tl-8bh9.4.3.1.15/plan.md), decided there, open to veto). The runbook's `P` no longer moves the
+   slot. `failed:offline-only:undefined` itself was the plan's `undefined` rule as designed (plan section 7): a name
+   `main` requires that X's profile lacks.
+2. Fixed: a round that never reads the ready rows (no free slot, a stop) carries the previous round's admission skip
+   keys (`attempted`, `abandoned`, `assigned`, `ancestry`) into its `written`, so `skip abandoned` is written once.
+3. As designed (recorded above and in the runbook).
+4. Fixed: the closing line's quiet key is its whole text (`moves=<n>` and the stopped word), so the first round with
+   no move after one with moves writes `round moves=0`, whatever the stopped word.
+5. Fixed: `tl step release` of a checks attempt marks its refusal (`Failed.checks`), and the guides come from
+   `guide(word, checks=True)`: `unsettled` has a checks text (a process of the checks attempt holds the slot).
+
 ## Runbook corrections made with this file
 
 1. Section 1: X descends from the free slot's D; `P` also detaches the free slot at the new `main`.
