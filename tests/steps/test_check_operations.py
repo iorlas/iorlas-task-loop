@@ -175,6 +175,9 @@ class Releases:
         self.calls.append((key.attempt_id, abandon))
         return self.results.pop(0) if self.results else Released("s1", None, True, "kept", abandon)
 
+    def release_candidate(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        return self.release(key, abandon, me)
+
 
 def release(rig: Rig, abandon: bool, implement: Releases, checks: Releases) -> ReleasedTask | Failed:
     return release_task(AttemptStore(lambda: rig.bench.con), implement, checks, "tasks", "tl-1", abandon=abandon)

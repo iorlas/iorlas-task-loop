@@ -56,7 +56,7 @@ ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step star
 STATUS_KEYS = {
     "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process",
     "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release", "published",
-    "checks",
+    "checks", "land",
 }
 REPEAT = AttemptView(
     "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
@@ -70,7 +70,8 @@ ABANDONED = AttemptView(
 FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, "failed"), Path("/a/d/setup-2.log"))
 RUNNING_SETUP = SetupShown(SetupRow(3, D, "f" * 64, 1, OwnedProcess(5, 5, "s", "b"), None), Path("/a/d/setup-3.log"))
 RELEASE = ["step", "release", "tl-1", "--backlog", "tasks"]
-FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned", "checks"}
+FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned", "checks", "land",
+         "candidate"}
 X, T = "a" * 40, "b" * 40
 PUBLISH = ["step", "publish", "tl-1", "--backlog", "tasks"]
 PUBLISHED = {"status", "backlog", "task", "attempt_id", "commit", "remote_head"}
@@ -563,7 +564,7 @@ def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, c
     assert ("Run one scheduling round: settle existing attempts, advance claimed tasks whose step is done to the next step "
             "(no label check), start approved ready tasks in the free slots left") in shown
     assert "read only when a new task is taken; a claimed task advances without it" in shown
-    assert "steps built: plan, implement, check; publishes task/<id>; no merge or land" in shown
+    assert "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round" in shown
 
 
 def test_next_refuses_an_unusable_tracker_root_and_a_missing_database(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

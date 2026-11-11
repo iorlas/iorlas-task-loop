@@ -207,7 +207,7 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _
             trail.add(_checks_released(ports, each, each.checks.row.key))
         case "wait":
             trail.add(Move(task, "report", "running", attempt, step=step))
-        case "publish" | "advance":
+        case "publish" | "advance" | "land" | "landed":  # only the person's `tl step land` lands (`rounds-never-land`)
             return
         case "done" if succeeded(each.result):
             return

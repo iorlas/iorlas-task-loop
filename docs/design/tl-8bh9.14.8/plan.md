@@ -1159,3 +1159,115 @@ words and printability, the rerun closing once unblocked.
 
 Code lines after the repairs: `land` 283, `land_close` 56, `tracker_client` 90; `test_land_close` 207. **Not verified**:
 the `bd close --force` advice is not run by the factory (by design); bd versions other than 1.3.1's refusal words.
+
+## 29. As built: L5 (tl-8bh9.14.8.6)
+
+The command surface, status and words of the land, and the M3 runbook; nothing of the land operation changed (no edit
+to `land`, `land_check`, `land_push`, `land_close`, `land_summary`, `land_store`). M3 is not reached: the [M3 live
+smoke](live-smoke.md) has not run. Code lines by the policy counter: `cli_step` 191 (+27), `operations` 366 (+20),
+`attempt_status` 210 (+8), `show_render` 102 (+34), `step_render` 122 (+10), `result_data` 132 (+10), `step_guide` 190
+(+6), `check_release` 219 (+2), `round` 256 (+0, one `case` widened), `land_status` 41, `land_guide` 80, `land_render`
+47, `land_data` 45 (all new); `tests/cli/test_land_cli` 172 and `tests/steps/test_land_status` 192 (new),
+`test_checks_round` 330 (+35), `test_check_operations` 234 (+3), `test_step_cli` 592 (+2), `test_cli` 58 (+1),
+`test_check_status` 136 (+0). Largest new function: `show_render._candidate` (16).
+
+- **`tl step land TASK --backlog --checkout --minutes [--summary | --withdraw] [--no-change] [--db] [--artifacts]
+  [--json]`** (`cli_step._land`): the flags become one `LandRequest` (`--summary` and `--withdraw` mutually exclusive in
+  the parser: usage, exit 2; `--no-change` with either is the operation's `refused choices`), `open_land`, then
+  `land.land`; the CLI parses and renders only. A later dashboard calls the same `land.land` over its own ports. Exit
+  codes are the step commands' (`exit_codes`, unchanged): 0 `Landed`/`Withdrawn`/`LandSummary`, 1 refused, 3
+  unavailable or unsettled (a rerun is safe); a refusal or unknown goes to stderr. The help names the flags, "never
+  forced", "rounds never land" and the exit codes. `STEP_ONLY` now says "`tl step land` lands, never a round".
+- **Rendering** (`land_render`): `Landed` prints `<how>: <task> (backlog ...) on origin main; <what this call did>`
+  (`pushed`, `already_pushed`, `no_change`, `delivered`, `already_landed`), the candidate (`Candidate N (<id>): S <S>
+  onto origin main at <O>; same tree as X, no checks | no change, no checks | checks passed on S`), `Pushed:`, a
+  `Release:` word when a held release was retried, then `Closed: <word>`, the `Tracker: closed locally, not synced (bd
+  dolt push shares it)` line and `git pull --ff-only`, or (close still to come, `--withdraw` finding S on origin)
+  `Closed: not yet: rerun ...`. `Withdrawn`: the superseded candidate and the way to the abandon. `LandSummary`:
+  `land_summary.lines` and "Nothing was recorded, reserved, pushed or closed". A refusal: `tl step land: <kind>:<reason>`,
+  the detail split on newlines only, each line one printable line (`one_line`), then each guide once for the reason, its
+  first word (`checks:running` is `checks`) and the kind, from `land_guide.LAND_GUIDE` before `step_guide.GUIDE`.
+- **JSON** (`land_data`, additive): `Landed` `{status: <how>, backlog, task, candidate, release, synced: false}`,
+  `Withdrawn` `{status: "withdrawn", backlog, task, candidate}`, `LandSummary` `{status: "summary", ...section 10's
+  facts, message}`; `candidate` is the row's stored facts (no dispatch token, URL or Git output). `tl step show` gains
+  the key `land` (null without a candidate: the candidate, its land process as observed, its latest block's results with
+  log paths); `tl step release` gains `land` (the candidate's release, nested) and `candidate` (this release is a
+  candidate's). No existing key changed.
+- **Status** (`land_status`, read by `attempt_status`; no land module imported): `land_view` reads the latest candidate
+  of a released checks attempt (an abandoned one's too, as history), its latest block's results when it had a slot, and
+  its stored land process (observed only while it holds its slot); `land_next` over the checks view's own word: only
+  `done` goes on; no candidate is `land` after passed checks (`done` after failed ones); a validated or superseded
+  candidate still holding its slot is `release`; delivered and closed is `landed`; anything else (pending, pushable,
+  failed, superseded, delivered not closed) `land`. `Next` gains `land` and `landed`. `round._settle` returns at once on
+  both; a land's `release` reaches the default `report release` move (the checks-release case needs an unreleased
+  checks attempt), so a round never releases a land's slot.
+- **`tl step show`** (`show_render.land_lines`), after the check step's lines: `Land: candidate N (<id>) onto origin
+  main at <O>: <S>; <same tree as X, no checks | no change: ... | same tree as X, checks run again | merged onto a moved
+  main, checks run again>`, `Land required: <names> (origin main at <O>; same as the checks | the checks required ...)`,
+  `Land slot: <slot>, held | released <time>, parked at <D>`, `Land process: <observed> (pid ..., started ...)` while
+  it holds its slot, one `Land check:` line per result (`check_line` with the prefix and the candidate's required names),
+  `Land result: <validation> | failed <reason> | pending`, `Land superseded: <why>`, `Pushed: origin main at <remote
+  head>, <time>` or `Delivered: no change, ...`, `Closed: <time> (<word>)` and the tracker line. Stored words (reason,
+  slot, the process start) are one printable line each. `tl step list` shows the `Next` word only.
+- **Guide** (`land_guide`): `LAND_NEXT` (`land`, `landed`, a land's `release`; `step_guide.guide(word, checks=,
+  land=)` uses it once the view has a candidate) and `LAND_GUIDE`, one entry for every word the land's modules write
+  (a test scans their `Failed(...)` calls) plus the release's `entry_running`, `not_terminal`, `unsettled`: `push_barred`,
+  `not_done`, `not_checked`, `landing`, `not_landing`, `land_running`, `observe`, `no_change`, `changes`, `conflict`,
+  `checks_failed`, `target_moved`, `push_url`, `no_remote`, `branch_moved`, `commit_missing`, `target`, `target_profile`,
+  `no_required`, `remote_rejected`, `remote`, `git`, `tracker`, `store`, `claim_lost`, `closed`, `blocked`, `task`,
+  `checkout`, `choices`, `slot_busy`, `no_free_slot`, `checks`, `changed`, `abandoned`, `profile`, and `unavailable`
+  (the rerun line). Words shared with the step commands keep the land's meaning first. `GUIDE` gains `land`, `landed`
+  (the `Next` word and the abandon's refusal share one text) and `landing`.
+- **Release order** (`operations.release_task`, `_halves`): the latest checks attempt's latest candidate, when it still
+  holds its slot, first (`ChecksRelease.release_candidate`, the L2 `CandidateTarget` on the checks releaser's store),
+  then the checks attempt, then (abandon) the implement attempt. Settled, a candidate's release is the answer (the
+  checks attempt's, already released, changes nothing). A candidate's refusal is `Failed(..., land=True)`, rendered with
+  the land's guide (`refused:entry_running` for a live land process, `refused:not_terminal` for a settled release of a
+  pending one); a pushable or delivered candidate not holding a slot is refused by the checks abandon's `LANDING` fence
+  (`landing`, `landed`), as built in L1. `ReleasedTask` gains `land` and `candidate`; the text prints `released: land
+  candidate <id> for <task> ...` first. A rerun of the abandon never releases the candidate again (it no longer holds
+  its slot). The help of `tl step release` names the order.
+- **Docs**: glossary (`land` as built, `landed`, `Next` words, `T` after a land, `block`/`result sink` for candidates,
+  the land flags and `--abandon`'s order), the roadmap's built table, B6 as-built row and M3 row, INDEX, and the M3
+  runbook [live-smoke.md](live-smoke.md) (section 21's outline made concrete: two slots, a second clone pushing to
+  `main`, eight tasks; the multi-URL step marked blocked until git-porcelain 0.17.0 is pinned).
+- **Contracts**: `land_status`, `land_guide`, `land_render`, `land_data` join the sources of
+  `cli-never-imports-the-attempt-entry`; `land_render` and `land_data` join the command surface the entries never
+  import. `rounds-never-land` holds with `attempt_status` importing `land_status` (it imports `land_store` only).
+
+**Deviations (decided here, open to veto).**
+
+1. **The summary is not printed before every land** (section 10 says "printed before every land"; L4 deviation 5 left
+   it to L5). Printing it would make the CLI run two operations and fetch twice; the person's route is `--summary`, then
+   the land (section 1, the `land` guide, the runbook), and the land's own answer names O, S and whether the checks ran
+   again.
+2. **A pending candidate is `Next: land`, not `release`**, although it holds its slot: section 14's first row read
+   literally would send the person to `tl step release`, which refuses a pending candidate `not_terminal`; `tl step land`
+   resumes it. `release` is for a validated or superseded candidate still holding its slot (section 4 step 5's rule).
+3. Four new modules (`land_status`, `land_guide`, `land_render`, `land_data`) instead of growing `attempt_status`,
+   `step_guide`, `step_render` and `result_data`; `check_line` takes the required names and a prefix.
+4. `Failed` gains `land` (as it has `checks`) for a candidate's refused release; `tl step land`'s own refusals are
+   recognized by the command.
+5. The detail of a land refusal is split on `\n` only (a U+2028 in bd's words becomes a space, never a new line).
+
+**Tests**: `tests/cli/test_land_cli.py` (flags to `LandRequest` for five flag sets, with `open_land` and `land.land`
+replaced; usage errors exit 2 before any port; an absent factory.db refused and not created; help; a real same-tree
+land's lines and JSON keys; each `how`; a close still to come; the summary and a withdrawal with their JSON; six
+refusals and unknowns with their exit code, stderr, land guide before the step commands' and the rerun line exactly for
+`unavailable`; a hostile detail printed printable; a guide for every word the land modules write).
+`tests/steps/test_land_status.py` over `land_bench` (no candidate `land` with its guide; failed checks `done`; a
+same-tree land's exact `Land` lines, `landed`, JSON; a close refused after the push `land` with `Pushed:` and no
+`Closed:`; a validated land's slot, `Land check:` lines and log paths; a pending candidate with its land process running
+or gone; a held release `release` with the land's guide; withdrawn; no change on failed checks `landed`; a hostile stored
+reason printed as one printable line; the release order settled, abandoned, held by a live land process, refused
+`landing`/`landed` with nothing changed, and its rerun). `test_checks_round` (+2: rounds silent on `land` and `landed`,
+a land's `release` reported once and its slot never released, nothing relaunched). Existing tests changed only where a
+passed check's `Next` is now `land` (five round assertions, one status row), the new JSON keys and `STEP_ONLY`.
+Seventeen hand mutations (each reinstalled and run): fifteen failed a test at once; two survived as equivalent and the
+code was simplified instead (the settled early return in `_halves`; the abandoned guard in `land_view`, removed, with an
+assertion that an abandoned candidate shows as history).
+
+**Not verified**: the M3 live smoke (section 21, [runbook](live-smoke.md)); a real terminal's rendering of the land's
+answers beyond the tests' text; the multi-URL push guard (section 27.1 item 4, open: git-porcelain 0.17.0 unreleased);
+whether a remote `pre-receive` refusal maps to `remote_rejected` or `unavailable git` (git-porcelain's classification,
+the runbook records it).

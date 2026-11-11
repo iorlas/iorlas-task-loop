@@ -3,7 +3,9 @@ them to do, and the whole-DB discard steps. Text only; `step_render` places it, 
 
 from pathlib import Path
 
-STEP_ONLY = "steps built: plan, implement, check; publishes task/<id>; no merge or land"
+from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
+
+STEP_ONLY = "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round"
 PUBLISH = ("The step's result is verified but not on `origin` yet: `tl step publish`. A `refused` word names what to fix; "
            "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
            "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl step publish`), rerunning does not "
@@ -154,6 +156,9 @@ GUIDE = {
     "aside yourself; the factory never forces.",
     "remote_rejected": "The remote's policy refused it: push the verified commit by hand (`git push origin <commit>:refs/heads/"
     "task/<id>`, never `--force`) to see why.",
+    "land": LAND_NEXT["land"],
+    "landed": LAND_NEXT["landed"],
+    "landing": LAND_GUIDE["landing"],
 }
 
 # A checks attempt's own words for the `Next` words whose agent text would mislead (S6d): its entry is
@@ -180,8 +185,11 @@ CHECKS_GUIDE = {
 }
 
 
-def guide(word: str, *, checks: bool) -> str:
-    """The guide of a `Next` word: a checks attempt's own (`CHECKS_GUIDE`) where the agent text would mislead."""
+def guide(word: str, *, checks: bool, land: bool = False) -> str:
+    """The guide of a `Next` word: a land's own (`LAND_NEXT`: its `release` is the candidate's slot) once the task has a
+    land candidate, else a checks attempt's own (`CHECKS_GUIDE`) where the agent text would mislead."""
+    if land and word in LAND_NEXT:
+        return LAND_NEXT[word]
     return CHECKS_GUIDE.get(word, GUIDE[word]) if checks else GUIDE[word]
 
 

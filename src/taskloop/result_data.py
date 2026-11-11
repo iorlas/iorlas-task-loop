@@ -7,6 +7,10 @@ from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
 from taskloop.check_status import ChecksView
 from taskloop.checks import differs
+from taskloop.land import Landed
+from taskloop.land_data import land_data, view_data
+from taskloop.land_push import Withdrawn
+from taskloop.land_summary import LandSummary
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     Adoption,
@@ -24,7 +28,8 @@ from taskloop.slots import Adopted, NotAdopted, SlotView
 
 # every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
 # `exit_codes`
-type Result = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
+type StepResult = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
+type Result = StepResult | Landed | Withdrawn | LandSummary
 
 
 def _entry_data(entry: EntryIdentity | None) -> dict[str, object] | None:
@@ -42,7 +47,7 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
         "repeat_reason": each.repeat_reason, "earlier": [attempt_id for attempt_id, _reason in each.earlier],
         "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
-        "published": _published_data(each.published), "checks": _checks_data(each.checks),
+        "published": _published_data(each.published), "checks": _checks_data(each.checks), "land": view_data(each.land),
     }
 
 
@@ -84,7 +89,8 @@ def _released_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[
     status = release_word(found)
     return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id, "slot": found.slot,
             "parked": changed[0], "reservation_removed": changed[1], "claim": found.claim, "abandoned": found.abandoned,
-            "checks": None if result.checks is None else _released_data(result.checks)}
+            "checks": None if result.checks is None else _released_data(result.checks),
+            "land": None if result.land is None else _released_data(result.land), "candidate": result.candidate}
 
 
 def _publish_data(result: PublishedTask) -> dict[str, object]:
@@ -105,6 +111,13 @@ def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
 
 
 def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
+    """`_step_data`'s shapes, and `tl step land`'s answers (`land_data`)."""
+    if isinstance(result, Landed | Withdrawn | LandSummary):
+        return land_data(result)
+    return _step_data(result, admission=admission)
+
+
+def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
     """The one JSON shape per result (a refusal or unknown is `{"error": {kind, reason, message}}`, plus `claim_leaked`,
     `admitted` and `slots` for an admission's, `tl step start`); no dispatch token, no version field. An empty diagnostic
     or result text is null, as every other absent field."""

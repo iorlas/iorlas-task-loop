@@ -10,7 +10,8 @@ A done implement attempt goes to the check step (tl-8bh9.14.6 sections 5, 9, 10;
 re-run after a failed checks attempt, through the `ChecksPorts` admission; an admitted checks attempt, and a racing
 winner, are launched with the checks launcher, never the agent's; so is a round's relaunch (`relaunch_checks`). A task's
 release goes to its latest checks attempt first; its abandon releases that, then abandons the implement attempt (whose
-claim it returns).
+claim it returns). A land candidate of that checks attempt still holding its slot goes before both (tl-8bh9.14.8 section
+13): released settled, or abandoned (superseded `abandoned`) unless it is pushable or delivered (`landing`, `landed`).
 """
 
 import sqlite3
@@ -40,7 +41,8 @@ from taskloop.attempt_types import (
 )
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_status import HALF_DONE, checks_result, latest, route
-from taskloop.check_store import CheckStore
+from taskloop.check_store import ChecksRow, CheckStore
+from taskloop.land_store import LandRow, LandStore
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.machine_config import ConfigRefused
 from taskloop.publish import BranchPublished, NotPublished, PublishResult, publish_word
@@ -86,6 +88,12 @@ class Release(Protocol):
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult: ...
 
 
+class ChecksReleasing(Release, Protocol):
+    """A checks attempt's release, and a land candidate's (`check_release.ChecksRelease`)."""
+
+    def release_candidate(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult: ...
+
+
 class Publish(Protocol):
     def publish(self, key: AttemptKey) -> PublishResult: ...
 
@@ -94,7 +102,8 @@ class Publish(Protocol):
 class Failed:
     """Every refusal and unknown in one shape; `detail` is diagnostic only. `admitted`: this start admitted the attempt
     before its launch failed, so the tracker claim and the slot are held (re-running `tl step start` retries the launch).
-    `checks`: a checks attempt's refusal (its words are guided by `step_guide.CHECKS_GUIDE` where they differ)."""
+    `checks`: a checks attempt's refusal (its words are guided by `step_guide.CHECKS_GUIDE` where they differ); `land`: a
+    land candidate's (guided by `land_guide.LAND_GUIDE` first)."""
 
     kind: FailureKind
     reason: str
@@ -103,6 +112,7 @@ class Failed:
     slots: tuple[SlotView, ...] = ()
     admitted: bool = False
     checks: bool = False
+    land: bool = False
 
     @property
     def word(self) -> str:
@@ -180,13 +190,16 @@ class VerifiedTask:
 @dataclass(frozen=True)
 class ReleasedTask:
     """`tl step release`: what this call changed (`released`) or that nothing was pending (`already_released`); a
-    checks attempt's (`attempt_id`) release names no claim of its own (`kept`: its implement attempt's)."""
+    checks attempt's (`attempt_id`) or land candidate's (`candidate`) release names no claim of its own (`kept`: its
+    implement attempt's)."""
 
     backlog: str
     task_id: str
     attempt_id: str
     result: Released | AlreadyReleased
     checks: ReleasedTask | None = None  # the abandon's first half: the latest checks attempt's release
+    land: ReleasedTask | None = None  # before it: the land candidate still holding its slot
+    candidate: bool = False  # `attempt_id` is a land candidate's
 
 
 @dataclass(frozen=True)
@@ -475,32 +488,52 @@ def verify_task(
 
 
 def release_task(
-    reader: AttemptStore, releaser: Release, checks: Release, backlog: str, task_id: str, *, abandon: bool
+    reader: AttemptStore, releaser: Release, checks: ChecksReleasing, backlog: str, task_id: str, *, abandon: bool
 ) -> ReleasedTask | Failed:
     """`tl step release`: the task's current attempt released (settled), or abandoned (`abandon`). With a checks attempt
-    (section 10) its latest one goes first (`checks`); settled, that is all; an abandon then abandons the implement
-    attempt, which returns the claim. A failure between the two leaves `Next: release`; rerunning finishes it. Once the
-    implement attempt's claim is no longer `kept` and its latest checks attempt is released, that half is done and not
-    reported again: the answer is the implement attempt's (its claim as it is)."""
+    (section 10) its latest one goes first (`checks`), and before it its latest land candidate while that holds its slot;
+    settled, the first of them is all; an abandon then abandons the implement attempt, which returns the claim. A failure
+    between them leaves `Next: release`; rerunning finishes it. Once the implement attempt's claim is no longer `kept` and
+    its latest checks attempt is released, those halves are done and not reported again: the answer is the implement
+    attempt's (its claim as it is)."""
     try:
         found = reader.attempt_of(backlog, task_id)
         row = None if found is None else latest(CheckStore(reader.connect, reader.begin), found[0].attempt_id)
         ended = None if row is None or row.released_at is None or found is None else reader.release_of(found[0])
+        held = None if row is None or row.released_at is None else LandStore(reader.connect, reader.begin).latest(row.key.attempt_id)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     if found is None:
         return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
     row = None if ended is not None and ended.claim != "kept" else row  # the abandon went past its checks half
-    first = None if row is None else checks.release(row.key, abandon)
-    if isinstance(first, NotReleased):
-        return Failed(first.kind, first.reason, first.detail, checks=True)
-    went = None if row is None or first is None else ReleasedTask(backlog, task_id, row.key.attempt_id, first)
-    if went is not None and not abandon:
-        return went
+    halves = _halves(checks, (backlog, task_id), row, held, abandon)
+    if isinstance(halves, Failed):
+        return halves
+    landed, went = halves
+    settled = landed or went
+    if not abandon and settled is not None:
+        return settled
     result = releaser.release(found[0], abandon)
     if isinstance(result, NotReleased):
         return Failed(result.kind, result.reason, result.detail + ("" if went is None else " The checks attempt was released first."))
-    return ReleasedTask(backlog, task_id, found[0].attempt_id, result, went)
+    return ReleasedTask(backlog, task_id, found[0].attempt_id, result, went, landed)
+
+
+def _halves(
+    checks: ChecksReleasing, task: tuple[str, str], row: ChecksRow | None, held: LandRow | None, abandon: bool
+) -> tuple[ReleasedTask | None, ReleasedTask | None] | Failed:
+    """The land candidate still holding its slot first, then the checks attempt (settled, a released one changes nothing);
+    each released one as its `ReleasedTask`, a refusal of either as `Failed` (the checks attempt's saying the candidate
+    went first)."""
+    land = None if row is None or held is None or not held.holds_slot else checks.release_candidate(held.key, abandon)
+    if isinstance(land, NotReleased):
+        return Failed(land.kind, land.reason, land.detail, land=True)
+    landed = None if land is None or held is None else ReleasedTask(*task, held.key.attempt_id, land, candidate=True)
+    first = None if row is None else checks.release(row.key, abandon)
+    if isinstance(first, NotReleased):
+        before = "" if landed is None else " The land candidate was released first."
+        return Failed(first.kind, first.reason, first.detail + before, checks=True)
+    return landed, None if row is None or first is None else ReleasedTask(*task, row.key.attempt_id, first)
 
 
 def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id: str) -> PublishedTask | Failed:

@@ -18,6 +18,8 @@ from round_bench import Factory, Tracker, scripts, task
 from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess, ProcessObservation
 
+from taskloop import land_store
+from taskloop.admit import issued, reserve
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksAdmission
 from taskloop.check_release import ChecksRelease
@@ -203,7 +205,7 @@ def test_rounds_take_a_task_through_plan_implement_and_its_checks_to_done_with_o
     rig.bodies = ["passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")] and rig.last.stopped == ""
     checks = rig.key("tl-1").attempt_id
-    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "done")}  # a pass writes nothing
+    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "land")}  # a pass writes nothing
     assert rig.entries == [(CHECK_ENTRY_MODULE, "tl-1")] and rig.launched == ["tl-1", "tl-1"]
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.tracker.claims == ["tl-1"]
     assert rig.tracker.beads["tl-1"].status == "in_progress" and rig.logged("tl-1", "check", "advance", "started", checks) == 1
@@ -237,7 +239,7 @@ def test_an_admitted_checks_attempt_is_relaunched_with_the_checks_launcher_only(
     checks = rig.key("tl-1").attempt_id
     assert rig.next_words() == {"tl-1": ("check", "start")}
     assert rig.round() == [("tl-1", "check", "relaunch", "relaunched")] and rig.last.moves[0].attempt_id == checks
-    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "done")}
+    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "land")}
     assert {module for module, _task in rig.entries} == {CHECK_ENTRY_MODULE} and rig.launched == ["tl-1", "tl-1"]
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.logged("tl-1", "check", "relaunch", "relaunched", checks) == 1
 
@@ -256,7 +258,7 @@ def test_two_counted_refusals_stop_the_relaunches_without_stopping_new_work_unti
     rig.now += 1
     by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
     assert isinstance(by_hand, Started) and (by_hand.status, by_hand.step) == ("relaunched", "check")
-    assert rig.next_words()["tl-1"] == ("check", "done") and rig.counted("tl-1") == (None, 0)
+    assert rig.next_words()["tl-1"] == ("check", "land") and rig.counted("tl-1") == (None, 0)
 
 
 @pytest.mark.parametrize(("late", "word"), [("unstartable", "unavailable:start"), ("crash", "relaunched")])
@@ -334,7 +336,7 @@ def test_a_command_outliving_its_dead_entry_is_waited_for_never_relaunched_or_co
         assert rig.round() == [("tl-1", "check", "report", "stuck:hung")] and rig.starts == 1
     rig.groups[pid] = "gone"
     assert rig.round() == [("tl-1", "check", "relaunch", "relaunched")]
-    assert rig.next_words() == {"tl-1": ("check", "done")} and rig.counted("tl-1") == (None, 0)
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.counted("tl-1") == (None, 0)
 
 
 @pytest.mark.parametrize("body", ["unreleased", "releasing"])
@@ -347,7 +349,7 @@ def test_a_concluded_checks_attempt_whose_entry_died_before_its_release_is_relea
         assert rig.round() == [("tl-1", "check", "report", "running")]
         rig.alive.clear()
     assert rig.round() == [("tl-1", "check", "release", "released")] and rig.logged("tl-1", "check", "release", "released", checks) == 1
-    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "done")} and rig.starts == 1
+    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "land")} and rig.starts == 1
 
 
 def test_a_held_checks_release_is_retried_each_round_logged_once_and_released_once_its_group_ends(rig: Checking) -> None:
@@ -360,3 +362,53 @@ def test_a_held_checks_release_is_retried_each_round_logged_once_and_released_on
     rig.groups[901] = "gone"
     assert rig.round(rig.last.written) == [("tl-1", "check", "release", "released")]
     assert rig.round(rig.last.written) == [("tl-1", "check", "report", "failed:check:lingering")] and rig.starts == 1
+
+
+def _candidate(rig: Checking, *, slot: bool) -> AttemptKey:
+    """tl-1's land candidate 1 of its passed checks attempt, as `tl step land` inserts it: validated `same_tree` with no
+    slot, or pending in s1 with its reservation (then concluded `passed` by the test)."""
+    checks = rig.key("tl-1").attempt_id
+    repo_id = rig.con.execute("SELECT repo_id FROM slot WHERE name='s1'").fetchone()[0]
+    x = rig.checks_commit(rig.key("tl-1"))
+    with begin_immediate(rig.con):
+        key = AttemptKey("candidate", "candidate-token", issued(rig.con, repo_id, ("s1",)) + 1 if slot else 0)
+        if slot:
+            reserve(rig.con, repo_id, "s1", key)
+        d = rig.con.execute("SELECT parked FROM checks_attempt WHERE attempt_id=?", (checks,)).fetchone()[0]
+        land_store.insert(rig.con, land_store.LandAdmitted(key, checks, 1, x, x, True, (("check", "c" * 64),), "s1" if slot else None,
+                                                           d if slot else None, rig.now + 600 if slot else None,
+                                                           None if slot else "same_tree", rig.now))
+    return key
+
+
+def test_rounds_never_land_never_relaunch_and_never_release_a_land_s_slot(rig: Checking) -> None:
+    """`land` and `landed` are silent; a land's `release` (its candidate validated, still holding its slot) is reported,
+    logged once, never released by the round; nothing is relaunched or admitted for the task."""
+    implemented(rig)
+    rig.bodies = ["passed"]
+    rig.round()
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == []
+    key = _candidate(rig, slot=True)
+    lands = land_store.LandStore(lambda: rig.con)
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == []  # pending: `tl step land` resumes it
+    lands.conclude(key, "passed", None, rig.now)
+    reserved = rig.con.execute("SELECT slot,attempt_id FROM reservation").fetchall()
+    assert rig.round(frozenset()) == [("tl-1", "check", "report", "release")] and rig.last.stopped == "no_free_slot"
+    assert rig.round(rig.last.written) == [("tl-1", "check", "report", "release")]
+    assert rig.logged("tl-1", "check", "report", "release", rig.key("tl-1").attempt_id) == 1
+    assert rig.con.execute("SELECT slot,attempt_id FROM reservation").fetchall() == reserved == [("s1", "candidate")]
+    row = lands.row(key)
+    assert row is not None and row.released_at is None and rig.starts == 1 and rig.tracker.claims == ["tl-1"]
+
+
+def test_a_landed_task_is_silent_in_every_round(rig: Checking) -> None:
+    implemented(rig)
+    rig.bodies = ["passed"]
+    rig.round()
+    key = _candidate(rig, slot=False)
+    lands = land_store.LandStore(lambda: rig.con)
+    lands.record_delivery(key, rig.checks_commit(rig.key("tl-1")), rig.now)
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == []  # delivered, not closed: the land closes it
+    lands.record_close(key, "closed", rig.now)
+    assert rig.next_words() == {"tl-1": ("check", "landed")} and rig.round() == [] and rig.round() == []
+    assert rig.starts == 1 and rig.launched == ["tl-1", "tl-1"] and rig.tracker.claims == ["tl-1"]

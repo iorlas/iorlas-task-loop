@@ -43,6 +43,10 @@ source_modules =
     taskloop.land_push
     taskloop.land_close
     taskloop.land_summary
+    taskloop.land_status
+    taskloop.land_guide
+    taskloop.land_render
+    taskloop.land_data
 forbidden_modules =
     taskloop.attempt_entry
     taskloop.check_entry
@@ -102,6 +106,8 @@ forbidden_modules =
     taskloop.machine_config
     taskloop.rounds
     taskloop.interrupts
+    taskloop.land_render
+    taskloop.land_data
 
 [importlinter:contract:no-runtime-mechanisms]
 name = The foundation has no direct network or process mechanisms

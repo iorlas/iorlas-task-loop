@@ -8,6 +8,7 @@ then that checks attempt's (`check_status`); the backlog, task, order and public
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import partial
 from itertools import pairwise
 from pathlib import Path
 from typing import Literal
@@ -21,6 +22,7 @@ from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResu
 from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result, commands_seen
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.land_status import LandView, land_next, land_view, with_logs
 from taskloop.operations import Clock, Failed
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
 from taskloop.steps import CHECK, following
@@ -31,7 +33,9 @@ type Stuck = Literal[
     "stuck:checks_refused",
 ]
 type Next = (
-    Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "advance", "done", "unknown"] | Stuck
+    Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "advance", "done", "unknown", "land",
+            "landed"]
+    | Stuck
 )
 type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a step still to settle
 
@@ -71,6 +75,7 @@ class AttemptView:
     release: ReleaseRow | None = None  # how it ended its reservation, once released
     published: PublishedRow | None = None  # its verified commit on origin's task/<id>, once published
     checks: ChecksView | None = None  # the latest checks attempt whose fields these are (section 9), None for an agent attempt
+    land: LandView | None = None  # its latest land candidate (tl-8bh9.14.8 section 14), None before the first
 
 
 @dataclass(frozen=True)
@@ -139,17 +144,20 @@ def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> Attempt
         rows = store.of_attempt(row.key.attempt_id)
         results = store.results(rows[-1].key) if rows else ()
         setup = SetupStore(reads.store.connect, reads.store.begin).latest(rows[-1].key) if rows else None
+        land = land_view(reads.store, rows[-1], reads.observe) if rows else None
     except StoreUnavailable:
         return replace(view, next="unknown")
-    return _swapped(reads, view, rows, results, None if setup is None else setup.unsettled) if rows else view
+    return _swapped(reads, view, rows, results, None if setup is None else setup.unsettled, land) if rows else view
 
 
 def _swapped(
-    reads: StatusPorts, view: AttemptView, rows: tuple[ChecksRow, ...], results: tuple[ResultRow, ...], setup: OwnedProcess | None
+    reads: StatusPorts, view: AttemptView, rows: tuple[ChecksRow, ...], results: tuple[ResultRow, ...], setup: OwnedProcess | None,
+    land: LandView | None = None,
 ) -> AttemptView:
     """Section 9's field swap: the latest checks attempt's fields; each earlier one `re-run`, then the implement attempt
     `advanced`, newest first. No worker, leftovers or repeat: a checks attempt has no agent. Its registered commands are
-    observed only for an admitted attempt whose entry does not run (`checks_next`)."""
+    observed only for an admitted attempt whose entry does not run (`checks_next`). A released one's `done` goes on to
+    its land (`land_status.land_next`)."""
     latest, claim = rows[-1], "kept" if view.release is None else view.release.claim
     entry, expired = _observed(reads, latest.entry), reads.clock() >= latest.deadline
     stopped = latest.phase == "admitted" and latest.released_at is None and entry not in ("running", "unknown")
@@ -157,10 +165,10 @@ def _swapped(
     earlier = (*((each.key.attempt_id, "re-run") for each in reversed(rows[:-1])), (view.attempt_id, "advanced"))
     return replace(
         view, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
-        result=checks_result(latest), deadline_passed=expired, next=checks_next(latest, entry, expired, commands),
+        result=checks_result(latest), deadline_passed=expired, next=land_next(checks_next(latest, entry, expired, commands), latest, land),
         entry_process=latest.entry,
         worker=None, leftovers=(), number=latest.number, previous_attempt_id=None, repeat_reason=None, earlier=earlier,
-        release=checks_release(latest, claim), checks=ChecksView(latest, results),
+        release=checks_release(latest, claim), checks=ChecksView(latest, results), land=land,
     )
 
 
@@ -245,7 +253,8 @@ def _checks_shown(reads: StatusPorts, files: EvidenceFiles, view: AttemptView, c
     logs = tuple(None if row.conclusion == "undefined" else files.check_path(key, row.block, row.name) for row in checks.results)
     latest = SetupStore(reads.store.connect, reads.store.begin).latest(key)
     setup = None if latest is None else SetupShown(latest, directory / f"setup-{latest.run}.log")
-    shown = replace(view, last_entry=files.last_entry(key), checks=replace(checks, logs=logs))
+    land = None if view.land is None else with_logs(view.land, partial(files.check_path, view.land.row.key))
+    shown = replace(view, last_entry=files.last_entry(key), checks=replace(checks, logs=logs), land=land)
     return Shown(shown, directory, directory / "entry.log", setup)
 
 

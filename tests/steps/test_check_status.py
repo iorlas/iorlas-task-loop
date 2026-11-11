@@ -97,7 +97,7 @@ def concluded(conclusion: str, released: bool = True, abandoned: bool = False) -
     (refused(2), "gone", 10, "stuck:checks_refused"),
     (concluded("failed", released=False), "gone", 10, "release"),
     (lambda s: (registered(s), concluded("failed", released=False)(s)), "matching", 500, "wait"),  # releasing its slot
-    (concluded("passed"), "gone", 10, "done"),
+    (concluded("passed"), "gone", 10, "land"),  # tl-8bh9.14.8: a pass goes on to the land
     (concluded("failed"), "gone", 10, "done"),
     (concluded("failed", abandoned=True), "gone", 10, "release"),
     (lambda s: s.bench.con.execute("UPDATE checks_attempt SET required='[]'"), "gone", 10, "unknown"),  # an unreadable row

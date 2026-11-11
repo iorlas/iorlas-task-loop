@@ -5,6 +5,10 @@ from pathlib import Path
 
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
+from taskloop.land import Landed
+from taskloop.land_push import Withdrawn
+from taskloop.land_render import COMMAND, land_lines
+from taskloop.land_summary import LandSummary
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     UNCLAIMING,
@@ -18,7 +22,7 @@ from taskloop.operations import (
     VerifiedTask,
 )
 from taskloop.publish import is_published, publish_word
-from taskloop.result_data import Result
+from taskloop.result_data import Result, StepResult
 from taskloop.show_render import show_lines
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
@@ -27,6 +31,14 @@ from taskloop.tracker import leaked_claim
 
 
 def human(command: str, result: Result, db: Path | None) -> list[str]:
+    """`tl step land`'s answers and refusals, and a land candidate's refused release, are `land_render`'s; the rest
+    `_step_lines`'."""
+    if isinstance(result, Landed | Withdrawn | LandSummary) or (isinstance(result, Failed) and (command == COMMAND or result.land)):
+        return land_lines(command, result)
+    return _step_lines(command, result, db)
+
+
+def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
     """`db` (the resolved factory.db) goes into the discard steps; None only when the config itself was refused."""
     stuck = [] if db is None else [discard(db)]
     match result:
@@ -48,7 +60,7 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
         case Shown(view=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             ended = each.release
-            told = guide(each.next, checks=each.checks is not None)
+            told = guide(each.next, checks=each.checks is not None, land=each.land is not None)
             told = told if ended is None or not ended.abandoned else GUIDE["abandoned"] if each.next == "start" else UNCLAIMING
             steps = [told, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
@@ -92,7 +104,7 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
 
 def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:
     """A verdict with the release and the publication that followed it; a release with each change on its own line (an
-    abandon's checks attempt first); a publication."""
+    abandon's land candidate first, then its checks attempt); a publication."""
     if isinstance(result, PublishedTask):
         found = result.result
         done = publish_word(found)
@@ -103,11 +115,13 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
         held += [f"Publish: {result.published}"] + ([] if is_published(result.published) else [PUBLISH])
         return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
     found, task = result.result, result.task_id
-    first = [] if result.checks is None else _released_lines(result.checks)
+    first = [] if result.land is None else _released_lines(result.land)
+    first += [] if result.checks is None else _released_lines(result.checks)
+    what = f"{'land candidate' if result.candidate else 'attempt'} {result.attempt_id} for {task} (backlog {result.backlog})"
     if not isinstance(found, Released):
-        return [*first, f"{release_word(found)}: attempt {result.attempt_id} for {task} (backlog {result.backlog}); nothing changed",
-                f"Claim: {found.claim}{'; abandoned' if found.abandoned else ''}"]
-    lines = [*first, f"{release_word(found)}: attempt {result.attempt_id} for {task} (backlog {result.backlog})"]
+        claim = f"Claim: {found.claim}{'; abandoned' if found.abandoned else ''}"
+        return [*first, f"{release_word(found)}: {what}; nothing changed", claim]
+    lines = [*first, f"{release_word(found)}: {what}"]
     lines += [f"Slot {found.slot} parked at {found.parked}" if found.parked else f"Slot {found.slot}: no Git write"]
     lines += [f"Reservation of {found.slot} removed"] if found.reservation_removed else []
     claims = {"kept": "Claim kept", "unclaimed": "Claim returned to the tracker",

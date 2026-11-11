@@ -240,6 +240,10 @@ class ChecksRelease:
         """Release the checks attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
         return self.release_of(ChecksTarget(self.store), key, abandon, me)
 
+    def release_candidate(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        """Release a land candidate's reservation (settled) or abandon it, on the same store (`tl step release`)."""
+        return self.release_of(CandidateTarget(LandStore(self.store.connect, self.store.begin)), key, abandon, me)
+
     def release_of[R](self, target: ReleaseTarget[R], key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         """Release `target`'s reservation (settled) or abandon it; `me` is the calling entry's (or land process's) identity."""
         try:
