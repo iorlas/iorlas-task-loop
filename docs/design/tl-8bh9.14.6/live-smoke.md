@@ -1,6 +1,7 @@
 # M2 live smoke: the check step in the rounds (owner-run, after S6e)
 
-**Status: not run.** Milestone M2 of the [roadmap](../self-hosting-roadmap.md) is reached when this run passes: a
+**Status: passed 2026-11-11** at `4e004864c`, with three runbook corrections ([findings](m2-smoke-findings.md)).
+Milestone M2 of the [roadmap](../self-hosting-roadmap.md) is reached when this run passes: a
 `tl step rounds` loop from a runner worktree takes a small task of **this repository** through plan, implement and the
 **check step**, which runs the profile's checks on the implement commit X on the host and shows each check's result
 (design: [plan.md](plan.md) sections 1, 6, 7, 9, 17; the S6e as-built section says what the round does). Linux only.
@@ -46,12 +47,14 @@ bytes, mise trust, `codex` and `bd` on `PATH`, network for `setup`).
 ## 1. The smoke profile on the scratch `main`
 
 The required names come from the local `main` of `$M2/repo` at each checks admission; the commands from the profile at
-X, which a task branch takes from the scratch `main` when the task is cut. So each variant is committed to the local
-`main` **and** pushed to the scratch origin **before** its task is created, and the next variant only after the previous
-task's checks concluded. Every smoke check except `offline-only` is guarded by `test -n "$UV_OFFLINE" ||`: the implement
-agent's sandbox shell has `UV_OFFLINE=1` and passes it at once, while the check step on the host (no `UV_OFFLINE`) runs
-the real command. `offline-only` is the reverse: it passes in the sandbox and fails on the host, a deterministic failing
-required check the agent cannot see.
+X. X descends from the free slot's HEAD (D), not from `main`: the plan attempt cuts `task/<id>` from D, and the factory
+never fetches or moves a free slot (`prepare.py`; M2 finding 1). So each variant is committed to the local `main`,
+pushed to the scratch origin **and** the free slot is detached at the new `main` (`P` does all three once `$SLOT` is
+set) **before** its task is created, and the next variant only after the previous task's checks concluded and
+released. Every smoke check except `offline-only` is guarded by `test -n "$UV_OFFLINE" ||`: the implement agent's
+sandbox shell has `UV_OFFLINE=1` and passes it at once, while the check step on the host (no `UV_OFFLINE`) runs the real
+command. `offline-only` is the reverse: it passes in the sandbox and fails on the host, a deterministic failing required
+check the agent cannot see.
 
 ```bash
 P() {  # P base|failing|orphan: main's profile, committed and pushed to the scratch origin
@@ -68,11 +71,12 @@ if variant == "failing":
     checks.append({"name": "offline-only", "argv": ["sh", "-c", 'test -n "$UV_OFFLINE"'], "timeout": 30})
     required.append("offline-only")
 if variant == "orphan":
-    checks.append({"name": "orphan", "argv": guard("sleep 600 & sleep 600"), "timeout": 5})
+    checks.append({"name": "orphan", "argv": guard("sleep 600 & true"), "timeout": 30})
 with open(path, "w") as out:
     json.dump({"setup": [["just", "bootstrap"]], "checks": checks, "required": required, "target": "main"}, out, indent=2)
 EOF
-  G -C "$M2/repo" commit -qam "smoke profile: $1" && G -C "$M2/repo" push -q origin main
+  G -C "$M2/repo" commit -qam "smoke profile: $1" && G -C "$M2/repo" push -q origin main &&
+    { [ -z "${SLOT:-}" ] || G -C "$SLOT" checkout -q --detach main; }   # the free slot at the new main
 }
 P base
 TL profile show --checkout "$M2/repo" --at HEAD    # setup just bootstrap; checks check, test, report, slow; required check, test
@@ -188,21 +192,22 @@ with `claim unclaimed`; `bd show "$B"`: `open`, no assignee. Rounds then write `
 and never advance or re-admit it (`TL step list` shows `Next: start`). `TL step start "$B" ...` by hand would admit it
 afresh at plan (D4): do not, unless testing that.
 
-## 6. A timed-out check with a surviving background process: `lingering`
+## 6. A check that leaves a background process: `lingering`
 
 `P orphan` (main's required names are `check`, `test` again), then cut task C (`C=$(bd create "Test the checks guide
 words" --silent)`, asking for tests of `step_guide.guide` with `checks=True` and `False`, label `auto`). `orphan` is
-`sh -c 'sleep 600 & sleep 600'` with a 5 s timeout: its timeout stops the command and the backgrounded `sleep` survives
-the stop, so the result is `lingering` (S6b: a process left after any end):
+`sh -c 'sleep 600 & true'`: the command exits 0 at once and leaves the backgrounded `sleep` alive in its process
+group, so the result is `lingering` (S6b: a process left after any end). A **timeout** does not give `lingering`: the
+stop (`stream_proc.tree.stop_tree`) signals the group and every descendant it noted beforehand, `setsid` ones included,
+so `sh -c 'sleep 600 & sleep 600'` and `sh -c 'setsid sleep 600 & sleep 600'` with a 5 s timeout both end `orphan
+timed_out` with nothing left, and the block goes on (M2 finding 3):
 
 - `TL step show "$C"`: `Check: orphan lingering, ..., process group <pgid> (not required)`, `Result: collected
   failed:orphan:lingering`, no `Released:` line, `Next: release`; the entry log ends `... release=held:check_running`;
-  `rounds.log` has `<C> check report release <c>` once. If the result is `orphan timed_out` instead (the stop took the
-  whole group: plan section 17 step 7's first case), record it as a finding: the block then goes on and the attempt may
-  pass.
-- The person stops the survivor: `ps -o pid=,lstart=,command= -g <pgid>` lists the `sleep 600` processes; `lsof -a -p
-  <pid> -d cwd` shows the slot; `kill -TERM <each verified pid>`. Then `TL step release "$C" --backlog m2`: `released`;
-  `Next: done` with the failed result; the slot is clean at D.
+  `rounds.log` has `<C> check report release <c>` once.
+- The person stops the survivor: `ps -o pid=,lstart=,command= -g <pgid>` lists the `sleep 600` process; `lsof -a -p
+  <pid> -d cwd` (or `readlink /proc/<pid>/cwd`) shows the slot; `kill -TERM <each verified pid>`. Then `TL step
+  release "$C" --backlog m2`: `released`; `Next: done` with the failed result; the slot is clean at D.
 - Revert the profile afterwards: `P base`.
 
 ## 7. Paste back

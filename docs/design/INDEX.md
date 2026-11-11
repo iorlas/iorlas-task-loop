@@ -26,6 +26,7 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.4.3.1.16.2](tl-8bh9.4.3.1.16.2/plan.md) | S5e: the environment for running checks and tests in the agent sandbox (block B2) | design; S5e-1, S5e-2 built |
 | [tl-8bh9.4.3.1.16.2 live smoke](tl-8bh9.4.3.1.16.2/live-smoke.md) | S5e and M1 end to end (plan, round advance, implement): owner-run live smoke steps | M1 passed; S5e checklist partly |
 | [tl-8bh9.4.3.1.16.2 M1 smoke](tl-8bh9.4.3.1.16.2/m1-smoke-findings.md) | M1 end-to-end live smoke: plan, round advance, implement on a scratch remote (2026-11-11) | evidence |
+| [tl-8bh9.14.6 M2 smoke](tl-8bh9.14.6/m2-smoke-findings.md) | M2 live smoke: the check step in the rounds (pass, fail, lingering, interrupt, abandon) on a scratch remote (2026-11-11) | evidence |
 | [tl-8bh9.4.3.1.2](tl-8bh9.4.3.1.2/plan.md) | Admit one plan attempt (admission only) | built |
 | [tl-8bh9.4.3.1.3](tl-8bh9.4.3.1.3/plan.md) | Managed slots: the smallest slot state admission needs | built |
 | [tl-8bh9.4.3.1.4](tl-8bh9.4.3.1.4/plan.md) | Registered attempt entry: launch an admitted attempt into a surviving process | built |
