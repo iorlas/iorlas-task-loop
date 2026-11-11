@@ -796,3 +796,77 @@ each with tests that fail without it (seven hand mutations, each failing a test)
 
 Code lines after the repairs: `land_store` 200, `factory_schema` 208, `check_admit` 209 (+8), `admit` 283 (+1);
 `test_land_store` 373, `test_check_store` 470, `test_check_admit` 159 (+21).
+
+## 26. As built: L2 (tl-8bh9.14.8.3)
+
+The shared validation, the renewal move and the generalized release; nothing of L3-L5 (no land operation, CLI, push,
+close or status: nothing creates or validates a candidate outside tests). A refactor for checks and agent attempts:
+every existing test passes unchanged, `test_check_entry` included (not one line of it changed). Code lines by the policy
+counter: `validate` 104 (new), `check_entry` 131 (-83), `check_release` 203 (+61), `claim_lease` 69 (+7),
+`attempt_entry` 224 (-6), `land_store` 208 (+8); `test_validate` 105 (new), `test_check_release` 291 (+82),
+`test_claim_lease` 97 (+5), `conftest` 190 (+16, the `candidate_on_slot` fixture). Largest function: `enter` (29).
+
+- **`claim_lease.renewal`**: moved verbatim from `attempt_entry`; both entries import it from `claim_lease`, and so will
+  `land`. The `Renewal`/`Renew` types stay in `environment` (their owner; `claim_lease` imports them), so no import of
+  them moves.
+- **`validate.py`**: `check_entry`'s steps 4-12 moved verbatim, each function taking `(work: Checking, target: Target)`
+  where it took the registered entry: `validate` (the old `_checked`, with its exception mapping), `reconcile` (public:
+  the claim-lost path calls it alone), `_expired`, `_profiled`, `_at`, `_environment`, `_block`; `Verdict`, `Ended`,
+  `RELAUNCHED` and `concluded` moved with them. `Target(key, repo_id, slot_path, commit, required, deadline, main,
+  profiled)`: the plan's `moved` parameter is `main: str | None` (the commit `main` was at when the names were read;
+  None watches nothing) and `profiled` writes the digest to the owner's row. `check_entry` builds the checks target
+  (`_target`: X, `row.target` as `main`, `CheckStore.profiled`) and keeps the registration, lock, keep-alive, counting,
+  conclusion and release. A candidate's target is S, `main` None, `LandStore.profiled`; `CheckSink` and the setup runs
+  take its key unchanged (`RESULT_HELD`, the three-way `setup_store.HELD`).
+- **Old and new flows compared step by step** (checks): the reconcile, deadline, profile read, `main` read (the view is
+  built only when `main` is set; for a checks target always, as before), completed-block conclusion, detach, setup,
+  block number, digest write, block, `main` reread and conclusion run in the same order with the same arguments
+  (`row.key`, `found.slot_path`, `row.repo_id`, `row.commit`, `row.required`, `row.deadline`, `row.target`), and the same
+  three exception types map to the same words. The release: the same reads (`CheckStore.row`, then `held_slot`,
+  `running`, `unsettled` on one connection), the same order of answers (`absent`; an earlier release and the
+  abandon's flip; `changed` without the reservation; `not_terminal`; entry, setup, checks stop proof; lock; reset; park;
+  the fenced record and `free` in one transaction; scratch) and the same detail texts.
+- **`check_release`**: `ReleaseTarget[R]` (a protocol: `store`, `read` to a `Holding[R]` or `refused absent`,
+  `released` for an earlier release, `refusal` before the stop proof, `record_release` in the transaction) with
+  `ChecksTarget` (the old checks behavior) and `CandidateTarget` (over `LandStore`). `ChecksRelease.release(key,
+  abandon, me)` keeps its signature (the checks target); `ChecksRelease.release_of(target, key, abandon, me)` serves
+  either. The candidate's stop proof is `entry_stopped` with the land process stored on the candidate (`me` passing:
+  the land releasing its own slot), its setup run and its block's unsettled results, boot-aware; its reset is to S, its
+  park at D; its record is `land_store.record_release` (`True` read as `released`/`abandoned`, `False` as `changed`).
+  `land_store` gains reads only: `LandStore.row(key)` and `held_slot(con, key)`.
+- **Contracts**: `validate` joins the sources of `cli-never-imports-the-attempt-entry` and of
+  `entry-never-imports-the-command-surface`. `rounds-never-land` and the land modules as sources wait for L3, which
+  creates the modules.
+
+**Deviations (decided here, open to veto).**
+
+1. The candidate target lives in `check_release`, not `land_store` (the plan's "`land_store`'s" target): its refusals
+   and words are the release's; `land_store` stays the writer and reader of its table.
+2. A candidate's abandon is refused before anything changes: delivered `refused landed`, pushable `refused landing`
+   (with the L1 guides), read from the row before the stop proof, not only by the record's fence (section 25 deviation
+   8 for candidates). A checks attempt's abandon keeps its `LANDING` refusal in the record (unchanged behavior).
+3. A settled release of a candidate needs a validation (`refused not_terminal` while pending); a pushable or delivered
+   candidate still holding its slot is released settled (the land's own release after a pass).
+4. A candidate validated with no slot (`same_tree`, `no_change`) reads as `refused absent` ("No such land candidate
+   holding a slot"); a released candidate answers `AlreadyReleased` in both modes (`abandoned` when superseded
+   `abandoned`): the checks attempt's abandon that follows carries `LANDING`.
+5. The protocol's record method is `record_release`: the policy's Git-write matcher counts any `.record` attribute as a
+   Git write (`record` is `Worktree.record`).
+
+**Tests**: `test_validate.py` (a candidate's target over `candidate_on_slot`: a passing block at S with results and
+setup runs under the candidate key, the digest on the candidate, the checks attempt untouched, `main` moved during the
+block not watched; a failed required check; a surviving check of a killed land process `checks:running`/`checks:unknown`
+before any read; an interrupted block repeated whole; a completed block concluded as it stands, then `expired`; the
+reconcile alone). `test_check_release` (five new test functions): a candidate refused `not_terminal` while pending, then reset to S, parked
+at D, recorded once, the checks attempt untouched; the abandon of a pending or failed candidate superseded `abandoned`;
+the stop proof in both modes (the stored land process running or unknown, its check, its setup) and the land's own
+identity passing; the abandon of a pushable or delivered candidate refused with nothing changed and its settled release
+allowed; absent and store unavailable. `test_claim_lease` (+1): `renewal` from its new owner, a faulted beat
+`unrenewed`. Ten hand mutations each fail a test: in `validate` drop the reconcile, the completed-block reading, the
+deadline, the digest write (`test_check_entry`), and watch `main` when None (`test_validate`); in `check_release` drop the
+entry stop proof, the candidate's `landing` and `landed` refusals, its `not_terminal`, and the reset to S.
+
+**Not verified**: no real-Git or real-process run of a candidate's validation or release (`test_check_release_real`
+covers the checks target only); `validate` and `CandidateTarget` have no production caller until L3; whether
+import-linter accepts a forbidden contract naming modules that do not exist yet (not tried: L3 adds them with the
+modules).

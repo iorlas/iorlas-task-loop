@@ -1,7 +1,8 @@
 """The checks release (S6c, tl-8bh9.14.6 section 10) over a factory.db file (the `on_slot` checks attempt), the semantic Git
 fake's slot, scripted entry and command observations and the real slot lock: the reset to X before the park, the stop
 proof in both modes, the refusals that change nothing, the abandon of a released checks attempt, and the task's abandon
-order against the implement attempt's `SlotRelease`."""
+order against the implement attempt's `SlotRelease`. The same release of a land candidate (`CandidateTarget`, tl-8bh9.14.8
+slice L2, over `candidate_on_slot`): reset to S, parked at D, its stop proof with the stored land process."""
 
 import dataclasses
 import sqlite3
@@ -10,16 +11,17 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS, REQUIRED, FakeSlotFiles, PinnedViews
+from doubles import CANDIDATE, CHECKS, REQUIRED, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store
 from stream_proc import OwnedProcess
 
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
-from taskloop.check_release import ChecksRelease
+from taskloop.check_release import CandidateTarget, ChecksRelease
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.factory_schema import SCHEMA
+from taskloop.land_store import LandStore
 from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody, lock_path
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult, SlotRelease, release_word
@@ -76,6 +78,10 @@ class Bench:
     def release(self, abandon: bool = False, me: EntryIdentity | None = None, key: AttemptKey = CHECKS) -> ReleaseResult:
         released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30, self.setup_seen, self.scratch)
         return released.release(key, abandon, me)
+
+    def candidate(self, abandon: bool = False, me: EntryIdentity | None = None) -> ReleaseResult:
+        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30, self.setup_seen, self.scratch)
+        return released.release_of(CandidateTarget(LandStore(lambda: self.con)), CANDIDATE, abandon, me)
 
     def implement(self) -> ReleaseResult:
         """The task's abandon, second half: the implement attempt's own `SlotRelease` (its release row is `kept`)."""
@@ -277,3 +283,106 @@ def test_an_abandon_of_released_checks_with_a_pushable_or_delivered_land_candida
     found = bench.release(abandon=True)
     assert isinstance(found, NotReleased) and found.word == word and "tl step land" in found.detail
     assert bench.stored() == ([], (30.0, bench.d, 0))
+
+
+@pytest.fixture
+def lands(candidate_on_slot: tuple[Path, str], slot: FakeWorktree, checkouts: PinnedViews, slot_files: FakeSlotFiles) -> Generator[Bench]:
+    """`bench` over the pending candidate: `x` is S here (the commit its slot is reset to)."""
+    path, s = candidate_on_slot
+    con = Store(SCHEMA).open_rw(path)
+    assert con is not None
+    found = Bench(con, slot, checkouts, slot_files)
+    found.x = s
+    yield found
+    con.close()
+
+
+def candidate_columns(b: Bench) -> tuple[object, ...]:
+    """The reservations, then the candidate's release and supersession columns."""
+    held = b.con.execute("SELECT slot,attempt_id FROM reservation").fetchall()
+    return held, b.con.execute("SELECT released_at,parked,superseded FROM land_candidate").fetchone()
+
+
+CANDIDATE_HELD = ([("s1", "candidate")], (None, None, None))
+
+
+def test_a_validated_candidate_is_reset_to_exactly_s_then_parked_at_d_and_freed(lands: Bench) -> None:
+    """The land's own settled release after its block: refused while pending, then reset, parked, recorded once."""
+    lands.at_x()
+    lands.slot.write_file("coverage.xml", "left by a check")
+    found = lands.candidate()
+    assert isinstance(found, NotReleased) and found.word == "refused:not_terminal" and lands.holds == 0
+    assert candidate_columns(lands) == CANDIDATE_HELD and lands.slot.read_file("coverage.xml") == "left by a check"
+    LandStore(lambda: lands.con).conclude(CANDIDATE, "passed", None, 20)
+    assert lands.candidate() == Released("s1", lands.d, True, "kept", False)
+    assert (lands.head(), lands.slot.branch(), lands.slot.read_file("coverage.xml")) == (lands.d, None, None)
+    assert candidate_columns(lands) == ([], (30.0, lands.d, None)) and lands.emptied == [lands.slot.path]
+    assert lands.candidate() == AlreadyReleased("s1", "kept", False) and lands.holds == 1
+    assert lands.stored()[1] == (6.0, lands.d, 0)  # the checks attempt is not touched
+
+
+@pytest.mark.parametrize("failed", [False, True], ids=["pending", "failed"])
+def test_an_abandon_releases_a_pending_or_failed_candidate_and_supersedes_it_abandoned(lands: Bench, failed: bool) -> None:
+    lands.at_x()
+    if failed:
+        LandStore(lambda: lands.con).conclude(CANDIDATE, "failed", "test:failed", 20)
+    assert lands.candidate(abandon=True) == Released("s1", lands.d, True, "kept", True)
+    assert candidate_columns(lands) == ([], (30.0, lands.d, "abandoned"))
+    assert lands.candidate(abandon=True) == AlreadyReleased("s1", "kept", True)
+
+
+def running_land_check(b: Bench) -> None:
+    store = CheckStore(lambda: b.con)
+    store.start(CANDIDATE, store.block(CANDIDATE), 0, "check", REQUIRED[0][1], 600, 10)
+    store.registered(CANDIDATE, 1, 0, COMMAND)
+
+
+def running_land_setup(b: Bench) -> None:
+    setups = SetupStore(lambda: b.con)
+    setups.start(CANDIDATE, 1, b.x, "e" * 64, 10)
+    setups.registered(CANDIDATE, 1, 0, SETUP)
+
+
+@pytest.mark.parametrize("abandon", [False, True], ids=["settled", "abandon"])
+@pytest.mark.parametrize(("arrange", "word"), [
+    (lambda b: setattr(b, "entry", "matching"), "refused:entry_running"),
+    (lambda b: setattr(b, "entry", "unknown"), "unavailable:observe"),
+    (lambda b: (running_land_check(b), b.seen.update({600: "alive"})), "held:check_running"),
+    (lambda b: (running_land_setup(b), b.seen.update({700: "alive"})), "held:setup_running"),
+], ids=["land_running", "land_unknown", "check_running", "setup_running"])
+def test_the_candidate_stop_proof_holds_its_slot_in_both_modes_and_changes_nothing(
+    lands: Bench, arrange: Callable[[Bench], object], word: str, abandon: bool
+) -> None:
+    """The land process stored on the candidate (boot-aware, as an entry), its setup run and its block's results."""
+    lands.at_x()
+    candidates = LandStore(lambda: lands.con)
+    assert candidates.hold(CANDIDATE, ENTRY) == "accepted"
+    arrange(lands)
+    candidates.conclude(CANDIDATE, "failed", "test:failed", 20)
+    assert release_word(lands.candidate(abandon)) == word
+    assert candidate_columns(lands) == CANDIDATE_HELD and lands.holds == 0 and lands.head() == lands.x
+    if word == "refused:entry_running":
+        assert release_word(lands.candidate(abandon, me=ENTRY)) == "released"  # the land releasing its own slot
+
+
+@pytest.mark.parametrize(("delivered", "word"), [(False, "refused:landing"), (True, "refused:landed")])
+def test_an_abandon_of_a_pushable_or_delivered_candidate_holding_its_slot_is_refused_before_anything_changes(
+    lands: Bench, delivered: bool, word: str
+) -> None:
+    """S may already be on origin, or is: the abandon waits for a land or `--withdraw`; the settled release still frees the slot."""
+    lands.at_x()
+    candidates = LandStore(lambda: lands.con)
+    candidates.conclude(CANDIDATE, "passed", None, 20)
+    if delivered:
+        candidates.record_delivery(CANDIDATE, lands.x, 25)
+    found = lands.candidate(abandon=True)
+    assert isinstance(found, NotReleased) and found.word == word and "tl step land" in found.detail
+    assert candidate_columns(lands) == CANDIDATE_HELD and lands.holds == 0 and lands.head() == lands.x
+    assert lands.candidate() == Released("s1", lands.d, True, "kept", False)
+
+
+def test_an_unknown_candidate_is_absent_and_a_closed_store_unavailable(lands: Bench) -> None:
+    lands.con.execute("UPDATE land_candidate SET dispatch_token='other'")
+    assert release_word(lands.candidate()) == "refused:absent"
+    lands.con.close()
+    assert release_word(lands.candidate()) == "unavailable:store"

@@ -139,6 +139,14 @@ def of_checks_on(con: sqlite3.Connection, checks: str) -> tuple[LandRow, ...]:
     return tuple(_row(row) for row in con.execute(LOADED + " WHERE l.checks_attempt_id=? ORDER BY l.number", (checks,)).fetchall())
 
 
+def held_slot(con: sqlite3.Connection, key: AttemptKey) -> str | None:
+    """The slot path of the reservation the candidate holds at its key's generation (validated or not); None when it holds
+    none (released, validated with no slot, or never this key's)."""
+    found = con.execute("SELECT (SELECT s.path FROM slot s WHERE s.repo_id=q.repo_id AND s.name=q.slot) " + CANDIDATE_RESERVED,
+                        astuple(key)).fetchone()
+    return None if found is None else as_nullable_text(found[0])
+
+
 def insert(con: sqlite3.Connection, admitted: LandAdmitted) -> None:
     """The candidate's row, in the caller's write transaction (with `admit.reserve` when it validates in a slot). Fenced:
     the checks attempt the latest of its implement attempt, released, not abandoned and `passed` (any conclusion for
@@ -185,6 +193,12 @@ def record_release(
 
 class LandStore(StoreConnection):
     """The fenced writes and the reads of land candidates."""
+
+    def row(self, key: AttemptKey) -> LandRow | None:
+        """One candidate by its key (the release's read)."""
+        with self._connection() as con:
+            found = con.execute(LOADED + " WHERE l.candidate_id=? AND l.dispatch_token=? AND l.generation=?", astuple(key)).fetchone()
+        return None if found is None else _row(found)
 
     def latest(self, checks: str) -> LandRow | None:
         """The checks attempt's latest candidate (its highest `number`); None before the first."""
