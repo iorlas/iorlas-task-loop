@@ -684,3 +684,57 @@ An independent review of 872e6d2c9 found six defects; all are repaired, each wit
 | 4 | The entry checked `after_commit` only before the take | Also after the take (park back to D, `branch_moved`) and in the base check of a relaunched attempt 1 already on its branch |
 | 5 | The advance reserved a slot although the branch had lost X | `admit_next` checks read-only, before the input or any row, that the start each free slot would take (local, else remote-tracking, else D) contains X: `branch_moved` |
 | 6 | Doc drift; `round.advance` collided with the glossary's `advance` | `prepare` docstring (a missing `after_commit` is `branch_moved`); the round's operation is `round.run_round`; the Q1 process deviation above |
+
+## 14. As built: S5c (the round advances, 2026-11-11)
+
+Tracker tl-8bh9.4.3.1.16.4. Built after S5e-2 (D2: the implement agent runs its checks in a prepared slot). No schema,
+exit code or JSON key change; `rounds.log` gains the `advance` action and the `skip` words below.
+
+- **The advance phase** (`round._advance`, between settle and admit, section 3.6): the snapshot's attempts whose `Next`
+  is `advance`, oldest `release.released_at` first (task id breaks a tie), each through `operations.start(...,
+  advancing=<attempt>)` with the round's checkout, model, effort and minutes, and no label. With every adopted slot
+  reserved (`_full`) the phase returns `no_free_slot` with no tracker read. **Claimed work first** (the plan's decision,
+  .15 Q3): admission runs only after the advance phase and only into the slots it left; a stop word of the advance
+  (`no_free_slot`, admission's `STOPS`, an unknown) ends admission too. New work cannot be starved for long: each claimed
+  task advances at most once per step and `STEPS` has two; claimed work waits behind new work never.
+- **One operation, fenced** (chosen here): the round calls `start`, the operation `tl step start` runs, with
+  `advancing`: it acts only when the task's current attempt is still that done attempt (`_Advance`), else it refuses
+  `abandoned` (abandoned since the snapshot: never a fresh admission, so never a claim or an ingestion without the
+  label) or `changed` (another current attempt, or no longer advanceable). A plain `start` on an abandoned task would
+  admit afresh; the fence is why the round does not call it bare.
+- **Moves and words.** Started: `<task> implement advance <status> <new attempt>` (`started`; `relaunched` when a
+  concurrent start won, `task_attempted`). A refusal about the task: `<task> plan skip <reason> <done attempt>`
+  (`claim_lost`, `not_advanceable`, `branch_moved`, `branch_diverged`, `abandoned`, `changed`, ...). An unknown, a stop
+  word other than `no_free_slot`, or an advance admitted whose launch failed: `<task> plan advance <kind:reason> <done
+  attempt>` (the next round relaunches an admitted one: `implement relaunch`). `no_free_slot` is unwritten, as
+  admission's. Nothing is retried within a round; a skipped task is tried once each round (one `bd show` while a slot is
+  free), and the existing `quiet` set keeps its unchanged line out of `rounds.log`. `environment:*` is the entry's word:
+  the implement attempt stays `admitted`, each round relaunches it once (`implement relaunch relaunched`, written once),
+  two failed setup runs then `refused environment:failed` with no process (S5e), so nothing spins.
+- **Restart.** The round keeps no state: an advance admitted but never launched (the rounds process stopped, or the
+  launch failed) is the implement attempt `admitted` in factory.db, relaunched by the next round's settle; nothing
+  advances twice (`admit_next` sees the plan attempt superseded).
+- **Words.** `Action` gains `advance`; `tl step next` prints the guide of an `advance` move's word too. `GUIDE["advance"]`
+  names the round first and `tl step start` by hand, and says removing the label does not stop a claimed task.
+  `tl step next --help`, `tl step rounds --help` (`ROUNDS`) and `--label`'s help say the round advances claimed tasks
+  whose step is done and that the label is read only when a new task is taken. `rounds.RoundsPorts` docstring names
+  `round.run_round` (the last glossary collision with `advance`).
+
+Tests (pytest functions, fakes through ports, no process): `test_advance.py` (new, 228 code lines) runs the round end to
+end over real SQLite, real admission (`AttemptAdmission`, `NextAdmission`), verify, release and publish, the Git fake with
+its remote, the fake slot setup, a scripted agent the launch port runs at once (the attempt body runs synchronously over
+the fakes; section 10's open point) and a tracker double: plan, verify, advance, implement, `Next: done` with one claim
+and the label removed after the claim; two done tasks and one slot (older release first, the new ready task waits with
+no ready read and no claim, then starts once both advanced); an abandoned task neither advanced nor re-admitted, and an
+abandon racing the snapshot skipped `abandoned`; `claim_lost` skipped, tried and written once; a restart after an
+admitted, unlaunched advance; a failing setup relaunched once per round, written once, two setup runs. `test_round.py`:
+each advance refusal (skip words, `no_free_slot`, `unavailable:tracker`, `refused:checkout`) with what admission does
+after it, the request's choices and no label, `quiet`; every slot reserved: no advance call; the published plan's next
+round advances (it reported `advance` before). CLI help expectations. Mutations (fence removed, admission before the
+advance, no FIFO sort, no free-slot gate) each fail a test (run by hand, not kept).
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 contracts kept); `just test` 1600 passed. Code lines
+(policy counter): source +39 against the estimate of about +35 (`round` 214 to 239, `operations` 268 to 276,
+`step_guide` 126, `cli_step` 162, `step_render` 138); tests +282 (`test_advance` 228, `test_round` 456 to 507,
+`test_step_cli` 590). Live smoke not run: the owner-run M1 end-to-end steps are in
+[live-smoke.md](../tl-8bh9.4.3.1.16.2/live-smoke.md).

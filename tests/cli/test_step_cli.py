@@ -559,7 +559,9 @@ def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, c
     with pytest.raises(SystemExit):
         main(["step", "next", "--help"])
     shown = " ".join(capsys.readouterr().out.split())
-    assert "Run one scheduling round: settle existing attempts, start approved ready tasks" in shown
+    assert ("Run one scheduling round: settle existing attempts, advance claimed tasks whose step is done to the next step "
+            "(no label check), start approved ready tasks in the free slots left") in shown
+    assert "read only when a new task is taken; a claimed task advances without it" in shown
     assert "steps built: plan, implement; publishes task/<id>; no merge or land" in shown
 
 
@@ -673,6 +675,7 @@ def test_rounds_require_every_choice_and_the_help_names_the_stop(missing: str, c
     shown = " ".join(capsys.readouterr().out.split())
     assert "Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot" in shown
     assert "Ctrl-C once stops after the current move, twice exits at once; launched steps keep running." in shown
+    assert "each round advances claimed tasks whose step is done to their next step, then starts approved ready tasks" in shown
 
 
 def test_the_real_opener_refuses_inputs_a_missing_database_and_a_second_rounds_process_before_any_round(

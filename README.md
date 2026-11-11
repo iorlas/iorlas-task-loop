@@ -2,10 +2,10 @@
 
 The successor task factory. Built so far: read-only inspection of Git checkouts and tasks, and the plan step end to
 end, from admitting a ready task into a free slot to publishing its verified plan as `task/<id>` on `origin`; then the
-implement step, advanced by hand (`tl step start`) and published on the same branch; before an implement agent starts,
-its entry resets the slot's environment and runs the repository's `setup` (Linux only). Not built: the agent's access to
-that environment (it still has the plan step's sandbox access), rounds advancing a task, the checks, review and land
-steps, and the dashboard. Nothing merges or lands.
+implement step, advanced by each round (or by hand, `tl step start`) and published on the same branch; before an
+implement agent starts, its entry resets the slot's environment and runs the repository's `setup` (Linux only), and the
+agent runs offline with that environment. Not built: the checks, review and land steps, holds, and the dashboard.
+Nothing merges or lands.
 
 - `tl repo inspect PATH [--json]` reports the local repository identity, common directory, selected checkout and origin.
 - `tl task show TASK_ID --backlog BACKLOG --tracker-root PATH [--json]` reads the explicitly configured Beads tracker,
@@ -18,7 +18,8 @@ steps, and the dashboard. Nothing merges or lands.
 - `tl step start|show|list|verify|release|publish` run, inspect, verify, release (`--abandon` returns the tracker
   claim) and publish one task's current attempt, whatever its step (plan, then implement: `tl step start` on a done plan
   admits the implement step). `tl step next` runs one
-  scheduling round over approved ready tasks; `tl step rounds` runs rounds in the foreground until Ctrl-C. `tl plan` is
+  scheduling round: it settles existing attempts, advances each claimed task whose step is done (no label check), then
+  admits approved ready tasks (`--label`) into the slots left; `tl step rounds` runs rounds in the foreground until Ctrl-C. `tl plan` is
   gone (an unknown command).
 
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to

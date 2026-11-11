@@ -1,11 +1,15 @@
 """`tl step next`: one scheduling round over the existing operations, stateless and idempotent.
 
 Settle each existing attempt of the backlog by its `Next` word (relaunch an admitted attempt whose entry is not running,
-verify, repeat; report the rest), admit eligible ready tasks in priority order into free slots, then publish the verified,
+verify, repeat; report the rest), advance each claimed task whose step is done (`Next: advance`) to its next step, oldest
+release first, then admit eligible ready tasks in priority order into the slots left free, then publish the verified,
 released, unpublished results read at the start. It adds no state, lock, Git write, tracker write or process of its own: its
 only other output is one append-only round-log line per move, never read back. Nothing merges or lands.
 
-Admission reads the tracker only when factory.db has an adopted slot without a reservation row. Repeated rounds
+Claimed work goes before new work (.16 3.6): the advance takes free slots before admission. The label is ingestion's only:
+admission's ready read carries it; an advance checks no label, takes no claim, and reads the tracker once per task (still
+in progress for the factory's actor). Advance and admission read the tracker only when factory.db has an adopted slot
+without a reservation row. Repeated rounds
 (`rounds`) pass the previous round's `Round.written` keys as `quiet` (an identical move is not written again) and a
 `stopping` port asked before each move (the graceful stop: no further move, `stopped=interrupted`).
 """
@@ -139,7 +143,7 @@ def _request(request: NextRequest, task_id: str) -> StartRequest:
 
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
-    """One round: settle, admit, publish. A whole-round refusal (empty label, unreadable store) is `Failed`."""
+    """One round: settle, advance, admit, publish. A whole-round refusal (empty label, unreadable store) is `Failed`."""
     label = request.label.strip()
     if not label:
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
@@ -156,7 +160,8 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
         if ports.stopping():
             return trail.close(INTERRUPTED)
         _settle(ports, request, each, trail)
-    stopped = _admit(ports, request, current, trail)
+    stopped = _advance(ports, request, tuple(each for each in current if each.next == "advance"), trail)
+    stopped = stopped or _admit(ports, request, current, trail)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
     return trail.close(INTERRUPTED if ports.stopping() else stopped)
@@ -167,7 +172,8 @@ def _backlog(listed: Listed, backlog: str) -> tuple[AttemptView, ...]:
 
 
 def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _Trail) -> None:
-    """One existing attempt by its `Next` word: an abandoned one is never re-admitted; `publish` waits for step 3."""
+    """One existing attempt by its `Next` word: an abandoned one is never re-admitted; `advance` waits for the advance
+    phase, `publish` for the last one."""
     task, attempt, step = each.task_id, each.attempt_id, each.step
     abandoned = each.release is not None and each.release.abandoned
     match each.next:
@@ -185,7 +191,7 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _
             trail.add(_verified(ports, request.backlog, each))
         case "wait":
             trail.add(Move(task, "report", "running", attempt, step=step))
-        case "publish":
+        case "publish" | "advance":
             return
         case "done" if succeeded(each.result):
             return
@@ -236,6 +242,40 @@ def _full(store: AttemptStore) -> bool:
         return False
 
 
+def _stops(result: Failed) -> bool:
+    """Admission's stop: an unknown, or a refusal of the round's own inputs, the store or the slots (`STOPS`)."""
+    return result.kind in STOPPING_UNKNOWN or (result.kind == "refused" and result.reason in STOPS)
+
+
+def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView, ...], trail: _Trail) -> str:
+    """The snapshot's done attempts whose step has a following one (`Next: advance`), oldest settled release first (.15
+    Q3): each one's next step admitted into a free slot (one tracker read; no claim, no label) and launched, before any
+    new task. Admission's stop words end both phases (`no_free_slot` unwritten, as admission's); a refusal about one
+    task (`claim_lost`, `not_advanceable`, `branch_moved`, `abandoned`, `changed`) is a `skip` of the done attempt, tried
+    again next round, its unchanged line kept out of the log by `quiet`. With every slot reserved: no tracker call."""
+    if not waiting:
+        return ""
+    if _full(ports.reads.store):
+        return "no_free_slot"
+    for each in sorted(waiting, key=lambda view: (view.release.released_at if view.release else 0.0, view.task_id)):
+        if ports.stopping():
+            return INTERRUPTED
+        result = start(ports.starting, _request(request, each.task_id), advancing=each.attempt_id)
+        if isinstance(result, Started):
+            trail.add(Move(each.task_id, "advance", result.status, result.attempt_id, step=result.step or ""))
+            continue
+        if result.reason == "no_free_slot":
+            return result.reason
+        stop = _stops(result)
+        if stop or result.admitted:  # an unknown, a stop, or the next step admitted but not launched (the next round relaunches)
+            trail.add(Move(each.task_id, "advance", result.word, each.attempt_id, result.detail, each.step))
+        else:
+            trail.add(Move(each.task_id, "skip", result.reason, each.attempt_id, result.detail, each.step))
+        if stop:
+            return result.word
+    return ""
+
+
 def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: _Trail) -> str:
     """Eligible ready tasks in priority order, one start each, until a slot or the round's inputs run out; the word that
     stopped admission early ("" when the candidates ran out). With every slot reserved: `no_free_slot`, no tracker call."""
@@ -264,7 +304,7 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
         if isinstance(result, Started):
             trail.add(Move(row.task_id, "start", result.status, result.attempt_id, step=result.step or ""))
             continue
-        stop = result.kind in STOPPING_UNKNOWN or (result.kind == "refused" and result.reason in STOPS)
+        stop = _stops(result)
         if result.reason != "no_free_slot":
             trail.add(Move(row.task_id, "start", _word(result), detail=result.detail))
         if result.claim_leaked:

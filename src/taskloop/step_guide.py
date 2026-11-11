@@ -16,6 +16,7 @@ HELD = ("The tracker claim stays held, and the slot until the step ends on a cle
         "its attempt, and rounds skip it (`attempted`).")
 ABANDON = "`tl step release --abandon` frees the slot and gives the task back."
 ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot frees; "
+          "each round advances claimed tasks whose step is done to their next step, then starts approved ready tasks; "
           f"the tracker is read only when a slot is free; writes `<artifacts>/rounds.log`; {STEP_ONLY}. Runs in this terminal "
           "until stopped: Ctrl-C once stops after the current move, twice exits at once; launched steps keep running. A move "
           "in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
@@ -36,8 +37,10 @@ GUIDE = {
     "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl step start` admits a fresh "
     "attempt.",
     "publish": PUBLISH,
-    "advance": "The step is verified and on `origin`. The next step starts with `tl step start <task>` after one tracker read "
-    "confirms the task is in progress for taskloop (no new claim, no label check); it starts from that published commit.",
+    "advance": "The step is verified and on `origin`. The next `tl step next` round (or `tl step rounds`) starts the next step "
+    "once a slot is free, before any new task, oldest first; by hand, `tl step start <task>`. Either way one tracker read "
+    "first confirms the task is in progress for taskloop (no new claim, no label check: removing the label does not stop it, "
+    "`tl step release --abandon` does); it starts from that published commit.",
     "done": "Collected: `succeeded` tells whether the step's result was verified.",
     "unknown": "The entry or the store could not be read; run `tl step show` again.",
     "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl step start` admits a "

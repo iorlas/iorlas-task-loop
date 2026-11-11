@@ -19,6 +19,7 @@ from doubles import NoAdvance
 from git_porcelain.testing import FakeWorktree
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
+from taskloop.admit_chain import NextStepRequest
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
@@ -27,6 +28,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
+    Advance,
     Failed,
     Move,
     Publish,
@@ -97,6 +99,18 @@ class Repeats:
         return Started("repeated", backlog, task_id, "next", False, ENTRY, number=2)
 
 
+class Advances:
+    """The advance port answering `result` to every request it records."""
+
+    def __init__(self, result: AdmitResult) -> None:
+        self.result = result
+        self.requests: list[NextStepRequest] = []
+
+    def admit_next(self, request: NextStepRequest) -> AdmitResult:
+        self.requests.append(request)
+        return self.result
+
+
 PARKED = Released("s1", HEAD, True, "kept", False)
 
 
@@ -141,6 +155,7 @@ class Bench:
         self.releaser: Release = self.recorded
         self.publisher: Publish = self.recorded
         self.stopping: Callable[[], bool] = never
+        self.advance: Advance = NoAdvance()
 
     def observe(self, _entry: EntryIdentity) -> Seen:
         """Called while the round reads its snapshot: `during` is another actor acting right after that read."""
@@ -152,7 +167,7 @@ class Bench:
 
     def ports(self) -> RoundPorts:
         reads = StatusPorts(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
-        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, NoAdvance())
+        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance)
         return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, self.ready, self.log, self.stopping)
 
     def round(self, request: NextRequest = REQUEST) -> Round:
@@ -283,16 +298,62 @@ def verified_released(
     return store
 
 
-def test_a_verified_released_plan_is_published_once_then_reported_to_advance(
+def test_a_verified_released_plan_is_published_once_then_advanced_never_before(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
     bench = Bench(registered)
     bench.publisher = BranchPublish(store, checkouts, slot_files, lambda: 40)
-    assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt", step="plan"),)
+    assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt", step="plan"),)  # unpublished: no advance
     assert registered.execute("SELECT count(*) FROM published_branch").fetchone() == (1,)
-    # nothing pushed again; a round reports the advance, the person runs `tl step start` (rounds advance with S5c)
-    assert bench.round().moves == (Move("tl-1", "report", "advance", "attempt", step="plan"),)
+    bench.advance = advances = Advances(AdmitRefused("claim_lost", detail="status open"))  # nothing pushed again: next round advances
+    found = bench.round()
+    assert found.moves == (Move("tl-1", "skip", "claim_lost", "attempt", "status open", "plan"),) and exit_code(found) == 0
+    assert [request.previous.attempt_id for request in advances.requests] == ["attempt"] and bench.launcher.calls == []
+    assert bench.lines[-2].endswith(" tasks tl-1 plan skip claim_lost attempt")
+
+
+@pytest.mark.parametrize("answer, expected, stopped, code", [
+    (AdmitRefused("not_advanceable"), [("tl-1", "skip", "not_advanceable")], "", 0),
+    (AdmitRefused("branch_moved"), [("tl-1", "skip", "branch_moved")], "", 0),
+    (AdmitRefused("branch_diverged"), [("tl-1", "skip", "branch_diverged")], "", 0),
+    (AdmitRefused("no_free_slot"), [], "no_free_slot", 0),
+    (AdmitUnavailable("tracker"), [("tl-1", "advance", "unavailable:tracker")], "unavailable:tracker", 3),
+    (AdmitRefused("checkout"), [("tl-1", "advance", "refused:checkout")], "refused:checkout", 1),
+], ids=lambda value: getattr(value, "reason", getattr(value, "what", None)))
+def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admission_too(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    answer: AdmitResult, expected: list[tuple[str, str, str]], stopped: str, code: int,
+) -> None:
+    """The advance carries the round's checkout and choices and no label; a refusal about the task skips it (admission
+    goes on to the ready task), a stop word ends the advance and admission (no ready read), as admission's own do."""
+    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    ready = FakeTaskReadClient([bead("t-9")], ready=["t-9"])
+    bench = Bench(registered, ready)
+    bench.advance = advances = Advances(answer)
+    found = bench.round(replace(REQUEST, quiet=frozenset()))
+    assert (moves(found), found.stopped, exit_code(found)) == (expected + ([("t-9", "start", "started")] if not stopped else []), stopped,
+                                                               code)
+    sent = advances.requests[0]
+    assert (sent.previous, sent.checkout, sent.model, sent.effort, sent.deadline) == (KEY, Path("/checkout"), "model-m", "effort-e", 1810)
+    assert ready.ready_reads == ([] if stopped else ["auto"]) and bench.launcher.calls == ([] if stopped else ["t-9"])
+    lines = len(bench.lines)
+    bench.round(replace(REQUEST, quiet=found.written))
+    assert len(bench.lines) == lines and len(advances.requests) == 2  # tried again next round, its unchanged line not written
+
+
+def test_with_every_slot_reserved_a_done_step_waits_without_a_tracker_read(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    seed(registered, "tl-2", "other", entry=ENTRY)
+    registered.execute("INSERT INTO reservation VALUES ('s1',?,2,'other')", (slot.repo.identity().key,))
+    bench = Bench(registered, free=False)
+    bench.seen, bench.advance = "matching", (advances := Advances(AdmitRefused("claim_lost")))
+    found = bench.round()
+    assert moves(found) == [("tl-2", "report", "running")] and found.stopped == "no_free_slot" and advances.requests == []
 
 
 def test_a_failed_publication_is_retried_every_round(

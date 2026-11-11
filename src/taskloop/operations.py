@@ -175,7 +175,7 @@ class Adoption:
     slots: tuple[Adopted | NotAdopted, ...]
 
 
-type Action = Literal["start", "relaunch", "repeat", "verify", "publish", "report", "skip"]
+type Action = Literal["start", "relaunch", "repeat", "verify", "advance", "publish", "report", "skip"]
 
 
 @dataclass(frozen=True)
@@ -254,12 +254,16 @@ class _Advance:
     previous: AttemptKey
 
 
-def start(ports: StartPorts, request: StartRequest) -> Started | Failed:
+def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = None) -> Started | Failed:
     """An existing attempt is launched as admitted (no tracker read), a captured one repeated, a done one advanced to the
     next step (one tracker read, no claim), another released one answered with its result; otherwise (none, or the
     current one abandoned) admit first. A refusal or unknown stops before the launch; a concurrent start that won
-    (`task_attempted`) is launched as existing. A start names its attempt's step."""
-    found = _start(ports, request)
+    (`task_attempted`) is launched as existing. A start names its attempt's step.
+
+    `advancing` (the round's advance): only the advance of that done attempt, never a fresh admission, relaunch or
+    repeat: refused `abandoned` when the task's attempt was abandoned since, `changed` when it is no longer that done
+    attempt (another current attempt, or not advanceable)."""
+    found = _start(ports, request, advancing)
     if isinstance(found, Failed):
         return found
     try:
@@ -268,12 +272,14 @@ def start(ports: StartPorts, request: StartRequest) -> Started | Failed:
         return found
 
 
-def _start(ports: StartPorts, request: StartRequest) -> Started | Failed:
+def _start(ports: StartPorts, request: StartRequest, advancing: str | None) -> Started | Failed:
     refused = minutes_refused(request.minutes)
     if refused is not None:
         return refused
     try:
         found = _current(ports, request)
+        if advancing is not None and not (isinstance(found, _Advance) and found.previous.attempt_id == advancing):
+            found = _not_advanced(found)
         if isinstance(found, (Started, Failed)):
             return found
         target = (found[0], True) if isinstance(found, tuple) else _admit(ports, request, found)
@@ -307,6 +313,15 @@ def _current(
     if rows and rows[0].key == found[0] and rows[0].published is not None and following(rows[0].step) is not None:
         return _Advance(found[0])
     return Started("already_dispatched", request.backlog, request.task_id, found[0].attempt_id, True, result=result.reason)
+
+
+def _not_advanced(found: tuple[AttemptKey, str, EntryIdentity | None] | _Advance | Started | Failed | None) -> Failed:
+    """Why the round's advance of a done attempt does not run: the read's own refusal, its abandon, or another state."""
+    if isinstance(found, Failed):
+        return found
+    if found is None:
+        return Failed("refused", "abandoned", "The task's attempt was abandoned since this round read the store")
+    return Failed("refused", "changed", "The task's current attempt is no longer the done step this round read")
 
 
 def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -> tuple[AttemptKey, bool] | Failed:

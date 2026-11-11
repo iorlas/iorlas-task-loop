@@ -117,7 +117,8 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     lines = [f"{each.task_id:<{width}}  {each.action:<8} {each.word} {each.attempt_id}".rstrip() for each in result.moves]
     lines += [f"Stopped: {result.stopped}"] if result.stopped else []
     lines += [] if result.moves or result.stopped else [f"Nothing to do in backlog {result.backlog}."]
-    words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves if each.action in ("report", "skip")]
+    words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves
+             if each.action in ("report", "skip", "advance")]
     keys = dict.fromkeys(key for word in [*words, result.stopped] for key in (word, word.split(":")[0]) if key in GUIDE)
     leaked = [f"claim_leaked: {leaked_claim(each.task_id)}" for each in result.moves if each.word == "claim_leaked"]
     return lines + [f"{key}: {GUIDE[key]}" for key in keys] + leaked

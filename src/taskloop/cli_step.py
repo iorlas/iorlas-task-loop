@@ -72,8 +72,9 @@ def register(commands: Parsers) -> None:
     release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl step start` "
                          "then admits a fresh attempt")
     _common(release, "--db")
-    _round_flags(_add(step, "next", "Run one scheduling round: settle existing attempts, start approved ready tasks "
-                      f"in free slots, publish verified results; {STEP_ONLY}. {HELD}"))
+    _round_flags(_add(step, "next", "Run one scheduling round: settle existing attempts, advance claimed tasks whose "
+                      "step is done to the next step (no label check), start approved ready tasks in the free slots left, publish "
+                      f"verified results; {STEP_ONLY}. {HELD}"))
     rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
@@ -87,7 +88,8 @@ def register(commands: Parsers) -> None:
 def _round_flags(parser: argparse.ArgumentParser) -> None:
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         parser.add_argument(flag, required=True)
-    parser.add_argument("--label", required=True, help="The tracker label approving autonomous execution (`auto`)")
+    parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
+                        "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
     _common(parser, "--db", "--artifacts")
 

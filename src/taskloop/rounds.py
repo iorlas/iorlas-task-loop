@@ -35,7 +35,7 @@ class RoundsRequest:
 
 @dataclass(frozen=True)
 class RoundsPorts:
-    """`round`: one `advance` over fresh ports, with the given `quiet`; `slot_use`: factory.db's reservation rows read
+    """`round`: one `round.run_round` over fresh ports, with the given `quiet`; `slot_use`: factory.db's reservation rows read
     now (None when unreadable); `clock`, the wall clock for log stamps; `monotonic` and `wait` pace; `warn`, said when
     the round log stops being written; `stopping`, True once a graceful stop is asked."""
 
