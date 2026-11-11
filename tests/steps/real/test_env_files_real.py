@@ -80,14 +80,32 @@ def test_empty_of_a_missing_folder_is_true_and_of_a_link_false(tmp_path: Path) -
     assert not files.empty(tmp_path / "link") and (tmp_path / "real" / "f").exists()
 
 
-def test_ensure_creates_0700_and_refuses_a_link_in_place_of_a_folder(tmp_path: Path) -> None:
+def test_ensure_makes_0700_again_and_refuses_a_link_in_place_of_a_folder(tmp_path: Path) -> None:
     files = RealEnvFiles()
     made = tmp_path / ".env" / "s1" / "uv-cache"
     assert files.ensure(made) and stat.S_IMODE(made.stat().st_mode) == 0o700
     (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "elsewhere").chmod(0o755)
     (tmp_path / ".t").mkdir()
     (tmp_path / ".t" / "s1").symlink_to(tmp_path / "elsewhere", target_is_directory=True)
     assert not files.ensure(tmp_path / ".t" / "s1")
+    assert stat.S_IMODE((tmp_path / "elsewhere").stat().st_mode) == 0o755  # the link's target is never chmodded
+    made.chmod(0o500)  # an agent made its root read-only
+    assert files.ensure(made) and stat.S_IMODE(made.stat().st_mode) == 0o700
+
+
+def test_the_release_empties_the_scratch_only_where_it_belongs(tmp_path: Path) -> None:
+    """`.t` replaced by a link to another slot: nothing there is touched; the real scratch is emptied."""
+    base = tmp_path / "slots" / "0123456789ab"
+    (base / "s2" / "s1").mkdir(parents=True)
+    (base / "s2" / "s1" / "work").write_text("another slot's")
+    (base / ".t").symlink_to(base / "s2", target_is_directory=True)
+    files = RealEnvFiles()
+    assert not files.empty_scratch(base / "s1") and (base / "s2" / "s1" / "work").read_text() == "another slot's"
+    (base / ".t").unlink()
+    (base / ".t" / "s1").mkdir(parents=True)
+    (base / ".t" / "s1" / "left").write_text("x")
+    assert files.empty_scratch(base / "s1") and list((base / ".t" / "s1").iterdir()) == []
 
 
 def test_a_command_registers_before_it_runs_and_its_output_and_exit_come_back(tmp_path: Path) -> None:

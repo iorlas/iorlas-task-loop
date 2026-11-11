@@ -61,10 +61,13 @@ class AttemptView:
 
 @dataclass(frozen=True)
 class SetupShown:
-    """The attempt's latest setup run (`setup_store`) and where its log is; nothing reads the log."""
+    """The latest setup run (`setup_store`) of the step's attempt 1, the one whose slot environment the shown attempt uses
+    (a repeat runs none and keeps it), and where its log is; nothing reads the log. `attempt_id`: that attempt, when it
+    is not the shown one."""
 
     row: SetupRow
     log: Path
+    attempt_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,7 +75,7 @@ class Shown:
     view: AttemptView
     directory: Path
     entry_log: Path
-    setup: SetupShown | None = None  # None: no setup ran (a plan attempt, or an implement attempt before its preparation)
+    setup: SetupShown | None = None  # None: no setup ran for the step (a plan attempt, or implement before its preparation)
 
 
 @dataclass(frozen=True)
@@ -147,7 +150,8 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
     files = EvidenceFiles(artifacts)
     try:
         rows = reads.store.attempts(backlog, task_id)
-        latest = SetupStore(reads.store.connect, reads.store.begin).latest(rows[0].key) if rows else None
+        first = _first(rows) if rows else None
+        latest = None if first is None else SetupStore(reads.store.connect, reads.store.begin).latest(first.key)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     if not rows:
@@ -155,8 +159,19 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
     directory = files.root / files.directory(rows[0].key)
     earlier = tuple((older.key.attempt_id, _ended(newer, older)) for newer, older in pairwise(rows))
     last = files.last_entry(rows[0].key)
-    setup = None if latest is None else SetupShown(latest, directory / f"setup-{latest.run}.log")
+    setup = None
+    if first is not None and latest is not None:
+        other = None if first is rows[0] else first.key.attempt_id
+        setup = SetupShown(latest, files.root / files.directory(first.key) / f"setup-{latest.run}.log", other)
     return Shown(replace(_show(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log", setup)
+
+
+def _first(rows: tuple[AttemptRow, ...]) -> AttemptRow:
+    """The current attempt's attempt 1 in its step, following each repeat to the attempt it repeats."""
+    by_id, found = {row.key.attempt_id: row for row in rows}, rows[0]
+    while found.number > 1 and (earlier := by_id.get(found.previous_attempt_id or "")) is not None:
+        found = earlier
+    return found
 
 
 def _ended(newer: AttemptRow, older: AttemptRow) -> str:

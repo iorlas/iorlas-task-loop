@@ -14,7 +14,7 @@ from any_agent.testing import FakeRun
 from doubles import Command, Environment, FakeProfiles
 from git_porcelain.testing import FakeWorktree
 
-from taskloop.access import CODEX_ACCESS, folders, prepared_access
+from taskloop.access import CODEX_ACCESS, SHELL, folders, prepared_access
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, SlotFiles
@@ -112,7 +112,7 @@ def test_attempt_one_runs_the_setup_in_order_then_dispatches(entry: Entry, slot:
     entry.execute()
     found = folders(slot.path)
     assert env.events == [
-        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "probe", "empty .t/s1",
+        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "probe",
         "empty .env/s1", "ensure s1/uv-cache", "ensure s1/uv-tools",
         "exec just install", "group 501", "exec just bootstrap", "group 502",
         "empty .t/s1", "renew", "agent",
@@ -159,7 +159,7 @@ def test_a_passed_run_is_reused_by_a_relaunch_of_the_still_admitted_attempt(entr
     entry.environment.events.clear()
     entry.execute()
     assert entry.environment.events == [
-        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "probe", "empty .t/s1", "empty .t/s1", "renew", "agent"]
+        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "probe", "empty .t/s1", "renew", "agent"]
     assert slot.read_file(".venv/kept") == "from setup" and rows(entry.environment.con) == [(1, "passed", 0, 0, 501)]
 
 
@@ -308,7 +308,7 @@ def test_a_repeat_keeps_its_environment_and_only_empties_the_scratch(entry: Entr
     repeat = dataclasses.replace(record, admission=dataclasses.replace(record.admission, number=2))
     gitdir = slot.repo.identity().common_dir / "worktrees" / "s1"
     assert env.preparation().prepare(repeat, Prepared("d" * 40, gitdir, slot.repo.path), held, ("/bin/codex", {})) is None
-    assert env.events == ["ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "probe", "empty .t/s1", "empty .t/s1"]
+    assert env.events == ["ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "probe", "empty .t/s1"]
     assert env.profiles.read == [] and rows(env.con) == []
 
 
@@ -354,16 +354,20 @@ ENSURED = ["ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools"]
 
 
 def test_the_implement_agent_writes_its_folders_offline_and_the_probe_sees_what_it_will(entry: Entry, slot: FakeWorktree) -> None:
-    """The agent's access names exactly the three folders, its environment points its tools there with uv offline over
-    the scrubbed credentials' one; the probe ran `codex` in the slot with that same environment. Setup had network."""
+    """The agent's access names exactly the three folders and gives only its shell TMPDIR, uv's folders and uv offline;
+    Codex's own environment stays the scrubbed credentials' (its temporary files stay out of the roots). The probe ran
+    `codex` with that environment and those folders. Setup had network."""
     entry.execute()
     found, env = folders(slot.path), entry.environment
-    added = {"TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools), "UV_OFFLINE": "1"}
     (spec,) = entry.specs
+    access = prepared_access(found)
     flags = spec.argv.index("--json")
-    assert spec.argv[flags - len(CODEX_ACCESS) : flags] == list(prepared_access(found)) and spec.env == {"HOME": "/home/p"} | added
+    assert spec.argv[flags - len(access) : flags] == list(access) and spec.env == {"HOME": "/home/p"}
+    shell = {key.removeprefix(SHELL): json.loads(value) for key, _, value in (item.partition("=") for item in access)
+             if key.startswith(SHELL)}
+    assert shell == {"TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools), "UV_OFFLINE": "1"}
     (probe,) = env.probes
-    assert (probe.exe, probe.slot, probe.env, probe.folders) == ("/bin/codex", slot.path, {"HOME": "/home/p"} | added, found)
+    assert (probe.exe, probe.env, probe.folders) == ("/bin/codex", {"HOME": "/home/p"}, found)
     assert "UV_OFFLINE" not in env.process.calls[0].env
 
 
@@ -391,16 +395,19 @@ def test_a_tmpdir_over_64_bytes_is_refused_before_any_folder_is_made(entry: Entr
 
 
 @pytest.mark.parametrize("case", ["into_slot", "evidence_holds_one", "outside_slots", "into_each_other", "slots_in_db_folder",
-                                  "unreadable"])
+                                  "unreadable", "sibling_slot", "locks"])
 def test_a_root_that_overlaps_what_the_agent_must_not_write_is_refused(entry: Entry, slot: FakeWorktree, case: str) -> None:
-    """Resolved, links followed: no root may equal, hold or sit inside the slot, its Git directories, the person's checkout,
-    the evidence root or factory.db's folder, or another root, and each stays inside `<slots_root>/<repo_id>/`."""
+    """Resolved, links followed: each root must be exactly where it belongs beside the slot (never another slot, `.locks/`
+    or another root), and none may equal, hold or sit inside the slot, its Git directories, the person's checkout, the
+    evidence root or factory.db's folder."""
     env, base = entry.environment, slot.path.parent
     env.protected = (env.artifacts, Path("/db"))
     links = {
         "into_slot": {base / ".t": slot.path},
         "outside_slots": {base / ".t": Path("/elsewhere")},
         "into_each_other": {base / ".t": base / ".env"},  # .t/s1 is .env/s1, which holds both uv folders
+        "sibling_slot": {base / ".t": base / "s2"},  # .t/s1 is s2/s1: inside another slot
+        "locks": {base / ".env": base / ".locks"},  # the uv folders among the custody lock files
     }
     env.files.links = links.get(case, {})
     if case == "evidence_holds_one":  # an artifacts root set to `.t` beside the slots
@@ -414,5 +421,5 @@ def test_a_root_that_overlaps_what_the_agent_must_not_write_is_refused(entry: En
 
 def test_a_sandbox_that_does_not_work_refuses_after_the_folders_are_made_and_runs_nothing(entry: Entry) -> None:
     entry.environment.sandbox = False
-    assert refused(entry, "refused", "environment:sandbox") == [*ENSURED, "probe"]
+    assert refused(entry, "refused", "environment:sandbox") == [*ENSURED, "empty .t/s1", "probe"]
     assert rows(entry.environment.con) == []

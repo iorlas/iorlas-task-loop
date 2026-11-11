@@ -20,7 +20,6 @@ from git_porcelain.testing import FakeWorktree
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
-from taskloop.access import folders
 from taskloop.admit import AdmitRefused
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
 from taskloop.attempt import Attempts
@@ -67,7 +66,7 @@ class Ports:
         self.inside: Callable[[], object] = lambda: None
         self.setups: dict[int, ProcessSeen] = {}  # a setup command's observation by pid (default gone)
         self.setup_asked: list[int] = []
-        self.emptied: list[Path] = []  # the scratch folders emptied, in order
+        self.emptied: list[Path] = []  # the slots whose scratch was emptied, in order
         self.emptiable = True
 
     def checkouts(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
@@ -158,7 +157,7 @@ def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then
     assert ports.releaser().release(KEY, False) == Released("s1", d, True, "kept", False)
     assert (slot.branch(), head(slot), tip(slot)) == (None, d, x)  # detached at D; the branch keeps X
     assert stored(registered) == ([], [(d, 30.0, "kept")]) and ports.unclaimed == [] and ports.holds == 1
-    assert ports.emptied == [folders(slot.path).tmp]  # the scratch, after the stop proof and the record
+    assert ports.emptied == [slot.path]  # its scratch, after the stop proof and the record
     ports.opens = ports.holds = 0
     again = ports.releaser().release(KEY, False)
     assert again == AlreadyReleased("s1", "kept", False) and release_word(again) == "already_released"
@@ -225,7 +224,7 @@ def test_abandon_an_admitted_attempt_on_a_detached_slot_needs_no_git_write(
     d, ports = head(slot), Ports(con, checkouts, slot_files)
     ports.emptiable = False
     assert ports.releaser().release(KEY, True) == Released("s1", None, True, "unclaimed", True)
-    assert ports.emptied == [folders(slot.path).tmp]
+    assert ports.emptied == [slot.path]
     assert stored(con) == ([], [(d, 30.0, "unclaimed")]) and ports.unclaimed == [("/tracker", "tl-1")] and slot.branch() is None
     con.close()
 

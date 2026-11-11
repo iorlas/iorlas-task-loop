@@ -8,7 +8,7 @@ from typing import Literal
 
 from any_agent import CodexHarness, DecodedAnswer, Harness, InvalidAnswer, LaunchInputs, LaunchSpec, RunHooks, RunOutcome, decode_answer
 
-from taskloop.access import CODEX_ACCESS, SANDBOX, agent_env, folders, prepared_access
+from taskloop.access import CODEX_ACCESS, SANDBOX, folders, prepared_access
 from taskloop.attempt_store import AttemptStore, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import (
     Admission,
@@ -243,8 +243,9 @@ class Attempts:
         return self.environment.prepare(record, base, renew, credentials) or base
 
     def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec, Launch] | AttemptResult:
-        """The launch spec: plan's access unchanged; a kind with `environment` writes its three folders too, with its tools
-        pointed there and uv offline (`access`). The credentials' own executable and environment come back for setup."""
+        """The launch spec: plan's access unchanged; a kind with `environment` writes its three folders too, and its shell
+        (only) gets its tools pointed there and uv offline (`access.prepared_access`). Codex's own environment is the
+        credentials' for both. They come back for setup."""
         try:
             exe, env = self.credentials()
         except CredentialsUnavailable as error:
@@ -256,18 +257,14 @@ class Attempts:
         except EvidenceError:
             return AttemptResult("unavailable", "files")
         harness = CodexHarness()
-        access: tuple[str, ...] = CODEX_ACCESS
-        added: dict[str, str] = {}
-        if kind(admission.step).environment:
-            found = folders(Path(admission.slot_path))
-            access, added = prepared_access(found), agent_env(found)
+        access = prepared_access(folders(Path(admission.slot_path))) if kind(admission.step).environment else CODEX_ACCESS
         inputs = LaunchInputs(
             exe=exe,
             cwd=admission.slot_path,
             model=admission.model,
             effort=admission.effort,
             prompt=prompt,
-            env=env | added,
+            env=env,
             schema=schema,
             sandbox=admission.sandbox,
             out_file=out_file,

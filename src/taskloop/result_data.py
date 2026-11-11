@@ -104,7 +104,8 @@ def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
                     "result": result.result or None}
         case Shown():
             setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": result.setup.row.conclusion,
-                                                        "commit": result.setup.row.commit, "log": str(result.setup.log)}
+                                                        "commit": result.setup.row.commit, "log": str(result.setup.log),
+                                                        "attempt_id": result.setup.attempt_id}
             return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log), "setup": setup}
         case Listed() | Round() | Ended():
             return _rows_data(result)

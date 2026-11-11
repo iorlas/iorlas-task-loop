@@ -30,7 +30,6 @@ from beads_client import BdError
 from git_porcelain import GitUnavailable
 from stream_proc import OwnedProcess
 
-from taskloop.access import folders
 from taskloop.admit import Unclaim
 from taskloop.attempt import collect
 from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
@@ -43,7 +42,7 @@ from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import listing, observe_slot
 
 type ParkHold = Callable[[str, str], AbstractContextManager[None]]  # (slot path, attempt id): the slot's lock, never waiting
-type Empty = Callable[[Path], bool]  # a folder's contents removed, never following a link; False when anything stays
+type Scratch = Callable[[Path], bool]  # the slot's `.t/<slot>` emptied when it resolves where it belongs; False otherwise
 type Claimed = Literal["kept", "unclaiming", "unclaimed", "not_held"]
 CLAIMS: Final[tuple[Claimed, ...]] = ("kept", "unclaiming", "unclaimed", "not_held")
 NOTHING: Final = "Nothing changed."
@@ -207,7 +206,7 @@ class SlotRelease:
     unclaim: Unclaim
     clock: Callable[[], float]
     setup_seen: SetupSeen
-    scratch: Empty  # empties `.t/<slot>` after a release (`RealEnvFiles.empty`)
+    scratch: Scratch  # empties the slot's `.t/<slot>` after a release (`RealEnvFiles.empty_scratch`)
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         """Release the attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
@@ -319,7 +318,7 @@ class SlotRelease:
             return NotReleased("unavailable", "store", f"{type(error).__name__}. {where}; nothing was recorded.")
         if not recorded:
             return NotReleased("unavailable", "changed", f"The attempt changed after the stop proof. {where}; nothing was recorded.")
-        self.scratch(folders(path).tmp)  # best effort: the next preparation empties it again before any agent
+        self.scratch(path)  # best effort: the next preparation empties it again before any agent
         return Released(row.slot, parked, True, "kept", abandon)
 
     def _slot(self, row: _Row, path: Path) -> tuple[str, str | None] | NotReleased:

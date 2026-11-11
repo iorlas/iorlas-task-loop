@@ -98,10 +98,12 @@ GUIDE = {
     "`path_long`: the agent's `TMPDIR` (`<slots root>/<repo id>/.t/<slot>`) is over 64 bytes, set a shorter `slots_root`; "
     "`roots`: a folder the agent may write (`.t/<slot>`, `.env/<slot>/uv-cache`, `.env/<slot>/uv-tools` beside the slots) "
     "resolves into the slot, its Git directories, your checkout, the artifacts or factory.db's folder, or outside the "
-    "slots, by a link or by the machine config's paths: move them apart or remove the link; `sandbox`: `codex sandbox` "
-    "could not write those folders, or could write `/tmp` (Linux needs bubblewrap with unprivileged user namespaces; "
-    "`codex sandbox -- true` from the slot shows the error); `files`: one of those folders cannot be made or emptied, fix "
-    "its permissions. Otherwise `tl step release --abandon`.",
+    "slots, by a link or by the machine config's paths: move them apart or remove the link; `sandbox`: the probe failed "
+    "after those folders were made 0700 and the scratch emptied, so it is the sandbox, not their state: `codex sandbox` "
+    "did not start, did not pass `TMPDIR`/`UV_OFFLINE` to its shell (a Codex config `profile` or `shell_environment_policy` "
+    "can override), could not write a folder, or could write `/tmp` (Linux needs bubblewrap with unprivileged user "
+    "namespaces; `codex sandbox -- true` run in `.t/<slot>` shows the error); `files`: one of those folders cannot be made "
+    "or emptied, fix its permissions. Otherwise `tl step release --abandon`.",
     "setup_running": "A process of the slot's setup still runs in the process group named (from an entry that died, or left "
     "behind by a command; one recorded before a reboot never counts). Wait for it. To stop it yourself, list the group "
     "(`ps -o pid=,lstart=,command= -g <pgid>`), check each member's working directory is the slot (`lsof -a -p <pid> -d "

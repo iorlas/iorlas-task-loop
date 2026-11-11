@@ -6,11 +6,11 @@ In the entry process, after `prepare.base` and before the dispatch write, under 
 and inside the claim keep-alive; only for a step kind with `environment`. Order (a repeat skips 5-8: its slot keeps
 attempt 1's environment): 1 two failed runs of this attempt refuse `environment:failed`; 2 the latest unfinished run is
 reconciled (`interrupted` when its process is gone, else `environment:running` or `environment:unknown`, never
-signalled); 3 preflight (platform, the TMPDIR budget, the roots apart from the slot, its Git directories, the person's
-checkout, the evidence and factory.db's folder, symlink-safe removal, the folders created, the sandbox probe); 4 the
-scratch emptied; 5 the profile read
-from Git at B, and a `passed` run at this B and setup digest reused; 6 the reset (the slot's ignored files and nested
-repositories removed, then an empty ignored listing, and the uv folders emptied); 7 each setup command in order, through
+signalled); 3 preflight (platform, the TMPDIR budget, each root exactly beside the slot and apart from it, its Git
+directories, the person's checkout, the evidence and factory.db's folder, symlink-safe removal, the folders made 0700);
+4 the scratch emptied, then the sandbox probe run in it; 5 the profile read from Git at B, and a `passed` run at this B
+and setup digest reused; 6 the reset (the slot's ignored files and nested repositories removed, then an empty ignored
+listing, and the uv folders emptied); 7 each setup command in order, through
 the registered start, its process group proven empty after it; 8 the slot clean afterwards; 9 the scratch emptied again;
 10 the claim renewed once; 11 the deadline. Every refusal leaves the attempt `admitted` with nothing dispatched; no
 process is ever signalled here.
@@ -28,7 +28,7 @@ from typing import Final, Literal, Protocol
 from git_porcelain import GitUnavailable
 from stream_proc import OwnedProcess
 
-from taskloop.access import TMP_BYTES, Folders, agent_env, folders
+from taskloop.access import TMP_BYTES, Folders, folders
 from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Checkouts
 from taskloop.evidence_files import EvidenceFiles, SetupLog
 from taskloop.prepare import Prepared, task_branch
@@ -41,9 +41,9 @@ type Renew = Callable[[], Renewal]  # one claim renewal, now (the entry's keep-a
 type GroupAlive = Callable[[int], bool]  # any process left in a process group
 type SlotProfiles = Callable[[Path, Path], ProfileFiles]  # (slot, its verified Git directory): the profile at a commit
 type Launch = tuple[str, Mapping[str, str]]  # the agent's Codex executable and its scrubbed environment (the credentials)
-# Whether the implement agent's sandbox works here: `codex sandbox` (exe) in the slot (cwd) with the agent's environment
-# writes each folder and not /tmp.
-type SandboxProbe = Callable[[str, Path, Mapping[str, str], Folders], bool]
+# Whether the implement agent's sandbox works here: `codex sandbox` (exe) with the agent's environment and keys, run in the
+# freshly emptied scratch, gives the shell its variables and writes each folder and not /tmp.
+type SandboxProbe = Callable[[str, Mapping[str, str], Folders], bool]
 
 
 @dataclass(frozen=True)
@@ -170,13 +170,17 @@ class Preparation:
 
     def _ready(self, key: AttemptKey, path: Path, slot: Prepared, launch: Launch) -> AttemptResult | None:
         """Steps 1-4: the failure count (before the probe: a dead attempt costs nothing), the reconcile, the preflight,
-        the scratch emptied."""
+        the scratch emptied, then the sandbox probe in it (never in the slot, whose ignored files are not reset yet)."""
         if self.ports.store.failures(key) >= SETUP_RUNS:
             return _refused("environment:failed")
-        stopped = self._reconcile(key) or self._preflight(path, slot, launch)
-        if stopped is None and not self.ports.files.empty(folders(path).tmp):
+        found = folders(path)
+        stopped = self._reconcile(key) or self._preflight(path, slot, found)
+        if stopped is not None:
+            return stopped
+        if not self.ports.files.empty(found.tmp):
             return _unavailable("environment:files")
-        return stopped
+        exe, env = launch
+        return None if self.ports.probe(exe, env, found) else _refused("environment:sandbox")
 
     def _finish(self, found: Folders, renew: Renew, deadline: float) -> AttemptResult | None:
         """Steps 9-11: the scratch emptied again (setup's temporary files never reach the agent), one claim renewal, the
@@ -204,9 +208,9 @@ class Preparation:
             self.ports.store.conclude(key, latest.run, "interrupted", None, self.ports.clock())
         return None
 
-    def _preflight(self, path: Path, slot: Prepared, launch: Launch) -> AttemptResult | None:
-        """Checks and folder creation only (section 6), the sandbox probe last: it needs the folders."""
-        ports, found = self.ports, folders(path)
+    def _preflight(self, path: Path, slot: Prepared, found: Folders) -> AttemptResult | None:
+        """Checks and folder creation only (section 6); the probe follows the scratch's emptying."""
+        ports = self.ports
         if ports.platform != "linux":  # nothing of the environment is observed elsewhere (owner question Q2)
             return _refused("environment:platform")
         if len(str(found.tmp).encode()) > ports.tmp_bytes:
@@ -215,26 +219,23 @@ class Preparation:
             return _refused("environment:roots")
         if not ports.safe_removal:
             return _refused("environment:remove_unsafe")
-        if not all(ports.files.ensure(root) for root in found.roots):
-            return _unavailable("environment:files")
-        exe, env = launch
-        return None if ports.probe(exe, path, {**env, **agent_env(found)}, found) else _refused("environment:sandbox")
+        return None if all(ports.files.ensure(root) for root in found.roots) else _unavailable("environment:files")
 
     def _apart(self, path: Path, slot: Prepared, found: Folders) -> bool:
-        """Resolved, each root lies inside `<slots_root>/<repo_id>/`, and no two of the roots, nor a root and the slot, its
-        Git directory G, the common one C, the person's checkout, the evidence root or factory.db's folder, are equal or
-        nested. A link anywhere on the way is followed, so a root redirected into the slot or the evidence is refused."""
+        """Resolved, each root is exactly where `folders` puts it beside the resolved slot (no link anywhere below
+        `<slots_root>/<repo_id>/`, so never a sibling slot, `.locks/` or another root), and none equals, holds or sits
+        inside the slot, its Git directory G, the common one C, the person's checkout, the evidence root or factory.db's
+        folder."""
         resolve = self.ports.files.resolve
         base = resolve(path.parent)
         roots = [resolve(root) for root in found.roots]
         kept = [resolve(each) for each in (path, slot.gitdir, slot.gitdir.parent.parent, slot.root, *self.ports.protected)]
-        if base is None or any(each is None for each in (*roots, *kept)):
+        if base is None:
             return False
-        placed = [root for root in roots if root is not None and root != base and root.is_relative_to(base)]
-        others = [each for each in kept if each is not None]
-        if len(placed) != len(roots) or len(set(placed)) != len(placed):
+        expected = folders(base / path.name).roots
+        if roots != list(expected):
             return False
-        return not any(_nested(root, other) for index, root in enumerate(placed) for other in (*placed[index + 1:], *others))
+        return not any(other is None or _nested(root, other) for root in expected for other in kept)
 
     def _setup(
         self, key: AttemptKey, where: tuple[Path, str], slot: Prepared, deadline: float, env: Mapping[str, str]

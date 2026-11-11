@@ -35,3 +35,13 @@ evidence to paste) is to be written before the run; the steps below are what it 
 8. No process with its cwd in the slot after the release (`readlink /proc/<pid>/cwd`).
 9. (S5e-2) The probe refuses: with a root made unwritable (`chmod 500 .env/<slot>/uv-tools`) the next relaunch says
    `refused environment:sandbox` with nothing run; restore it.
+10. (S5e-2 review, unverified) A slot holding an ignored `mise.local.toml` (for example `[env] X = "set"`) while the probe
+    runs: the probe runs `codex` through the mise shim with cwd `.t/<slot>`, never the slot, so the file must not be
+    evaluated (no `X` in the probe's environment, no mise trust prompt or error naming the slot).
+11. (S5e-2 review, unverified) A person's `~/.codex/config.toml` naming a `profile` (or a `shell_environment_policy`)
+    that sets another `sandbox_mode` or drops the shell's variables: the probe, which cannot pass `--ignore-user-config`,
+    may refuse `environment:sandbox` (a false refusal) while the agent itself would work; record what it says and whether
+    `-c` keys beat the profile.
+12. (S5e-2 review) The agent's transcript shows `TMPDIR`, `UV_CACHE_DIR`, `UV_TOOL_DIR`, `UV_OFFLINE` in its shell
+    although the codex argv's environment has none of them; `.t/<slot>` holds only Codex's
+    `codex-bwrap-synthetic-mount-targets-<uid>` during the step.

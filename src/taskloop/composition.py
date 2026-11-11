@@ -371,7 +371,7 @@ def open_releaser(database: Path, store: Store) -> SlotRelease:
     tracker's fenced unclaim, wall clock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
     return SlotRelease(writer, checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim, time.time,
-                       setup_seen, RealEnvFiles().empty)
+                       setup_seen, RealEnvFiles().empty_scratch)
 
 
 def open_publisher(database: Path, store: Store) -> BranchPublish:

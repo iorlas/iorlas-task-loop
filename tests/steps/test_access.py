@@ -25,10 +25,16 @@ def test_plans_access_is_unchanged_byte_for_byte() -> None:
     )
 
 
-def test_the_implement_access_adds_exactly_the_three_roots_as_a_toml_array() -> None:
-    """Network stays off and both `exclude_*` keys stay: /tmp stays closed, TMPDIR (a root) writable."""
+def test_the_implement_access_adds_exactly_the_three_roots_and_the_shells_variables() -> None:
+    """Network stays off and both `exclude_*` keys stay: /tmp stays closed, TMPDIR (a root) writable. The variables go to
+    the agent's shell only (`shell_environment_policy.set`), each value a TOML string."""
     access = prepared_access(FOUND)
-    changed = [(old, new) for old, new in zip(CODEX_ACCESS, access, strict=True) if old != new]
+    shell = access[len(CODEX_ACCESS):]
+    assert shell[0::2] == ("-c",) * 4
+    assert {key: tomllib.loads(f"v = {value}")["v"] for key, _, value in (item.partition("=") for item in shell[1::2])} == {
+        "shell_environment_policy.set.TMPDIR": ROOTS[0], "shell_environment_policy.set.UV_CACHE_DIR": ROOTS[1],
+        "shell_environment_policy.set.UV_TOOL_DIR": ROOTS[2], "shell_environment_policy.set.UV_OFFLINE": "1"}
+    changed = [(old, new) for old, new in zip(CODEX_ACCESS, access[:len(CODEX_ACCESS)], strict=True) if old != new]
     assert len(changed) == 1 and changed[0][0] == "sandbox_workspace_write.writable_roots=[]"
     key, _, value = changed[0][1].partition("=")
     assert key == "sandbox_workspace_write.writable_roots" and tomllib.loads(f"roots = {value}")["roots"] == ROOTS
@@ -36,7 +42,8 @@ def test_the_implement_access_adds_exactly_the_three_roots_as_a_toml_array() -> 
 
 
 def test_the_agent_environment_points_uv_and_tmpdir_at_the_roots_and_survives_the_scrub() -> None:
-    """No name holds KEY, SECRET or TOKEN (Codex's default policy drops those), and the factory's own scrub keeps them."""
+    """No name holds KEY, SECRET or TOKEN (Codex's default policy drops those), and the factory's own scrub would keep
+    them (setup gets the first three in its environment)."""
     added = agent_env(FOUND)
     assert added == {"TMPDIR": ROOTS[0], "UV_CACHE_DIR": ROOTS[1], "UV_TOOL_DIR": ROOTS[2], "UV_OFFLINE": "1"}
     assert not any(marker in name for name in added for marker in ("KEY", "SECRET", "TOKEN"))
@@ -52,4 +59,4 @@ def test_the_probe_runs_codex_sandbox_with_the_agents_keys_on_the_three_roots() 
     keys = [item for item in prepared_access(FOUND) if not item.startswith("--")]
     assert argv[:split] == ["/bin/codex", "sandbox", "-c", 'sandbox_mode="workspace-write"', *keys]
     assert argv[split:] == ["--", "/bin/sh", "-c", PROBE, "sh", *ROOTS]
-    assert "rm " not in PROBE and "exit 4" in PROBE  # it removes only its own folders, and fails when /tmp is writable
+    assert "rm " not in PROBE and "mktemp -d /tmp/" in PROBE  # only its own folders go; /tmp is tried by an unguessable name

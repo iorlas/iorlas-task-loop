@@ -520,9 +520,9 @@ schema change.
   `folders` (moved from `environment`, with `roots`); `TMP_BYTES = 64`; `prepared_access(found)` (CODEX_ACCESS with
   `writable_roots=<json.dumps([tmp, cache, tools])>`, a valid TOML array); `agent_env(found)` (`TMPDIR`, `UV_CACHE_DIR`,
   `UV_TOOL_DIR`, `UV_OFFLINE=1`); `PROBE` and `probe_argv(exe, found)`.
-- **`attempt._launch`**: for a kind with `environment`, `prepared_access` and the credentials' environment with
-  `agent_env` merged over it (scrubbing and the push bar kept: they are the credentials'); it returns the credentials'
-  own `(exe, env)` for the preparation, so setup still has network (no `UV_OFFLINE`).
+- **`attempt._launch`**: for a kind with `environment`, `prepared_access` (since section 19 it also carries `agent_env`
+  as shell-only keys; the launch environment is the credentials' alone); it returns the credentials' own `(exe, env)`
+  for the preparation, so setup still has network (no `UV_OFFLINE`).
 - **Preflight** (`environment._preflight`, section 6's order): `platform`, `path_long` (TMPDIR bytes over
   `EnvironmentPorts.tmp_bytes`, composition `TMP_BYTES`), `roots` (`_apart`: every root resolved through the new
   `EnvFiles.resolve`, links followed; each strictly inside the resolved `<slots_root>/<repo_id>/`; no two roots, nor a root
@@ -585,3 +585,31 @@ config's `db` out of `~/tl-smoke` or `slots_root` elsewhere), or narrow it to "e
 **Not verified.** No live run: no implement agent has run `just check`/`just test` inside the real sandbox through the
 factory; the probe ran against the real `codex` only by hand (above), not from an entry with the scrubbed credentials'
 environment. Steps for the owner-run smoke: [live-smoke.md](live-smoke.md).
+
+## 19. Review repairs: S5e-2 (2026-11-11)
+
+An independent review of 55022eac7 found seven points. Six are repaired as asked; the first is repaired in part, because
+a check with the real `codex` showed its suggested fix cannot keep Codex's sandbox launcher out of the scratch. Each
+repair has a test that fails without it, except where noted.
+
+| # | Finding | Repair |
+|---|---|---|
+| 1 | `TMPDIR=.t/<slot>` (and `UV_*`) reached Codex's own process, so Codex's temporary files land in an agent-writable root | The four variables are now `-c shell_environment_policy.set.<NAME>=<TOML string>` keys appended to `prepared_access` (plan's bytes unchanged); the agent's launch environment is the credentials' alone, for plan and implement alike; the probe is given the same keys and the credentials' environment, and `PROBE` exits 5 unless its shell has `TMPDIR` = the first root and `UV_OFFLINE=1`. **Not fully achievable, checked under `~/tl-smoke/s5e2-probe` with codex 0.167.0:** `codex sandbox ... -c shell_environment_policy.set.TMPDIR=<root>` gives the shell `TMPDIR` and `UV_OFFLINE` (verified), but Codex's Linux sandbox launcher, which runs outside bubblewrap per command, still makes its mount registry `codex-bwrap-synthetic-mount-targets-<uid>/lock` in the command's TMPDIR: inside the scratch, even with the person's own `TMPDIR` set elsewhere; with no TMPDIR for the shell it goes to `/tmp`. Codex's default workspace-write sandbox makes both `/tmp` and `$TMPDIR` agent-writable, so the registry lives in an agent-writable folder by Codex's own design, and the binary refuses a registry that is a symlink ("synthetic mount registry must not be a symlink"). What the repair does keep private is everything else Codex's own process does with TMPDIR (for `codex exec`, not observed: no agent run). The alternative, no `TMPDIR` for the shell (only `TEMP`/`TMP`), leaves `mktemp`, Rust and uv temporary files in the unwritable `/tmp`; not adopted (owner question c below) |
+| 2 | A root made read-only, or a probe folder left behind, failed every later probe | `RealEnvFiles.ensure` makes an existing folder 0700 again through `os.open(O_DIRECTORY | O_NOFOLLOW)` and `fchmod` (never a link's target); `PROBE` uses `mktemp -d "$d/.tl-probe-XXXXXX"`; the probe runs after the scratch is emptied (below); the `sandbox` guide says the folders were already made 0700 and emptied, so a failure is the sandbox itself, and names the shell-variable case. The `mktemp` change has only a text test: the stand-in `codex` runs no PID namespace, so the old fixed name (`$$`, 1 or 2 inside bubblewrap's namespace) never collides there |
+| 3 | The probe ran the Codex shim with cwd = the slot before the reset | The probe's cwd is the scratch, and the probe moved after step 4: failure count, reconcile, preflight (checks, folders), scratch emptied, probe. The registry the probe's Codex leaves in the scratch is emptied by step 9 (after setup, or on a reuse or repeat) |
+| 4 | `_apart` let a root resolve into a sibling slot or `.locks/` | Each root must resolve exactly to `folders(resolve(<slots_root>/<repo_id>) / <slot>)`, so no link below the base; that subsumes the inside-the-base and root-to-root checks. The overlap with the slot, G, C, the checkout and the protected paths stays. Two new cases: `.t` linked to a sibling slot, `.env` linked to `.locks` |
+| 5 | The release emptied `.t/<slot>` without the link check | The release's port is now `RealEnvFiles.empty_scratch(slot)`: it empties only when the scratch resolves exactly to `resolve(<slots_root>/<repo_id>)/.t/<slot>`; otherwise nothing is touched (real test: `.t` linked to another slot) |
+| 6 | The probe's `/tmp` check used a fixed name | `mktemp -d /tmp/.tl-probe-XXXXXX`; a success is a writable `/tmp` (exit 4) |
+| 7 | A repeat of implement showed `Setup: none` | `tl step show` follows the repeats to the step's attempt 1 and shows its latest run: `Setup: run 1 passed at <B> (attempt <id>'s, which this repeat keeps); log <that attempt's dir>/setup-1.log`; JSON `setup.attempt_id` (null for the shown attempt's own) |
+
+**Owner decisions added.** (c) Accept Codex's launcher registry in the scratch (Codex's own default places it in an
+agent-writable `/tmp` or `$TMPDIR` and refuses a symlinked registry), or give the shell no `TMPDIR` (only `TEMP`/`TMP`)
+at the cost of tools that use `TMPDIR` alone. (a) and (b) of section 18 stand.
+
+**Not verified.** That `codex exec` applies `shell_environment_policy.set` under `--ignore-user-config` as `codex
+sandbox` does (no agent run); that Codex's own process writes nothing else into the scratch during `exec`; the two items
+added to the [live smoke](live-smoke.md) (a slot's `mise.local.toml` and a person's Codex `profile`).
+
+Gates after the repairs: `just check` clean (ruff, pyrefly 0 errors, import-linter 8 kept); `just test` 1585 passed.
+Code lines (policy counter): `access` 54, `slot_env` 96, `environment` 230, `attempt` 286, `attempt_status` 143,
+`slot_release` 263.

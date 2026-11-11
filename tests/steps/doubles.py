@@ -253,7 +253,6 @@ class FakeEnvFiles:
 @dataclass(frozen=True)
 class ProbeCall:
     exe: str
-    slot: Path
     env: Mapping[str, str]
     folders: Folders
 
@@ -282,9 +281,9 @@ class Environment:
         self.process = FakeSetupProcess(self.events)
         self.files = FakeEnvFiles(self.events)
 
-    def probe(self, exe: str, slot: Path, env: Mapping[str, str], found: Folders) -> bool:
+    def probe(self, exe: str, env: Mapping[str, str], found: Folders) -> bool:
         self.events.append("probe")
-        self.probes.append(ProbeCall(exe, slot, dict(env), found))
+        self.probes.append(ProbeCall(exe, dict(env), found))
         return self.sandbox
 
     def observe(self, process: OwnedProcess) -> ProcessSeen:

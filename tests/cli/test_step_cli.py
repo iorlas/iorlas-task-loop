@@ -426,6 +426,27 @@ def admitted(path: Path) -> None:
     con.close()
 
 
+def test_a_repeat_shows_the_setup_of_the_attempt_whose_environment_it_keeps(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """A repeat runs no setup of its own: its `Setup:` line is attempt 1's run, named as such, with that attempt's log."""
+    db, art = tmp_path / "factory.db", tmp_path / "art"
+    admitted(db)
+    con = sqlite3.connect(db)
+    with con:
+        con.execute("INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion,rc) "
+                    "VALUES ('attempt',1,?,1,?,?,1,2,'passed',0)", (KEY.dispatch_token, "d" * 40, "f" * 64))
+        con.execute("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+            input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason)
+            SELECT 'second','token-2',1,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,
+            model,effort,sandbox,deadline,2,2,slot_head,'attempt','uncommitted' FROM attempt WHERE attempt_id='attempt'""")
+    con.close()
+    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["attempt_id"] == "second" and shown["setup"]["attempt_id"] == "attempt"
+    assert shown["setup"]["log"] != f"{shown['directory']}/setup-1.log" and shown["setup"]["log"].endswith("/setup-1.log")
+    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
+    assert f"Setup: run 1 passed at {'d' * 40} (attempt attempt's, which this repeat keeps); log" in capsys.readouterr().out
+
+
 def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     db, art = tmp_path / "factory.db", tmp_path / "art"
     admitted(db)
@@ -441,7 +462,8 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     con.close()
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     setup = json.loads(capsys.readouterr().out)["setup"]
-    assert setup == {"run": 1, "conclusion": "passed", "commit": "d" * 40, "log": f"{shown['directory']}/setup-1.log"}
+    assert setup == {"run": 1, "conclusion": "passed", "commit": "d" * 40, "log": f"{shown['directory']}/setup-1.log",
+                     "attempt_id": None}
     assert main(["step", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
     assert listed.startswith("task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\ntl-1\ttasks\tplan\t1/3\ts1\t")

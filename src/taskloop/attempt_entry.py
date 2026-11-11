@@ -284,7 +284,7 @@ def _claimed(
     if collected:
         app = found.app
         releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock, setup_seen,
-                               RealEnvFiles().empty)
+                               RealEnvFiles().empty_scratch)
         line += " release=" + release_word(releaser.release(found.key, False, found.me))
     return line, ok
 

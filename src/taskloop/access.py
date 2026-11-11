@@ -9,6 +9,7 @@ from typing import Final
 
 SANDBOX: Final = "workspace-write"  # the only mode CODEX_ACCESS constrains; both step kinds
 ROOTS: Final = "sandbox_workspace_write.writable_roots="
+SHELL: Final = "shell_environment_policy.set."  # a variable for the agent's shell commands only, not Codex's own process
 # Neither the user's config nor a repo file widens or narrows these. The sandbox has no network; it writes the working
 # directory and, by Codex's default, also /tmp and $TMPDIR, which the two `exclude_*` keys remove (so the agent cannot
 # stage a Git directory there). A command it blocks fails back to the model (`never`: no escalation, so no reviewer).
@@ -59,32 +60,37 @@ def folders(slot: Path) -> Folders:
                    slot.parent / ".env" / slot.name / "uv-tools")
 
 
-def prepared_access(found: Folders) -> tuple[str, ...]:
-    """CODEX_ACCESS with the three folders as writable roots (a JSON array of strings, which is a valid TOML array);
-    network stays off and both `exclude_*` keys stay: `TMPDIR`, itself a root, stays writable (Run S finding 2b)."""
-    roots = ROOTS + json.dumps([str(path) for path in found.roots])
-    return tuple(roots if item == ROOTS + "[]" else item for item in CODEX_ACCESS)
-
-
 def agent_env(found: Folders) -> dict[str, str]:
-    """Added to the scrubbed environment of an implement agent: its temporary files, uv's cache and tools in the roots,
-    and uv offline (setup filled the cache). No name contains KEY, SECRET or TOKEN, which Codex's default
-    `shell_environment_policy` and the factory's own scrub drop."""
+    """What the implement agent's shell gets beyond its inherited environment: its temporary files, uv's cache and tools
+    in the roots, and uv offline (setup filled the cache). No name contains KEY, SECRET or TOKEN, which Codex's default
+    `shell_environment_policy` drops."""
     return {"TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools), "UV_OFFLINE": "1"}
 
 
-# Creates and removes one folder in each root (no `rm`), then fails when /tmp is writable. Exit 3: a root is not writable;
-# 4: /tmp is.
+def prepared_access(found: Folders) -> tuple[str, ...]:
+    """CODEX_ACCESS with the three folders as writable roots (a JSON array of strings, which is a valid TOML array), then
+    `agent_env` as `shell_environment_policy.set` keys: only the agent's shell gets them, so Codex's own process keeps
+    the person's TMPDIR (outside every root). Network stays off and both `exclude_*` keys stay: `TMPDIR`, itself a root,
+    stays writable (Run S finding 2b). Codex's sandbox launcher still keeps its mount registry
+    (`codex-bwrap-synthetic-mount-targets-<uid>`) in the shell's TMPDIR, as it does in `/tmp` by default (plan section 19)."""
+    roots = ROOTS + json.dumps([str(path) for path in found.roots])
+    shell = [part for name, value in agent_env(found).items() for part in ("-c", f"{SHELL}{name}={json.dumps(value)}")]
+    return (*(roots if item == ROOTS + "[]" else item for item in CODEX_ACCESS), *shell)
+
+
+# Checks the shell got TMPDIR (the first root) and UV_OFFLINE (exit 5), creates and removes a folder of an unpredictable
+# name in each root (exit 3 when it cannot; no `rm`), then fails when it can create one in /tmp (exit 4).
 PROBE: Final = (
-    'for d in "$@"; do mkdir "$d/.tl-probe-$$" && rmdir "$d/.tl-probe-$$" || exit 3; done; '
-    "if mkdir /tmp/.tl-probe-$$ 2>/dev/null; then rmdir /tmp/.tl-probe-$$; exit 4; fi"
+    '[ "$TMPDIR" = "$1" ] && [ "$UV_OFFLINE" = 1 ] || exit 5; '
+    'for d in "$@"; do t=$(mktemp -d "$d/.tl-probe-XXXXXX") && rmdir "$t" || exit 3; done; '
+    'if t=$(mktemp -d /tmp/.tl-probe-XXXXXX 2>/dev/null); then rmdir "$t"; exit 4; fi'
 )
 
 
 def probe_argv(exe: str, found: Folders) -> list[str]:
     """`codex sandbox` running PROBE under the implement agent's sandbox: the mode as a key, then every `-c` key of
-    `prepared_access` (the agent's `exec` flags are not accepted there, so the person's Codex config is read beneath
-    these keys)."""
+    `prepared_access`, the shell's variables included (the agent's `exec` flags are not accepted there, so the person's
+    Codex config is read beneath these keys)."""
     keys = [item for item in prepared_access(found) if item not in EXEC_ONLY]
     return [exe, "sandbox", "-c", f'sandbox_mode="{SANDBOX}"', *keys, "--", "/bin/sh", "-c", PROBE, "sh",
             *(str(path) for path in found.roots)]

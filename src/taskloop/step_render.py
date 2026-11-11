@@ -58,8 +58,8 @@ def _setup_line(found: SetupShown | None) -> str:
     """The latest setup run's conclusion from factory.db (`unfinished` while it has none) and its log's path."""
     if found is None:
         return "Setup: none"
-    row = found.row
-    return f"Setup: run {row.run} {row.conclusion or 'unfinished'} at {row.commit}; log {found.log}"
+    row, whose = found.row, "" if found.attempt_id is None else f" (attempt {found.attempt_id}'s, which this repeat keeps)"
+    return f"Setup: run {row.run} {row.conclusion or 'unfinished'} at {row.commit}{whose}; log {found.log}"
 
 
 def human(command: str, result: Result, db: Path | None) -> list[str]:
