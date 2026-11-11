@@ -5,6 +5,8 @@ from taskloop.attempt import succeeded
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
+from taskloop.check_status import ChecksView
+from taskloop.checks import differs
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     Adoption,
@@ -40,8 +42,23 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
         "repeat_reason": each.repeat_reason, "earlier": [attempt_id for attempt_id, _reason in each.earlier],
         "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
-        "published": _published_data(each.published),
+        "published": _published_data(each.published), "checks": _checks_data(each.checks),
     }
+
+
+def _checks_data(checks: ChecksView | None) -> dict[str, object] | None:
+    """A checks attempt's own facts (tl-8bh9.14.6 section 9): X, the target and the required names, the profile digest,
+    the counted refusals and its latest block's results (`log`: `tl step show` only)."""
+    if checks is None:
+        return None
+    row, required = checks.row, dict(checks.row.required)
+    logs = checks.logs or (None,) * len(checks.results)
+    results = [{"name": each.name, "required": each.name in required, "conclusion": each.conclusion, "rc": each.rc,
+                "block": each.block, "started_at": each.started_at, "ended_at": each.ended_at,
+                "argv_differs": differs(row.required, each), "log": None if log is None else str(log)}
+               for each, log in zip(checks.results, logs, strict=True)]
+    return {"commit": row.commit, "target": row.target, "target_seen": row.target_seen, "required": list(required),
+            "profile_digest": row.profile_digest, "refusal": row.refusal, "refusals": row.refusals, "results": results}
 
 
 def _release_data(release: ReleaseRow | None) -> dict[str, object] | None:
@@ -66,7 +83,8 @@ def _released_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[
     changed = (found.parked, found.reservation_removed) if isinstance(found, Released) else (None, False)
     status = release_word(found)
     return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id, "slot": found.slot,
-            "parked": changed[0], "reservation_removed": changed[1], "claim": found.claim, "abandoned": found.abandoned}
+            "parked": changed[0], "reservation_removed": changed[1], "claim": found.claim, "abandoned": found.abandoned,
+            "checks": None if result.checks is None else _released_data(result.checks)}
 
 
 def _publish_data(result: PublishedTask) -> dict[str, object]:

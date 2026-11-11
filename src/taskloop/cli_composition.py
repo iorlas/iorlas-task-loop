@@ -16,11 +16,15 @@ from sqlite_store import Store
 from taskloop.attempt_reads import SlotUse
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
+from taskloop.check_release import ChecksRelease
 from taskloop.composition import (
     adopt_slots,
     open_admission,
     open_advance,
     open_chain,
+    open_checks_admission,
+    open_checks_launcher,
+    open_checks_releaser,
     open_launcher,
     open_publisher,
     open_releaser,
@@ -32,7 +36,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import checkouts
 from taskloop.interrupts import installed
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
-from taskloop.operations import Adoption, Failed, Quiet, Round, StartPorts, require_database
+from taskloop.operations import Adoption, ChecksPorts, Failed, Quiet, Round, StartPorts, require_database
 from taskloop.owned_processes import current_boot, entry_seen, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
@@ -113,7 +117,8 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
     admission, launcher, chain = open_admission(database, artifacts), open_launcher(database, artifacts), open_chain(database, artifacts)
     repeat = StepRepeat(reader, open_verifier(database, store), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
                         time.time, repeating)
-    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts))
+    checks = ChecksPorts(open_checks_admission(database), open_checks_launcher(database, artifacts))
+    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts), checks)
 
 
 @contextmanager
@@ -247,12 +252,13 @@ def open_publish(database: Path) -> Generator[tuple[AttemptStore, BranchPublish]
 
 
 @contextmanager
-def open_release(database: Path) -> Generator[tuple[AttemptStore, SlotRelease] | Failed]:
-    """The database guard first, then the releaser's shared writer (`tl step release`)."""
+def open_release(database: Path) -> Generator[tuple[AttemptStore, SlotRelease, ChecksRelease] | Failed]:
+    """The database guard first, then the releasers' shared writer (`tl step release`: the agent attempt's and the
+    checks attempt's)."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
-            yield con if isinstance(con, Failed) else (_reader(con), open_releaser(database, store))
+            yield con if isinstance(con, Failed) else (_reader(con), open_releaser(database, store), open_checks_releaser(database, store))
         finally:
             store.close_shared()
 

@@ -1,7 +1,9 @@
 """The step kinds: the few values and functions that make a step the plan step or the implement step. Everything else is
 the shared step machinery, which reaches a kind only through `kind(admission.step)`. The set and order of kinds is this
 fixed tuple in code, never configuration; only this module imports a kind's own module (`plan_step`, `implement_step`,
-an import-linter contract). `next_step` is the one sequencing rule: a task goes plan, then implement, then is done."""
+an import-linter contract). `next_step` is the one sequencing rule over `ORDER`: a task goes plan, then implement, then
+check, then is done. The check step is not a kind (no agent: its attempt is a `checks_attempt`, tl-8bh9.14.6 section 3);
+`is_agent` tells the two apart."""
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -47,7 +49,9 @@ IMPLEMENT: Final = StepKind(
     "implement", implement_step.step_rules, implement_step.input_text, implement_step.ANSWER_SCHEMA, implement_step.decode,
     implement_step.artifact, implement_step.feedback, environment=True,
 )
-STEPS: Final[tuple[StepKind, ...]] = (PLAN, IMPLEMENT)  # the fixed step order
+STEPS: Final[tuple[StepKind, ...]] = (PLAN, IMPLEMENT)  # the agent steps, in order
+CHECK: Final = "check"  # the checks step: no kind, its own tables (`check_store`)
+ORDER: Final = (PLAN.step, IMPLEMENT.step, CHECK)  # every built step, in the fixed order
 # every verdict word a stored verdict may hold
 RULES: Final[tuple[Rule, ...]] = CHAIN_RULES + plan_step.ARTIFACT_RULES + implement_step.ARTIFACT_RULES
 
@@ -64,14 +68,20 @@ def kind(step: str) -> StepKind:
             raise ValueError(f"Unknown step: {step}")
 
 
-def following(step: str) -> Step | None:
-    """The step after `step` in the fixed order; None after the last built step."""
-    order = [each.step for each in STEPS]
-    at = order.index(kind(step).step)
-    return order[at + 1] if at + 1 < len(order) else None
+def is_agent(step: str) -> bool:
+    """`step` has a kind (an agent attempt, `attempt` row); `check` has none."""
+    return any(each.step == step for each in STEPS)
 
 
-def next_step(current: str | None, done: bool) -> Step | None:
+def following(step: str) -> str | None:
+    """The step after `step` in `ORDER`; None after the last built step. An unknown step is a programming error."""
+    if step not in ORDER:
+        raise ValueError(f"Unknown step: {step}")
+    at = ORDER.index(step)
+    return ORDER[at + 1] if at + 1 < len(ORDER) else None
+
+
+def next_step(current: str | None, done: bool) -> str | None:
     """What a task admits next. `current`: its current attempt's step, None when it has none or its abandon returned the
     claim (a fresh start: the first step). `done`: that attempt is verified, its release settled (claim kept) and its
     commit published. None: the current attempt's own `Next` applies, or the last step is done."""

@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import Environment, PinnedViews
+from doubles import NO_CHECKS, Environment, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
@@ -199,7 +199,7 @@ def test_another_repository_checkout_is_refused(
     assert isinstance(found, AdmitRefused) and found.reason == "checkout"
 
 
-def test_the_implement_step_commits_on_the_plan_and_is_published_then_done(
+def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_to_check(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     """Code, its test and a deletion, committed by the factory as one commit on the published plan commit."""
@@ -222,7 +222,7 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_done(
     shown = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert isinstance(shown, Shown)
     view = shown.view
-    assert (view.step, view.next, view.earlier) == ("implement", "done", (("attempt", "advanced"),))
+    assert (view.step, view.next, view.earlier) == ("implement", "advance", (("attempt", "advanced"),))
 
 
 def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
@@ -317,7 +317,7 @@ def test_step_start_on_a_done_plan_admits_and_launches_implement(
 ) -> None:
     launcher, never = Launcher(), Never()
     ports = StartPorts(AttemptStore(lambda: registered), never, launcher, lambda: 10, never,
-                       advancing(registered, tmp_path, checkouts, slot_files))
+                       advancing(registered, tmp_path, checkouts, slot_files), NO_CHECKS)
     started = start(ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", 1))
     assert isinstance(started, Started) and (started.status, started.step, started.existing) == ("started", "implement", False)
     assert launcher.calls == ["tl-1"]

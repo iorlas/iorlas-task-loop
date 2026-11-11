@@ -18,7 +18,7 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
         assert main(arguments) == 0
     output = capsys.readouterr()
     assert "usage: tl" in output.out
-    assert "steps built: plan, implement; publishes task/<id>; no merge or land" in " ".join(output.out.split())
+    assert "steps built: plan, implement, check; publishes task/<id>; no merge or land" in " ".join(output.out.split())
     assert output.err == ""
 
 
@@ -31,7 +31,7 @@ def test_step_help_names_the_steps_built(arguments: list[str], capsys: pytest.Ca
     with pytest.raises(SystemExit) as result:
         main(arguments)
     assert result.value.code == 0
-    assert "steps built: plan, implement; publishes task/<id>; no merge or land" in " ".join(capsys.readouterr().out.split())
+    assert "steps built: plan, implement, check; publishes task/<id>; no merge or land" in " ".join(capsys.readouterr().out.split())
 
 
 def test_publish_help_says_it_pushes_as_you_never_forced(capsys: pytest.CaptureFixture[str]) -> None:

@@ -47,7 +47,8 @@ def register(commands: Parsers) -> None:
     adopt.add_argument("--count", type=int, help="Slots s1..sN (overrides the machine config's slot_count)")
     _common(adopt, "--root", "--db")
     step = _add(commands, "step", f"Step attempts ({STEP_ONLY})").add_subparsers(dest="operation", required=True)
-    start = _add(step, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim); {STEP_ONLY}. {HELD}")
+    start = _add(step, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
+                 f"re-run failed checks on the same commit; {STEP_ONLY}. {HELD}")
     start.add_argument("task_id", metavar="TASK")
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         start.add_argument(flag, required=True)
@@ -61,12 +62,13 @@ def register(commands: Parsers) -> None:
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:* or unknown")
     _common(listing, "--db")
     verify = _add(step, "verify", f"Commit the step's listed files and verify them, then release a clean slot and publish a verified "
-                  f"result ({STEP_ONLY})")
+                  f"result; an agent step's only, never the checks ({STEP_ONLY})")
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
     _common(verify, "--db")
     release = _add(step, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept); with --abandon, "
-                   f"of any step whose entry and agent are stopped, and return the tracker claim ({STEP_ONLY})")
+                   "of any step whose entry and agent or checks are stopped, and return the tracker claim (the check step's slot "
+                   f"first, then its implement step's claim) ({STEP_ONLY})")
     release.add_argument("task_id", metavar="TASK")
     release.add_argument("--backlog", required=True)
     release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl step start` "

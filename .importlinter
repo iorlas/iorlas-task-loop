@@ -26,6 +26,7 @@ source_modules =
     taskloop.exit_codes
     taskloop.step_guide
     taskloop.step_render
+    taskloop.show_render
     taskloop.operations
     taskloop.attempt_status
     taskloop.round
@@ -48,6 +49,8 @@ source_modules =
     taskloop.check_entry
     taskloop.check_release
     taskloop.check_store
+    taskloop.check_admit
+    taskloop.check_status
     taskloop.composition
     taskloop.git_views
     taskloop.agent_credentials
@@ -64,6 +67,7 @@ forbidden_modules =
     taskloop.exit_codes
     taskloop.step_guide
     taskloop.step_render
+    taskloop.show_render
     taskloop.operations
     taskloop.attempt_status
     taskloop.round

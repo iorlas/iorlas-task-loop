@@ -4,27 +4,55 @@ import json
 import os
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from git_porcelain import GitUnavailable, Repo
+from beads_client import Bead
+from git_porcelain import GitUnavailable, Recorded, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop.access import TMP_BYTES, Folders
 from taskloop.admit import AdmitResult
 from taskloop.admit_chain import NextStepRequest
 from taskloop.attempt_types import AttemptKey, Checkouts, FileStat
+from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitProfileFiles
+from taskloop.launch import LaunchResult
+from taskloop.operations import ChecksPorts
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
 from taskloop.setup_store import ProcessSeen, SetupStore
+from taskloop.task import TaskBinding, TaskInspection, TaskScope
+from taskloop.tracker import inspect_task
 
 # The `checking` fixture's checks attempt: its key, its slot's HEAD D, the implement attempt's X, its target (`main`'s
 # commit at admission), and the required names with their argv digests at the target.
 CHECKS = AttemptKey("checks", "checks-token", 1)
 D, X, TARGET = "d" * 40, "c" * 40, "f" * 40
 REQUIRED = (("check", "1" * 64), ("test", "2" * 64))
+
+
+# A profile at `main` requiring `check` and `test` and defining a third, non-required check.
+MAIN_PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"], "checks": [
+    {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 600},
+    {"name": "slow", "argv": ["sleep", "1"], "timeout": 60}]}
+
+
+@dataclass(frozen=True)
+class Done:
+    """The `done` fixture: its factory.db, the implement attempt's key and X, `main`'s commit (the target) and the free
+    slot's HEAD D."""
+
+    path: Path
+    implement: AttemptKey
+    x: str
+    target: str
+    d: str
 
 
 class FakeSlotFiles:
@@ -142,6 +170,19 @@ class NoAdvance:
 
     def admit_next(self, request: NextStepRequest) -> AdmitResult:
         raise AssertionError(f"no advance expected: {request.previous}")
+
+
+class NoChecks:
+    """The checks admission and launcher of a start that never reaches the check step."""
+
+    def admit_checks(self, request: ChecksRequest) -> AdmitResult:
+        raise AssertionError(f"no checks admission expected: {request.previous}")
+
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
+        raise AssertionError(f"no checks launch expected: {task_id}")
+
+
+NO_CHECKS = ChecksPorts(NoChecks(), NoChecks())
 
 
 type Blob = bytes | NoCommit | NotAFile | Unavailable | None
@@ -303,3 +344,68 @@ class Environment:
             self.process.lingering, EvidenceFiles(self.artifacts), self.clock, self.platform, self.safe_removal, self.probe,
             self.protected, self.tmp_bytes,
         ))
+
+
+@dataclass
+class ChecksBench:
+    """A checks admission's ports over the `done` factory.db (the person's checkout and its profile reader, the slot
+    ports): `status`/`assignee` are the task in the tracker (each read in `reads`); `racing` runs once right before the
+    admission's write transaction (another actor's commit)."""
+
+    done: Done
+    repo: FakeRepo
+    views: PinnedViews
+    files: FakeSlotFiles
+    status: str = "in_progress"
+    assignee: str = "taskloop"
+    now: float = 10
+    reads: list[str] = field(default_factory=list)
+    racing: Callable[[], object] = lambda: None
+
+    def __post_init__(self) -> None:
+        con = Store(SCHEMA).open_rw(self.done.path)
+        assert con is not None
+        self.con: sqlite3.Connection = con
+        self.root = self.repo.worktree(self.repo.identity().root)
+
+    def show(self, task_id: str) -> Bead:
+        return Bead(task_id, title="Widget", description="It must do X", status=self.status, assignee=self.assignee)
+
+    def inspect(self, task_id: str, backlog: str, root: str) -> TaskInspection:
+        self.reads.append(task_id)
+        return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self, task_id)
+
+    def begin(self, con: sqlite3.Connection) -> AbstractContextManager[None]:
+        racing, self.racing = self.racing, lambda: None
+        racing()
+        return begin_immediate(con)
+
+    def admission(self) -> ChecksAdmission:
+        return ChecksAdmission(lambda: self.con, self.begin, self.inspect, self.views, lambda: self.now, lambda _p: True, self.files,
+                               lambda path: GitProfileFiles(path, self.views))
+
+    def admit(self, number: int = 1, checkout: Path | None = None) -> AdmitResult:
+        return self.admission().admit_checks(ChecksRequest(self.done.implement, checkout or self.repo.path, 100.0, number))
+
+    def stored(self) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]:
+        rows = "SELECT number,slot,slot_head,target_commit,required,deadline,phase,after_attempt_id FROM checks_attempt ORDER BY number"
+        held = "SELECT slot,attempt_id,generation FROM reservation ORDER BY attempt_id"
+        return self.con.execute(rows).fetchall(), self.con.execute(held).fetchall()
+
+    def main(self, profile: dict[str, object] | None) -> str:
+        """A commit on the person's `main` with this profile (None: without one); returns it."""
+        if profile is None:
+            self.root.remove_file(".task-loop.json")
+        else:
+            self.root.write_file(".task-loop.json", json.dumps(profile))
+        made = self.root.record("main moves", paths="all")
+        assert isinstance(made, Recorded)
+        return made.sha
+
+    def concluded(self, conclusion: str = "failed", released: bool = True, abandoned: bool = False) -> None:
+        """The latest checks attempt concluded as given (and released, abandoned), as the entry and a release leave it."""
+        reason = "test:failed" if conclusion == "failed" else None
+        self.con.execute("UPDATE checks_attempt SET phase='concluded',conclusion=?,reason=?,concluded_at=20", (conclusion, reason))
+        if released:
+            self.con.execute("UPDATE checks_attempt SET released_at=30,parked=?,abandoned=?", (self.done.d, int(abandoned)))
+            self.con.execute("DELETE FROM reservation")

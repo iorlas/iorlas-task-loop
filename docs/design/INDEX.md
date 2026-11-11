@@ -11,7 +11,7 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.1](tl-8bh9.1/plan.md) | Repository binding and storage ownership | design |
 | [tl-8bh9.13](tl-8bh9.13/plan.md) | Untouched-file and workflow gap analysis | design |
 | [tl-8bh9.14.1](tl-8bh9.14.1/plan.md) | Repository profile reader: `.task-loop.json` at a commit, `tl profile show` (block B3) | built |
-| [tl-8bh9.14.6](tl-8bh9.14.6/plan.md) | The checks step: the factory runs the profile's checks on X (block B4, milestone M2) | S6a built (schema v12, check store), S6b built (block, checks setup, detach at X), S6c built (checks entry, launcher, checks release); S6d-S6e design |
+| [tl-8bh9.14.6](tl-8bh9.14.6/plan.md) | The checks step: the factory runs the profile's checks on X (block B4, milestone M2) | S6a built (schema v12, check store), S6b built (block, checks setup, detach at X), S6c built (checks entry, launcher, checks release), S6d built (checks admission, `steps.ORDER`, `tl step` routing and status); S6e design |
 | [tl-8bh9.2](tl-8bh9.2/plan.md) | Workspace ownership and concurrency | design |
 | [tl-8bh9.3.2.1](tl-8bh9.3.2.1/plan.md) | First one-shot plan execution | built |
 | [tl-8bh9.4.3.1.1](tl-8bh9.4.3.1.1/plan.md) | Collect one already admitted plan attempt | built |

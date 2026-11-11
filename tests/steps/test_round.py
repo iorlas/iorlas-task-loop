@@ -15,7 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import NoAdvance
+from doubles import NO_CHECKS, NoAdvance
 from git_porcelain.testing import FakeWorktree
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
@@ -167,7 +167,7 @@ class Bench:
 
     def ports(self) -> RoundPorts:
         reads = StatusPorts(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
-        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance)
+        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance, NO_CHECKS)
         return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, self.ready, self.log, self.stopping)
 
     def round(self, request: NextRequest = REQUEST) -> Round:

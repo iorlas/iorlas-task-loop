@@ -3,7 +3,7 @@ them to do, and the whole-DB discard steps. Text only; `step_render` places it, 
 
 from pathlib import Path
 
-STEP_ONLY = "steps built: plan, implement; publishes task/<id>; no merge or land"
+STEP_ONLY = "steps built: plan, implement, check; publishes task/<id>; no merge or land"
 PUBLISH = ("The step's result is verified but not on `origin` yet: `tl step publish`. A `refused` word names what to fix; "
            "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
            "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl step publish`), rerunning does not "
@@ -40,8 +40,11 @@ GUIDE = {
     "advance": "The step is verified and on `origin`. The next `tl step next` round (or `tl step rounds`) starts the next step "
     "once a slot is free, before any new task, oldest first; by hand, `tl step start <task>`. Either way one tracker read "
     "first confirms the task is in progress for taskloop (no new claim, no label check: removing the label does not stop it, "
-    "`tl step release --abandon` does); it starts from that published commit.",
-    "done": "Collected: `succeeded` tells whether the step's result was verified.",
+    "`tl step release --abandon` does); it starts from that published commit (the check step runs the profile's checks on it, "
+    "detached, with the required names read from your local `main`).",
+    "done": "Collected: `succeeded` tells whether the step's result was verified (the check step: every check required by `main` "
+    "passed). A failed check step keeps the claim and nothing retries it: read the `Check:` lines and logs, then `tl step start` "
+    "re-runs the checks on the same commit (no new plan or implement), or `tl step release --abandon` starts the task afresh.",
     "unknown": "The entry or the store could not be read; run `tl step show` again.",
     "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl step start` admits a "
     "fresh attempt. Its deadline passed with no relaunchable entry from before a reboot (none registered, one from this boot, or "
@@ -96,7 +99,8 @@ GUIDE = {
     "not record it as its publication and never forces.",
     "no_remote": "Add the remote (`git remote add origin <url>`) in the person's checkout, then rerun `tl step publish`.",
     "not_advanceable": "Only the task's current attempt advances, once it is verified, released with its claim kept and "
-    "published, and only when its step has a following one: `tl step show` names its `Next`.",
+    "published, and only when its step has a following one: `tl step show` names its `Next`. A check step is not admitted "
+    "while the task's abandon is half done: rerun `tl step release --abandon`.",
     "claim_lost": "The tracker no longer shows the task in progress for taskloop (claim reverted, taken by another actor, or "
     "the task closed): check `bd show <task>`; nothing retakes the claim. `tl step release --abandon` (its claim answers "
     "`not_held`), then `tl step start` admits it afresh at plan.",
@@ -122,6 +126,27 @@ GUIDE = {
     "(`ps -o pid=,lstart=,command= -g <pgid>`), check each member's working directory is the slot (`lsof -a -p <pid> -d "
     "cwd`), stop only those pids, then run it again. The factory never stops it.",
     "setup_unknown": "The process table could not be read to show the slot's setup stopped: run it again.",
+    "stuck:checks_refused": "The checks were relaunched twice without concluding (every relaunch counts; `Refused:` names the "
+    "last word, the entry log says why), so rounds no longer relaunch them. Fix the cause (a check's process still running, a "
+    "busy slot, the store), then `tl step start` relaunches them by hand; or `tl step release --abandon`.",
+    "check_running": "A check's process still runs in the process group named (from an entry that died, or left behind by a "
+    "check: `lingering`). Wait for it. To stop it yourself, list the group (`ps -o pid=,lstart=,command= -g <pgid>`), check each "
+    "member's working directory is the slot (`lsof -a -p <pid> -d cwd`), stop only those pids, then run it again. The factory "
+    "never stops it.",
+    "check_unknown": "The process table could not be read to show a check's process stopped: run it again.",
+    "checks": "A checks entry did not conclude: `checks:running`, a check's process from an earlier entry still runs (wait for "
+    "it); `unknown`, the process table could not be read; `uncertain`, a check's start could not be confirmed. A relaunch "
+    "reconciles it; each relaunch counts toward `stuck:checks_refused`.",
+    "no_required": "The profile at your local `main` requires no check, so nothing would decide a pass: add the required check "
+    "names to `.task-loop.json` on `main`. Every done task waits (skipped each round, logged once) until then.",
+    "target": "The required checks are read from your local `main`, which is missing or whose profile names another `target` "
+    "(only `main` is checked yet): fix `main`, then rerun.",
+    "target_profile": "The profile at your local `main` is refused (the detail names why; `tl profile show --at main` shows it): "
+    "fix `.task-loop.json` on `main`, then rerun. Every done task waits until then.",
+    "commit_missing": "The implement step's commit is not in the repository any more: fetch `task/<id>` back, or `tl step "
+    "release --abandon` to start the task afresh at plan.",
+    "main_moved": "`main` moved while the checks ran (`Main:` shows both commits), so the required names it gave may be stale: "
+    "`tl step start` re-runs the checks against `main` as it is now.",
     "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl step release --abandon`.",
     "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl step publish`.",
     "diverged": "The remote task/<id> does not contain the verified commit: compare them, then merge or move the remote branch "

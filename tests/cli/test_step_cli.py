@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import get_args
 
 import pytest
-from doubles import NoAdvance
+from doubles import NO_CHECKS, NoAdvance
 from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess
 
@@ -56,6 +56,7 @@ ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step star
 STATUS_KEYS = {
     "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process",
     "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release", "published",
+    "checks",
 }
 REPEAT = AttemptView(
     "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
@@ -69,7 +70,7 @@ ABANDONED = AttemptView(
 FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, "failed"), Path("/a/d/setup-2.log"))
 RUNNING_SETUP = SetupShown(SetupRow(3, D, "f" * 64, 1, OwnedProcess(5, 5, "s", "b"), None), Path("/a/d/setup-3.log"))
 RELEASE = ["step", "release", "tl-1", "--backlog", "tasks"]
-FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned"}
+FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned", "checks"}
 X, T = "a" * 40, "b" * 40
 PUBLISH = ["step", "publish", "tl-1", "--backlog", "tasks"]
 PUBLISHED = {"status", "backlog", "task", "attempt_id", "commit", "remote_head"}
@@ -129,7 +130,7 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     @contextmanager
     def opener(database: Path, artifacts: Path) -> Generator[StartPorts | Failed]:
         opened.append((database, artifacts))
-        yield StartPorts(AttemptStore(lambda: con), admission, FakeLauncher(), lambda: 1000, NoRepeat(), NoAdvance())
+        yield StartPorts(AttemptStore(lambda: con), admission, FakeLauncher(), lambda: 1000, NoRepeat(), NoAdvance(), NO_CHECKS)
 
     monkeypatch.setattr(cli_composition, "open_start", opener)
     config = tmp_path / "scratch.toml"
@@ -361,20 +362,20 @@ class Releases:
 def test_release_flags_reach_the_operation_through_the_opener(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], abandon: bool
 ) -> None:
-    db, releases, opened = tmp_path / "factory.db", Releases(), list[Path]()
+    db, releases, checks, opened = tmp_path / "factory.db", Releases(), Releases(), list[Path]()
     admitted(db)
     con = Store(SCHEMA).open_ro(db)
     assert con is not None
 
     @contextmanager
-    def opener(database: Path) -> Generator[tuple[AttemptStore, Releases]]:
+    def opener(database: Path) -> Generator[tuple[AttemptStore, Releases, Releases]]:
         opened.append(database)
-        yield AttemptStore(lambda: con), releases
+        yield AttemptStore(lambda: con), releases, checks
 
     monkeypatch.setattr(cli_composition, "open_release", opener)
     assert main([*RELEASE, *(["--abandon"] if abandon else []), "--db", str(db), "--json"]) == 0
     con.close()
-    assert opened == [db] and releases.calls == [(KEY, abandon)]
+    assert opened == [db] and releases.calls == [(KEY, abandon)] and checks.calls == []  # no checks attempt: never called
     assert json.loads(capsys.readouterr().out)["abandoned"] is abandon
 
 
@@ -562,7 +563,7 @@ def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, c
     assert ("Run one scheduling round: settle existing attempts, advance claimed tasks whose step is done to the next step "
             "(no label check), start approved ready tasks in the free slots left") in shown
     assert "read only when a new task is taken; a claimed task advances without it" in shown
-    assert "steps built: plan, implement; publishes task/<id>; no merge or land" in shown
+    assert "steps built: plan, implement, check; publishes task/<id>; no merge or land" in shown
 
 
 def test_next_refuses_an_unusable_tracker_root_and_a_missing_database(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

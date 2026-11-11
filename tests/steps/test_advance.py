@@ -1,6 +1,7 @@
 """The round advances a claimed task from plan to implement (S5c), end to end over real SQLite, real admission, verify,
 release and publish, the semantic Git fake with its fake remote, a scripted agent run at once by the launch port (as the
-registered entry would run it), the fake slot setup and a tracker double: plan, advance, implement, `Next: done`."""
+registered entry would run it), the fake slot setup and a tracker double: plan, advance, implement, `Next: advance` (to
+the check step, whose admission is a double here)."""
 
 import json
 import sqlite3
@@ -13,19 +14,20 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
-from doubles import Command, Environment, PinnedViews
+from doubles import Command, Environment, NoChecks, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
 
-from taskloop.admit import AttemptAdmission
+from taskloop.admit import AdmitRefused, AdmitResult, AttemptAdmission
 from taskloop.admit_chain import NextAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
+from taskloop.check_admit import ChecksRequest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.launch import Launched, LaunchResult, LaunchUnavailable
-from taskloop.operations import Round, Started, StartPorts, StartRequest, start, verify_task
+from taskloop.operations import ChecksPorts, Round, Started, StartPorts, StartRequest, start, verify_task
 from taskloop.publish import BranchPublish
 from taskloop.round import NextRequest, RoundPorts, run_round
 from taskloop.slot_lock import custody, hold
@@ -128,7 +130,7 @@ class Factory:
                                  self.tracker.unclaim, clock, lambda _p: True, self.files)
         advance = NextAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, clock, lambda _p: True,
                                 self.files)
-        return StartPorts(self.store, fresh, self, clock, Never(), advance)
+        return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks()))
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(self.store, self.checkouts, self.files, lambda _entry: "gone", lambda _worker: True, custody,
@@ -176,6 +178,13 @@ class Factory:
         return next(ref.sha for ref in self.slot.repo.refs(["refs/heads/task/"]) if ref.name == f"refs/heads/task/{task_id}")
 
 
+class NoRequired:
+    """The checks admission at a `main` whose profile requires no check: every done implement attempt is skipped."""
+
+    def admit_checks(self, request: ChecksRequest) -> AdmitResult:
+        return AdmitRefused("no_required")
+
+
 class Never:
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started:
         raise AssertionError("no step leaves leftovers here")
@@ -204,7 +213,7 @@ def factory(factory: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, che
     return built
 
 
-def test_rounds_plan_advance_and_implement_a_task_to_done_without_a_second_claim_or_the_label(factory: Factory) -> None:
+def test_rounds_plan_advance_and_implement_a_task_to_its_check_step_without_a_second_claim_or_the_label(factory: Factory) -> None:
     factory.tracker.beads.pop("tl-2")
     assert factory.round() == [("tl-1", "plan", "start", "started")]
     assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
@@ -214,7 +223,9 @@ def test_rounds_plan_advance_and_implement_a_task_to_done_without_a_second_claim
     advanced = factory.round()
     assert advanced == [("tl-1", "implement", "advance", "started")] and factory.last.stopped == "no_free_slot"
     assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
-    assert factory.round() == [] and factory.next_words() == {"tl-1": ("implement", "done")}
+    # the check step is next: this `main` requires no check, so the done implement attempt is skipped (S6d)
+    assert factory.round() == [("tl-1", "implement", "skip", "no_required")]
+    assert factory.next_words() == {"tl-1": ("implement", "advance")}
     x = factory.tip("tl-1")
     tree = factory.slot.repo.tree(x)
     assert tree is not None and {"src/tl-1.py", "tests/test_tl-1.py", "docs/design/tl-1/plan.md"} <= set(tree.files)
@@ -239,8 +250,8 @@ def test_two_done_tasks_and_one_slot_advance_oldest_release_first_and_new_work_w
     assert factory.round() == [("tl-2", "implement", "verify", "verified release=released branch=published"),
                                ("tl-1", "implement", "advance", "started")]
     assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published"),
-                               ("tl-3", "plan", "start", "started")]
-    assert factory.next_words() == {"tl-1": ("implement", "done"), "tl-2": ("implement", "done"), "tl-3": ("plan", "verify")}
+                               ("tl-2", "implement", "skip", "no_required"), ("tl-3", "plan", "start", "started")]
+    assert factory.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "advance"), "tl-3": ("plan", "verify")}
 
 
 def test_an_abandoned_task_is_never_advanced_nor_re_admitted_by_a_round(factory: Factory) -> None:
@@ -283,7 +294,7 @@ def test_a_restart_after_the_advance_was_admitted_but_never_launched_continues_i
     assert factory.next_words() == {"tl-1": ("implement", "start")}
     assert factory.round() == [("tl-1", "implement", "relaunch", "relaunched")]
     assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
-    assert factory.next_words() == {"tl-1": ("implement", "done")}
+    assert factory.next_words() == {"tl-1": ("implement", "advance")}
     assert factory.con.execute("SELECT count(*) FROM attempt WHERE step='implement'").fetchone() == (1,)
 
 

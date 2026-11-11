@@ -907,3 +907,90 @@ without it:
    two.
 5. **A lost claim reconciles first**: before concluding `claim_lost` the entry runs the reconcile (no slot access) and
    ignores its word, so gone unfinished results become `interrupted` (a live one holds the release). Test.
+
+## 24. As built: S6d (tl-8bh9.14.6.4)
+
+The checks admission, `steps.ORDER` and the `tl step` routing and status of a task in its check step; nothing of S6e (the
+round's settle and `_resume` routing and its `rounds.log` words). Code lines by the policy counter: `check_admit` 201
+(new), `check_status` 45 (new), `show_render` 67 (new: the `tl step show` lines, moved out of `step_render`), `operations`
+324 (+48), `attempt_status` 194 (+40), `step_render` 110 (-28), `step_guide` 161 (+25), `result_data` 122 (+14),
+`cli_composition` 213 (+5), `composition` 146 (+10), `steps` 51 (+5), `attempt_reads` 196 (+1), `admit` 281 (+1),
+`cli_step` 164 (+2); `test_check_admit` 138, `test_check_operations` 176, `test_check_status` 119, `tests/cli/test_check_cli`
+119 (all new), `conftest` 164 (+35, the `done` fixture), `doubles` 294 (+74, `ChecksBench`, `NoChecks`, `MAIN_PROFILE`).
+
+- **`check_admit.ChecksAdmission.admit_checks(ChecksRequest(previous, checkout, deadline, number))`**: section 5's order.
+  `next_number` (shared by the reads and the write transaction) is the implement attempt still current and done
+  (`admit_chain.CURRENT`, `task_of`, made public) and the number its checks attempts give. The required names come from
+  the profile at the local `refs/heads/main` through `git_views.GitProfileFiles` on the checkout (`composition`'s
+  `Profiles` port). No input file, no claim.
+- **`steps.ORDER = ("plan", "implement", "check")`**, `CHECK`, `is_agent`; `following` and `next_step` read `ORDER`
+  (`kind("check")` stays an error); `admit_chain._previous` refuses `not_advanceable` when the next step is no agent's.
+- **`check_status`**: `latest`, `route` (`advance`, `launch`, `rerun`, `answer`, `abandoned`), `checks_result`,
+  `checks_release`, `checks_next` (section 9's table, `REFUSED_STUCK = 2`), `ChecksView`, `HALF_DONE`.
+- **`operations`**: `StartPorts.checks` (`ChecksPorts`: the admission and the launcher of `taskloop.check_entry`);
+  `_current` sends a done implement attempt to `_checked`; an admitted checks attempt (`_Relaunch`), the advance, the
+  re-run and a racing winner (read through `CheckStore.attempt_of`) are launched with the checks launcher; `Started.step`
+  is set to `check` by the route (no `step_of` read). `release_task(reader, releaser, checks, ...)`: the latest checks
+  attempt first; settled stops there; the abandon then abandons the implement attempt (`ReleasedTask.checks` carries the
+  first half). `verify_task` and `publish_task` are unchanged: they follow the agent attempt (tested).
+- **Status**: `AttemptView.checks`; `attempt_status._show` swaps the fields once the implement attempt's `Next` is
+  `advance` and a checks attempt exists (a failed read of it is `unknown`); `show_attempt` names the checks attempt's
+  directory, entry log, latest setup run and each latest-block result's log (computed, never made). `Next` gains
+  `stuck:checks_refused`. `attempt.succeeded` accepts `passed`.
+- **Words**: `STEP_ONLY` names `check`; GUIDE adds `stuck:checks_refused`, `check_running`, `check_unknown`, `checks`,
+  `no_required`, `target`, `target_profile`, `commit_missing`, `main_moved`, and the `done`, `advance` and
+  `not_advanceable` texts name the check step; `start`, `verify` and `release` help.
+- **Composition**: `open_checks_admission(database)`, `open_checks_releaser(database, store)`; `open_start` and
+  `open_next` wire `ChecksPorts`; `open_release` yields the checks releaser too. `.importlinter`: `check_admit` and
+  `check_status` join the entry closure contract (composition imports them), `show_render` the command surface's.
+
+**Deviations and decisions (decided here, open to veto).**
+
+1. `ChecksRequest.number`: the caller's reading of the next number (1, or the failed latest + 1); the store deciding another
+   number, before or under the write lock, is `task_attempted`. So the round's advance (`advancing`) only admits number 1
+   (a re-run is never the round's) and a concurrent conclusion between the reads and the write cannot slip in a re-run.
+2. X readable (`commit_missing`) is checked before its containment by the task branch (`branch_moved`), so both words
+   are reachable; a superseded implement attempt is `not_advanceable` (section 5), not `admit_chain`'s `task_attempted`.
+3. A required name the profile at `main` does not define among its own checks is `refused target_profile` with
+   `required_undefined: <names> at main` (B3's `resolve` rule for the target side).
+4. A concluded checks attempt not yet released is answered (`already_dispatched` with its result), never re-run; a passed
+   one likewise. The half-done abandon is `refused release` with `HALF_DONE` (rerun `--abandon`), never a launch.
+5. `ReleaseRow.checks_abandoned` (additive): a checks attempt's own abandon flag, so `abandoned` holds while its claim is
+   still the implement attempt's `kept`; `tl step release --abandon` prints the checks attempt's lines first and its
+   JSON gains `checks` (the first half's release data, null otherwise). The "Abandoned: `tl step start` admits a fresh
+   attempt" line is printed only for a release that returned the claim.
+6. `tl step show` of a checks attempt prints section 9's lines (no `Worker:`, `Deadline passed:` or `Published:`; the
+   JSON keeps every key), `Check: none yet` before a block, `unfinished` for a running check, the exit only when known and
+   whole seconds; `tl step list`'s attempt column is the run number alone. JSON: `checks` (commit, target, target_seen,
+   required names, profile_digest, refusal, refusals, results with name, required, conclusion, rc, block, times,
+   argv_differs and log, the log null in `tl step list`) on every view, null for an agent attempt.
+7. The round is not changed (S6e). Its advance phase already admits and launches checks attempts (`<task> check advance
+   started <id>`; `no_required`, `target`, `target_profile`, `commit_missing` are skips). Until S6e its settle phase
+   reports, for a checks attempt: a relaunch `refused:changed` (`_resume` reads the agent attempt), a failed one as
+   `failed:failed:<reason>`, and the other `Next` words as they are.
+8. `tests/steps/test_advance.py` now ends at `Next: advance` for the implement step (its checks admission is a double
+   refusing `no_required`).
+
+**Tests**: `test_check_admit.py` (the `done` factory.db, the Git fake's `main` and `task/tl-1`, the real profile reader,
+a tracker double): the stored row and reservation (D, target, required digests, generation), each refusal with nothing
+written and no tracker read (`expired`, `unclaiming`, rejected, unpublished, a plan, branch gone or moved, `commit_missing`,
+no `main`, another target, no or a broken profile, `required_undefined`, `no_required`, `no_free_slot`), `claim_lost`
+after one read, another repository's checkout, X only on origin's task branch, a re-run (number 2, the target read again,
+the first kept; refused before the release), a passed or half-abandoned latest one, a number the store does not give,
+and commits between the reads and the write (a winner, a winner already failed and released, the abandon's flip, a taken
+slot); the agent advance refusing the check step. `test_check_operations.py`: start's advance, relaunch, answers, re-run
+(never by the round), the round's advance, the half-done refusal, a racing winner and a failed launch through the checks
+launcher; release settled (checks only), the abandon's order, a half-way stop and its rerun, no checks attempt; verify on
+the implement attempt. `test_check_status.py`: the field swap, `advance` without a checks attempt, every `Next` row
+(including `stuck:checks_refused`, `stuck:hung`, `unknown` and an unreadable row), result and release, `--stuck`, show's
+directory, setup, logs and earlier attempts (creating nothing) and its last entry line. `tests/cli/test_check_cli.py`: the
+show lines in order, `Main:`, `Refused:`, an unread profile, no block, an unfinished check, show and list JSON, the list
+row, a checks start, the abandon's text and JSON. Mutation-checked: removing either number fence, the commit read, the
+remote-tracking fallback, the abandon, `no_required`, target, checkout or `required_undefined` refusal, the round's
+number 1, the winner's checks read, the settled stop, the `check` step on a start, the `abandoned` route, the abandoned
+`release`, the refusal threshold, `unknown`, `stuck:hung`, `passed` in `succeeded`, `checks_abandoned`, `is_agent` in
+`_previous`, the argv marker, the swap or the claim-returning `Abandoned:` line each fails a test.
+
+**Not verified**: a real `tl step start` launching a real `taskloop.check_entry` and its block end to end (the launcher is
+a semantic fake here); the profile read of a real `main` through `GitProfileFiles` in the admission (only the Git fake);
+the round's settle of checks attempts (S6e).

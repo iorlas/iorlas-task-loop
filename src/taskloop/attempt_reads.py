@@ -22,11 +22,13 @@ class ReleaseRow:
     head: str
     released_at: float
     claim: str
+    checks_abandoned: bool = False  # a checks attempt's own abandon flag: its claim is its implement attempt's, still kept
 
     @property
     def abandoned(self) -> bool:
-        """An abandon never keeps the claim; a settled release always does."""
-        return self.claim != "kept"
+        """An abandon never keeps the claim; a settled release always does. A checks attempt's abandon keeps it (the
+        implement attempt's abandon, which follows, returns it)."""
+        return self.claim != "kept" or self.checks_abandoned
 
 
 @dataclass(frozen=True)

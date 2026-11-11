@@ -92,8 +92,9 @@ def judged(verdict: Verdict) -> str:
 
 
 def succeeded(result: AttemptResult) -> bool:
-    """`collected` means terminal, never success: success is a verified plan, new (`verified`) or existing (`reused`)."""
-    return result.status == "collected" and result.reason in ("verified", "reused")
+    """`collected` means terminal, never success: success is a verified step result, new (`verified`) or existing
+    (`reused`), or a checks attempt concluded `passed` (`check_status.checks_result`)."""
+    return result.status == "collected" and result.reason in ("verified", "reused", "passed")
 
 
 def collect(store: AttemptStore, key: AttemptKey) -> AttemptResult:

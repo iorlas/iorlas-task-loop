@@ -1,6 +1,10 @@
 """Every step command's status read (`tl step show`, `tl step list` and the round's snapshot): a task's current attempt
 with its entry observation, collected result, deadline and the `Next` word a person acts on. Read-only: values in,
-values out; `result_data.as_data` is the one JSON shape."""
+values out; `result_data.as_data` is the one JSON shape.
+
+A task whose current attempt is a done implement attempt with checks attempts shows its latest checks attempt (section 9
+of tl-8bh9.14.6): the view's step, attempt, slot, phase, entry, result, deadline, `Next`, number, last entry and release are
+then that checks attempt's (`check_status`); the backlog, task, order and publication stay the implement attempt's."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -12,14 +16,17 @@ from taskloop.attempt import collect, succeeded
 from taskloop.attempt_reads import AttemptRow, PublishedRow, ReleaseRow
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, EntryIdentity, Observe, Unsettled
+from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result
+from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.operations import Clock, Failed
 from taskloop.setup_store import SETUP_RUNS, SetupRow, SetupStore
-from taskloop.steps import following
+from taskloop.steps import CHECK, following
 
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
 type Stuck = Literal[
-    "stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:uncollected", "stuck:conflict", "stuck:setup_failed"
+    "stuck:expired_admitted", "stuck:entry_lost", "stuck:hung", "stuck:uncollected", "stuck:conflict", "stuck:setup_failed",
+    "stuck:checks_refused",
 ]
 type Next = (
     Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "release", "publish", "advance", "done", "unknown"] | Stuck
@@ -40,7 +47,7 @@ class StatusPorts:
 class AttemptView:
     backlog: str
     task_id: str
-    step: str  # the step the attempt belongs to (`plan`, `implement`)
+    step: str  # the step the attempt belongs to (`plan`, `implement`, `check`)
     attempt_id: str
     slot: str
     phase: str
@@ -54,11 +61,13 @@ class AttemptView:
     number: int = 1  # in its step; at most ATTEMPTS
     previous_attempt_id: str | None = None  # the attempt this one repeats
     repeat_reason: str | None = None
-    earlier: tuple[tuple[str, str], ...] = ()  # each earlier attempt, newest first: its repeat reason, `abandoned` or `advanced`
+    earlier: tuple[tuple[str, str], ...] = ()  # each earlier attempt, newest first: its repeat reason, `abandoned`, `advanced`
+    # or `re-run` (an earlier checks attempt of the same implement attempt)
     last_entry: str | None = None  # the entry log's last line of fixed words (`refused slot_staged ...`), read now
     seq: int = 1  # the attempt's order among its task's attempts
     release: ReleaseRow | None = None  # how it ended its reservation, once released
     published: PublishedRow | None = None  # its verified commit on origin's task/<id>, once published
+    checks: ChecksView | None = None  # the latest checks attempt whose fields these are (section 9), None for an agent attempt
 
 
 @dataclass(frozen=True)
@@ -108,13 +117,45 @@ def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
     return "verify" if result.reason == "verification" else "stuck:uncollected"
 
 
+def _observed(reads: StatusPorts, entry: EntryIdentity | None) -> EntryState:
+    if entry is None:
+        return "none"
+    seen = reads.observe(entry)
+    return "running" if seen == "matching" else seen
+
+
 def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
-    """A task's current attempt. `probe`: read the leftovers of a step still to settle (Git and slot reads); never for
-    a listing that keeps only stuck or unknown attempts, which a `verify`, `repeat` or `repeats_exhausted` step never is."""
-    entry: EntryState = "none"
-    if row.entry is not None:
-        seen = reads.observe(row.entry)
-        entry = "running" if seen == "matching" else seen
+    """A task's current attempt, or (a done implement attempt with checks attempts) its latest checks attempt; a failed
+    read of those is `unknown`. `probe`: read the leftovers of a step still to settle (Git and slot reads); never for a
+    listing that keeps only stuck or unknown attempts, which a `verify`, `repeat` or `repeats_exhausted` step never is."""
+    view = _agent(reads, row, probe=probe)
+    if view.next != "advance" or following(row.step) != CHECK:
+        return view
+    try:
+        store = CheckStore(reads.store.connect, reads.store.begin)
+        rows = store.of_attempt(row.key.attempt_id)
+        results = store.results(rows[-1].key) if rows else ()
+    except StoreUnavailable:
+        return replace(view, next="unknown")
+    return _swapped(reads, view, rows, results) if rows else view
+
+
+def _swapped(reads: StatusPorts, view: AttemptView, rows: tuple[ChecksRow, ...], results: tuple[ResultRow, ...]) -> AttemptView:
+    """Section 9's field swap: the latest checks attempt's fields; each earlier one `re-run`, then the implement attempt
+    `advanced`, newest first. No worker, leftovers or repeat: a checks attempt has no agent."""
+    latest, claim = rows[-1], "kept" if view.release is None else view.release.claim
+    entry, expired = _observed(reads, latest.entry), reads.clock() >= latest.deadline
+    earlier = (*((each.key.attempt_id, "re-run") for each in reversed(rows[:-1])), (view.attempt_id, "advanced"))
+    return replace(
+        view, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
+        result=checks_result(latest), deadline_passed=expired, next=checks_next(latest, entry, expired), entry_process=latest.entry,
+        worker=None, leftovers=(), number=latest.number, previous_attempt_id=None, repeat_reason=None, earlier=earlier,
+        release=checks_release(latest, claim), checks=ChecksView(latest, results),
+    )
+
+
+def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
+    entry = _observed(reads, row.entry)
     result = collect(reads.store, row.key)
     expired = reads.clock() >= row.deadline
     rebooted = row.entry is not None and reads.boot() not in (None, row.entry[2])
@@ -173,12 +214,29 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
         return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
     directory = files.root / files.directory(rows[0].key)
     earlier = tuple((older.key.attempt_id, _ended(newer, older)) for newer, older in pairwise(rows))
-    last = files.last_entry(rows[0].key)
+    view = _show(reads, rows[0])
+    if view.checks is not None:
+        try:
+            return _checks_shown(reads, files, replace(view, earlier=view.earlier + earlier), view.checks)
+        except StoreUnavailable as error:
+            return Failed("unavailable", "store", str(error))
     setup = None
     if first is not None and latest is not None:
         other = None if first is rows[0] else first.key.attempt_id
         setup = SetupShown(latest, files.root / files.directory(first.key) / f"setup-{latest.run}.log", other)
-    return Shown(replace(_show(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log", setup)
+    return Shown(replace(view, earlier=earlier, last_entry=files.last_entry(rows[0].key)), directory, directory / "entry.log", setup)
+
+
+def _checks_shown(reads: StatusPorts, files: EvidenceFiles, view: AttemptView, checks: ChecksView) -> Shown:
+    """The checks attempt's own directory, entry log, latest setup run and each latest-block result's log (computed,
+    never made); StoreUnavailable propagates."""
+    key = checks.row.key
+    directory = files.root / files.directory(key)
+    logs = tuple(directory / f"check-{row.block}-{row.name}.log" for row in checks.results)
+    latest = SetupStore(reads.store.connect, reads.store.begin).latest(key)
+    setup = None if latest is None else SetupShown(latest, directory / f"setup-{latest.run}.log")
+    shown = replace(view, last_entry=files.last_entry(key), checks=replace(checks, logs=logs))
+    return Shown(shown, directory, directory / "entry.log", setup)
 
 
 def _first(rows: tuple[AttemptRow, ...]) -> AttemptRow:
@@ -198,8 +256,8 @@ def _ended(newer: AttemptRow, older: AttemptRow) -> str:
 
 
 def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed:
-    """Every task's current attempt (one row per task: its highest `seq`), or (`stuck`) only those whose next action is
-    `stuck:*` or `unknown`."""
+    """Every task's current attempt (one row per task: its highest `seq`; its latest checks attempt once its implement
+    attempt is done), or (`stuck`) only those whose next action is `stuck:*` or `unknown`."""
     try:
         every = reads.store.attempts()
     except StoreUnavailable as error:

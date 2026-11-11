@@ -23,12 +23,14 @@ from taskloop.attempt import Attempts, Credentials
 from taskloop.attempt_reads import AttemptReads, StoreConnection
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
 from taskloop.attempt_types import Checkouts, Observe, SlotFiles
+from taskloop.check_admit import ChecksAdmission
+from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
 from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
-from taskloop.git_views import checkouts, remotes, slot_profiles
+from taskloop.git_views import GitProfileFiles, checkouts, remotes, slot_profiles
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
@@ -204,3 +206,21 @@ def open_advance(database: Path, artifacts: Path) -> NextAdmission:
         lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), inspect_tracker_task, checkouts, time.time,
         slot_lock.probe, RealSlotFiles(),
     )
+
+
+def open_checks_admission(database: Path) -> ChecksAdmission:
+    """Real wiring of a checks attempt's admission (an advance to the check step, or a re-run): per-thread shared writers
+    on factory.db, the task read, the real Git boundary and slot lock probe, the profile read on the person's checkout,
+    wall-clock deadlines; no claim, no input file."""
+    store = Store(SCHEMA)
+    return ChecksAdmission(lambda: store.shared_rw(database), store.begin_immediate, inspect_tracker_task, checkouts, time.time,
+                           slot_lock.probe, RealSlotFiles(), GitProfileFiles)
+
+
+def open_checks_releaser(database: Path, store: Store) -> ChecksRelease:
+    """Real wiring for `tl step release` of a checks attempt: a shared writer of `store` (the caller closes it) on
+    factory.db, real Git, the entry and command observations, the reset and park under the slot's custody lock, wall clock;
+    no tracker call."""
+    writer = CheckStore(lambda: store.shared_rw(database), store.begin_immediate)
+    return ChecksRelease(writer, checkouts, RealSlotFiles(), entry_seen, slot_lock.custody, time.time, setup_seen,
+                         RealEnvFiles().empty_scratch)

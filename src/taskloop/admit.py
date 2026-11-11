@@ -44,6 +44,7 @@ type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tra
 type Refusal = Literal[
     "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged", "claim_lost", "not_advanceable", "branch_moved",
+    "commit_missing", "target", "target_profile", "no_required",  # the checks admission's (`check_admit`)
 ]
 FIRST = STEPS[0].step  # a fresh admission's step: the first one
 NOT_CLAIMED = frozenset({"missing_binary", "version", "not_found", "lint"})  # BdError kinds where the claim certainly did not happen

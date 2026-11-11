@@ -15,7 +15,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles, NoAdvance
+from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store, begin_immediate
@@ -467,7 +467,7 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
     fresh = AttemptAdmission(
         lambda: registered, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, lambda: 10, never, slot_files
     )
-    ports = StartPorts(store, fresh, launcher, lambda: 10, repeats, NoAdvance())
+    ports = StartPorts(store, fresh, launcher, lambda: 10, repeats, NoAdvance(), NO_CHECKS)
     assert start(ports, request) == Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY, step="plan")
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     assert start(ports, request) == Failed("refused", "repeats_exhausted")

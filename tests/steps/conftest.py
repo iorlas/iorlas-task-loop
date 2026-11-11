@@ -4,6 +4,7 @@ entry-registered attempt on it, and another holder of a slot's lock."""
 
 import fcntl
 import hashlib
+import json
 import os
 import sqlite3
 from collections.abc import Callable, Generator
@@ -11,12 +12,13 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS, REQUIRED, TARGET, D, FakeSlotFiles, PinnedViews, X
+from doubles import CHECKS, MAIN_PROFILE, REQUIRED, TARGET, D, Done, FakeSlotFiles, PinnedViews, X
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
 
 from taskloop import check_store
+from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import SCHEMA
 
 
@@ -156,6 +158,46 @@ def on_slot(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Path:
         check_store.insert(con, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s1", d, made.sha, REQUIRED, 100.0))
     con.close()
     return path
+
+
+DONE = (  # the implement attempt's capture, verdict, settled release and publication
+    """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,stderr_path,
+    stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,session_state) VALUES
+    ('implement','implement-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""",
+    """INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,observed_at)
+    VALUES ('implement','implement-token',1,'verified',5)""",
+)
+
+
+@pytest.fixture
+def done(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Done:
+    """`<tmp>/factory.db`: tl-1's done implement attempt `implement` (verified, released `kept` from slot s0, published at X)
+    and the adopted, free slot s1 (the Git fake's, detached at D). The person's `main` holds `MAIN_PROFILE` (the target);
+    `task/tl-1` holds X on it. No checks attempt yet."""
+    root, d = repo.worktree(repo.identity().root), head(slot)
+    root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    target = root.record("profile", paths="all")
+    root.checkout_new("task/tl-1")
+    root.write_file("src/x.py", "X = 1\n")
+    x = root.record("the task's commit", paths="all")
+    assert isinstance(target, Recorded) and isinstance(x, Recorded)
+    root.checkout("main")
+    path, repo_id = tmp_path / "factory.db", repo.identity().key
+    con = Store(SCHEMA).open_rw(path)
+    assert con is not None
+    with begin_immediate(con):
+        con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot.path)))
+        con.execute(
+            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
+            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, target.sha, x.sha, d, target.sha))
+        for statement in DONE:
+            con.execute(statement)
+        con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,4,'kept')", (d,))
+        con.execute("INSERT INTO published_branch VALUES ('implement','implement-token',1,?,?,6)", (x.sha, x.sha))
+    con.close()
+    return Done(path, AttemptKey("implement", "implement-token", 1), x.sha, target.sha, d)
 
 
 @contextmanager

@@ -50,7 +50,7 @@ from taskloop.factory_schema import LATER
 from taskloop.prepare import HEADS, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
-from taskloop.steps import next_step
+from taskloop.steps import is_agent, next_step
 from taskloop.task import TaskInspection
 from taskloop.tracker import ACTOR
 
@@ -173,8 +173,9 @@ class NextStepRequest:
 
 
 @dataclass(frozen=True)
-class _Task:
-    """The previous attempt's task, read before any effect; `current`: it is still the task's current attempt."""
+class Task:
+    """The previous attempt's task, read before any effect; `current`: it is still the task's current attempt (also the
+    checks admission's read, `check_admit`)."""
 
     backlog: str
     task_id: str
@@ -190,7 +191,7 @@ class _Ready:
     """Everything an advance read before any effect."""
 
     con: sqlite3.Connection
-    found: _Task
+    found: Task
     step: str
     task: TaskInspection
     free: tuple[Free, ...]
@@ -233,7 +234,7 @@ class NextAdmission:
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
 
-    def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, _Task, str] | AdmitRefused | AdmitUnavailable:
+    def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, Task, str] | AdmitRefused | AdmitUnavailable:
         """The choices, the deadline, then the previous attempt's task and the step after it; a superseded previous
         attempt is `task_attempted` before any tracker read (the transaction checks it again)."""
         if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
@@ -243,12 +244,12 @@ class NextAdmission:
             return refused
         try:
             con = open_store(self.connect)
-            found = _task_of(con, request.previous)
+            found = task_of(con, request.previous)
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
         step = None if found is None else next_step(found.step, True)
-        if found is None or step is None or found.end_commit is None:
-            return AdmitRefused("not_advanceable")
+        if found is None or step is None or not is_agent(step) or found.end_commit is None:
+            return AdmitRefused("not_advanceable")  # the check step is the checks admission's (`check_admit`)
         return (con, found, step) if found.current else AdmitRefused("task_attempted")
 
     def _ready(self, request: NextStepRequest) -> _Ready | AdmitRefused | AdmitUnavailable:
@@ -270,7 +271,7 @@ class NextAdmission:
                                 f"assigned to {task.assignee or 'nobody'}")
         return _Ready(con, found, step, task, free)
 
-    def _free(self, con: sqlite3.Connection, request: NextStepRequest, found: _Task) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
+    def _free(self, con: sqlite3.Connection, request: NextStepRequest, found: Task) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
         """The checkout is the previous attempt's repository; its free slots whose D the task branch rule passes and
         whose start (as the entry takes it) contains the previous X."""
         checked = checkout_repo(self.checkouts, request.checkout)
@@ -311,7 +312,7 @@ class NextAdmission:
         return Admitted(key, name)
 
 
-def _task_of(con: sqlite3.Connection, previous: AttemptKey) -> _Task | None:
+def task_of(con: sqlite3.Connection, previous: AttemptKey) -> Task | None:
     row: tuple[object, ...] | None = con.execute(
         "SELECT p.backlog,p.task_id,p.tracker_root,p.repo_id,p.step,NOT " + LATER + ",p.end_commit FROM attempt p "
         "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?",
@@ -322,10 +323,10 @@ def _task_of(con: sqlite3.Connection, previous: AttemptKey) -> _Task | None:
     backlog, task_id, root, repo_id, step, current, end = row
     if not all(isinstance(each, str) for each in row[:5]) or not isinstance(end, (str, type(None))):
         raise sqlite3.DatabaseError("Malformed attempt row")
-    return _Task(str(backlog), str(task_id), str(root), str(repo_id), str(step), bool(current), end)
+    return Task(str(backlog), str(task_id), str(root), str(repo_id), str(step), bool(current), end)
 
 
-def _containing(repo: Repo, found: _Task, free: tuple[Free, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
+def _containing(repo: Repo, found: Task, free: tuple[Free, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
     """Read-only, before anything is reserved (the entry checks it again): the free slots whose start, the local
     `task/<id>`, else origin's remote-tracking one, else the slot's D, contains the previous X."""
     after, task_id = found.end_commit or "", found.task_id
