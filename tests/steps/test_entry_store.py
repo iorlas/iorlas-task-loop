@@ -21,10 +21,10 @@ def seed(con: sqlite3.Connection) -> sqlite3.Connection:
     """An admitted, unregistered attempt (entry_* NULL) and its held reservation, as admission writes them."""
     con.execute("INSERT INTO reservation VALUES ('slot','repo','/slots/repo/slot',1,'attempt')")
     con.execute(
-        """INSERT INTO plan_attempt
-        (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
+        """INSERT INTO attempt
+        (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
          schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
-        VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker','repo','slot','input.txt','0',1,'chosen','high',
+        VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker','repo','slot','input.txt','0',1,'chosen','high',
         'workspace-write',100,1,1,'dddddddddddddddddddddddddddddddddddddddd')"""
     )
     return con
@@ -36,7 +36,7 @@ def con(factory: sqlite3.Connection) -> sqlite3.Connection:
 
 
 def entry(con: sqlite3.Connection) -> tuple[object, ...]:
-    return con.execute("SELECT entry_pid,entry_start,entry_boot,rev FROM plan_attempt").fetchone()
+    return con.execute("SELECT entry_pid,entry_start,entry_boot,rev FROM attempt").fetchone()
 
 
 def test_first_registration_wins_and_a_second_is_a_conflict(con: sqlite3.Connection) -> None:
@@ -64,9 +64,9 @@ def test_replacement_needs_the_exact_stored_identity(con: sqlite3.Connection) ->
 def test_no_registration_or_replacement_after_admitted(con: sqlite3.Connection, phase: str) -> None:
     store = AttemptStore(lambda: con)
     assert store.register_entry(KEY, FIRST, 10) == "accepted"
-    con.execute("UPDATE plan_attempt SET phase=?,base_commit=?", (phase, "b" * 40))
+    con.execute("UPDATE attempt SET phase=?,base_commit=?", (phase, "b" * 40))
     assert store.register_entry(KEY, SECOND, 10, Replaced(FIRST, "gone")) == "conflict"
-    con.execute("UPDATE plan_attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL")
+    con.execute("UPDATE attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL")
     assert store.register_entry(KEY, SECOND, 10) == "conflict"
 
 
@@ -77,14 +77,14 @@ def test_no_registration_or_replacement_after_admitted(con: sqlite3.Connection, 
         "UPDATE reservation SET attempt_id='other'",
         "UPDATE reservation SET repo_id='other-repo'",
         "DELETE FROM reservation",
-        "UPDATE plan_attempt SET deadline=10",
-        "DELETE FROM plan_attempt",
+        "UPDATE attempt SET deadline=10",
+        "DELETE FROM attempt",
     ],
 )
 def test_stale_reservation_expired_or_missing_attempt_is_refused(con: sqlite3.Connection, change: str) -> None:
     con.execute(change)
     assert AttemptStore(lambda: con).register_entry(KEY, FIRST, 10) == "refused"
-    assert con.execute("SELECT count(*) FROM plan_attempt WHERE entry_pid IS NOT NULL").fetchone() == (0,)
+    assert con.execute("SELECT count(*) FROM attempt WHERE entry_pid IS NOT NULL").fetchone() == (0,)
 
 
 @pytest.mark.parametrize(
@@ -139,7 +139,7 @@ def test_attempt_of_is_the_recovery_read_by_task(con: sqlite3.Connection) -> Non
     assert store.attempt_of("tasks", "tl-2") is None
     assert store.attempt_of("other", "tl-1") is None
     assert store.register_entry(KEY, FIRST, 10) == "accepted"
-    con.execute("UPDATE plan_attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
+    con.execute("UPDATE attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
     con.execute("DELETE FROM reservation")  # a recovery read needs no live reservation
     assert store.attempt_of("tasks", "tl-1") == (KEY, "dispatching", FIRST)
     with pytest.raises(StoreUnavailable):
@@ -150,7 +150,7 @@ REBOOTED = (9, "after-reboot", "new-boot")
 
 
 def deadline(con: sqlite3.Connection) -> object:
-    return con.execute("SELECT deadline FROM plan_attempt").fetchone()[0]
+    return con.execute("SELECT deadline FROM attempt").fetchone()[0]
 
 
 def test_a_replacement_from_another_boot_renews_the_deadline_once_per_reboot(con: sqlite3.Connection) -> None:
@@ -180,7 +180,7 @@ def test_the_renewal_is_fenced_by_key_phase_and_the_stored_identity(con: sqlite3
     replacing = Replaced(FIRST, "different_process")
     assert store.register_entry(AttemptKey("attempt", "other-token", 1), REBOOTED, 200, replacing, renewed=2000) == "refused"
     assert store.register_entry(KEY, REBOOTED, 200, Replaced(SECOND, "different_process"), renewed=2000) == "conflict"
-    con.execute("UPDATE plan_attempt SET phase='dispatching',base_commit=?", ("d" * 40,))
+    con.execute("UPDATE attempt SET phase='dispatching',base_commit=?", ("d" * 40,))
     assert store.register_entry(KEY, REBOOTED, 200, replacing, renewed=2000) == "conflict"
     assert (entry(con), deadline(con)) == ((*FIRST, 1), 100)
 

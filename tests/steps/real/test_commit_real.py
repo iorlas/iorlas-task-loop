@@ -22,7 +22,7 @@ from taskloop.task import TaskReference, TaskScope
 
 P = "docs/design/tl-1/plan.md"
 HOOKS = ("pre-commit", "commit-msg", "prepare-commit-msg", "post-commit", "post-index-change", "reference-transaction")
-ANSWER = AnswerState("valid", "planned", P, (P,), "Plan tl-1")
+ANSWER = AnswerState("valid", "planned", "commit", (P,), "Plan tl-1")
 
 
 def quiet() -> Unsettled | None:
@@ -60,7 +60,7 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) 
 def admission(main: Path, slot: Path) -> Admission:
     key = checkouts(main).identity().key
     task = TaskReference(TaskScope("tasks"), "tl-1")
-    choices = ("m", "e", "s", 100, (1, "", ""), 1)
+    choices = ("m", "e", "s", 100, (1, "", ""), 1, "plan")
     return Admission(AttemptKey("attempt", "dispatch", 1), task, RepoId(key), "s1", str(slot), FileRef("i", "d"), *choices)
 
 

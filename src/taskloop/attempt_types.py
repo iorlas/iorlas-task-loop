@@ -24,6 +24,9 @@ MODE: Final = "100644"
 ATTEMPTS: Final = 3  # attempts of one step at most (2 repeats); always compared as `number >= ATTEMPTS`
 type RepeatReason = Literal["uncommitted", "unsafe", "ignored"]
 REPEATABLE: Final[tuple[RepeatReason, ...]] = ("uncommitted", "unsafe", "ignored")  # the only leftovers a repeat hands back
+# What a valid answer does to the slot: `commit` ends at a new commit X != B, `keep` ends at B itself, `none` ends nothing.
+type Effect = Literal["commit", "keep", "none"]
+EFFECTS: Final[tuple[Effect, ...]] = ("commit", "keep", "none")
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,7 @@ class Admission:
     deadline: float
     entry: tuple[int, str, str]
     number: int  # the attempt's number in its step (1, 2, 3), admitted with it
+    step: str  # the step the attempt belongs to (`plan`), admitted with it
 
 
 @dataclass(frozen=True)
@@ -114,7 +118,7 @@ class AttemptRecord:
     session_ref: str | None
     session_conflict: bool
     base_commit: str | None  # B: the slot HEAD read just before dispatch; never part of the fenced Admission
-    plan_commit: str | None = None  # the commit the stage ends at (X, or B for `unchanged`), written once
+    end_commit: str | None = None  # the commit the step ends at (X, or B when its effect is `keep`), written once
     start: str | None = None  # E: where the previous attempt ended (its X, else its B), read frozen; None for attempt 1
 
 
@@ -125,7 +129,7 @@ class ChainLink:
 
     number: int
     base_commit: str
-    plan_commit: str | None
+    end_commit: str | None
     disposition: str | None
     paths: tuple[str, ...]
     input_ref: FileRef
@@ -161,7 +165,7 @@ class ExecutionFacts:
 class AnswerState:
     kind: Literal["validation_pending", "valid", "missing", "json_invalid", "schema_invalid"]
     disposition: str | None = None
-    plan_path: str | None = None
+    effect: Effect | None = None  # stored with the disposition of a valid answer; the store's fences read it
     paths: tuple[str, ...] = ()  # the files the agent asked the factory to commit, as validated
     message: str | None = None
 
@@ -181,7 +185,7 @@ class Verified:
     """Every rule held over the step's chain (B1, each attempt's commit, the plan blob at Xn); `reused`: no attempt of
     the step committed anything, the plan at B1 stands."""
 
-    plan_blob: str
+    blob: str
     reused: bool = False
 
 

@@ -118,7 +118,7 @@ class Verifier:
             if not isinstance(stored, StoredExecution) or record is None or record.base_commit is None:
                 return None
             admission = record.admission
-            return leftovers(self.checkouts, self.files, admission, record.base_commit, stored.answer, record.plan_commit)
+            return leftovers(self.checkouts, self.files, admission, record.base_commit, stored.answer, record.end_commit)
         except (StoreUnavailable, StoreRefused, NotSettled, GitUnavailable, Unreadable):
             return None
 
@@ -149,20 +149,20 @@ class Verifier:
     def _settle(self, record: AttemptRecord, base: str, stored: StoredExecution) -> VerifyResult:
         """Outside any transaction: X (stored, adopted or made), then the clean tree at X, then the verdict over the
         step's chain."""
-        admission, answer, commit = record.admission, stored.answer, record.plan_commit
+        admission, answer, commit = record.admission, stored.answer, record.end_commit
         if commit is None:
             settled = settle(self.checkouts, self.files, admission, base, answer, lambda: self._quiet(record))
             if isinstance(settled, Unsettled):
                 return settled
             if isinstance(settled, Rejected):  # nothing_written: no commit to bind
                 return self._kept(record, base, None, settled)
-            commit = settled.sha if answer.disposition == "unchanged" else self.store.plan_commit(admission, settled.sha)
+            commit = settled.sha if answer.disposition == "unchanged" else self.store.end_commit(admission, settled.sha)
             if commit != settled.sha:
                 return VerifyUnavailable("inconsistent")
         root = clean_at(self.checkouts, self.files, admission, commit)
         if isinstance(root, Unsettled):
             return root
-        if record.plan_commit is None and answer.disposition == "unchanged" and self.store.plan_commit(admission, commit) != commit:
+        if record.end_commit is None and answer.disposition == "unchanged" and self.store.end_commit(admission, commit) != commit:
             return VerifyUnavailable("inconsistent")
         found = judge(self.checkouts(root), root, commit, plan_stage(admission.task.task_id), self.store.chain(admission.key))
         return self._kept(record, base, commit, found)

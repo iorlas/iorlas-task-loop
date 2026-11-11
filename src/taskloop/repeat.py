@@ -142,7 +142,7 @@ class StepRepeat:
             return Failed("unavailable", "store", str(error))
         except EvidenceError as error:
             return Failed("refused", "input", str(error))
-        unrecorded = steps[-1].disposition == "planned" and steps[-1].plan_commit is None
+        unrecorded = steps[-1].disposition == "planned" and steps[-1].end_commit is None
         number = record.admission.number
         return feedback(found, plan_stage(record.admission.task.task_id), number, task, secrets.token_hex(8), unrecorded=unrecorded)
 

@@ -134,7 +134,7 @@ def body(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Check
 
 
 def rows(con: sqlite3.Connection) -> tuple[int, int]:
-    return con.execute("SELECT (SELECT count(*) FROM reservation),(SELECT count(*) FROM plan_attempt)").fetchone()
+    return con.execute("SELECT (SELECT count(*) FROM reservation),(SELECT count(*) FROM attempt)").fetchone()
 
 
 def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
@@ -147,7 +147,7 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
     cwd = str(root.resolve() / repo_id / "s1")
     assert factory.execute("SELECT * FROM reservation").fetchall() == [("s1", repo_id, cwd, 1, key.attempt_id)]
     columns = "backlog,task_id,repo_id,slot,model,phase,entry_pid,entry_start,entry_boot"
-    stored = factory.execute(f"SELECT {columns} FROM plan_attempt").fetchone()
+    stored = factory.execute(f"SELECT {columns} FROM attempt").fetchone()
     assert stored == ("tasks", "tl-1", repo_id, "s1", "chosen", "admitted", None, None, None)
     assert AttemptStore(lambda: factory).tracker_root(key) == str(tmp_path.resolve())  # the claimed root, renewed by the entry
     with pytest.raises(StoreRefused, match="unregistered_entry"):
@@ -214,7 +214,7 @@ def test_a_slot_taken_between_observe_and_commit_moves_to_the_next_or_refuses(
     tracker.during = lambda: factory.execute(taken, ("s1", repo_id, "other"))
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, Admitted) and result.slot == "s2" and tracker.calls == ["claim:tl-1"]
-    factory.execute("DELETE FROM plan_attempt")
+    factory.execute("DELETE FROM attempt")
     factory.execute("DELETE FROM reservation WHERE slot='s2'")
     tracker = Tracker(factory, tmp_path / "artifacts")
     tracker.during = lambda: factory.execute(taken, ("s2", repo_id, "third"))
@@ -291,7 +291,7 @@ def test_constraint_is_caught_after_rollback_and_compensated(
     factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, unclaim: bool
 ) -> None:
     slots(factory, repo, root, 1)
-    factory.execute("CREATE TEMP TRIGGER mismatch BEFORE INSERT ON plan_attempt BEGIN SELECT RAISE(ABORT, 'schema mismatch'); END")
+    factory.execute("CREATE TEMP TRIGGER mismatch BEFORE INSERT ON attempt BEGIN SELECT RAISE(ABORT, 'schema mismatch'); END")
     tracker = Tracker(factory, tmp_path / "artifacts", unclaim=unclaim)
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, AdmitRefused) and result.reason == "constraint" and result.claim_leaked is not unclaim
@@ -317,10 +317,10 @@ def test_an_unreadable_attempt_check_keeps_the_claim_and_reports_it_leaked(
 ) -> None:
     slots(factory, repo, root, 1)
     tracker = Tracker(factory, tmp_path / "artifacts")
-    tracker.during = lambda: factory.execute("DROP TABLE plan_attempt")
+    tracker.during = lambda: factory.execute("DROP TABLE attempt")
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, AdmitUnavailable) and result.what == "store" and result.claim_leaked
-    assert result.detail == "OperationalError: no such table: plan_attempt"
+    assert result.detail == "OperationalError: no such table: attempt"
     assert tracker.calls == ["claim:tl-1"] and factory.execute("SELECT count(*) FROM reservation").fetchone() == (0,)
 
 
@@ -491,14 +491,14 @@ def test_after_an_abandon_the_task_is_admitted_afresh_on_its_existing_branch_wit
     first = admit(factory, tmp_path, repo, tracker)
     assert isinstance(first, Admitted) and first.key.reservation_generation == 1 and generations(factory) == [("s1", 1), ("s2", 0)]
     path = root.resolve() / repo.identity().key / "s1"
-    d = factory.execute("SELECT slot_head FROM plan_attempt").fetchone()[0]
+    d = factory.execute("SELECT slot_head FROM attempt").fetchone()[0]
     repo.worktree(path).take_branch("task/tl-1", "HEAD", mode="resume")  # as its entry prepared it
     release = SlotRelease(AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody,
                           tracker.unclaim, time)
     assert release.release(first.key, True) == Released("s1", d, True, "unclaimed", True)
     again = admit(factory, tmp_path, repo, tracker)
     assert isinstance(again, Admitted) and again.slot == "s1" and again.key.reservation_generation == 2  # never reused
-    rows = factory.execute("SELECT attempt_id,number,seq,previous_attempt_id,slot_head FROM plan_attempt ORDER BY seq").fetchall()
+    rows = factory.execute("SELECT attempt_id,number,seq,previous_attempt_id,slot_head FROM attempt ORDER BY seq").fetchall()
     assert rows == [(first.key.attempt_id, 1, 1, None, d), (again.key.attempt_id, 1, 2, None, d)]
     assert generations(factory) == [("s1", 2), ("s2", 0)] and tracker.calls == ["claim:tl-1", "unclaim:tl-1", "claim:tl-1"]
     assert factory.execute("SELECT generation,attempt_id FROM reservation").fetchall() == [(2, again.key.attempt_id)]
@@ -510,10 +510,10 @@ def test_a_settled_release_still_answers_the_task(factory: sqlite3.Connection, r
     first = admit(factory, tmp_path, repo)
     assert isinstance(first, Admitted)
     factory.execute("DELETE FROM reservation")
-    factory.execute("INSERT INTO plan_release SELECT attempt_id,dispatch_token,generation,slot_head,1,0,'kept' FROM plan_attempt")
+    factory.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,1,0,'kept' FROM attempt")
     tracker = Tracker(factory, tmp_path / "artifacts")
     assert admit(factory, tmp_path, repo, tracker) == AdmitRefused("task_attempted") and tracker.calls == []
-    factory.execute("UPDATE plan_release SET abandoned=1,claim='unclaimed'")
+    factory.execute("UPDATE slot_release SET abandoned=1,claim='unclaimed'")
     assert isinstance(admit(factory, tmp_path, repo, tracker), Admitted)
 
 

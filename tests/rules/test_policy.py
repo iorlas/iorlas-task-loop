@@ -64,24 +64,24 @@ def test_caps_cannot_be_relaxed() -> None:
 WRITERS = {
     ("CREATE TABLE", "slot"): "factory_schema.py",
     ("CREATE TABLE", "reservation"): "factory_schema.py",
-    ("CREATE TABLE", "plan_attempt"): "factory_schema.py",
-    ("CREATE TABLE", "plan_execution"): "factory_schema.py",
-    ("CREATE TABLE", "plan_verification"): "factory_schema.py",
-    ("CREATE TABLE", "plan_release"): "factory_schema.py",
+    ("CREATE TABLE", "attempt"): "factory_schema.py",
+    ("CREATE TABLE", "execution"): "factory_schema.py",
+    ("CREATE TABLE", "verification"): "factory_schema.py",
+    ("CREATE TABLE", "slot_release"): "factory_schema.py",
     ("CREATE TABLE", "published_branch"): "factory_schema.py",
     ("INSERT", "slot"): "slots.py",
     ("INSERT", "reservation"): "admit.py",
-    ("INSERT", "plan_attempt"): "admit.py",
+    ("INSERT", "attempt"): "admit.py",
     ("UPDATE", "reservation"): "admit.py",
     ("UPDATE", "slot"): "admit.py",
-    ("INSERT", "plan_release"): "slot_release.py",
-    ("UPDATE", "plan_release"): "slot_release.py",
+    ("INSERT", "slot_release"): "slot_release.py",
+    ("UPDATE", "slot_release"): "slot_release.py",
     ("DELETE FROM", "reservation"): "slot_release.py",
     ("INSERT", "published_branch"): "publish.py",
-    ("INSERT", "plan_execution"): "attempt_store.py",
-    ("INSERT", "plan_verification"): "attempt_store.py",
-    ("UPDATE", "plan_attempt"): "attempt_store.py",  # also the deadline renewal after a reboot, in the entry registration's write
-    ("UPDATE", "plan_execution"): "attempt_store.py",
+    ("INSERT", "execution"): "attempt_store.py",
+    ("INSERT", "verification"): "attempt_store.py",
+    ("UPDATE", "attempt"): "attempt_store.py",  # also the deadline renewal after a reboot, in the entry registration's write
+    ("UPDATE", "execution"): "attempt_store.py",
 }
 WRITE = re.compile(
     r"\b(CREATE\s+TABLE|(?:INSERT|REPLACE)(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(\w+)", re.IGNORECASE
@@ -106,7 +106,7 @@ def test_every_sql_write_has_its_one_owner() -> None:
 
 @pytest.mark.parametrize(
     "statement",
-    ["INSERT INTO slot(a) VALUES (1)", "REPLACE INTO reservation VALUES (1)", "delete from plan_attempt", "UPDATE OR ABORT slot SET a=1"],
+    ["INSERT INTO slot(a) VALUES (1)", "REPLACE INTO reservation VALUES (1)", "delete from attempt", "UPDATE OR ABORT slot SET a=1"],
 )
 def test_write_pattern_catches_spelling_variants(statement: str) -> None:
     assert WRITE.search(statement) is not None

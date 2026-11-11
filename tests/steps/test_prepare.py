@@ -140,7 +140,7 @@ def test_attempt_one_takes_its_branch_and_starts_from_what_it_holds(
     tip = made[where]() if where in made else d
     status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
     assert (status, reason, len(agent.calls)) == ("pending", "verification", 1)
-    assert slot.branch() == BRANCH and con.execute("SELECT base_commit FROM plan_attempt").fetchone() == (tip,)
+    assert slot.branch() == BRANCH and con.execute("SELECT base_commit FROM attempt").fetchone() == (tip,)
     assert dict(repo.branches("task/"))[BRANCH] == head(repo, slot.path)
 
 
@@ -173,7 +173,7 @@ def test_a_tip_without_the_slots_commit_is_diverged_and_nothing_runs(
         status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
         assert (status, reason, agent.calls) == ("refused", "branch_diverged", [])
     assert Spy.cleanups == [1, 1] and slot.branch() is None and dict(repo.branches("task/")).get(BRANCH) in (tip, None)
-    assert con.execute("SELECT phase,rev,base_commit FROM plan_attempt").fetchone() == ("admitted", 0, None)
+    assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 
 
 def test_an_unreadable_branch_is_unknown_never_absent(
@@ -195,7 +195,7 @@ class PointerFiles(SlotFiles, Protocol):
 def refused_untouched(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, word: str) -> None:
     status, reason, agent = execute(con, tmp_path, checkouts, files)
     assert (status, reason, agent.calls, Spy.cleanups) == ("refused", word, [], [1])
-    assert con.execute("SELECT phase,rev,base_commit FROM plan_attempt").fetchone() == ("admitted", 0, None)
+    assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 
 
 def test_a_pointer_rewritten_after_the_rule_is_redirected_before_the_take(
@@ -301,7 +301,7 @@ def test_admission_refuses_a_branch_before_its_input_claim_or_rows(
     result, claims = admitted(factory, repo, root, tmp_path, "tl..1" if case == "name" else "tl-1")
     assert isinstance(result, AdmitRefused) and result.reason == f"branch_{case}"
     assert ("git branch -m task/tl-1 old/task/tl-1" in result.detail) is (case == "diverged")
-    assert claims.calls == [] and factory.execute("SELECT count(*) FROM plan_attempt").fetchone() == (0,)
+    assert claims.calls == [] and factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
 
 
 def test_admission_skips_a_free_slot_whose_head_the_branch_does_not_contain(

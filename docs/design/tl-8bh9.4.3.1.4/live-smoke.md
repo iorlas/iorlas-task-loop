@@ -132,15 +132,15 @@ admitted choices stand). Everything below runs in tab B, a fresh shell:
 ```bash
 source ~/tl-smoke/env.sh; cat "$SMOKE/launch.txt"; T plan show "$TASK" --backlog "$BACKLOG"   # repeat until Next: done (or verify)
 ATT=$(T plan show "$TASK" --backlog "$BACKLOG" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["directory"])')
-E=$(sqlite3 -readonly "$DB" "select entry_pid from plan_attempt"); W=$(sqlite3 -readonly "$DB" "select worker_pid from plan_attempt")
-# without sqlite3: E=$(python3 "$SMOKE/q.py" "$DB" "select entry_pid from plan_attempt" | tail -1), W likewise
+E=$(sqlite3 -readonly "$DB" "select entry_pid from attempt"); W=$(sqlite3 -readonly "$DB" "select worker_pid from attempt")
+# without sqlite3: E=$(python3 "$SMOKE/q.py" "$DB" "select entry_pid from attempt" | tail -1), W likewise
 ps -o pid,ppid,pgid,stat,tt,lstart,command -p "$E"        # entry: PPID 1, PGID = PID, STAT has s, TT ?? (macOS) or ? (Linux)
 pgrep -lf -P "$E"; lsof -a -p "$E" -d 0-2; lsof -a -p "$W" -d 0-2; lsof "$ATT/entry.log"   # no lsof: /proc, section 0
 cat "$ATT/entry.log"; ls -la "$ATT"
 sqlite3 -readonly -header "$DB" "select phase,rev,entry_pid,entry_start,entry_boot,worker_pid,worker_pgid,
- session_ref is not null as has_session,session_conflict,round(deadline-strftime('%s','now')) as left_s from plan_attempt;
- select rc,timed_out,stop,watch,reason,http_status,turns,answer_kind,disposition,plan_path,commit_paths,commit_message,publication
- from plan_execution; select plan_commit from plan_attempt;"
+ session_ref is not null as has_session,session_conflict,round(deadline-strftime('%s','now')) as left_s from attempt;
+ select rc,timed_out,stop,watch,reason,http_status,turns,answer_kind,disposition,effect,commit_paths,commit_message,publication
+ from execution; select end_commit from attempt;"
 T "${START[@]}"                             # second start: already_dispatched while the agent runs (dispatching/registered,
                                             # no entry pid); already_running only while the entry itself still runs before
                                             # dispatch or after capture (verifying); never started/relaunched
@@ -167,7 +167,7 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.delegate-push-refused://.pushInsteadOf G
 | Codex accepts CODEX_ACCESS + file login | `rc` 0, `answer_kind` valid | `stderr.txt` names an unknown flag/config key: installed codex rejects CODEX_ACCESS; `http_status` 401: login refused; entry.log `unavailable credentials:<word>`: source refused (`codex` not on PATH, `auth`, `git_config`) | paste `codex --version`, first lines of `stderr.txt` (check them for secrets first) |
 | Push refused | owner probe fails; no `smoke` or `probe` ref in `remote.git` (since .12 the `refs/heads/task/*` refs there are the factory's own publication, not the agent's) | a `smoke` or `probe` ref exists: the push bar does not hold | stop; paste `show-ref` |
 | Plan file written | `$SLOT/docs/design/$TASK/plan.md` exists in the factory's commit; `answer_kind` valid, `disposition` planned | `incomplete` saying the write was blocked: `approval_policy=never` fell back to read-only (the binary says it may when requirements forbid `danger-full-access`); codex or a tool failing on `/tmp`/`$TMPDIR` (now excluded from the sandbox) | paste answer.txt and the first lines of `stderr.txt` |
-| Commit in a linked worktree | the slot, on `task/$TASK` (`G -C $SLOT branch --show-current`), shows exactly one new commit, by the person's identity, whose message ends `Task-Loop-Attempt: <attempt_id>`; its sha = `plan_commit`; `commit_paths` names the plan; `G -C $SLOT status --short` empty | the agent's commit succeeded (a commit without the trailer, `unsettled:head_moved`): the sandbox did not bound it; leftovers (`unsettled:uncommitted`) | record it; paste answer.txt, the log lines and the row |
+| Commit in a linked worktree | the slot, on `task/$TASK` (`G -C $SLOT branch --show-current`), shows exactly one new commit, by the person's identity, whose message ends `Task-Loop-Attempt: <attempt_id>`; its sha = `end_commit`; `commit_paths` names the plan; `G -C $SLOT status --short` empty | the agent's commit succeeded (a commit without the trailer, `unsettled:head_moved`): the sandbox did not bound it; leftovers (`unsettled:uncommitted`) | record it; paste answer.txt, the log lines and the row |
 | No hook marker | `ls "$SMOKE/markers"` empty (it was empty before the launch, section 3) | a marker that appeared after the launch: a hook ran under the factory's Git (or the agent's) | paste the marker names and `G -C "$REPO" config --list --local` |
 | Escalations approved | none (`approval_policy=never`: a blocked command fails back to the model) | any approval event in `stdout.txt` | paste the command lines only (check them for secrets) and `G -C "$REPO" config --list --local` |
 | collect from a fresh shell | tab B `T plan show` prints `Result: collected verified` (or `reused`) and `Succeeded: yes`, `Next: done`, the worker as `last known pid` (never as running); `pending verification` with `Next: verify` when the entry's verification was unsettled or unavailable (then `T plan verify`); a `run:`/`answer:`/`rejected:` reason is a failure; the second start is never `started`/`relaunched`; `T plan list --stuck` lists nothing | `Result: unavailable ...`/`pending <phase>` long after codex exited; any `stuck:<kind>` | paste the show and list output and the row |
@@ -195,7 +195,7 @@ T slot adopt "$REPO"; T plan start "$TASK2" --backlog "$BACKLOG" --tracker-root 
 T plan show "$TASK2" --backlog "$BACKLOG"   # repeat until Next: done
 ```
 
-Pass: `Result: collected reused`, `Succeeded: yes`; entry.log `collected reused verify=reused`; `plan_commit` = the seed
+Pass: `Result: collected reused`, `Succeeded: yes`; entry.log `collected reused verify=reused`; `end_commit` = the seed
 commit (`G -C "$SLOT" rev-parse HEAD` in the slot before the run), no new commit, `task/$TASK2` at it, the slot parked
 detached at that commit after the release (slice .11), `status --short` empty,
 `ls "$SMOKE/markers"` empty. Fail:
@@ -278,7 +278,7 @@ without a trailer. The exit code of `tl plan start` is 0 for `already_dispatched
 Release is automatic when a step ends on a clean slot: the entry parks the slot back at its admission base D (detached)
 and keeps the tracker claim (`release=released`). `tl plan release` frees a slot left held once the person tidied it;
 `--abandon` also returns the claim and lets `tl plan start` admit a fresh attempt. Move the previous run aside as in 6a
-(evidence kept; a factory.db from before schema v7 is refused `schema` and must be moved aside), then:
+(evidence kept; a factory.db from before schema v9 is refused `schema` and must be moved aside), then:
 
 ```bash
 mkdir "$SMOKE/runD" && for f in "$DB" "$DB-wal" "$DB-shm" "$ART" "$SMOKE/markers"; do [ -e "$f" ] && mv "$f" "$SMOKE/runD/"; done
@@ -344,7 +344,7 @@ T slot adopt "$REPO"
 start() { T plan start "$1" --backlog "$BACKLOG" --tracker-root "$TRACKER" --checkout "$REPO" --model "$MODEL" --effort "$EFFORT" --minutes 30; }
 # F0, the baseline: the entry publishes on its own
 start "$PUB_BASE"; T plan show "$PUB_BASE" --backlog "$BACKLOG"   # repeat until: ... release=released branch=published; Next: done
-sqlite3 -readonly "$DB" "SELECT plan_commit FROM plan_attempt WHERE task_id='$PUB_BASE'"   # X
+sqlite3 -readonly "$DB" "SELECT end_commit FROM attempt WHERE task_id='$PUB_BASE'"   # X
 G -C "$SMOKE/remote.git" rev-parse "task/$PUB_BASE"        # the same X
 # F1, a publish that fails, then the retry: origin pointed at a missing path for the run
 G -C "$REPO" remote set-url origin "file://$SMOKE/missing.git"
@@ -367,7 +367,7 @@ ls "$SMOKE/markers"   # empty: no hook ran
 
 | Check | Pass | Fail means |
 |---|---|---|
-| F0 baseline | entry.log `... release=released branch=published`; `T plan show` has `Published: task/$PUB_BASE at X on origin, <UTC>` and `Next: done`; `remote.git`'s `task/$PUB_BASE` == the attempt's `plan_commit` | another word; a different sha on the remote |
+| F0 baseline | entry.log `... release=released branch=published`; `T plan show` has `Published: task/$PUB_BASE at X on origin, <UTC>` and `Next: done`; `remote.git`'s `task/$PUB_BASE` == the attempt's `end_commit` | another word; a different sha on the remote |
 | F1 failure | `branch=unavailable:remote`, `Next: publish`, the slot released, no `task/$PUB_RETRY` in `remote.git` | `branch=published` against a missing path; the release waited on the push |
 | F1 retry | `published`; `remote.git`, local branch and tracking ref all at X | a different sha anywhere; a `+` (forced) update |
 | already published | `already_published` with origin unreachable | any Git error (it touched the network) |
@@ -381,7 +381,7 @@ says that after those three words rerunning does not help: fetch `task/<id>`, co
 merge or move one branch aside by hand; then `tl plan publish` again.
 
 **Observed (smoke 6, Linux/OrbStack, real Codex, 2026-11-10).** F0 baseline: `branch=published`, the `Published:` line,
-the remote ref at `plan_commit`; F1: `branch=unavailable:remote`, then `published`, then `already_published` with origin
+the remote ref at `end_commit`; F1: `branch=unavailable:remote`, then `published`, then `already_published` with origin
 unreachable; F2: `branch=refused:remote_moved`, then `refused:diverged` after the fetch, `remote.git` unchanged; no
 marker. Not observed yet: `tl plan verify`'s `Publish:` line; `refused:remote_ahead`, `unavailable:changed`,
 `refused:no_remote`, `refused:branch_moved`, `refused:remote_rejected`, `unavailable:git`; a real SSH/HTTPS
@@ -565,7 +565,7 @@ for it with a stored `entry_boot` other than the current boot id (`tests/steps/t
 choose to reboot the scratch machine mid-start: before it, `T plan show <task> --backlog "$BACKLOG" --json` for an attempt
 still `admitted` with an entry registered (e.g. G6's `unavailable credentials:auth` state), noting `deadline_passed` and
 the entry's identity; after the reboot, past the deadline, `cat /proc/sys/kernel/random/boot_id` differs from the stored
-`entry_boot` (`sqlite3 "$DB" "SELECT entry_boot, deadline FROM plan_attempt WHERE task_id='<task>'"`), `T plan show`
+`entry_boot` (`sqlite3 "$DB" "SELECT entry_boot, deadline FROM attempt WHERE task_id='<task>'"`), `T plan show`
 says `Next: start` (not `stuck:expired_admitted`), and the next round (or `T plan start`) writes `relaunch relaunched`
 on the same attempt id, with `deadline` now the relaunch time plus `--minutes` and the new `entry_boot` the current one.
 A second relaunch in the same boot never moves the deadline again. Fail means: `stuck:expired_admitted` after a reboot, a

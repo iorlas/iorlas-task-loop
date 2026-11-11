@@ -366,9 +366,9 @@ def admitted(path: Path) -> None:
     with begin_immediate(con):
         con.execute("INSERT INTO reservation VALUES ('s1','repo','/slots/s1',1,'attempt')")
         con.execute(
-            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
+            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
-            VALUES ('attempt',?,1,'beads','tasks','tl-1','/tracker','repo','s1','input.txt',?,1,'m','high','workspace-write',100,1,1,
+            VALUES ('attempt',?,1,'plan','beads','tasks','tl-1','/tracker','repo','s1','input.txt',?,1,'m','high','workspace-write',100,1,1,
             'dddddddddddddddddddddddddddddddddddddddd')""",
             (KEY.dispatch_token, hashlib.sha256(b"x").hexdigest()),
         )
@@ -392,7 +392,7 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert KEY.dispatch_token not in output.out + output.err + json.dumps(shown)
     assert not art.exists()
     con = sqlite3.connect(db)
-    assert con.execute("SELECT phase,rev FROM plan_attempt").fetchall() == [("admitted", 0)]
+    assert con.execute("SELECT phase,rev FROM attempt").fetchall() == [("admitted", 0)]
     con.close()
 
 

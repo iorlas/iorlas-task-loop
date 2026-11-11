@@ -403,7 +403,7 @@ def test_a_failed_run_that_left_files_keeps_its_slot_held_and_the_claim(
     con = Store(SCHEMA).open_ro(admitted)
     assert con is not None
     assert con.execute("SELECT attempt_id FROM reservation").fetchall() == [("attempt",)]
-    assert con.execute("SELECT count(*) FROM plan_release").fetchone() == (0,)
+    assert con.execute("SELECT count(*) FROM slot_release").fetchone() == (0,)
     con.close()
     assert slot.branch() == "task/tl-1" and entry.unclaimed == []
 

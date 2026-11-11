@@ -157,7 +157,7 @@ def unsafe(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkout
 
 
 def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
-    return con.execute("SELECT attempt_id,number,generation,previous_attempt_id,repeat_reason FROM plan_attempt ORDER BY number").fetchall()
+    return con.execute("SELECT attempt_id,number,generation,previous_attempt_id,repeat_reason FROM attempt ORDER BY number").fetchall()
 
 
 def held(con: sqlite3.Connection) -> tuple[object, ...]:
@@ -170,13 +170,13 @@ def renumber(con: sqlite3.Connection, number: int) -> None:
     previous = None
     for n in range(1, number):
         con.execute(
-            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
+            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,base_commit,seq,slot_head)
-            VALUES (?,?,1,'beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','s',1,?,?,?,?,?,?)""",
+            VALUES (?,?,1,'plan','beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','s',1,?,?,?,?,?,?)""",
             (f"a{n}", f"d{n}", n, previous, None if previous is None else "uncommitted", "b" * 40, n, "b" * 40),
         )
         previous = f"a{n}"
-    con.execute("UPDATE plan_attempt SET number=?,previous_attempt_id=?,repeat_reason='unsafe' WHERE attempt_id='attempt'",
+    con.execute("UPDATE attempt SET number=?,previous_attempt_id=?,repeat_reason='unsafe' WHERE attempt_id='attempt'",
                 (number, previous))
 
 
@@ -228,7 +228,7 @@ def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
         store.load(KEY)
     assert store.register_entry(KEY, SECOND, 10) == "refused"
     with pytest.raises(StoreRefused):
-        store.plan_commit(previous.admission, "e" * 40)
+        store.end_commit(previous.admission, "e" * 40)
     with pytest.raises(StoreRefused):
         store.verdict(previous.admission, base, None, Rejected("nothing_written"), 1)
     text = EvidenceFiles(tmp_path).read(record.admission.input_ref)
@@ -261,15 +261,15 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
 
 
 GATES: list[tuple[str, str, float, str]] = [
-    ("verdict", "INSERT INTO plan_verification (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
+    ("verdict", "INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
      "VALUES ('attempt','dispatch',1,'rejected','paths',1)", 1000, "not_repeatable"),
-    ("invalid_answer", "UPDATE plan_execution SET answer_kind='schema_invalid',disposition=NULL,plan_path=NULL,commit_paths=NULL,"
+    ("invalid_answer", "UPDATE execution SET answer_kind='schema_invalid',disposition=NULL,effect=NULL,commit_paths=NULL,"
      "commit_message=NULL", 1000, "not_repeatable"),
-    ("failed_run", "UPDATE plan_execution SET rc=1", 1000, "not_repeatable"),
-    ("timed_out", "UPDATE plan_execution SET timed_out=1", 1000, "not_repeatable"),
-    ("pending_publication", "UPDATE plan_execution SET publication='pending'", 1000, "not_repeatable"),
-    ("incomplete", "UPDATE plan_execution SET disposition='incomplete'", 1000, "not_repeatable"),
-    ("not_captured", "UPDATE plan_attempt SET phase='registered'", 1000, "not_repeatable"),
+    ("failed_run", "UPDATE execution SET rc=1", 1000, "not_repeatable"),
+    ("timed_out", "UPDATE execution SET timed_out=1", 1000, "not_repeatable"),
+    ("pending_publication", "UPDATE execution SET publication='pending'", 1000, "not_repeatable"),
+    ("no_effect", "UPDATE execution SET effect='none'", 1000, "not_repeatable"),
+    ("not_captured", "UPDATE attempt SET phase='registered'", 1000, "not_repeatable"),
     ("not_holder", "UPDATE reservation SET generation=7", 1000, "not_repeatable"),
     ("expired", "", 10, "expired"),
     ("infinite", "", float("inf"), "deadline"),
@@ -301,7 +301,7 @@ def test_both_repeat_launches_pass_the_request_minutes(
     launcher = Launches(registered)
     first = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 45)
     assert isinstance(first, Started) and first.status == "repeated"
-    registered.execute("UPDATE plan_attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL WHERE attempt_id=?", (first.attempt_id,))
+    registered.execute("UPDATE attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL WHERE attempt_id=?", (first.attempt_id,))
     again = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 50)
     assert again == Started("relaunched", "tasks", "tl-1", first.attempt_id, True, SECOND)
     assert launcher.minutes == [45, 50] and len(rows(registered)) == 2
@@ -329,10 +329,10 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     with begin_immediate(con):
         con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
         con.execute(
-            """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
+            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
-            VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high','workspace-write',100,
-            7,'entry-start','boot',1,1,?)""",
+            VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
+            'workspace-write',100,7,'entry-start','boot',1,1,?)""",
             (repo_id, hashlib.sha256(TASK.encode()).hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text(TASK)
@@ -358,7 +358,7 @@ def test_two_starts_on_two_connections_admit_exactly_one(
         thread.join()
     winners = [each for each in outcomes if isinstance(each, Admitted)]
     assert len(winners) == 1 and [each.reason for each in outcomes if isinstance(each, AdmitRefused)] == ["task_attempted"]
-    assert con.execute("SELECT count(*) FROM plan_attempt").fetchone() == (2,) and held(con) == (winners[0].key.attempt_id, 2)
+    assert con.execute("SELECT count(*) FROM attempt").fetchone() == (2,) and held(con) == (winners[0].key.attempt_id, 2)
     con.close()
 
 
@@ -467,9 +467,9 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 
 
 def test_the_schema_numbers_attempts_and_links_each_to_the_one_it_repeats(registered: sqlite3.Connection) -> None:
-    insert = """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
+    insert = """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
     input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head)
-    VALUES (?,?,2,'beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','s',1,?,?,?,?,'""" + "d" * 40 + "')"
+    VALUES (?,?,2,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','s',1,?,?,?,?,'""" + "d" * 40 + "')"
     for values, constraint in [
         (("n", "t", 2, None, "unsafe", 2), "previous_attempt_id IS NULL"),
         (("n", "t", 2, "attempt", None, 2), "repeat_reason IS NULL"),

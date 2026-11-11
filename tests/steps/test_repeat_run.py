@@ -176,9 +176,9 @@ def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_path
     found = step.verifier.verify(key)
     assert isinstance(found, Verified) and not found.reused
     assert made(slot, base) == ["Plan tl-1", "Plan tl-1"]
-    rows = step.con.execute("SELECT number,base_commit,plan_commit FROM plan_attempt ORDER BY number").fetchall()
+    rows = step.con.execute("SELECT number,base_commit,end_commit FROM attempt ORDER BY number").fetchall()
     assert rows[0][1] == base and rows[1][1] == rows[0][2] and rows[1][2] == head(slot)
-    assert step.con.execute("SELECT attempt_id,verdict FROM plan_verification").fetchall() == [(key.attempt_id, "verified")]
+    assert step.con.execute("SELECT attempt_id,verdict FROM verification").fetchall() == [(key.attempt_id, "verified")]
 
 
 def test_planned_with_nothing_new_in_a_later_attempt_is_rejected_for_good(step: Step, slot: FakeWorktree) -> None:
@@ -227,7 +227,7 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
                                                                              ("uncommitted", f"?? {STRAY}"))
     assert [attempt_id for attempt_id, _reason in each.earlier] == [second.attempt_id, "attempt"]
     assert step.repeat(third) == Failed("refused", "repeats_exhausted")
-    assert step.con.execute("SELECT count(*) FROM plan_attempt").fetchone() == (3,)
+    assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (3,)
     slot.remove_file(STRAY)
     assert isinstance(step.verifier.verify(third), Verified)  # the owner tidies the slot; attempt 3 can still verify
 
@@ -256,8 +256,8 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
     monkeypatch.setattr(FakeWorktree, "dirty", dirty)
     assert step.verifier.verify(KEY) == Unsettled("superseded")
     assert slot.state().index == index and made(slot, base) == []
-    assert step.con.execute("SELECT plan_commit FROM plan_attempt WHERE attempt_id='attempt'").fetchone() == (None,)
-    assert step.con.execute("SELECT count(*) FROM plan_verification").fetchone() == (0,)
+    assert step.con.execute("SELECT end_commit FROM attempt WHERE attempt_id='attempt'").fetchone() == (None,)
+    assert step.con.execute("SELECT count(*) FROM verification").fetchone() == (0,)
 
 
 @pytest.mark.parametrize(("before", "written", "expected"), [
@@ -277,8 +277,8 @@ def rules() -> StepRules:
     return StepRules(D)
 
 
-def attempt(number: int, base: str, plan_commit: str | None, paths: tuple[str, ...], disposition: str = "planned") -> ChainLink:
-    return ChainLink(number, base, plan_commit, disposition, paths, FileRef("input.txt", "d"))
+def attempt(number: int, base: str, end_commit: str | None, paths: tuple[str, ...], disposition: str = "planned") -> ChainLink:
+    return ChainLink(number, base, end_commit, disposition, paths, FileRef("input.txt", "d"))
 
 
 def test_judge_holds_each_commit_of_the_chain_to_its_own_attempts_paths(repo: FakeRepo, slot: FakeWorktree) -> None:
@@ -408,7 +408,7 @@ def test_a_path_staged_beside_the_listed_ones_is_never_committed(
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
     assert step.verifier.verify(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
-    assert step.con.execute("SELECT count(*) FROM plan_verification").fetchone() == (0,)
+    assert step.con.execute("SELECT count(*) FROM verification").fetchone() == (0,)
 
 
 def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: FakeWorktree) -> None:
@@ -419,7 +419,7 @@ def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: Fa
                         lambda _entry: "gone", lambda: 10, repeating)
     found = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)  # its read of the current attempt predates the takeover
     assert found == Started("relaunched", "tasks", "tl-1", taken.key.attempt_id, True, (8, "start", "boot"))
-    assert step.con.execute("SELECT count(*) FROM plan_attempt").fetchone() == (2,)
+    assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (2,)
 
 
 def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, slot: FakeWorktree) -> None:
@@ -459,7 +459,7 @@ def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step:
     slot.stage([STRAY], literal=True)  # the owner's staged file must never become the agent's leftover
     dirs = sorted(path.name for path in (step.tmp / "attempts").iterdir())
     assert step.repeat(KEY) == Failed("unsettled", "staged", STRAY) and step.launcher.keys == []
-    assert step.con.execute("SELECT count(*) FROM plan_attempt").fetchone() == (1,)
+    assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
     assert step.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == ("attempt", 1)
     assert sorted(path.name for path in (step.tmp / "attempts").iterdir()) == dirs  # no input written
 

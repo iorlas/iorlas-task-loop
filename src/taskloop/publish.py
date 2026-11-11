@@ -43,17 +43,17 @@ from taskloop.slot_state import repository
 
 REMOTE: Final = "origin"  # v1: the one remote (owner decision); never stored
 NOTHING: Final = "Nothing was pushed or recorded."
-ROW: Final = """SELECT p.task_id,p.repo_id,p.plan_commit,s.cwd,v.verdict,v.reason,x.abandoned,b.commit_sha,b.remote_head,b.published_at
-FROM plan_attempt p LEFT JOIN plan_verification v ON v.attempt_id=p.attempt_id
-LEFT JOIN plan_release x ON x.attempt_id=p.attempt_id LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
+ROW: Final = """SELECT p.task_id,p.repo_id,p.end_commit,s.cwd,v.verdict,v.reason,x.abandoned,b.commit_sha,b.remote_head,b.published_at
+FROM attempt p LEFT JOIN verification v ON v.attempt_id=p.attempt_id
+LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
 LEFT JOIN slot s ON s.repo_id=p.repo_id AND s.name=p.slot
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 # Inside the write transaction: still verified at X, not abandoned, not repeated.
-FENCE: Final = """SELECT 1 FROM plan_attempt p JOIN plan_verification v ON v.attempt_id=p.attempt_id
-WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND v.verdict='verified' AND p.plan_commit=?
-AND NOT EXISTS (SELECT 1 FROM plan_release x WHERE x.attempt_id=p.attempt_id AND x.abandoned=1)
-AND NOT EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id)"""
-ABANDONED: Final = "SELECT 1 FROM plan_release WHERE attempt_id=? AND abandoned=1"
+FENCE: Final = """SELECT 1 FROM attempt p JOIN verification v ON v.attempt_id=p.attempt_id
+WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND v.verdict='verified' AND p.end_commit=?
+AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.abandoned=1)
+AND NOT EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id)"""
+ABANDONED: Final = "SELECT 1 FROM slot_release WHERE attempt_id=? AND abandoned=1"
 
 
 @dataclass(frozen=True)

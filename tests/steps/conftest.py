@@ -160,10 +160,10 @@ def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
         con.execute("INSERT INTO slot (repo_id,name,cwd) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
         con.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
         con.execute(
-            """INSERT INTO plan_attempt
-            (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
+            """INSERT INTO attempt
+            (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
              schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
-            VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
+            VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
             'workspace-write',100,1,1,?)""",
             (repo_id, hashlib.sha256(text.encode()).hexdigest(), head(slot)),
         )
@@ -181,10 +181,10 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
         factory.execute("INSERT INTO slot (repo_id,name,cwd) VALUES (?,'s1',?)", (repo_id, str(slot.path)))  # adopted
         factory.execute("INSERT INTO reservation VALUES ('s1',?,?,1,'attempt')", (repo_id, str(slot.path)))
         factory.execute(
-            """INSERT INTO plan_attempt
-            (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
+            """INSERT INTO attempt
+            (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
              schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
-            VALUES ('attempt','dispatch',1,'beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
+            VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
             'workspace-write',100,7,'entry-start','boot',1,1,?)""",
             (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), head(slot)),
         )

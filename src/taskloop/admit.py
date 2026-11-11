@@ -1,4 +1,4 @@
-"""Admit a plan attempt: the only writer of `reservation` and of the admitted `plan_attempt` row; it runs nothing.
+"""Admit an attempt: the only writer of `reservation` and of the admitted `attempt` row; it runs nothing.
 
 A task's first attempt takes a free slot and the tracker claim (`admit`), after the task branch rule passed for that
 slot's HEAD (`prepare.branch_refusal`, read-only, before anything is written or claimed); a repeat (`admit_repeat`) is the step's next
@@ -11,7 +11,7 @@ starts from (D) is stored as `slot_head` (a repeat copies it): a release parks t
 Each slot's `generation` is the last reservation generation issued for it, so a generation is never reused after a
 release: a fresh admission takes one above every observed-free slot's counter, a repeat the next one. `seq` orders a
 task's attempts (a repeat or a fresh attempt after an abandon takes the next); `number` is the attempt's place in its
-step. A task whose current attempt was abandoned (`plan_release`) is admitted again as a fresh attempt 1. Nothing here
+step. A task whose current attempt was abandoned (`slot_release`) is admitted again as a fresh attempt 1. Nothing here
 releases a slot; the claim is returned only to compensate a failed admission.
 """
 
@@ -31,7 +31,7 @@ from git_porcelain import GitUnavailable, Repo
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.plan_step import closing_words, plan_stage
+from taskloop.plan_step import STEP, closing_words, plan_stage
 from taskloop.prepare import DIVERGED, branch_refusal
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotsUnavailable, SlotView, observe
@@ -45,17 +45,17 @@ type Refusal = Literal[
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged",
 ]
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
-# clean completely published `planned`/`unchanged` answer (the gate of `factory_commit` and the verdict), no verdict, the
-# tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order and D (both carried on).
+# clean completely published answer of effect `commit`/`keep` (the gate of `factory_commit` and the verdict), no verdict, the
+# tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D and step (all carried on).
 PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
-EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id),
+EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),
 p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
-AND EXISTS (SELECT 1 FROM plan_execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
- AND e.disposition IN ('planned','unchanged') AND e.publication='complete')
-AND NOT EXISTS (SELECT 1 FROM plan_verification v WHERE v.attempt_id=p.attempt_id),
-p.tracker_root,p.seq,p.slot_head
-FROM plan_attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
+AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
+ AND e.effect IN ('commit','keep') AND e.publication='complete')
+AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
+p.tracker_root,p.seq,p.slot_head,p.step
+FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 NOT_CLAIMED = frozenset({"missing_binary", "version", "not_found", "lint"})  # BdError kinds where the claim certainly did not happen
 
 
@@ -255,10 +255,10 @@ class AttemptAdmission:
                 "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
                 "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
-                "repeat_reason": request.reason, "seq": as_count(row[13]) + 1, "slot_head": row[14],
+                "repeat_reason": request.reason, "seq": as_count(row[13]) + 1, "slot_head": row[14], "step": row[15],
             }
             values = bound(ATTEMPT_ADMITTED, attempt)
-            con.execute(f"INSERT INTO plan_attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
+            con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
             moved = con.execute(
                 """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
                 AND generation=?""",
@@ -369,13 +369,13 @@ class AttemptAdmission:
             attempt = {
                 "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
                 "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "tracker_root": request.tracker_root,
-                "repo_id": repo_id, "slot": name,
+                "repo_id": repo_id, "slot": name, "step": STEP,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None, "seq": _next_seq(con, request), "slot_head": head,
             }
             values = bound(ATTEMPT_ADMITTED, attempt)
-            con.execute(f"INSERT INTO plan_attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
+            con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
         return Admitted(key, name)
 
 
@@ -417,7 +417,7 @@ def _issued(con: sqlite3.Connection, repo_id: RepoId, names: tuple[str, ...]) ->
 
 def _next_seq(con: sqlite3.Connection, request: AdmitRequest) -> int:
     row = con.execute(
-        "SELECT coalesce(max(seq),0)+1 FROM plan_attempt WHERE adapter='beads' AND backlog=? AND task_id=?",
+        "SELECT coalesce(max(seq),0)+1 FROM attempt WHERE adapter='beads' AND backlog=? AND task_id=?",
         (request.backlog, request.task_id),
     ).fetchone()
     return as_count(None if row is None else row[0])
@@ -428,8 +428,8 @@ def _attempted(con: sqlite3.Connection, request: AdmitRequest) -> bool:
     whose claim was returned (`unclaimed`, or found `not_held`) starts the task again. While the claim is `unclaiming`,
     a fresh claim could be undone by the abandon's own unclaim, so the task still counts as attempted."""
     found = con.execute(
-        """SELECT EXISTS (SELECT 1 FROM plan_release r WHERE r.attempt_id=p.attempt_id AND r.abandoned=1
-        AND r.claim IN ('unclaimed','not_held')) FROM plan_attempt p
+        """SELECT EXISTS (SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id AND r.abandoned=1
+        AND r.claim IN ('unclaimed','not_held')) FROM attempt p
         WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1""",
         (request.backlog, request.task_id),
     ).fetchone()

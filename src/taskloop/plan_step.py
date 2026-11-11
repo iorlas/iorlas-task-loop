@@ -9,6 +9,7 @@ from git_porcelain import Tree
 from taskloop.attempt_types import (
     MODE,
     TRAILER,
+    Effect,
     PlanAnswer,
     Rejected,
     RepeatReason,
@@ -20,7 +21,10 @@ from taskloop.attempt_types import (
     path_allowed,
 )
 
+STEP: Final = "plan"  # the step's stored name (`attempt.step`)
 DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
+# Each disposition's effect, stored with it: only `planned` commits and only `unchanged` keeps B; the rest end nothing.
+EFFECT_OF: Final[dict[str, Effect]] = {"planned": "commit", "unchanged": "keep", "incomplete": "none", "needs_owner": "none"}
 PLAN_NAME: Final = "plan.md"
 ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
 # The structural answer contract Codex forwards as an OpenAI strict response format: a plain object at the top level (no

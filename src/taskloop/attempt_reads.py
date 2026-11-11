@@ -1,4 +1,4 @@
-"""The plan store's connection and its status reads (SELECT only, no reservation or deadline check): a task's current
+"""The attempt store's connection and its status reads (SELECT only, no reservation or deadline check): a task's current
 attempt (its highest `seq`), every attempt (with its release and its published task branch), a dispatch phase, an
 attempt's tracker root, its release, the attempts of one step, and the slots' use. `AttemptStore` adds the fenced writes."""
 
@@ -16,7 +16,7 @@ from taskloop.factory_schema import current
 
 @dataclass(frozen=True)
 class ReleaseRow:
-    """How an attempt ended its reservation (`plan_release`): where the slot was left, when, whether it was abandoned
+    """How an attempt ended its reservation (`slot_release`): where the slot was left, when, whether it was abandoned
     (the task can be started again) and the tracker claim's state."""
 
     head: str
@@ -52,6 +52,7 @@ class AttemptRow:
     previous_attempt_id: str | None
     repeat_reason: str | None
     successor: bool
+    step: str  # the step the attempt belongs to (`plan`)
     seq: int = 1  # the attempt's order among its task's attempts
     held: bool = False  # it still holds its reservation
     release: ReleaseRow | None = None
@@ -62,7 +63,7 @@ class AttemptRow:
 class SlotUse:
     """Every adopted slot of factory.db against the reservation rows, across repos: `free`, the adopted slots with no
     reservation row (not proof a slot is free: it may be dirty or locked); `held`, each reserved (repo_id, slot), every
-    backlog's: a repeat's takeover rewrites the row's attempt but keeps the slot reserved. The release (`plan_release`)
+    backlog's: a repeat's takeover rewrites the row's attempt but keeps the slot reserved. The release (`slot_release`)
     is the one owner of a row's removal."""
 
     free: int
@@ -110,11 +111,11 @@ def as_listed(value: object) -> tuple[str, ...]:
     return tuple(str(path) for path in paths)
 
 
-STEP = """SELECT p.number,p.base_commit,p.plan_commit,p.input_path,p.input_digest,e.disposition,e.commit_paths,p.previous_attempt_id
-FROM plan_attempt p LEFT JOIN plan_execution e ON e.attempt_id=p.attempt_id"""
+STEP = """SELECT p.number,p.base_commit,p.end_commit,p.input_path,p.input_digest,e.disposition,e.commit_paths,p.previous_attempt_id
+FROM attempt p LEFT JOIN execution e ON e.attempt_id=p.attempt_id"""
 
 
-RELEASED = "SELECT head,released_at,abandoned,claim FROM plan_release"
+RELEASED = "SELECT head,released_at,abandoned,claim FROM slot_release"
 
 
 def _released(row: tuple[object, ...]) -> ReleaseRow | None:
@@ -168,7 +169,7 @@ class AttemptReads:
         """Dispatch phase and recorded session conflict, without needing a live reservation (historical reads)."""
         with self._connection() as con:
             row = con.execute(
-                "SELECT phase,session_conflict FROM plan_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
+                "SELECT phase,session_conflict FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
             ).fetchone()
             return None if row is None else (as_text(row[0]), bool(as_int(row[1])))
 
@@ -177,7 +178,7 @@ class AttemptReads:
         reservation or deadline check."""
         with self._connection() as con:
             row: tuple[object, ...] | None = con.execute(
-                """SELECT attempt_id,dispatch_token,generation,phase,entry_pid,entry_start,entry_boot FROM plan_attempt
+                """SELECT attempt_id,dispatch_token,generation,phase,entry_pid,entry_start,entry_boot FROM attempt
                 WHERE adapter='beads' AND backlog=? AND task_id=? ORDER BY seq DESC LIMIT 1""",
                 (backlog, task_id),
             ).fetchone()
@@ -190,7 +191,7 @@ class AttemptReads:
         """The absolute tracker root the attempt's claim was taken at (stored by admission, copied by a repeat)."""
         with self._connection() as con:
             row = con.execute(
-                "SELECT tracker_root FROM plan_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
+                "SELECT tracker_root FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)
             ).fetchone()
         return None if row is None else as_text(row[0])
 
@@ -207,10 +208,10 @@ class AttemptReads:
             rows: list[tuple[object, ...]] = con.execute(
                 """SELECT p.attempt_id,p.dispatch_token,p.generation,p.backlog,p.task_id,p.slot,p.phase,p.entry_pid,p.entry_start,
                 p.entry_boot,p.deadline,p.worker_pid,p.worker_pgid,p.number,p.previous_attempt_id,p.repeat_reason,
-                EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id),p.seq,
+                EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),p.seq,
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
-                 AND r.generation=p.generation),x.head,x.released_at,x.abandoned,x.claim,b.commit_sha,b.remote_head,b.published_at
-                FROM plan_attempt p LEFT JOIN plan_release x ON x.attempt_id=p.attempt_id
+                 AND r.generation=p.generation),x.head,x.released_at,x.abandoned,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step
+                FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
                 WHERE p.adapter='beads' AND (?1 IS NULL OR p.backlog=?1) AND (?2 IS NULL OR p.task_id=?2)
                 ORDER BY p.backlog,p.task_id,p.seq DESC""",
@@ -225,7 +226,7 @@ class AttemptReads:
             worker = None if row[11] is None or row[12] is None else (as_int(row[11]), as_int(row[12]))
             found.append(
                 AttemptRow(key, as_text(row[3]), as_text(row[4]), as_text(row[5]), as_text(row[6]), entry, float(row[10]), worker,
-                           as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])),
+                           as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[26]),
                            as_int(row[17]), bool(as_int(row[18])), _released(row[19:23]), _published(row[23:26]))
             )
         return tuple(found)

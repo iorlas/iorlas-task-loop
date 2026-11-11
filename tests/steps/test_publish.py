@@ -177,11 +177,11 @@ def test_a_reused_plan_publishes_b(
 
 
 def abandoned(con: sqlite3.Connection, _slot: FakeWorktree, _repo: Scripted, _files: FakeSlotFiles) -> None:
-    con.execute("UPDATE plan_release SET abandoned=1,claim='unclaimed'")
+    con.execute("UPDATE slot_release SET abandoned=1,claim='unclaimed'")
 
 
 def unverified(con: sqlite3.Connection, _slot: FakeWorktree, _repo: Scripted, _files: FakeSlotFiles) -> None:
-    con.execute("DELETE FROM plan_verification")
+    con.execute("DELETE FROM verification")
 
 
 def redirected(_con: sqlite3.Connection, slot: FakeWorktree, _repo: Scripted, files: FakeSlotFiles) -> None:
@@ -190,7 +190,7 @@ def redirected(_con: sqlite3.Connection, slot: FakeWorktree, _repo: Scripted, fi
 
 def other_repository(con: sqlite3.Connection, slot: FakeWorktree, _repo: Scripted, _files: FakeSlotFiles) -> None:
     con.execute("INSERT INTO slot (repo_id,name,cwd) VALUES ('other','s1',?)", (str(slot.path),))
-    con.execute("UPDATE plan_attempt SET repo_id='other'")
+    con.execute("UPDATE attempt SET repo_id='other'")
 
 
 def no_origin(_con: sqlite3.Connection, _slot: FakeWorktree, repo: Scripted, _files: FakeSlotFiles) -> None:
@@ -202,7 +202,7 @@ def branch_missing(_con: sqlite3.Connection, slot: FakeWorktree, repo: Scripted,
 
 
 def branch_rewritten(con: sqlite3.Connection, slot: FakeWorktree, _repo: Scripted, _files: FakeSlotFiles) -> None:
-    slot.checkout_force("task/tl-1", str(con.execute("SELECT slot_head FROM plan_attempt").fetchone()[0]))
+    slot.checkout_force("task/tl-1", str(con.execute("SELECT slot_head FROM attempt").fetchone()[0]))
 
 
 @pytest.mark.parametrize(
@@ -268,7 +268,7 @@ def test_a_rejected_push_records_nothing_even_when_the_remote_tip_is_x_and_a_rer
 
 def d_on_origin(con: sqlite3.Connection, repo: Scripted, _remote: FakeRemote) -> str:
     """origin's task/tl-1 at D, behind X: a push that raced with this one."""
-    d = str(con.execute("SELECT slot_head FROM plan_attempt").fetchone()[0])
+    d = str(con.execute("SELECT slot_head FROM attempt").fetchone()[0])
     repo.worktree(repo.path).push("task/tl-1", head=Sha(d))
     return d
 

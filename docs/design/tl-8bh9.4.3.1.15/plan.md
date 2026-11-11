@@ -491,3 +491,42 @@ Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 6 contracts kep
 more than 1227 are `test_source_policy`'s parametrized cases for the two new source files (`plan_step.py`,
 `verdict.py`); no behavior test was added or removed. Code lines after: `attempt_types` 223, `plan_step` 109,
 `slot_state` 116, `verdict` 52, `evidence_files` 72, `admit` 331, `repeat` 158, `operations` 382.
+
+## 11. As built: S2 factory.db v9 (2026-11-11)
+
+Schema version 9; no migration: `current()` refuses a v8 file (`refused:schema`), the owner discards factory.db.
+
+| v8 | v9 |
+|---|---|
+| `plan_attempt`, `plan_execution`, `plan_verification`, `plan_release` | `attempt`, `execution`, `verification`, `slot_release` (`slot`, `reservation`, `published_branch` unchanged) |
+| `plan_attempt.plan_commit` | `attempt.end_commit` |
+| `plan_verification.plan_blob`, NOT NULL exactly when `verified` | `verification.blob`, nullable; the `reason` CHECK stays |
+| `plan_execution.plan_path` | dropped (nothing read it; `PlanAnswer.plan_path` and the answer schema keep the key) |
+| (none) | `attempt.step TEXT NOT NULL CHECK(step IN ('plan'))` |
+| (none) | `execution.effect TEXT CHECK(effect IN ('commit','keep','none'))` |
+
+- **Effect.** `attempt_types.Effect`/`EFFECTS`; `AnswerState.plan_path` is replaced by `AnswerState.effect` (the stored
+  answer read back must equal the one written). `plan_step.EFFECT_OF` maps the dispositions (`planned` to `commit`,
+  `unchanged` to `keep`, `incomplete` and `needs_owner` to `none`); `attempt._validate` sets it, `AttemptStore.answer`
+  writes it with the disposition, an unusable answer stores NULL for both. The three SQL fences read `effect` only:
+  `AttemptStore.end_commit` (`commit` with X != B, `keep` with X = B), the verdict insert (`commit`/`keep`;
+  `nothing_written` needs `commit`, `reused` needs `keep`) and `admit.PREVIOUS` (a repeat needs `commit`/`keep`).
+  Python branches on the disposition word (`verifier`, `factory_commit`, `verdict`, `repeat`) are unchanged; S3 moves
+  them to the step port.
+- **Step.** `plan_step.STEP = "plan"`. A fresh admission writes it, a repeat copies the previous attempt's (`PREVIOUS`
+  reads `p.step`). `Admission.step` (loaded by `AttemptStore._load`, so `AttemptRecord` carries it through its
+  admission, no second field) and `AttemptRow.step` (`attempts()`). Not displayed: rows, JSON and `rounds.log` gain it
+  in S4.
+- **Names.** `AttemptStore.end_commit()` (was `plan_commit()`); `AttemptRecord.end_commit`, `ChainLink.end_commit`,
+  `Verified.blob`, `factory_commit.leftovers(..., end_commit)`.
+- **Tests.** SQL renamed everywhere; every test `INSERT INTO attempt` names `step`. New: `test_attempt.py`
+  `test_the_answer_is_stored_with_its_effect` (4 cases: `planned`, `unchanged`, `needs_owner`, invalid JSON) and
+  `test_verify.py` `test_the_end_commit_and_verdict_fences_read_the_stored_effect` (3 cases; the disposition stays
+  `planned`, only `effect` varies). The repeat gate's `incomplete` disposition fixture became `no_effect`
+  (`effect='none'`). The schema refusal tests (`test_ops`, `test_launch`) now refuse version 8 (and 10).
+  `test_policy` `WRITERS` names the new tables. The live-smoke runbook's `sqlite3` lines use the new names.
+
+Gates: `just check` clean (ruff, pyrefly 0 errors, import-linter 6 contracts kept); `just test` 1237 passed (1229 + 4
+answer-effect cases + 3 fence cases + the version-10 refusal case). Source code lines +16 over the touched modules
+(2436 to 2452): `admit` 331, `attempt_store` 317, `attempt_types` 226, `attempt_reads` 180, `plan_step` 112,
+`factory_schema` 97; `operations` 382 untouched.

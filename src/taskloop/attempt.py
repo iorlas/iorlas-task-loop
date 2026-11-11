@@ -27,7 +27,7 @@ from taskloop.attempt_types import (
     execution_facts,
 )
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.plan_step import decode_plan_answer, plan_stage
+from taskloop.plan_step import EFFECT_OF, decode_plan_answer, plan_stage
 from taskloop.prepare import base as prepared_base
 from taskloop.session import GateRefused, SessionLatch, reconcile, registration_gate
 
@@ -336,7 +336,7 @@ class Attempts:
         answer = decode_answer(text, lambda value: self.decoder(value, plan_stage(admission.task.task_id)))
         if isinstance(answer, DecodedAnswer):
             value = answer.value
-            state = AnswerState("valid", value.disposition, value.plan_path, value.paths, value.message)
+            state = AnswerState("valid", value.disposition, EFFECT_OF[value.disposition], value.paths, value.message)
         elif isinstance(answer, InvalidAnswer):
             state = AnswerState("json_invalid" if answer.kind == "json" else "schema_invalid")
         else:

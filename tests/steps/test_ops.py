@@ -222,8 +222,8 @@ def test_an_existing_attempt_is_launched_as_admitted_without_the_tracker(
 
 
 def test_a_concurrent_start_that_won_is_launched_as_existing(admitted: Path, reader: AttemptStore) -> None:
-    write(admitted, "UPDATE plan_attempt SET task_id='hidden'")
-    admission = Admission(AdmitRefused("task_attempted"), lambda: write(admitted, "UPDATE plan_attempt SET task_id='tl-1'"))
+    write(admitted, "UPDATE attempt SET task_id='hidden'")
+    admission = Admission(AdmitRefused("task_attempted"), lambda: write(admitted, "UPDATE attempt SET task_id='tl-1'"))
     launched = start(Starting(reader, admission, Launcher(AlreadyRunning(KEY, ENTRY)), lambda: 10, Repeats()), REQUEST)
     assert launched == Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY)
     assert len(admission.requests) == 1
@@ -308,14 +308,14 @@ def observe(seen: Seen, calls: list[tuple[int, str, str]]) -> Callable[[tuple[in
 def test_show_observes_the_registered_entry(
     admitted: Path, reader: AttemptStore, tmp_path: Path, seen: Seen, now: float, entry: EntryState, expected: Next
 ) -> None:
-    write(admitted, "UPDATE plan_attempt SET entry_pid=?,entry_start=?,entry_boot=?", *ENTRY)
+    write(admitted, "UPDATE attempt SET entry_pid=?,entry_start=?,entry_boot=?", *ENTRY)
     calls: list[tuple[int, str, str]] = []
     shown = status(Reads(reader, observe(seen, calls), lambda: now, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown)
     assert (shown.status.entry, shown.status.next, shown.status.deadline_passed) == (entry, expected, now >= 100)
     assert calls == [ENTRY]
     assert (shown.status.entry_process, shown.status.worker) == (ENTRY, None)
-    write(admitted, "UPDATE plan_attempt SET phase='dispatching',base_commit=?,worker_pid=42,worker_pgid=41", "a" * 40)
+    write(admitted, "UPDATE attempt SET phase='dispatching',base_commit=?,worker_pid=42,worker_pgid=41", "a" * 40)
     again = status(Reads(reader, observe(seen, calls), lambda: now, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
     assert isinstance(again, Shown) and again.status.worker == (42, 41)
 
@@ -325,7 +325,7 @@ def test_an_expired_admitted_attempt_registered_before_a_reboot_shows_start(
     admitted: Path, reader: AttemptStore, tmp_path: Path, boot: str | None, expected: Next
 ) -> None:
     """The entry stored `boot`; this machine's boot id differs only after a reboot (unknown never counts as one)."""
-    write(admitted, "UPDATE plan_attempt SET entry_pid=?,entry_start=?,entry_boot=?", *ENTRY)
+    write(admitted, "UPDATE attempt SET entry_pid=?,entry_start=?,entry_boot=?", *ENTRY)
     reads = Reads(reader, observe("different_process", []), lambda: 200, nothing_left, lambda: boot)
     shown = status(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(shown, Shown) and (shown.status.deadline_passed, shown.status.next) == (True, expected)
@@ -338,7 +338,7 @@ def test_show_creates_nothing_and_computes_the_attempt_directory(admitted: Path,
     def rows() -> list[tuple[object, ...]]:
         con = sqlite3.connect(admitted)
         try:
-            return con.execute("SELECT * FROM plan_attempt").fetchall()
+            return con.execute("SELECT * FROM attempt").fetchall()
         finally:
             con.close()
 
@@ -492,7 +492,7 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 9])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 8, 10])
 def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
@@ -528,7 +528,7 @@ def test_adopt_refuses_a_bad_checkout_before_making_anything(
 def test_adopt_refuses_another_schema_and_otherwise_creates_the_database(tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts) -> None:
     foreign = tmp_path / "foreign.db"
     write(foreign, "PRAGMA journal_mode=WAL")
-    write(foreign, "PRAGMA user_version=9")
+    write(foreign, "PRAGMA user_version=8")
     refused = adopt(foreign, tmp_path, tmp_path / "slots", 1, checkouts)
     assert isinstance(refused, Failed) and (refused.kind, refused.reason) == ("refused", "schema")
     database = tmp_path / "state" / "factory.db"
@@ -606,13 +606,13 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
 def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_abandoned_one(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree
 ) -> None:
-    registered.execute("INSERT INTO plan_release SELECT attempt_id,dispatch_token,generation,slot_head,5,1,'unclaimed' FROM plan_attempt")
+    registered.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,5,1,'unclaimed' FROM attempt")
     registered.execute("UPDATE reservation SET attempt_id='fresh',generation=2")
     registered.execute(
-        """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
+        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
         input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
-        SELECT 'fresh','token',2,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,
-        sandbox,deadline,1,2,slot_head FROM plan_attempt WHERE attempt_id='attempt'"""
+        SELECT 'fresh','token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,
+        sandbox,deadline,1,2,slot_head FROM attempt WHERE attempt_id='attempt'"""
     )
     reads = Reads(AttemptStore(lambda: registered), observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
     listed = attempts_status(reads)
@@ -624,7 +624,7 @@ def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_aband
 
 def test_an_abandon_whose_claim_is_still_unclaiming_says_release_and_start_refuses(registered: sqlite3.Connection, tmp_path: Path) -> None:
     registered.execute("DELETE FROM reservation")
-    registered.execute("INSERT INTO plan_release SELECT attempt_id,dispatch_token,generation,slot_head,5,1,'unclaiming' FROM plan_attempt")
+    registered.execute("INSERT INTO slot_release SELECT attempt_id,dispatch_token,generation,slot_head,5,1,'unclaiming' FROM attempt")
     store = AttemptStore(lambda: registered)
     found = status(Reads(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot"), tmp_path / "art", "tasks", "tl-1")
     assert isinstance(found, Shown) and found.status.next == "release"

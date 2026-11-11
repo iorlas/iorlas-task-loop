@@ -84,7 +84,7 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
     attempts = Attempts(store, files, lambda: ("/bin/codex", {}), agent, lambda: now[0], slow, slot_files)
     result = attempts.execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "expired") and agent.calls == [] and Spy.cleanups == [1]
-    assert con.execute("SELECT phase,rev,base_commit FROM plan_attempt").fetchone() == ("admitted", 0, None)
+    assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)
 
 
 @pytest.mark.parametrize(
@@ -130,11 +130,11 @@ def test_an_unusable_slot_never_dispatches_and_the_attempt_stays_admitted(
         repo.drop_worktree(slot.path)
     else:
         con.execute("UPDATE reservation SET repo_id='other'")
-        con.execute("UPDATE plan_attempt SET repo_id='other'")
+        con.execute("UPDATE attempt SET repo_id='other'")
     agent = run()
     attempts = body(con, tmp_path, agent, checkouts, slot_files)
     for _ in range(2):  # nothing moved: the same refusal again
         result = attempts.execute(KEY, ENTRY)
         assert (result.status, result.reason) == (status, reason)
     assert agent.calls == [] and Spy.cleanups == [1, 1]
-    assert con.execute("SELECT phase,rev,base_commit FROM plan_attempt").fetchone() == ("admitted", 0, None)
+    assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)

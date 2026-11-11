@@ -1,4 +1,4 @@
-"""Release a slot reservation (a lease), and abandon an attempt: the one writer of `plan_release` and the only deleter of
+"""Release a slot reservation (a lease), and abandon an attempt: the one writer of `slot_release` and the only deleter of
 a `reservation`; its one Git write is `park`, under the slot's lock.
 
 Two modes of one operation. settled: the attempt's result is collected; the slot is parked at the attempt's admission
@@ -43,16 +43,16 @@ NOTHING: Final = "Nothing changed."
 ROW: Final = """SELECT p.task_id,p.repo_id,p.slot,p.phase,p.rev,p.entry_pid,p.entry_start,p.entry_boot,p.worker_pid,p.worker_pgid,
 p.worker_start,p.worker_boot,p.slot_head,p.tracker_root,
 (SELECT r.cwd FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id AND r.generation=p.generation),
-EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id),x.abandoned,x.claim
-FROM plan_attempt p LEFT JOIN plan_release x ON x.attempt_id=p.attempt_id
+EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),x.abandoned,x.claim
+FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 # Inside the write transaction: still the attempt the proof read (same rev and phase), no successor, the reservation held
 # at the key's generation, and no release row.
-FENCE: Final = """SELECT 1 FROM plan_attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.rev=? AND p.phase=?
-AND NOT EXISTS (SELECT 1 FROM plan_attempt s WHERE s.previous_attempt_id=p.attempt_id)
+FENCE: Final = """SELECT 1 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.rev=? AND p.phase=?
+AND NOT EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id)
 AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
-AND NOT EXISTS (SELECT 1 FROM plan_release x WHERE x.attempt_id=p.attempt_id)"""
+AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id)"""
 
 
 @dataclass(frozen=True)
@@ -241,7 +241,7 @@ class SlotRelease:
         if abandon and not abandoned:
             with self._writing() as con:
                 flipped = con.execute(
-                    "UPDATE plan_release SET abandoned=1,claim='unclaiming' WHERE attempt_id=? AND abandoned=0", (row.key.attempt_id,)
+                    "UPDATE slot_release SET abandoned=1,claim='unclaiming' WHERE attempt_id=? AND abandoned=0", (row.key.attempt_id,)
                 ).rowcount
             if flipped != 1:
                 return NotReleased("unavailable", "changed", f"Another release changed it first. {NOTHING}")
@@ -307,7 +307,7 @@ class SlotRelease:
             if con.execute(FENCE, (*astuple(key), row.rev, row.stopping.phase)).fetchone() is None:
                 return False
             values = (*astuple(key), head, self.clock(), int(abandon), "unclaiming" if abandon else "kept")
-            con.execute(f"INSERT INTO plan_release ({RELEASE}) VALUES ({marks(RELEASE)})", values)
+            con.execute(f"INSERT INTO slot_release ({RELEASE}) VALUES ({marks(RELEASE)})", values)
             con.execute(
                 "DELETE FROM reservation WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",
                 (row.repo_id, row.slot, key.attempt_id, key.reservation_generation),
@@ -325,7 +325,7 @@ class SlotRelease:
         claim: Literal["unclaimed", "not_held"] = "unclaimed" if back else "not_held"
         try:
             with self._writing() as con:
-                con.execute("UPDATE plan_release SET claim=? WHERE attempt_id=? AND claim='unclaiming'", (claim, row.key.attempt_id))
+                con.execute("UPDATE slot_release SET claim=? WHERE attempt_id=? AND claim='unclaiming'", (claim, row.key.attempt_id))
         except (sqlite3.Error, StoreUnavailable) as error:
             unrecorded = f"Released and the claim {claim}, but that was not recorded ({type(error).__name__}): rerun."
             return NotReleased("unavailable", "store", unrecorded)

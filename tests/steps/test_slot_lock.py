@@ -96,7 +96,7 @@ def test_a_held_slot_refuses_verify_before_any_git_write_and_then_it_settles(
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
     with occupy(lock_path(str(slot.path))):
         assert verifier(registered, checkouts, slot_files).verify(KEY) == VerifyUnavailable("slot_busy")
-    assert writes == [] and registered.execute("SELECT count(*) FROM plan_verification").fetchone() == (0,)
+    assert writes == [] and registered.execute("SELECT count(*) FROM verification").fetchone() == (0,)
     found = verifier(registered, checkouts, slot_files).verify(KEY)
     assert isinstance(found, Verified) and writes == ["stage", "record"]
     with occupy(lock_path(str(slot.path))):  # a stored verdict reads no Git and takes no lock

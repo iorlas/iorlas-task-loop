@@ -134,11 +134,11 @@ def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles
 
 
 def stored(con: sqlite3.Connection) -> list[tuple[object, ...]]:
-    return con.execute("SELECT verdict,reason,reused,observed_at FROM plan_verification").fetchall()
+    return con.execute("SELECT verdict,reason,reused,observed_at FROM verification").fetchall()
 
 
-def plan_commit(con: sqlite3.Connection) -> object:
-    return con.execute("SELECT plan_commit FROM plan_attempt").fetchone()[0]
+def end_commit(con: sqlite3.Connection) -> object:
+    return con.execute("SELECT end_commit FROM attempt").fetchone()[0]
 
 
 def made(slot: FakeWorktree, base: str) -> list[tuple[str, str]]:
@@ -185,8 +185,8 @@ def unregistered(slot: FakeWorktree, files: FakeSlotFiles) -> None:
 LOST = "unavailable:git:MissingRevision"  # B no longer resolves: permanently unknown, never a verdict
 # B made unresolvable: its first hex digit always changes (fake commit ids hang on one counter shared by every repository
 # in the process, so a fixed replacement digit was a no-op whenever an earlier test left B starting with it)
-LOSE_BASE = "UPDATE plan_attempt SET base_commit=(CASE substr(base_commit,1,1) WHEN 'f' THEN 'e' ELSE 'f' END) || substr(base_commit,2)"
-OTHER_REPO = "UPDATE reservation SET repo_id='other'; UPDATE plan_attempt SET repo_id='other'"
+LOSE_BASE = "UPDATE attempt SET base_commit=(CASE substr(base_commit,1,1) WHEN 'f' THEN 'e' ELSE 'f' END) || substr(base_commit,2)"
+OTHER_REPO = "UPDATE reservation SET repo_id='other'; UPDATE attempt SET repo_id='other'"
 PLANNED = {P: "# Plan\n"}
 # id, files committed before dispatch (B), files the agent writes, its answer, a change after the run, SQL, expected, commits
 CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, str | None, str, int]] = [
@@ -271,7 +271,7 @@ def test_one_factory_commit_with_the_agents_message_and_the_trailer_is_recorded_
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {NOTE: "n"}, PLAN | {"paths": [P, NOTE]})
     assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)
-    assert made(slot, base) == [("Plan tl-1", TRAILER)] and plan_commit(registered) == head(slot)
+    assert made(slot, base) == [("Plan tl-1", TRAILER)] and end_commit(registered) == head(slot)
     assert slot.dirty().raw is False
 
 
@@ -281,11 +281,11 @@ def test_leftovers_are_listed_fresh_and_a_tidied_slot_then_verifies(
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED | {NOTE: "n", "scratch.txt": "s"})
     check = verifier(registered, checkouts, slot_files)
     assert check.verify(KEY) == Unsettled("uncommitted", ("?? docs/design/tl-1/note.md", "?? scratch.txt"))
-    x = plan_commit(registered)
+    x = end_commit(registered)
     assert x == head(slot) and check.leftovers(KEY) == check.verify(KEY)  # X stays recorded; the listing is read again
     slot.remove_file(NOTE)
     slot.remove_file("scratch.txt")
-    assert check.leftovers(KEY) is None and isinstance(check.verify(KEY), Verified) and plan_commit(registered) == x
+    assert check.leftovers(KEY) is None and isinstance(check.verify(KEY), Verified) and end_commit(registered) == x
 
 
 def test_the_listing_is_bounded(
@@ -302,11 +302,11 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
     base = commit(slot, PLANNED)
     captured(registered, tmp_path, slot, checkouts, slot_files, {NOTE: "n"}, UNCHANGED)
     check = verifier(registered, checkouts, slot_files)
-    assert shown(check.verify(KEY)) == "unsettled:uncommitted" and plan_commit(registered) is None
+    assert shown(check.verify(KEY)) == "unsettled:uncommitted" and end_commit(registered) is None
     slot.remove_file(NOTE)
     tree = slot.repo.tree(base)
     assert tree is not None and check.verify(KEY) == Verified(tree.files[P][1], reused=True)
-    assert plan_commit(registered) == base
+    assert end_commit(registered) == base
 
 
 @pytest.mark.parametrize(
@@ -327,7 +327,7 @@ def test_a_rewritten_slot_pointer_is_redirected_before_any_git_call(
     rewrite(slot, slot_files)
     counted = Counted(checkouts)
     assert verifier(registered, counted, slot_files).verify(KEY) == Unsettled("redirected") and counted.opens == 0
-    assert stored(registered) == [] and plan_commit(registered) is None
+    assert stored(registered) == [] and end_commit(registered) is None
 
 
 @pytest.mark.parametrize("target", ["slot_path", "gitdir_in_slot", "common_in_slot", "unresolvable"])
@@ -349,7 +349,7 @@ def test_a_pointer_is_judged_as_git_resolves_it(
     slot_files.resolved.update(redirects[target])
     counted = Counted(checkouts)
     assert verifier(registered, counted, slot_files).verify(KEY) == Unsettled("redirected") and counted.opens == 0
-    assert made(slot, head(slot)) == [] and plan_commit(registered) is None
+    assert made(slot, head(slot)) == [] and end_commit(registered) is None
 
 
 def test_a_wrong_back_pointer_is_redirected(
@@ -482,7 +482,7 @@ def test_refusals_and_unknowns_before_any_git_read(
     assert verifier(registered, counted, slot_files).verify(KEY) == VerifyRefused("not_captured")
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute(
-        "UPDATE plan_execution SET answer_kind='validation_pending',disposition=NULL,plan_path=NULL,commit_paths=NULL,commit_message=NULL"
+        "UPDATE execution SET answer_kind='validation_pending',disposition=NULL,effect=NULL,commit_paths=NULL,commit_message=NULL"
     )
     assert verifier(registered, counted, slot_files).verify(KEY) == VerifyUnavailable("validation_pending")
     assert Verifier(AttemptStore(lambda: None), counted, slot_files, gone, lambda: 20, hold).verify(KEY) == VerifyUnavailable("store")
@@ -502,16 +502,16 @@ def test_an_unfinished_session_publication_is_never_verified(
     expected: object,
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    registered.execute("UPDATE plan_execution SET publication=?", (publication,))
+    registered.execute("UPDATE execution SET publication=?", (publication,))
     assert verifier(registered, checkouts, slot_files).verify(KEY) == expected and stored(registered) == []
 
 
 def test_a_dispatched_attempt_always_has_a_base(registered: sqlite3.Connection) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="base_commit IS NOT NULL"):
-        registered.execute("UPDATE plan_attempt SET phase='dispatching'")
-    registered.execute("UPDATE plan_attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
+        registered.execute("UPDATE attempt SET phase='dispatching'")
+    registered.execute("UPDATE attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
     with pytest.raises(sqlite3.IntegrityError, match="phase='captured'"):
-        registered.execute("UPDATE plan_attempt SET plan_commit=?", ("c" * 40,))
+        registered.execute("UPDATE attempt SET end_commit=?", ("c" * 40,))
 
 
 def test_a_stale_reservation_refuses_and_stores_nothing(
@@ -533,7 +533,7 @@ def test_another_verifier_storing_first_is_inconsistent(
     found = verifier(registered, checkouts, slot_files).verify(KEY)
     tree = slot.repo.tree(head(slot))
     assert tree is not None and found == Verified(tree.files[P][1])
-    registered.execute("DELETE FROM plan_verification")
+    registered.execute("DELETE FROM verification")
     assert store.verdict(record.admission, record.base_commit, head(slot), Rejected("paths"), 1) == Rejected("paths")
 
     class Racing(AttemptStore):
@@ -558,7 +558,7 @@ def test_every_rule_a_verdict_can_name_is_one_the_store_reads_back() -> None:
     assert "merge" not in RULES and {"nothing_written", "file_size"} <= set(RULES)
 
 
-def test_the_writer_refuses_a_plan_commit_or_verdict_without_its_preconditions(
+def test_the_writer_refuses_an_end_commit_or_verdict_without_its_preconditions(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
@@ -566,15 +566,48 @@ def test_the_writer_refuses_a_plan_commit_or_verdict_without_its_preconditions(
     record = store.load(KEY)
     assert record is not None and record.base_commit is not None
     with pytest.raises(StoreRefused, match="changed_answer"):
-        store.plan_commit(record.admission, record.base_commit)  # planned: X must differ from B
+        store.end_commit(record.admission, record.base_commit)  # planned: X must differ from B
     with pytest.raises(StoreRefused, match="changed_answer"):
-        store.verdict(record.admission, record.base_commit, "e" * 40, Verified("e" * 40), 1)  # no plan_commit stored yet
-    assert store.plan_commit(record.admission, "e" * 40) == "e" * 40
-    assert store.plan_commit(record.admission, "f" * 40) == "e" * 40  # written once: the caller sees the other value
+        store.verdict(record.admission, record.base_commit, "e" * 40, Verified("e" * 40), 1)  # no end_commit stored yet
+    assert store.end_commit(record.admission, "e" * 40) == "e" * 40
+    assert store.end_commit(record.admission, "f" * 40) == "e" * 40  # written once: the caller sees the other value
     with pytest.raises(StoreRefused, match="changed_answer"):
         store.verdict(record.admission, record.base_commit, None, Rejected("nothing_written"), 1)  # a commit is recorded
     with pytest.raises(StoreRefused, match="changed_answer"):
-        store.verdict(record.admission, record.base_commit, "e" * 40, Verified("e" * 40, reused=True), 1)  # reused needs unchanged
+        store.verdict(record.admission, record.base_commit, "e" * 40, Verified("e" * 40, reused=True), 1)  # reused needs keep
+    assert stored(registered) == []
+
+
+@pytest.mark.parametrize(("effect", "refused", "accepted"), [("commit", "B", "X"), ("keep", "X", "B"), ("none", "BX", "")])
+def test_the_end_commit_and_verdict_fences_read_the_stored_effect(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+    effect: str, refused: str, accepted: str,
+) -> None:
+    """The stored disposition stays `planned`; only the effect decides: `commit` ends at X != B, `keep` at B, `none` at
+    neither and never gets a verdict."""
+    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
+    registered.execute("UPDATE execution SET effect=?", (effect,))
+    store = AttemptStore(lambda: registered)
+    record = store.load(KEY)
+    assert record is not None and record.base_commit is not None
+    commits = {"B": record.base_commit, "X": "e" * 40}
+    for each in refused:
+        with pytest.raises(StoreRefused, match="changed_answer"):
+            store.end_commit(record.admission, commits[each])
+    end = commits[accepted] if accepted else "e" * 40
+    if not accepted:  # no commit recorded yet: only the effect refuses `nothing_written`
+        with pytest.raises(StoreRefused, match="changed_answer"):
+            store.verdict(record.admission, record.base_commit, None, Rejected("nothing_written"), 1)
+    if accepted:
+        assert store.end_commit(record.admission, end) == end
+    else:
+        registered.execute("UPDATE attempt SET end_commit=?", (end,))
+    verdict = Verified("f" * 40, reused=effect == "keep")
+    if accepted:
+        assert store.verdict(record.admission, record.base_commit, end, verdict, 1) == verdict
+        return
+    with pytest.raises(StoreRefused, match="changed_answer"):
+        store.verdict(record.admission, record.base_commit, end, verdict, 1)
     assert stored(registered) == []
 
 
@@ -598,7 +631,7 @@ def test_a_pointer_rewritten_after_the_slot_read_stops_before_stage(
 
     monkeypatch.setattr(FakeWorktree, "dirty", dirty)
     assert verifier(registered, checkouts, slot_files).verify(KEY) == Unsettled("redirected")
-    assert slot.state().index == index and made(slot, base) == [] and plan_commit(registered) is None
+    assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
 
 
 def test_a_pointer_rewritten_during_stage_stops_before_record(
@@ -615,7 +648,7 @@ def test_a_pointer_rewritten_during_stage_stops_before_record(
 
     monkeypatch.setattr(FakeWorktree, "stage", stage)
     assert verifier(registered, checkouts, slot_files).verify(KEY) == Unsettled("redirected")
-    assert made(slot, base) == [] and plan_commit(registered) is None and stored(registered) == []
+    assert made(slot, base) == [] and end_commit(registered) is None and stored(registered) == []
 
 
 def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
@@ -639,11 +672,11 @@ def test_a_verifier_racing_another_adopts_its_commit_never_nothing_written(
     monkeypatch.setattr(FakeWorktree, "record", record)
     found = verifier(registered, checkouts, slot_files, unheld).verify(KEY)
     assert isinstance(found, Verified) and raced == [found]
-    assert made(slot, base) == [("Plan tl-1", TRAILER)] and plan_commit(registered) == head(slot)
+    assert made(slot, base) == [("Plan tl-1", TRAILER)] and end_commit(registered) == head(slot)
     assert stored(registered) == [("verified", None, 0, 20.0)]
 
 
-def test_no_plan_commit_is_written_once_a_verdict_is_stored(
+def test_no_end_commit_is_written_once_a_verdict_is_stored(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
@@ -653,8 +686,8 @@ def test_no_plan_commit_is_written_once_a_verdict_is_stored(
     nothing = Rejected("nothing_written")
     assert store.verdict(record.admission, record.base_commit, None, nothing, 1) == nothing
     with pytest.raises(StoreRefused, match="changed_answer"):
-        store.plan_commit(record.admission, "e" * 40)
-    assert plan_commit(registered) is None
+        store.end_commit(record.admission, "e" * 40)
+    assert end_commit(registered) is None
 
 
 def test_the_listing_is_safe_to_print(
@@ -679,5 +712,5 @@ def test_no_git_write_while_the_worker_may_still_run(
 
     found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, alive, lambda: 20, hold).verify(KEY)
     assert found == Unsettled("worker_alive") and seen == [WORKER]
-    assert slot.state().index == index and made(slot, base) == [] and plan_commit(registered) is None
+    assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
     assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)  # once it is gone

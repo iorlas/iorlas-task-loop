@@ -129,7 +129,7 @@ def nowhere(_admission: object) -> AbstractContextManager[None]:
 def stored(con: sqlite3.Connection) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]:
     """The reservations and the release rows."""
     return (con.execute("SELECT slot,generation,attempt_id FROM reservation").fetchall(),
-            con.execute("SELECT head,released_at,abandoned,claim FROM plan_release").fetchall())
+            con.execute("SELECT head,released_at,abandoned,claim FROM slot_release").fetchall())
 
 
 def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then_has_nothing_pending(
@@ -151,7 +151,7 @@ def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, phase: str
 ) -> None:
     if phase == "registered":
-        registered.execute("UPDATE plan_attempt SET phase='registered',base_commit=?,worker_pid=42,worker_pgid=42,worker_start='s',"
+        registered.execute("UPDATE attempt SET phase='registered',base_commit=?,worker_pid=42,worker_pgid=42,worker_start='s',"
                            "worker_boot='b'", (head(slot),))
     elif phase == "captured":  # pending verification
         assert executed(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"}) == "verification"
@@ -161,7 +161,7 @@ def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
     assert (stored(registered), ports.opens, ports.holds, ports.observed) == (before, 0, 0, [])
 
 
-WORKING = "UPDATE plan_attempt SET phase=?,base_commit='" + "b" * 40 + "',worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?"
+WORKING = "UPDATE attempt SET phase=?,base_commit='" + "b" * 40 + "',worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?"
 
 
 @pytest.mark.parametrize(
@@ -276,7 +276,7 @@ def test_an_attempt_changed_after_the_proof_records_nothing_and_says_it_parked(
     d = head(slot)
     slot.take_branch("task/tl-1", "HEAD", mode="resume")
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
-    ports.inside = lambda: registered.execute("UPDATE plan_attempt SET entry_pid=8,rev=rev+1")
+    ports.inside = lambda: registered.execute("UPDATE attempt SET entry_pid=8,rev=rev+1")
     found = ports.releaser().release(KEY, True)
     assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed")
     assert f"parked at {d}" in found.detail and stored(registered) == before and ports.unclaimed == []
@@ -294,7 +294,7 @@ def test_the_claim_is_returned_once_retried_while_bd_fails_and_reported_when_not
     assert ports.releaser().release(KEY, True) == AlreadyReleased("s1", "unclaimed", True)
     assert ports.unclaimed == [("/tracker", "tl-1")] * 2 and stored(registered)[1] == [(d, 30.0, 1, "unclaimed")]
     other = Ports(registered, checkouts, slot_files)
-    registered.execute("UPDATE plan_release SET abandoned=0,claim='kept'")  # as if settled, to abandon again
+    registered.execute("UPDATE slot_release SET abandoned=0,claim='kept'")  # as if settled, to abandon again
     other.answers = [False]
     assert other.releaser().release(KEY, True) == Released("s1", None, False, "not_held", True)
 

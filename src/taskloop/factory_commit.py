@@ -62,7 +62,7 @@ def trailer(admission: Admission) -> str:
 
 
 def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: Quiet) -> Settled:
-    """Steps 2 to 5 of the stage commit for a valid `planned` or `unchanged` answer with no stored `plan_commit`.
+    """Steps 2 to 5 of the stage commit for a valid `planned` or `unchanged` answer with no stored `end_commit`.
     `quiet` is asked right before each Git write: its answer (`worker_alive`, `superseded`) stops it, nothing written."""
     state = _observed(checkouts, files, admission)
     if isinstance(state, Unsettled):
@@ -192,12 +192,12 @@ def clean_at(checkouts: Checkouts, files: SlotFiles, admission: Admission, commi
 
 
 def leftovers(
-    checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, plan_commit: str | None
+    checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, end_commit: str | None
 ) -> Unsettled | None:
     """Read-only, for a person (`tl plan show`): what a verify would report as a stage to repeat, read now. Before the
     factory's commit the same `refusal` as `settle` (`unsafe`, `ignored`); after it, or for `unchanged`, the clean-tree
     check."""
-    if answer.disposition == "planned" and plan_commit is None:
+    if answer.disposition == "planned" and end_commit is None:
         state = _observed(checkouts, files, admission)
         if isinstance(state, Unsettled):
             return None
@@ -206,5 +206,5 @@ def leftovers(
         if state.head != base:
             return None
         return refusal(checkouts(Path(admission.cwd)).worktree(Path(admission.cwd)), files, admission, base, answer)
-    found = clean_at(checkouts, files, admission, plan_commit or base)
+    found = clean_at(checkouts, files, admission, end_commit or base)
     return found if isinstance(found, Unsettled) else None

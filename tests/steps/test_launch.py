@@ -111,7 +111,7 @@ def launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: fl
 def stored(db: Path) -> tuple[object, ...]:
     con = sqlite3.connect(db)
     try:
-        return con.execute("SELECT entry_pid,entry_start,entry_boot,phase FROM plan_attempt").fetchone()
+        return con.execute("SELECT entry_pid,entry_start,entry_boot,phase FROM attempt").fetchone()
     finally:
         con.close()
 
@@ -184,7 +184,7 @@ def test_a_relaunch_after_a_reboot_renews_the_deadline_from_its_minutes(admitted
     assert found == Launched(KEY, (9, "new-start", "boot")) and start.permitted
     con = sqlite3.connect(admitted)
     try:
-        assert con.execute("SELECT deadline FROM plan_attempt").fetchone() == (200 + 30 * 60,)
+        assert con.execute("SELECT deadline FROM attempt").fetchone() == (200 + 30 * 60,)
     finally:
         con.close()
 
@@ -214,7 +214,7 @@ def test_only_an_admitted_attempt_of_a_known_task_launches(admitted: Path) -> No
     start = FakeStart()
     assert launcher(admitted, start).launch("tasks", "tl-9", 30) == LaunchRefused("absent")
     con = sqlite3.connect(admitted)
-    con.execute("UPDATE plan_attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
+    con.execute("UPDATE attempt SET phase='dispatching',base_commit=?", ("b" * 40,))
     con.commit()
     con.close()
     assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchRefused("dispatched")
@@ -230,7 +230,7 @@ def test_a_missing_database_is_refused_and_never_created(tmp_path: Path) -> None
 
 def test_a_foreign_schema_version_is_unavailable(admitted: Path) -> None:
     con = sqlite3.connect(admitted)
-    con.execute("PRAGMA user_version=9")
+    con.execute("PRAGMA user_version=8")
     con.close()
     start = FakeStart()
     assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchUnavailable("store")

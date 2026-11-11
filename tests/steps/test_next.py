@@ -147,15 +147,16 @@ class Bench:
 def seed(con: sqlite3.Connection, task_id: str, attempt_id: str, *, phase: str = "admitted", entry: Entry | None = None) -> None:
     """One attempt of `tasks/<task_id>` (deadline 100), with its registered entry when given."""
     con.execute(
-        """INSERT INTO plan_attempt (attempt_id,dispatch_token,generation,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
+        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
         input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,phase,base_commit,number,seq,slot_head)
-        VALUES (?,?,1,'beads','tasks',?,'/tracker','repo','s1','input.txt','digest',1,'m','high','workspace-write',100,?,?,?,?,?,1,1,?)""",
+        VALUES (?,?,1,'plan','beads','tasks',?,'/tracker','repo','s1','input.txt','digest',1,'m','high','workspace-write',
+        100,?,?,?,?,?,1,1,?)""",
         (attempt_id, f"token-{attempt_id}", task_id, *(entry or (None, None, None)), phase, None if phase == "admitted" else HEAD, HEAD),
     )
 
 
 def released(con: sqlite3.Connection, attempt_id: str, claim: str) -> None:
-    con.execute("INSERT INTO plan_release VALUES (?,?,1,?,5,?,?)", (attempt_id, f"token-{attempt_id}", HEAD, claim != "kept", claim))
+    con.execute("INSERT INTO slot_release VALUES (?,?,1,?,5,?,?)", (attempt_id, f"token-{attempt_id}", HEAD, claim != "kept", claim))
 
 
 def moves(found: Round) -> list[tuple[str, str, str]]:
@@ -234,10 +235,10 @@ def test_a_step_that_ran_is_verified_repeated_or_reported_every_round(
     if case in ("repeat", "repeats_exhausted"):
         bench.left = Unsettled("uncommitted", ("?? docs/design/tl-1/x.md",))
     if case == "repeats_exhausted":
-        registered.execute("UPDATE plan_attempt SET seq=2")
+        registered.execute("UPDATE attempt SET seq=2")
         seed(registered, "tl-1", "older", phase="captured")
         registered.execute(
-            "UPDATE plan_attempt SET number=3,previous_attempt_id='older',repeat_reason='uncommitted' WHERE attempt_id='attempt'"
+            "UPDATE attempt SET number=3,previous_attempt_id='older',repeat_reason='uncommitted' WHERE attempt_id='attempt'"
         )
     if case == "failed":
         registered.execute("DELETE FROM reservation")

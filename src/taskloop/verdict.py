@@ -23,7 +23,7 @@ def judge(repo: Repo, root: Path, commit: str, rules: StepRules, steps: tuple[Ch
     if tip is None or tip.sha != commit:  # never a tag, tree or abbreviation that resolves to some other commit
         return Rejected("commit_absent")
     *earlier, last = steps
-    chain = [(each.plan_commit, each.paths) for each in earlier if each.disposition == "planned" and each.plan_commit is not None]
+    chain = [(each.end_commit, each.paths) for each in earlier if each.disposition == "planned" and each.end_commit is not None]
     chain += [(commit, last.paths)] if last.disposition == "planned" else []
     if not chain:
         return plan_rule(tip, rules, reused=True)

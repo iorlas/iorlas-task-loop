@@ -151,15 +151,15 @@ def stored(rc: int | None, timed_out: bool, reason: str | None, answer: AnswerSt
     return StoredExecution(KEY, facts, Evidence(ref, ref, ref, ref), answer, "complete", verdict)
 
 
-VALID = AnswerState("valid", "planned", EXPECTED, (EXPECTED,), "Plan tl-1")
-REUSE = AnswerState("valid", "unchanged", EXPECTED)
+VALID = AnswerState("valid", "planned", "commit", (EXPECTED,), "Plan tl-1")
+REUSE = AnswerState("valid", "unchanged", "keep")
 
 
 @pytest.mark.parametrize(
     ("rc", "timed_out", "reason", "answer", "expected"),
     [
-        (0, False, None, AnswerState("valid", "incomplete"), "incomplete"),
-        (0, False, None, AnswerState("valid", "needs_owner"), "needs_owner"),
+        (0, False, None, AnswerState("valid", "incomplete", "none"), "incomplete"),
+        (0, False, None, AnswerState("valid", "needs_owner", "none"), "needs_owner"),
         (1, False, "bad_request", AnswerState("missing"), "run:bad_request"),
         (7, False, "worker_failed", VALID, "run:worker_failed"),
         (None, True, "timeout", VALID, "run:timeout"),
