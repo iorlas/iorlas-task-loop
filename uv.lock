@@ -4,8 +4,8 @@ requires-python = ">=3.15"
 
 [[package]]
 name = "any-agent"
-version = "0.4.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.4.0#5e4a4a21849e631a055eadb4a66e83be298c1892" }
+version = "0.5.0"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.5.0#fbc683fde52c0eaa309218e02df15ce5cea67b4c" }
 dependencies = [
     { name = "stream-proc" },
 ]
@@ -35,8 +35,8 @@ wheels = [
 
 [[package]]
 name = "git-porcelain"
-version = "0.14.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.14.0#4f45dae55a74636f333aa18a2be41df59a430f7d" }
+version = "0.15.0"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.15.0#abd04bfbb8e6d6a2e31682102ba1fa341a84df09" }
 
 [[package]]
 name = "iniconfig"
@@ -68,12 +68,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.4.0" },
+    { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.5.0" },
     { name = "beads-client", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.2.0" },
-    { name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.14.0" },
+    { name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.15.0" },
     { name = "process-lock", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=process-lock-v0.2.1" },
     { name = "sqlite-store", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fsqlite-store&tag=sqlite-store-v0.1.0" },
-    { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.4.0" },
+    { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.5.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -150,5 +150,5 @@ source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2F
 
 [[package]]
 name = "stream-proc"
-version = "0.5.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.4.0#5e4a4a21849e631a055eadb4a66e83be298c1892" }
+version = "0.6.0"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.5.0#fbc683fde52c0eaa309218e02df15ce5cea67b4c" }
