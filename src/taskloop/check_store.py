@@ -16,18 +16,18 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import astuple, dataclass
-from typing import Final, Literal, override
+from typing import Final, Literal
 
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
-from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
+from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
 from taskloop.factory_schema import CHECK_RESULT, CHECKS_ADMITTED, CHECKS_LOADED, marks, prefixed
 
 type Outcome = Literal["passed", "failed"]
 type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted"]
-type Required = tuple[tuple[str, str], ...]  # each required name with its check's argv digest at T, in T's order
+type Required = tuple[tuple[str, str], ...]  # each required name with its check's argv digest at the target, in its order
 OUTCOMES: Final[tuple[Outcome, ...]] = ("passed", "failed")
 CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted")
 # Unfinished or so concluded, a result names a command whose group must be proven empty before the slot is reset, set up,
@@ -45,7 +45,8 @@ LATEST_BLOCK: Final = "(SELECT coalesce(max(block),0) FROM check_result WHERE at
 
 @dataclass(frozen=True)
 class ChecksAdmitted:
-    """What the admission stores: D (the free slot's HEAD), T (`main` when the required names were read), the names."""
+    """What the admission stores: D (the free slot's HEAD), the target (`main`'s commit when the required names were
+    read) and the names."""
 
     key: AttemptKey
     after: str  # the done implement attempt
@@ -66,7 +67,7 @@ class ChecksRow:
     number: int
     slot: str
     slot_head: str  # D: the release parks here
-    target: str  # T
+    target: str  # `main`'s commit when the required names were read
     target_seen: str | None  # `main` when found moved
     required: Required
     profile_digest: str | None
@@ -119,7 +120,7 @@ def _nullable_real(value: object) -> float | None:
     return None if value is None else _real(value)
 
 
-def _word[T: str](value: object, words: tuple[T, ...]) -> T | None:
+def _word[W: str](value: object, words: tuple[W, ...]) -> W | None:
     found = next((each for each in words if each == value), None)
     if (found is None) != (value is None):
         raise StoreUnavailable("Malformed stored conclusion")
@@ -150,8 +151,26 @@ def _required(value: object) -> Required:
     return required
 
 
+def _entry(values: tuple[object, ...]) -> EntryIdentity | None:
+    """A stored entry identity (pid, start, boot): all set or none (the CHECK), else a broken row."""
+    if all(value is None for value in values):
+        return None
+    if None in values:
+        raise StoreUnavailable("Malformed stored identity")
+    return as_int(values[0]), as_text(values[1]), as_text(values[2])
+
+
+def _process(values: tuple[object, ...]) -> OwnedProcess | None:
+    """A stored command identity (pid, pgid, start, boot): all set or none (the CHECK), else a broken row."""
+    if all(value is None for value in values):
+        return None
+    if None in values:
+        raise StoreUnavailable("Malformed stored identity")
+    return OwnedProcess(as_int(values[0]), as_int(values[1]), as_text(values[2]), as_text(values[3]))
+
+
 def _checks(row: tuple[object, ...]) -> ChecksRow:
-    entry = None if None in row[12:15] else (as_int(row[12]), as_text(row[13]), as_text(row[14]))
+    entry = _entry(row[12:15])
     phase = "concluded" if row[15] == "concluded" else "admitted" if row[15] == "admitted" else None
     if phase is None:
         raise StoreUnavailable("Malformed checks phase")
@@ -165,9 +184,7 @@ def _checks(row: tuple[object, ...]) -> ChecksRow:
 
 
 def _result(row: tuple[object, ...]) -> ResultRow:
-    pid, pgid, start, boot = as_nullable_int(row[5]), as_nullable_int(row[6]), as_nullable_text(row[7]), as_nullable_text(row[8])
-    process = None if pid is None or pgid is None or start is None or boot is None else OwnedProcess(pid, pgid, start, boot)
-    return ResultRow(as_int(row[0]), as_int(row[1]), as_text(row[2]), as_nullable_text(row[3]), as_nullable_int(row[4]), process,
+    return ResultRow(as_int(row[0]), as_int(row[1]), as_text(row[2]), as_nullable_text(row[3]), as_nullable_int(row[4]), _process(row[5:9]),
                      _real(row[9]), _nullable_real(row[10]), as_nullable_int(row[11]), _word(row[12], CONCLUSIONS))
 
 
@@ -206,33 +223,34 @@ def record_release(con: sqlite3.Connection, key: AttemptKey, read: tuple[int, st
     return True
 
 
-class CheckStore(AttemptReads):
-    """The fenced writes and the reads of checks attempts and their results. Only the identity write runs inside the
-    registered start's window: it goes through `registering` (composition's bounded connection); every other read and
-    write through the store's own connection."""
+class CheckStore(StoreConnection):
+    """The fenced writes and the reads of checks attempts and their results; no agent attempt read (a checks key never
+    reads the `attempt` table as its own). Only the identity write runs inside the registered start's window: it goes
+    through `registering` (composition's bounded connection); every other read and write through the store's own
+    connection."""
 
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
         begin: Callable[[sqlite3.Connection], AbstractContextManager[None]] = begin_immediate,
-        registering: AttemptReads | None = None,
+        registering: StoreConnection | None = None,
     ) -> None:
         super().__init__(connect, begin)
         self.registering = self if registering is None else registering
 
-    @override
     def attempt_of(self, backlog: str, task_id: str) -> tuple[AttemptKey, str, EntryIdentity | None] | None:
         """The launcher's read (the agent store's, for checks attempts): the latest checks attempt of the task's current
-        agent attempt (its highest `seq`), its phase and registered entry; None when that attempt has none."""
+        agent attempt (its highest `seq`), its state and registered entry; None when that attempt has none. The state is
+        `released` once released (an abandon may release an `admitted` one), else the phase: only `admitted` launches."""
         with self._connection() as con:
             row: tuple[object, ...] | None = con.execute(
-                """SELECT attempt_id,dispatch_token,generation,phase,entry_pid,entry_start,entry_boot FROM checks_attempt
+                """SELECT attempt_id,dispatch_token,generation,CASE WHEN released_at IS NULL THEN phase ELSE 'released' END,
+                entry_pid,entry_start,entry_boot FROM checks_attempt
                 WHERE after_attempt_id=(SELECT attempt_id FROM attempt WHERE adapter='beads' AND backlog=? AND task_id=?
                 ORDER BY seq DESC LIMIT 1) ORDER BY number DESC LIMIT 1""", (backlog, task_id)).fetchone()
         if row is None:
             return None
-        entry = None if None in row[4:7] else (as_int(row[4]), as_text(row[5]), as_text(row[6]))
-        return AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), entry
+        return AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), as_text(row[3]), _entry(row[4:7])
 
     def row(self, key: AttemptKey) -> ChecksRow | None:
         with self._connection() as con:
@@ -261,7 +279,7 @@ class CheckStore(AttemptReads):
             if row is None:
                 return "refused"
             deadline = _real(row[1])
-            stored = None if None in row[2:5] else (as_int(row[2]), as_text(row[3]), as_text(row[4]))
+            stored = _entry(row[2:5])
             if renewed is not None and stored is not None and stored[2] != entry[2] and math.isfinite(renewed):
                 deadline = max(deadline, renewed)
             if row[0] != "admitted" or entry == stored or stored != (None if replacing is None else replacing.identity):
@@ -290,10 +308,10 @@ class CheckStore(AttemptReads):
             con.execute("UPDATE checks_attempt SET profile_digest=coalesce(profile_digest,?) WHERE attempt_id=?", (digest, key.attempt_id))
 
     def block(self, key: AttemptKey) -> int:
-        """A block starts: the refusal count is cleared; returns its number, the latest plus one."""
+        """A block starts: returns its number, the latest plus one. The refusal count stands: a block that repeats after a
+        refusal inside it still counts toward `stuck:checks_refused`; only the conclusion clears it."""
         with self._connection(write=True) as con:
             self._held(con, key)
-            con.execute("UPDATE checks_attempt SET refusal=NULL,refusals=0 WHERE attempt_id=?", (key.attempt_id,))
             return as_int(con.execute(f"SELECT {LATEST_BLOCK}", (key.attempt_id,)).fetchone()[0]) + 1
 
     def start(self, key: AttemptKey, block: int, position: int, name: str, argv_digest: str, timeout: int, now: float) -> None:

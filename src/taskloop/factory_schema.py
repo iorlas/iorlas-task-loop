@@ -109,6 +109,7 @@ CREATE TABLE checks_attempt (
  CHECK((conclusion='failed') = (reason IS NOT NULL)), CHECK((released_at IS NULL) = (parked IS NULL)),
  CHECK(abandoned=0 OR released_at IS NOT NULL), CHECK(abandoned=1 OR released_at IS NULL OR phase='concluded'),
  CHECK((refusal IS NULL) = (refusals = 0)),
+ CHECK((entry_pid IS NULL) = (entry_start IS NULL) AND (entry_pid IS NULL) = (entry_boot IS NULL)),
  UNIQUE (after_attempt_id, number)
 );
 CREATE TABLE check_result (
@@ -121,6 +122,8 @@ CREATE TABLE check_result (
  conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','undefined','interrupted')),
  CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS 'undefined')),
  CHECK((timeout IS NULL) = (argv_digest IS NULL)),
+ CHECK((pid IS NULL) = (pgid IS NULL) AND (pid IS NULL) = (proc_start IS NULL) AND (pid IS NULL) = (boot IS NULL)),
+ CHECK(conclusion IS NOT 'undefined' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
  PRIMARY KEY (attempt_id, block, position), UNIQUE (attempt_id, block, name)
 );
 """,

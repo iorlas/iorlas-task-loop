@@ -129,23 +129,39 @@ GIT_WRITES = frozenset({
 })
 
 
+DYNAMIC = frozenset({"getattr", "methodcaller", "attrgetter"})  # calls that reach an attribute by a string name
+
+
+def git_names(tree: ast.AST) -> set[str]:
+    """Every Git write (`GIT_WRITES`) one module uses: a call or reference of that attribute on any receiver, a bare call
+    of that name, or the name as a string argument of `getattr`, `methodcaller` or `attrgetter`. Any other string (a
+    refusal word such as `reset` in a word table) is not a use. Its limit: a name built at runtime (`getattr(slot, "re" +
+    "cord")`) or a write through another library API is not seen."""
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            found.add(node.attr)
+        if not isinstance(node, ast.Call):
+            continue
+        called = node.func.id if isinstance(node.func, ast.Name) else node.func.attr if isinstance(node.func, ast.Attribute) else None
+        found.update({called} if isinstance(node.func, ast.Name) and called is not None else set())
+        if called in DYNAMIC:
+            found.update(arg.value for arg in node.args if isinstance(arg, ast.Constant) and isinstance(arg.value, str))
+    return found & GIT_WRITES
+
+
 def git_writers() -> set[tuple[str, str]]:
-    """Every use of a Git write on a checkout (`GIT_WRITES`) in the factory source, by module: a call or reference of
-    that attribute on any receiver, a bare call of that name, or the name as a string (`getattr(slot, "record")`). Its
-    limit: a name built at runtime (`getattr(slot, "re" + "cord")`) or a write through another library API is not seen."""
-    found: set[tuple[str, str]] = set()
-    for path in (ROOT / "src" / "taskloop").glob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text())):
-            called = node.func if isinstance(node, ast.Call) else None
-            name = (
-                node.attr if isinstance(node, ast.Attribute)
-                else called.id if isinstance(called, ast.Name)
-                else node.value if isinstance(node, ast.Constant) and isinstance(node.value, str)
-                else None
-            )
-            if name in GIT_WRITES:
-                found.add((name, path.name))
-    return found
+    """Every use of a Git write in the factory source, by module (`git_names`)."""
+    return {(name, path.name) for path in (ROOT / "src" / "taskloop").glob("*.py") for name in git_names(ast.parse(path.read_text()))}
+
+
+@pytest.mark.parametrize(("source", "names"), [
+    ("slot.reset(x)", {"reset"}), ("hook = slot.park", {"park"}), ("reset()", {"reset"}), ('getattr(slot, "record")()', {"record"}),
+    ('operator.methodcaller("clean")', {"clean"}), ('attrgetter("push")', {"push"}),
+    ('WORDS = ("reset", "clean")', set()), ('word = "environment:reset"', set()), ('f(reset)', set()),
+], ids=["call", "reference", "bare_call", "getattr", "methodcaller", "attrgetter", "word_table", "refusal_word", "plain_name"])
+def test_the_git_write_matcher_sees_uses_and_not_words(source: str, names: set[str]) -> None:
+    assert git_names(ast.parse(source)) == names
 
 
 def test_only_the_commit_prepare_release_publish_and_environment_modules_write_git() -> None:

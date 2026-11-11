@@ -75,9 +75,9 @@ CREATE TABLE checks_attempt (
  number INTEGER NOT NULL CHECK(number >= 1),                     -- 1 for the advance, +1 for each re-run of the same X
  slot TEXT NOT NULL,
  slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),           -- D: the free slot's HEAD; the release parks here
- target_commit TEXT NOT NULL CHECK(length(target_commit) IN (40,64)),   -- T: `main` when the required names were read
+ target_commit TEXT NOT NULL CHECK(length(target_commit) IN (40,64)),   -- the target: `main` when the required names were read
  target_seen TEXT CHECK(target_seen IS NULL OR length(target_seen) IN (40,64)),  -- `main` when found moved (main_moved)
- required TEXT NOT NULL,              -- JSON [[name, argv digest of that name at T], ...] in T's `required` order, 1..32
+ required TEXT NOT NULL,              -- JSON [[name, argv digest of that name at the target], ...] in the target's `required` order, 1..32
  profile_digest TEXT CHECK(profile_digest IS NULL OR length(profile_digest)=64),  -- sha256 of `.task-loop.json` at X; set once
  deadline REAL NOT NULL, entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
  phase TEXT NOT NULL DEFAULT 'admitted' CHECK(phase IN ('admitted','concluded')),
@@ -90,6 +90,7 @@ CREATE TABLE checks_attempt (
  CHECK((conclusion='failed') = (reason IS NOT NULL)), CHECK((released_at IS NULL) = (parked IS NULL)),
  CHECK(abandoned=0 OR released_at IS NOT NULL), CHECK(abandoned=1 OR released_at IS NULL OR phase='concluded'),
  CHECK((refusal IS NULL) = (refusals = 0)),
+ CHECK((entry_pid IS NULL) = (entry_start IS NULL) AND (entry_pid IS NULL) = (entry_boot IS NULL)),  -- S6a repair
  UNIQUE (after_attempt_id, number)
 );
 CREATE TABLE check_result (
@@ -102,6 +103,8 @@ CREATE TABLE check_result (
  conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','undefined','interrupted')),
  CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS 'undefined')),
  CHECK((timeout IS NULL) = (argv_digest IS NULL)),
+ CHECK((pid IS NULL) = (pgid IS NULL) AND (pid IS NULL) = (proc_start IS NULL) AND (pid IS NULL) = (boot IS NULL)),  -- S6a repair
+ CHECK(conclusion IS NOT 'undefined' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
  PRIMARY KEY (attempt_id, block, position), UNIQUE (attempt_id, block, name)
 );
 ```
@@ -118,7 +121,7 @@ compared (X is immutable, so a second digest cannot differ; no refusal word for 
 
 **What the rows mean.** The phase is only `admitted` (setup and blocks run; there is no once-only agent, so no
 `dispatching`/`registered`) and `concluded`. "Current" is the highest `number` of one implement attempt; "latest block"
-the highest `block` of one checks attempt; the conclusion reads only that block. X, T, the required list and the profile
+the highest `block` of one checks attempt; the conclusion reads only that block. X, the target, the required list and the profile
 digest are facts of the attempt, never copied into each result: a result always travels joined with them and carries
 its own argv digest. `timed_out` is the conclusion `timed_out`; the exit is `rc`; the duration is `ended_at -
 started_at`. The output is a file (section 7), never a column. `check_store.LIVE_AFTER = ("lingering", "timed_out",
@@ -163,15 +166,15 @@ round never re-runs). Order, every read before any effect:
    `task_attempted`. The checkout's repository is the attempt's (`checkout`).
 3. X still on the task's branch: the local `task/<id>`, else the remote-tracking one, contains X (`prepare.lacks`), else
    `branch_moved`; X readable, else `commit_missing`. The checks run on X itself, not the tip.
-4. **The required names (O1, decided here):** `refs/heads/main` of the repository resolves to T (else `refused target`);
-   `profile.read_profile(files, T)` through the checkout's view (`Refused`: `refused target_profile` with B3's reason in
+4. **The required names (O1, decided here):** `refs/heads/main` of the repository resolves to the target (else `refused target`);
+   `profile.read_profile(files, target)` through the checkout's view (`Refused`: `refused target_profile` with B3's reason in
    the detail; `Unavailable`: `unavailable git`); its `target` must be `main` (another land branch is B6's, `refused
    target`); its `required` must be non-empty (`refused no_required`: nothing required would conclude `passed`
-   vacuously). The list stored is each required name with the argv digest of that name's check at T.
+   vacuously). The list stored is each required name with the argv digest of that name's check at the target.
 5. Free slots (`admit.free_slots`). No branch rule: the slot takes X detached, never `task/<id>`.
 6. One tracker read (`admit.read_task`): `claim_lost` unless `in_progress` for `taskloop`; no label (D3).
 7. One write transaction re-reading 2 and an unheld slot: `admit.reserve`, then `check_store.insert` (D = the slot's
-   HEAD, T, required, deadline, the number). A lost race on `(after_attempt_id, number)` is `task_attempted`; the caller
+   HEAD, the target, required, deadline, the number). A lost race on `(after_attempt_id, number)` is `task_attempted`; the caller
    then reads the winner through `check_store.attempt_of` and launches it with the checks launcher (never the agent's
    `attempt_of`). No claim call, no input file.
 
@@ -220,7 +223,7 @@ Order (each "concludes" below writes the conclusion and goes to step 13):
    when the latest block has a terminal row (`passed`, `failed`, `timed_out`, `undefined`) for every check at X and
    every undefined required name, or a row that stops a block (`lingering`, `dirty`), the conclusion is computed from it
    (step 12) and nothing runs. An `interrupted` row or a missing name means the block repeats whole.
-8. **`main` still T**: `refs/heads/main` read now; another commit concludes `main_moved` (and stores it as
+8. **`main` still the target**: `refs/heads/main` read now; another commit concludes `main_moved` (and stores it as
    `target_seen`).
 9. **Take X** (`prepare.detach_at`, new in `prepare.py`): through `observe_slot` and the pinned view, a clean slot
    detached at D is parked at X (`Worktree.park(X)`) and re-read (`(head, branch) == (X, None)`); a slot already detached
@@ -232,7 +235,7 @@ Order (each "concludes" below writes the conclusion and goes to step 13):
     section 6.1's table.
 11. **The block** (`checks.Block.run`, section 7), then `main` read again: moved concludes `main_moved`.
 12. **The conclusion**: `passed` when, in the latest block, every stored required name has a result `passed`; else
-    `failed` with the reason of the first required name (T's order) that did not pass: `<name>:<conclusion>`, or
+    `failed` with the reason of the first required name (the target's order) that did not pass: `<name>:<conclusion>`, or
     `<name>:not_run` when the block stopped before it; a stopping `dirty` or `lingering` row of a non-required check is
     the reason itself. Written once, fenced (`check_store.conclude`, which also clears `refusal`).
 13. **Release** of its own slot under the lock it holds (`ChecksRelease.release(key, abandon=False, me)`, section 10),
@@ -244,9 +247,9 @@ Order (each "concludes" below writes the conclusion and goes to step 13):
 
 A condition the candidate caused, or one that a relaunch cannot clear, **concludes** the checks attempt `failed` with a
 reason and releases its slot; a transient or unknown one leaves it `admitted` for a relaunch and is **counted**:
-`check_store.refused(key, word)` sets `refusal` and adds one when the word repeats (another word starts at 1; a block
-start or a conclusion clears it). Two in a row make `Next` `stuck:checks_refused`: rounds stop relaunching it, as
-`stuck:setup_failed` does; `tl step start` relaunches it by hand.
+`check_store.refused(key, word)` sets `refusal` and adds one when the word repeats (another word starts at 1; only the
+conclusion clears it: a block that repeats after a refusal inside it keeps counting, so it cannot relaunch forever).
+Two in a row make `Next` `stuck:checks_refused`: rounds stop relaunching it, as `stuck:setup_failed` does; `tl step start` relaunches it by hand.
 
 | Concludes `failed` with reason | Relaunch, counted |
 |---|---|
@@ -371,7 +374,7 @@ Slot: s1
 Phase: concluded
 Entry: gone (pid 4242, started ...)
 Commit: <X>
-Required: check, test (main at <T>)
+Required: check, test (main at <target>)
 Profile: <digest> at X
 Setup: run 1 passed at <X>; log <dir>/setup-1.log
 Check: check passed, exit 0, 41 s; log <dir>/check-1-check.log
@@ -383,8 +386,8 @@ Released: 2026-11-12 10:00:00 UTC, slot parked at <D>; claim kept
 Next: done
 ```
 
-A moved `main` adds `Main: moved from <T> to <target_seen>`; a counted refusal adds `Refused: <word> (<n> in a row)`.
-`(argv differs from main)` marks a required check whose argv digest at X differs from the one stored from T (decided
+A moved `main` adds `Main: moved from <target> to <target_seen>`; a counted refusal adds `Refused: <word> (<n> in a row)`.
+`(argv differs from main)` marks a required check whose argv digest at X differs from the one stored from the target (decided
 here: the cheapest visible signal of a task changing a required command); `(not required)` marks the others.
 `tl step list`: step `check`, the checks attempt's slot, phase, entry, result and `Next`; `--stuck` includes its
 `stuck:*` and `unknown`. `tl step verify` and `tl step publish` act on the agent attempt only. `STEP_ONLY` names `plan,
@@ -419,7 +422,7 @@ the round refuse `release`, admission refuses `not_advanceable`, and nothing lau
 
 **D4 and re-runs.** An abandon gives the claim back and the next start is a fresh plan (D4); the old checks attempts hang
 off an abandoned implement attempt and are never current again. A re-run is not an abandon: same claim, same implement
-attempt and X, a new checks attempt (`number` + 1) with a new T. **Publish**: the checks step pushes and commits nothing;
+attempt and X, a new checks attempt (`number` + 1) with a new target. **Publish**: the checks step pushes and commits nothing;
 it requires the implement attempt published at X and runs on X itself. **Across candidates**: a new implement attempt
 has its own X and its own checks attempts; nothing is carried. The same X checked in a new workflow runs again (D9).
 
@@ -445,13 +448,13 @@ factory folders outside the slot, the slot's lock, the pinned Git views, the sto
 **O1 (decided here).** Required names are read from the local `refs/heads/main` (the person's; the factory never writes
 it). This protects only against non-hostile task edits: task code already runs on the host and could rewrite that ref.
 Therefore: `main` is read before and after each block, a move concludes `failed main_moved` and is shown (`Main:`
-line); and B6 must re-read the required names from the remote target at land time and compare them with the stored T.
+line); and B6 must re-read the required names from the remote target at land time and compare them with the stored target.
 
 **The B6 land summary must list** (recorded here so B6's design starts from it):
 
-1. The checks attempt for exactly the land candidate X (else the checks run again), its conclusion, T, and each
+1. The checks attempt for exactly the land candidate X (else the checks run again), its conclusion, the target, and each
    required name with its result.
-2. The required names re-read from the remote target at land time, compared with T's; any difference, or a new required
+2. The required names re-read from the remote target at land time, compared with the target's; any difference, or a new required
    name, reruns the checks (O1).
 3. Each required check whose argv at X differs from the target's (stored digests), with both argv shown.
 4. Checks the task added, removed or changed at X (non-required ones ran on the host too) and every changed `setup`.
@@ -497,7 +500,7 @@ only S6c's entry runs). Each slice lands green with `just check` and `just test`
 | Term | Meaning |
 |---|---|
 | check (as built) | A named entry of the profile's `checks` at X that the checks step runs on the host. |
-| checks attempt | The check step's attempt (`checks_attempt`): numbered per done implement attempt (a re-run adds one); a slot, an entry process (`taskloop.check_entry`), a deadline; T and the required names; concluded `passed` or `failed` with a reason. Not an `attempt` row. |
+| checks attempt | The check step's attempt (`checks_attempt`): numbered per done implement attempt (a re-run adds one); a slot, an entry process (`taskloop.check_entry`), a deadline; the target and the required names; concluded `passed` or `failed` with a reason. Not an `attempt` row. |
 | block | One pass over the profile's checks at X within a checks attempt, after a reset to X and `setup` at X; an interrupted block repeats whole after its stop proof; a completed one is never run again. |
 | check result | One check's result in one block (`check_result`): `passed`, `failed`, `timed_out`, `lingering`, `dirty` (a tracked change or a moved HEAD), `undefined` (required at `main`, not defined at X), `interrupted` (not a result of the check: the block stopped). Its output is `check-<block>-<name>.log`. |
 | pass (as built) | A check result `passed` in its checks attempt's latest block, for that attempt's X, profile digest and argv digest; never looked up for any other X or attempt. |
@@ -513,8 +516,8 @@ gains `held:check_running`; `step kind` says the check step is not one; `evidenc
 - **Store and the not-current rule** (S6a): every v12 CHECK; writes fenced by token, generation and the held reservation
   of an `admitted` attempt; a concluded attempt refuses new results; the reboot renewal and no deadline refusal;
   `UNIQUE(after_attempt_id, number)`; latest block only; `unsettled` returns every unsettled row (unfinished,
-  `lingering`, `timed_out`, `interrupted`); the refusal counter (same word, another word, cleared by a block and a
-  conclusion); `SUCCESSOR` in `ROW`, `FENCE` and `FLIP`; a checks attempt's setup run fenced through `HELD`.
+  `lingering`, `timed_out`, `interrupted`); the refusal counter (same word, another word, kept across a block,
+  cleared by a conclusion); `SUCCESSOR` in `ROW`, `FENCE` and `FLIP`; a checks attempt's setup run fenced through `HELD`.
 - **Block** (S6b), as observed events over fakes: the identity committed before the fake executes; env (push bar,
   folders, no `UV_OFFLINE`, no Codex variables), cwd, the `min` timeout; every row of section 7 steps 4-6, including
   `timed_out` with survivors and the deadline with survivors (`lingering`), the deadline without (`interrupted`,
@@ -655,8 +658,7 @@ counter: `check_store` 258 (new), `factory_schema` 153 (+44), `setup_store` 99 (
    attempt by number (the last is the latest), so S6d's `Earlier:` lines need no second read.
 3. `attempt_of` overrides `AttemptReads.attempt_of` with the same signature (the latest checks attempt of the task's
    current agent attempt), ready for S6c's `EntryTargets`.
-4. There is no block column on the attempt: `block(key)` returns the latest result block plus one (clearing the
-   refusal); called again before any result is written it returns the same number. Result writes are accepted only in
+4. There is no block column on the attempt: `block(key)` returns the latest result block plus one; called again before any result is written it returns the same number. Result writes are accepted only in
    the latest block, or to start the next one (`check_changed` otherwise); a command registers once.
 5. `register_entry` ignores a non-finite renewal rather than refusing (it has no deadline refusal at all); `now` is
    unused and kept for the launcher's port.
@@ -677,6 +679,29 @@ release's lock, and the other order: the abandon's flip committed first, then a 
 abandon's rerun still returns the claim. The admission's own refusal in that order (`not_advanceable` on `unclaiming`)
 is S6d's.
 
-**Not verified**: nothing runs a checks attempt yet; the store's shape is exercised only by these tests. The glossary
-letter T is "the remote tip after a push", while this plan also calls `main` at admission T (`target_commit`); S6e's
-glossary pass should name one of them differently.
+**Not verified**: nothing runs a checks attempt yet; the store's shape is exercised only by these tests.
+
+### 21.1 Review repairs to S6a (2026-11-11)
+
+An independent review of 3ce982650 found no defect in the DDL or `SUCCESSOR`; six repairs, each with a test that fails
+without it:
+
+1. **The refusal counter survives a block** (section 6.1 changed): `block()` no longer clears it, only `conclude` does.
+   Otherwise a refusal inside a block (start uncertain, store or Git unavailable mid-block) was cleared when the
+   relaunch repeated the block, and the attempt relaunched forever.
+2. **New CHECKs** (section 4 DDL): an entry identity (`entry_pid`, `entry_start`, `entry_boot`) and a command identity
+   (`pid`, `pgid`, `proc_start`, `boot`) are all set or none; an `undefined` result has no `pid` and no `rc`; `rc` only
+   with a conclusion. A partial stored identity (only past the CHECKs) reads as `StoreUnavailable`, never as no process.
+3. **`attempt_of` says `released`** for a released checks attempt, whatever its phase (an abandon releases an `admitted`
+   one without a conclusion). **S6c**: the launcher launches only `admitted`, so an abandoned checks attempt is never
+   relaunched; the round's and `tl step start`'s routing (S6d, S6e) must read the same word.
+4. **`CheckStore` has no agent attempt read**: `attempt_reads.StoreConnection` is the shared connection base;
+   `AttemptReads` (the `attempt` table's reads) extends it, and `CheckStore` extends only `StoreConnection`, so a checks
+   key can never be passed to `state`, `tracker_root`, `release_of`, `step_of`, `attempts`, `chain` or `slot_use`.
+   `attempt_of` is now `CheckStore`'s own method, not an override (deviation 3 above).
+5. **The Git write matcher** in `test_policy` (`git_names`) counts an attribute (call or reference), a bare call, or a
+   string argument of `getattr`, `methodcaller` or `attrgetter`; any other string (the refusal word `reset` in S6b's word
+   tables) is not a use. It stays closed for real calls.
+6. **The letter T**: the glossary's T is the remote tip after a push; `main`'s commit at a checks admission is now "the
+   target" everywhere in this plan, the code comments and the test constants (`TARGET`). The glossary says factory.db
+   v12 since S6a.

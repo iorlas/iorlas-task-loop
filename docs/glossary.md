@@ -91,7 +91,7 @@ execution entity.
 
 ## Factory vocabulary as built
 
-Added 2026-11-11 from the successor tree (factory.db v11 since S5b). Each word has one meaning across the code, CLI, database and
+Added 2026-11-11 from the successor tree (factory.db v12 since S6a). Each word has one meaning across the code, CLI, database and
 logs; use it for nothing else. Words for owner-visible output are listed as the code prints them.
 
 | Term | Meaning | Example / distinction |

@@ -6,7 +6,7 @@ import sqlite3
 from collections.abc import Callable
 
 import pytest
-from doubles import CHECKS, REQUIRED, D, T, X
+from doubles import CHECKS, REQUIRED, TARGET, D, X
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
@@ -32,7 +32,7 @@ def columns(con: sqlite3.Connection, sql: str) -> list[tuple[object, ...]]:
 # A valid concluded-and-released checks attempt; each case overrides columns and must fail one CHECK (or the key rules).
 ATTEMPT: dict[str, object] = {
     "attempt_id": "other", "dispatch_token": "other-token", "generation": 1, "after_attempt_id": "implement", "number": 2,
-    "slot": "s2", "slot_head": D, "target_commit": T, "target_seen": None, "required": "[]", "profile_digest": None,
+    "slot": "s2", "slot_head": D, "target_commit": TARGET, "target_seen": None, "required": "[]", "profile_digest": None,
     "deadline": 100, "phase": "concluded", "rev": 0, "refusal": None, "refusals": 0, "conclusion": "passed", "reason": None,
     "concluded_at": 5, "released_at": 6, "parked": D, "abandoned": 0,
 }
@@ -45,7 +45,7 @@ def put(con: sqlite3.Connection, table: str, row: dict[str, object]) -> None:
 @pytest.mark.parametrize("change", [
     {}, {"phase": "admitted", "conclusion": None, "concluded_at": None, "released_at": None, "parked": None},
     {"phase": "admitted", "conclusion": None, "concluded_at": None, "abandoned": 1},
-    {"conclusion": "failed", "reason": "test:failed"}, {"target_seen": T, "profile_digest": DIGEST},
+    {"conclusion": "failed", "reason": "test:failed"}, {"target_seen": TARGET, "profile_digest": DIGEST},
 ])
 def test_valid_checks_attempts_are_stored(checking: sqlite3.Connection, change: dict[str, object]) -> None:
     put(checking, "checks_attempt", ATTEMPT | change)
@@ -61,6 +61,7 @@ def test_valid_checks_attempts_are_stored(checking: sqlite3.Connection, change: 
     {"released_at": None, "parked": None, "abandoned": 1},  # abandoned only once released
     {"phase": "admitted", "conclusion": None, "concluded_at": None},  # released settled only once concluded
     {"refusal": "slot_busy"}, {"refusals": 1},  # a refusal word exactly when counted
+    {"entry_pid": 7}, {"entry_pid": 7, "entry_start": "s"}, {"entry_start": "s", "entry_boot": "b"},  # an entry all or none
 ], ids=lambda change: ",".join(f"{key}={value}" for key, value in change.items()))
 def test_every_checks_attempt_check_rejects_its_bad_row(checking: sqlite3.Connection, change: dict[str, object]) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
@@ -86,7 +87,8 @@ RESULT: dict[str, object] = {
 UNDEFINED: dict[str, object] = {"argv_digest": None, "timeout": None, "rc": None, "conclusion": "undefined"}
 
 
-@pytest.mark.parametrize("change", [{}, {"ended_at": None, "rc": None, "conclusion": None}, UNDEFINED, {"conclusion": "interrupted"}])
+@pytest.mark.parametrize("change", [{}, {"ended_at": None, "rc": None, "conclusion": None}, UNDEFINED, {"conclusion": "interrupted"},
+                                    {"pid": 5, "pgid": 5, "proc_start": "s", "boot": "b"}])
 def test_valid_check_results_are_stored(checking: sqlite3.Connection, change: dict[str, object]) -> None:
     put(checking, "check_result", RESULT | change)
 
@@ -97,6 +99,9 @@ def test_valid_check_results_are_stored(checking: sqlite3.Connection, change: di
     {"argv_digest": None, "timeout": None},  # no argv only when undefined
     UNDEFINED | {"argv_digest": DIGEST, "timeout": 60},  # undefined has no argv
     {"timeout": None}, UNDEFINED | {"timeout": 60},  # a timeout exactly with an argv
+    {"pid": 5}, {"pid": 5, "pgid": 5, "proc_start": "s"}, {"pgid": 5, "proc_start": "s", "boot": "b"},  # an identity all or none
+    UNDEFINED | {"pid": 5, "pgid": 5, "proc_start": "s", "boot": "b"}, UNDEFINED | {"rc": 0},  # undefined ran nothing
+    {"ended_at": None, "conclusion": None},  # an exit only with a conclusion
 ], ids=lambda change: ",".join(f"{key}={value}" for key, value in change.items()))
 def test_every_check_result_check_rejects_its_bad_row(checking: sqlite3.Connection, change: dict[str, object]) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
@@ -128,7 +133,7 @@ def test_the_admitted_row_reads_back_joined_with_its_implement_attempt(checking:
     found = store(checking).row(CHECKS)
     assert found is not None and found.key == CHECKS
     assert (found.after, found.number, found.slot, found.slot_head, found.target, found.required, found.deadline) == (
-        "implement", 1, "s2", D, T, REQUIRED, 100.0)
+        "implement", 1, "s2", D, TARGET, REQUIRED, 100.0)
     assert (found.backlog, found.task_id, found.repo_id, found.tracker_root, found.commit) == ("tasks", "tl-1", "r", "/tracker", X)
     assert (found.phase, found.entry, found.rev, found.refusal, found.refusals, found.conclusion, found.released_at,
             found.abandoned, found.profile_digest, found.target_seen) == ("admitted", None, 0, None, 0, None, None, False, None, None)
@@ -137,7 +142,7 @@ def test_the_admitted_row_reads_back_joined_with_its_implement_attempt(checking:
 
 
 def admitted(number: int, attempt_id: str = "next", required: tuple[tuple[str, str], ...] = REQUIRED) -> ChecksAdmitted:
-    return ChecksAdmitted(AttemptKey(attempt_id, attempt_id + "-token", 1), "implement", number, "s1", D, T, required, 200.0)
+    return ChecksAdmitted(AttemptKey(attempt_id, attempt_id + "-token", 1), "implement", number, "s1", D, TARGET, required, 200.0)
 
 
 def test_a_second_admission_of_the_same_number_lost_the_race_and_writes_nothing(checking: sqlite3.Connection) -> None:
@@ -291,7 +296,7 @@ def test_unsettled_is_every_unfinished_or_live_after_result_of_the_latest_block(
     assert found == ([(0, ME)] if listed else []) + [(2, None)]
 
 
-def test_the_refusal_counter_counts_one_word_in_a_row_and_a_block_or_conclusion_clears_it(checking: sqlite3.Connection) -> None:
+def test_the_refusal_counter_counts_one_word_in_a_row_across_blocks_and_only_a_conclusion_clears_it(checking: sqlite3.Connection) -> None:
     checks = store(checking)
 
     def counted() -> tuple[object, ...]:
@@ -300,8 +305,9 @@ def test_the_refusal_counter_counts_one_word_in_a_row_and_a_block_or_conclusion_
     assert (checks.refused(CHECKS, "slot_busy"), checks.refused(CHECKS, "slot_busy")) == (1, 2)
     assert checks.refused(CHECKS, "checks:running") == 1 and counted() == ("checks:running", 1)
     assert checks.refused(CHECKS, "checks:running") == 2
-    checks.block(CHECKS)
-    assert counted() == (None, 0) and checks.refused(CHECKS, "checks:running") == 1
+    checks.refused(CHECKS, "checks:uncertain")  # raised inside block 1; the relaunch repeats the block
+    assert checks.block(CHECKS) == 1 and counted() == ("checks:uncertain", 1)
+    assert checks.refused(CHECKS, "checks:uncertain") == 2  # stuck:checks_refused, never an endless relaunch
     checks.conclude(CHECKS, "failed", "expired", 9)
     assert counted() == (None, 0)
 
@@ -430,3 +436,32 @@ def test_an_abandon_of_the_latest_released_checks_attempt_flips_it_once(checking
     assert not checks.abandon_released(AttemptKey("checks", "other", 1))
     found = checks.row(CHECKS)
     assert found is not None and found.abandoned
+
+
+@pytest.mark.parametrize("identity", ["pid=5", "entry_pid=8"], ids=["result", "entry"])
+def test_a_partial_stored_identity_is_unavailable_not_a_missing_one(checking: sqlite3.Connection, identity: str) -> None:
+    """Only a row written past the CHECKs can hold one: a read refuses it rather than reading no process."""
+    store(checking).start(CHECKS, 1, 0, "check", DIGEST, 60, 2)
+    checking.execute("PRAGMA ignore_check_constraints=ON")
+    checking.execute(f"UPDATE {'check_result' if identity == 'pid=5' else 'checks_attempt'} SET {identity}")
+    with pytest.raises(StoreUnavailable, match="identity"):
+        store(checking).results(CHECKS) if identity == "pid=5" else store(checking).row(CHECKS)
+
+
+def test_an_abandoned_or_released_checks_attempt_is_never_offered_to_the_launcher_as_admitted(checking: sqlite3.Connection) -> None:
+    """An abandon releases an `admitted` checks attempt without a conclusion: the launcher's read says `released`."""
+    checks = store(checking)
+    assert released(checking, (0, "admitted"), True)
+    assert checks.attempt_of("tasks", "tl-1") == (CHECKS, "released", None)
+    with begin_immediate(checking):
+        check_store.insert(checking, admitted(2))
+        checking.execute("INSERT INTO reservation VALUES ('s1','r',1,'next')")
+    later = AttemptKey("next", "next-token", 1)
+    checks.conclude(later, "passed", None, 5)
+    assert checks.attempt_of("tasks", "tl-1") == (later, "concluded", None)
+    assert released(checking, (1, "concluded"), False, later) and checks.attempt_of("tasks", "tl-1") == (later, "released", None)
+
+
+@pytest.mark.parametrize("read", ["state", "tracker_root", "release_of", "step_of", "attempts", "chain", "slot_use"])
+def test_the_check_store_has_no_agent_attempt_read_to_misread_a_checks_key(read: str) -> None:
+    assert not hasattr(CheckStore, read)

@@ -20,10 +20,10 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
 from taskloop.setup_store import ProcessSeen, SetupStore
 
-# The `checking` fixture's checks attempt: its key, its slot's HEAD D, the implement attempt's X, `main` T at admission,
-# and the required names with their argv digests at T.
+# The `checking` fixture's checks attempt: its key, its slot's HEAD D, the implement attempt's X, its target (`main`'s
+# commit at admission), and the required names with their argv digests at the target.
 CHECKS = AttemptKey("checks", "checks-token", 1)
-D, X, T = "d" * 40, "c" * 40, "f" * 40
+D, X, TARGET = "d" * 40, "c" * 40, "f" * 40
 REQUIRED = (("check", "1" * 64), ("test", "2" * 64))
 
 

@@ -158,7 +158,10 @@ def _step(row: tuple[object, ...]) -> ChainLink:
     return ChainLink(as_int(row[0]), base, commit, stored_effect(row[5]), as_listed(row[6]), FileRef(as_text(row[3]), as_text(row[4])))
 
 
-class AttemptReads:
+class StoreConnection:
+    """factory.db's connection for one store: the current schema checked on every use, a write in `begin`'s transaction,
+    and any sqlite3 error reported as StoreUnavailable. No query of its own: each store adds the reads of its own tables."""
+
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
@@ -180,6 +183,10 @@ class AttemptReads:
                 yield con
         except sqlite3.Error as error:
             raise StoreUnavailable("Factory database operation failed") from error
+
+
+class AttemptReads(StoreConnection):
+    """The status reads of agent attempts (the `attempt` table and its chain)."""
 
     def state(self, key: AttemptKey) -> tuple[str, bool] | None:
         """Dispatch phase and recorded session conflict, without needing a live reservation (historical reads)."""
