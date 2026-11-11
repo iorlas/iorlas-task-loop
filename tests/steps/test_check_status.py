@@ -94,12 +94,13 @@ def concluded(conclusion: str, released: bool = True, abandoned: bool = False) -
     (refused(1), "gone", 10, "start"),
     (refused(2), "gone", 10, "stuck:checks_refused"),
     (concluded("failed", released=False), "gone", 10, "release"),
+    (lambda s: (registered(s), concluded("failed", released=False)(s)), "matching", 500, "wait"),  # releasing its slot
     (concluded("passed"), "gone", 10, "done"),
     (concluded("failed"), "gone", 10, "done"),
     (concluded("failed", abandoned=True), "gone", 10, "release"),
     (lambda s: s.bench.con.execute("UPDATE checks_attempt SET required='[]'"), "gone", 10, "unknown"),  # an unreadable row
 ], ids=["none", "none_expired", "running", "hung", "entry_unknown", "other_process", "refused_once", "refused_twice",
-        "concluded_held", "passed", "failed", "abandoned", "store"])
+        "concluded_held", "concluded_releasing", "passed", "failed", "abandoned", "store"])
 def test_the_next_table(status: Status, arrange: Callable[[Status], object], seen: Seen, now: float, expected: str) -> None:
     arrange(status)
     status.seen, status.now = seen, now
@@ -144,7 +145,7 @@ def test_show_names_the_checks_attempt_s_directory_setup_logs_and_earlier_attemp
     view = found.view
     assert view.earlier == ((status.key.attempt_id, "re-run"), ("implement", "advanced")) and view.number == 2
     assert view.checks is not None and [row.name for row in view.checks.results] == ["check", "smoke"]
-    assert view.checks.logs == (directory / "check-1-check.log", directory / "check-1-smoke.log")
+    assert view.checks.logs == (directory / "check-1-check.log", None)  # an undefined result has no command, no log
 
 
 def test_show_reads_the_checks_entry_s_own_last_line(status: Status, tmp_path: Path) -> None:

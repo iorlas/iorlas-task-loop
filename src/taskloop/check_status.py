@@ -24,7 +24,7 @@ class ChecksView:
 
     row: ChecksRow
     results: tuple[ResultRow, ...]
-    logs: tuple[Path, ...] = ()
+    logs: tuple[Path | None, ...] = ()  # None for an `undefined` result: no command, no log
 
 
 def latest(store: CheckStore, after: str) -> ChecksRow | None:
@@ -62,15 +62,16 @@ def checks_release(row: ChecksRow, claim: str) -> ReleaseRow | None:
 
 def checks_next(row: ChecksRow, entry: str, expired: bool) -> ChecksNext:
     """Section 9's table: released is `done` (`release` when by an abandon: the claim is still to be returned); an entry
-    not observable is `unknown`; concluded and still held is `release`; a running entry `wait`s (`stuck:hung` past the
-    deadline); otherwise a relaunch (`start`, which past the deadline concludes `expired`), unless `REFUSED_STUCK`
-    counted refusals in a row stop the rounds (`stuck:checks_refused`)."""
+    not observable is `unknown`; a running entry `wait`s (`stuck:hung` past the deadline while still `admitted`; once
+    concluded it is releasing its slot); concluded and still held is `release`; otherwise a relaunch (`start`, which past
+    the deadline concludes `expired`), unless `REFUSED_STUCK` counted refusals in a row stop the rounds
+    (`stuck:checks_refused`)."""
     if row.released_at is not None:
         return "release" if row.abandoned else "done"
     if entry == "unknown":
         return "unknown"
+    if entry == "running":  # a concluded entry still running is releasing its slot, whatever the deadline
+        return "stuck:hung" if expired and row.phase == "admitted" else "wait"
     if row.phase == "concluded":
         return "release"
-    if entry == "running":
-        return "stuck:hung" if expired else "wait"
     return "stuck:checks_refused" if row.refusals >= REFUSED_STUCK else "start"

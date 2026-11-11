@@ -155,6 +155,28 @@ GUIDE = {
     "task/<id>`, never `--force`) to see why.",
 }
 
+# A checks attempt's own words for the `Next` words whose agent text would mislead (S6d): its entry is
+# `taskloop.check_entry`, its commands are check process groups, and until S6e routes the round only `tl step start`
+# relaunches it.
+CHECKS_GUIDE = {
+    "start": "Run `tl step start` to relaunch the checks entry (`taskloop.check_entry`); rounds do not relaunch a checks "
+    "attempt yet. Past its deadline the relaunched entry concludes `expired` once nothing of the attempt still runs. If the "
+    "last entry says `checks:running`, a check's process group from an earlier entry still runs: wait for it (`check_running`). "
+    "`tl step release --abandon` gives the task back.",
+    "stuck:hung": "The checks entry runs past its deadline. Verify before stopping anything: `ps -o command= -p <entry pid>` must "
+    "show taskloop.check_entry, and each process group a `Check:` line names (`ps -o pid=,lstart=,command= -g <pgid>`) must work "
+    "in the slot (`lsof -a -p <pid> -d cwd`). Stop only the pids you verified, the check groups first, then the entry; then "
+    "`tl step start` relaunches it (it concludes `expired`), or `tl step release --abandon`.",
+    "release": "The checks concluded; their slot is still held (the last entry or `tl step release` says why: `held:check_running` "
+    "waits for a check's process group, `held:slot_dirty` for files a person removes). Then `tl step release`; `--abandon` also "
+    "gives the task back.",
+}
+
+
+def guide(word: str, *, checks: bool) -> str:
+    """The guide of a `Next` word: a checks attempt's own (`CHECKS_GUIDE`) where the agent text would mislead."""
+    return CHECKS_GUIDE.get(word, GUIDE[word]) if checks else GUIDE[word]
+
 
 def discard(db: Path) -> str:
     """The last resort, naming this machine config's resolved factory.db, never another factory's."""

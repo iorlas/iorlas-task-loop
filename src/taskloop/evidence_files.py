@@ -101,10 +101,15 @@ class EvidenceFiles:
         """`setup_log`, opened for append; OSError propagates (nothing has run yet)."""
         return CappedLog(self.setup_log(key, run))
 
+    def check_path(self, key: AttemptKey, block: int, name: str) -> Path:
+        """Check `name`'s log in block `block` (`check-<block>-<name>.log` in the attempt's key-derived directory), made
+        nothing (`tl step show`). A check name is the profile's `[A-Za-z0-9._-]`, never starting with `.` or `-`: no
+        escaping."""
+        return self._path(f"{self.directory(key)}/check-{block}-{name}.log")
+
     def check_log(self, key: AttemptKey, block: int, name: str) -> Path:
-        """Check `name`'s log in block `block` (`check-<block>-<name>.log` in the attempt's key-derived directory), with
-        that directory made. A check name is the profile's `[A-Za-z0-9._-]`, never starting with `.` or `-`: no escaping."""
-        path = self._path(f"{self.directory(key)}/check-{block}-{name}.log")
+        """`check_path`, with its directory made."""
+        path = self.check_path(key, block, name)
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 

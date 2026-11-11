@@ -994,3 +994,25 @@ number 1, the winner's checks read, the settled stop, the `check` step on a star
 **Not verified**: a real `tl step start` launching a real `taskloop.check_entry` and its block end to end (the launcher is
 a semantic fake here); the profile read of a real `main` through `GitProfileFiles` in the admission (only the Git fake);
 the round's settle of checks attempts (S6e).
+
+### 24.1 Review repairs to S6d (2026-11-11)
+
+An independent review of a7dc16784 found the admission, routing and fences sound and five wording or reporting defects;
+each is repaired with a test that fails without it:
+
+1. **A checks view's own guide** (`step_guide.CHECKS_GUIDE`, chosen by `guide(word, checks=...)` in `tl step show` and
+   in `tl step list`'s stuck lines): `start` says only `tl step start` relaunches a checks attempt (S6e changes this
+   sentence once the round routes it); `stuck:hung` names `taskloop.check_entry` and the check process groups and stops
+   only verified pids; `release` names `held:check_running` and `held:slot_dirty`. The agent texts (`Worker`,
+   `taskloop.attempt_entry`, "each round relaunches it") are never shown for a checks attempt. A `Check:` line of a
+   command not proven gone names its process group (`, process group <pgid>`), which the hung guide verifies.
+2. **A concluded checks entry still running is `wait`** (it is releasing its slot), never `stuck:hung` past the deadline
+   and not `release`; `stuck:hung` is only an `admitted` attempt's (section 9's table, `checks_next`).
+3. **After a finished abandon** (the implement attempt's claim no longer `kept`, its latest checks attempt released),
+   `tl step release` and the `--abandon` rerun answer with the implement attempt's release and its claim (`unclaimed`),
+   not the checks half's `kept`. A checks attempt still holding its slot (admitted after the implement flip, the other race
+   order) is still released first.
+4. **A refusal whose detail names its action** (`HALF_DONE`, `UNCLAIMING`: rerun `tl step release --abandon`) prints no
+   further guide; `GUIDE["release"]` ("slot still held ... `tl step release`") contradicted it.
+5. **Logs through their owner**: `EvidenceFiles.check_path` (no directory made; `check_log` makes it) gives `tl step
+   show`'s log paths; an `undefined` result has none (`logs` entry and JSON `results[].log` null).

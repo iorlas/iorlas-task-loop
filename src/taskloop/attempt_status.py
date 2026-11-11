@@ -232,7 +232,7 @@ def _checks_shown(reads: StatusPorts, files: EvidenceFiles, view: AttemptView, c
     never made); StoreUnavailable propagates."""
     key = checks.row.key
     directory = files.root / files.directory(key)
-    logs = tuple(directory / f"check-{row.block}-{row.name}.log" for row in checks.results)
+    logs = tuple(None if row.conclusion == "undefined" else files.check_path(key, row.block, row.name) for row in checks.results)
     latest = SetupStore(reads.store.connect, reads.store.begin).latest(key)
     setup = None if latest is None else SetupShown(latest, directory / f"setup-{latest.run}.log")
     shown = replace(view, last_entry=files.last_entry(key), checks=replace(checks, logs=logs))

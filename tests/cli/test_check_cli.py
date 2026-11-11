@@ -7,19 +7,20 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from stream_proc import OwnedProcess
 
 from taskloop import cli_step
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
-from taskloop.attempt_status import AttemptView, Listed, SetupShown, Shown
+from taskloop.attempt_status import AttemptView, Listed, Next, SetupShown, Shown
 from taskloop.attempt_types import AttemptKey, AttemptResult
-from taskloop.check_status import ChecksView
+from taskloop.check_status import HALF_DONE, ChecksView
 from taskloop.check_store import ChecksRow, ResultRow
 from taskloop.cli import main
-from taskloop.operations import ReleasedTask, Started
+from taskloop.operations import Failed, ReleasedTask, Started
 from taskloop.result_data import Result
 from taskloop.setup_store import SetupRow
 from taskloop.slot_release import Released
-from taskloop.step_guide import GUIDE
+from taskloop.step_guide import CHECKS_GUIDE, GUIDE
 
 X, TARGET, D, SEEN = "a" * 40, "b" * 40, "d" * 40, "e" * 40
 CHECK, TEST, SMOKE = "1" * 64, "2" * 64, "3" * 64
@@ -40,7 +41,7 @@ VIEW = AttemptView(
     "tasks", "tl-1", "check", "checks", "s1", "concluded", "gone", AttemptResult("collected", "failed:test:failed"), False, "done",
     (42, "entry-start", "boot"), None, (), 2, None, None, (("first", "re-run"), ("implement", "advanced")), None, 2,
     ReleaseRow(D, 1762941600.0, "kept"), PublishedRow(X, X, 6.0),
-    ChecksView(ROW, RESULTS, tuple(LOGS / f"check-1-{name}.log" for name in ("check", "test", "slow", "smoke"))),
+    ChecksView(ROW, RESULTS, (*(LOGS / f"check-1-{name}.log" for name in ("check", "test", "slow")), None)),
 )
 SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", SetupShown(SetupRow(1, X, "f" * 64, 0, None, "passed"), LOGS / "setup-1.log"))
 SHOW = ["step", "show", "tl-1", "--backlog", "tasks"]
@@ -105,6 +106,7 @@ def test_show_json_adds_the_checks_facts_and_results(capsys: pytest.CaptureFixtu
         "refusal": None, "refusals": 0}
     assert checks["results"][1] == {"name": "test", "required": True, "conclusion": "failed", "rc": 1, "block": 1, "started_at": 51.0,
                                     "ended_at": 363.0, "argv_differs": True, "log": "/a/c/check-1-test.log"}
+    assert checks["results"][3]["log"] is None  # an undefined result has no log
     assert [(each["required"], each["argv_differs"]) for each in checks["results"]] == [(True, False), (True, True), (False, False),
                                                                                          (True, False)]
     assert "token-never-shown" not in json.dumps(data)
@@ -146,3 +148,28 @@ def test_the_task_s_abandon_shows_the_checks_attempt_first_then_the_claim(
     assert (data["attempt_id"], data["claim"], data["checks"]["attempt_id"], data["checks"]["claim"]) == ("implement", "unclaimed",
                                                                                                          "checks", "kept")
     assert data["checks"]["checks"] is None and data["checks"]["abandoned"] is True
+
+
+@pytest.mark.parametrize("word", ["start", "stuck:hung", "release"])
+def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
+    word: Next, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    running = ResultRow(1, 0, "check", CHECK, 600, OwnedProcess(600, 601, "start", "boot"), 10.0, None, None, None)
+    view = replace(VIEW, next=word, release=None, checks=ChecksView(ROW, (running,)))
+    out = run(SHOW, Shown(view, LOGS, LOGS / "entry.log"), capsys, monkeypatch)
+    assert CHECKS_GUIDE[word] in out and GUIDE[word] not in out and "attempt_entry" not in out and "Worker" not in out
+    assert "Check: check unfinished, process group 601" in out.splitlines()  # the group the hung guide verifies
+    assert "rounds do not relaunch" in CHECKS_GUIDE["start"] and "taskloop.check_entry" in CHECKS_GUIDE["stuck:hung"]
+    listed = run(["step", "list", "--stuck"], Listed((replace(view, next="stuck:hung"),)), capsys, monkeypatch)
+    assert f"stuck:hung: {CHECKS_GUIDE['stuck:hung']}" in listed.splitlines()
+
+
+def test_the_half_done_refusal_names_its_own_action_without_the_release_guide(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    argv = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/t", "--checkout", "/c", "--model", "m", "--effort", "e",
+            "--minutes", "5"]
+    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "start"), lambda _arguments, _loaded: Failed("refused", "release", HALF_DONE))
+    assert main(argv) == 1
+    err = capsys.readouterr().err
+    assert HALF_DONE in err and GUIDE["release"] not in err

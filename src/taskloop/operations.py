@@ -448,14 +448,18 @@ def release_task(
 ) -> ReleasedTask | Failed:
     """`tl step release`: the task's current attempt released (settled), or abandoned (`abandon`). With a checks attempt
     (section 10) its latest one goes first (`checks`); settled, that is all; an abandon then abandons the implement
-    attempt, which returns the claim. A failure between the two leaves `Next: release`; rerunning finishes it."""
+    attempt, which returns the claim. A failure between the two leaves `Next: release`; rerunning finishes it. Once the
+    implement attempt's claim is no longer `kept` and its latest checks attempt is released, that half is done and not
+    reported again: the answer is the implement attempt's (its claim as it is)."""
     try:
         found = reader.attempt_of(backlog, task_id)
         row = None if found is None else latest(CheckStore(reader.connect, reader.begin), found[0].attempt_id)
+        ended = None if row is None or row.released_at is None or found is None else reader.release_of(found[0])
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     if found is None:
         return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
+    row = None if ended is not None and ended.claim != "kept" else row  # the abandon went past its checks half
     first = None if row is None else checks.release(row.key, abandon)
     if isinstance(first, NotReleased):
         return Failed(first.kind, first.reason, first.detail)

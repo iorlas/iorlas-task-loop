@@ -54,13 +54,15 @@ def setup_line(found: SetupShown | None) -> str:
 
 
 def check_line(row: ResultRow, log: Path | None, checks: ChecksView) -> str:
-    """One latest-block result: its conclusion, exit and whole seconds, its log, and whether `main` requires it (a
-    required one whose argv at X differs from the one stored from `main` says so)."""
+    """One latest-block result: its conclusion, exit and whole seconds, the process group of a command not proven gone,
+    its log, and whether `main` requires it (a required one whose argv at X differs from the one stored from `main` says
+    so)."""
     if row.conclusion == "undefined":
         return f"Check: {row.name} undefined (required by main, not defined at X)"
     state = "unfinished" if row.conclusion is None else row.conclusion
     state += "" if row.rc is None else f", exit {row.rc}"
     state += "" if row.ended_at is None else f", {round(row.ended_at - row.started_at)} s"
+    state += f", process group {row.process.pgid}" if row.process is not None and row.unsettled else ""  # to verify before a stop
     required = checks.row.required
     mark = " (not required)" if row.name not in dict(required) else " (argv differs from main)" if differs(required, row) else ""
     return f"Check: {row.name} {state}{'' if log is None else f'; log {log}'}{mark}"

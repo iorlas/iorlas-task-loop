@@ -239,3 +239,24 @@ def test_verify_on_a_task_in_check_acts_on_its_implement_attempt_only(rig: Rig) 
     found = verify_task(AttemptStore(lambda: rig.bench.con), seen, implement, seen, "tasks", "tl-1")
     assert isinstance(found, VerifiedTask) and (found.status, found.attempt_id) == ("reused", "implement")
     assert seen.keys == ["implement", "implement"] and implement.calls == [("implement", False)]
+
+
+@pytest.mark.parametrize("abandon", [False, True], ids=["settled", "abandon_rerun"])
+def test_after_a_finished_abandon_the_release_is_the_implement_attempt_s_with_its_returned_claim(rig: Rig, abandon: bool) -> None:
+    rig.start()
+    rig.bench.concluded("failed", abandoned=True)
+    rig.bench.con.execute("UPDATE slot_release SET claim='unclaimed'")
+    implement, checks = Releases(results=[AlreadyReleased("s0", "unclaimed", True)]), Releases()
+    found = release(rig, abandon, implement, checks)
+    assert isinstance(found, ReleasedTask) and (found.attempt_id, found.result.claim, found.checks) == ("implement", "unclaimed", None)
+    assert checks.calls == [] and implement.calls == [("implement", abandon)]
+
+
+def test_a_checks_attempt_admitted_after_the_implement_flip_is_still_released_first(rig: Rig) -> None:
+    """The other race order: the claim is no longer `kept`, but the latest checks attempt holds its slot."""
+    started = rig.start()
+    assert isinstance(started, Started)
+    rig.bench.con.execute("UPDATE slot_release SET claim='unclaiming'")
+    implement, checks = Releases(results=[Released("s0", None, False, "unclaimed", True)]), Releases()
+    found = release(rig, True, implement, checks)
+    assert checks.calls == [(started.attempt_id, True)] and isinstance(found, ReleasedTask) and found.checks is not None

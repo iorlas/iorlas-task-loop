@@ -22,7 +22,7 @@ from taskloop.result_data import Result
 from taskloop.show_render import show_lines
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
-from taskloop.step_guide import GUIDE, HELD, PUBLISH, STEP_ONLY, discard
+from taskloop.step_guide import GUIDE, HELD, PUBLISH, STEP_ONLY, discard, guide
 from taskloop.tracker import leaked_claim
 
 
@@ -33,7 +33,8 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
         case Failed(kind=kind, reason=reason):
             lines = [f"{command}: {result.word}", *([result.detail] if result.detail else [])]
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
-            lines += [GUIDE[each] for each in (kind, reason) if each in GUIDE]
+            named = "`tl step release --abandon`" in result.detail  # the detail names the action (`HALF_DONE`, `UNCLAIMING`)
+            lines += [] if named else [GUIDE[each] for each in (kind, reason) if each in GUIDE]
             return lines + ([f"Admitted: {HELD} Re-run `tl step start` to retry the launch."] if result.admitted else [])
         case Started():
             entry = "" if result.entry is None else f"; entry pid {result.entry[0]}"
@@ -47,8 +48,9 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
         case Shown(view=each):
             paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
             ended = each.release
-            guide = GUIDE[each.next] if ended is None or not ended.abandoned else GUIDE["abandoned"] if each.next == "start" else UNCLAIMING
-            steps = [guide, *(stuck if each.next.startswith("stuck:") else [])]
+            told = guide(each.next, checks=each.checks is not None)
+            told = told if ended is None or not ended.abandoned else GUIDE["abandoned"] if each.next == "start" else UNCLAIMING
+            steps = [told, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
             return [*show_lines(result), *paths, *last, *left, f"Next: {each.next}", *steps]
@@ -74,8 +76,8 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
         attempts = result.attempts
         rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
                 f"{a.result.status} {a.result.reason}\t{a.next}" for a in attempts]
-        kinds = dict.fromkeys(a.next for a in attempts if a.next.startswith("stuck:"))
-        steps = [f"{kind}: {GUIDE[kind]}" for kind in kinds] + (stuck if kinds else [])
+        kinds = dict.fromkeys((a.next, a.checks is not None) for a in attempts if a.next.startswith("stuck:"))
+        steps = [f"{kind}: {guide(kind, checks=checks)}" for kind, checks in kinds] + (stuck if kinds else [])
         return ["task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
     width = max((len(each.task_id) for each in result.moves), default=0)
     lines = [f"{each.task_id:<{width}}  {each.action:<8} {each.word} {each.attempt_id}".rstrip() for each in result.moves]
