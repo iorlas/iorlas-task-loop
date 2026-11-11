@@ -37,7 +37,7 @@ from taskloop.attempt_types import (
     VerifyResult,
     VerifyUnavailable,
 )
-from taskloop.cli_composition import adopt, open_reads, open_start, open_verify
+from taskloop.cli_composition import adopt, open_land, open_reads, open_start, open_verify
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
@@ -513,6 +513,8 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
         assert ports == refused
     with open_verify(missing) as opened:
         assert opened == refused
+    with open_land(missing, tmp_path / "art") as land_ports:
+        assert land_ports == refused
     assert list(tmp_path.iterdir()) == []
 
 

@@ -2,12 +2,13 @@
 
 The attempt entry holds its slot's lock around its whole body (preparation, the agent run, the publish retries, the
 factory commit, the clean-tree check and the verdict). `tl step verify` and a repeating `tl step start` take the same
-lock around their Git writes (`hold`), a release around its park and its transaction (`custody`), and admission probes it
-before it counts a slot free (`probe`). A second taker, in this process or another, is refused at once (`SlotBusy`):
-nonreentrant, `timeout=0`. The lock file sits beside the slots (`<slots_root>/<repo_id>/.locks/sN.lock`), outside the
-slot, where the agent's sandbox cannot write; nothing ever deletes it. The kernel frees the lock when its holder exits,
-so a free lock is never a stop proof for a worker. The holder record (the attempt and the taker's role; the library adds
-pid and time) is informational only: nothing decides on it.
+lock around their Git writes (`hold`), a release around its park and its transaction (`custody`), a land around its
+validation and release (`landing`), and admission probes it before it counts a slot free (`probe`). A second taker, in
+this process or another, is refused at once (`SlotBusy`): nonreentrant, `timeout=0`. The lock file sits beside the
+slots (`<slots_root>/<repo_id>/.locks/sN.lock`), outside the slot, where the agent's sandbox cannot write; nothing ever
+deletes it. The kernel frees the lock when its holder exits, so a free lock is never a stop proof for a worker. The
+holder record (the attempt and the taker's role; the library adds pid and time) is informational only: nothing decides
+on it.
 """
 
 from collections.abc import Generator
@@ -20,7 +21,7 @@ from process_lock import LockHeldError, ProcessLock
 from taskloop.attempt_types import Admission
 
 LABEL: Final = "taskloop-slot"
-type Role = Literal["entry", "verify", "release", "repeat", "probe"]
+type Role = Literal["entry", "verify", "release", "repeat", "probe", "land"]
 
 
 class SlotBusy(Exception):
@@ -70,6 +71,12 @@ def hold(admission: Admission) -> AbstractContextManager[None]:
 def custody(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:
     """A release's park and transaction for the attempt on the slot at `slot_path`, under the slot's lock."""
     return _held(slot_path, attempt_id, "release")
+
+
+def landing(slot_path: str, candidate_id: str) -> AbstractContextManager[None]:
+    """A land's custody of its candidate's slot (tl-8bh9.14.8 section 6): the validation and its release, or the release of
+    a slot an earlier land left held, under the slot's lock."""
+    return _held(slot_path, candidate_id, "land")
 
 
 def repeating(slot_path: str, attempt_id: str) -> AbstractContextManager[None]:

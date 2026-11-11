@@ -40,6 +40,14 @@ def entry_seen(entry: EntryIdentity) -> Seen:
     return observe_owned(entry_process(entry)).kind
 
 
+def this_process() -> EntryIdentity | None:
+    """This process's own native identity (pid, start, boot), as a registered entry's is read: the land process's, written
+    on its candidate while it holds the slot's custody (tl-8bh9.14.8 section 6); None when it cannot be read."""
+    seen = inspect_process(os.getpid())
+    found = seen.identity
+    return None if seen.kind != "matching" or found is None else (found.pid, found.start, found.boot)
+
+
 def current_boot() -> str | None:
     """This machine's boot id, as a registered entry's identity carries it: this process's own native identity read
     through the library's public inspection (no spawn or signal); None when unknown."""

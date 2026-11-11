@@ -135,10 +135,10 @@ def test_write_pattern_catches_spelling_variants(statement: str, write: tuple[st
     assert match is not None and write_of(match) == write
 
 
-# The remote and ref writes below (fetch, sync, the other pushes, branch and remote-ref deletion) have no owner: unused.
+# The remote and ref writes below (sync, the other pushes, branch and remote-ref deletion) have no owner: unused.
 GIT_WRITES = frozenset({
     "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
-    "push_request", "push_lease", "delete_branch", "clean", "reset",
+    "push_request", "push_lease", "delete_branch", "clean", "reset", "squash",
 })
 
 
@@ -177,12 +177,14 @@ def test_the_git_write_matcher_sees_uses_and_not_words(source: str, names: set[s
     assert git_names(ast.parse(source)) == names
 
 
-def test_only_the_commit_prepare_release_publish_and_environment_modules_write_git() -> None:
+def test_only_the_commit_prepare_release_publish_environment_and_land_modules_write_git() -> None:
     """`clean` is the environment reset's (the slot's ignored files and nested repositories, before each setup); `reset`
-    too (a checks slot's tracked files back to exactly X, tl-8bh9.14.6 section 8). The checks block writes no Git."""
+    too (a checks slot's tracked files back to exactly X, tl-8bh9.14.6 section 8). The checks block writes no Git. The
+    land's squash (objects only) is `land`'s, its fetch of origin's `main` and its push of S `land_push`'s."""
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
         ("park", "slot_release.py"), ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
+        ("squash", "land.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }
     assert git_writers() == expected
 

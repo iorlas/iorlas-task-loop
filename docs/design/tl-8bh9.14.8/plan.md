@@ -900,3 +900,102 @@ each with a test that fails without it (five hand mutations, each failing a test
 
 Code lines after the repairs: `check_release` 217, `land_store` 211, `slot_release` 269 (+4); `test_check_release` 336,
 `test_land_store` 377.
+
+## 27. As built: L3 (tl-8bh9.14.8.4)
+
+The land operation up to and including the delivery: section 4's reads, section 5's candidate, section 6's validation,
+section 7's delivery rule and push, `--withdraw`, the resume rows of section 12 but the close, `open_land`, the policy
+tables and the contracts. Nothing of L4 (tracker close and its record, the commit message, the summary) or L5 (the `tl
+step land` subcommand, status lines, `Next` words, guide, runbook): no command calls the operation yet. Code lines by the
+policy counter: `land` 222 (new), `land_check` 138 (new), `land_push` 138 (new), `cli_composition` 229 (+15),
+`land_store` 214 (+3), `slot_lock` 48 (+2), `owned_processes` 25 (+4), `check_admit` 209 (+0); `land_bench` 176 (new),
+`test_land` 131, `test_land_resume` 100, `test_land_push` 132, `real/test_land_real` 137 (all new), `test_policy` 186
+(+1), `test_operations` 601 (+2). Largest function: `land._made` (23).
+
+- **`land.land(ports, request) -> Landed | Withdrawn | Failed`** (`LandRequest(backlog, task_id, checkout, minutes,
+  mode, no_change)`): section 4's reads in order (`choices`, `push_barred`, then `not_done`, `not_checked` on factory.db
+  read through `admit.open_store`: another schema version is `unavailable store`; the latest candidate; the checkout,
+  `no_remote`, `push_url`, one `ls_remote` of `main` and `task/<id>` (`target`, `branch_moved`, `commit_missing`); one
+  tracker read, `claim_lost`, `closed`), then section 5 (`fetched`; `named` at O: `target_profile`, `target`,
+  `no_required`; `Repo.squash`: `conflict` with the first 20 paths and the count; tree listings: `no_change`, `changes`;
+  the required names against the checks attempt's) and the resume: a pending candidate renews its deadline and validates,
+  a pushable one is delivered, anything else (none, superseded, failed) makes candidate latest + 1. Any factory.db fault
+  is `unavailable store`.
+- **`land_check`**: `LandPorts` (the validation's `Checking`, `LandStore`, the `remotes` view and its profile port, the
+  tracker read and heartbeat, a stop event per keep-alive, this process's identity, the slot lock's probe and custody,
+  this process's environment); `inserted` (a same-tree or no-change candidate with no slot and generation 0, or the
+  lowest observed-free slot's reservation and the pending candidate in one transaction: `admit.free_slots`,
+  `check_admit.heads`, `admit.issued`/`unheld`/`reserve`, `land_store.insert`); `validated` (the custody
+  `slot_lock.landing`, the identity `LandStore.hold`, one renewal, the keep-alive around `validate.validate`,
+  `validate.concluded`, `LandStore.conclude`, the settled release through `check_release.CandidateTarget` with `me`);
+  `released` (section 4 step 5: a non-pending candidate still holding its slot released first under the custody).
+- **`land_push`**: `same_url`, `remote_tips` (the one `ls_remote`), `fetched` (`+refs/heads/main:refs/remotes/origin/main`,
+  `timeout=PUSH_TIMEOUT`), `deliver` (the rule; `Again` makes N+1 at most once per invocation), `observed` (the rule
+  without a push: the closed-task read), `withdraw`. `Delivered(row, remote_head, how)`, `Withdrawn(row)`. A delivery
+  record refused because a concurrent land recorded it first answers that delivery (`already_pushed`).
+- **Wiring**: `cli_composition.open_land(database, artifacts)` (the database guard, then `composition.open_checking`'s
+  ports, `remotes`, `GitProfileFiles` on `remotes`, `inspect_tracker_task`, `tracker_claims().heartbeat_for`,
+  `threading.Event`, `owned_processes.this_process`, `slot_lock.probe`, `slot_lock.landing`, `os.environ`).
+- **Contracts and policy**: `rounds-never-land` (sources `round`, `rounds`, `operations`, `attempt_entry`, `check_entry`,
+  `composition`, `validate`, `check_release`, `land_store`, indirect imports included; forbidden `land`, `land_check`,
+  `land_push`); the three land modules join `cli-never-imports-the-attempt-entry`'s sources. `GIT_WRITES` gains
+  `squash` (owner `land.py`); `fetch` and `push` gain the owner `land_push.py`.
+
+**Deviations (decided here, open to veto).**
+
+1. Three modules, not two: `land_check` holds the ports, the insert and the validation driver so each file stays small;
+   it is a land module in both contracts.
+2. `LandRequest.mode` is `land` or `withdraw`: `--summary` is L4's and is not stubbed. `--no-change` is built here (the
+   candidate is inserted `no_change`, delivered at insert, the branch rule skipped, any concluded checks attempt; `changes`
+   when S's tree is not O's); its close with "Already on main at O" is L4's. `--withdraw --no-change` is `refused
+   choices`.
+3. Results: `Landed(row, how, release)` with `how` `pushed`, `already_pushed`, `no_change`, or `delivered` (a delivery
+   recorded before this call: only L4's close remains; L3 never answers `already_landed`); `Withdrawn(row)`; `Failed` is
+   `operations.Failed`. `release` is the word of section 4 step 5's release when one ran; the land's own release after a
+   validation is not carried (a held one stays on the row and the next rerun retries it first).
+4. S's message is a placeholder (`land.message`: `Land <task-id>`, the branch and X) until L4's `land_summary.message`.
+5. `not_done` points to `tl step show` instead of naming the attempt's `Next` (the operation reads no status view).
+6. New words: `land_running` (the land process stored on a pending candidate still runs: never replaced; unknown is
+   `observe`), `not_landing` (`--withdraw` with no pushable candidate). A third rejected push in one invocation is
+   `target_moved` (at most three delivery passes).
+7. `--withdraw` runs section 4 steps 1-6 only (no branch rule, no tracker read): it changes nothing on origin.
+8. A closed task whose pushable candidate is found on origin answers `Landed` (`already_pushed`); L4 records
+   `already_closed`. Not found: `refused closed`, the candidate left pushable (not superseded).
+9. A concurrent land that wins while this one validates takes the slot's next generation first: the loser answers
+   `unavailable no_free_slot` (the counter), not `landing`; with no slot (same tree) the insert's fence answers `landing`.
+10. Section 4 step 5's release of a candidate that is neither pushable nor delivered stops the land with the release's
+    word (`held:...` as `unsettled`); a pushable or delivered one goes on.
+11. `check_admit._named` and `_heads` became public (`named`, `heads`), shared with the land; `owned_processes.this_process`,
+    `slot_lock.landing` (role `land`) and `LandStore.slot_path` were added.
+
+**Tests**: `test_land` (same tree: S's one parent O, X's tree, no slot, no check, the person's `main` and branch
+untouched; a moved `main` validated in s1, released and parked at D, pushed; changed required names validated with the
+same tree; a failed validation; a conflict; `no_change` then `--no-change` on a moved branch; `changes`; seventeen
+refusals each with nothing written, no push and no check; `push_url` before any remote read, and set by a check during
+the validation refused right before the push; another repository; failed checks refused before any remote read).
+`test_land_resume` (a crash after the validation pushes on the rerun without checking again; Ctrl-C during the block
+repeated whole with a renewed deadline; a killed land's check still running holds the rerun, then a new land process
+replaces the identity; a live stored land process is never replaced; `slot_busy` under another custody; a concurrent
+land winning first, same tree `landing` and validated `no_free_slot`; a held release retried first while the land still
+pushed; an abandoned checks attempt; a claim lost at the first renewal; no free slot). `test_land_push` (origin at S after
+a lost answer: delivered, no second push; built on S: delivered with the later tip; a pushable candidate onto a moved
+`main` superseded and candidate 2 landed; `main` moving after the insert: `target_moved`, then the rerun; a push rejected
+after the read: `target_moved`, then the rerun; `Transient`, `RemoteRejected`, `HookRejected` each leave it pushable;
+the failed fetch; a delivery recorded by a concurrent land; `--withdraw` superseding then the abandon proceeding,
+`--withdraw` finding S on origin, nothing to withdraw; a closed task with S on origin and without; at most one new
+candidate per invocation; a pruned S superseded `gone`). `real/test_land_real` (a bare origin: a moved `main` validated
+with an `sh -c` check through the real setup, block, slot lock and release, origin's `main` the S commit whose only parent
+is O and whose tree holds both changes, the slot parked at D, the person's HEAD, `refs/heads/main` and index digest
+unchanged; the same tree with X's tree and the person's identity; a `pushurl` elsewhere refused with nothing pushed to
+either repository; no origin). `test_operations`: `open_land` refuses a missing factory.db and creates none. Thirty-two
+hand mutations (each reinstalled and run against the four land test files) each fail a test (three survived the first
+run: the once-per-invocation rule, the not-checked read order and `gone`; a test was added for each): the push-bar read, both
+push URL checks, the same-tree and required-names rules, the ancestry read, the once-per-invocation rule, the deadline
+renewal, the live-identity guard, its own-identity skip, the release first and its continue rule, the local and the
+origin branch rules, the no-change rule, the closed read, the concurrent-delivery answer, the fetch refspec, the lost
+claim, the claim assignee, the not-checked read order, the rejected-push loop, the withdraw supersede, the validation's
+release, the checkout's repository, the relaunchable words, the delivered and no-change answers, `gone`, and R is S.
+
+**Not verified**: no command calls the operation (L5); the close (L4); a real `RefRejected` race and a real
+`RemoteRejected` (the fake and a scripted answer only); a real Ctrl-C through `stream_proc`'s supervision (the fake
+raises `KeyboardInterrupt` from a check); a pruned S on real Git; the land on a remote other than `file://`.

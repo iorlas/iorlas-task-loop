@@ -38,9 +38,30 @@ source_modules =
     taskloop.rounds_lock
     taskloop.interrupts
     taskloop.validate
+    taskloop.land
+    taskloop.land_check
+    taskloop.land_push
 forbidden_modules =
     taskloop.attempt_entry
     taskloop.check_entry
+
+[importlinter:contract:rounds-never-land]
+name = Rounds, the step operations, both entry processes and the wiring they import never import the land (only the person's `tl step land` runs it, wired in `cli_composition`)
+type = forbidden
+source_modules =
+    taskloop.round
+    taskloop.rounds
+    taskloop.operations
+    taskloop.attempt_entry
+    taskloop.check_entry
+    taskloop.composition
+    taskloop.validate
+    taskloop.check_release
+    taskloop.land_store
+forbidden_modules =
+    taskloop.land
+    taskloop.land_check
+    taskloop.land_push
 
 [importlinter:contract:entry-never-imports-the-command-surface]
 name = The attempt and checks entry processes import no command surface, operations or machine config (their import closure stays small)

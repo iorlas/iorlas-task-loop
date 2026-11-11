@@ -4,6 +4,7 @@ slot openers over `composition`'s real wiring. The attempt entry process never i
 import os
 import sqlite3
 import sys
+import threading
 import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -22,6 +23,7 @@ from taskloop.composition import (
     open_admission,
     open_advance,
     open_chain,
+    open_checking,
     open_checks_admission,
     open_checks_launcher,
     open_checks_releaser,
@@ -33,22 +35,24 @@ from taskloop.composition import (
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
-from taskloop.git_views import checkouts
+from taskloop.git_views import GitProfileFiles, checkouts, remotes
 from taskloop.interrupts import installed
+from taskloop.land_check import LandPorts
+from taskloop.land_store import LandStore
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.operations import Adoption, ChecksPorts, Failed, Quiet, Round, StartPorts, require_database
-from taskloop.owned_processes import current_boot, entry_seen, setup_seen, worker_gone
+from taskloop.owned_processes import current_boot, entry_seen, setup_seen, this_process, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
 from taskloop.round import NextRequest, RoundPorts, run_round
 from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
 from taskloop.slot_files import RealSlotFiles
-from taskloop.slot_lock import refused, repeating
+from taskloop.slot_lock import landing, probe, refused, repeating
 from taskloop.slot_release import SlotRelease
 from taskloop.slots import SlotGit
 from taskloop.task import TaskInspectionError
-from taskloop.tracker_client import tracker_reads
+from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_reads
 from taskloop.verifier import Verifier
 
 
@@ -283,3 +287,25 @@ def adopt(database: Path, checkout: Path, root: Path, count: int, git: SlotGit |
                 return con
     database.parent.mkdir(parents=True, exist_ok=True)
     return Adoption(adopt_slots(database, path, root, count, git))
+
+
+def _land_profiles(checkout: Path) -> GitProfileFiles:
+    """The target profile at O, read from Git objects on the person's checkout through the remote-capable view."""
+    return GitProfileFiles(checkout, remotes)
+
+
+@contextmanager
+def open_land(database: Path, artifacts: Path) -> Generator[LandPorts | Failed]:
+    """`tl step land` (tl-8bh9.14.8): the database guard first, then the land's ports over `composition.open_checking`'s
+    real wiring (the validation's), the candidates' store on its connections, the person's checkout through the
+    remote-capable view (`remotes`: hooks off, bounded transport, the person's credentials), the tracker read and claim
+    heartbeat, a new stop event per keep-alive, this process's identity, the slot lock's probe and custody (`landing`),
+    and this process's environment. Here, never in `composition`: neither entry may import the land
+    (`rounds-never-land`)."""
+    with _read_only(database) as con:
+        if isinstance(con, Failed):
+            yield con
+            return
+        work = open_checking(database, artifacts)
+        yield LandPorts(work, LandStore(work.store.connect, work.store.begin), remotes, _land_profiles, inspect_tracker_task,
+                        tracker_claims().heartbeat_for, threading.Event, this_process, probe, landing, os.environ)

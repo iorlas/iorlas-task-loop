@@ -172,7 +172,7 @@ class ChecksAdmission:
             return candidate
         repo, target, required = candidate
         views = free_slots(con, repo, SlotGit(self.checkouts, self.slot_files), RepoId(found.repo_id), self.probe)
-        free = views if not isinstance(views, tuple) else _heads(repo, views)
+        free = views if not isinstance(views, tuple) else heads(repo, views)
         if not isinstance(free, tuple):
             return free
         return self._lost(found) or _Ready(con, found, target, required, free)
@@ -200,7 +200,7 @@ class ChecksAdmission:
         profile = read_profile(self.profiles(checkout), target)
         if isinstance(profile, Unavailable):
             return AdmitUnavailable("git", detail=profile.detail)
-        return _named(target, profile)
+        return named(target, profile)
 
     def _lost(self, found: Task) -> AdmitRefused | AdmitUnavailable | None:
         """Step 6: one tracker read; the task must still be in progress for taskloop (no label, D3)."""
@@ -233,7 +233,7 @@ class ChecksAdmission:
         return Admitted(key, name)
 
 
-def _named(target: str, profile: Profile | Refused) -> tuple[str, Required] | AdmitRefused:
+def named(target: str, profile: Profile | Refused) -> tuple[str, Required] | AdmitRefused:
     """The profile at `main`: refused (`target_profile`), naming another target (`target`), requiring nothing
     (`no_required`) or a name its own checks do not define (`target_profile`); else each required name with its digest."""
     if isinstance(profile, Refused):
@@ -264,7 +264,7 @@ def _on_branch(repo: Repo, found: Task) -> AdmitRefused | AdmitUnavailable | Non
     return AdmitRefused("branch_moved", detail=f"task/{task_id} does not contain the implement attempt's commit {x}") if moved else None
 
 
-def _heads(repo: Repo, views: tuple[SlotView, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
+def heads(repo: Repo, views: tuple[SlotView, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
     """Step 5: each observed-free slot with its HEAD (D, where the release parks it); no branch rule."""
     try:
         heads = {info.path: info.head for info in repo.worktrees()}

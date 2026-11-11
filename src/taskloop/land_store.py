@@ -204,6 +204,11 @@ class LandStore(StoreConnection):
             found = con.execute(LOADED + " WHERE l.candidate_id=? AND l.dispatch_token=? AND l.generation=?", astuple(key)).fetchone()
         return None if found is None else _row(found)
 
+    def slot_path(self, key: AttemptKey) -> str | None:
+        """The land's read of its candidate's slot (`held_slot`): its custody lock is beside it."""
+        with self._connection() as con:
+            return held_slot(con, key)
+
     def latest(self, checks: str) -> LandRow | None:
         """The checks attempt's latest candidate (its highest `number`); None before the first."""
         found = self.of_checks(checks)
