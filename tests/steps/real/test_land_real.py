@@ -39,7 +39,7 @@ from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import landing
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
-from taskloop.tracker_client import Closed
+from taskloop.tracker_client import CloseAnswer
 
 CHECK = ["/bin/sh", "-c", "test -f src/x.py"]
 PROFILE = {"setup": [["/bin/sh", "-c", "true"]], "required": ["has-x"], "checks": [{"name": "has-x", "argv": CHECK, "timeout": 60}]}
@@ -129,9 +129,9 @@ class Real:
     def tasks(self, task_id: str, backlog: str, root: str) -> TaskInspection:
         return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self.tracker, task_id)
 
-    def close(self, _root: str, task_id: str, reason: str) -> Closed:
+    def close(self, _root: str, task_id: str, reason: str) -> CloseAnswer:
         self.closed.append((task_id, reason))
-        return "closed"
+        return CloseAnswer("closed")
 
     def land(self) -> LandResult:
         return land(self.ports(), LandRequest("tasks", "tl-1", self.main, 5))

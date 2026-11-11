@@ -181,7 +181,7 @@ def _read(ports: LandPorts, checks: ChecksRow) -> TaskInspection | Failed:
     return read
 
 
-def _tracker(ports: LandPorts, origin: Origin, task: _Task) -> TaskInspection | Landed | Failed:
+def _tracker(ports: LandPorts, origin: Origin, task: _Task, release: str | None) -> TaskInspection | Landed | Failed:
     """Step 8: one tracker read; closed with a pushable candidate reads origin first (delivered is recorded)."""
     checks = task.checks
     read = _read(ports, checks)
@@ -191,7 +191,7 @@ def _tracker(ports: LandPorts, origin: Origin, task: _Task) -> TaskInspection | 
         found = None if task.candidate is None or not task.candidate.pushable else observed(
             ports.lands, ports.work.clock, origin, task.candidate)
         if isinstance(found, (Delivered, Failed)):
-            return Landed(found.row, "already_pushed") if isinstance(found, Delivered) else found
+            return Landed(found.row, "already_pushed", release) if isinstance(found, Delivered) else found
         return Failed("refused", "closed", f"{checks.task_id} is closed in the tracker without a land.")
     if read.status != "in_progress" or read.assignee != ACTOR:
         return Failed("refused", "claim_lost", f"The tracker shows {checks.task_id} {read.status or 'without status'}, assigned "
@@ -287,7 +287,8 @@ def _checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
                   "logs, then rerun `tl step land` (flaky) or abandon. Nothing was pushed.")
 
 
-def _no_change(ports: LandPorts, origin: Origin, current: LandRow | None, again: Callable[[], LandRow | Failed]) -> LandResult:
+def _no_change(ports: LandPorts, origin: Origin, current: LandRow | None, again: Callable[[], LandRow | Failed],
+               release: str | None) -> LandResult:
     """`--no-change` never validates or pushes: a pending candidate is `landing`; a pushable one is read by the rule
     without a push (on origin: delivered; origin still at its O: `changes`, S is what to land; moved past it:
     superseded `moved`); then the no-change candidate (`changes` when S's tree is not O's)."""
@@ -297,13 +298,13 @@ def _no_change(ports: LandPorts, origin: Origin, current: LandRow | None, again:
     if current is not None and current.pushable:
         seen = observed(ports.lands, ports.work.clock, origin, current)
         if isinstance(seen, (Delivered, Failed)):
-            return Landed(seen.row, "already_pushed") if isinstance(seen, Delivered) else seen
+            return Landed(seen.row, "already_pushed", release) if isinstance(seen, Delivered) else seen
         if seen == "at_origin":
             return Failed("refused", "changes", f"The validated candidate S ({current.commit}) onto origin's main is still "
                           "to land: drop --no-change. Nothing was pushed.")
         ports.lands.supersede(current.key, "moved", ports.work.clock())
     made = again()
-    return made if isinstance(made, Failed) else Landed(made, "no_change")
+    return made if isinstance(made, Failed) else Landed(made, "no_change", release)
 
 
 def _landed(found: Delivered | Failed, release: str | None) -> Landed | Failed:
@@ -318,7 +319,7 @@ def _delivered(ports: LandPorts, request: LandRequest, task: _Task, origin: Orig
         return _made(ports, request, task, origin, (0 if current is None else current.number) + 1)
 
     if request.no_change:
-        return _no_change(ports, origin, current, again)
+        return _no_change(ports, origin, current, again, release)
     if current is not None and current.pending:
         try:
             ports.lands.renew(current.key, deadline_after(request.minutes, clock))
@@ -357,13 +358,13 @@ def _resumed(ports: LandPorts, request: LandRequest, task: _Task) -> LandResult:
     if isinstance(candidate, Failed):
         return candidate
     task = _Task(task.implement, task.checks, candidate)
-    if candidate is not None and candidate.delivery is not None:
+    if candidate is not None and candidate.delivery is not None:  # `--withdraw` never writes the tracker
         found = Landed(candidate, "already_landed" if candidate.close is not None else "delivered", release)
-        return found if candidate.close is not None else _closing(ports, found)
+        return found if candidate.close is not None or request.mode == "withdraw" else _closing(ports, found)
     origin = _origin(ports, request, task)
     if isinstance(origin, Failed) or request.mode == "withdraw":
         return origin if isinstance(origin, Failed) else _withdrawn(ports, origin, candidate, release)
-    read = _tracker(ports, origin, task)
+    read = _tracker(ports, origin, task, release)
     if not isinstance(read, TaskInspection):
         return _closing(ports, read)
     return _closing(ports, _delivered(ports, request, replace(task, title=read.title), origin, release))

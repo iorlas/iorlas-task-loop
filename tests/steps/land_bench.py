@@ -36,7 +36,7 @@ from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import landing
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
-from taskloop.tracker_client import Closed
+from taskloop.tracker_client import CloseAnswer
 
 PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"], "checks": [
     {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 600}]}
@@ -117,7 +117,7 @@ class LandBench:
     """One land's collaborators. `status`/`assignee` are the task in the tracker; `beats` the claim's answers; `environ`
     this process's environment; `seen` the process-table answer per stored land process; `racing` runs once right before
     the next write transaction of the candidates' store (another actor's commit). The tracker's close is semantic: found
-    closed is `already_closed`, another assignee `claim_lost`, else the task becomes `closed` with the reason; `closing`
+    closed is `already_closed`, another or no assignee `claim_lost` (with it), else the task becomes `closed` with the reason; `closing`
     answers the next closes instead (`missing`, `unavailable`, ...); `on_close` runs first (a crash); `tracker` logs each
     close with origin's `main` at that moment."""
 
@@ -138,7 +138,7 @@ class LandBench:
     racing: Callable[[], object] = lambda: None
     title: str = "Widget"
     reason: str | None = None
-    closing: list[Closed] = field(default_factory=list)
+    closing: list[CloseAnswer] = field(default_factory=list)
     tracker: list[tuple[str, str]] = field(default_factory=list)
     on_close: Callable[[], object] = lambda: None
 
@@ -163,17 +163,17 @@ class LandBench:
     def show(self, task_id: str) -> Bead:
         return Bead(task_id, title=self.title, description="It must do X", status=self.status, assignee=self.assignee)
 
-    def close(self, _root: str, task_id: str, reason: str) -> Closed:
+    def close(self, _root: str, task_id: str, reason: str) -> CloseAnswer:
         self.on_close()
         self.tracker.append((task_id, self.remote.branches().get("main", "")))
         if self.closing:
             return self.closing.pop(0)
         if self.status == "closed":
-            return "already_closed"
+            return CloseAnswer("already_closed")
         if self.assignee != "taskloop":
-            return "claim_lost"
+            return CloseAnswer("claim_lost", self.assignee)
         self.status, self.reason = "closed", reason
-        return "closed"
+        return CloseAnswer("closed")
 
     def inspect(self, task_id: str, backlog: str, root: str) -> TaskInspection:
         return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self, task_id)

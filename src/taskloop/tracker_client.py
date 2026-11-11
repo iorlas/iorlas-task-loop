@@ -43,9 +43,26 @@ def tracker_reads(tracker_root: str) -> ReadyRows:
 
 
 # The land's close (tl-8bh9.14.8 section 8): `closed` by this call, `already_closed` (found closed: never closed twice),
-# `claim_lost` (another assignee, or bd's fence refused), `missing` (no such task), `unavailable` (bd could not be asked).
-type Closed = Literal["closed", "already_closed", "claim_lost", "missing", "unavailable"]
-type Close = Callable[[str, str, str], Closed]  # (tracker root, task id, reason)
+# `claim_lost` (another or no assignee, or bd's fence refused), `blocked` (bd refuses the close itself: open children or
+# blockers, measured), `missing` (no such task), `unavailable` (bd could not be asked, or no answer in BD_TIMEOUT_S).
+type Closed = Literal["closed", "already_closed", "claim_lost", "blocked", "missing", "unavailable"]
+# bd 1.3.1's words when it refuses a close (measured in a scratch tracker, 2026-11-12): "cannot close <id>: 1 open child
+# issue(s); close children first or use --force to override", "cannot close blocked issue: <id> is blocked by [<id>] (use
+# --force to override)". Classified like `GONE`: bd has no exit code for it.
+REFUSED_CLOSE = "cannot close"
+
+
+@dataclass(frozen=True)
+class CloseAnswer:
+    """The close's word; `assignee` as read for `claim_lost` (None: bd's fence refused, the holder unread); `detail` bd's
+    own words for `blocked` and the failure's kind for `unavailable`."""
+
+    word: Closed
+    assignee: str | None = None
+    detail: str = ""
+
+
+type Close = Callable[[str, str, str], CloseAnswer]  # (tracker root, task id, reason)
 
 
 @dataclass(frozen=True)
@@ -79,31 +96,40 @@ def beat_of(error: BdError) -> Beat:
     return "lost" if error.kind in LOST or (error.kind == "other" and GONE in error.text) else "unrenewed"
 
 
-def _closed(bd: Bd, task_id: str, reason: str) -> Closed:
-    """One read (`Bd.show`): closed is `already_closed`, another assignee `claim_lost`; else `Bd.close` as this actor,
-    fenced by a same-value assignee update (bd 1.3.1 refuses a close by an actor other than the assignee, and closing a
-    closed task as its assignee changes nothing: measured). The claim is never returned: the close ends it."""
+def _closed(bd: Bd, task_id: str, reason: str) -> CloseAnswer:
+    """One read (`Bd.show`): closed is `already_closed`, another or no assignee `claim_lost`; else `Bd.close` as this
+    actor, fenced by a same-value assignee update (bd 1.3.1 refuses a close by an actor other than the assignee, and
+    closing a closed task as its assignee changes nothing: measured). The claim is never returned: the close ends it."""
     try:
         found = bd.show(task_id)
         if found is None:
-            return "missing"
+            return CloseAnswer("missing")
         if found.status == "closed":
-            return "already_closed"
+            return CloseAnswer("already_closed")
         if found.assignee != ACTOR:
-            return "claim_lost"
+            return CloseAnswer("claim_lost", found.assignee)
         bd.close(task_id, reason, if_assignee=ACTOR)
     except BdError as error:
-        if error.kind in LOST:
-            return "claim_lost"
-        return "missing" if error.kind == "other" and GONE in error.text else "unavailable"
-    return "closed"
+        return _close_failed(error)
+    return CloseAnswer("closed")
+
+
+def _close_failed(error: BdError) -> CloseAnswer:
+    """A failed bd call of the close: the fence refused, the task deleted, bd's own refusal, or bd not answering."""
+    if error.kind in LOST:
+        return CloseAnswer("claim_lost")
+    if error.kind == "other" and GONE in error.text:
+        return CloseAnswer("missing")
+    if error.kind == "other" and REFUSED_CLOSE in error.text.lower():
+        return CloseAnswer("blocked", detail=error.text)
+    return CloseAnswer("unavailable", detail=error.kind)
 
 
 def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerClaims:
     """`Bd.claim`, the compensating `Bd.unclaim` fenced to this actor (never forced), `Bd.heartbeat` mapped to a `Beat`
     (one bd call capped at BD_TIMEOUT_S, no lock retry: a refused beat is retried by the next interval), and the land's
-    close (`_closed`). The one place a `Bd` is constructed for a write; `client` is the seam a test checks the
-    construction through."""
+    close (`_closed`, each of its bd calls capped at BD_TIMEOUT_S: a hung bd is `unavailable`). The one place a `Bd` is
+    constructed for a write; `client` is the seam a test checks the construction through."""
 
     def located(tracker_root: str) -> str:
         return str(Path(tracker_root).expanduser().resolve())
@@ -129,7 +155,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
 
         return beat
 
-    def close(tracker_root: str, task_id: str, reason: str) -> Closed:
-        return _closed(bd(tracker_root), task_id, reason)
+    def close(tracker_root: str, task_id: str, reason: str) -> CloseAnswer:
+        return _closed(client(ACTOR, cwd=located(tracker_root), run=run, timeout=BD_TIMEOUT_S), task_id, reason)
 
     return TrackerClaims(claim, unclaim, heartbeat_for, close)

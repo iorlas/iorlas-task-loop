@@ -104,7 +104,7 @@ Refusal words are `refused <word>` (exit 1) unless written `unavailable` (exit 3
 5. **The latest land candidate** of this checks attempt (section 11), if any, decides where to resume (section 12). A
    candidate still holding its slot is released first (the rerun retries a held release before anything else, closing or
    answering `already_landed` included). A closed one then answers `already_landed` with no Git or tracker call; a
-   delivered one goes to step 8 and then the close (section 8).
+   delivered one goes straight to the close (section 8), whose own `bd show` is its tracker read (no step 6-8 read).
 6. The checkout's repository is the attempt's (`checkout`); `origin` exists (`no_remote`); **the push URL is the fetch
    URL**: `remote_url("origin", push=True)` (Git's `remote get-url --push`, which applies `pushurl` and `pushInsteadOf`)
    equals `remote_url("origin")` (which applies `insteadOf`), else **`push_url`** ("origin pushes elsewhere than it
@@ -1090,7 +1090,8 @@ counter: `land` 280 (+42), `land_close` 44 (new), `land_summary` 158 (new), `lan
 1. The close is its own module `land_close` (the plan put it in `land.py`, +45): `land.py` keeps only `_closing`. Both
    join the `rounds-never-land` forbidden list and the `cli-never-imports-the-attempt-entry` sources with `land_summary`.
 2. The port answers a word, not four result classes (`Closed | ClosedBefore | CloseLost | CloseUnavailable`), and adds
-   `missing` (no such task: `refused task`, the admission's word for it).
+   `missing` (no such task: `refused task`, the admission's word for it); since 28.1 a `CloseAnswer` (the word, the
+   assignee read, bd's words) and `blocked`.
 3. `--withdraw` never closes: finding S on origin it records the delivery and answers `Landed` with `close` None (it
    reads no tracker, L3 deviation 7); the next `tl step land` closes.
 4. `Checked:` names the checks attempt's own conclusion (a no-change S on a failed checks attempt is never pushed, but
@@ -1123,3 +1124,38 @@ summary recomputes the message; that S object is never shown or recorded).
 pinned over `Script` with bd 1.3.1's measured texts); the close of a claim whose lease lapsed between commands (`claim_lost`
 from bd's fence, by the double only); the summary on a real repository (fake Git only; the message on real Git is
 covered); the open push URL residual of section 27.1 item 4 is unchanged.
+
+### 28.1 Review repairs to L4 (2026-11-12)
+
+An independent review of b999eb000 found the close ordering, the message's injection defences and `--summary` sound, and
+five defects; all repaired, each with a test that fails without it (nine hand mutations, each failing a test).
+
+1. **(medium) A second `--withdraw` closed the task**: `_resumed` sent a delivered, unclosed candidate to the close before
+   it looked at the mode. `--withdraw` now answers `Landed` (`delivered`, `close` None) with no tracker call. Test: a close
+   refused `unavailable`, then `--withdraw`: not closed, the tracker asked once.
+2. **(low-medium) The `claim_lost` advice did not work**: bd 1.3.1 refuses `bd close` by an actor other than the assignee.
+   Measured in a scratch tracker under `~/tl-smoke` (removed afterwards): `bd close` by another actor of a task assigned
+   to `someone` fails ("cannot close ...: assignee is \"someone\", actor is \"person\"; reclaim or use --force to
+   override"); with `--force` it closes; an unassigned task closes with plain `bd close`. The port now returns the
+   assignee it read (`CloseAnswer.assignee`; None when bd's fence refused after the read), and the advice names the
+   command that works: `bd close <id>` (unassigned), `bd close <id> --force` (another actor), or `bd show <id>` first
+   (taken meanwhile). A task reverted to `open` but still assigned to `taskloop` (as `bd update --status open` leaves it;
+   `bd reclaim` of a fresh lease reclaims nothing) is closed by the land: the fence is the assignee.
+3. **(low) `_tracker` dropped the release word**: the closed task's delivery found on origin, and `--no-change`'s, now carry
+   section 4 step 5's release word like every other `Landed`. Test: a held release (`held:slot_redirected`) with S on
+   origin and its record lost, for a closed task and for `--no-change`.
+4. **(low) The close had no time bound**: its `Bd` is built with `timeout=BD_TIMEOUT_S` (each of its three bd calls);
+   a hung bd is `unavailable tracker`. Test: the construction through the `client` seam and a timed-out answer.
+5. **(low, doc)** Section 4 step 5 said a delivered candidate goes to step 8 before the close; it goes straight to the
+   close, whose own `bd show` is the read.
+
+**Also measured** (the same scratch tracker): bd 1.3.1 refuses to close a task with an open child ("cannot close <id>: 1
+open child issue(s); close children first or use --force to override") or an open blocker ("cannot close blocked issue:
+<id> is blocked by [<id>] (use --force to override)"), exit 1 after the fence update passed. Such a close was
+`unavailable tracker` (a rerun would never succeed). It is now the word `blocked` (`refused blocked`, bd's words shown
+as one printable line, the advice: close or unblock what it names, or `bd close <id> --force`), classified by bd's
+"cannot close" as `GONE` is (bd has no exit code for it). Tests: both measured texts through the port, the refusal's
+words and printability, the rerun closing once unblocked.
+
+Code lines after the repairs: `land` 283, `land_close` 56, `tracker_client` 90; `test_land_close` 207. **Not verified**:
+the `bd close --force` advice is not run by the factory (by design); bd versions other than 1.3.1's refusal words.

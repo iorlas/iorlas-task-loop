@@ -8,20 +8,35 @@ import json
 from pathlib import Path
 
 import pytest
+from beads_client import Bd
 from beads_client.testing import Script
+from doubles import Command
 from land_bench import LandBench, bench
 
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_types import AttemptKey
+from taskloop.claim_lease import BD_TIMEOUT_S
 from taskloop.land import Landed, LandResult
 from taskloop.land_close import NOT_SYNCED
 from taskloop.land_store import Close, LandStore
 from taskloop.operations import Failed
-from taskloop.tracker_client import Closed, tracker_claims
+from taskloop.tracker_client import CloseAnswer, Closed, tracker_claims
 
 
 class Died(BaseException):
     """The `tl step land` process died (a crash, `kill -9`) right before the tracker's close."""
+
+
+class LosingDelivery(LandStore):
+    """The candidates' store whose first delivery record is lost (S already on origin)."""
+
+    lost = 1
+
+    def record_delivery(self, key: AttemptKey, remote_head: str, now: float) -> None:
+        if self.lost:
+            self.lost -= 1
+            raise StoreUnavailable("the push's answer was lost")
+        super().record_delivery(key, remote_head, now)
 
 
 class Losing(LandStore):
@@ -105,7 +120,8 @@ def test_a_close_recorded_by_a_concurrent_land_is_the_same_answer(b: LandBench) 
 def test_a_claim_taken_during_the_push_leaves_the_task_open_until_closed_by_hand(b: LandBench) -> None:
     b.repo.after_ls = [None, lambda: setattr(b, "assignee", "someone")]  # after the delivery's read, before the push
     found = b.land()
-    assert word(found) == ("refused", "claim_lost") and isinstance(found, Failed) and "`bd close tl-1`" in found.detail
+    assert word(found) == ("refused", "claim_lost") and isinstance(found, Failed)
+    assert "assigned to someone: close it by hand with `bd close tl-1 --force`" in found.detail
     s = b.rows()[0].commit
     assert b.origin_main() == s and b.rows()[0].close is None and b.status == "in_progress"
     assert word(b.land()) == ("refused", "claim_lost")  # the rerun goes straight to the close again
@@ -117,11 +133,12 @@ def test_a_claim_taken_during_the_push_leaves_the_task_open_until_closed_by_hand
 
 @pytest.mark.parametrize(("answer", "expected"), [
     ("unavailable", ("unavailable", "tracker")), ("claim_lost", ("refused", "claim_lost")), ("missing", ("refused", "task")),
+    ("blocked", ("refused", "blocked")),
 ])
 def test_a_refused_close_leaves_the_task_open_and_claimed_and_the_rerun_closes_it(
     b: LandBench, answer: Closed, expected: tuple[str, str]
 ) -> None:
-    b.closing = [answer]
+    b.closing = [CloseAnswer(answer)]
     assert word(b.land()) == expected
     delivered_open(b)
     found = b.land()
@@ -133,7 +150,7 @@ def test_a_closed_land_is_already_landed_with_no_git_or_tracker_call(b: LandBenc
     first = b.land()
     assert isinstance(first, Landed)
     b.remote.offline = True
-    b.closing = ["unavailable"]
+    b.closing = [CloseAnswer("unavailable")]
     found = b.land()
     assert isinstance(found, Landed) and found.how == "already_landed" and found.row == b.rows()[0]
     assert len(b.tracker) == 1 and b.repo.pushes == 1
@@ -147,7 +164,7 @@ def test_no_change_closes_with_the_disposition_s_reason(b: LandBench) -> None:
 
 
 def test_a_closed_task_whose_candidate_is_on_origin_records_already_closed(b: LandBench) -> None:
-    b.closing = ["unavailable"]
+    b.closing = [CloseAnswer("unavailable")]
     assert word(b.land()) == ("unavailable", "tracker")
     b.con.execute("UPDATE land_candidate SET delivery=NULL,delivered_at=NULL,remote_head=NULL")  # the delivery record lost too
     b.status = "closed"
@@ -155,8 +172,16 @@ def test_a_closed_task_whose_candidate_is_on_origin_records_already_closed(b: La
     assert isinstance(found, Landed) and found.how == "already_pushed" and found.row.close == "already_closed"
 
 
+def test_withdraw_of_a_delivered_unclosed_candidate_never_closes(b: LandBench) -> None:
+    b.closing = [CloseAnswer("unavailable")]
+    assert word(b.land()) == ("unavailable", "tracker")
+    found = b.land("withdraw")
+    assert isinstance(found, Landed) and found.how == "delivered" and found.row.close is None
+    assert len(b.tracker) == 1 and b.status == "in_progress"
+
+
 def test_withdraw_finding_the_candidate_on_origin_never_closes(b: LandBench) -> None:
-    b.closing = ["unavailable"]
+    b.closing = [CloseAnswer("unavailable")]
     assert word(b.land()) == ("unavailable", "tracker")
     b.con.execute("UPDATE land_candidate SET delivery=NULL,delivered_at=NULL,remote_head=NULL")
     found = b.land("withdraw")
@@ -175,7 +200,7 @@ def show(status: str = "in_progress", assignee: str = "taskloop") -> str:
 
 def test_the_port_closes_as_taskloop_fenced_on_the_assignee_and_never_unclaims(tmp_path: Path) -> None:
     script = Script().say(SHOW)
-    assert tracker_claims(script).close(str(tmp_path), "tl-1", REASON) == "closed"
+    assert tracker_claims(script).close(str(tmp_path), "tl-1", REASON) == CloseAnswer("closed")
     assert [argv[1:] for argv in script.calls] == [
         ["--actor", "taskloop", "show", "tl-1", "--json"],
         ["--actor", "taskloop", "update", "tl-1", "--if-assignee", "taskloop", "--assignee", "taskloop", "--json"],
@@ -184,6 +209,9 @@ def test_the_port_closes_as_taskloop_fenced_on_the_assignee_and_never_unclaims(t
 
 
 DELETED = '{"error": "resolving tl-1: no issue found matching \\"tl-1\\"", "schema_version": 1}'
+# bd 1.3.1's refusals of a close (stderr, exit 1), measured in a scratch tracker on 2026-11-12.
+CHILDREN = "cannot close tl-1: 1 open child issue(s); close children first or use --force to override"
+BLOCKERS = "cannot close blocked issue: tl-1 is blocked by [tl-2] (use --force to override)"
 
 
 @pytest.mark.parametrize(("replies", "expected", "calls"), [
@@ -194,10 +222,62 @@ DELETED = '{"error": "resolving tl-1: no issue found matching \\"tl-1\\"", "sche
     ([(SHOW, "", 0), ("", "", 13)], "claim_lost", 2),
     ([(SHOW, "", 0), (DELETED, "", 1)], "missing", 2),
     ([(SHOW, "", 0), ("", "", 0), ('{"error": "database is down"}', "", 1)], "unavailable", 3),
-], ids=["closed", "other_assignee", "not_found", "timeout", "fence_refused", "deleted", "close_failed"])
+    ([(SHOW, "", 0), ("", "", 0), ("", CHILDREN, 1)], "blocked", 3),
+    ([(SHOW, "", 0), ("", "", 0), ("", BLOCKERS, 1)], "blocked", 3),
+], ids=["closed", "other_assignee", "not_found", "timeout", "fence_refused", "deleted", "close_failed", "children", "blockers"])
 def test_the_port_maps_bd_s_answers(tmp_path: Path, replies: list[tuple[str, str, int]], expected: str, calls: int) -> None:
     script = Script()
     for out, err, code in replies:
         script.say(out, err, code)
-    assert tracker_claims(script).close(str(tmp_path), "tl-1", REASON) == expected
-    assert len(script.calls) == calls and all("unclaim" not in argv for argv in script.calls)
+    found = tracker_claims(script).close(str(tmp_path), "tl-1", REASON)
+    assert found.word == expected and len(script.calls) == calls and all("unclaim" not in argv for argv in script.calls)
+    assert found.assignee == ("someone" if expected == "claim_lost" and calls == 1 else None)
+    assert expected != "blocked" or found.detail == replies[-1][1]
+
+
+def test_the_port_s_bd_calls_are_capped_at_bd_timeout(tmp_path: Path) -> None:
+    """A hung bd answers within BD_TIMEOUT_S per call (bd's runner then gives `timeout`: `unavailable tracker`)."""
+    built: list[dict[str, object]] = []
+
+    class Recorded(Bd):
+        def __init__(self, actor: str, cwd: str | None = None, **options: object) -> None:
+            built.append({"actor": actor, "cwd": cwd} | {key: value for key, value in options.items() if key != "run"})
+            super().__init__(actor, cwd, run=Script().say("", "bd: no answer in 30.0s", 124))
+
+    found = tracker_claims(Script(), client=Recorded).close(str(tmp_path / "x" / ".."), "tl-1", REASON)
+    assert found == CloseAnswer("unavailable", detail="timeout")
+    assert built == [{"actor": "taskloop", "cwd": str(tmp_path.resolve()), "timeout": BD_TIMEOUT_S}]
+
+
+@pytest.mark.parametrize(("holder", "advice"), [
+    ("", "it is unassigned (its claim lapsed): close it by hand with `bd close tl-1`;"),
+    ("someone", "it is assigned to someone: close it by hand with `bd close tl-1 --force`"),
+    (None, "another actor took it meanwhile: inspect it (`bd show tl-1`)"),
+], ids=["unassigned", "another_actor", "fence"])
+def test_a_lost_claim_names_the_close_by_hand_that_works(b: LandBench, holder: str | None, advice: str) -> None:
+    b.closing = [CloseAnswer("claim_lost", holder)]
+    found = b.land()
+    assert word(found) == ("refused", "claim_lost") and isinstance(found, Failed) and advice in found.detail
+
+
+def test_a_blocked_close_names_bd_s_words_and_is_no_plain_rerun(b: LandBench) -> None:
+    b.closing = [CloseAnswer("blocked", detail=f"{BLOCKERS}\x1b[2J")]
+    found = b.land()
+    assert word(found) == ("refused", "blocked") and isinstance(found, Failed) and found.detail.isprintable()
+    assert "is blocked by [tl-2]" in found.detail and "`bd close tl-1 --force`" in found.detail
+
+
+@pytest.mark.parametrize("closed_by_hand", [True, False], ids=["closed_task", "no_change"])
+def test_a_delivery_found_on_origin_carries_the_held_release_word(b: LandBench, closed_by_hand: bool) -> None:
+    """Section 4 step 5's release ran first (held: the block rewrote the slot's `.git` pointer); a candidate found on
+    origin by the closed task's read, or by `--no-change`'s, answers with that word as every other `Landed` does."""
+    b.advance({"OTHER": "another task\n"})
+    pointer = b.slot.path / ".git"
+    b.environment.process.script = [Command(), Command(), Command(effect=lambda: b.files.contents.update({pointer: b"gitdir: /x\n"}))]
+    b.lands = LosingDelivery(lambda: b.con, b.begin)
+    assert word(b.land()) == ("unavailable", "store")
+    assert b.rows()[0].pushable and b.rows()[0].holds_slot and b.origin_main() == b.rows()[0].commit
+    b.status = "closed" if closed_by_hand else b.status
+    found = b.land(no_change=not closed_by_hand)
+    assert isinstance(found, Landed) and (found.how, found.release) == ("already_pushed", "held:slot_redirected")
+    assert found.row.close == ("already_closed" if closed_by_hand else "closed")
