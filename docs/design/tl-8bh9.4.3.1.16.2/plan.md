@@ -401,8 +401,9 @@ An independent review of 01e06b3fe found sixteen points; all are taken.
 
 ## 15. Not verified
 
-- `codex sandbox linux` accepting `--ignore-user-config` and the same `-c` keys as `exec` (Run S used an empty
-  `CODEX_HOME` instead; the slice copies Run S's argv and checks it).
+- ~~`codex sandbox linux` accepting `--ignore-user-config` and the same `-c` keys as `exec`.~~ Checked by S5e-2 (section 18):
+  codex 0.167.0 has no `linux` subcommand and rejects `--ignore-user-config`; the probe is `codex sandbox -c
+  sandbox_mode="workspace-write" <the agent's -c keys> -- <command>`.
 - ~~That `git clean -ffdx` through the pinned view removes `.venv` and nested repositories without touching tracked
   files.~~ Verified by S5e-1's real test (section 16).
 - That `just bootstrap` warms everything `just check` needs offline beyond what Run S ran by hand (the same commands).
@@ -508,3 +509,79 @@ hand, not kept).
 Also found, not fixed here: the shelf's `stream_proc._pump` buffers a line without a newline without bound, so setup
 output can grow the entry's memory before the 32 MiB log cap applies. Tracked as tl-8bh9.14.25 (shelf, label
 architecture-review).
+
+## 18. As built: S5e-2 (access, 2026-11-11)
+
+Tracker tl-8bh9.4.3.1.16.2, on S5e-1. The implement agent now launches with three writable roots outside its slot and an
+offline environment; plan attempts are unchanged byte for byte (`CODEX_ACCESS`, no added environment, no probe). No
+schema change.
+
+- **`access.py` (new leaf, 51 code lines).** `SANDBOX` and `CODEX_ACCESS` moved from `attempt` unchanged; `Folders`,
+  `folders` (moved from `environment`, with `roots`); `TMP_BYTES = 64`; `prepared_access(found)` (CODEX_ACCESS with
+  `writable_roots=<json.dumps([tmp, cache, tools])>`, a valid TOML array); `agent_env(found)` (`TMPDIR`, `UV_CACHE_DIR`,
+  `UV_TOOL_DIR`, `UV_OFFLINE=1`); `PROBE` and `probe_argv(exe, found)`.
+- **`attempt._launch`**: for a kind with `environment`, `prepared_access` and the credentials' environment with
+  `agent_env` merged over it (scrubbing and the push bar kept: they are the credentials'); it returns the credentials'
+  own `(exe, env)` for the preparation, so setup still has network (no `UV_OFFLINE`).
+- **Preflight** (`environment._preflight`, section 6's order): `platform`, `path_long` (TMPDIR bytes over
+  `EnvironmentPorts.tmp_bytes`, composition `TMP_BYTES`), `roots` (`_apart`: every root resolved through the new
+  `EnvFiles.resolve`, links followed; each strictly inside the resolved `<slots_root>/<repo_id>/`; no two roots, nor a root
+  and the slot, G, C = G's grandparent, the person's checkout, or `EnvironmentPorts.protected` (composition: the
+  artifacts root and factory.db's folder) equal or nested; an unresolvable path refuses), `remove_unsafe`, the folders
+  made (`files`), then the probe (`sandbox`). The failure count and the reconcile stay before it, so a dead attempt never
+  probes.
+- **The probe** (`slot_env.sandbox_probe`): `stream_proc.capture` of `codex sandbox -c sandbox_mode="workspace-write"
+  <every -c key of prepared_access> -- /bin/sh -c PROBE sh <tmp> <cache> <tools>`, cwd the slot, the agent's environment,
+  30 s; True only for exit 0, not timed out, no survivors; an `OSError` at start is False. `PROBE` makes and removes a
+  `.tl-probe-<pid>` folder in each root (`mkdir`/`rmdir`, no `rm`), exits 3 when a root is not writable and 4 when `/tmp`
+  is. Checked by hand on this machine (codex 0.167.0, bubblewrap): the full key set exits 0; a missing root exits 3;
+  without the `exclude_*` keys exits 4; without `sandbox_mode` the roots are read-only (exit 3); `--ignore-user-config`
+  is rejected (exit 2). Then `sandbox_probe` itself, by hand against the real `codex` with roots under `~/tl-smoke`: True;
+  with the tools root removed, False. Codex leaves its own `codex-bwrap-synthetic-mount-targets-<uid>` in `TMPDIR` (the
+  scratch); step 4 empties the scratch after the preflight, so it never reaches the agent; the uv folders stay as they
+  were.
+- **`slot_env.py` (new, 84).** `RealEnvFiles` (with `resolve`), `_Writable`, `_remove` and `setup_process` moved out of
+  `composition` (358 to 317 code lines), plus `sandbox_probe`. `composition.open_attempts` wires the probe and the
+  protected paths.
+- **`slot_release`**: a new port `scratch` (`RealEnvFiles().empty`); after the recorded release, still under the lock and
+  after the stop proof, `.t/<slot>` is emptied; its answer is ignored (the next preparation empties it again before any
+  agent). Both modes; a refusal empties nothing.
+- **`tl step show`**: `Setup: run <n> <conclusion|unfinished> at <B>; log <attempt dir>/setup-<n>.log`, or `Setup: none`;
+  JSON key `setup` (`run`, `conclusion`, `commit`, `log`, or null). Read through `SetupStore.latest` on the status
+  store's connection; the log path is computed, never created.
+- **Words.** `implement_step.ENVIRONMENT` is section 7's text (the closing "In `explanation`, name each command you ran
+  and how it ended" merged with the existing words about test files). GUIDE `environment` names `path_long`, `roots`,
+  `sandbox` and `files`. `composition.worker_gone`'s docstring and the glossary's `agent process` row carry the
+  stop-proof wording of section 8.
+- **Import contract**: `slot_env` and `access` join the entry's "never imports the command surface" sources.
+
+**Deviations from the plan.** (1) The probe runs `codex sandbox`, not `codex sandbox linux`, and without
+`--ignore-user-config` (both refused by 0.167.0); the person's Codex config is therefore read beneath the agent's `-c`
+keys, which override every key the probe depends on, while the agent itself still ignores that config. (2) The probe
+makes and removes a folder, not a file (no `rm` in the script). (3) `tmp_bytes` is an `EnvironmentPorts` value
+(composition passes `TMP_BYTES`) so the sequence tests in `test_prepare`, `test_admit_chain` and the real setup test, whose
+slots sit under pytest's long `tmp_path`, can widen it; `test_environment` keeps 64 with a short fake slots root.
+(4) Per section 6, a root inside factory.db's folder or the artifacts root is refused even though only a root equal to or
+holding them exposes them: a machine config with `slots_root` under factory.db's folder (the owner's `~/tl-smoke` config:
+`db = ~/tl-smoke/factory.db`, `slots_root = ~/tl-smoke/slots`) refuses `environment:roots` (owner decision below).
+
+Tests: `test_access.py` (new, 4): plan's bytes, the three roots as a TOML array with nothing else changed, `agent_env`
+names surviving the factory's scrub, the probe argv. `test_environment.py` (+5 tests, 11 cases): the implement agent's
+argv and env and the probe's inputs; a plan attempt's argv and env unchanged and no probe; TMPDIR of 64 bytes passes and
+65 refuses before any folder; six `roots` cases (a link into the slot, an evidence root holding a root, a link outside
+the slots, roots nested in each other, slots inside factory.db's folder, an unresolvable root); a failed probe after the
+folders, nothing run. `test_slot_release.py`: the scratch emptied after a settled release, not on a refusal, and a
+failed emptying still releases. `test_step_cli.py`: the `Setup:` line (none, failed, unfinished), the JSON key, and a
+real read of a stored run. `test_steps.py`: section 7's words. Real: `real/test_sandbox_probe_real.py` (3: a stand-in
+`codex` script records cwd, TMPDIR, UV_OFFLINE and the argv and maps exit 0/1; a missing executable; `PROBE` itself on a
+read-only root fails and leaves no folder behind). Mutations of the budget comparison, the slot/G/C/checkout list, the
+protected list, the inside-the-slots rule, the root-to-root check and the probe's environment each fail a test (run by
+hand, not kept).
+
+**Owner decisions.** (a) Keep section 6's "is inside" for the artifacts root and factory.db's folder (then move the smoke
+config's `db` out of `~/tl-smoke` or `slots_root` elsewhere), or narrow it to "equals or holds" for those two.
+(b) Q2 stands as built: implement refuses `environment:platform` off Linux.
+
+**Not verified.** No live run: no implement agent has run `just check`/`just test` inside the real sandbox through the
+factory; the probe ran against the real `codex` only by hand (above), not from an entry with the scrubbed credentials'
+environment. Steps for the owner-run smoke: [live-smoke.md](live-smoke.md).

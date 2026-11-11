@@ -15,9 +15,10 @@ from typing import Final, Literal, Protocol
 
 from sqlite_store import SchemaError
 
+from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
-from taskloop.attempt import SANDBOX, collect, succeeded
+from taskloop.attempt import collect, succeeded
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import (

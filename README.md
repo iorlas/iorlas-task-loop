@@ -56,4 +56,7 @@ they are not additional executable commands.
 `.task-loop.json` is this repository's profile (`setup`, `checks`, `required`, `target`), read from Git by
 `tl profile show` ([tl-8bh9.14.1](docs/design/tl-8bh9.14.1/plan.md)). An implement attempt's entry runs its `setup`
 (`just bootstrap`: `just install` plus every pinned check tool warmed in the uv cache) in the slot before the agent
-([S5e](docs/design/tl-8bh9.4.3.1.16.2/plan.md)); nothing runs the checks yet.
+([S5e](docs/design/tl-8bh9.4.3.1.16.2/plan.md)), on Linux only; the agent then writes three folders beside the slots
+(`TMPDIR`, the uv cache and tools) with uv offline and is told to run every command under `checks` itself. The factory
+does not run the checks yet. A slots root must keep `<slots_root>/<repo_id>/.t/<slot>` within 64 bytes and lie outside
+the checkout, the artifacts root and factory.db's folder.

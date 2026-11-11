@@ -6,7 +6,9 @@ In the entry process, after `prepare.base` and before the dispatch write, under 
 and inside the claim keep-alive; only for a step kind with `environment`. Order (a repeat skips 5-8: its slot keeps
 attempt 1's environment): 1 two failed runs of this attempt refuse `environment:failed`; 2 the latest unfinished run is
 reconciled (`interrupted` when its process is gone, else `environment:running` or `environment:unknown`, never
-signalled); 3 preflight (platform, symlink-safe removal, the folders created); 4 the scratch emptied; 5 the profile read
+signalled); 3 preflight (platform, the TMPDIR budget, the roots apart from the slot, its Git directories, the person's
+checkout, the evidence and factory.db's folder, symlink-safe removal, the folders created, the sandbox probe); 4 the
+scratch emptied; 5 the profile read
 from Git at B, and a `passed` run at this B and setup digest reused; 6 the reset (the slot's ignored files and nested
 repositories removed, then an empty ignored listing, and the uv folders emptied); 7 each setup command in order, through
 the registered start, its process group proven empty after it; 8 the slot clean afterwards; 9 the scratch emptied again;
@@ -26,6 +28,7 @@ from typing import Final, Literal, Protocol
 from git_porcelain import GitUnavailable
 from stream_proc import OwnedProcess
 
+from taskloop.access import TMP_BYTES, Folders, agent_env, folders
 from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Checkouts
 from taskloop.evidence_files import EvidenceFiles, SetupLog
 from taskloop.prepare import Prepared, task_branch
@@ -37,6 +40,10 @@ type Renewal = Literal["held", "unrenewed", "lost"]
 type Renew = Callable[[], Renewal]  # one claim renewal, now (the entry's keep-alive)
 type GroupAlive = Callable[[int], bool]  # any process left in a process group
 type SlotProfiles = Callable[[Path, Path], ProfileFiles]  # (slot, its verified Git directory): the profile at a commit
+type Launch = tuple[str, Mapping[str, str]]  # the agent's Codex executable and its scrubbed environment (the credentials)
+# Whether the implement agent's sandbox works here: `codex sandbox` (exe) in the slot (cwd) with the agent's environment
+# writes each folder and not /tmp.
+type SandboxProbe = Callable[[str, Path, Mapping[str, str], Folders], bool]
 
 
 @dataclass(frozen=True)
@@ -73,24 +80,9 @@ class EnvFiles(Protocol):
         """Everything inside the folder removed, the folder kept; a missing folder is empty. False when anything stays."""
         ...
 
-
-@dataclass(frozen=True)
-class Folders:
-    """Beside the slots and `.locks/` under `<slots_root>/<repo_id>/`: the scratch (`TMPDIR`), uv's cache and its tools."""
-
-    tmp: Path
-    cache: Path
-    tools: Path
-
-    @property
-    def env(self) -> Path:
-        """`.env/<slot>`: emptied whole by every reset."""
-        return self.cache.parent
-
-
-def folders(slot: Path) -> Folders:
-    return Folders(slot.parent / ".t" / slot.name, slot.parent / ".env" / slot.name / "uv-cache",
-                   slot.parent / ".env" / slot.name / "uv-tools")
+    def resolve(self, path: Path) -> Path | None:
+        """The absolute path with every existing link followed (a missing tail kept as written); None when unreadable."""
+        ...
 
 
 def setup_env(env: Mapping[str, str], found: Folders) -> dict[str, str]:
@@ -111,6 +103,10 @@ def _ending(ended: SetupEnded) -> bytes:
     if ended.exec_failed:
         return b"not started\n"
     return b"ended by a signal\n" if ended.rc is None else f"exit {ended.rc}\n".encode()
+
+
+def _nested(one: Path, other: Path) -> bool:
+    return one.is_relative_to(other) or other.is_relative_to(one)
 
 
 def _refused(reason: str) -> AttemptResult:
@@ -134,6 +130,9 @@ class EnvironmentPorts:
     clock: Callable[[], float]
     platform: str  # `sys.platform`
     safe_removal: bool  # `shutil.rmtree.avoids_symlink_attacks`
+    probe: SandboxProbe
+    protected: tuple[Path, ...]  # no root may equal, hold or sit inside these: the evidence root, factory.db's folder
+    tmp_bytes: int = TMP_BYTES  # TMPDIR's budget; only a test of the sequence on a long tmp_path widens it
 
 
 @dataclass(frozen=True)
@@ -154,26 +153,28 @@ class Preparation:
     def __init__(self, ports: EnvironmentPorts) -> None:
         self.ports = ports
 
-    def prepare(self, record: AttemptRecord, slot: Prepared, renew: Renew, env: Mapping[str, str]) -> AttemptResult | None:
-        """Section 4's order; None when the agent may be dispatched."""
+    def prepare(self, record: AttemptRecord, slot: Prepared, renew: Renew, launch: Launch) -> AttemptResult | None:
+        """Section 4's order; None when the agent may be dispatched. `launch`: the agent's executable and the credentials'
+        scrubbed environment (setup gets it with the folders, the probe with the agent's additions)."""
         admission = record.admission
         key, path = admission.key, Path(admission.slot_path)
         found = folders(path)
-        stopped = self._ready(key, found)
+        stopped = self._ready(key, path, slot, launch)
         if stopped is None and admission.number == 1:
             try:
                 branch = task_branch(admission.task.task_id)
-                stopped = self._setup(key, (path, branch), slot, admission.deadline, setup_env(env, found))
+                stopped = self._setup(key, (path, branch), slot, admission.deadline, setup_env(launch[1], found))
             except GitUnavailable:
                 stopped = _unavailable("git")
         return stopped or self._finish(found, renew, admission.deadline)
 
-    def _ready(self, key: AttemptKey, found: Folders) -> AttemptResult | None:
-        """Steps 1-4: the failure count, the reconcile, the preflight, the scratch emptied."""
+    def _ready(self, key: AttemptKey, path: Path, slot: Prepared, launch: Launch) -> AttemptResult | None:
+        """Steps 1-4: the failure count (before the probe: a dead attempt costs nothing), the reconcile, the preflight,
+        the scratch emptied."""
         if self.ports.store.failures(key) >= SETUP_RUNS:
             return _refused("environment:failed")
-        stopped = self._reconcile(key) or self._preflight(found)
-        if stopped is None and not self.ports.files.empty(found.tmp):
+        stopped = self._reconcile(key) or self._preflight(path, slot, launch)
+        if stopped is None and not self.ports.files.empty(folders(path).tmp):
             return _unavailable("environment:files")
         return stopped
 
@@ -203,14 +204,37 @@ class Preparation:
             self.ports.store.conclude(key, latest.run, "interrupted", None, self.ports.clock())
         return None
 
-    def _preflight(self, found: Folders) -> AttemptResult | None:
-        """Checks and folder creation only (the access checks and the sandbox probe come with the agent's roots)."""
-        if self.ports.platform != "linux":  # nothing of the environment is observed elsewhere (owner question Q2)
+    def _preflight(self, path: Path, slot: Prepared, launch: Launch) -> AttemptResult | None:
+        """Checks and folder creation only (section 6), the sandbox probe last: it needs the folders."""
+        ports, found = self.ports, folders(path)
+        if ports.platform != "linux":  # nothing of the environment is observed elsewhere (owner question Q2)
             return _refused("environment:platform")
-        if not self.ports.safe_removal:
+        if len(str(found.tmp).encode()) > ports.tmp_bytes:
+            return _refused("environment:path_long")
+        if not self._apart(path, slot, found):
+            return _refused("environment:roots")
+        if not ports.safe_removal:
             return _refused("environment:remove_unsafe")
-        ensured = all(self.ports.files.ensure(path) for path in (found.tmp, found.cache, found.tools))
-        return None if ensured else _unavailable("environment:files")
+        if not all(ports.files.ensure(root) for root in found.roots):
+            return _unavailable("environment:files")
+        exe, env = launch
+        return None if ports.probe(exe, path, {**env, **agent_env(found)}, found) else _refused("environment:sandbox")
+
+    def _apart(self, path: Path, slot: Prepared, found: Folders) -> bool:
+        """Resolved, each root lies inside `<slots_root>/<repo_id>/`, and no two of the roots, nor a root and the slot, its
+        Git directory G, the common one C, the person's checkout, the evidence root or factory.db's folder, are equal or
+        nested. A link anywhere on the way is followed, so a root redirected into the slot or the evidence is refused."""
+        resolve = self.ports.files.resolve
+        base = resolve(path.parent)
+        roots = [resolve(root) for root in found.roots]
+        kept = [resolve(each) for each in (path, slot.gitdir, slot.gitdir.parent.parent, slot.root, *self.ports.protected)]
+        if base is None or any(each is None for each in (*roots, *kept)):
+            return False
+        placed = [root for root in roots if root is not None and root != base and root.is_relative_to(base)]
+        others = [each for each in kept if each is not None]
+        if len(placed) != len(roots) or len(set(placed)) != len(placed):
+            return False
+        return not any(_nested(root, other) for index, root in enumerate(placed) for other in (*placed[index + 1:], *others))
 
     def _setup(
         self, key: AttemptKey, where: tuple[Path, str], slot: Prepared, deadline: float, env: Mapping[str, str]

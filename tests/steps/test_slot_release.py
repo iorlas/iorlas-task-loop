@@ -20,6 +20,7 @@ from git_porcelain.testing import FakeWorktree
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
+from taskloop.access import folders
 from taskloop.admit import AdmitRefused
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
 from taskloop.attempt import Attempts
@@ -66,6 +67,8 @@ class Ports:
         self.inside: Callable[[], object] = lambda: None
         self.setups: dict[int, ProcessSeen] = {}  # a setup command's observation by pid (default gone)
         self.setup_asked: list[int] = []
+        self.emptied: list[Path] = []  # the scratch folders emptied, in order
+        self.emptiable = True
 
     def checkouts(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opens += 1
@@ -77,6 +80,10 @@ class Ports:
 
     def gone(self, _worker: Worker) -> bool:
         return not self.alive
+
+    def scratch(self, path: Path) -> bool:
+        self.emptied.append(path)
+        return self.emptiable
 
     def setup_seen(self, process: OwnedProcess) -> ProcessSeen:
         self.setup_asked.append(process.pid)
@@ -98,7 +105,7 @@ class Ports:
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(AttemptStore(lambda: self.con), self.checkouts, self.files, self.observe, self.gone, self.hold, self.unclaim,
-                           lambda: 30, self.setup_seen)
+                           lambda: 30, self.setup_seen, self.scratch)
 
 
 def agent(slot: FakeWorktree, files: dict[str, str], rc: int = 0) -> Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]:
@@ -151,10 +158,11 @@ def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then
     assert ports.releaser().release(KEY, False) == Released("s1", d, True, "kept", False)
     assert (slot.branch(), head(slot), tip(slot)) == (None, d, x)  # detached at D; the branch keeps X
     assert stored(registered) == ([], [(d, 30.0, "kept")]) and ports.unclaimed == [] and ports.holds == 1
+    assert ports.emptied == [folders(slot.path).tmp]  # the scratch, after the stop proof and the record
     ports.opens = ports.holds = 0
     again = ports.releaser().release(KEY, False)
     assert again == AlreadyReleased("s1", "kept", False) and release_word(again) == "already_released"
-    assert (ports.opens, ports.holds) == (0, 0)
+    assert (ports.opens, ports.holds, len(ports.emptied)) == (0, 0, 1)
 
 
 @pytest.mark.parametrize("phase", ["admitted", "registered", "captured"])
@@ -197,7 +205,7 @@ def test_abandon_without_a_stop_proof_takes_no_lock_and_reads_no_git(
     found = ports.releaser().release(KEY, True)
     assert isinstance(found, NotReleased) and (found.kind, found.reason) == expected
     assert found.detail.endswith("Nothing changed.") and (found.reason != "entry_running" or "pid 7" in found.detail)
-    assert (stored(registered), ports.opens, ports.holds, ports.unclaimed) == (before, 0, 0, [])
+    assert (stored(registered), ports.opens, ports.holds, ports.unclaimed, ports.emptied) == (before, 0, 0, [], [])
 
 
 def test_the_entry_releasing_itself_passes_its_own_identity(
@@ -211,10 +219,13 @@ def test_the_entry_releasing_itself_passes_its_own_identity(
 def test_abandon_an_admitted_attempt_on_a_detached_slot_needs_no_git_write(
     admitted: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    """Never registered, never prepared: nothing to park; the reservation goes, the claim returns at the stored root."""
+    """Never registered, never prepared: nothing to park; the reservation goes, the claim returns at the stored root. A
+    scratch that cannot be emptied does not fail the release (the next preparation empties it before any agent)."""
     con = sqlite3.connect(admitted, isolation_level=None)
     d, ports = head(slot), Ports(con, checkouts, slot_files)
+    ports.emptiable = False
     assert ports.releaser().release(KEY, True) == Released("s1", None, True, "unclaimed", True)
+    assert ports.emptied == [folders(slot.path).tmp]
     assert stored(con) == ([], [(d, 30.0, "unclaimed")]) and ports.unclaimed == [("/tracker", "tl-1")] and slot.branch() is None
     con.close()
 

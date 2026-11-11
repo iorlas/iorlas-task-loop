@@ -132,7 +132,7 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
         Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere).verify(KEY)
     if release:
         releaser = SlotRelease(store, checkouts, files, lambda _e: "gone", lambda _w: True, nowhere, lambda _r, _t: True, lambda: 30,
-                               lambda _setup: "gone")
+                               lambda _setup: "gone", lambda _scratch: True)
         assert isinstance(releaser.release(KEY, False), Released)
     return tip(slot.repo)
 

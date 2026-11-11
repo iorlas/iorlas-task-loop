@@ -16,8 +16,9 @@ from git_porcelain import GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store
 
+from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
-from taskloop.attempt import SANDBOX, Attempts
+from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown, StatusPorts, list_attempts, next_action, show_attempt
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
@@ -137,7 +138,7 @@ class Publishes:
 def releaser(store: AttemptStore, checkouts: Checkouts, slot_files: SlotFiles) -> SlotRelease:
     """The real release over the fakes: the entry gone, the agent gone, the real slot lock, a claim that returns."""
     return SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", gone, custody, lambda _root, _task: True, lambda: 30,
-                       lambda _setup: "gone")
+                       lambda _setup: "gone", lambda _scratch: True)
 
 
 class FakeVerifier:

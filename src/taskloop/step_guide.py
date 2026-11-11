@@ -94,8 +94,14 @@ GUIDE = {
     "stays admitted and no agent ran. Its output is `setup-<run>.log` beside the attempt's entry.log. `exit` or `lingering`: "
     "the next relaunch runs it once more, two failed runs refuse `failed`; `dirty` or `moved`: setup left files in the slot "
     "or moved its HEAD, restore it (the `slot_dirty` guide); `running`: a process of an earlier setup still runs (the "
-    "`setup_running` guide); `profile`: fix `.task-loop.json` on the task branch; `platform`: implement runs on Linux only. "
-    "Otherwise `tl step release --abandon`.",
+    "`setup_running` guide); `profile`: fix `.task-loop.json` on the task branch; `platform`: implement runs on Linux only; "
+    "`path_long`: the agent's `TMPDIR` (`<slots root>/<repo id>/.t/<slot>`) is over 64 bytes, set a shorter `slots_root`; "
+    "`roots`: a folder the agent may write (`.t/<slot>`, `.env/<slot>/uv-cache`, `.env/<slot>/uv-tools` beside the slots) "
+    "resolves into the slot, its Git directories, your checkout, the artifacts or factory.db's folder, or outside the "
+    "slots, by a link or by the machine config's paths: move them apart or remove the link; `sandbox`: `codex sandbox` "
+    "could not write those folders, or could write `/tmp` (Linux needs bubblewrap with unprivileged user namespaces; "
+    "`codex sandbox -- true` from the slot shows the error); `files`: one of those folders cannot be made or emptied, fix "
+    "its permissions. Otherwise `tl step release --abandon`.",
     "setup_running": "A process of the slot's setup still runs in the process group named (from an entry that died, or left "
     "behind by a command; one recorded before a reboot never counts). Wait for it. To stop it yourself, list the group "
     "(`ps -o pid=,lstart=,command= -g <pgid>`), check each member's working directory is the slot (`lsof -a -p <pid> -d "

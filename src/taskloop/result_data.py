@@ -103,7 +103,9 @@ def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
                     "existing": result.existing, "entry_process": _entry_data(result.entry), "number": result.number,
                     "result": result.result or None}
         case Shown():
-            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log)}
+            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": result.setup.row.conclusion,
+                                                        "commit": result.setup.row.commit, "log": str(result.setup.log)}
+            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log), "setup": setup}
         case Listed() | Round() | Ended():
             return _rows_data(result)
         case VerifiedTask() | ReleasedTask() | PublishedTask():

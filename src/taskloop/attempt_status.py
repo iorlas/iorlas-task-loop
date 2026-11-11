@@ -14,6 +14,7 @@ from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, EntryIdentity, Observe, Unsettled
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.operations import Clock, Failed
+from taskloop.setup_store import SetupRow, SetupStore
 from taskloop.steps import following
 
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
@@ -59,10 +60,19 @@ class AttemptView:
 
 
 @dataclass(frozen=True)
+class SetupShown:
+    """The attempt's latest setup run (`setup_store`) and where its log is; nothing reads the log."""
+
+    row: SetupRow
+    log: Path
+
+
+@dataclass(frozen=True)
 class Shown:
     view: AttemptView
     directory: Path
     entry_log: Path
+    setup: SetupShown | None = None  # None: no setup ran (a plan attempt, or an implement attempt before its preparation)
 
 
 @dataclass(frozen=True)
@@ -137,6 +147,7 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
     files = EvidenceFiles(artifacts)
     try:
         rows = reads.store.attempts(backlog, task_id)
+        latest = SetupStore(reads.store.connect, reads.store.begin).latest(rows[0].key) if rows else None
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     if not rows:
@@ -144,7 +155,8 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
     directory = files.root / files.directory(rows[0].key)
     earlier = tuple((older.key.attempt_id, _ended(newer, older)) for newer, older in pairwise(rows))
     last = files.last_entry(rows[0].key)
-    return Shown(replace(_show(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log")
+    setup = None if latest is None else SetupShown(latest, directory / f"setup-{latest.run}.log")
+    return Shown(replace(_show(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log", setup)
 
 
 def _ended(newer: AttemptRow, older: AttemptRow) -> str:

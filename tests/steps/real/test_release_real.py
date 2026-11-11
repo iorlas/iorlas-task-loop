@@ -80,7 +80,7 @@ class Repository:
         adopt(lambda: factory, begin_immediate, checkouts(self.main), SlotGit(checkouts, RealSlotFiles()), slots, 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         self.releaser = SlotRelease(self.store, checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
-                                    lambda _setup: "gone")
+                                    lambda _setup: "gone", lambda _scratch: True)
         self.admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(self.art), tasks, checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
         )

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from taskloop.attempt import succeeded
-from taskloop.attempt_status import AttemptView, Listed, Shown
+from taskloop.attempt_status import AttemptView, Listed, SetupShown, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
@@ -54,6 +54,14 @@ def _show_lines(each: AttemptView) -> list[str]:
     ]
 
 
+def _setup_line(found: SetupShown | None) -> str:
+    """The latest setup run's conclusion from factory.db (`unfinished` while it has none) and its log's path."""
+    if found is None:
+        return "Setup: none"
+    row = found.row
+    return f"Setup: run {row.run} {row.conclusion or 'unfinished'} at {row.commit}; log {found.log}"
+
+
 def human(command: str, result: Result, db: Path | None) -> list[str]:
     """`db` (the resolved factory.db) goes into the discard steps; None only when the config itself was refused."""
     stuck = [] if db is None else [discard(db)]
@@ -79,7 +87,7 @@ def human(command: str, result: Result, db: Path | None) -> list[str]:
             steps = [guide, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
-            return [*_show_lines(each), *paths, *last, *left, f"Next: {each.next}", *steps]
+            return [*_show_lines(each), _setup_line(result.setup), *paths, *last, *left, f"Next: {each.next}", *steps]
         case Listed() | Round() | Ended():
             return _rows_lines(command, result, stuck)
         case VerifiedTask() | ReleasedTask() | PublishedTask():

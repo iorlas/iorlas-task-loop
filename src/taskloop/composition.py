@@ -16,15 +16,7 @@ from any_agent.procs import Worker
 from beads_client import Bd, BdError, Runner
 from git_porcelain import GitUnavailable, RealRepo, Repo
 from sqlite_store import Store
-from stream_proc import (
-    OwnedProcess,
-    RegisteredStartUncertainError,
-    group_alive,
-    inspect_process,
-    observe_owned,
-    popen_registered,
-    run_registered,
-)
+from stream_proc import OwnedProcess, group_alive, inspect_process, observe_owned, popen_registered
 
 from taskloop import slot_lock
 from taskloop.admit import AttemptAdmission, Claim, Unclaim
@@ -34,7 +26,7 @@ from taskloop.attempt_reads import AttemptReads
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
 from taskloop.attempt_types import Checkouts, EntryIdentity, FileStat, Seen
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
-from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
+from taskloop.environment import EnvironmentPorts, Preparation
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import Launcher, entry_process
@@ -42,6 +34,7 @@ from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.publish import BranchPublish
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 from taskloop.setup_store import ProcessSeen, SetupStore
+from taskloop.slot_env import RealEnvFiles, sandbox_probe, setup_process
 from taskloop.slot_release import SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
@@ -198,8 +191,12 @@ def ceiling(path: Path, environ: Mapping[str, str]) -> dict[str, str]:
 
 def worker_gone(worker: Worker) -> bool:
     """The registered agent process is gone (or its pid now names another process) and no process is left in its
-    process group: the library's identity read and `killpg(pgid, 0)`. Unknown counts as alive. Not a stop proof for
-    descendants that left the group (.4.4)."""
+    process group: the library's identity read and `killpg(pgid, 0)`. Unknown counts as alive. The agent's shell commands
+    run outside that group by design, each in a new session under `bwrap --unshare-pid --as-pid-1 --die-with-parent`:
+    that PID namespace contains them and ends when its parent ends (Run S finding 6, Linux, codex 0.167.0), so this is
+    their stop proof too. Setup processes are never in the agent's group (the entry proves each command's group empty
+    before dispatch; the release proves an unsettled setup gone). Not a stop proof for descendants that leave the group
+    otherwise (.4.4)."""
     seen = observe_owned(OwnedProcess(worker.pid, worker.pgid, worker.start, worker.boot)).kind
     return seen in ("gone", "different_process") and not group_alive(worker.pgid)
 
@@ -216,92 +213,6 @@ def setup_seen(process: OwnedProcess) -> ProcessSeen:
     return "alive" if group_alive(process.pgid) else "gone"
 
 
-def setup_process(
-    argv: Sequence[str], *, registered: Callable[[OwnedProcess], None], cwd: str, env: Mapping[str, str], timeout: float,
-    line: Callable[[bytes], None],
-) -> SetupEnded:
-    """One setup command through the shelf's registered start (its identity committed before it executes; stdin empty,
-    stderr merged; the deadline stops and proves its tree). An uncertain start is not waited for."""
-    try:
-        done = run_registered(argv, registered=registered, cwd=cwd, env=env, timeout=timeout, on_line=line)
-    except RegisteredStartUncertainError as error:
-        return SetupEnded(None, False, False, error.identity.pgid, uncertain=True)
-    return SetupEnded(done.returncode, done.timed_out is not None, done.exec_errno is not None, done.pgid)
-
-
-REMOVERS = (os.unlink, os.rmdir)  # an entry's own removal: a PermissionError there is its parent's mode
-
-
-class _Writable:
-    """`rmtree`'s `onexc` for what an agent can do in its roots: a directory made unreadable (a PermissionError opening or
-    listing a path `lstat` shows to be a directory, not a link) gets owner `rwx` and is removed again; an entry its
-    parent forbids removing (unlink or rmdir) gets owner `rwx` on that parent and is removed again. Each path is retried
-    once; a vanished path is done; anything else stays and the removal fails."""
-
-    def __init__(self) -> None:
-        self.tried: set[str] = set()
-
-    def __call__(self, function: Callable[..., object], path: str, error: BaseException) -> None:
-        if not isinstance(error, PermissionError) or path in self.tried:
-            raise error
-        self.tried.add(path)
-        target = os.path.dirname(path) if function in REMOVERS else path
-        try:
-            found = os.lstat(target)
-        except FileNotFoundError:
-            return
-        if not stat.S_ISDIR(found.st_mode):
-            raise error
-        os.chmod(target, stat.S_IMODE(found.st_mode) | stat.S_IRWXU)
-        if function in REMOVERS:
-            function(path)
-        else:
-            shutil.rmtree(path, onexc=self)
-
-
-def _remove(path: str, retry: _Writable) -> None:
-    """One entry of an emptied folder: a directory through the symlink-safe `rmtree`, anything else (a link included)
-    unlinked; a PermissionError of the unlink goes through `retry` as `rmtree`'s own would."""
-    if stat.S_ISDIR(os.lstat(path).st_mode):
-        shutil.rmtree(path, onexc=retry)
-        return
-    try:
-        os.unlink(path)
-    except PermissionError as error:
-        retry(os.unlink, path, error)
-
-
-class RealEnvFiles:
-    """The environment folders on the real file system: created 0700, emptied with the symlink-safe `rmtree` only
-    (`avoids_symlink_attacks`, checked by the preflight); a link is unlinked, never followed."""
-
-    def ensure(self, path: Path) -> bool:
-        try:
-            path.mkdir(mode=0o700, parents=True, exist_ok=True)
-            return stat.S_ISDIR(os.lstat(path).st_mode)
-        except OSError:
-            return False
-
-    def empty(self, path: Path) -> bool:
-        """Every entry is tried; an entry that vanished meanwhile is removed. False when anything stays."""
-        try:
-            if not stat.S_ISDIR(os.lstat(path).st_mode):
-                return False
-            with os.scandir(path) as listing:
-                names = [entry.path for entry in listing]
-        except FileNotFoundError:
-            return True
-        except OSError:
-            return False
-        retry, emptied = _Writable(), True
-        for name in names:
-            try:
-                _remove(name, retry)
-            except FileNotFoundError:
-                continue
-            except OSError:
-                emptied = False
-        return emptied
 def entry_seen(entry: EntryIdentity) -> Seen:
     """A native process-table read of the registered entry, by the launcher's identity rule; no spawn or signal."""
     return observe_owned(entry_process(entry)).kind
@@ -426,7 +337,8 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
     setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
     ports = EnvironmentPorts(
         setup, checkouts, slot_profiles, RealEnvFiles(), setup_process, setup_seen,
-        group_alive, evidence, time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks,
+        group_alive, evidence, time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks, sandbox_probe,
+        (artifacts.absolute(), database.absolute().parent),
     )
     return Attempts(
         AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
@@ -459,7 +371,7 @@ def open_releaser(database: Path, store: Store) -> SlotRelease:
     tracker's fenced unclaim, wall clock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
     return SlotRelease(writer, checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim, time.time,
-                       setup_seen)
+                       setup_seen, RealEnvFiles().empty)
 
 
 def open_publisher(database: Path, store: Store) -> BranchPublish:

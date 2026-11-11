@@ -10,8 +10,9 @@ from pathlib import Path
 import pytest
 from stream_proc import OwnedProcess, group_alive
 
-from taskloop import composition
-from taskloop.composition import RealEnvFiles, setup_process, setup_seen
+from taskloop import slot_env
+from taskloop.composition import setup_seen
+from taskloop.slot_env import RealEnvFiles, setup_process
 
 
 def test_empty_removes_a_planted_link_never_its_target(tmp_path: Path) -> None:
@@ -59,13 +60,13 @@ def test_empty_goes_on_past_an_entry_that_vanished_meanwhile(tmp_path: Path, mon
     folder.mkdir()
     for name in ("a", "b", "c"):
         (folder / name).write_text("x")
-    removing = composition._remove
+    removing = slot_env._remove
 
-    def racing(path: str, retry: composition._Writable) -> None:
+    def racing(path: str, retry: slot_env._Writable) -> None:
         (folder / "b").unlink(missing_ok=True)  # another remover was first
         removing(path, retry)
 
-    monkeypatch.setattr(composition, "_remove", racing)
+    monkeypatch.setattr(slot_env, "_remove", racing)
     assert RealEnvFiles().empty(folder)
     assert list(folder.iterdir()) == []
 

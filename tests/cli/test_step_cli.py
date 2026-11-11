@@ -12,12 +12,13 @@ from typing import get_args
 import pytest
 from doubles import NoAdvance
 from sqlite_store import Store, begin_immediate
+from stream_proc import OwnedProcess
 
 from taskloop import cli_composition, cli_step, rounds_lock, step_guide
+from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted
-from taskloop.attempt import SANDBOX
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
-from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown
+from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, SetupShown, Shown
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity
 from taskloop.cli import main
@@ -38,6 +39,7 @@ from taskloop.operations import (
 )
 from taskloop.publish import BranchPublished, PublishResult
 from taskloop.result_data import Result
+from taskloop.setup_store import SetupRow
 from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.slots import Adopted, NotAdopted, SlotView
 from taskloop.tracker import leaked_claim
@@ -64,6 +66,8 @@ ABANDONED = AttemptView(
     "tasks", "tl-1", "plan", "second", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, "start",
     earlier=(("first", "abandoned"),), seq=2, release=ReleaseRow(D, 30.0, "unclaimed"),
 )
+FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, "failed"), Path("/a/d/setup-2.log"))
+RUNNING_SETUP = SetupShown(SetupRow(3, D, "f" * 64, 1, OwnedProcess(5, 5, "s", "b"), None), Path("/a/d/setup-3.log"))
 RELEASE = ["step", "release", "tl-1", "--backlog", "tasks"]
 FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned"}
 X, T = "a" * 40, "b" * 40
@@ -174,18 +178,23 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (START, Failed("unavailable", "tracker", claim_leaked=True), 3, ["unavailable:tracker"], ADMISSION_ERROR),
     (START, Failed("uncertain", "launch"), 3, ["tl step start: uncertain:launch"], ADMISSION_ERROR),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
-     ["Step: plan", "Phase: captured", "Result: pending verification", "Entry log: /a/d/entry.log", "Next: verify",
-      "Run `tl step verify`."],
-     STATUS_KEYS | {"directory", "entry_log"}),
+     ["Step: plan", "Phase: captured", "Result: pending verification", "Setup: none\nDirectory: /a/d", "Entry log: /a/d/entry.log",
+      "Next: verify", "Run `tl step verify`."],
+     STATUS_KEYS | {"directory", "entry_log", "setup"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Unsettled: uncommitted",
       "  ?? docs/design/tl-1/note.md", "  +3 more", f"Next: repeat\n{step_guide.GUIDE['repeat']}",
       "Attempt: attempt (2 of at most 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1"],
-     STATUS_KEYS | {"directory", "entry_log"}),
+     STATUS_KEYS | {"directory", "entry_log", "setup"}),
+    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), FAILED_SETUP), 0,
+     [f"Deadline passed: no\nSetup: run 2 failed at {D}; log /a/d/setup-2.log\nDirectory"],
+     STATUS_KEYS | {"directory", "entry_log", "setup"}),
+    (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), RUNNING_SETUP), 0,
+     [f"Setup: run 3 unfinished at {D}; log /a/d/setup-3.log"], STATUS_KEYS | {"directory", "entry_log", "setup"}),
     (["step", "list", "--stuck"], Listed((STATUS,)), 0,
      ["task\tbacklog\tstep\tattempt\tslot", "tl-1\ttasks\tplan\t1/3\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
-     ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log"}),
+     ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log", "setup"}),
     (["step", "verify", "tl-1", "--backlog", "tasks"], VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
      ["reused: attempt attempt", "Release: released\nPublish: published"], CHECKED),
     (["step", "verify", "tl-1", "--backlog", "tasks"],
@@ -209,11 +218,11 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (PUBLISH, Failed("unavailable", "remote"), 3, ["tl step publish: unavailable:remote", step_guide.GUIDE["remote"]], ERROR),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(DONE, Path("/a/d"), Path("/a/d/entry.log")), 0,
      [f"Published: task/tl-1 at {X} on origin, 1970-01-01 00:00:40 UTC\n", "Next: done"],
-     STATUS_KEYS | {"directory", "entry_log"}),
+     STATUS_KEYS | {"directory", "entry_log", "setup"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(ABANDONED, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Earlier: first abandoned", f"Released: 1970-01-01 00:00:30 UTC, slot parked at {D}; claim unclaimed; abandoned",
       f"Next: start\n{step_guide.GUIDE['abandoned']}"],
-     STATUS_KEYS | {"directory", "entry_log"}),
+     STATUS_KEYS | {"directory", "entry_log", "setup"}),
     (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", Released("s1", D, True, "kept", False)), 0,
      ["released: attempt attempt for tl-1 (backlog tasks)\n", f"Slot s1 parked at {D}\nReservation of s1 removed\nClaim kept"], FREED),
     ([*RELEASE, "--abandon"], ReleasedTask("tasks", "tl-1", "attempt", Released("s1", None, True, "not_held", True)), 0,
@@ -423,7 +432,16 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     shown = json.loads(capsys.readouterr().out)
     assert (shown["step"], shown["phase"], shown["entry"], shown["next"]) == ("plan", "admitted", "none", "stuck:expired_admitted")
-    assert set(shown) == STATUS_KEYS | {"directory", "entry_log"} and (shown["entry_process"], shown["worker"]) == (None, None)
+    assert set(shown) == STATUS_KEYS | {"directory", "entry_log", "setup"} and (shown["entry_process"], shown["worker"]) == (None, None)
+    assert shown["setup"] is None
+    con = sqlite3.connect(db)
+    with con:
+        con.execute("INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion,rc) "
+                    "VALUES ('attempt',1,?,1,?,?,1,2,'passed',0)", (KEY.dispatch_token, "d" * 40, "f" * 64))
+    con.close()
+    assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
+    setup = json.loads(capsys.readouterr().out)["setup"]
+    assert setup == {"run": 1, "conclusion": "passed", "commit": "d" * 40, "log": f"{shown['directory']}/setup-1.log"}
     assert main(["step", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
     assert listed.startswith("task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\ntl-1\ttasks\tplan\t1/3\ts1\t")

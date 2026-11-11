@@ -1,12 +1,14 @@
 """Execute, capture, collect and verify one already admitted plan attempt; it grants no admission and releases nothing."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import replace
-from typing import Final, Literal
+from pathlib import Path
+from typing import Literal
 
 from any_agent import CodexHarness, DecodedAnswer, Harness, InvalidAnswer, LaunchInputs, LaunchSpec, RunHooks, RunOutcome, decode_answer
 
+from taskloop.access import CODEX_ACCESS, SANDBOX, agent_env, folders, prepared_access
 from taskloop.attempt_store import AttemptStore, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import (
     Admission,
@@ -26,7 +28,7 @@ from taskloop.attempt_types import (
     Verdict,
     execution_facts,
 )
-from taskloop.environment import Preparation, Renew
+from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
@@ -36,28 +38,6 @@ from taskloop.steps import kind
 type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
 type Credentials = Callable[[], tuple[str, dict[str, str]]]
 ACCEPTED = ("accepted", "already_same")
-SANDBOX = "workspace-write"  # the only mode CODEX_ACCESS constrains
-# Neither the user's config nor a repo file widens or narrows these. The sandbox has no network; it writes the working
-# directory and, by Codex's default, also /tmp and $TMPDIR, which the two `exclude_*` keys remove (so the agent cannot
-# stage a Git directory there). A command it blocks fails back to the model (`never`: no escalation, so no reviewer).
-# The agent never writes Git: the factory commits the paths it lists (tl-8bh9.4.3.1.7). Keys and values read from codex
-# 0.167.0's strings (its SandboxWorkspaceWrite fields), never run here.
-CODEX_ACCESS: Final = (
-    "--ignore-user-config",
-    "--ignore-rules",
-    "-c",
-    "sandbox_workspace_write.network_access=false",
-    "-c",
-    "sandbox_workspace_write.writable_roots=[]",
-    "-c",
-    "sandbox_workspace_write.exclude_slash_tmp=true",
-    "-c",
-    "sandbox_workspace_write.exclude_tmpdir_env_var=true",
-    "-c",
-    "approval_policy=never",
-    "-c",
-    "tool_output_token_limit=3000",
-)
 
 
 class CredentialsUnavailable(Exception):
@@ -237,10 +217,10 @@ class Attempts:
         launch = self._launch(admission, prompt)
         if isinstance(launch, AttemptResult):
             return launch
-        harness, spec, env = launch
+        harness, spec, credentials = launch
         running = False
         try:
-            base = self._prepared(record, renew, env)
+            base = self._prepared(record, renew, credentials)
             if isinstance(base, AttemptResult):
                 return base
             self.registration_store.warm()  # the first registration open runs here, never inside the harness registration window
@@ -252,17 +232,19 @@ class Attempts:
             if not running:
                 harness.cleanup()
 
-    def _prepared(self, record: AttemptRecord, renew: Renew | None, env: Mapping[str, str]) -> Prepared | AttemptResult:
+    def _prepared(self, record: AttemptRecord, renew: Renew | None, credentials: Launch) -> Prepared | AttemptResult:
         """The slot on its branch (`prepare.base`), then, for a kind with `environment`, its setup sequence with the
-        agent's environment."""
+        credentials' executable and scrubbed environment."""
         base = prepared_base(self.checkouts, self.slot_files, record, self.clock)
         if isinstance(base, AttemptResult) or not kind(record.admission.step).environment:
             return base
         if self.environment is None or renew is None:
             return AttemptResult("unavailable", "environment:unwired")
-        return self.environment.prepare(record, base, renew, env) or base
+        return self.environment.prepare(record, base, renew, credentials) or base
 
-    def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec, dict[str, str]] | AttemptResult:
+    def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec, Launch] | AttemptResult:
+        """The launch spec: plan's access unchanged; a kind with `environment` writes its three folders too, with its tools
+        pointed there and uv offline (`access`). The credentials' own executable and environment come back for setup."""
         try:
             exe, env = self.credentials()
         except CredentialsUnavailable as error:
@@ -274,20 +256,25 @@ class Attempts:
         except EvidenceError:
             return AttemptResult("unavailable", "files")
         harness = CodexHarness()
+        access: tuple[str, ...] = CODEX_ACCESS
+        added: dict[str, str] = {}
+        if kind(admission.step).environment:
+            found = folders(Path(admission.slot_path))
+            access, added = prepared_access(found), agent_env(found)
         inputs = LaunchInputs(
             exe=exe,
             cwd=admission.slot_path,
             model=admission.model,
             effort=admission.effort,
             prompt=prompt,
-            env=env,
+            env=env | added,
             schema=schema,
             sandbox=admission.sandbox,
             out_file=out_file,
-            access=list(CODEX_ACCESS),
+            access=list(access),
         )
         try:
-            return harness, harness.launch_spec(inputs), env
+            return harness, harness.launch_spec(inputs), (exe, env)
         except Exception as error:
             harness.cleanup()
             return AttemptResult("unavailable", "launch:" + type(error).__name__)

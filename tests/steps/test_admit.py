@@ -493,7 +493,7 @@ def test_after_an_abandon_the_task_is_admitted_afresh_on_its_existing_branch_wit
     d = factory.execute("SELECT slot_head FROM attempt").fetchone()[0]
     repo.worktree(path).take_branch("task/tl-1", "HEAD", mode="resume")  # as its entry prepared it
     release = SlotRelease(AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody,
-                          tracker.unclaim, time, lambda _setup: "gone")
+                          tracker.unclaim, time, lambda _setup: "gone", lambda _scratch: True)
     assert release.release(first.key, True) == Released("s1", d, True, "unclaimed", True)
     again = admit(factory, tmp_path, repo, tracker)
     assert isinstance(again, Admitted) and again.slot == "s1" and again.key.reservation_generation == 2  # never reused
@@ -549,7 +549,7 @@ def test_an_abandon_still_returning_its_claim_keeps_the_task_attempted(
 
     release = SlotRelease(
         AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody, unclaim, time,
-        lambda _setup: "gone"
+        lambda _setup: "gone", lambda _scratch: True,
     )
     failed = release.release(first.key, True)
     assert isinstance(failed, NotReleased) and failed.detail.endswith("The reservation was removed, no Git write.")

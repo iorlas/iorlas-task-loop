@@ -105,7 +105,7 @@ def pushed(repo: FakeRepo, tmp_path: Path) -> Sha:
 def execute(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles) -> tuple[str, str, FakeRun]:
     agent = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
     store = AttemptStore(lambda: con)
-    environment = Environment(con, checkouts, tmp_path).preparation()  # an implement attempt's setup passes
+    environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096).preparation()  # an implement attempt's setup passes
     result = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, files,
                       environment=environment).execute(KEY, ENTRY, lambda: "held")
     return result.status, result.reason, agent

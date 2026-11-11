@@ -56,6 +56,7 @@ from taskloop.composition import entry_seen, open_attempts, remotes, setup_seen,
 from taskloop.environment import Renew, Renewal
 from taskloop.factory_schema import SCHEMA
 from taskloop.publish import BranchPublish, publish_word
+from taskloop.slot_env import RealEnvFiles
 from taskloop.slot_release import SlotRelease, release_word
 from taskloop.verifier import Verifier
 
@@ -282,7 +283,8 @@ def _claimed(
     line = f"{line} claim={alive.word()}"
     if collected:
         app = found.app
-        releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock, setup_seen)
+        releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock, setup_seen,
+                               RealEnvFiles().empty)
         line += " release=" + release_word(releaser.release(found.key, False, found.me))
     return line, ok
 

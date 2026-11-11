@@ -39,6 +39,15 @@ ANSWER_SCHEMA: Final = {
         "explanation": {"type": "string"},
     },
 }
+# The environment the entry prepared (S5e, design tl-8bh9.4.3.1.16.2 section 7): generic, no repository command named;
+# the agent reads `checks` in its own checkout's profile.
+ENVIRONMENT: Final = (
+    "The factory ran this repository's `setup` before you started; there is no network now. Before answering, run every "
+    "command listed under `checks` in `.task-loop.json` (while you work, a focused part such as one test file is fine) and "
+    "fix what they report. Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere "
+    "outside the repository. Your runs are evidence for you: after this step the checks run again outside your control, "
+    "and only those results count."
+)
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
     "unsafe": "This listed path, or a `.git*` file near it, cannot be committed: a symlink or under one, not a plain file, "
@@ -85,12 +94,11 @@ def _closing_words(task_id: str, rules: StepRules) -> str:
         f"You may add, change and delete plain files anywhere in the repository, at most {rules.max_paths} files of at most "
         f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, anything under "
         f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. The plan's own folder may change too (for example "
-        f"an \"As built\" section). {step_text.GIT_WRITES} Do not add or upgrade dependencies. Before answering, run the "
-        "project's static analysis and tests where you can and fix what they report; your runs are evidence for you, and "
-        "after this step the factory's own checks decide. With `implemented`, list in `paths` every file you changed, "
+        f"an \"As built\" section). {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
+        "`implemented`, list in `paths` every file you changed, "
         "added or deleted and give a one-line commit `message`; the factory commits exactly those paths. Remove any other "
-        "file you created. Anything left uncommitted is reported back to you as a failed step. In `explanation`, say which "
-        "commands you ran and how they ended, and name every test file you added. If you could not finish, answer "
+        "file you created. Anything left uncommitted is reported back to you as a failed step. In `explanation`, name each "
+        "command you ran and how it ended, and every test file you added. If you could not finish, answer "
         "`incomplete`; if the plan cannot be implemented as written or needs a decision, answer `needs_owner`; say why in "
         "`explanation`."
     )

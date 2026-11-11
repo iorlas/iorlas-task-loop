@@ -53,7 +53,7 @@ def register(commands: Parsers) -> None:
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _common(start, "--db", "--artifacts")
-    status = _add(step, "show", f"The task's attempt, its entry, result and next action (read-only; {STEP_ONLY})")
+    status = _add(step, "show", f"The task's attempt, its entry, setup run, result and next action (read-only; {STEP_ONLY})")
     status.add_argument("task_id", metavar="TASK")
     status.add_argument("--backlog", required=True)
     _common(status, "--db", "--artifacts")

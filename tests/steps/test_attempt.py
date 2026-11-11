@@ -16,7 +16,8 @@ from any_agent.testing import FakeRun
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store, begin_immediate
 
-from taskloop.attempt import CODEX_ACCESS, Attempts, Credentials, CredentialsUnavailable, Execution, report
+from taskloop.access import CODEX_ACCESS
+from taskloop.attempt import Attempts, Credentials, CredentialsUnavailable, Execution, report
 from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import (
     Admission,

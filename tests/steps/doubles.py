@@ -11,6 +11,7 @@ from git_porcelain import GitUnavailable, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from stream_proc import OwnedProcess
 
+from taskloop.access import TMP_BYTES, Folders
 from taskloop.admit import AdmitResult
 from taskloop.admit_chain import NextStepRequest
 from taskloop.attempt_types import Checkouts, FileStat
@@ -225,11 +226,20 @@ class FakeSetupProcess:
 @dataclass
 class FakeEnvFiles:
     """The environment folders: what is ensured, what is emptied (in `events`, by the last two path parts), and
-    folders whose emptying or creation fails."""
+    folders whose emptying or creation fails. `links` resolves a path at or under a key as if that key were a link to
+    its value; a path in `unresolvable` cannot be resolved."""
 
     events: list[str]
     unemptiable: set[Path] = field(default_factory=set)
     unmakeable: set[Path] = field(default_factory=set)
+    links: dict[Path, Path] = field(default_factory=dict)
+    unresolvable: set[Path] = field(default_factory=set)
+
+    def resolve(self, path: Path) -> Path | None:
+        if path in self.unresolvable:
+            return None
+        link = next((each for each in self.links if path.is_relative_to(each)), None)
+        return path if link is None else self.links[link] / path.relative_to(link)
 
     def ensure(self, path: Path) -> bool:
         self.events.append(f"ensure {path.parent.name}/{path.name}")
@@ -240,9 +250,19 @@ class FakeEnvFiles:
         return path not in self.unemptiable
 
 
+@dataclass(frozen=True)
+class ProbeCall:
+    exe: str
+    slot: Path
+    env: Mapping[str, str]
+    folders: Folders
+
+
 @dataclass
 class Environment:
-    """A `Preparation` over fakes and real SQLite and evidence files; `seen` answers for a registered setup command."""
+    """A `Preparation` over fakes and real SQLite and evidence files; `seen` answers for a registered setup command;
+    `sandbox` is the probe's answer (each probe recorded in `probes` and `events`). `protected` are the paths no root may
+    overlap; `tmp_bytes` the TMPDIR budget (widened only where the slot sits under a long tmp_path)."""
 
     con: sqlite3.Connection
     checkouts: Checkouts
@@ -253,10 +273,19 @@ class Environment:
     safe_removal: bool = True
     clock: Callable[[], float] = lambda: 10
     profiles: FakeProfiles = field(default_factory=FakeProfiles)
+    sandbox: bool = True
+    protected: tuple[Path, ...] = ()
+    tmp_bytes: int = TMP_BYTES
+    probes: list[ProbeCall] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.process = FakeSetupProcess(self.events)
         self.files = FakeEnvFiles(self.events)
+
+    def probe(self, exe: str, slot: Path, env: Mapping[str, str], found: Folders) -> bool:
+        self.events.append("probe")
+        self.probes.append(ProbeCall(exe, slot, dict(env), found))
+        return self.sandbox
 
     def observe(self, process: OwnedProcess) -> ProcessSeen:
         self.events.append(f"seen {process.pid}")
@@ -265,5 +294,6 @@ class Environment:
     def preparation(self) -> Preparation:
         return Preparation(EnvironmentPorts(
             SetupStore(lambda: self.con), self.checkouts, self.profiles, self.files, self.process, self.observe,
-            self.process.lingering, EvidenceFiles(self.artifacts), self.clock, self.platform, self.safe_removal,
+            self.process.lingering, EvidenceFiles(self.artifacts), self.clock, self.platform, self.safe_removal, self.probe,
+            self.protected, self.tmp_bytes,
         ))

@@ -45,6 +45,8 @@ type = forbidden
 source_modules =
     taskloop.attempt_entry
     taskloop.composition
+    taskloop.slot_env
+    taskloop.access
 forbidden_modules =
     taskloop.cli
     taskloop.cli_step

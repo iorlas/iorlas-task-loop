@@ -54,7 +54,7 @@ def agent(answer: Mapping[str, object], change: Callable[[], None]) -> Agent:
 
 def execute(con: sqlite3.Connection, tmp_path: Path, key: AttemptKey, run: Agent, checkouts: Checkouts, files: SlotFiles) -> str:
     """The entry's execute; an implement attempt first runs its (fake) setup, which passes."""
-    environment = Environment(con, checkouts, tmp_path).preparation()
+    environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096).preparation()
     attempts = Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files,
                         environment=environment)
     return attempts.execute(key, ENTRY, lambda: "held").reason
@@ -65,7 +65,7 @@ def finish(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, *, p
     store = AttemptStore(lambda: con)
     verifier = Verifier(store, checkouts, files, lambda _worker: True, lambda: 20, hold)
     releaser = SlotRelease(store, checkouts, files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30,
-                           lambda _setup: "gone")
+                           lambda _setup: "gone", lambda _scratch: True)
     found = verify_task(store, verifier, releaser, BranchPublish(store, checkouts, files, lambda: 40) if publish else Unpublished(),
                         "tasks", "tl-1")
     assert isinstance(found, VerifiedTask)
@@ -141,7 +141,7 @@ def test_a_task_no_longer_in_progress_for_taskloop_is_claim_lost_with_nothing_wr
 def abandon(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, key: AttemptKey = KEY) -> None:
     store = AttemptStore(lambda: con)
     release = SlotRelease(store, checkouts, files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 50,
-                          lambda _setup: "gone")
+                          lambda _setup: "gone", lambda _scratch: True)
     assert isinstance(release.release(key, True), Released)
 
 
@@ -265,7 +265,7 @@ def test_abandoning_the_done_plan_while_implement_holds_the_claim_is_refused(
     implement(registered, tmp_path, slot.repo, checkouts, slot_files)
     returned: list[str] = []
     release = SlotRelease(AttemptStore(lambda: registered), checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody,
-                          lambda _root, task: returned.append(task) is None, lambda: 50, lambda _setup: "gone")
+                          lambda _root, task: returned.append(task) is None, lambda: 50, lambda _setup: "gone", lambda _scratch: True)
     found = release.release(KEY, True)
     assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("refused", "changed") and returned == []
     assert registered.execute("SELECT claim FROM slot_release WHERE attempt_id='attempt'").fetchone() == ("kept",)

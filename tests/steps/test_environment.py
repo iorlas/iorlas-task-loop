@@ -14,10 +14,11 @@ from any_agent.testing import FakeRun
 from doubles import Command, Environment, FakeProfiles
 from git_porcelain.testing import FakeWorktree
 
+from taskloop.access import CODEX_ACCESS, folders, prepared_access
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, SlotFiles
-from taskloop.environment import Renewal, folders, setup_digest
+from taskloop.environment import Renewal, setup_digest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.prepare import Prepared
 from taskloop.profile import Unavailable
@@ -27,6 +28,13 @@ ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 UNCHANGED = {"disposition": "unchanged", "paths": [], "message": None, "explanation": "nothing to do"}
 ROW = "SELECT run,conclusion,rc,command,pid FROM setup_run ORDER BY run"
+
+
+@pytest.fixture
+def root(request: pytest.FixtureRequest) -> Path:
+    """The slots root, short as a person's would be (the TMPDIR budget is the real one here), or the test's own
+    (`indirect`); the Git fake and the environment fakes never touch it."""
+    return getattr(request, "param", Path("/s"))
 
 
 @pytest.fixture
@@ -50,9 +58,11 @@ class Entry:
     files: SlotFiles
     renewals: list[Renewal] = dataclasses.field(default_factory=list)
     wired: bool = True
+    specs: list[LaunchSpec] = dataclasses.field(default_factory=list)
 
     def agent(self, harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         self.environment.events.append("agent")
+        self.specs.append(spec)
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(UNCHANGED), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
@@ -102,7 +112,7 @@ def test_attempt_one_runs_the_setup_in_order_then_dispatches(entry: Entry, slot:
     entry.execute()
     found = folders(slot.path)
     assert env.events == [
-        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1",
+        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "probe", "empty .t/s1",
         "empty .env/s1", "ensure s1/uv-cache", "ensure s1/uv-tools",
         "exec just install", "group 501", "exec just bootstrap", "group 502",
         "empty .t/s1", "renew", "agent",
@@ -149,7 +159,7 @@ def test_a_passed_run_is_reused_by_a_relaunch_of_the_still_admitted_attempt(entr
     entry.environment.events.clear()
     entry.execute()
     assert entry.environment.events == [
-        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "empty .t/s1", "renew", "agent"]
+        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "probe", "empty .t/s1", "empty .t/s1", "renew", "agent"]
     assert slot.read_file(".venv/kept") == "from setup" and rows(entry.environment.con) == [(1, "passed", 0, 0, 501)]
 
 
@@ -297,8 +307,8 @@ def test_a_repeat_keeps_its_environment_and_only_empties_the_scratch(entry: Entr
     assert record is not None
     repeat = dataclasses.replace(record, admission=dataclasses.replace(record.admission, number=2))
     gitdir = slot.repo.identity().common_dir / "worktrees" / "s1"
-    assert env.preparation().prepare(repeat, Prepared("d" * 40, gitdir, slot.repo.path), held, {}) is None
-    assert env.events == ["ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "empty .t/s1"]
+    assert env.preparation().prepare(repeat, Prepared("d" * 40, gitdir, slot.repo.path), held, ("/bin/codex", {})) is None
+    assert env.events == ["ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "probe", "empty .t/s1", "empty .t/s1"]
     assert env.profiles.read == [] and rows(env.con) == []
 
 
@@ -338,3 +348,71 @@ def test_a_supervision_failure_after_the_start_is_judged_by_its_group(entry: Ent
     assert "group 501" in events and rows(entry.environment.con) == [(1, conclusion, None, 0, 501)]
     log = EvidenceFiles(entry.environment.artifacts).setup_log(KEY, 1).read_text()
     assert log == "$ just bootstrap\ndone\nended uncertainly\n" + ("lingering\n" if lingering else "")
+
+
+ENSURED = ["ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools"]
+
+
+def test_the_implement_agent_writes_its_folders_offline_and_the_probe_sees_what_it_will(entry: Entry, slot: FakeWorktree) -> None:
+    """The agent's access names exactly the three folders, its environment points its tools there with uv offline over
+    the scrubbed credentials' one; the probe ran `codex` in the slot with that same environment. Setup had network."""
+    entry.execute()
+    found, env = folders(slot.path), entry.environment
+    added = {"TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools), "UV_OFFLINE": "1"}
+    (spec,) = entry.specs
+    flags = spec.argv.index("--json")
+    assert spec.argv[flags - len(CODEX_ACCESS) : flags] == list(prepared_access(found)) and spec.env == {"HOME": "/home/p"} | added
+    (probe,) = env.probes
+    assert (probe.exe, probe.slot, probe.env, probe.folders) == ("/bin/codex", slot.path, {"HOME": "/home/p"} | added, found)
+    assert "UV_OFFLINE" not in env.process.calls[0].env
+
+
+def test_a_plan_attempt_launches_with_plans_access_and_no_added_environment(
+    registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles, tmp_path: Path
+) -> None:
+    plan = Entry(Environment(registered, checkouts, tmp_path), checkouts, slot_files)
+    plan.execute()
+    (spec,) = plan.specs
+    flags = spec.argv.index("--json")
+    assert spec.argv[flags - len(CODEX_ACCESS) : flags] == list(CODEX_ACCESS) and spec.env == {"HOME": "/home/p"}
+    assert plan.environment.probes == []
+
+
+@pytest.mark.parametrize(("root", "reason"), [(Path("/" + "r" * 44), None), (Path("/" + "r" * 45), "environment:path_long")],
+                         ids=["64_bytes", "65_bytes"], indirect=["root"])
+def test_a_tmpdir_over_64_bytes_is_refused_before_any_folder_is_made(entry: Entry, slot: FakeWorktree, reason: str | None) -> None:
+    """A Unix socket path holds 107 bytes on Linux: 64 for TMPDIR leaves 43 for what a test appends."""
+    assert len(str(folders(slot.path).tmp).encode()) == (64 if reason is None else 65)
+    if reason is None:
+        entry.execute()
+        assert entry.environment.events[-1] == "agent"
+    else:
+        assert refused(entry, "refused", reason) == []
+
+
+@pytest.mark.parametrize("case", ["into_slot", "evidence_holds_one", "outside_slots", "into_each_other", "slots_in_db_folder",
+                                  "unreadable"])
+def test_a_root_that_overlaps_what_the_agent_must_not_write_is_refused(entry: Entry, slot: FakeWorktree, case: str) -> None:
+    """Resolved, links followed: no root may equal, hold or sit inside the slot, its Git directories, the person's checkout,
+    the evidence root or factory.db's folder, or another root, and each stays inside `<slots_root>/<repo_id>/`."""
+    env, base = entry.environment, slot.path.parent
+    env.protected = (env.artifacts, Path("/db"))
+    links = {
+        "into_slot": {base / ".t": slot.path},
+        "outside_slots": {base / ".t": Path("/elsewhere")},
+        "into_each_other": {base / ".t": base / ".env"},  # .t/s1 is .env/s1, which holds both uv folders
+    }
+    env.files.links = links.get(case, {})
+    if case == "evidence_holds_one":  # an artifacts root set to `.t` beside the slots
+        env.protected = (base / ".t", Path("/db"))
+    if case == "slots_in_db_folder":
+        env.protected = (env.artifacts, Path("/"))
+    if case == "unreadable":
+        env.files.unresolvable.add(folders(slot.path).tools)
+    assert refused(entry, "refused", "environment:roots") == []
+
+
+def test_a_sandbox_that_does_not_work_refuses_after_the_folders_are_made_and_runs_nothing(entry: Entry) -> None:
+    entry.environment.sandbox = False
+    assert refused(entry, "refused", "environment:sandbox") == [*ENSURED, "probe"]
+    assert rows(entry.environment.con) == []

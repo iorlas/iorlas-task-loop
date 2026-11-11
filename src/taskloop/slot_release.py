@@ -8,12 +8,14 @@ again. Before anything changes, in order: the terminal check (settled only), the
 the agent and its group, then the latest setup run's unsettled command and its group, boot-aware: `unsettled
 setup_running`, `unavailable setup_unknown`), then the
 slot's lock (`hold`, never waiting), the slot read and the park, then one write transaction fenced on the attempt, its
-reservation and the `rev` and phase read at proof time: the release row in, the reservation out. An abandon unclaims
+reservation and the `rev` and phase read at proof time: the release row in, the reservation out; then, still under the
+lock and after the stop proof, the slot's scratch (`TMPDIR`, `.t/<slot>`) emptied, best effort. An abandon unclaims
 after that commit; a failed unclaim stays `unclaiming` for the next call to retry. A slot that is dirty, on another
 branch, redirected or unborn is refused and stays reserved: release never resets work.
 
 Everything is injected: the store, the Git views, the slot file port, the entry and worker observations, the lock, the
-tracker's unclaim and the clock. It imports neither `operations` nor `repeat` (the entry's import closure).
+tracker's unclaim, the clock, the setup observation and the scratch's emptying. It imports neither `operations` nor
+`repeat` (the entry's import closure).
 """
 
 import sqlite3
@@ -28,6 +30,7 @@ from beads_client import BdError
 from git_porcelain import GitUnavailable
 from stream_proc import OwnedProcess
 
+from taskloop.access import folders
 from taskloop.admit import Unclaim
 from taskloop.attempt import collect
 from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
@@ -40,6 +43,7 @@ from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import listing, observe_slot
 
 type ParkHold = Callable[[str, str], AbstractContextManager[None]]  # (slot path, attempt id): the slot's lock, never waiting
+type Empty = Callable[[Path], bool]  # a folder's contents removed, never following a link; False when anything stays
 type Claimed = Literal["kept", "unclaiming", "unclaimed", "not_held"]
 CLAIMS: Final[tuple[Claimed, ...]] = ("kept", "unclaiming", "unclaimed", "not_held")
 NOTHING: Final = "Nothing changed."
@@ -203,6 +207,7 @@ class SlotRelease:
     unclaim: Unclaim
     clock: Callable[[], float]
     setup_seen: SetupSeen
+    scratch: Empty  # empties `.t/<slot>` after a release (`RealEnvFiles.empty`)
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         """Release the attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
@@ -314,6 +319,7 @@ class SlotRelease:
             return NotReleased("unavailable", "store", f"{type(error).__name__}. {where}; nothing was recorded.")
         if not recorded:
             return NotReleased("unavailable", "changed", f"The attempt changed after the stop proof. {where}; nothing was recorded.")
+        self.scratch(folders(path).tmp)  # best effort: the next preparation empties it again before any agent
         return Released(row.slot, parked, True, "kept", abandon)
 
     def _slot(self, row: _Row, path: Path) -> tuple[str, str | None] | NotReleased:

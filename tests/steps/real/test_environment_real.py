@@ -16,13 +16,15 @@ from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from stream_proc import group_alive
 
+from taskloop.access import folders
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
-from taskloop.composition import RealEnvFiles, checkouts, setup_process, setup_seen, slot_profiles
-from taskloop.environment import EnvironmentPorts, Preparation, Renewal, folders
+from taskloop.composition import checkouts, setup_seen, slot_profiles
+from taskloop.environment import EnvironmentPorts, Preparation, Renewal
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.prepare import Prepared
 from taskloop.setup_store import SetupStore
+from taskloop.slot_env import RealEnvFiles, setup_process
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 # fails unless the reset emptied `.venv` first; prints the slot's folders
@@ -63,9 +65,10 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     record = AttemptStore(lambda: factory).load(KEY)
     assert record is not None
     ports = EnvironmentPorts(SetupStore(lambda: factory), checkouts, slot_profiles, RealEnvFiles(), setup_process, setup_seen,
-                             group_alive, EvidenceFiles(root / "art"), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks)
+                             group_alive, EvidenceFiles(root / "art"), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks,
+                             lambda *_probe: True, (root / "art",), 4096)  # tmp_path is longer than the TMPDIR budget
     gitdir = Path(git(slot, "rev-parse", "--absolute-git-dir").strip())
-    result = Preparation(ports).prepare(record, Prepared(d, gitdir, main), held, {"PATH": os.environ["PATH"]})
+    result = Preparation(ports).prepare(record, Prepared(d, gitdir, main), held, ("/bin/codex", {"PATH": os.environ["PATH"]}))
     assert result is None
     found = folders(slot)
     assert factory.execute("SELECT run,commit_sha,conclusion,rc FROM setup_run").fetchall() == [(1, d, "passed", 0)]
