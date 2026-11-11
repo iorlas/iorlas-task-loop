@@ -551,7 +551,11 @@ gains `held:check_running`; `step kind` says the check step is not one; `evidenc
 
 ## 17. Live smoke (owner, or an agent the owner authorizes, after S6e)
 
-The runbook as built is [live-smoke.md](live-smoke.md) (section 25); the steps below are the design's.
+The runbook as built is [live-smoke.md](live-smoke.md) (section 25); the steps below are the design's. Since the S6e
+repairs (section 25.1): in step 5 a check outliving its stopped entry makes the rounds report `check report running`
+(they wait without relaunching or counting) and relaunch once it ends; in step 7 the rounds retry the held release each
+round (`check release held:check_running`, logged once) and release the slot (`check release released`) once the person
+stopped the survivor, so `T step release` is no longer needed there.
 
 Base: the M1 runbook ([live-smoke.md](../tl-8bh9.4.3.1.16.2/live-smoke.md) "M1 end-to-end smoke") with a new scratch
 folder `$M2`, the runner at the S6e commit, the scratch remote's `main` at that commit, and factory.db new (v12). Before
@@ -1074,3 +1078,42 @@ late count (removed or always), the `admitted` fence, the id fence and the `aban
 
 **Not verified**: a real `tl step rounds` with real checks entries (the [M2 live smoke](live-smoke.md)); the `lingering`
 outcome of a timed-out `sh -c 'sleep 600 & sleep 600'` on the host (the smoke records it); a real launch failure.
+
+### 25.1 Review repairs to S6e (2026-11-11)
+
+An independent review of eba237919 and 4e004864c found the routing, fences, stop sets and words sound and three defects;
+each is repaired with a test that fails without it:
+
+1. **A check outliving its dead entry no longer ends `stuck:checks_refused`** (medium). The status counted only the entry:
+   an admitted checks attempt whose entry died while a slow check ran was `start`, each round relaunched it and each
+   entry's reconcile counted `checks:running`, so within two rounds it was stuck before its deadline, and nothing resumed
+   it once the check ended. Now `attempt_status` observes, for an admitted, unreleased checks attempt whose entry does not
+   run, the latest setup run's unsettled command and every unsettled result of the latest block through a new
+   `StatusPorts.commands` port (the CLI wires `owned_processes.setup_seen`, the entry's reconcile rule: another boot is
+   gone; the default for reads that never meet one is gone), aggregated by `check_status.commands_seen`. `checks_next`:
+   alive is `wait` (the round reports `check report running`, never relaunches or counts), past the deadline
+   `stuck:hung` (nothing enforces a check's timeout once its entry died), unknown is `unknown`; gone relaunches as before.
+   `stuck:checks_refused` still takes precedence. Tests: a check (alive, unknown) and a setup command outliving the entry
+   across three rounds never counted or relaunched, logged once, `stuck:hung` past the deadline, then relaunched once
+   gone; `commands_seen` over setup and settled/unsettled rows.
+2. **The round releases a concluded checks attempt left holding its slot** (low-medium; decided by the reviewer). With
+   `Next: release` (concluded, not released, the entry not running: `checks_next` gives `wait` while it runs) the round
+   calls the settled `ChecksRelease.release(key, abandon=False)` through a new `ChecksPorts.release` (composition's
+   `open_checks_releaser`): the full stop proof, never a signal, held while a command of it runs. Words `check release
+   released <id>` or `check release held:<why>` / `unavailable:<why>` (the `release` action, new in `Action`), one per
+   round, the unchanged line logged once (`quiet`). Agent attempts keep their behavior (a `release` reported). Tests: an
+   entry that died after concluding, one still running (reported `running`, released once gone), and a `lingering` check
+   held each round, logged once, released once its group ended, then `check report failed:check:lingering`.
+3. **The `start` guide** no longer says every unfinished relaunch counts: every refusal the entry counts, while
+   uncounted relaunches (a failed or uncertain launch, an entry refusing `identity`, `stale_reservation`, `absent` or
+   `unavailable store`, a crash before it counts) repeat each round until the deadline like an agent's, then count
+   (`late_relaunch`). `CHECKS_GUIDE` gains `wait` (a check's or setup's group from a dead entry), and its `stuck:hung` and
+   `release` texts name the outliving group and the rounds' release retry.
+
+Code lines by the policy counter after the repairs: `round` 252, `operations` 345, `attempt_status` 202, `check_status`
+57, `step_guide` 182, `cli_composition` 214; `test_checks_round` 288, `test_check_status` 136, `doubles` 297.
+Mutation-checked: `checks_next` ignoring the commands, alive without the deadline, unknown dropped, the setup command not
+observed, and the round's release case removed each fail a test.
+
+**Not verified**: the real `setup_seen` against a real check group outliving a killed `taskloop.check_entry` (M2 smoke
+section 3's harder variant).

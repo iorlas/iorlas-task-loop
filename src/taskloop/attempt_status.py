@@ -12,15 +12,17 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Literal
 
+from stream_proc import OwnedProcess
+
 from taskloop.attempt import collect, succeeded
 from taskloop.attempt_reads import AttemptRow, PublishedRow, ReleaseRow
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, EntryIdentity, Observe, Unsettled
-from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result
+from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result, commands_seen
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.operations import Clock, Failed
-from taskloop.setup_store import SETUP_RUNS, SetupRow, SetupStore
+from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
 from taskloop.steps import CHECK, following
 
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
@@ -41,6 +43,7 @@ class StatusPorts:
     clock: Clock
     leftovers: Leftovers
     boot: Callable[[], str | None]  # this machine's boot id, None when unknown (then no attempt counts as rebooted)
+    commands: SetupSeen = lambda _process: "gone"  # a checks attempt's registered commands (the CLI: `setup_seen`)
 
 
 @dataclass(frozen=True)
@@ -135,20 +138,27 @@ def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> Attempt
         store = CheckStore(reads.store.connect, reads.store.begin)
         rows = store.of_attempt(row.key.attempt_id)
         results = store.results(rows[-1].key) if rows else ()
+        setup = SetupStore(reads.store.connect, reads.store.begin).latest(rows[-1].key) if rows else None
     except StoreUnavailable:
         return replace(view, next="unknown")
-    return _swapped(reads, view, rows, results) if rows else view
+    return _swapped(reads, view, rows, results, None if setup is None else setup.unsettled) if rows else view
 
 
-def _swapped(reads: StatusPorts, view: AttemptView, rows: tuple[ChecksRow, ...], results: tuple[ResultRow, ...]) -> AttemptView:
+def _swapped(
+    reads: StatusPorts, view: AttemptView, rows: tuple[ChecksRow, ...], results: tuple[ResultRow, ...], setup: OwnedProcess | None
+) -> AttemptView:
     """Section 9's field swap: the latest checks attempt's fields; each earlier one `re-run`, then the implement attempt
-    `advanced`, newest first. No worker, leftovers or repeat: a checks attempt has no agent."""
+    `advanced`, newest first. No worker, leftovers or repeat: a checks attempt has no agent. Its registered commands are
+    observed only for an admitted attempt whose entry does not run (`checks_next`)."""
     latest, claim = rows[-1], "kept" if view.release is None else view.release.claim
     entry, expired = _observed(reads, latest.entry), reads.clock() >= latest.deadline
+    stopped = latest.phase == "admitted" and latest.released_at is None and entry not in ("running", "unknown")
+    commands: ProcessSeen = commands_seen(reads.commands, setup, results) if stopped else "gone"
     earlier = (*((each.key.attempt_id, "re-run") for each in reversed(rows[:-1])), (view.attempt_id, "advanced"))
     return replace(
         view, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
-        result=checks_result(latest), deadline_passed=expired, next=checks_next(latest, entry, expired), entry_process=latest.entry,
+        result=checks_result(latest), deadline_passed=expired, next=checks_next(latest, entry, expired, commands),
+        entry_process=latest.entry,
         worker=None, leftovers=(), number=latest.number, previous_attempt_id=None, repeat_reason=None, earlier=earlier,
         release=checks_release(latest, claim), checks=ChecksView(latest, results),
     )

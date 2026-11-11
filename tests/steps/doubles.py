@@ -17,7 +17,7 @@ from stream_proc import OwnedProcess
 from taskloop.access import TMP_BYTES, Folders
 from taskloop.admit import AdmitResult
 from taskloop.admit_chain import NextStepRequest
-from taskloop.attempt_types import AttemptKey, Checkouts, FileStat
+from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat
 from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
@@ -27,6 +27,7 @@ from taskloop.launch import LaunchResult
 from taskloop.operations import ChecksPorts
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
 from taskloop.setup_store import ProcessSeen, SetupStore
+from taskloop.slot_release import ReleaseResult
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 
@@ -181,8 +182,11 @@ class NoChecks:
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         raise AssertionError(f"no checks launch expected: {task_id}")
 
+    def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        raise AssertionError(f"no checks release expected: {key.attempt_id}")
 
-NO_CHECKS = ChecksPorts(NoChecks(), NoChecks())
+
+NO_CHECKS = ChecksPorts(NoChecks(), NoChecks(), NoChecks())
 
 
 type Blob = bytes | NoCommit | NotAFile | Unavailable | None

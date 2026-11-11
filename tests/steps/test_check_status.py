@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from doubles import ChecksBench, Done, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRepo
+from stream_proc import OwnedProcess
 
 from taskloop.admit import Admitted
 from taskloop.attempt import succeeded
@@ -16,9 +17,10 @@ from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, list_attempts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity, Seen
-from taskloop.check_store import CheckStore
+from taskloop.check_status import commands_seen
+from taskloop.check_store import CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.setup_store import SetupStore
+from taskloop.setup_store import ProcessSeen, SetupStore
 
 ENTRY = (7, "entry-start", "boot")
 
@@ -153,3 +155,21 @@ def test_show_reads_the_checks_entry_s_own_last_line(status: Status, tmp_path: P
     files.entry_log(status.key).write_text("refused slot_busy\nunavailable checks:running claim=held\n")
     found = show_attempt(status.reads(), tmp_path / "artifacts", "tasks", "tl-1")
     assert isinstance(found, Shown) and found.view.last_entry == "unavailable checks:running claim=held"
+
+
+def test_the_commands_a_dead_checks_entry_left_are_its_setup_and_its_unsettled_results_by_the_entry_s_rule() -> None:
+    setup, check, done = (OwnedProcess(pid, pid, "start", "boot") for pid in (1, 2, 3))
+    passed = ResultRow(1, 1, "test", "d" * 64, 60, done, 1.0, 2.0, 0, "passed")  # settled: never observed
+    running = ResultRow(1, 0, "check", "c" * 64, 60, check, 1.0, None, None, None)
+    seen: dict[int, ProcessSeen] = {}
+
+    def observed(process: OwnedProcess) -> ProcessSeen:
+        return seen.get(process.pid, "alive" if process is done else "gone")
+
+    assert commands_seen(observed, setup, (passed, running)) == "gone"
+    seen[1] = "alive"
+    assert commands_seen(observed, setup, (passed,)) == "alive"  # the setup run's command
+    seen.update({1: "gone", 2: "unknown"})
+    assert commands_seen(observed, None, (passed, running)) == "unknown"
+    seen[1] = "alive"
+    assert commands_seen(observed, setup, (running,)) == "alive"  # alive wins over unknown

@@ -128,7 +128,7 @@ class Factory:
                                  self.tracker.unclaim, clock, lambda _p: True, self.files)
         advance = NextAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, clock, lambda _p: True,
                                 self.files)
-        return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks()))
+        return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks(), NoChecks()))
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(self.store, self.checkouts, self.files, lambda _entry: "gone", lambda _worker: True, custody,

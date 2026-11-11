@@ -113,10 +113,12 @@ class Repeat(Protocol):
 
 @dataclass(frozen=True)
 class ChecksPorts:
-    """The check step's start: its admission (`check_admit`) and the launcher of `taskloop.check_entry`."""
+    """The check step's start: its admission (`check_admit`) and the launcher of `taskloop.check_entry`; and the settled
+    release of a concluded checks attempt whose entry is gone (`check_release.ChecksRelease`, the round's)."""
 
     admission: ChecksAdmit
     launcher: Launch
+    release: Release
 
 
 @dataclass(frozen=True)
@@ -200,7 +202,7 @@ class Adoption:
     slots: tuple[Adopted | NotAdopted, ...]
 
 
-type Action = Literal["start", "relaunch", "repeat", "verify", "advance", "publish", "report", "skip"]
+type Action = Literal["start", "relaunch", "repeat", "verify", "advance", "release", "publish", "report", "skip"]
 
 
 @dataclass(frozen=True)

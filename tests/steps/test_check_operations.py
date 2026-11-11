@@ -77,7 +77,8 @@ class Rig:
     def ports(self) -> StartPorts:
         reader = AttemptStore(lambda: self.bench.con)
         never = Never()
-        return StartPorts(reader, never, NoChecks(), lambda: 10, never, NoAdvance(), ChecksPorts(self.bench.admission(), self.launcher))
+        checks = ChecksPorts(self.bench.admission(), self.launcher, NoChecks())
+        return StartPorts(reader, never, NoChecks(), lambda: 10, never, NoAdvance(), checks)
 
     def start(self, advancing: str | None = None) -> Started | Failed:
         return start(self.ports(), dataclasses.replace(REQUEST, checkout=self.bench.repo.path), advancing=advancing)

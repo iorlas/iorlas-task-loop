@@ -23,6 +23,7 @@ from typing import Final
 from taskloop.attempt import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
+from taskloop.attempt_types import AttemptKey
 from taskloop.evidence_files import EvidenceError
 from taskloop.operations import (
     UNKNOWN_KINDS,
@@ -48,6 +49,7 @@ from taskloop.operations import (
 from taskloop.publish import publish_word
 from taskloop.round_log import INTERRUPTED, fixed, ident, stamped
 from taskloop.selection import order
+from taskloop.slot_release import NotReleased, release_word
 from taskloop.task import TaskInspectionError
 from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, leaked_claim, ready_rows
 
@@ -194,6 +196,8 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _
                 trail.add(Move(task, action, _word(result), found, _detail(result), step))  # a repeat stays in its step
         case "verify":
             trail.add(_verified(ports, request.backlog, each))
+        case "release" if each.checks is not None and each.checks.row.released_at is None:  # its entry is gone (`checks_next`)
+            trail.add(_checks_released(ports, each, each.checks.row.key))
         case "wait":
             trail.add(Move(task, "report", "running", attempt, step=step))
         case "publish" | "advance":
@@ -227,6 +231,14 @@ def _resume(ports: StartPorts, backlog: str, minutes: int, each: AttemptView) ->
     if each.next == "repeat":
         return ports.repeat.repeat(backlog, each.task_id, key, entry, minutes)
     return launched(ports.launcher.launch(backlog, each.task_id, minutes), backlog, each.task_id, key, existing=True)
+
+
+def _checks_released(ports: RoundPorts, each: AttemptView, key: AttemptKey) -> Move:
+    """A concluded checks attempt still holding its slot, its entry gone (it died after concluding, or its release was
+    held and the cause may have cleared): the settled release, whose stop proof holds while a command of it runs."""
+    released = ports.starting.checks.release.release(key, False)
+    detail = released.detail if isinstance(released, NotReleased) else ""
+    return Move(each.task_id, "release", release_word(released), each.attempt_id, detail, each.step)
 
 
 def _detail(result: Started | Failed) -> str:

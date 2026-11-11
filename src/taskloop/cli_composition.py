@@ -37,7 +37,7 @@ from taskloop.git_views import checkouts
 from taskloop.interrupts import installed
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.operations import Adoption, ChecksPorts, Failed, Quiet, Round, StartPorts, require_database
-from taskloop.owned_processes import current_boot, entry_seen, worker_gone
+from taskloop.owned_processes import current_boot, entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
 from taskloop.round import NextRequest, RoundPorts, run_round
@@ -95,7 +95,7 @@ def open_reads(database: Path) -> Generator[StatusPorts | Failed]:
         else:
             reader = _reader(con)
             verifier = Verifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused)  # never verifies
-            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot)
+            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen)
 
 
 @contextmanager
@@ -117,7 +117,8 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
     admission, launcher, chain = open_admission(database, artifacts), open_launcher(database, artifacts), open_chain(database, artifacts)
     repeat = StepRepeat(reader, open_verifier(database, store), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
                         time.time, repeating)
-    checks = ChecksPorts(open_checks_admission(database), open_checks_launcher(database, artifacts))
+    releaser = open_checks_releaser(database, store)
+    checks = ChecksPorts(open_checks_admission(database), open_checks_launcher(database, artifacts), releaser)
     return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts), checks)
 
 
@@ -139,7 +140,7 @@ def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[R
                 return
             reader = _reader(con)
             leftovers = Verifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused).leftovers
-            reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot)
+            reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen)
             yield RoundPorts(reads, _starting(reader, database, artifacts, store), open_verifier(database, store),
                             open_releaser(database, store), open_publisher(database, store), ready, EvidenceFiles(artifacts).log_round)
         finally:

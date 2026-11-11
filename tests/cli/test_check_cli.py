@@ -150,7 +150,7 @@ def test_the_task_s_abandon_shows_the_checks_attempt_first_then_the_claim(
     assert data["checks"]["checks"] is None and data["checks"]["abandoned"] is True
 
 
-@pytest.mark.parametrize("word", ["start", "stuck:hung", "release"])
+@pytest.mark.parametrize("word", ["start", "wait", "stuck:hung", "release"])
 def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
     word: Next, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -160,6 +160,7 @@ def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
     assert CHECKS_GUIDE[word] in out and GUIDE[word] not in out and "attempt_entry" not in out and "Worker" not in out
     assert "Check: check unfinished, process group 601" in out.splitlines()  # the group the hung guide verifies
     assert "round relaunches the checks entry" in CHECKS_GUIDE["start"] and "late_relaunch" in CHECKS_GUIDE["start"]
+    assert "until the deadline" in CHECKS_GUIDE["start"] and "cannot finish counts" not in CHECKS_GUIDE["start"]
     assert "taskloop.check_entry" in CHECKS_GUIDE["stuck:hung"]
     listed = run(["step", "list", "--stuck"], Listed((replace(view, next="stuck:hung"),)), capsys, monkeypatch)
     assert f"stuck:hung: {CHECKS_GUIDE['stuck:hung']}" in listed.splitlines()

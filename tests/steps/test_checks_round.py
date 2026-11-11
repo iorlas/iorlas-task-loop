@@ -27,6 +27,8 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher, LaunchResult
 from taskloop.operations import LATE, ChecksPorts, Started, StartPorts, StartRequest, start
+from taskloop.round import RoundPorts
+from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody
 from taskloop.slot_release import Released
 
@@ -43,7 +45,11 @@ class Checking(Factory):
     """The rounds bench with the check step: `bodies` is what each started checks entry does, in order: `passed`,
     `failed` (`test:failed`), `expired`, `counted` (a relaunchable refusal the entry counts), `crash` (ends before counting:
     a crash, or a refusal before the attempt is its own), `running` (until `finish`), `unstartable` (the start fails,
-    nothing registered). `entries`: each started entry's module and task; `agents`: each agent launch's task."""
+    nothing registered), `orphan` (dies while its check `check`, pid 900, runs), `setup_orphan` (dies while its setup
+    command, pid 902, runs), `unreleased` (dies after concluding `passed`, before its release), `releasing` (the same,
+    still running), `lingering` (concludes `failed check:lingering`, pid 901 left; its release held). `groups`: each
+    registered command's observation by pid (default gone). `entries`: each started entry's module and task; `launched`:
+    each agent launch's task."""
 
     def __init__(self, path: Path, con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews,
                  files: SlotFiles, tracker: Tracker) -> None:
@@ -51,6 +57,14 @@ class Checking(Factory):
         self.path, self.bodies, self.starts = path, list[str](), 0
         self.entries, self.launched, self.alive = list[tuple[str, str]](), list[str](), set[EntryIdentity]()
         self.checks = CheckStore(lambda: con)
+        self.groups: dict[int, ProcessSeen] = {}
+
+    def command(self, process: OwnedProcess) -> ProcessSeen:
+        return self.groups.get(process.pid, "gone")
+
+    def ports(self) -> RoundPorts:
+        ports = super().ports()
+        return replace(ports, reads=replace(ports.reads, commands=self.command))
 
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         self.launched.append(task_id)  # the agent launcher: plan and implement attempts only
@@ -61,7 +75,7 @@ class Checking(Factory):
                                     lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts))
         launcher = Launcher(self.path, EvidenceFiles(self.tmp), lambda: self.now, self.entry, self.process, "python",
                             targets=CheckStore, module=CHECK_ENTRY_MODULE)
-        return replace(super().starting(), checks=ChecksPorts(admission, launcher))
+        return replace(super().starting(), checks=ChecksPorts(admission, launcher, self.releasing()))
 
     def observe(self, _entry: EntryIdentity) -> Seen:
         super().observe(_entry)
@@ -88,9 +102,35 @@ class Checking(Factory):
             self.alive.add(me)
         elif body == "counted":
             self.checks.refused(key, "checks:running")
+        elif body == "setup_orphan":  # dies while its setup command (pid 902) runs
+            setups = SetupStore(lambda: self.con)
+            setups.start(key, 1, self.checks_commit(key), "e" * 64, self.now)
+            setups.registered(key, 1, 0, OwnedProcess(902, 902, "setup-902", "boot"))
+            self.groups[902] = "alive"
+        elif body in ("orphan", "lingering"):
+            self.registered(key, 900 if body == "orphan" else 901)
+        elif body in ("unreleased", "releasing"):  # `releasing`: concluded, still running (its own release next)
+            self.checks.conclude(key, "passed", None, self.now)
+            if body == "releasing":
+                self.alive.add(me)
         elif body != "crash":
             self.conclude(key, body, me)
         return Pipes(), identity
+
+    def registered(self, key: AttemptKey, pid: int) -> None:
+        """The block's check `check` registered as `pid` (alive); `lingering`: then concluded so, and the attempt failed."""
+        block = self.checks.block(key)
+        self.checks.start(key, block, 0, "check", "c" * 64, 600, self.now)
+        self.checks.registered(key, block, 0, OwnedProcess(pid, pid, f"check-{pid}", "boot"))
+        self.groups[pid] = "alive"
+        if pid == 901:
+            self.checks.finish(key, block, 0, "lingering", 0, self.now)
+            self.checks.conclude(key, "failed", "check:lingering", self.now)
+
+    def checks_commit(self, key: AttemptKey) -> str:
+        row = self.checks.row(key)
+        assert row is not None
+        return row.commit
 
     def key(self, task_id: str) -> AttemptKey:
         found = self.checks.attempt_of("tasks", task_id)
@@ -108,7 +148,7 @@ class Checking(Factory):
 
     def releasing(self) -> ChecksRelease:
         return ChecksRelease(self.checks, self.checkouts, self.files, lambda _entry: "gone", custody, lambda: self.now,
-                             lambda _process: "gone", lambda _scratch: True)
+                             self.command, lambda _scratch: True)
 
     def finish(self, task_id: str, body: str) -> None:
         """The running entry of the task's checks attempt ends with `body`."""
@@ -272,3 +312,51 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_before_new_work(rig:
     # tl-2's checks pass at once here (its entry ran within the launch), so the slot is free again for tl-3 after them
     assert rig.round() == [("tl-2", "check", "advance", "started"), ("tl-3", "plan", "start", "started")]
     assert rig.rows() == [("tl-1", 1, "concluded", "passed"), ("tl-2", 1, "concluded", "passed")]
+
+
+@pytest.mark.parametrize(("body", "pid", "seen"), [
+    ("orphan", 900, "alive"), ("orphan", 900, "unknown"), ("setup_orphan", 902, "alive"),
+])
+def test_a_command_outliving_its_dead_entry_is_waited_for_never_relaunched_or_counted_then_resumed(
+    rig: Checking, body: str, pid: int, seen: ProcessSeen
+) -> None:
+    implemented(rig)
+    rig.bodies = [body, "passed"]
+    assert rig.round(frozenset()) == [("tl-1", "check", "advance", "started")]
+    rig.groups[pid] = seen
+    word = "running" if seen == "alive" else "unknown"
+    for _ in range(3):
+        assert rig.round(rig.last.written) == [("tl-1", "check", "report", word)]
+    assert rig.starts == 1 and rig.counted("tl-1") == (None, 0)
+    assert rig.logged("tl-1", "check", "report", word, rig.key("tl-1").attempt_id) == 1
+    rig.now += AFTER_DEADLINE
+    if seen == "alive":  # past the deadline nothing ends it: the person stops it
+        assert rig.round() == [("tl-1", "check", "report", "stuck:hung")] and rig.starts == 1
+    rig.groups[pid] = "gone"
+    assert rig.round() == [("tl-1", "check", "relaunch", "relaunched")]
+    assert rig.next_words() == {"tl-1": ("check", "done")} and rig.counted("tl-1") == (None, 0)
+
+
+@pytest.mark.parametrize("body", ["unreleased", "releasing"])
+def test_a_concluded_checks_attempt_whose_entry_died_before_its_release_is_released_by_the_round(rig: Checking, body: str) -> None:
+    implemented(rig)
+    rig.bodies = [body]
+    assert rig.round() == [("tl-1", "check", "advance", "started")] and rig.last.stopped == "no_free_slot"
+    checks = rig.key("tl-1").attempt_id
+    if body == "releasing":  # never while the entry still runs: it releases its own slot
+        assert rig.round() == [("tl-1", "check", "report", "running")]
+        rig.alive.clear()
+    assert rig.round() == [("tl-1", "check", "release", "released")] and rig.logged("tl-1", "check", "release", "released", checks) == 1
+    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "done")} and rig.starts == 1
+
+
+def test_a_held_checks_release_is_retried_each_round_logged_once_and_released_once_its_group_ends(rig: Checking) -> None:
+    implemented(rig)
+    rig.bodies = ["lingering"]
+    assert rig.round(frozenset()) == [("tl-1", "check", "advance", "started")]
+    held = ("tl-1", "check", "release", "held:check_running")
+    assert rig.round(rig.last.written) == [held] and rig.round(rig.last.written) == [held]
+    assert rig.logged("tl-1", "check", "release", "held:check_running", rig.key("tl-1").attempt_id) == 1
+    rig.groups[901] = "gone"
+    assert rig.round(rig.last.written) == [("tl-1", "check", "release", "released")]
+    assert rig.round(rig.last.written) == [("tl-1", "check", "report", "failed:check:lingering")] and rig.starts == 1

@@ -159,18 +159,22 @@ GUIDE = {
 # A checks attempt's own words for the `Next` words whose agent text would mislead (S6d): its entry is
 # `taskloop.check_entry` and its commands are check process groups.
 CHECKS_GUIDE = {
-    "start": "Each `tl step next` round relaunches the checks entry (`taskloop.check_entry`), and so does `tl step start`; "
-    "every relaunch the entry cannot finish counts, and past the deadline each round's relaunch counts too (`late_relaunch`), "
-    "so two make it `stuck:checks_refused`. Past its deadline the relaunched entry concludes `expired` once nothing of the "
-    "attempt still runs. If the last entry says `checks:running`, a check's process group from an earlier entry still runs: "
-    "wait for it (`check_running`). `tl step release --abandon` gives the task back.",
-    "stuck:hung": "The checks entry runs past its deadline. Verify before stopping anything: `ps -o command= -p <entry pid>` must "
-    "show taskloop.check_entry, and each process group a `Check:` line names (`ps -o pid=,lstart=,command= -g <pgid>`) must work "
-    "in the slot (`lsof -a -p <pid> -d cwd`). Stop only the pids you verified, the check groups first, then the entry; then "
-    "`tl step start` relaunches it (it concludes `expired`), or `tl step release --abandon`.",
+    "start": "Each `tl step next` round relaunches the checks entry (`taskloop.check_entry`), and so does `tl step start`. "
+    "Every refusal the entry counts (`Refused:`) brings `stuck:checks_refused` nearer (two in a row). Relaunches the entry "
+    "never counts (a failed or uncertain launch, an entry refusing `identity`, `stale_reservation`, `absent` or `unavailable "
+    "store`, a crash before it counts) repeat each round until the deadline, as an agent attempt's do; past it each round's "
+    "relaunch counts (`late_relaunch`), and the relaunched entry concludes `expired` once nothing of the attempt still runs. "
+    "`tl step release --abandon` gives the task back.",
+    "wait": "Its entry runs, or (the entry gone) a check's or setup's process group from it still runs: rounds wait without "
+    "relaunching or counting, then relaunch once it ends. `tl step show` again.",
+    "stuck:hung": "The checks entry, or a check's process group that outlived its entry, runs past the deadline (nothing ends "
+    "it now). Verify before stopping anything: `ps -o command= -p <entry pid>` must show taskloop.check_entry, and each process "
+    "group a `Check:` line names (`ps -o pid=,lstart=,command= -g <pgid>`) must work in the slot (`lsof -a -p <pid> -d cwd`). "
+    "Stop only the pids you verified, the check groups first, then the entry; then rounds or `tl step start` relaunch it (it "
+    "concludes `expired`), or `tl step release --abandon`.",
     "release": "The checks concluded; their slot is still held (the last entry or `tl step release` says why: `held:check_running` "
-    "waits for a check's process group, `held:slot_dirty` for files a person removes). Then `tl step release`; `--abandon` also "
-    "gives the task back.",
+    "waits for a check's process group, `held:slot_dirty` for files a person removes). Once the entry is gone each round "
+    "retries the settled release (`check release ...`); `tl step release` does it by hand; `--abandon` also gives the task back.",
 }
 
 
