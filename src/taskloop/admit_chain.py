@@ -47,7 +47,7 @@ from taskloop.admit import (
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER
-from taskloop.prepare import HEADS, REMOTES, lacks
+from taskloop.prepare import HEADS, MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
 from taskloop.steps import is_agent, next_step
@@ -327,13 +327,13 @@ def task_of(con: sqlite3.Connection, previous: AttemptKey) -> Task | None:
 
 
 def _containing(repo: Repo, found: Task, free: tuple[Free, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
-    """Read-only, before anything is reserved (the entry checks it again): the free slots whose start, the local
-    `task/<id>`, else origin's remote-tracking one, else the slot's D, contains the previous X."""
+    """Read-only, before anything is reserved (the entry checks it again): the free slots, when the start every slot
+    takes, the local `task/<id>`, else origin's remote-tracking one, else `main`'s tip, contains the previous X."""
     after, task_id = found.end_commit or "", found.task_id
     try:
-        tips = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES])}
-        tip = tips.get(f"{HEADS}/{task_id}") or tips.get(f"{REMOTES}/{task_id}")
-        keep = tuple(each for each in free if not lacks(repo, after, tip or each.head))
+        tips = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES, MAIN])}
+        tip = tips.get(f"{HEADS}/{task_id}") or tips.get(f"{REMOTES}/{task_id}") or tips.get(MAIN)
+        keep = free if tip is not None and not lacks(repo, after, tip) else ()
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
     return keep or AdmitRefused("branch_moved", detail=f"task/{task_id} does not contain the previous step's commit {after}")

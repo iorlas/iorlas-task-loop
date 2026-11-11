@@ -289,7 +289,7 @@ One Codex login (`auth.json`) and one model pair (.15 Q4). A usage-limit failure
 | Check environment shaping (credential strip, scratch HOME) | .13 audit | Decided (D10): the agent's scrubbed environment and push bar, no scratch HOME. |
 | Review verdict rewriting, stray-file quarantine | .13 audit | Not carried; review is B5, strays are repeats. |
 | `tl step verify` does not check the claim | .9 known gap | Unchanged until a case appears. |
-| Branch rule D for a later step (`branch_diverged`) | .15 section 5 | Adopt all slots at one base; revisit if S5's smoke hits it. |
+| Branch rule D for a later step (`branch_diverged`) | .15 section 5 | Adopt all slots from `main`'s history. Since .15 section 17 a new task branch starts at the local `main`'s tip (it must contain the slot's D), so slots no longer need moving and the rule holds for every later `main`. |
 | Claim lease between steps (`bd reclaim`) | .15, .16 section 7 | Hold via B7 on `claim_lost`. |
 | `rounds_lock.holder`, entry.log `publish=` word, three "outcome" comments | .14, glossary | Small cleanup tasks, good first self-hosted tasks. |
 

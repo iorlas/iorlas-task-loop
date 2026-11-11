@@ -128,6 +128,22 @@ def test_a_done_plan_advances_to_implement_attempt_one_after_its_commit(
     assert registered.execute("SELECT attempt_id FROM reservation").fetchone() == (admitted.key.attempt_id,)
 
 
+@pytest.mark.parametrize("landed", [True, False])
+def test_with_no_task_branch_left_the_advance_starts_from_main_which_must_hold_the_previous_commit(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    landed: bool,
+) -> None:
+    """The local and remote-tracking `task/tl-1` deleted: the slot would start at `main`'s tip (as a new branch does),
+    never at its own D, so only a `main` holding the plan's X advances."""
+    repo = slot.repo
+    repo.delete_branch("task/tl-1", expected=Sha(planned))
+    repo.plumbing().delete_ref_at(repo.path, "refs/remotes/origin/task/tl-1", planned)
+    if landed:
+        repo.worktree(repo.identity().root).merge_ff(planned)
+    found = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(repo))
+    assert isinstance(found, Admitted) if landed else isinstance(found, AdmitRefused) and found.reason == "branch_moved"
+
+
 @pytest.mark.parametrize("bead", [replace(CLAIMED, status="open"), replace(CLAIMED, assignee="someone"), replace(CLAIMED, status="closed")])
 def test_a_task_no_longer_in_progress_for_taskloop_is_claim_lost_with_nothing_written(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,

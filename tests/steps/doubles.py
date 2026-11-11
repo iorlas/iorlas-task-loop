@@ -44,6 +44,15 @@ MAIN_PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"],
     {"name": "slow", "argv": ["sleep", "1"], "timeout": 60}]}
 
 
+def main_at(slot: FakeWorktree) -> str:
+    """The person's `main` fast-forwarded to the slot's detached HEAD (a commit made there before dispatch): a new task
+    branch starts at `main`'s tip, so this is where B is."""
+    found = next(info.head for info in slot.repo.worktrees() if info.path == slot.path)
+    assert found is not None
+    slot.repo.worktree(slot.repo.identity().root).merge_ff(found)
+    return found
+
+
 @dataclass(frozen=True)
 class Done:
     """The `done` fixture: its factory.db, the implement attempt's key and X, `main`'s commit (the target) and the free

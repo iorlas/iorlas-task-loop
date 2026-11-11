@@ -47,13 +47,12 @@ bytes, mise trust, `codex` and `bd` on `PATH`, network for `setup`).
 ## 1. The smoke profile on the scratch `main`
 
 The required names come from the local `main` of `$M2/repo` at each checks admission; the commands from the profile at
-X. X descends from the free slot's HEAD (D), not from `main`: the plan attempt cuts `task/<id>` from D, and the factory
-never fetches or moves a free slot (`prepare.py`; M2 finding 1). So each variant is committed to the local `main`,
-pushed to the scratch origin **and** the free slot is detached at the new `main` (`P` does all three once `$SLOT` is
-set) **before** its task is created, and the next variant only after the previous task's checks concluded and
-released. Every smoke check except `offline-only` is guarded by `test -n "$UV_OFFLINE" ||`: the implement agent's
-sandbox shell has `UV_OFFLINE=1` and passes it at once, while the check step on the host (no `UV_OFFLINE`) runs the real
-command. `offline-only` is the reverse: it passes in the sandbox and fails on the host, a deterministic failing required
+X. A new task branch is cut from the local `main`'s tip at the plan attempt (tl-8bh9.4.3.1.15 section 17; M2 finding
+1), so X descends from the `main` its task was cut at; the free slot is never moved. So each variant is committed to the
+local `main` and pushed to the scratch origin (`P` does both) **before** its task is created, and the next variant only
+after the previous task's checks concluded and released. Every smoke check except `offline-only` is guarded by
+`test -n "$UV_OFFLINE" ||`: the implement agent's sandbox shell has `UV_OFFLINE=1` and passes it at once, while the
+check step on the host (no `UV_OFFLINE`) runs the real command. `offline-only` is the reverse: it passes in the sandbox and fails on the host, a deterministic failing required
 check the agent cannot see.
 
 ```bash
@@ -75,8 +74,7 @@ if variant == "orphan":
 with open(path, "w") as out:
     json.dump({"setup": [["just", "bootstrap"]], "checks": checks, "required": required, "target": "main"}, out, indent=2)
 EOF
-  G -C "$M2/repo" commit -qam "smoke profile: $1" && G -C "$M2/repo" push -q origin main &&
-    { [ -z "${SLOT:-}" ] || G -C "$SLOT" checkout -q --detach main; }   # the free slot at the new main
+  G -C "$M2/repo" commit -qam "smoke profile: $1" && G -C "$M2/repo" push -q origin main
 }
 P base
 TL profile show --checkout "$M2/repo" --at HEAD    # setup just bootstrap; checks check, test, report, slow; required check, test

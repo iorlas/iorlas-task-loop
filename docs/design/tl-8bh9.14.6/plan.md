@@ -267,7 +267,9 @@ attempt kept as history (`Earlier:`).
 One block runs every check of the profile at X in profile order, each once, required or not (decided here: D9's one
 mandatory set; a non-required result is shown and never decides; a task adding a check runs no code `setup` could not
 already run). Before the first command, each stored required name the profile at X does not define gets a result
-`undefined` (no process, no argv digest): a required check that never reports blocks, as on GitHub.
+`undefined` (no process, no argv digest): a required check that never reports blocks, as on GitHub. The M2 smoke's
+`failed:offline-only:undefined` (a name `main` required that X's profile lacked) is this rule as designed; its cause, X
+cut from a stale slot instead of `main`, is fixed by [.15 section 17](../tl-8bh9.4.3.1.15/plan.md).
 
 Per check, `name`, `argv`, `timeout` from the profile at X:
 

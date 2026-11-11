@@ -1,13 +1,14 @@
 """Admit an attempt: the only writer of the admitted `attempt` row and of a new `reservation` row; it runs nothing.
 
 A task's first attempt takes a free slot and the tracker claim (`admit`), after the task branch rule passed for that
-slot's HEAD (`prepare.branch_refusal`, read-only, before anything is written or claimed); a repeat and an advance to
+slot's HEAD (`prepare.branch_refusal`, read-only, before anything is written or claimed; a new task branch starts at the
+local `main`'s tip, so a checkout without `main` is `target`); a repeat and an advance to
 the next step are admitted by `admit_chain`, through the shared pieces here (the deadline check, the store, the task and
 checkout reads, the free slots and branch rule, the reservation, the attempt row and the slot's counter).
 An admitted attempt stays unregistered (entry_* NULL): the body refuses it with
 `unregistered_entry` until `AttemptStore.register_entry` registers its entry. The tracker root, resolved, is stored with the
-attempt (a repeat copies it): the entry renews the claim there, an abandon returns it there. The slot's HEAD the attempt
-starts from (D) is stored as `slot_head` (a repeat copies it): a release parks the slot back there.
+attempt (a repeat copies it): the entry renews the claim there, an abandon returns it there. The HEAD the slot
+is parked at when admitted (D) is stored as `slot_head` (a repeat copies it): a release parks the slot back there.
 
 Each slot's `generation` is the last reservation generation issued for it, so a generation is never reused after a
 release: a fresh admission takes one above every observed-free slot's counter, a repeat the next one. `seq` orders a
@@ -32,7 +33,7 @@ from git_porcelain import GitUnavailable, Repo
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.prepare import DIVERGED, branch_refusal
+from taskloop.prepare import DIVERGED, MAIN, branch_refusal
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe
 from taskloop.steps import STEPS, kind
@@ -314,9 +315,12 @@ def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
     if isinstance(found, str):
-        return AdmitRefused(found, detail=DIVERGED.format(task=task_id) if found == "branch_diverged" else "")
+        return AdmitRefused(found, detail=DETAILS.get(found, "").format(task=task_id))
     passing = tuple(Free(view.name, head) for view in free if (head := heads.get(view.path)) is not None and head in found.passing)
     return passing or AdmitRefused("no_free_slot")
+
+
+DETAILS = {"branch_diverged": DIVERGED, "target": f"The checkout has no local branch `{MAIN}` to start task/{{task}} from"}
 
 
 def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey) -> None:

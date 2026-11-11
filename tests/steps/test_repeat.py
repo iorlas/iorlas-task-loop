@@ -15,7 +15,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance
+from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance, main_at
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store, begin_immediate
@@ -186,6 +186,7 @@ def renumber(con: sqlite3.Connection, number: int) -> None:
 
 def ignored(slot: FakeWorktree, _files: FakeSlotFiles) -> None:
     commit(slot, {".gitignore": "*.log\n"})
+    main_at(slot)
 
 
 def executable(slot: FakeWorktree, files: FakeSlotFiles) -> None:

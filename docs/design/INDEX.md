@@ -20,7 +20,7 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.4.3.1.12](tl-8bh9.4.3.1.12/plan.md) | Publish the verified plan: push `task/<id>` to the remote | built |
 | [tl-8bh9.4.3.1.13](tl-8bh9.4.3.1.13/plan.md) | Scheduling: the factory takes ready tasks into free slots (`tl plan next`) | built |
 | [tl-8bh9.4.3.1.14](tl-8bh9.4.3.1.14/plan.md) | Trigger: rounds start by themselves (`tl plan rounds`) | built |
-| [tl-8bh9.4.3.1.15](tl-8bh9.4.3.1.15/plan.md) | Generalize the step machinery once: plan becomes the first step kind | built |
+| [tl-8bh9.4.3.1.15](tl-8bh9.4.3.1.15/plan.md) | Generalize the step machinery once: plan becomes the first step kind | built; section 17 (a new task branch starts at the local `main`'s tip, M2 finding 1) built, open to veto |
 | [tl-8bh9.4.3.1.16](tl-8bh9.4.3.1.16/plan.md) | Step sequencing and the implement step kind (slice S5) | design; S5a, S5b, S5c built |
 | [tl-8bh9.4.3.1.16 Run S](tl-8bh9.4.3.1.16/run-s-findings.md) | Run S: sandbox and environment spike for block B2 (2026-11-11) | evidence |
 | [tl-8bh9.4.3.1.16.2](tl-8bh9.4.3.1.16.2/plan.md) | S5e: the environment for running checks and tests in the agent sandbox (block B2) | design; S5e-1, S5e-2 built |

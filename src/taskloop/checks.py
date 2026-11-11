@@ -32,10 +32,10 @@ from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_store import CheckStore, Conclusion, Outcome, Required, ResultRow
 from taskloop.environment import GroupAlive, SetupEnded, SetupProcess, setup_env
 from taskloop.evidence_files import CappedLog, EvidenceFiles
+from taskloop.prepare import MAIN
 from taskloop.profile import Check
 from taskloop.slot_state import bounded
 
-MAIN: Final = "refs/heads/main"  # where the required names come from (O1: the person's local `main`)
 TERMINAL: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "undefined")
 STOPPING: Final[tuple[Conclusion, ...]] = ("lingering", "dirty")  # the block stops; the attempt fails with this result
 type _Next = Literal["next", "stopped"]

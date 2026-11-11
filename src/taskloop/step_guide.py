@@ -140,8 +140,8 @@ GUIDE = {
     "reconciles it; each relaunch counts toward `stuck:checks_refused`.",
     "no_required": "The profile at your local `main` requires no check, so nothing would decide a pass: add the required check "
     "names to `.task-loop.json` on `main`. Every done task waits (skipped each round, logged once) until then.",
-    "target": "The required checks are read from your local `main`, which is missing or whose profile names another `target` "
-    "(only `main` is checked yet): fix `main`, then rerun.",
+    "target": "A new task branch starts at your local `main`'s tip and the required checks are read from it: `main` is "
+    "missing, or its profile names another `target` (only `main` is checked yet). Fix `main`, then rerun.",
     "target_profile": "The profile at your local `main` is refused (the detail names why; `tl profile show --at main` shows it): "
     "fix `.task-loop.json` on `main`, then rerun. Every done task waits until then.",
     "commit_missing": "The implement step's commit is not in the repository any more: fetch `task/<id>` back, or `tl step "

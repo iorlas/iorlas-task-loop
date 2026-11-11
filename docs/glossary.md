@@ -41,7 +41,7 @@ redesign demonstrates a distinct factory concept that needs it. Do not introduce
 | Term | Meaning | Example / distinction |
 |---|---|---|
 | repo | A registered local Git repository binding, shared by its linked worktrees. | RepoId resolves canonical Git common-directory identity. Remote host/project is display/delivery information; task identity has its own configured backlog scope. Independent clones have separate local bindings. |
-| task branch | The Git reference retaining a task's committed plan and code. | Derived as task/<task-id> within its selected repository. It is not a directory, slot or execution; publishing it does not land the task. |
+| task branch | The Git reference retaining a task's committed plan and code. | Derived as task/<task-id> within its selected repository. It is not a directory, slot or execution; publishing it does not land the task. A new one is cut at the plan attempt from the person's local `main`'s tip (no fetch; refusal `target` without a local `main`); an existing one (local, else origin's remote-tracking) is resumed as it is, however far `main` moved ([.15 section 17](design/tl-8bh9.4.3.1.15/plan.md)). |
 | worktree | A Git checkout linked to a repository, sharing its commits and branches. | Committing in one linked worktree makes the commit available to the others locally; no push is needed for that sharing. |
 | workspace | An external or generic name for an execution's working directory; no separate factory entity. | Use worktree for a Git checkout and slot for a reusable managed worktree. Preserve literal names used by external APIs such as GitHub workspace. |
 | slot | A managed, reusable worktree reserved for one independently scheduled step attempt at a time. | `s1`. Internal checks may run concurrently. Reservations are local factory state in factory.db; slots are not tracker tasks. Current internal slot tasks are to be retired. |
@@ -142,8 +142,8 @@ Used in the plan documents and in code comments; read the column, not the letter
 
 | Letter | Meaning | Column / field |
 |---|---|---|
-| B | The base commit the entry reads before dispatch. | `attempt.base_commit` |
-| D | The slot's HEAD at admission; a released slot parks here. | `attempt.slot_head` (`slot_release.head` once parked) |
+| B | The base commit the entry reads before dispatch: for a new task branch, `main`'s tip at the take. | `attempt.base_commit` |
+| D | The slot's HEAD at admission; a released slot parks here. Never a branch start: the task branch must contain it. | `attempt.slot_head` (`slot_release.head` once parked) |
 | E | Where the previous attempt ended; a repeat starts here. | the previous attempt's `end_commit` |
 | X | The attempt's end commit. | `attempt.end_commit` |
 | T | The remote tip after a push. | `published_branch.remote_head` (with `commit_sha`, the X pushed). `main`'s commit at a checks admission is "the target" (`checks_attempt.target_commit`), never T; the M2 live-smoke runbook's shell function for `tl` is `TL` (the M1 runbook's `T` predates it, not this letter). |

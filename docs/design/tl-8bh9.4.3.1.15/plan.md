@@ -798,3 +798,44 @@ S4 review repair (no output word changed except the scope line):
 - `test_round`: the log test's admission seeds a real attempt row, so the start line carries `plan`; `LINE` now requires the step word on every attempt-bearing line (refused/unavailable starts, `claim_leaked` and `round` lines stay without); removing `step=result.step or ""` fails it. `test_operations` pins `Started.step is None` when `step_of` raises `StoreUnavailable`.
 - Naming and prose: the Next word in `attempt_status._show` and in `test_step_cli` is `next_word`, not `step`; `cli_composition` and README say "step" not "plan".
 - Help: "Step commands: steps built: plan; ...." (two colons) is now "Step commands (steps built: plan; publishes task/<id>; no merge or land)." in root help and the `tl step start` line; `STEP_ONLY` unchanged and single-sourced.
+
+## 17. Where a new task branch starts (decided here, open to veto; M2 finding 1, 2026-11-11)
+
+**Gap.** The plan attempt cut `task/<id>` from the free slot's HEAD D (`prepare._take`), and nothing ever moves a free
+slot: a release parks it back at its own D. So every task in a self-hosting loop started from the commit the slot was
+adopted at, however far `main` had moved (the M2 smoke's B read `offline-only` as `undefined` because of it).
+
+**Decision: the person's local `main` is the one owner of a new branch's start.** When neither the local `task/<id>`
+nor origin's remote-tracking one exists, the branch rule (`prepare.branch_refusal`) reads `refs/heads/main` in the same
+`for-each-ref` call and the slot takes the new branch at that tip (`Branch.start`); that is B. No fetch: keeping the local
+`main` current is the person's (or a later `tl` operation's, B6 land), exactly as the checks admission already reads
+the required names from the local `main` (O1, `check_admit`). One constant names the ref (`prepare.MAIN`, also the
+checks' read; `check_admit.TARGET` stays the only target M2 checks against).
+
+- **An existing branch is resumed as it is** (local, else remote-tracking), whatever `main` did since: a task in
+  progress keeps its branch, and an abandoned task restarting at plan (D4) resumes its branch. `main` is not read for it,
+  so a missing `main` refuses only a cut.
+- **D keeps its two jobs.** It is where a release parks the slot, and the branch rule still requires the branch (now
+  also a new one: `main`'s tip) to contain the free slot's D. Slots adopted from `main`'s history pass for every later
+  `main`, so the rule no longer refuses an abandoned task's branch after `main` moved (the smoke's `branch_diverged`
+  came from moving the slot by hand, which is now unnecessary). A slot sitting outside `main`'s history is skipped; with
+  no other free slot the admission refuses `branch_diverged`, whose detail now names that case too.
+- **Words.** No new word: a cut without a local `main` is `target` (the checks admission's word for the same missing
+  ref), at admission (before the input, claim or rows) and again at the entry; its guide names both uses.
+- **Later steps.** `after_commit` containment is unchanged; the start it is checked against is `Branch.start` at the
+  entry and the same start in `admit_chain._containing` (local, else remote-tracking, else `main`; before: else D), so
+  the admission and the entry agree. A repeat and a relaunch on the branch never read `main`.
+
+**Rejected.** (2) A fetch of origin's `main` before the cut: network inside admission, a second owner of "the target"
+(origin's `main` here, the local `main` for the required checks), and a fetch also moves the `origin/task/*` refs the
+branch rule reads. `git_porcelain` 0.15 has `Repo.fetch`, so this was a choice, not a shelf limit; it can come with land.
+(3) Park or release moving the free slot to `main`: it changes D under the branch rule (the smoke's `branch_diverged`),
+needs a `main` read in every release, and a never-released slot would still be stale.
+
+**As built.** `prepare.py` (`MAIN`, `Branch.start`, the `target` refusal, `_take` starts at `found.start`), `admit.py`
+(`DETAILS`), `admit_chain._containing`, `checks.py` imports `MAIN`; guide `target` names the cut. Tests: fake Git
+(`test_prepare`: a new branch at `main`'s tip after `main` moved, existing local and remote-tracking branches unchanged,
+`target` without `main` at admission and at the entry, a slot outside `main`'s history skipped or `branch_diverged`;
+`test_admit_chain`: with no task branch left, the advance needs `main` to hold X) and real Git (`test_prepare_real`: a
+slot adopted at D, `main` advanced, the plan's branch starts at `main`'s tip). Tests whose slot commits before dispatch
+now move `main` there too (`doubles.main_at`). Not live-smoked.
