@@ -43,8 +43,8 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import Failed, Started, StartPorts, StartRequest, StatusPorts, list_attempts, show_attempt, start
-from taskloop.plan_step import plan_stage
-from taskloop.repeat import Settle, StepRepeat, feedback
+from taskloop.plan_step import feedback, plan_stage
+from taskloop.repeat import Settle, StepRepeat
 from taskloop.result_data import as_data
 from taskloop.slot_lock import hold, lock_path, repeating
 from taskloop.slot_state import bounded

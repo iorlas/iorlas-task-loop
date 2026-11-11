@@ -10,6 +10,7 @@ from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
 from taskloop import cli_plan
 from taskloop.composition import inspect_checkout, inspect_tracker_task, tracker_located
+from taskloop.plan_guide import PLAN_ONLY
 from taskloop.repo import UnsupportedCheckout
 from taskloop.task import TaskInspectionError
 
@@ -63,7 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     tracker_located()  # before any bd call: the given tracker root decides the tracker, never an inherited BEADS_DIR
     parser = argparse.ArgumentParser(
         prog="tl",
-        description=f"Task-loop successor foundation. Plan commands run the {cli_plan.PLAN_ONLY}.",
+        description=f"Task-loop successor foundation. Plan commands run the {PLAN_ONLY}.",
         allow_abbrev=False,
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")

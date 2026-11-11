@@ -20,7 +20,8 @@ from typing import Final
 from taskloop.attempt_reads import SlotUse
 from taskloop.evidence_files import EvidenceError
 from taskloop.operations import Ended, Failed, Quiet, Round, minutes_refused
-from taskloop.round import IDENT, INTERRUPTED, STOPPING_UNKNOWN, NextRequest, fixed, stamped
+from taskloop.round import STOPPING_UNKNOWN, NextRequest
+from taskloop.round_log import IDENT, INTERRUPTED, fixed, stamped
 
 CHECK: Final = 2.0  # seconds between two reads of the reservation rows
 CAP: Final = 300  # the longest backoff delay, unless the interval is longer

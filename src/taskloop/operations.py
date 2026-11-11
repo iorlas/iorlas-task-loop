@@ -5,7 +5,6 @@ verified plan commit to origin's `task/<id>`), each following a task's current a
 only: nothing here merges or lands. `result_data.as_data` is the one JSON shape of every result.
 """
 
-import re
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -39,7 +38,6 @@ from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResul
 from taskloop.machine_config import ConfigRefused, Loaded
 from taskloop.publish import BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult, release_word
-from taskloop.slot_state import shown
 from taskloop.slots import Adopted, NotAdopted, SlotView
 
 type Clock = Callable[[], float]
@@ -49,9 +47,6 @@ type Next = Literal["start", "wait", "verify", "repeat", "repeats_exhausted", "r
 type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a stage still to settle
 type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "not_applicable", "unsettled", "defect"]
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
-ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
-ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
-WORD: Final = re.compile(r"(?:[a-z]+=)?[A-Za-z0-9_]{1,60}(?::[A-Za-z0-9_]{1,60}){0,2}")
 UNCLAIMING: Final = "Abandoned, but the tracker claim is still to be returned: run `tl plan release --abandon` again."
 VERIFY_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",
@@ -261,20 +256,6 @@ class Ended:
     detail: str = ""
 
 
-UNKNOWN_WORDS: Final = tuple(kind + ":" for kind in UNKNOWN_KINDS)
-ABRUPT: Final = 130  # 128 + SIGINT: the shell's convention for an interrupted command
-
-
-def _round_exit(result: Round) -> int:
-    """3 when admission stopped on an unknown or a move's word is one, a verify's `branch=` word included, as a publish
-    move's (rerunning is safe); 1 when the round's own inputs were refused; else 0 (a per-task refusal, a held release
-    and a leaked claim, reported as its own move, do not change the exit)."""
-    words = [result.stopped, *(word.removeprefix("branch=") for move in result.moves for word in move.word.split(" "))]
-    if any(word.startswith(UNKNOWN_WORDS) or word == "unknown" for word in words):
-        return 3
-    return 1 if result.stopped.startswith("refused:") else 0
-
-
 type Result = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
 
 
@@ -442,23 +423,13 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
         return Failed("refused", "absent", f"No attempt for {task_id} in backlog {backlog}")
     directory = files.root / files.directory(rows[0].key)
     earlier = tuple((older.key.attempt_id, _ended(newer, older)) for newer, older in pairwise(rows))
-    last = last_entry(files.entry_tail(rows[0].key))
+    last = files.last_entry(rows[0].key)
     return Shown(replace(_status(reads, rows[0]), earlier=earlier, last_entry=last), directory, directory / "entry.log")
 
 
 def _ended(newer: AttemptRow, older: AttemptRow) -> str:
     """Why `older` is not current: `abandoned`, or the reason `newer` repeated it."""
     return "abandoned" if older.release is not None and older.release.abandoned else newer.repeat_reason or ""
-
-
-def last_entry(tail: str | None) -> str | None:
-    """The last line of the entry log made only of the entry's fixed words (its status word, then `reason`, `key=value`
-    or `a:b` words of letters, digits and `_`), at most ENTRY_WORDS words; anything else in the log is never printed."""
-    for line in reversed((tail or "").splitlines()[-20:]):
-        words = line.split(" ")
-        if words[0] in ENTRY_STATUS and len(words) <= ENTRY_WORDS and all(WORD.fullmatch(word) for word in words[1:]):
-            return shown(line)
-    return None
 
 
 def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed:
@@ -531,20 +502,3 @@ def verify_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled 
     if isinstance(result, Unsettled):
         return Failed("unsettled", result.reason, "\n".join(result.listing))
     return Failed(VERIFY_KINDS[type(result)], result.what if isinstance(result, NotApplicable) else result.reason)
-
-
-def exit_code(result: Result) -> int:
-    """0 done or already so (a graceful rounds stop too); 1 refused; 3 unknown, re-running is safe; 130 an abrupt rounds
-    stop (2, usage, is argparse's). Rounds never end 3: they rerun by themselves."""
-    match result:
-        case Failed(kind=kind):
-            return 3 if kind in UNKNOWN_KINDS else 1
-        case Adoption(slots=slots):
-            reasons = {each.reason for each in slots if isinstance(each, NotAdopted)}
-            return 3 if reasons & {"git_unavailable", "store_unavailable"} else 1 if reasons else 0
-        case Round():
-            return _round_exit(result)
-        case Ended(reason=reason):
-            return 0 if reason == "interrupted" else ABRUPT if reason == "abrupt" else 1
-        case _:
-            return 0

@@ -22,6 +22,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Seen, SlotFiles, Unsettled, Verified, VerifyResult
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.exit_codes import exit_code
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     Failed,
@@ -34,7 +35,6 @@ from taskloop.operations import (
     StatusPorts,
     VerifiedTask,
     Verify,
-    exit_code,
     verify_task,
 )
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult

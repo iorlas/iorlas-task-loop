@@ -36,6 +36,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.cli_composition import adopt, open_reads, open_start, open_verify
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
@@ -57,8 +58,6 @@ from taskloop.operations import (
     StartRequest,
     StatusPorts,
     VerifiedTask,
-    exit_code,
-    last_entry,
     list_attempts,
     next_action,
     publish_task,
@@ -560,8 +559,11 @@ LONGEST = ("unavailable evidence publish=accepted then=collected:verified verify
     ("refused " + "x" * 61 + "\n", None),
     ("refused a b c d e f g h\n", None),
 ])
-def test_only_a_line_of_the_entrys_fixed_words_is_shown(tail: str | None, expected: str | None) -> None:
-    assert last_entry(tail) == expected
+def test_only_a_line_of_the_entrys_fixed_words_is_shown(tail: str | None, expected: str | None, tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    if tail is not None:
+        files.entry_log(KEY).write_text(tail, encoding="utf-8")
+    assert files.last_entry(KEY) == expected
 
 
 def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_after_an_abandon(

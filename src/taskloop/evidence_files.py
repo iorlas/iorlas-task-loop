@@ -4,11 +4,17 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from typing import Final
 
 from any_agent import RunOutcome
 
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
 from taskloop.plan_step import ANSWER_SCHEMA
+from taskloop.round_log import WORD
+from taskloop.slot_state import shown
+
+ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
+ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
 
 
 class EvidenceError(Exception):
@@ -82,6 +88,15 @@ class EvidenceFiles:
                 return stream.read(cap).decode("utf-8", "replace")
         except (OSError, EvidenceError):
             return None
+
+    def last_entry(self, key: AttemptKey) -> str | None:
+        """The last line of the entry log made only of the entry's fixed words (its status word, then `reason`, `key=value`
+        or `a:b` words of letters, digits and `_`), at most ENTRY_WORDS words; anything else in the log is never printed."""
+        for line in reversed((self.entry_tail(key) or "").splitlines()[-20:]):
+            words = line.split(" ")
+            if words[0] in ENTRY_STATUS and len(words) <= ENTRY_WORDS and all(WORD.fullmatch(word) for word in words[1:]):
+                return shown(line)
+        return None
 
     def put_input(self, key: AttemptKey, text: str) -> FileRef:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""

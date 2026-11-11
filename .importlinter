@@ -23,8 +23,12 @@ source_modules =
     taskloop.cli
     taskloop.cli_plan
     taskloop.cli_composition
+    taskloop.exit_codes
+    taskloop.plan_guide
+    taskloop.plan_render
     taskloop.operations
     taskloop.round
+    taskloop.round_log
     taskloop.selection
     taskloop.result_data
     taskloop.machine_config
@@ -44,6 +48,9 @@ forbidden_modules =
     taskloop.cli
     taskloop.cli_plan
     taskloop.cli_composition
+    taskloop.exit_codes
+    taskloop.plan_guide
+    taskloop.plan_render
     taskloop.operations
     taskloop.round
     taskloop.result_data

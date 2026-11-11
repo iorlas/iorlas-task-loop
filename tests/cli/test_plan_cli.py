@@ -12,7 +12,7 @@ from typing import get_args
 import pytest
 from sqlite_store import Store, begin_immediate
 
-from taskloop import cli_composition, cli_plan, rounds_lock
+from taskloop import cli_composition, cli_plan, plan_guide, rounds_lock
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted
 from taskloop.attempt import SANDBOX
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
@@ -148,26 +148,28 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
 VIEW = SlotView("s2", Path("/slots/s2"), "unknown", "dirty")
 STARTED = {"status", "backlog", "task", "attempt_id", "existing", "entry", "number", "result"}
 CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
-    (START, Started("started", "tasks", "tl-1", "attempt", False, ENTRY), 0, ["started: attempt attempt for tl-1", cli_plan.HELD], STARTED),
+    (START, Started("started", "tasks", "tl-1", "attempt", False, ENTRY), 0,
+     ["started: attempt attempt for tl-1", plan_guide.HELD], STARTED),
     (START, Started("relaunched", "tasks", "tl-1", "attempt", True, ENTRY), 0, ["existing attempt; its admitted choices stand"], STARTED),
     (START, Started("already_running", "tasks", "tl-1", "attempt", True, ENTRY), 0, ["already_running: attempt"], STARTED),
     (START, Started("already_dispatched", "tasks", "tl-1", "attempt", True), 0, ["already_dispatched: attempt"], STARTED),
     (START, Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:paths"), 0, ["Result: rejected:paths"],
      STARTED),
     (START, Started("repeated", "tasks", "tl-1", "next", False, ENTRY, number=2), 0,
-     ["repeated: attempt next for tl-1", "attempt 2 of at most 3; attempt 1's choices stand; deadline from --minutes", cli_plan.HELD],
+     ["repeated: attempt next for tl-1", "attempt 2 of at most 3; attempt 1's choices stand; deadline from --minutes", plan_guide.HELD],
      STARTED),
-    (START, Failed("refused", "repeats_exhausted"), 1, ["refused:repeats_exhausted", cli_plan.GUIDE["repeats_exhausted"]], ADMISSION_ERROR),
+    (START, Failed("refused", "repeats_exhausted"), 1,
+     ["refused:repeats_exhausted", plan_guide.GUIDE["repeats_exhausted"]], ADMISSION_ERROR),
     (START, Failed("refused", "repeat_cap"), 1, ["tl plan start: refused:repeat_cap"], ADMISSION_ERROR),
     (START, Failed("refused", "not_repeatable"), 1, ["tl plan start: refused:not_repeatable"], ADMISSION_ERROR),
-    (START, Failed("unsettled", "worker_alive"), 3, ["tl plan start: unsettled:worker_alive", cli_plan.GUIDE["unsettled"]],
+    (START, Failed("unsettled", "worker_alive"), 3, ["tl plan start: unsettled:worker_alive", plan_guide.GUIDE["unsettled"]],
      ADMISSION_ERROR),
     (START, Failed("unsettled", "superseded"), 3, ["tl plan start: unsettled:superseded"], ADMISSION_ERROR),
     (START, Failed("refused", "no_free_slot", slots=(VIEW,)), 1, ["tl plan start: refused:no_free_slot", "s2 unknown dirty /slots/s2"],
      ADMISSION_ERROR),
     (START, Failed("refused", "registration_refused"), 1, ["refused:registration_refused"], ADMISSION_ERROR),
-    (START, Failed("refused", "registration_conflict"), 1, [cli_plan.GUIDE["registration_conflict"]], ADMISSION_ERROR),
-    (START, Failed("unavailable", "start", admitted=True), 3, [f"Admitted: {cli_plan.HELD} Re-run `tl plan start` to retry"],
+    (START, Failed("refused", "registration_conflict"), 1, [plan_guide.GUIDE["registration_conflict"]], ADMISSION_ERROR),
+    (START, Failed("unavailable", "start", admitted=True), 3, [f"Admitted: {plan_guide.HELD} Re-run `tl plan start` to retry"],
      ADMISSION_ERROR),
     (START, Failed("unavailable", "tracker", claim_leaked=True), 3, ["unavailable:tracker"], ADMISSION_ERROR),
     (START, Failed("uncertain", "launch"), 3, ["tl plan start: uncertain"], ADMISSION_ERROR),
@@ -176,7 +178,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      STATUS_KEYS | {"directory", "entry_log"}),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Unsettled: uncommitted",
-      "  ?? docs/design/tl-1/note.md", "  +3 more", f"Next: repeat\n{cli_plan.GUIDE['repeat']}",
+      "  ?? docs/design/tl-1/note.md", "  +3 more", f"Next: repeat\n{plan_guide.GUIDE['repeat']}",
       "Attempt: attempt (2 of at most 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1"],
      STATUS_KEYS | {"directory", "entry_log"}),
     (["plan", "list", "--stuck"], Listed((STATUS,)), 0,
@@ -187,26 +189,26 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
      ["reused: attempt attempt", "Release: released\nPublish: published"], CHECKED),
     (["plan", "verify", "tl-1", "--backlog", "tasks"],
      VerifiedTask("verified", "tasks", "tl-1", "attempt", "held:slot_dirty", "unavailable:remote"), 0,
-     ["Release: held:slot_dirty", cli_plan.GUIDE["release"], f"Publish: unavailable:remote\n{cli_plan.PUBLISH}"], CHECKED),
+     ["Release: held:slot_dirty", plan_guide.GUIDE["release"], f"Publish: unavailable:remote\n{plan_guide.PUBLISH}"], CHECKED),
     (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", BranchPublished(X, X)), 0,
      [f"published: task/tl-1 at {X} on origin (attempt attempt, backlog tasks)\n"], PUBLISHED),
     (PUBLISH, PublishedTask("tasks", "tl-1", "attempt", PublishedRow(X, X, 40.0)), 0,
      [f"already_published: task/tl-1 at {X} on origin (attempt attempt, backlog tasks)\nNothing changed: it was published before."],
      PUBLISHED),
     (PUBLISH, Failed("refused", "diverged", f"origin's task/tl-1 is at {T}"), 1,
-     ["tl plan publish: refused:diverged", cli_plan.GUIDE["diverged"]], ERROR),
-    (PUBLISH, Failed("refused", "remote_ahead"), 1, [cli_plan.GUIDE["remote_ahead"]], ERROR),
-    (PUBLISH, Failed("refused", "no_remote"), 1, [cli_plan.GUIDE["no_remote"]], ERROR),
-    (PUBLISH, Failed("refused", "repository"), 1, [cli_plan.GUIDE["repository"]], ERROR),
-    (PUBLISH, Failed("refused", "not_verified"), 1, [cli_plan.GUIDE["not_verified"]], ERROR),
-    (PUBLISH, Failed("unavailable", "git"), 3, [cli_plan.GUIDE["git"]], ERROR),
-    (PUBLISH, Failed("unavailable", "remote"), 3, ["tl plan publish: unavailable:remote", cli_plan.GUIDE["remote"]], ERROR),
+     ["tl plan publish: refused:diverged", plan_guide.GUIDE["diverged"]], ERROR),
+    (PUBLISH, Failed("refused", "remote_ahead"), 1, [plan_guide.GUIDE["remote_ahead"]], ERROR),
+    (PUBLISH, Failed("refused", "no_remote"), 1, [plan_guide.GUIDE["no_remote"]], ERROR),
+    (PUBLISH, Failed("refused", "repository"), 1, [plan_guide.GUIDE["repository"]], ERROR),
+    (PUBLISH, Failed("refused", "not_verified"), 1, [plan_guide.GUIDE["not_verified"]], ERROR),
+    (PUBLISH, Failed("unavailable", "git"), 3, [plan_guide.GUIDE["git"]], ERROR),
+    (PUBLISH, Failed("unavailable", "remote"), 3, ["tl plan publish: unavailable:remote", plan_guide.GUIDE["remote"]], ERROR),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(DONE, Path("/a/d"), Path("/a/d/entry.log")), 0,
      [f"Published: task/tl-1 at {X} on origin, 1970-01-01 00:00:40 UTC\n", "Next: done"],
      STATUS_KEYS | {"directory", "entry_log"}),
     (["plan", "show", "tl-1", "--backlog", "tasks"], Shown(ABANDONED, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Earlier: first abandoned", f"Released: 1970-01-01 00:00:30 UTC, slot parked at {D}; claim unclaimed; abandoned",
-      f"Next: start\n{cli_plan.GUIDE['abandoned']}"],
+      f"Next: start\n{plan_guide.GUIDE['abandoned']}"],
      STATUS_KEYS | {"directory", "entry_log"}),
     (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", Released("s1", D, True, "kept", False)), 0,
      ["released: attempt attempt for tl-1 (backlog tasks)\n", f"Slot s1 parked at {D}\nReservation of s1 removed\nClaim kept"], FREED),
@@ -216,22 +218,22 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", AlreadyReleased("s1", "unclaimed", True)), 0,
      ["already_released: attempt attempt for tl-1 (backlog tasks); nothing changed", "Claim: unclaimed; abandoned"], FREED),
     (RELEASE, Failed("refused", "slot_dirty", "?? x\nRemove the listed files. Nothing changed."), 1,
-     ["tl plan release: refused:slot_dirty\n?? x\nRemove the listed files. Nothing changed.", cli_plan.GUIDE["slot_dirty"]], ERROR),
-    (RELEASE, Failed("refused", "not_terminal"), 1, [cli_plan.GUIDE["not_terminal"]], ERROR),
-    (RELEASE, Failed("unsettled", "worker_unknown"), 3, [cli_plan.GUIDE["worker_unknown"]], ERROR),
+     ["tl plan release: refused:slot_dirty\n?? x\nRemove the listed files. Nothing changed.", plan_guide.GUIDE["slot_dirty"]], ERROR),
+    (RELEASE, Failed("refused", "not_terminal"), 1, [plan_guide.GUIDE["not_terminal"]], ERROR),
+    (RELEASE, Failed("unsettled", "worker_unknown"), 3, [plan_guide.GUIDE["worker_unknown"]], ERROR),
     (RELEASE, Failed("unavailable", "tracker", "Released; the tracker claim is still to be returned (other): rerun"), 3,
      ["unavailable:tracker\nReleased; the tracker claim is still to be returned"], ERROR),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("rejected", "paths"), 1, ["tl plan verify: rejected:paths"], ERROR),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("not_applicable", "incomplete"), 1, ["not_applicable:incomplete"], ERROR),
-    (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("unsettled", "dirty"), 3, ["unsettled:dirty", cli_plan.GUIDE["unsettled"]],
+    (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("unsettled", "dirty"), 3, ["unsettled:dirty", plan_guide.GUIDE["unsettled"]],
      ERROR),
     (["plan", "verify", "tl-1", "--backlog", "tasks"], Failed("unavailable", "slot_busy"), 3,
-     ["unavailable:slot_busy", cli_plan.GUIDE["slot_busy"]], ERROR),
+     ["unavailable:slot_busy", plan_guide.GUIDE["slot_busy"]], ERROR),
     (NEXT, Round("tasks", MOVES, "no_free_slot"), 0,
      ["tl-3   start    started a3\ntl-2   report   stuck:hung a2\ntl-10  skip     abandoned\n", "Stopped: no_free_slot",
-      f"stuck:hung: {cli_plan.GUIDE['stuck:hung']}", f"failed: {cli_plan.GUIDE['failed']}",
-      f"abandoned_skip: {cli_plan.GUIDE['abandoned_skip']}", f"no_free_slot: {cli_plan.GUIDE['no_free_slot']}",
-      "tl-5   report   claim_leaked\n", f"claim_leaked: {cli_plan.GUIDE['claim_leaked']}"], ROUND),
+      f"stuck:hung: {plan_guide.GUIDE['stuck:hung']}", f"failed: {plan_guide.GUIDE['failed']}",
+      f"abandoned_skip: {plan_guide.GUIDE['abandoned_skip']}", f"no_free_slot: {plan_guide.GUIDE['no_free_slot']}",
+      "tl-5   report   claim_leaked\n", f"claim_leaked: {plan_guide.GUIDE['claim_leaked']}"], ROUND),
     (NEXT, Round("tasks", (), "unavailable:tracker"), 3, ["Stopped: unavailable:tracker"], ROUND),
     (NEXT, Round("tasks", ()), 0, ["Nothing to do in backlog tasks."], ROUND),
     (NEXT, Failed("refused", "label"), 1, ["tl plan next: refused:label"], ERROR),
@@ -270,7 +272,7 @@ def test_every_next_step_renders_with_its_guidance(step: Next, monkeypatch: pyte
                   Path("/d"), Path("/d/entry.log"))
     monkeypatch.setitem(cli_plan.OPERATIONS, ("plan", "show"), lambda _arguments, _loaded: shown)
     assert main(["plan", "show", "tl-1", "--backlog", "tasks"]) == 0
-    assert f"Next: {step}\n{cli_plan.GUIDE[step]}" in capsys.readouterr().out
+    assert f"Next: {step}\n{plan_guide.GUIDE[step]}" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("entry", words(EntryState))
@@ -572,7 +574,7 @@ def test_rounds_refuse_a_short_interval_before_opening_anything(
     error = json.loads(capsys.readouterr().err)["error"]
     assert (error["kind"], error["reason"]) == ("refused", "interval") and run.opened == []
     assert main([*ROUNDS, "--every", "4"]) == 1
-    assert cli_plan.GUIDE["interval"] in capsys.readouterr().err
+    assert plan_guide.GUIDE["interval"] in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--model", "--effort", "--minutes"])
@@ -605,4 +607,4 @@ def test_the_real_opener_refuses_inputs_a_missing_database_and_a_second_rounds_p
     finally:
         held.release()
     output = capsys.readouterr()
-    assert output.out == "" and "tl plan rounds: refused:rounds_running" in output.err and cli_plan.GUIDE["rounds_running"] in output.err
+    assert output.out == "" and "tl plan rounds: refused:rounds_running" in output.err and plan_guide.GUIDE["rounds_running"] in output.err

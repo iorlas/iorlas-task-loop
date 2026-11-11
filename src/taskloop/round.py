@@ -10,10 +10,8 @@ Admission reads the tracker only when factory.db has an adopted slot without a r
 `stopping` port asked before each move (the graceful stop: no further move, `stopped=interrupted`).
 """
 
-import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
@@ -22,7 +20,6 @@ from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.evidence_files import EvidenceError
 from taskloop.operations import (
     UNKNOWN_KINDS,
-    WORD,
     AttemptView,
     Failed,
     Listed,
@@ -46,6 +43,7 @@ from taskloop.operations import (
     verify_task,
 )
 from taskloop.publish import BranchPublished
+from taskloop.round_log import INTERRUPTED, fixed, ident, stamped
 from taskloop.selection import order
 from taskloop.task import TaskInspectionError
 from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, ready_rows
@@ -58,8 +56,6 @@ STOPS: Final = frozenset({
 # re-running is safe; a single task's unsettled must not stop admission or back off the loop
 STOPPING_UNKNOWN: Final = frozenset(UNKNOWN_KINDS) - {"unsettled"}
 LEAKED: Final = "the tracker claim may still be held by taskloop: check `bd show {task}`; `bd unclaim {task} --if-assignee taskloop`"
-IDENT: Final = re.compile(r"[A-Za-z0-9._:@+/-]{1,128}")  # a backlog, task or attempt id as a log word
-INTERRUPTED: Final = "interrupted"  # the round's stopped word after a graceful stop; replaces any admission word
 
 
 def never() -> bool:
@@ -96,15 +92,6 @@ class RoundPorts:
     stopping: Callable[[], bool] = never
 
 
-def stamped(now: float, backlog: str, *words: str) -> str:
-    """One round-log line (`rounds.log`): the UTC time, the backlog and fixed words; `rounds` writes the same."""
-    return " ".join([datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), _ident(backlog), *words])
-
-
-def fixed(word: str) -> str:
-    return word if WORD.fullmatch(word) else "invalid"
-
-
 def _key(move: Move) -> tuple[str, str, str, str]:
     return move.task_id, move.action, move.word, move.attempt_id
 
@@ -134,7 +121,7 @@ class _Trail:
     def add(self, move: Move) -> None:
         self.moves.append(move)
         words = [fixed(each) for each in move.word.split(" ")]
-        self._write(_key(move), _ident(move.task_id), move.action, *words, *([_ident(move.attempt_id)] if move.attempt_id else []))
+        self._write(_key(move), ident(move.task_id), move.action, *words, *([ident(move.attempt_id)] if move.attempt_id else []))
 
     def close(self, stopped: str) -> Round:
         """The closing line, unless quiet: no move line written and the same stopped word as the previous round."""
@@ -144,10 +131,6 @@ class _Trail:
         self._write(key, "round", f"moves={len(self.moves)}", *([f"stopped={fixed(stopped)}"] if stopped else []))
         written = frozenset(self.written) if self.logged else frozenset()
         return Round(self.backlog, tuple(self.moves), stopped, self.logged, written)
-
-
-def _ident(value: str) -> str:
-    return value if IDENT.fullmatch(value) else "invalid"
 
 
 def _word(result: Started | Failed) -> str:

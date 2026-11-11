@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from taskloop.attempt_reads import SlotUse
-from taskloop.operations import Ended, Failed, Move, Quiet, Round, exit_code
+from taskloop.exit_codes import exit_code
+from taskloop.operations import Ended, Failed, Move, Quiet, Round
 from taskloop.round import NextRequest
 from taskloop.rounds import CHECK, RoundsPorts, RoundsRequest, abrupt, inputs, run_rounds
 
