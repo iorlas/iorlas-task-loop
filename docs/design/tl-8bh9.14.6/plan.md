@@ -551,6 +551,8 @@ gains `held:check_running`; `step kind` says the check step is not one; `evidenc
 
 ## 17. Live smoke (owner, or an agent the owner authorizes, after S6e)
 
+The runbook as built is [live-smoke.md](live-smoke.md) (section 25); the steps below are the design's.
+
 Base: the M1 runbook ([live-smoke.md](../tl-8bh9.4.3.1.16.2/live-smoke.md) "M1 end-to-end smoke") with a new scratch
 folder `$M2`, the runner at the S6e commit, the scratch remote's `main` at that commit, and factory.db new (v12). Before
 any task is cut, commit to the scratch `main`'s `.task-loop.json` one non-required check `slow`, `["sh", "-c", "sleep
@@ -1016,3 +1018,59 @@ each is repaired with a test that fails without it:
    further guide; `GUIDE["release"]` ("slot still held ... `tl step release`") contradicted it.
 5. **Logs through their owner**: `EvidenceFiles.check_path` (no directory made; `check_log` makes it) gives `tl step
    show`'s log paths; an `undefined` result has none (`logs` entry and JSON `results[].log` null).
+
+## 25. As built: S6e (tl-8bh9.14.6.5)
+
+The round's settle routing for checks attempts, its `rounds.log` words, the guide, the glossary and roadmap rows and the
+[M2 live-smoke runbook](live-smoke.md). No schema, exit code or JSON key change. Code lines by the policy counter: `round`
+244 (+4), `operations` 344 (+18), `step_guide` 178 (+2); tests: `round_bench` 150 (new: the rounds bench moved out of
+`test_advance`, now 112), `test_checks_round` 215 (new), `test_check_operations` 222 (+30), `test_check_cli` 143 (+1).
+
+- **`_resume` of a checks view** (`each.checks` set) calls `operations.relaunch_checks`: fenced on
+  `CheckStore.attempt_of` (the checks launcher's own read): the snapshot's checks attempt is still the task's latest,
+  `admitted` and not released, else `refused:changed`, `concluded`, `released` or `abandoned` (the last a `skip
+  abandoned`); then the checks launcher, never the agent's; `Started.step` is `check`. A checks attempt whose advance
+  launch failed (`implement advance unavailable:start`), whose entry refused or died, or that passed its deadline is
+  relaunched (`check relaunch relaunched`). The round never admits, claims or re-runs: a failed checks attempt is `done`.
+- **Words** (section 9): `check advance started`, `check report running`, `check relaunch relaunched`, `check report
+  failed:<reason>` (the checks result's reason is already `failed:<reason>`; it was `failed:failed:<reason>`, four parts,
+  logged `invalid`), `check report stuck:checks_refused`, `check report release`. A failed or stuck checks task is one
+  task's move: it never stops other advances or ingestion (S5c's stop set is unchanged).
+- **Admission's skip of a half-done abandon**: `_admit`'s attempts map reads "abandoned" as the claim no longer `kept`,
+  so a ready task whose checks half is abandoned (claim kept, then lapsed) is skipped `attempted`, not `abandoned`.
+- **Guide**: `CHECKS_GUIDE["start"]` says each round relaunches the checks entry, and `tl step start` does; it and
+  `stuck:checks_refused` name the count past the deadline.
+
+**Decided here (open to veto): the bound on relaunches the entry never counts.** S6c's counter is the entry's: a launch
+that fails or is uncertain, an entry refusing before the attempt is its own (`identity`, `stale_reservation`, `absent`,
+`unavailable store`) or one crashing before it counts (`failed <Type>` from `main`) leave `refusals` unchanged, so a
+round relaunching them would do so forever, past the deadline too (a checks attempt past its deadline is still `start`:
+its entry concludes `expired`). The plan has no mechanism for these; the smallest, with no new column: **past its
+deadline each round's relaunch is counted before the launch** (`CheckStore.refused(key, LATE)`, `LATE = "late_relaunch"`,
+the existing counter and threshold), so at most two such relaunches follow the deadline before `stuck:checks_refused`
+(fewer when the entry counted refusals already; one that concludes clears the count). Before the deadline such
+relaunches repeat once per round, as an agent attempt's do until its deadline (`stuck:expired_admitted`). Not chosen:
+counting every failed launch (a transient fork failure would stop the rounds after two), counting every round relaunch
+(double counts the entry's own refusals: stuck after one), or counting at registration (changes S6c's meaning of the
+counter). Consequences: a reservation no longer held makes the count refuse, so past the deadline nothing launches
+(`relaunch refused:stale_reservation`, reported each round, logged once); the relaunch after a reboot past the deadline
+is counted although the entry's registration renews the deadline (once; cleared by its conclusion); with a live
+orphan check past the deadline the round and the entry both count, so one late relaunch reaches the threshold.
+`tl step start` by hand is not counted.
+
+**Tests** (`test_checks_round.py`, over a factory.db file, the rounds bench, the real checks admission at a `main`
+requiring `check` and `test`, and the real `launch.Launcher` over `CheckStore` whose registered start runs a scripted
+entry body at once): plan, implement and checks to `Next: done` with one claim and nothing logged for the pass; a failed
+check reported once (`quiet`), never relaunched or re-run, the claim kept and a new task started; relaunch with the checks
+launcher only after a failed launch, a crashed entry and a counted refusal (the agent launcher never called again); two
+counted refusals stopping the rounds (reported once) while new work starts in a second slot, then `tl step start` by hand;
+past the deadline a failed launch and a crash each stopping after two counted relaunches, uncounted before it; a late
+relaunch concluding `expired` clearing the count; the half-done abandon `attempted`, the finished one `skip abandoned`,
+never re-advanced; two done tasks on one slot checked in release order while new work waits. `test_check_operations`:
+`relaunch_checks` launching the admitted attempt uncounted before the deadline, its fences (`changed`, `concluded`,
+`released`, `abandoned`, `stale_reservation`) launching nothing, and the late count written before a failed launch.
+Mutation-checked: the checks route in `_resume`, the agent launcher in its place, the `failed:` word, the attempts map, the
+late count (removed or always), the `admitted` fence, the id fence and the `abandoned` word each fail a test.
+
+**Not verified**: a real `tl step rounds` with real checks entries (the [M2 live smoke](live-smoke.md)); the `lingering`
+outcome of a timed-out `sh -c 'sleep 600 & sleep 600'` on the host (the smoke records it); a real launch failure.

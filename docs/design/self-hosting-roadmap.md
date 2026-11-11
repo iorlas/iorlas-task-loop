@@ -45,7 +45,8 @@ section 2.9 and its decision 8.7 now run `setup` from the task branch.
 | Implement step and step chaining (S5) | design ([.16](tl-8bh9.4.3.1.16/plan.md)); S5a, S5b (implement kind, hand advance, factory.db v11), S5c (round advance) built, gated; live smoke not run | f5ee65990, 872e6d2c9, da4245d9c; S5c: .16 section 14 |
 | Test environment inside the agent sandbox (B2, [S5e](tl-8bh9.4.3.1.16.2/plan.md)) | S5e-0 pins, S5e-1 setup and S5e-2 access built, gated (Linux only); live smoke not run ([checklist and M1 runbook](tl-8bh9.4.3.1.16.2/live-smoke.md)) | 06b656747, bbbb0c775, 5cfcaa2fb; S5e-2: plan section 18 |
 | Repository profile reader (`.task-loop.json`, B3) | built, gated; `tl profile show` | 85c9e68fc, 2bb02d106 |
-| Checks step, review step, land (merge, close, sync) | not built; contracts agreed in candidate-checks and delivery-publication | none |
+| Checks step (B4, [tl-8bh9.14.6](tl-8bh9.14.6/plan.md)): factory.db v12, the block, the checks entry and release, admission and `tl step`, the round's routing | S6a-S6e built, gated; M2 live smoke not run ([M2 runbook](tl-8bh9.14.6/live-smoke.md)) | 3ce982650, 89a4a0608, f28337f41, a7dc16784, eba237919 (each with its review repairs) |
+| Review step, land (merge, close, sync) | not built; contracts agreed in candidate-checks and delivery-publication | none |
 | Questions and holds; a failed result today leaves the task claimed with no signal | not built | none |
 | Install, pin, release; session resume; dashboard; keep-awake; account routing | not built | none |
 | Tracker entries for the roadmap (B14) | filed (D13): epic tl-8bh9.14 with 25 children (blocks B3 to B15 and audits; tl-8bh9.14.1 and .14.2 closed), S5 slices under tl-8bh9.4.3.1.16; stale-entry hygiene remains open (tl-8bh9.14.15) | none |
@@ -57,6 +58,13 @@ profile's checks (S5e); the implement commit is verified and published on the sa
 every block of M1 is built (B14 filed, B3, B13 pinned `git_dir`, B2, S5a-c): **M1 is reached once the owner-run live smoke
 ([M1 end to end](tl-8bh9.4.3.1.16.2/live-smoke.md)) passes**. A result that is not `verified` ends as a failed `done`:
 the slot is released, the claim kept, and nothing tells the person.
+
+Since S6e the loop goes on: a done implement attempt advances (claimed work first) to the **check step**, which runs
+every check of the profile at X on the host in a free slot (reset to X, `setup` at X) and concludes `passed` only when
+every check `main` requires passed (`tl step show`: one `Check:` line per check, `Next: done`). A failed checks attempt
+is a visible failed `done` (`check report failed:<reason>` once in `rounds.log`, the claim kept, never re-run by a
+round; `tl step start` re-runs it). **M2 is reached once the owner-run [M2 live smoke](tl-8bh9.14.6/live-smoke.md)
+passes.**
 
 ## 2. "Self-hosting ready": observable checklist
 
@@ -204,7 +212,8 @@ credentials and push-barred. One `SANDBOX` value for every step; `StepKind` has 
 | Depends on | B1, B3; B2 for the same prepared environment |
 | Size | 3 slices: schema and result store; the check runner and step in `tl step` (show, list); the round phase |
 | Open decisions | O1 (not blocking), O2; where they run is decided (D10) |
-| Design / smoke | yes (own plan, tasks tl-8bh9.5, tl-8bh9.5.1, tl-8bh9.5.2) / yes |
+| Design / smoke | yes ([tl-8bh9.14.6](tl-8bh9.14.6/plan.md); earlier tasks tl-8bh9.5, tl-8bh9.5.1, tl-8bh9.5.2) / yes ([M2 runbook](tl-8bh9.14.6/live-smoke.md)) |
+| Built | S6a-S6e (5 slices, each reviewed): failure route as in O2's M2 reading (a failed `done`, claim kept, no hold); holds are B7 |
 
 ### B5. Review step
 
@@ -297,7 +306,7 @@ S5a ─────────┼─> B3 profile ─> B13 pinned git_dir ─> R
 | Milestone | Blocks | The owner can | Still by hand |
 |---|---|---|---|
 | **M1 semi-assisted** | B14, S5 (a-c), B3, B13 pinned `git_dir`, B2 | Label an own task `auto`, run `tl step rounds` from a runner worktree, get plan and implementation (with new tests the agent ran) on `task/<id>` | Run `just check`/`just test` on `task/<id>`; read the diff; squash-merge, push, `bd close`; spot failed tasks in `tl step list` and abandon them; stop rounds before any factory upgrade |
-| **M2 checks in the factory** | B4 | See per-check passed/failed on X in `tl step show` | Read the diff; land and close; handle failures |
+| **M2 checks in the factory** | B4 (built S6a-S6e; reached once the [M2 live smoke](tl-8bh9.14.6/live-smoke.md) passes) | See per-check passed/failed on X in `tl step show`; rounds run the checks after implement | Read the diff; land and close; handle failures (re-run with `tl step start`, or abandon) |
 | **M3 land and close** | B6 | Run `tl step land TASK` after reading diff and checks: squash on origin `main`, task closed | Decide each land; tracker sync if O4 says so; failures |
 | **M4 unattended loop** | B7, B11, B13 Git read timeout | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
 | **M5 daily self-hosting** | B8, B10 (then the dashboard) | Run a pinned version; land factory changes and adopt them by changing the pin and restarting; see time since last command | Land decisions; pin changes; anything deferred (section 6) |
