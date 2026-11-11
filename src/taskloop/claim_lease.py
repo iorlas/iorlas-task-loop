@@ -3,13 +3,17 @@ BEAT_EVERY_S (a third of bd's fixed 300 s TTL) and stops when the entry's step e
 
 A renewal's outcome is recorded, never acted on: a lost claim stops the renewing, not the step, and nothing here releases
 or re-claims. The one word `KeepAlive.word` is what the entry's log line ends with (`claim=<word>`). No IO of its own:
-the renewal (`Heartbeat`), the stop event and the clock are injected.
+the renewal (`Heartbeat`), the stop event and the clock are injected. `renewal` is the one claim renewal a step takes now
+(after an implement step's setup, before a checks or land validation's block), shared by both entries and by the land
+(tl-8bh9.14.8 section 3), so none of them imports another's entry.
 """
 
 import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Literal, Protocol
+
+from taskloop.environment import Renew, Renewal
 
 type Beat = Literal["held", "lost", "unrenewed"]  # one renewal: renewed; the claim is gone (taken, reverted, closed); unknown
 type Heartbeat = Callable[[], Beat]  # bound to one tracker root and task by `tracker_client`
@@ -99,3 +103,15 @@ def keeping(alive: KeepAlive) -> Generator[KeepAlive]:
     finally:
         alive.halt()
         thread.join(BD_TIMEOUT_S + 5)
+
+
+def renewal(alive: KeepAlive) -> Renew:
+    """One renewal now through the keep-alive (an implement step's, after its setup; a validation's, after its setup):
+    `lost` and `held` as its word says, anything else `unrenewed`."""
+
+    def renew() -> Renewal:
+        alive.renew()
+        word = alive.word()
+        return "lost" if word == "lost" else "held" if word == "held" else "unrenewed"
+
+    return renew

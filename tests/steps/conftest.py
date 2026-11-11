@@ -174,6 +174,27 @@ def on_slot(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Path:
     return path
 
 
+@pytest.fixture
+def candidate_on_slot(on_slot: Path, repo: FakeRepo, slot: FakeWorktree) -> tuple[Path, str]:
+    """`on_slot` with `CHECKS` concluded `passed` and released (parked at D), and its land candidate 1 `CANDIDATE` (O
+    `ORIGIN`, S a commit on the person's `main` after X, S's tree not X's) pending on the Git fake's slot s1 (still at D),
+    deadline 300, with its held reservation; no land process held yet. Returns the path and S."""
+    root = repo.worktree(repo.identity().root)
+    root.write_file("README", "S")
+    made = root.record("the land candidate", paths="all")
+    assert isinstance(made, Recorded)
+    d, con = head(slot), Store(SCHEMA).open_rw(on_slot)
+    assert con is not None
+    with begin_immediate(con):
+        con.execute("""UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=?
+        WHERE attempt_id='checks'""", (d,))
+        con.execute("UPDATE reservation SET attempt_id='candidate' WHERE attempt_id='checks'")
+        land_store.insert(con, land_store.LandAdmitted(CANDIDATE, "checks", 1, ORIGIN, made.sha, False, REQUIRED, "s1", d, 300.0,
+                                                       None, 10.0))
+    con.close()
+    return on_slot, made.sha
+
+
 DONE = (  # the implement attempt's capture, verdict, settled release and publication
     """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,stderr_path,
     stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,session_state) VALUES

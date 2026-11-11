@@ -51,9 +51,9 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
     WorkerGone,
 )
-from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
+from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import open_attempts
-from taskloop.environment import Renew, Renewal
+from taskloop.environment import Renew
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import remotes
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
@@ -178,18 +178,6 @@ def _held(_admission: Admission) -> AbstractContextManager[None]:
 def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[None]:
     """The entry's release runs inside the slot lock the entry already holds."""
     return nullcontext()
-
-
-def renewal(alive: KeepAlive) -> Renew:
-    """One renewal now through the keep-alive (an implement step's, after its setup): `lost` and `held` as its word says,
-    anything else `unrenewed`."""
-
-    def renew() -> Renewal:
-        alive.renew()
-        word = alive.word()
-        return "lost" if word == "lost" else "held" if word == "held" else "unrenewed"
-
-    return renew
 
 
 def _step(
