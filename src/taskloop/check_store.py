@@ -306,12 +306,12 @@ class CheckStore(StoreConnection):
             raise StoreRefused("stale_reservation")
 
     def refused(self, key: AttemptKey, word: str) -> int:
-        """A relaunchable refusal (section 6.1): the same word as the last one counts one more, another starts at 1.
-        Returns the count."""
+        """A relaunchable refusal (section 6.1): every one counts, whatever its word (two words alternating, such as an
+        uncertain setup start then its command still running, would otherwise relaunch forever); `refusal` keeps the last
+        word for display only. Only the conclusion clears the count. Returns it."""
         with self._connection(write=True) as con:
             self._held(con, key)
-            con.execute("UPDATE checks_attempt SET refusals=CASE WHEN refusal=? THEN refusals+1 ELSE 1 END,refusal=? WHERE attempt_id=?",
-                        (word, word, key.attempt_id))
+            con.execute("UPDATE checks_attempt SET refusals=refusals+1,refusal=? WHERE attempt_id=?", (word, key.attempt_id))
             return as_int(con.execute("SELECT refusals FROM checks_attempt WHERE attempt_id=?", (key.attempt_id,)).fetchone()[0])
 
     def profiled(self, key: AttemptKey, digest: str) -> None:

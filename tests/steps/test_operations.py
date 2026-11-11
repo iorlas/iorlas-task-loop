@@ -578,7 +578,12 @@ LONGEST = ("unavailable evidence publish=accepted then=collected:verified verify
     ("refused claim_lost\n", "refused claim_lost"),
     (LONGEST + "\n", LONGEST),
     (LONGEST + " x=y\n", None),
-    ("refused " + "x" * 61 + "\n", None),
+    ("refused " + "x" * 65 + "\n", None),
+    ("refused -x\n", None),
+    ("collected failed:type-check:failed claim=held release=released\n", "collected failed:type-check:failed claim=held release=released"),
+    ("collected failed:" + "a.b-c" * 12 + "z" * 4 + ":not_run\n", "collected failed:" + "a.b-c" * 12 + "z" * 4 + ":not_run"),
+    ("collected failed:expired:a.b-c claim=lost release=held:check_running\n",
+     "collected failed:expired:a.b-c claim=lost release=held:check_running"),
     ("refused a b c d e f g h\n", None),
 ])
 def test_only_a_line_of_the_entrys_fixed_words_is_shown(tail: str | None, expected: str | None, tmp_path: Path) -> None:

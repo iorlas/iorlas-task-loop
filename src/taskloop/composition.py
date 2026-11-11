@@ -88,7 +88,8 @@ class Checking:
     """What a checks attempt's entry (`check_entry`) works with: its store and its setup runs' store, its evidence, the
     Git views and slot file port, the profile port on a slot's pinned view, the slot environment (setup without a
     probe), the block, the process-table observations of a registered command and entry, the scratch's emptying, the
-    clock and the scrubbed environment every setup and check command gets (`agent_credentials.scrubbed`)."""
+    clock and the scrubbed environment every setup and check command gets (`agent_credentials.scrubbed`, read when the
+    slot is set up: a fault there is the entry's counted `fault:CredentialsUnavailable`)."""
 
     store: CheckStore
     setups: SetupStore
@@ -102,20 +103,19 @@ class Checking:
     entry_seen: Observe
     scratch: Scratch
     clock: Callable[[], float]
-    environ: Mapping[str, str]
+    environ: Callable[[], Mapping[str, str]]
 
 
 def open_checking(database: Path, artifacts: Path) -> Checking:
     """Real wiring of the checks entry: per-thread shared writers on factory.db (each command's identity through the
-    bounded registration connections), real Git, files and processes, wall clock; the environment scrubbed once here
-    (`CredentialsUnavailable` on a malformed Git config count)."""
+    bounded registration connections), real Git, files and processes, wall clock, this process's scrubbed environment."""
     store, (registration, bounded) = Store(SCHEMA), _registration(database)
     registering = StoreConnection(bounded, registration.begin_immediate)
     setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
     return Checking(
         CheckStore(lambda: store.shared_rw(database), store.begin_immediate, registering), setup, EvidenceFiles(artifacts), checkouts,
         RealSlotFiles(), slot_profiles, _environment(setup, database, artifacts), Block(BlockPorts(setup_process, group_alive, time.time)),
-        setup_seen, entry_seen, RealEnvFiles().empty_scratch, time.time, scrubbed(os.environ),
+        setup_seen, entry_seen, RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(os.environ),
     )
 
 

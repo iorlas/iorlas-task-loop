@@ -4,18 +4,19 @@ attempt's `entry.log`.
 
 It runs only as the identity the launcher registered (`refused identity` otherwise), never creates factory.db, and
 signals nothing. Order: its slot's custody lock (never waiting), held to the end; the claim renewed once (lost concludes
-`claim_lost`), then kept alive by a thread until the block ends (a later loss is only the log's `claim=`); the reconcile
-before any slot read or write (the latest setup run's unsettled command and every unsettled result of the latest block,
-boot-aware: alive `unavailable checks:running`, unknown `checks:unknown`; gone, an unfinished result becomes
-`interrupted`); the deadline (`expired`); the profile at X on the slot's pinned view (`profile:<reason>`); a completed
-latest block is concluded as it stands, never run again; `main` read (`main_moved`); X taken detached
-(`prepare.detach_at`); the slot reset to exactly X and set up at X (`environment.prepare_for`, no probe); the block
-(`checks.Block`); `main` read again; the conclusion from the latest block; then the settled release of its own slot under
-the lock it holds (`check_release`). Section 6.1: a condition the candidate caused, or one a relaunch cannot clear,
-concludes `failed` with its reason and releases; an unavailable word, or a refusal in `RELAUNCHED`, leaves the attempt
-`admitted` and is counted (`CheckStore.refused`; two in a row stop the rounds' relaunches). One log line of fixed words:
-`collected passed|failed:<reason>` then `claim=` and `release=`, or the refusal (then `claim=` once the claim was read).
-Exit 0 only for `passed`.
+`claim_lost`, after the reconcile below marks gone unfinished results), then kept alive by a thread until the block ends
+(a later loss is only the log's `claim=`); the reconcile before any slot read or write (the latest setup run's unsettled
+command and every unsettled result of the latest block, boot-aware: alive `unavailable checks:running`, unknown
+`checks:unknown`; gone, an unfinished result becomes `interrupted`); the deadline (`expired`); the profile at X on the
+slot's pinned view (`profile:<reason>`); `main` read (`main_moved`); a completed latest block is concluded as it stands,
+never run again; X taken detached (`prepare.detach_at`); the slot reset to exactly X and set up at X
+(`environment.prepare_for`, no probe); the block (`checks.Block`); `main` read again; the conclusion from the latest
+block; then the settled release of its own slot under the lock it holds (`check_release`). Section 6.1: a condition the
+candidate caused, or one a relaunch cannot clear, concludes `failed` with its reason and releases; an unavailable word,
+or a refusal in `RELAUNCHED`, leaves the attempt `admitted` and is counted (`CheckStore.refused`, whatever the word; two
+in a row stop the rounds' relaunches), and so is any other fault once the attempt is the entry's own (`unavailable
+fault:<type>`). One log line of fixed words: `collected passed|failed:<reason>` then `claim=` and `release=`, or the
+refusal (then `claim=` once the claim was read). Exit 0 only for `passed`.
 """
 
 import contextlib
@@ -142,6 +143,8 @@ def enter(
     try:  # the lock is outermost: the claim's keep-alive starts and stops inside it
         alive = KeepAlive(heartbeat_for(found.row.tracker_root, args.task_id), stop, found.work.clock)
         line, passed = _claimed(found, alive)
+    except Exception as error:  # a fault of the environment or a defect: counted, so it cannot relaunch forever
+        line, passed = _counted(found, AttemptResult("unavailable", "fault:" + type(error).__name__)), False
     finally:
         lock.release()
     log(line)
@@ -152,7 +155,10 @@ def _claimed(found: _Registered, alive: KeepAlive) -> tuple[str, bool]:
     """Under the lock: one renewal, then the checks inside the keep-alive; a conclusion is written and the slot released."""
     alive.renew()
     ended: Ended = Verdict("failed", "claim_lost")
-    if alive.word() != "lost":
+    if alive.word() == "lost":  # the reconcile still marks its gone unfinished results before the conclusion
+        with contextlib.suppress(StoreRefused, StoreUnavailable):
+            _reconciled(found)
+    else:
         with keeping(alive):
             ended = _checked(found, renewal(alive))
     if isinstance(ended, AttemptResult):
@@ -233,16 +239,17 @@ def _profiled(found: _Registered) -> tuple[Profile, str, Path] | AttemptResult:
 
 
 def _at_x(found: _Registered, renew: Renew) -> Ended:
-    """Steps 6-9: the profile at X, a completed latest block concluded as it stands, `main`, then X taken detached."""
+    """Steps 6-9: the profile at X, `main` (also before a completed latest block is concluded as it stands: a candidate
+    that moved it and then killed its entry never passes), then X taken detached."""
     work, row = found.work, found.row
     read = _profiled(found)
     if isinstance(read, AttemptResult):
         return read
     profile, digest, gitdir = read
     results = work.store.results(row.key)
-    if completed(results, profile.checks, row.required):
-        return Verdict(*conclusion(results, row.required))
     moved = _moved(work.checkouts(Path(found.slot_path), git_dir=gitdir), row.target)
+    if moved is None and completed(results, profile.checks, row.required):
+        return Verdict(*conclusion(results, row.required))
     prepared = moved or detach_at(work.checkouts, work.slot_files, found.slot_path, row.repo_id, row.commit)
     if not isinstance(prepared, Prepared):
         return prepared
@@ -254,7 +261,7 @@ def _environment(found: _Registered, prepared: Prepared, renew: Renew) -> Ended 
     of the latest."""
     work, row = found.work, found.row
     target = SetupFor(row.key, Path(found.slot_path), row.commit, None, row.deadline, True)
-    stopped = work.preparation.prepare_for(target, prepared, renew, work.environ, probe=None)
+    stopped = work.preparation.prepare_for(target, prepared, renew, work.environ(), probe=None)
     if stopped is None or stopped != AttemptResult("refused", "environment:failed"):
         return stopped
     latest = work.setups.latest(row.key)
@@ -267,7 +274,7 @@ def _block(found: _Registered, profile: Profile, prepared: Prepared, digest: str
     number = work.store.block(row.key)
     work.store.profiled(row.key, digest)
     view = work.checkouts(path, git_dir=prepared.gitdir)
-    target = BlockTarget(path, view, row.commit, row.required, row.deadline, check_env(work.environ, path))
+    target = BlockTarget(path, view, row.commit, row.required, row.deadline, check_env(work.environ(), path))
     stopped = work.block.run(target, CheckSink(work.store, row.key, work.files, work.clock), number, profile.checks)
     if stopped is not None:
         return stopped

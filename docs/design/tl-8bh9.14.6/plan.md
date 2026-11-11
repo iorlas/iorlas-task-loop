@@ -208,7 +208,8 @@ Order (each "concludes" below writes the conclusion and goes to step 13):
    (`refused identity` otherwise), as `attempt_entry._registered`.
 2. Slot custody, never waiting (`refused slot_busy`), held to the end.
 3. The claim keep-alive (`claim_lease.keeping` at the implement attempt's tracker root) starts, and one renewal now
-   (`attempt_entry.renewal`): `lost` concludes `claim_lost`. The keep-alive thread renews every 100 s while setup and
+   (`attempt_entry.renewal`): `lost` concludes `claim_lost`, after step 4's reconcile (no slot access) has marked the
+   gone unfinished results `interrupted` (S6c review). The keep-alive thread renews every 100 s while setup and
    the block run, between checks included; a claim lost later is recorded (`claim=`) and the results stand.
 4. **Reconcile, before any slot read or write**: the latest setup run's unsettled command (`setup_store.running`) and
    every unsettled row of the latest block (`check_store.unsettled`: no conclusion, or `LIVE_AFTER`), each through
@@ -219,12 +220,13 @@ Order (each "concludes" below writes the conclusion and goes to step 13):
 6. **The profile at X** (`read_profile` through `slot_profiles` on the slot's pinned view): `Refused` concludes
    `profile:<reason>` (X's own profile is the candidate's); `Unavailable` is `unavailable git`. The first block writes
    the profile digest.
-7. **A completed latest block is not run again** (candidate checks: "if the whole checks block completed, continue"):
+7. **`main` still the target**: `refs/heads/main` read now on the slot's pinned view; another commit concludes
+   `main_moved` (and stores it as `target_seen`). Read before step 8 (S6c review): a candidate that moved `main` and then
+   killed its entry must not pass on the relaunch.
+8. **A completed latest block is not run again** (candidate checks: "if the whole checks block completed, continue"):
    when the latest block has a terminal row (`passed`, `failed`, `timed_out`, `undefined`) for every check at X and
    every undefined required name, or a row that stops a block (`lingering`, `dirty`), the conclusion is computed from it
    (step 12) and nothing runs. An `interrupted` row or a missing name means the block repeats whole.
-8. **`main` still the target**: `refs/heads/main` read now; another commit concludes `main_moved` (and stores it as
-   `target_seen`).
 9. **Take X** (`prepare.detach_at`, new in `prepare.py`): through `observe_slot` and the pinned view, a clean slot
    detached at D is parked at X (`Worktree.park(X)`) and re-read (`(head, branch) == (X, None)`); a slot already detached
    at X passes in any state (step 10's reset makes it exactly X). On a branch concludes `slot:branch`; a redirected
@@ -247,13 +249,15 @@ Order (each "concludes" below writes the conclusion and goes to step 13):
 
 A condition the candidate caused, or one that a relaunch cannot clear, **concludes** the checks attempt `failed` with a
 reason and releases its slot; a transient or unknown one leaves it `admitted` for a relaunch and is **counted**:
-`check_store.refused(key, word)` sets `refusal` and adds one when the word repeats (another word starts at 1; only the
-conclusion clears it: a block that repeats after a refusal inside it keeps counting, so it cannot relaunch forever).
+`check_store.refused(key, word)` adds one for every relaunch whatever its word and keeps the word in `refusal` for display
+only (S6c review: two words alternating, such as `environment:uncertain` then `checks:running`, must not relaunch forever);
+only the conclusion clears it, so a block that repeats after a refusal inside it keeps counting.
 Two in a row make `Next` `stuck:checks_refused`: rounds stop relaunching it, as `stuck:setup_failed` does; `tl step start` relaunches it by hand.
 
 | Concludes `failed` with reason | Relaunch, counted |
 |---|---|
-| `claim_lost`; `expired` (before the block) and `expired:<check>` (mid-block); `main_moved`; `commit_missing`; `slot:branch`; `slot:redirected`; `profile:<reason>`; `setup:<conclusion>` (two failed setup runs, `SETUP_RUNS`); `environment:<word>` for `platform`, `path_long`, `roots`, `remove_unsafe`, `reset`, `profile`, `moved`, `dirty`; `<name>:lingering`, `<name>:dirty`, `<name>:<conclusion>` from the block | `unavailable` `store`, `git`, `checks:running`, `checks:unknown`, `checks:uncertain`, `environment:files`, `environment:exit` (one failed setup run), `environment:lingering`, `environment:running`, `environment:unknown`, `environment:uncertain`; `refused slot_busy`, `slot_dirty` |
+| `claim_lost`; `expired` (before the block) and `expired:<check>` (mid-block); `main_moved`; `commit_missing`; `slot:branch`; `slot:redirected`; `profile:<reason>`; `setup:<conclusion>` (two failed setup runs, `SETUP_RUNS`); `environment:<word>` for `platform`, `path_long`, `roots`, `remove_unsafe`, `reset`, `profile`, `moved`, `dirty`; `<name>:lingering`, `<name>:dirty`, `<name>:<conclusion>` from the block | `unavailable` `store`, `git`, `checks:running`, `checks:unknown`, `checks:uncertain`, `environment:files`, `environment:exit` (one failed setup run), `environment:lingering`, `environment:running`, `environment:unknown`, `environment:uncertain`; `refused slot_busy`, `slot_dirty`; any other fault
+once the attempt is the entry's own, `unavailable fault:<type>` (S6c review) |
 
 A concluded checks attempt is re-run with `tl step start` (section 5): cheap, no new plan or implement, the earlier
 attempt kept as history (`Earlier:`).
@@ -453,8 +457,8 @@ factory folders outside the slot, the slot's lock, the pinned Git views, the sto
 
 **O1 (decided here).** Required names are read from the local `refs/heads/main` (the person's; the factory never writes
 it). This protects only against non-hostile task edits: task code already runs on the host and could rewrite that ref.
-Therefore: `main` is read before and after each block, a move concludes `failed main_moved` and is shown (`Main:`
-line); and B6 must re-read the required names from the remote target at land time and compare them with the stored target.
+Therefore: `main` is read before and after each block, and before a completed block is concluded on a relaunch; a
+move concludes `failed main_moved` and is shown (`Main:` line); and B6 must re-read the required names from the remote target at land time and compare them with the stored target.
 
 **The B6 land summary must list** (recorded here so B6's design starts from it):
 
@@ -881,3 +885,25 @@ state check or the exit code each fails a test.
 **Not verified**: a real launched `taskloop.check_entry` process (only the body runs in tests; the launcher's start is the
 fake); a real block run by the entry end to end (S6b's real test runs the block alone); `bd`'s heartbeat after a lapsed
 lease (section 19); everything S6d-S6e route.
+
+### 23.1 Review repairs to S6c (2026-11-11)
+
+An independent review of f28337f41 found the refactor sound and five defects; each is repaired with a test that fails
+without it:
+
+1. **The counter counts every relaunch** (`CheckStore.refused`: `refusals+1` whatever the word; `refusal` is for display).
+   Two words alternating (an uncertain setup or check start, then `checks:running` because it is not waited for) relaunched
+   forever and reran the candidate's setup each cycle. Consequence: two failed setup runs (`environment:exit`, then
+   `environment:lingering`) are now two counted relaunches, so `stuck:checks_refused` stops the rounds before the third
+   entry concludes `setup:<conclusion>`; a relaunch by hand concludes it. Tests: setup and block alternation, the store.
+2. **`main` before a completed block**: section 6 steps 7 and 8 swapped; the completed path reads `main` on the pinned
+   view first (`main_moved`). Test: a completed passing block with `main` moved concludes `main_moved`.
+3. **The entry-log grammar** (`round_log.WORD`, the one owner, also `rounds.log`): a part is the profile's name alphabet
+   and length, `[A-Za-z0-9_][A-Za-z0-9._-]{0,63}`, so `collected failed:type-check:failed` and `failed:expired:a.b-c` are
+   read by `last_entry`. Tests in `test_operations` (a 65-character part and a leading `-` still refused).
+4. **Faults are counted**: any exception under the lock once the attempt is the entry's own is `unavailable
+   fault:<type>`, counted. The scrubbed environment is read when the slot is set up (`Checking.environ` is now a
+   callable), so `CredentialsUnavailable` is such a fault (supersedes deviation 6 of section 23). Test: two faults reach
+   two.
+5. **A lost claim reconciles first**: before concluding `claim_lost` the entry runs the reconcile (no slot access) and
+   ignores its word, so gone unfinished results become `interrupted` (a live one holds the release). Test.

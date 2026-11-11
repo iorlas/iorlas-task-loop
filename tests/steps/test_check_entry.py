@@ -18,6 +18,7 @@ from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store
 from stream_proc import OwnedProcess, ProcessObservation, inspect_process
 
+from taskloop.attempt import CredentialsUnavailable
 from taskloop.attempt_entry import EntryArgs
 from taskloop.attempt_types import AttemptResult, EntryIdentity
 from taskloop.check_entry import Verdict, concluded, enter
@@ -74,6 +75,7 @@ class Bench:
     beats: list[Beat] = dataclasses.field(default_factory=lambda: ["held"])
     thread: Beat = "held"  # the renewing thread's answer, once `go` is set
     go: threading.Event | None = None
+    credentials: Exception | None = None  # raised by the scrubbed environment's read
     lines: list[str] = dataclasses.field(default_factory=list)
     emptied: list[Path] = dataclasses.field(default_factory=list)
     now: float = 10.0
@@ -106,11 +108,16 @@ class Bench:
         self.emptied.append(path)
         return True
 
+    def environ(self) -> dict[str, str]:
+        if self.credentials is not None:
+            raise self.credentials
+        return {"HOME": "/home/p"}
+
     def checking(self, _database: Path, _artifacts: Path) -> Checking:
         env = self.environment
         block = Block(BlockPorts(env.process, env.process.lingering, self.clock))
         return Checking(self.store, SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files, env.profiles,
-                        env.preparation(), block, env.observe, lambda _entry: "gone", self.scratch, self.clock, {"HOME": "/home/p"})
+                        env.preparation(), block, env.observe, lambda _entry: "gone", self.scratch, self.clock, self.environ)
 
     def __call__(self, inspect: object = inspect_process) -> int:
         observe = inspect_process if inspect is inspect_process else self.other
@@ -293,8 +300,8 @@ def test_two_failed_setup_runs_conclude_with_the_latest_setup_conclusion(bench: 
     bench.environment.process.groups.clear()
     bench()
     assert bench.lines == ["unavailable environment:exit claim=held", "unavailable environment:lingering claim=held"]
-    assert bench.attempt()[3:5] == ("environment:lingering", 1)
-    bench()
+    assert bench.attempt()[3:5] == ("environment:lingering", 2)  # two relaunches in a row: stuck, whatever the words
+    bench()  # relaunched by hand (`tl step start`)
     assert bench.lines[-1] == "collected failed:setup:lingering claim=held release=released"
 
 
@@ -350,3 +357,36 @@ def test_a_busy_slot_lock_is_counted_with_nothing_read(bench: Bench) -> None:
 ])
 def test_section_6_1_concludes_what_a_relaunch_cannot_clear(result: AttemptResult, verdict: Verdict | None) -> None:
     assert concluded(result) == verdict
+
+
+@pytest.mark.parametrize("script", [[Command(uncertain=True)], [Command(), Command(uncertain=True)]], ids=["setup", "block"])
+def test_two_words_alternating_still_count_to_stuck(bench: Bench, script: list[Command]) -> None:
+    """An uncertain start is not waited for: the next entry finds its command running. Both relaunches count."""
+    bench.environment.process.script = list(script)
+    bench()
+    bench.environment.seen[500 + len(script)] = "alive"  # the uncertain command's pid
+    bench()
+    assert bench.lines[1] == "unavailable checks:running claim=held" and bench.attempt()[3:5] == ("checks:running", 2)
+
+
+def test_a_completed_block_is_not_concluded_once_main_moved(bench: Bench) -> None:
+    """A candidate that moved `main` and then lost its entry never passes on the relaunch."""
+    bench.result(1, 0, "check", "passed")
+    bench.result(1, 1, "test", "passed")
+    seen = moved(bench)
+    assert bench() == 1 and bench.lines == ["collected failed:main_moved claim=held release=released"]
+    assert bench.attempt()[5] == seen and bench.execs() == []
+
+
+def test_a_fault_of_the_environment_is_counted_once_the_attempt_is_the_entry_s_own(bench: Bench) -> None:
+    bench.credentials = CredentialsUnavailable("git_config")
+    assert bench() == 1 and bench() == 1
+    assert bench.lines == ["unavailable fault:CredentialsUnavailable"] * 2
+    assert bench.attempt()[:5] == ("admitted", None, None, "fault:CredentialsUnavailable", 2)
+
+
+def test_a_lost_claim_still_marks_gone_unfinished_results_interrupted_before_it_concludes(bench: Bench) -> None:
+    bench.beats = ["lost"]
+    bench.result(1, 0, "check", None, pid=904)  # gone: its entry died mid-check
+    assert bench() == 1 and bench.lines == ["collected failed:claim_lost claim=lost release=released"]
+    assert bench.results() == [(1, "check", "interrupted")]

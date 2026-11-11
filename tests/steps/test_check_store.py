@@ -296,18 +296,20 @@ def test_unsettled_is_every_unfinished_or_live_after_result_of_the_latest_block(
     assert found == ([(0, ME)] if listed else []) + [(2, None)]
 
 
-def test_the_refusal_counter_counts_one_word_in_a_row_across_blocks_and_only_a_conclusion_clears_it(checking: sqlite3.Connection) -> None:
+def test_the_refusal_counter_counts_every_relaunch_whatever_its_word_and_only_a_conclusion_clears_it(
+    checking: sqlite3.Connection,
+) -> None:
+    """Two words alternating (an uncertain start, then its command still running) still reach `stuck:checks_refused`;
+    `refusal` is the last word, for display."""
     checks = store(checking)
 
     def counted() -> tuple[object, ...]:
         return checking.execute("SELECT refusal,refusals FROM checks_attempt WHERE attempt_id='checks'").fetchone()
 
-    assert (checks.refused(CHECKS, "slot_busy"), checks.refused(CHECKS, "slot_busy")) == (1, 2)
-    assert checks.refused(CHECKS, "checks:running") == 1 and counted() == ("checks:running", 1)
-    assert checks.refused(CHECKS, "checks:running") == 2
+    assert (checks.refused(CHECKS, "environment:uncertain"), checks.refused(CHECKS, "checks:running")) == (1, 2)
+    assert counted() == ("checks:running", 2)
     checks.refused(CHECKS, "checks:uncertain")  # raised inside block 1; the relaunch repeats the block
-    assert checks.block(CHECKS) == 1 and counted() == ("checks:uncertain", 1)
-    assert checks.refused(CHECKS, "checks:uncertain") == 2  # stuck:checks_refused, never an endless relaunch
+    assert checks.block(CHECKS) == 1 and counted() == ("checks:uncertain", 3)
     checks.conclude(CHECKS, "failed", "expired", 9)
     assert counted() == (None, 0)
 
