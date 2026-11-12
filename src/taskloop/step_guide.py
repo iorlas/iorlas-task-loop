@@ -63,8 +63,8 @@ GUIDE = {
     "abandoned_skip": "Abandoned here: rounds never re-admit it; `tl step start` admits a fresh attempt.",
     "no_free_slot": "No slot is free: each one is reserved, or unusable (missing, dirty, on another branch: the detail and the round log's "
     "`unusable` lines name it and why; fix it or `tl slot adopt`). `tl step rounds` fills a freed slot seconds after.",
-    "unusable": "A slot no attempt holds cannot be used (missing, dirty, redirected or on a branch: `unusable:<slot>:<why>`, the path "
-    "in the move's detail): put it right (`git worktree add --detach`, `git switch --detach`, a clean tree) or `tl slot adopt`.",
+    "unusable": "A slot no attempt holds cannot be used (missing, dirty, redirected or on a branch: `unusable:<slot>:<why>`, its "
+    "path printed under the line): put it right (`git worktree add --detach`, `git switch --detach`, a clean tree) or `tl slot adopt`.",
     "rounds_running": "Another `tl step rounds` runs for this backlog (the pid is its lock record's, informational): use its "
     "terminal, or stop it there with Ctrl-C first. `tl step next` runs beside it.",
     "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5; "
@@ -83,6 +83,10 @@ GUIDE = {
     "rounds no longer relaunch it (a relaunch would only refuse `environment:failed`). Read `setup-<run>.log` beside the "
     f"attempt's entry.log (`Setup:` names the last run), fix the cause (the task branch's `setup`, the network, the slot); then {ABANDON} "
     "Rounds never re-admit an abandoned task: `tl step start` admits it afresh at plan.",
+    "task_missing": "The task is gone from the tracker (deleted): the round skips it and starts the others. `tl step release --abandon "
+    "<task>` clears its attempt.",
+    "paused": "The task carries `held` that no hold of the factory's put there (added by hand): rounds will not start it. Remove the "
+    "label (`bd label remove <task> held`) to let it run; a step already running goes on.",
     "task": "The task could not be read from the tracker named by the attempt's tracker root (deleted, malformed, or the root no "
     "longer resolves): check `bd show <task>` there. Rounds skip it every round; `tl step release --abandon` gives it up.",
     "changed": "Another attempt of the task became current since the round read the store; the next round follows it (`tl step show`).",

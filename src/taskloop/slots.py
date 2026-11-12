@@ -6,7 +6,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal, get_args
 
 from git_porcelain import GitUnavailable, Repo, WorktreeInfo
 
@@ -32,9 +32,12 @@ class SlotView:
     attempt_id: str | None = None
 
 
+UNUSABLE: Final = frozenset(get_args(Unclean.__value__))  # a state a person must fix; `locked` or `store_unavailable` pass by themselves
+
+
 def unusable(views: tuple[SlotView, ...]) -> tuple[SlotView, ...]:
-    """The slots no admission can use although no attempt holds them (`unknown`: missing, dirty, redirected, on a branch...)."""
-    return tuple(each for each in views if each.state == "unknown")
+    """The slots no attempt holds that no admission can use until a person acts: missing, dirty, redirected, on a branch..."""
+    return tuple(each for each in views if each.reason in UNUSABLE)
 
 
 def unusable_text(views: tuple[SlotView, ...]) -> str:

@@ -109,4 +109,4 @@ def test_a_hand_added_held_pauses_admission_but_the_answer_to_a_hold_of_ours_doe
     paused = TaskRow("t-1", 2, "", "", True)
     answered = TaskRow("t-2", 2, "", "", True)
     ordered, skipped = order([paused, answered, row("t-3", 2)], Tasks(), {}, "taskloop", frozenset({"t-2"}))
-    assert [each.task_id for each in ordered] == ["t-2", "t-3"] and skipped == (("t-1", "held"),)
+    assert [each.task_id for each in ordered] == ["t-2", "t-3"] and skipped == (("t-1", "paused"),)

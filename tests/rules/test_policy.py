@@ -241,7 +241,7 @@ def signal_uses(path: Path) -> tuple[set[str], set[str], set[str]]:
     return imports, dynamic, signalling
 
 
-def test_the_one_signal_owner_installs_only_a_sigint_handler_and_nothing_sends_a_signal() -> None:
+def test_the_one_signal_owner_installs_only_the_rounds_handlers_and_nothing_sends_a_signal() -> None:
     """CLAUDE.md's one exception: only `interrupts.py` imports `signal`, plainly (no alias, no `from`, no `_signal`, no
     dynamic import anywhere), and uses only what installs and restores the SIGINT, SIGTERM, SIGHUP handlers; no factory source or test
     sends or times a signal (`SIGNALLING`), and tests never import `signal` (so never install a handler)."""

@@ -92,6 +92,7 @@ class NextRequest:
     effort: str
     minutes: int
     quiet: Quiet | None = None
+    retake: bool = False  # admit the factory's own lapsed claims that have no attempt here (after a factory.db discard)
 
 
 @dataclass(frozen=True)
@@ -312,7 +313,7 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
     if _full(ports.reads.store):
         return "no_free_slot"
     try:
-        rows = ready_rows(ports.ready, request.label, ports.reads.clock())
+        rows = ready_rows(ports.ready, request.label, ports.reads.clock(), request.retake)
     except TaskInspectionError as error:
         return "refused:tracker" if error.kind == "malformed" else "unavailable:tracker"
     # abandoned once its claim is no longer kept: a half-done checks abandon (claim still kept) is `attempted`; a finished

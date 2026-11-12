@@ -43,7 +43,8 @@ type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, 
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
 type Refusal = Literal[
-    "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
+    "choices", "deadline", "expired", "task", "task_missing", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere",
+    "constraint",
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged", "claim_lost", "not_advanceable", "branch_moved",
     "commit_missing", "target", "target_profile", "no_required",  # the checks admission's (`check_admit`)
     "landing", "landed",  # a checks re-run refused by the task's land candidates (`factory_schema.LANDING`)
@@ -266,8 +267,10 @@ def read_task(tasks: Tasks, task_id: str, backlog: str, tracker_root: str) -> Ta
     except TaskInspectionError as error:
         if error.kind == "tracker_unavailable":
             return AdmitUnavailable("tracker", detail=why(error))
-        gone = f"gone from the tracker: `tl step release --abandon {task_id}` clears its attempt. " if error.kind == "not_found" else ""
-        return AdmitRefused("task", detail=f"{gone}{error.kind}: {why(error)}")
+        if error.kind == "not_found":
+            gone = f"{task_id} is gone from the tracker; `tl step release --abandon {task_id}` clears its attempt"
+            return AdmitRefused("task_missing", detail=gone)
+        return AdmitRefused("task", detail=f"{error.kind}: {why(error)}")
 
 
 def checkout_repo(checkouts: Checkouts, path: Path) -> tuple[Repo, RepoId] | AdmitRefused | AdmitUnavailable:

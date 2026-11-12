@@ -104,8 +104,9 @@ def test_a_discarded_factory_leaves_in_progress_rows_with_an_expired_lease_that_
         claimed("t-old", "2027-01-15T07:00:00Z"), claimed("t-live", "2027-01-15T09:00:00Z"), claimed("t-nolease"),
         claimed("t-other", "2027-01-15T07:00:00Z", "someone"), Bead("t-open", status="open", labels=("auto",)),
     ]
-    rows = ready_rows(ReadyTracker(records, ready=["t-open"]), "auto", NOW)
+    rows = ready_rows(ReadyTracker(records, ready=["t-open"]), "auto", NOW, retake=True)
     assert [row.task_id for row in rows] == ["t-open", "t-old"]
+    assert [row.task_id for row in ready_rows(ReadyTracker(records, ready=["t-open"]), "auto", NOW)] == ["t-open"]  # not by default
 
 
 def test_ready_rows_keep_the_trackers_order_label_and_scheduling_fields() -> None:

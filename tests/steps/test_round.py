@@ -46,6 +46,7 @@ from taskloop.round import NextRequest, RoundPorts, never, run_round
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
 from taskloop.slots import SlotView
+from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
 from taskloop.verifier import Verifier
 
@@ -323,7 +324,7 @@ def test_a_verified_released_plan_is_published_once_then_advanced_never_before(
     (AdmitRefused("branch_diverged"), [("tl-1", "skip", "branch_diverged")], "", 0),
     (AdmitRefused("no_free_slot"), [], "no_free_slot", 0),
     (AdmitUnavailable("tracker"), [("tl-1", "advance", "unavailable:tracker")], "unavailable:tracker", 3),
-    *[(AdmitRefused(reason), [("tl-1", "skip", reason)], "", 0) for reason in ("task", "checkout", "input", "constraint")],
+    *[(AdmitRefused(reason), [("tl-1", "skip", reason)], "", 0) for reason in ("task", "task_missing", "checkout", "input", "constraint")],
     (AdmitRefused("deadline"), [("tl-1", "advance", "refused:deadline")], "refused:deadline", 1),
 ], ids=lambda value: getattr(value, "reason", getattr(value, "what", None)))
 def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admission_too(
@@ -680,3 +681,34 @@ def test_a_slot_no_attempt_holds_but_nothing_can_use_is_named_in_the_log_not_cal
     lines = len(bench.lines)
     bench.round(replace(REQUEST, quiet=first.written))
     assert len(bench.lines) == lines
+
+
+def test_an_advance_with_every_free_slot_unusable_names_it_and_the_next_renders_its_path(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    gone = SlotView("s4", Path("/slots/s4"), "unknown", "not_listed")
+    bench = Bench(registered, ReadyTracker())
+    bench.advance = Advances(AdmitRefused("no_free_slot", (gone,)))
+    found = bench.round()
+    assert ("tl-1", "report", "unusable:s4:not_listed") in moves(found) and found.stopped == "no_free_slot"
+    lines = human("next", found, None)
+    assert any(line.strip() == "/slots/s4" for line in lines) and any(line.startswith("unusable: ") for line in lines)
+
+
+def test_a_transient_slot_state_is_not_called_unusable(factory: sqlite3.Connection) -> None:
+    ready = ReadyTracker([bead("t-1")], ready=["t-1"])
+    busy = SlotView("s1", Path("/slots/s1"), "unknown", "locked")
+    found = Bench(factory, ready, Admission({"t-1": AdmitRefused("no_free_slot", (busy,))})).round()
+    assert moves(found) == [] and found.stopped == "no_free_slot"
+
+
+def test_after_a_discard_a_round_told_to_retake_admits_a_lapsed_claim_with_no_attempt_and_otherwise_never(
+    factory: sqlite3.Connection,
+) -> None:
+    lapsed = Bead("t-1", status="in_progress", assignee="taskloop", labels=("auto",), lease_expires_at="1970-01-01T00:00:05Z")
+    for retake, admitted in ((False, []), (True, ["t-1"])):
+        bench = Bench(factory, ReadyTracker([lapsed]))
+        found = bench.round(replace(REQUEST, retake=retake))
+        assert bench.admission.requests == admitted and found.stopped == ""

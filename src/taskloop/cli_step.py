@@ -124,6 +124,9 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
                         "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
+    parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
+                        "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
+                        "factory on the tracker); run it once, with `tl step next`")
     _common(parser, "--db", "--artifacts")
 
 
@@ -141,7 +144,7 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 def _next_request(arguments: argparse.Namespace) -> NextRequest:
     return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
-                       arguments.effort, arguments.minutes)
+                       arguments.effort, arguments.minutes, retake=arguments.retake_lapsed)
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:

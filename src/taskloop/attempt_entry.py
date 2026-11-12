@@ -26,6 +26,7 @@ from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import Final
 
 from git_porcelain import GitUnavailable
 from sqlite_store import open_ro
@@ -70,7 +71,8 @@ from taskloop.tracker_client import tracker_claims, tracker_located
 from taskloop.verifier import Verifier
 
 RETRY_WAIT = 2.0
-RESUMES = 30  # re-runs of a captured but unfinished step (`Attempts.execute` resumes without the agent)
+UNFINISHED: Final = frozenset({"validation_pending", "session_pending", "session_fault"})  # a captured result still to finish
+RESUMES = 5  # re-runs of an unfinished one (`Attempts.execute` resumes without the agent), never past the deadline
 
 
 @dataclass(frozen=True)
@@ -202,11 +204,11 @@ def _step(
     result = app.execute(key, found.me, renew)
     captured = _capture(app, result, clock, wait)
     accepted = captured is not None and captured.status in ACCEPTED
+    if accepted:  # captured but maybe not finished (the store was busy again): finish it before verify commits anything
+        resumed(lambda: app.collect(key), lambda: app.execute(key, found.me), clock, wait, found.deadline)
     verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
     # newly stored facts or a stored verdict: read the terminal result back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
-    if accepted:  # captured but not finished (the store was busy again): resume without the agent, not a hold
-        latest = _resumed(found, latest, clock, wait)
     line = f"{latest.status} {latest.reason}"
     if captured is not None:  # `publish=` is the log word of the capture retry's DB acceptance, not the branch push
         then = f" then={latest.status}:{latest.reason}" if accepted else ""
@@ -214,12 +216,18 @@ def _step(
     return f"{line} verify={shown(verified)}", succeeded(latest), latest.status == "collected"
 
 
-def _resumed(found: _Registered, latest: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]) -> AttemptResult:
+def resumed(
+    read: Callable[[], AttemptResult], resume: Callable[[], AttemptResult], clock: Callable[[], float], wait: Callable[[float], None],
+    deadline: float,
+) -> AttemptResult:
+    """The stored result while it is unfinished (`unavailable`, or an `UNFINISHED` reason: `verification` is the normal
+    wait): `resume` (never the agent) after each wait, at most RESUMES times and never past the deadline."""
+    latest = read()
     for _ in range(RESUMES):
-        if latest.status not in ("pending", "unavailable") or clock() >= found.deadline:
+        if (latest.status != "unavailable" and latest.reason not in UNFINISHED) or clock() >= deadline:
             break
         wait(RETRY_WAIT)
-        latest = found.app.execute(found.key, found.me)
+        latest = resume()
     return latest
 
 

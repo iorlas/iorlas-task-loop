@@ -17,6 +17,7 @@ from taskloop.operations import (
     Adoption,
     Ended,
     Failed,
+    Move,
     PublishedTask,
     ReleasedTask,
     Round,
@@ -86,6 +87,11 @@ def _guides(result: Failed) -> list[str]:
             if text is not None or each in GUIDE]
 
 
+def _path(move: Move) -> list[str]:
+    """An `unusable` slot's path, under its line (the round log holds fixed words only)."""
+    return [f"  {move.detail}"] if move.word.startswith("unusable:") and move.detail else []
+
+
 def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) -> list[str]:
     """`tl step list`: one row per task. `tl step next`: one line per move as performed, `Stopped:` when admission ended
     early, then the guide of each distinct reported, skipped or stopping word once. `tl step rounds`: why it ended."""
@@ -106,6 +112,7 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
         return ["task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\tlast command", *rows, *steps]
     width = max((len(each.task_id) for each in result.moves), default=0)
     lines = [f"{each.task_id:<{width}}  {each.action:<8} {each.word} {each.attempt_id}".rstrip() for each in result.moves]
+    lines = [line for each, text in zip(result.moves, lines, strict=True) for line in (text, *_path(each))]
     lines += [f"Stopped: {result.stopped}"] if result.stopped else []
     lines += [] if result.moves or result.stopped else [f"Nothing to do in backlog {result.backlog}."]
     words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves

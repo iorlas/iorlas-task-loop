@@ -74,14 +74,16 @@ def _lapsed(record: Bead, now: float) -> bool:
         return False
 
 
-def ready_rows(client: ReadyRows, label: str, now: float) -> tuple[TaskRow, ...]:
-    """One tracker read of the ready tasks carrying `label`, in the tracker's order, then the factory's own in-progress ones
-    carrying it whose lease expired at `now` (`bd ready` never lists those; a round skips one that has an attempt); a failed
-    read raises, never `()`."""
+def ready_rows(client: ReadyRows, label: str, now: float, retake: bool = False) -> tuple[TaskRow, ...]:
+    """One tracker read of the ready tasks carrying `label`, in the tracker's order; with `retake` (the person's statement
+    that factory.db was discarded: `--retake-lapsed`) then the factory's own in-progress ones carrying it whose lease expired
+    at `now`, which `bd ready` never lists (a round skips one that has an attempt here). Without it no in-progress task is
+    read: another factory.db on the tracker may own it. A failed read raises, never `()`."""
     try:
         ready = client.ready(label)
         seen = {record.id for record in ready}
-        lapsed = [record for record in client.find("in_progress", label) if record.id not in seen and _lapsed(record, now)]
+        found = client.find("in_progress", label) if retake else []
+        lapsed = [record for record in found if record.id not in seen and _lapsed(record, now)]
         return tuple(_row(record) for record in (*ready, *lapsed))
     except BdError as error:
         raise _failure(error, "ready read failed") from error

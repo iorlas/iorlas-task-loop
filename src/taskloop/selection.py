@@ -1,7 +1,7 @@
 """Which ready, approved tasks a scheduling round may admit, and in which order: pure, no IO in the comparator.
 
 Eligibility, in order: any attempt of the task in factory.db (`attempted`, or `abandoned` when its current attempt was
-abandoned); carrying `held` unless the person answered a hold of the factory's (`held`: a hand-added `held` pauses
+abandoned); carrying `held` unless the person answered a hold of the factory's (`paused`: a hand-added `held` pauses
 admission only, a claimed task's running steps go on); assigned to another actor than the factory (`assigned`); a
 missing or cyclic ancestor chain (`ancestry`), or one whose ancestor could not be read (`unavailable:ancestry`,
 transient). Order (the owner-accepted hierarchical-priority contract, tl-8bh9.3): own priority (P2 when missing), then
@@ -16,7 +16,7 @@ from typing import Final, Literal
 from taskloop.task import TaskInspectionError
 from taskloop.tracker import TaskRow
 
-type Skip = Literal["attempted", "abandoned", "assigned", "held", "ancestry", "unavailable:ancestry"]
+type Skip = Literal["attempted", "abandoned", "assigned", "paused", "ancestry", "unavailable:ancestry"]
 type Lookup = Callable[[str], TaskRow | None]  # None: the tracker says no such task; a failed read raises TaskInspectionError
 DEFAULT: Final = 2
 DIGITS: Final = re.compile(r"(\d+)")
@@ -52,7 +52,7 @@ def _eligible(row: TaskRow, attempts: Mapping[str, bool], actor: str, resumed: f
     if row.task_id in attempts:
         return "abandoned" if attempts[row.task_id] else "attempted"
     if row.held and row.task_id not in resumed:  # a person's pause (a hold of ours is answered by adding the label back)
-        return "held"
+        return "paused"
     return "assigned" if row.assignee and row.assignee != actor else None
 
 
