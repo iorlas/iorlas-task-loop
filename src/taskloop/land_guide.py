@@ -5,14 +5,21 @@
 
 from typing import Final
 
-# The one recovery from a conflict (or a failed validation that needs new code): a new chain on the current main. The task
-# branch is the chain's memory, so the stale one is set aside (locally and on origin) and local `main`, where a new branch
-# starts, is brought up to date first; the old commits stay on `old/task/<id>`.
-RESTART: Final = (
-    "start the task again on the current main, in your checkout: `git switch main && git pull --ff-only`; `git branch -m "
-    "task/<id> old/task/<id>`; `git push origin --delete task/<id>`; then `tl step release --abandon` and `tl step start` "
-    "(plan and implement run again on the new main; the old commits stay on `old/task/<id>`)."
-)
+
+def restart(task_id: str = "<id>", x: str = "<X>") -> str:
+    """The one recovery from a conflict (or a failed validation that needs new code): a new chain on the current main. The
+    task branch is the chain's memory, so the stale one is set aside under a name no earlier recovery used (X's first 12
+    characters) and dropped from origin; local `main`, where a new branch starts, is brought up to date first."""
+    aside = f"old/{task_id}-{x[:12]}"
+    return (
+        f"start the task again on the current main, in your checkout: `git switch main && git pull --ff-only` (if that "
+        f"cannot fast-forward, local main holds commits origin lacks: push or move them first, a new chain starts at local "
+        f"main); `git branch -m task/{task_id} {aside}`; `git push origin --delete task/{task_id}` (the old commits then "
+        f"stay only in your checkout, on `{aside}`); then `tl step release {task_id} --abandon` and `tl step start {task_id}` "
+        f"(plan and implement run again on the new main)."
+    )
+
+
 RERUN: Final = "Nothing was lost: rerun `tl step land` (a rerun does only what is missing)."
 INTERRUPTED: Final = "interrupted"  # `tl step land` stopped by Ctrl-C (`cli_step._land`): exit 130, the rerun reconciles
 
@@ -50,9 +57,9 @@ LAND_GUIDE: Final = {
     "no_change": "origin's main already holds X's changes (a hand land, say): confirm with `git log origin/main`, then `tl step "
     "land TASK --no-change` records it and closes the task.",
     "changes": "There is something to land: drop `--no-change`.",
-    "conflict": f"X does not merge onto origin's main: {RESTART}",
+    "conflict": "X does not merge onto origin's main: the detail above gives the restart to run.",
     "checks_failed": "A check failed on S (the `Land check:` lines and logs say which): rerun `tl step land` if it is flaky; "
-    f"otherwise {RESTART} Nothing was pushed.",
+    f"otherwise {restart()} Nothing was pushed.",
     "target_moved": "Rerun `tl step land`: it squashes X onto the new main as a new candidate and runs the checks again on it "
     "when its tree differs from X's (a slot and the checks' time).",
     "no_remote": "The checkout has no `origin`: add it (`git remote add origin <url>`), then rerun.",

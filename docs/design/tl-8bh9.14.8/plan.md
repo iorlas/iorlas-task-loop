@@ -441,14 +441,17 @@ record follows the observation.
   free a slot a land left held without landing (a candidate whose land process still runs is `held` by its identity).
 - **A failed land validation** leaves the task `Next: land`: rerun (flaky: a new candidate runs the block again), or
   abandon (D4: plan, implement on the current branch, checks, land). **A conflict (decision tl-8bh9.14.30, trial 2 F1):
-  one path, a new chain on the current `main`.** The task branch is the chain's memory (an existing local, else
-  remote-tracking, `task/<id>` is resumed as it is) and a new branch starts at the person's local `main`, so a hand
-  merge or an abandon alone reuses X's stale base and conflicts again. The person, in their checkout: `git switch main &&
-  git pull --ff-only`; `git branch -m task/<id> old/task/<id>`; `git push origin --delete task/<id>` (drops the
-  remote-tracking ref too); `tl step release --abandon`; `tl step start`. Plan and implement run again on the new `main`
-  (two agent runs; the old commits stay on `old/task/<id>`), the checks run on the new X, and the land squashes it
-  clean unless `main` moved again. No typed re-base step is built. `test_conflict_recovery` runs this path and fails
-  without any one of its hand steps.
+  one path, a new chain on the current `main`.**
+  The task branch is the chain's memory (an existing local, else remote-tracking, `task/<id>` is resumed as it is) and a
+  new branch starts at the person's local `main`, so a hand merge or an abandon alone reuses X's stale base and
+  conflicts again. The conflict refusal prints the commands with the real id and X (`land_guide.restart`): `git switch
+  main && git pull --ff-only` (if it cannot fast-forward, local `main` holds commits origin lacks: push or move them
+  first); `git branch -m task/<id> old/<id>-<first 12 of X>` (a name per X, so a second recovery never meets the first's);
+  `git push origin --delete task/<id>` (drops the remote-tracking ref; the old commits then stay only in the checkout);
+  `tl step release <id> --abandon`; `tl step start <id>`. Plan and implement run again on the new `main` (two agent runs),
+  the checks run on the new X, and the land squashes it clean unless `main` moved again. No typed re-base step is built.
+  `test_conflict_recovery` runs the abandon (the real
+  `release_task` over a passed checks attempt), the land of the restarted chain and a second conflict's recovery.
 - **A hand land** (the M2 way) is reported by the next `tl step land` as `no_change`; `--no-change` records it and
   closes the task, whatever the task branch holds. `--no-change` never validates or pushes (L3 review): a pending
   candidate refuses it `landing`; a pushable one is read by section 7's rule without a push (on origin: delivered is

@@ -308,8 +308,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         claims, views = tracker_claims(), GitViews(args.read_seconds)
         return enter(args, partial(open_attempts, views=views), inspect_process, time.time, time.sleep, log, worker_gone,
                      claims.heartbeat_for, threading.Event(), claims.unclaim, views.remotes)
-    except SystemExit:  # the agent library's SIGTERM/SIGHUP handler (`any_agent.supervisor`): no signal handling here
-        log("failed " + TERMINATED)
+    except SystemExit as ended:  # `any_agent.supervisor` raises 128 + signal number from its SIGTERM/SIGHUP handler (1: parent gone)
+        log("failed " + (TERMINATED if isinstance(ended.code, int) and ended.code > 128 else type(ended).__name__))
         return 1
     except BaseException as error:  # the type name only, never its text
         log("failed " + type(error).__name__)

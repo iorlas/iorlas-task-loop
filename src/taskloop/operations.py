@@ -387,12 +387,12 @@ def _current(ports: StartPorts, request: StartRequest) -> _Found:
 
 
 def _answered_hold(ports: StartPorts, request: StartRequest, key: AttemptKey) -> Failed | None:
-    """A start by hand (no label) of a task whose settled hold still has `held` on it would clear that hold unanswered:
+    """A start by hand (no label) of a task whose settled hold (labels moved or absent, not cleared) would be cleared unanswered:
     refused `on_hold`, whose guide says how to answer. A hold the person's own tracker holds (`not_ours`) is answered by
     this very start, as its comment says; a round's start is the answer (the label is back)."""
     hold = HoldStore(ports.reader.connect, ports.reader.begin).of_attempts((key.attempt_id,)).get(key.attempt_id)
     if request.label is None and hold is not None and hold.cleared_at is None and hold.labels in ANSWERED:
-        return Failed("refused", "on_hold", f"The task is held ({hold.reason}): its abandon is recorded and `held` is on it")
+        return Failed("refused", "on_hold", f"The task is held ({hold.reason}) and the hold is not answered")
     return None
 
 

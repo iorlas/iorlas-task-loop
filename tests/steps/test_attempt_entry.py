@@ -450,19 +450,22 @@ def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixtu
     assert (out + err).strip() == "refused usage"
 
 
-def test_main_logs_a_signal_ended_entry_as_terminated_never_as_the_bare_exception(capfd: pytest.CaptureFixture[str],
-                                                                               monkeypatch: pytest.MonkeyPatch) -> None:
-    """The agent library's SIGTERM handler raises SystemExit in the entry; the log names the cause in fixed words."""
+@pytest.mark.parametrize(("code", "logged"), [(143, "failed terminated_by_signal"), (129, "failed terminated_by_signal"),
+                                              (1, "failed SystemExit"), (None, "failed SystemExit")])
+def test_main_names_only_a_signal_exit_terminated(capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, code: int | None,
+                                                  logged: str) -> None:
+    """`any_agent.supervisor` raises SystemExit(128 + signal) from its SIGTERM/SIGHUP handler and SystemExit(1) when the parent
+    is gone: only the first is a signal's cause."""
     monkeypatch.setattr("taskloop.attempt_entry.tracker_located", lambda: None)
     monkeypatch.setattr("taskloop.attempt_entry.tracker_claims", Claims)
 
-    def terminated(*_args: object) -> int:
-        raise SystemExit(143)
+    def ended(*_args: object) -> int:
+        raise SystemExit(code)
 
-    monkeypatch.setattr("taskloop.attempt_entry.enter", terminated)
+    monkeypatch.setattr("taskloop.attempt_entry.enter", ended)
     assert main(["/db", "/a", "45", "tasks", "tl-1"]) == 1
     out, err = capfd.readouterr()
-    assert (out + err).strip() == "failed terminated_by_signal"
+    assert (out + err).strip() == logged
 
 
 @pytest.mark.parametrize(
