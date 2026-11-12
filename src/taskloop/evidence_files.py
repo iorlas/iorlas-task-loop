@@ -18,6 +18,7 @@ TERMINATED: Final = "terminated_by_signal"  # the entry log's cause word when a 
 ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
 LOG_CAP: Final = 32 << 20  # bytes of one setup run's or one check's log, and of one agent attempt's stdout or stderr; then `[truncated]`
 TRUNCATED: Final = b"[truncated]\n"
+TAIL_CAP: Final = 256 << 10  # bytes `round_tail` reads from the end of the round log
 
 
 class EvidenceError(Exception):
@@ -150,6 +151,20 @@ class EvidenceFiles:
                 return stream.read(cap).decode("utf-8", "replace")
         except (OSError, EvidenceError):
             return None
+
+    def round_tail(self, limit: int) -> tuple[str, ...]:
+        """Read-only: the last `limit` lines of the round log from a bounded read of its end (at most TAIL_CAP bytes), `()`
+        when it does not exist or cannot be read; creates nothing. A cut first line is dropped. Untrusted display text."""
+        try:
+            with self._path("rounds.log").open("rb") as stream:
+                size = stream.seek(0, 2)
+                start = max(0, size - TAIL_CAP)
+                stream.seek(start)
+                text = stream.read(TAIL_CAP).decode("utf-8", "replace")
+        except (OSError, EvidenceError):
+            return ()
+        lines = text.splitlines()
+        return tuple((lines[1:] if start else lines)[-limit:]) if limit > 0 else ()
 
     def last_entry(self, key: AttemptKey) -> str | None:
         """The last line of the entry log made only of the entry's fixed words (its status word, then `reason`, `key=value`
