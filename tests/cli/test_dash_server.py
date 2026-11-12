@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.dash_model import Board, Card, TaskDetail
+from taskloop.dash_model import Board, Card, FeedEvent, FeedPage, TaskDetail
 from taskloop.dash_server import DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
@@ -32,7 +32,7 @@ class Ports:
     def __init__(self, static: Path, max_streams: int = 16, queue_depth: int = 256) -> None:
         self.cards, self.mode = [card()], "ok"
         self.rows: tuple[LogRow, ...] = (row(),)
-        self.ports = DashPorts(self.board, self.task, lambda: self.rows, "tl", static, 0.03, 0.05, max_streams, queue_depth)
+        self.ports = DashPorts(self.board, self.task, lambda: self.rows, self.feed, "tl", static, 0.03, 0.05, max_streams, queue_depth)
 
     def board(self) -> Board | Failed:
         if self.mode == "raise":
@@ -40,6 +40,13 @@ class Ports:
         if self.mode == "failed":
             return Failed("refused", "schema")
         return Board(AT, ("s1",), tuple(self.cards))
+
+    def feed(self, task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
+        """Attempt 2 of implement has one running command; the cursor says whether the page is a tail or a follow."""
+        if (task_id, step, number) != ("tl-1", "implement", 2):
+            return None
+        line = FeedEvent("command", "2026-11-12T10:00:00Z", id="c1", state="running", cmd="ls")
+        return FeedPage((line,), "7:42", replaced=False, available=True) if cursor is None else FeedPage((), cursor, False, True)
 
     def task(self, task_id: str) -> TaskDetail | Failed | None:
         return Failed("unavailable", "store") if task_id == "broken" else None
@@ -190,3 +197,13 @@ def test_no_more_pages_than_allowed_may_listen_and_a_page_that_cannot_keep_up_is
         fake.cards = [card(title=str(number), column="implement" if number % 2 else "plan")]
         hub.poll()
     assert first.closed.is_set() and hub.subscribers == []
+
+
+def test_the_feed_endpoint_answers_the_tail_then_a_follow_and_refuses_a_bad_cursor_or_attempt(served: tuple[Ports, DashServer]) -> None:
+    _fake, server = served
+    status, body = get(server, "/api/tasks/tl-1/attempts/implement/2/feed")
+    assert status == 200 and json.loads(body)["cursor"] == "7:42" and json.loads(body)["events"][0]["cmd"] == "ls"
+    assert json.loads(get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=7:42")[1]) == {
+        "events": [], "cursor": "7:42", "replaced": False, "available": True}
+    assert get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=junk")[0] == 400
+    assert get(server, "/api/tasks/tl-1/attempts/implement/9/feed")[0] == 404

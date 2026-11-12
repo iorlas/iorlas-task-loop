@@ -1,7 +1,7 @@
 // Task loop dashboard page: the board. Plain ES modules, no framework, no build step.
 // It consumes the shapes in docs/design/dashboard-ui.md from the JSON endpoints and the event stream (api.js).
 
-import { initDrawer, onFeed, onTaskMoved, openDrawer } from "./drawer.js";
+import { initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
 import { $, COLUMNS, STEPS, callout, el, quietSpan, tag, tick } from "./ui.js";
@@ -214,7 +214,6 @@ async function start() {
       drop(msg.id);
       return renderBoard();
     }
-    if (msg.kind === "feed") return onFeed(msg);
     if (msg.kind === "log") return onLog(msg.row);
     tasks.set(msg.task.id, msg.task);
     renderBoard();

@@ -3,12 +3,15 @@
 import sqlite3
 from pathlib import Path
 
+from any_agent import events
+
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
+from taskloop.command_sink import CommandSink
 from taskloop.dash_board import BoardPorts, build_board
-from taskloop.dash_model import Board, Comment, Fields, Ready, TaskDetail
-from taskloop.dash_task import TaskPorts, build_task
+from taskloop.dash_model import Board, Comment, FeedPage, Fields, Ready, TaskDetail
+from taskloop.dash_task import TaskPorts, build_feed, build_task
 from taskloop.evidence_files import EvidenceFiles
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -91,3 +94,25 @@ def test_the_checks_attempt_follows_its_implement_attempt_in_the_history(checkin
     assert isinstance(found, TaskDetail)
     assert [(each.step, each.n) for each in found.attempts] == [("implement", 1), ("checks", 1)]
     assert found.attempts[1].state == "running"
+
+
+def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_live_lines(
+    registered: sqlite3.Connection, tmp_path: Path,
+) -> None:
+    files = EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Plan the actual task")
+    sink = CommandSink(files, KEY, iter(range(100, 200, 2)).__next__)
+    ports = TaskPorts(reads_of(registered), files, Tracker())
+    sink.feed(events.Cmd(id="c1", text="just test"))
+    sink.feed(events.CmdEnd(id="c1", text="just test", exit=2))
+    sink.feed(events.Msg(text="two checks failed"))
+    found = build_task(ports, "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    (attempt,) = found.attempts
+    assert [(line.type, line.state, line.cmd or line.text) for line in attempt.feed[1:]] == [
+        ("command", "finished", "just test"), ("message", None, "two checks failed")]
+    assert attempt.feed[1].exit_code == 2 and attempt.feed_cursor is not None
+    sink.feed(events.Msg(text="done"))
+    page = build_feed(ports, "tasks", "tl-1", "plan", 1, attempt.feed_cursor)
+    assert isinstance(page, FeedPage) and [line.text for line in page.events] == ["done"] and not page.replaced
+    assert build_feed(ports, "tasks", "tl-1", "plan", 7, None) is None

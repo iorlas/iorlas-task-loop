@@ -5,6 +5,7 @@ This is the one module that imports the standard library's HTTP server (`.import
 
 import json
 import queue
+import re
 import threading
 from collections import Counter
 from collections.abc import Callable
@@ -13,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import override
 
-from taskloop.dash_model import Board, Card, TaskDetail
+from taskloop.dash_model import Board, Card, FeedPage, TaskDetail
 from taskloop.operations import Failed
 from taskloop.round_log import IDENT
 from taskloop.round_reader import LogRow
@@ -32,6 +33,7 @@ class DashPorts:
     board: Callable[[], Board | Failed]
     task: Callable[[str], TaskDetail | Failed | None]
     log: Callable[[], tuple[LogRow, ...]]
+    feed: Callable[[str, str, int, str | None], FeedPage | Failed | None]  # task, step, attempt number, cursor
     backlog: str
     static: Path
     interval: float = 2.0
@@ -148,18 +150,32 @@ NOT_FOUND = Reply(404, b'{"error":"not_found"}', JSON)
 FORBIDDEN = Reply(403, b'{"error":"forbidden_host"}', JSON)
 
 
-def _json(found: Board | TaskDetail | Failed | None) -> Reply:
+def _json(found: Board | TaskDetail | FeedPage | Failed | None) -> Reply:
     if isinstance(found, Failed):
         return Reply(503, json.dumps({"error": found.word}).encode(), JSON)
     return NOT_FOUND if found is None else Reply(200, json.dumps(asdict(found)).encode(), JSON)
 
 
-def respond(ports: DashPorts, path: str) -> Reply:
+FEED = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})/feed")
+AFTER = re.compile(r"after=([0-9]{1,20}:[0-9]{1,20})")
+
+
+def _feed(ports: DashPorts, found: re.Match[str], query: str) -> Reply:
+    """The agent's lines of one attempt; the only query is `after=<cursor>`, the opaque cursor of the last answer."""
+    after = AFTER.fullmatch(query)
+    if query and after is None:
+        return Reply(400, b'{"error":"bad_cursor"}', JSON)
+    return _json(ports.feed(found["task"], found["step"], int(found["n"]), after[1] if after else None))
+
+
+def respond(ports: DashPorts, path: str, query: str = "") -> Reply:
     """The answer to a GET that is not the stream: a JSON endpoint or one file of the static page."""
     if path == "api/board":
         return _json(ports.board())
     if path == "api/log":
         return Reply(200, json.dumps({"backlog": ports.backlog, "rows": [asdict(row) for row in ports.log()]}).encode(), JSON)
+    if found := FEED.fullmatch(path):
+        return _feed(ports, found, query)
     if path.startswith("api/tasks/") and IDENT.fullmatch(path[10:]):
         return _json(ports.task(path[10:]))
     if path in PAGES and (file := ports.static / PAGES[path]).is_file():
@@ -184,11 +200,12 @@ def _handler(ports: DashPorts, hub: Hub, hosts: set[str]) -> type[BaseHTTPReques
         def do_GET(self) -> None:
             if self.headers.get("Host") not in hosts:  # a page served under another name (DNS rebinding) never reads this
                 return self._reply(FORBIDDEN)
-            path = self.path.split("?", 1)[0].strip("/")
+            path, _, query = self.path.partition("?")
+            path = path.strip("/")
             if path == "api/events":
                 return self._stream()
             try:
-                reply = respond(ports, path)
+                reply = respond(ports, path, query)
             except Exception as error:  # a read that raises is the page's error, not a dropped connection and a traceback
                 reply = Reply(500, json.dumps({"error": f"{type(error).__name__}: {error}"}).encode(), JSON)
             self._reply(reply)

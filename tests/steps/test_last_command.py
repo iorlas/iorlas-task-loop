@@ -107,7 +107,7 @@ def test_the_throttle_runs_on_its_own_clock_and_keeps_the_earlier_wall_time(tmp_
     wall.now, tick.now = 6.0, 1.5  # the wall clock went back, the monotonic one passed the window
     command(sink)
     assert files.last_command(KEY) == 6.0
-    assert [each.name for each in (tmp_path / files.directory(KEY)).iterdir()] == ["last-command"]
+    assert sorted(each.name for each in (tmp_path / files.directory(KEY)).iterdir()) == ["events.jsonl", "last-command"]
 
 
 def test_only_a_command_counts(tmp_path: Path) -> None:

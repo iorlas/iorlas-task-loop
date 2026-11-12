@@ -16,6 +16,8 @@ export function apiSource() {
     snapshot: () => json("/api/board"),
     detail: (id) => json(`/api/tasks/${encodeURIComponent(id)}`),
     logs: () => json("/api/log"),
+    // One attempt's agent lines: its latest, or those after `after` (the cursor of the last answer, opaque to the page).
+    feed: (id, step, n, after) => json(`/api/tasks/${encodeURIComponent(id)}/attempts/${step}/${n}/feed${after ? `?after=${after}` : ""}`),
     // Messages are {kind: "task" | "gone" | "feed" | "log" | "error" | "resync", ...}: `error` says the board cannot be read, `resync`
     // (after an error, and on a reconnect) says to load it again.
     subscribe(on) {
