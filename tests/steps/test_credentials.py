@@ -124,6 +124,10 @@ def test_every_factory_git_view_runs_hardened_after_existing_git_config_entries(
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", "/home")  # the person's own ceiling stays, after the checkout's parent
     other = VIEWS.checkouts(Path("/slots/s1"))
     assert isinstance(other, RealRepo) and other.extra_env["GIT_CEILING_DIRECTORIES"] == "/slots:/home"
+    pinned = VIEWS.checkouts(Path("/slots/s1"), git_dir=Path("/repo/.git/worktrees/s1"))
+    assert isinstance(pinned, RealRepo)
+    assert pinned.extra_env["GIT_AUTHOR_EMAIL"] == pinned.extra_env["GIT_COMMITTER_EMAIL"] == "task-loop@localhost"
+    assert "GIT_AUTHOR_EMAIL" not in view.extra_env  # the person's own checkout commits as the person
     monkeypatch.setenv("GIT_CONFIG_COUNT", "two")
     with pytest.raises(GitUnavailable, match="GIT_CONFIG_COUNT"):
         VIEWS.checkouts(Path("/nowhere"))

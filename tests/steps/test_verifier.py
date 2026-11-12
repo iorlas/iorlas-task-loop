@@ -48,6 +48,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.slot_lock import hold
 from taskloop.slot_state import pointer
+from taskloop.step_guide import GUIDE
 from taskloop.steps import kind
 from taskloop.verdict import judge
 from taskloop.verifier import Verifier, VerifyHold
@@ -749,3 +750,15 @@ def test_no_git_write_while_the_worker_may_still_run(
     assert found == Unsettled("worker_alive") and seen == [WORKER]
     assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
     assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)  # once it is gone
+
+
+def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_working_recovery(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
+) -> None:
+    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
+    commit(slot, {}, "agent commit")
+    slot.repo.tag("task/evil", head(slot))
+    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    assert result == Unsettled("head_moved", ("refs/tags/task/evil",))
+    guide = GUIDE["unsettled"]
+    assert "`tl step release --abandon`, then `tl step start`" in guide and "`head_moved`" in guide

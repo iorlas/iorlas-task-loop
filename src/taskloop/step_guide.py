@@ -85,8 +85,10 @@ GUIDE = {
     "longer resolves): check `bd show <task>` there. Rounds skip it every round; `tl step release --abandon` gives it up.",
     "changed": "Another attempt of the task became current since the round read the store; the next round follows it (`tl step show`).",
     "unsettled": "The slot has files the step did not commit (listed), or the slot pointer or HEAD changed. Remove the "
-    "listed files and `tl step verify`, or run `tl step start` again to repeat the step; for `redirected` or `head_moved` "
-    "inspect first; for `worker_alive` stop the worker first; for `staged` unstage the listed paths first.",
+    "listed files and `tl step verify`, or run `tl step start` again to repeat the step; for `redirected` "
+    "inspect first; for `head_moved` (a commit the sandbox should have refused; any listed tag or branch is the agent's: delete it) "
+    "`tl step start` refuses too, so run `tl step release --abandon`, then `tl step start`; for `worker_alive` stop the worker "
+    "first; for `staged` unstage the listed paths first.",
     "registration_conflict": "Another start registered its entry first; `tl step show` follows that attempt.",
     "slot_busy": "Another entry or verify holds the slot: wait and run it again; if nothing ends, see the `stuck:hung` guide.",
     "lock": "The slot's lock file under `<slots root>/<repo id>/.locks` cannot be created: fix that folder's permissions.",

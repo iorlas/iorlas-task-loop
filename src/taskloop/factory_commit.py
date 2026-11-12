@@ -96,9 +96,10 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     if head is None or state.branch != task_branch(admission.task.task_id):
         return Unsettled("unborn" if head is None else "branch")
     if answer.effect == "keep":  # X is B: a `keep` step never adopts a commit
-        return Committed(base) if head == base else Unsettled("head_moved")
+        return Committed(base) if head == base else _moved(checkouts(state.root), head, base, admission)
     if head != base:
-        return Committed(head) if _ours(checkouts(state.root), head, base, admission) else Unsettled("head_moved")
+        view = checkouts(state.root)
+        return Committed(head) if _ours(view, head, base, admission) else _moved(view, head, base, admission)
     return _commit(checkouts, files, admission, state, base, answer, quiet)
 
 
@@ -169,7 +170,16 @@ def _unwritten(checkouts: Checkouts, files: SlotFiles, admission: Admission, bas
         return Unsettled("unborn" if head is None else "branch")
     if head == base:
         return Rejected("nothing_written")
-    return Committed(head) if _ours(checkouts(state.root), head, base, admission) else Unsettled("head_moved")
+    return Committed(head) if _ours(checkouts(state.root), head, base, admission) else _moved(checkouts(state.root), head, base, admission)
+
+
+def _moved(repo: Repo, head: str, base: str, admission: Admission) -> Unsettled:
+    """`head_moved`, listing the tags and branches that name a commit the agent made beside the moved HEAD (B excluded,
+    the task's own branch excluded): they live in the shared repository and the release does not remove them."""
+    made = {head, *(each.sha for each in repo.history([head], not_on=[base]))}
+    own = "refs/heads/" + task_branch(admission.task.task_id)
+    named = [each.name for each in repo.refs(["refs/tags/", "refs/heads/"]) if each.sha in made and each.name != own]
+    return Unsettled("head_moved", bounded(named))
 
 
 def git_file(dirty: tuple[str, ...], rules: StepRules, paths: tuple[str, ...]) -> str | None:
