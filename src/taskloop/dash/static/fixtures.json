@@ -226,6 +226,30 @@
     "created_ago_s": 120000,
     "description": "The message blamed the network when the clock was ahead."
    }
+  },
+  {
+   "id": "tl-3d1",
+   "title": "Stabilize round log line order",
+   "column": "held",
+   "attempt": 6,
+   "repeat": {
+    "kind": "repeat",
+    "reason": "checks failed: pyrefly reported 1 error"
+   },
+   "step_started_ago_s": 13180,
+   "slot": null,
+   "hold_cause": "repeats_exhausted: checks failed three times after a restart at plan. Narrow the task, then add `auto` again.",
+   "last_activity_ago_s": 13180,
+   "fields": {
+    "priority": "P2",
+    "labels": [
+     "auto"
+    ],
+    "branch": "task/tl-3d1",
+    "claimed_by": null,
+    "created_ago_s": 90000,
+    "description": "Round log lines come out in dictionary order. Sort them by task id so two rounds on the same state print the same lines."
+   }
   }
  ],
  "script": [
@@ -501,7 +525,8 @@
           "waited_ms": 500,
           "exit_code": 124
          }
-        ]
+        ],
+        "output": "$ uv run pytest -q tests/steps -x\n.....................F\nFAILED tests/steps/test_relaunch.py::test_lease_kept - Failed: Timeout >1700.0s\nattempt deadline reached (30m): the agent process was stopped"
        }
       ]
      }
@@ -724,7 +749,8 @@
           "passed": false,
           "duration_ms": 24100
          }
-        ]
+        ],
+        "output": "ERROR src/taskloop/hold_text.py:41:12 `str | None` is not assignable to parameter `slot` with type `str` [bad-argument-type]\nERROR src/taskloop/hold_text.py:58:9 Object of class `NoneType` has no attribute `name` [missing-attribute]\nERROR src/taskloop/hold.py:112:20 Argument missing for parameter `slot` [missing-argument]\n INFO 3 errors"
        },
        {
         "state": "running",
@@ -1604,7 +1630,8 @@
           "passed": false,
           "duration_ms": 1500
          }
-        ]
+        ],
+        "output": "src/taskloop/claim_lease.py:3:8: F401 [*] `time` imported but unused\n  |\n3 | import time\n  |        ^^^^ F401\n  |\n  = help: Remove unused import: `time`\n\nFound 1 error.\n[*] 1 fixable with the `--fix` option."
        },
        {
         "state": "succeeded",
@@ -1669,6 +1696,350 @@
           "exit_code": 0
          }
         ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "tl-3d1": [
+   {
+    "outcome": "restarted",
+    "reason": "checks failed three times: types",
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 40000,
+        "duration_s": 100,
+        "summary": "Plan admitted: one module, one test.",
+        "feed": [
+         {
+          "ago_s": 40000,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 39980,
+          "type": "message",
+          "text": "Sorting moves into one helper; the log writer calls it."
+         },
+         {
+          "ago_s": 39940,
+          "type": "command",
+          "id": "pl1",
+          "cmd": "rg -n 'def write_round' src/taskloop",
+          "state": "finished",
+          "duration_ms": 330,
+          "waited_ms": 9000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 37000,
+        "duration_s": 600,
+        "summary": "Diff: 2 files, +48 \u22126.",
+        "feed": [
+         {
+          "ago_s": 37000,
+          "type": "step",
+          "step": "implement",
+          "attempt": 1
+         },
+         {
+          "ago_s": 36960,
+          "type": "command",
+          "id": "im1",
+          "cmd": "apply_patch src/taskloop/rounds_log.py",
+          "state": "finished",
+          "duration_ms": 260,
+          "waited_ms": 31000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 36800,
+          "type": "command",
+          "id": "it1",
+          "cmd": "uv run pytest -q tests/steps/test_rounds_log.py",
+          "state": "finished",
+          "duration_ms": 7400,
+          "waited_ms": 4000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "checks",
+      "attempts": [
+       {
+        "state": "failed",
+        "started_ago_s": 34000,
+        "duration_s": 170,
+        "summary": "failed: pyrefly reported 3 errors",
+        "feed": [
+         {
+          "ago_s": 34000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 1
+         },
+         {
+          "ago_s": 33992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1800
+         },
+         {
+          "ago_s": 33960,
+          "type": "check",
+          "name": "types",
+          "passed": false,
+          "duration_ms": 23000
+         }
+        ],
+        "output": "ERROR src/taskloop/hold_text.py:41:12 `str | None` is not assignable to parameter `slot` with type `str` [bad-argument-type]\nERROR src/taskloop/hold_text.py:58:9 Object of class `NoneType` has no attribute `name` [missing-attribute]\nERROR src/taskloop/hold.py:112:20 Argument missing for parameter `slot` [missing-argument]\n INFO 3 errors"
+       },
+       {
+        "state": "failed",
+        "started_ago_s": 31000,
+        "duration_s": 170,
+        "summary": "failed: pyrefly reported 3 errors",
+        "feed": [
+         {
+          "ago_s": 31000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 2
+         },
+         {
+          "ago_s": 30992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1800
+         },
+         {
+          "ago_s": 30960,
+          "type": "check",
+          "name": "types",
+          "passed": false,
+          "duration_ms": 23000
+         }
+        ],
+        "output": "ERROR src/taskloop/hold_text.py:44:12 `str | None` is not assignable to parameter `slot` with type `str` [bad-argument-type]\nERROR src/taskloop/hold_text.py:58:9 Object of class `NoneType` has no attribute `name` [missing-attribute]\nERROR src/taskloop/hold.py:112:20 Argument missing for parameter `slot` [missing-argument]\n INFO 3 errors"
+       },
+       {
+        "state": "failed",
+        "started_ago_s": 28000,
+        "duration_s": 170,
+        "summary": "failed: pyrefly reported 1 error",
+        "feed": [
+         {
+          "ago_s": 28000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 3
+         },
+         {
+          "ago_s": 27992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1800
+         },
+         {
+          "ago_s": 27960,
+          "type": "check",
+          "name": "types",
+          "passed": false,
+          "duration_ms": 23000
+         }
+        ],
+        "output": "ERROR src/taskloop/hold_text.py:44:12 `str | None` is not assignable to parameter `slot` with type `str` [bad-argument-type]\n INFO 1 error"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "outcome": "held",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 25000,
+        "duration_s": 100,
+        "summary": "Plan admitted: one module, one test.",
+        "feed": [
+         {
+          "ago_s": 25000,
+          "type": "step",
+          "step": "plan",
+          "attempt": 2
+         },
+         {
+          "ago_s": 24980,
+          "type": "message",
+          "text": "Sorting moves into one helper; the log writer calls it."
+         },
+         {
+          "ago_s": 24940,
+          "type": "command",
+          "id": "pl2",
+          "cmd": "rg -n 'def write_round' src/taskloop",
+          "state": "finished",
+          "duration_ms": 330,
+          "waited_ms": 9000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 22000,
+        "duration_s": 600,
+        "summary": "Diff: 2 files, +48 \u22126.",
+        "feed": [
+         {
+          "ago_s": 22000,
+          "type": "step",
+          "step": "implement",
+          "attempt": 2
+         },
+         {
+          "ago_s": 21960,
+          "type": "command",
+          "id": "im2",
+          "cmd": "apply_patch src/taskloop/rounds_log.py",
+          "state": "finished",
+          "duration_ms": 260,
+          "waited_ms": 31000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 21800,
+          "type": "command",
+          "id": "it2",
+          "cmd": "uv run pytest -q tests/steps/test_rounds_log.py",
+          "state": "finished",
+          "duration_ms": 7400,
+          "waited_ms": 4000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "checks",
+      "attempts": [
+       {
+        "state": "failed",
+        "started_ago_s": 19000,
+        "duration_s": 170,
+        "summary": "failed: pyrefly reported 2 errors",
+        "feed": [
+         {
+          "ago_s": 19000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 4
+         },
+         {
+          "ago_s": 18992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1800
+         },
+         {
+          "ago_s": 18960,
+          "type": "check",
+          "name": "types",
+          "passed": false,
+          "duration_ms": 23000
+         }
+        ],
+        "output": "ERROR src/taskloop/rounds_log.py:77:5 Missing return statement [bad-return]\nERROR src/taskloop/rounds_log.py:91:16 `list[str]` is not assignable to `tuple[str, ...]` [bad-return]\n INFO 2 errors"
+       },
+       {
+        "state": "failed",
+        "started_ago_s": 16000,
+        "duration_s": 170,
+        "summary": "failed: pyrefly reported 1 error",
+        "feed": [
+         {
+          "ago_s": 16000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 5
+         },
+         {
+          "ago_s": 15992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1800
+         },
+         {
+          "ago_s": 15960,
+          "type": "check",
+          "name": "types",
+          "passed": false,
+          "duration_ms": 23000
+         }
+        ],
+        "output": "ERROR src/taskloop/rounds_log.py:77:5 Missing return statement [bad-return]\n INFO 1 error"
+       },
+       {
+        "state": "failed",
+        "started_ago_s": 13000,
+        "duration_s": 170,
+        "summary": "failed: pyrefly reported 1 error",
+        "feed": [
+         {
+          "ago_s": 13000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 6
+         },
+         {
+          "ago_s": 12992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1800
+         },
+         {
+          "ago_s": 12960,
+          "type": "check",
+          "name": "types",
+          "passed": false,
+          "duration_ms": 23000
+         }
+        ],
+        "output": "ERROR src/taskloop/rounds_log.py:80:9 `sorted` result unused [unused-value]\n INFO 1 error"
        }
       ]
      }

@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @source "./index.html";
 @source "./app.js";
+@source "./drawer.js";
+@source "./ui.js";
 
 /* Dark by default from the system; the theme button forces .dark or .light on <html>. */
 @custom-variant dark {

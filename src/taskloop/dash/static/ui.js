@@ -1,0 +1,87 @@
+// Shared constants and small DOM helpers for the dashboard page.
+
+export const COLUMNS = [
+  { id: "waiting", label: "Ready", dot: "bg-slate-400" },
+  { id: "plan", label: "Plan", dot: "bg-slate-400" },
+  { id: "implement", label: "Implement", dot: "bg-slate-400" },
+  { id: "checks", label: "Checks", dot: "bg-slate-400" },
+  { id: "land", label: "Land", dot: "bg-slate-400" },
+  { id: "held", label: "Held", dot: "bg-rose-500" },
+  { id: "landed", label: "Landed", dot: "bg-emerald-500" },
+];
+export const STEPS = COLUMNS.slice(1, 5);
+export const STATE = {
+  running: { label: "Running", dot: "bg-sky-500 animate-pulse-dot", text: "text-sky-700 dark:text-sky-300" },
+  succeeded: { label: "Succeeded", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" },
+  failed: { label: "Failed", dot: "bg-rose-500", text: "text-rose-700 dark:text-rose-300" },
+};
+export const JUMP = {
+  repeat: { label: "Repeat", glyph: "↻", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
+  restart_at_plan: { label: "Back to plan", glyph: "↩", text: "text-violet-700 dark:text-violet-300", bar: "border-violet-500" },
+};
+export const FEED_LIMIT = 20;
+
+export const $ = (id) => document.getElementById(id);
+export const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+export const dot = (cls) => el("span", `inline-block h-1.5 w-1.5 shrink-0 rounded-full ${cls}`);
+
+// A small outlined label with an optional leading dot: the one badge shape of the page.
+export function tag(text, { dotCls, cls = "text-slate-600 dark:text-slate-300" } = {}) {
+  const node = el("span", `inline-flex items-center gap-1.5 rounded border border-slate-200 px-1.5 text-[11px] font-medium leading-5 dark:border-slate-700 ${cls}`);
+  if (dotCls) node.append(dot(dotCls));
+  node.append(text);
+  return node;
+}
+
+// A callout: one accent line, no fill. Used for repeat reasons, hold causes and failures alike.
+const BAR_TEXT = {
+  "border-rose-500": "text-rose-700 dark:text-rose-300", "border-amber-500": "text-amber-700 dark:text-amber-300",
+  "border-violet-500": "text-violet-700 dark:text-violet-300", "border-sky-500": "text-sky-700 dark:text-sky-300",
+  "border-emerald-500": "text-emerald-700 dark:text-emerald-300",
+};
+export function callout(barCls, head, body) {
+  const node = el("div", `border-l-2 pl-2.5 text-xs leading-snug ${barCls}`);
+  if (head) node.append(el("p", `font-medium ${BAR_TEXT[barCls] ?? ""}`, head));
+  if (body) node.append(el("p", "mt-0.5 text-slate-600 dark:text-slate-300", body));
+  return node;
+}
+
+export function fmtDur(ms) {
+  if (ms < 1000) return `${Math.max(Math.round(ms), 0)}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${String(Math.floor(s % 60)).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+export const since = (iso) => fmtDur(Date.now() - Date.parse(iso));
+export const ago = (iso) => `${since(iso)} ago`;
+export const clock = (ms) => `+${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+
+// Quiet time of running work: nothing under 2 minutes, then amber, red from 15 minutes. Display only.
+const QUIET_AFTER_S = 120;
+const QUIET_LONG_S = 900;
+function tickQuiet(node) {
+  const s = (Date.now() - Date.parse(node.dataset.quiet)) / 1000;
+  const level = s >= QUIET_LONG_S ? "long" : s >= QUIET_AFTER_S ? "slow" : "";
+  node.hidden = !level;
+  node.replaceChildren(dot(level === "long" ? "bg-rose-500" : "bg-amber-500"), `Quiet ${fmtDur(s * 1000)}`);
+  node.className = `${node.closest("article") ? "mt-2 w-fit" : ""} inline-flex items-center gap-1.5 text-[11px] font-medium ${level === "long" ? "text-rose-700 dark:text-rose-300" : "text-amber-700 dark:text-amber-300"}`;
+  const card = node.closest("article");
+  if (card) card.dataset.quietLevel = level;
+}
+export function tick(node) {
+  if (node.dataset.quiet) return tickQuiet(node);
+  node.textContent = `${node.dataset.prefix || ""}${since(node.dataset.since)}${node.dataset.suffix || ""}`;
+}
+export function quietSpan(sinceIso) {
+  const node = el("span");
+  node.dataset.quiet = sinceIso;
+  tick(node);
+  return node;
+}

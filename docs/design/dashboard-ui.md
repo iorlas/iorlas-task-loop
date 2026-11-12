@@ -16,22 +16,32 @@ below. Terms: [dashboard, board, live tail](../glossary.md). This is separate fr
 - A card shows task id and title, attempt number, a *repeat* or *restarted at plan* badge with its reason, time in the
   current step, slot, and the hold cause. A card that changes column animates to its new place.
 - Clicking a card opens a wide drawer (see below): task fields, then the task's history, then the lines of one attempt.
-- The drawer's history is one **trail** of attempts in the order they happened, left to right, wrapping. A label between
-  two nodes names a jump: `↻ repeat` (the same step again) or `↩ back to plan` (restarted at plan, D4); an ordinary
-  advance is a plain arrow. Dashed nodes at the end are the steps still to come. Click a node to see that attempt: how it
-  ended, why it began (the jump reason) and its lines. Clicking nothing selects the last attempt. No tabs: the first mock's
-  "From plan N" tabs showed that a restart happened but not why or from where.
-- Header: id, title, then one muted line of facts (column, slot, priority, task branch, created), the description and,
-  for a held task, the cause.
-- **Quiet**: a running step that has produced no line for 2 minutes shows `💤 quiet 5m 40s` (amber; red from 15 minutes)
-  on its card, with a coloured card border, and in the drawer's attempt bar. Any new line resets it. Display only, from
-  the time of the latest agent line (the B10 fact); it decides nothing and the word stuck stays the engine's.
-- A line is a compact styled row, never raw JSON: ⚙️ command with ⏱ how long it ran (❌ and the exit code when not 0),
-  💬 agent message, ✅/❌ check result with its duration, 🚦 attempt started. Before a command, when the agent took
-  2 s or more to issue it, a faint 🤔 "agent thought 33s" hint. That number is the time from the previous line to this
-  command's start; it is *not* part of the command's own duration (the first mock showed both as unlabeled ⏱ and ⌛).
-- Stack: plain HTML, one vanilla JS ES module (`app.js`), no framework, no npm at runtime. `mock.js` is the throwaway
-  fake source, deleted when the server slice lands. Styling is Tailwind compiled once; `dash.css` is committed, so nobody
+- The drawer is a master and a detail. Top: id, title, one line of facts (column, slot, priority, task branch, created),
+  the description and, for a held task, the hold cause. Left, the **attempt rail**: every attempt of the task in the
+  order it happened, one aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
+  jump names how the next attempt began: `↻ Repeat` (the same step again) or `↩ Back to plan` (restarted at plan, D4)
+  with its reason when that adds something. Steps still to come are dim. A task with ten attempts is ten rows and the
+  rail scrolls. Right, the selected attempt, in three tabs:
+  - **Lines**: the log grid (below). Opens first for a running attempt.
+  - **Result**: the conclusion, the agent's answer (disposition and text) and for checks each check's result with its
+    full output (a failed check shows its output at once). Opens first for an ended attempt.
+  - **Prompt**: exactly what the agent was told in that attempt, repeat feedback included; a step that runs commands
+    (checks, land) has none. The chosen tab stays when another attempt is selected, so prompts can be compared.
+  An attempt that began as a jump also shows why, naming the attempt it follows ("Repeat of Checks #5").
+- Design language: no emoji in the page chrome. A state is a coloured dot and a word, a badge is one outlined label, a
+  reason is a callout (one accent line, no fill: amber repeat, violet back to plan, rose held or failed, sky running,
+  green succeeded), numbers are tabular and right-aligned, colour means status only. The first mocks used emoji for
+  everything and read as noise.
+- Header: id, title, then the facts line, the description and, for a held task, the cause.
+- **Quiet**: a running step that has produced no line for 2 minutes shows `Quiet 5m 40s` (amber; red from 15 minutes)
+  on its card, with a coloured card border, and in the drawer. Any new line resets it. Display only, from the time of
+  the latest agent line (the B10 fact); it decides nothing and the word stuck stays the engine's.
+- A line is one row of a grid, never raw JSON: offset from the attempt's start, kind (`CMD`, `MSG`, `CHECK`, `STEP`),
+  content, duration right-aligned (with the exit code in red when not 0). Before a command, when the agent took 2 s or
+  more to issue it, a faint "agent thought 33s" line. That number is the time from the previous line to this command's
+  start; it is *not* part of the command's own duration (the first mock showed both as unlabeled durations).
+- Stack: plain HTML and vanilla JS ES modules (`app.js` board, `drawer.js`, `ui.js`), no framework, no bundler, no npm
+  at runtime. `mock.js` is the throwaway fake source, deleted when the server slice lands. Styling is Tailwind compiled once; `dash.css` is committed, so nobody
   installs Tailwind to use or serve the page. Light and dark theme follow the system; the switch overrides and is
   remembered in `localStorage` (optional, failure ignored).
 - Later slices: a stdlib server in a thread of the rounds process, JSON endpoints and SSE. Typed agent events come from
@@ -104,6 +114,11 @@ event. `slot` is `null` when the task holds none. `hold_cause` is the sentence t
     {"step": "implement", "n": 2, "state": "failed", "started_at": "...", "ended_at": "...",
      "summary": "failed: deadline exceeded after 30m",
      "after": "repeat", "reason": "failed: the agent finished without a diff",
+     "input": "You are the implementing agent for task tl-7d5. ...",
+     "result": {"summary": "failed: deadline exceeded after 30m",
+                "answer": {"disposition": "incomplete", "text": "..."},
+                "checks": [{"name": "types", "passed": false, "duration_ms": 23000, "output": "ERROR ..."}],
+                "output": null},
      "feed": [ <live event>, ... ]}
   ]
 }
@@ -112,8 +127,11 @@ event. `slot` is `null` when the task holds none. `hold_cause` is the sentence t
 `attempts` is every attempt of the task, oldest first. `n` counts per step. `state` is `running`, `succeeded` or `failed`;
 `summary` says how it ended (the verdict or conclusion the owner of that fact already states); `ended_at` is `null`
 while running. `after` says how the attempt began: `null` (the previous step succeeded), `repeat` or `restart_at_plan`,
-with the `reason` the engine recorded. `feed` is the last 20 lines of that attempt, oldest first, read behind the
-evidence reader; display only, never control state.
+with the `reason` the engine recorded. `input` is the prompt text the agent was given (`null` for a step that runs commands). `result.answer` is the
+agent's answer (`null` before it ends or for checks and land); `result.checks` are the check results of a checks attempt
+with the full output of each failed one; `result.output` is any other failure output, such as a stopped command's.
+`feed` is the last 20 lines of that attempt, oldest first. Lines, prompt and outputs are read behind the evidence reader;
+all of it is display only, never control state.
 
 ### Live event
 
@@ -121,10 +139,10 @@ One line. `id` identifies a command so its `finished` event replaces its `runnin
 
 | `type` | fields | shows |
 |---|---|---|
-| `step` | `step`, `attempt` | 🚦 attempt started |
-| `command` | `id`, `cmd`, `state` (`running` or `finished`), `waited_ms`, and when finished `duration_ms`, `exit_code` | ⚙️ the command, ⏱ how long it ran (a running one counts up); ❌ and the exit code when not 0; 🤔 `waited_ms` = how long the agent took before issuing it |
-| `message` | `text` | 💬 an agent message |
-| `check` | `name`, `passed`, `duration_ms` | ✅ or ❌ a check result |
+| `step` | `step`, `attempt` | `STEP` attempt started |
+| `command` | `id`, `cmd`, `state` (`running` or `finished`), `waited_ms`, and when finished `duration_ms`, `exit_code` | `CMD` the command and how long it ran (a running one counts up); the exit code in red when not 0; `waited_ms` as the "agent thought" line before it |
+| `message` | `text` | `MSG` an agent message |
+| `check` | `name`, `passed`, `duration_ms` | `CHECK` name, passed or failed, duration |
 
 Every event carries `at`. `waited_ms` is measured by the producer: from the previous event's end to this command's start.
 

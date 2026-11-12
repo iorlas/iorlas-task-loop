@@ -36,7 +36,7 @@ function buildAttempts(planStarts) {
         out.push({
           step: stage.step, n: seen[stage.step], state: a.state, started_at: iso(a.started_ago_s),
           ended_at: a.duration_s == null ? null : iso(a.started_ago_s - a.duration_s),
-          summary: a.summary, after, reason, feed: a.feed.map(event).slice(-FEED_LIMIT),
+          summary: a.summary, after, reason, output: a.output ?? null, feed: a.feed.map(event).slice(-FEED_LIMIT),
         });
       }
     }
@@ -53,9 +53,34 @@ function plainAttempts(t) {
     return {
       step, n: 1, state: running ? "running" : "succeeded", started_at: iso(t.step_started_ago_s + (upto - i) * 300),
       ended_at: running ? null : iso(t.step_started_ago_s + (upto - i - 1) * 300),
-      summary: running ? "running" : `${step} succeeded`, after: null, reason: null, feed: [],
+      summary: running ? "running" : `${step} succeeded`, after: null, reason: null, output: null, feed: [],
     };
   });
+}
+
+// What the agent is told in a step. The real prompt comes from the step kind; this is a stand-in of the same shape.
+function promptFor(task, fields, step, after, reason) {
+  if (step !== "plan" && step !== "implement") return null;
+  const head = `You are the ${step === "plan" ? "planning" : "implementing"} agent for task ${task.id}.\n\nTask: ${task.title}\n\n${fields.description}\n\n`;
+  const body = step === "plan"
+    ? `Write the plan to docs/design/${task.id}/plan.md. Name the files you will touch, the tests you will add and what finishes the task. Do not change code in this step.`
+    : `The admitted plan is at docs/design/${task.id}/plan.md. Implement it in this slot's worktree on task branch ${fields.branch}. Run the focused tests before you answer. Do not edit check configuration unless the plan says so.`;
+  const feedback = after ? `\n\nThe previous attempt ended: ${reason}\nFix that first.` : "";
+  return `${head}${body}${feedback}\n\nReply with the answer JSON: {"disposition": "${step === "plan" ? "planned" : "implemented"}" | "unchanged" | "incomplete" | "needs_owner", "summary": "..."}.`;
+}
+
+// Fields the backend stores per attempt; the mock derives them from what it has.
+function withDerived(d) {
+  for (const a of d.attempts) {
+    a.input = promptFor(d.task, d.fields, a.step, a.after, a.reason);
+    const checks = a.feed.filter((e) => e.type === "check")
+      .map((e) => ({ name: e.name, passed: e.passed, duration_ms: e.duration_ms, output: e.passed ? null : (a.output ?? "No output captured.") }));
+    const lastMessage = a.feed.findLast((e) => e.type === "message")?.text;
+    const answer = a.state === "running" || !a.input ? null
+      : { disposition: a.state === "succeeded" ? (a.step === "plan" ? "planned" : "implemented") : "incomplete", text: a.state === "failed" ? (lastMessage ?? a.summary) : a.summary };
+    a.result = { summary: a.summary, answer, checks, output: checks.length ? null : a.output };
+  }
+  return d;
 }
 
 // Keep the mock's own detail in step with the events it sends, as the real backend's store will.
@@ -70,7 +95,7 @@ function applyMove(d, next) {
     const prev = d.attempts.at(-1);
     const after = next.column === "plan" && d.attempts.length ? "restart_at_plan" : prev?.step === next.column ? "repeat" : null;
     const n = d.attempts.filter((a) => a.step === next.column).length + 1;
-    d.attempts.push({ step: next.column, n, state: "running", started_at: now(), ended_at: null, summary: "running", after, reason: null, feed: [] });
+    d.attempts.push({ step: next.column, n, state: "running", started_at: now(), ended_at: null, summary: "running", after, reason: null, output: null, feed: [] });
   }
 }
 
@@ -98,7 +123,7 @@ export async function mockSource() {
   return {
     label: "mock data",
     snapshot: async () => structuredClone(snapshot),
-    detail: async (id) => structuredClone(detail[id]),
+    detail: async (id) => structuredClone(withDerived(detail[id])),
     subscribe(on) {
       const current = new Map(snapshot.tasks.map((t) => [t.id, t]));
       for (const step of fx.script) {
