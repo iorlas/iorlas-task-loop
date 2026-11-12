@@ -138,7 +138,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if arguments.command in cli_step.COMMANDS:
         return cli_step.run(arguments)
-    handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": cli_install.run}
+    handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": cli_install.run,
+                "install": cli_install.run_install}
     return handlers[arguments.command](arguments)
 
 

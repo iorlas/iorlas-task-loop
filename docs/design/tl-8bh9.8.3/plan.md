@@ -269,9 +269,10 @@ version (Q4).
    `REV` itself (a tree or blob id, which `Repo.tree` also accepts, has no history: `revision`). A tag name: it must pass
    the tag-name filter of 4.3; `Repo.refs(["refs/tags/<REV>"])` is a prefix listing, so only the row whose name is
    exactly `refs/tags/<REV>` counts (`refs/tags/<REV>-rc` is ignored); none is `revision`. **Annotated** when that ref's
-   object id differs from the commit id `Repo.tree(REV).sha` (the peeled commit) and the object is not itself a commit
-   (`Repo.history([<object id>], limit=1)` does not start at that id); otherwise `not_annotated`. A tag of a tag is
-   accepted (it peels to a commit); a tag of a tree is `revision`.
+   object id differs from the commit id `Repo.tree("refs/tags/<REV>").sha` (the peeled commit, itself checked to be a
+   commit by its history); otherwise `not_annotated`. A tag of a tag is accepted (it peels to a commit); a tag of a tree
+   is `revision`. By this rule a lightweight ref that names another annotated tag's object is accepted too (as built,
+   I2: the ref names an object other than its commit; the peeled commit is what is installed).
 2. **Lock** `installs/<commit>.lock` without waiting: `refused busy` when another `tl install` of the same commit holds
    it. Everything below happens under the lock.
 3. **State** (`installs.state`, the same validity as the resolver, `tl pin` and `tl version`): complete: `Installed:
@@ -280,21 +281,29 @@ version (Q4).
    the path (section 6.4); absent: build.
 4. **Export** the tree into `installs/<commit>/source/` natively: every entry of `Tree.files` with mode `100644` or
    `100755` written with `Tree.read(path)` and that mode; a symlink (`120000`) or gitlink (`160000`) is `refused tree`
-   with the path (this repository has neither); a path with an empty, `.` or `..` part is `refused tree`. About 300
+   with the path (this repository has neither); a path with an empty, `.`, `..` or `.git` part (any case), two paths that differ only in case, or a file
+   and a folder that do, is `refused tree` (as built, I2; folders that differ only in case merge harmlessly). About 300
    `cat-file` reads at 26be8f7ae (293 tracked files); not verified for time (section 20).
 5. **Build** with uv, the one external tool (it owns environment creation and the locked dependency set):
    ```
    cwd: ~/.local/share/task-loop/installs
-   uv --directory <commit>/source sync --frozen --no-editable --no-dev --reinstall-package iorlas-task-loop
-   env: the person's environment without every UV_* variable and VIRTUAL_ENV, plus UV_PROJECT_ENVIRONMENT=<install>/venv
+   uv --project <commit>/source sync --frozen --no-editable --no-dev --reinstall-package iorlas-task-loop
+   env: the person's environment without every UV_* variable, VIRTUAL_ENV, CONDA_PREFIX, PYTHONPATH, PYTHONHOME,
+        PYTHONSTARTUP, GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE, plus UV_PROJECT_ENVIRONMENT=<install>/venv and
+        UV_NO_CONFIG=1
    ```
    through `stream_proc.run` (foreground; lines to the terminal and `install.log`; timeout 15 minutes). The working
    directory is the installs root, never the exported source, so a `mise.toml` or `.python-version` inside the commit
    cannot choose the tools that build it; mise resolves `uv` from the installs root's config chain (D14: trusting that
-   folder is the person's prerequisite). Stripping `UV_*` and `VIRTUAL_ENV` keeps a shell's active environment, cache or
-   index settings from leaking into the build. `--reinstall-package` matches `just install` (the project wheel is
+   folder is the person's prerequisite). `--project`, not `--directory` (as built, I2): uv's own working directory stays
+   the installs root; uv still reads the commit's own `.python-version` from the project root, the commit's Python
+   request. Stripping these variables keeps a shell's active environment, cache, Python path or Git repository from
+   leaking into the build; `UV_NO_CONFIG=1` keeps `uv.toml` and `[tool.uv]` settings of the person's folders (an index,
+   for example) out, while the project's `[tool.uv.sources]` are still read (checked with uv 0.13.0: `uv lock --check`
+   passes with it on this repository's export). `--reinstall-package` matches `just install` (the project wheel is
    always rebuilt). `uv` is found with `shutil.which` on `PATH` (a mise shim is fine): absent is `unavailable uv`. A
-   non-zero exit or the timeout is `refused build` with the last line and the log path.
+   non-zero exit, a signal, the timeout or survivors of uv's tree after its stop is `refused build` with the last line,
+   the log path and, for survivors, "its process tree may still be writing" with their pids.
 6. **Verify**: `<install>/venv/bin/python -I -m taskloop version --json` through `stream_proc.capture` (timeout 60 s),
    run with the same working directory; the answer must parse and its `running.prefix` must resolve to this venv.
    Anything else is `refused verify`. This is the one cross-process read: validated JSON, as CLAUDE.md allows across a
@@ -304,7 +313,7 @@ version (Q4).
 ```
 Install: factory-v0.2.0 = 3f2a9c4e1b07... (annotated tag) from /home/u/src/task-loop
 Export: 293 files to /home/u/.local/share/task-loop/installs/3f2a9c4e1b07.../source
-Build: uv --directory 3f2a9c4e1b07.../source sync --frozen --no-editable --no-dev --reinstall-package iorlas-task-loop (log .../install.log)
+Build: uv --project 3f2a9c4e1b07.../source sync --frozen --no-editable --no-dev --reinstall-package iorlas-task-loop (log .../install.log)
 Verify: running from /home/u/.local/share/task-loop/installs/3f2a9c4e1b07.../venv
 Installed: 3f2a9c4e1b07 factory-v0.2.0; not pinned (tl pin factory-v0.2.0 runs it from the next start)
 ```
@@ -454,7 +463,8 @@ leaves its own incomplete directory (section 6.4).
 | `tl install` | `tree` | a symlink, gitlink or unsafe path in the commit's tree |
 | `tl install` | `build` | uv exited non-zero or timed out |
 | `tl install` | `verify` | the new install's `version --json` failed, timed out or named another prefix |
-| `tl install` | unavailable `uv`, `git`, `write` | uv not on `PATH`; Git unreadable; the installs folder cannot be written |
+| `tl install` | unavailable `uv`, `git`, `write` | uv not on `PATH`; Git unreadable; the installs folder, a file of the export, `install.log` or the manifest cannot be written. Once the install's directory exists, the detail says it is left without a manifest and how to check (`ps`) and remove it (as built, I2) |
+| `tl install` | unavailable `interrupted` (exit 130) | Ctrl-C during the export, the build or the verification (as built, I2); the directory is left incomplete, with the same recovery text |
 | `tl pin` | `not_installed`, `incomplete`, `broken` | `installs.state` of REV's install |
 | `tl pin` | `ambiguous` | a tag name recorded by two installs |
 | `tl pin` | unavailable `write` | the pin file cannot be written or removed |
@@ -484,7 +494,7 @@ leaves its own incomplete directory (section 6.4).
 ## 13. Security and risks
 
 - **An install runs code from the named commit at build time** (hatchling and any build hook in that commit's
-  `pyproject.toml`) with the person's environment (minus `UV_*`, `VIRTUAL_ENV`) and network. The person names the
+  `pyproject.toml`) with the person's environment (minus the variables of section 6.1) and network. The person names the
   commit; the land summary already lists build and check configuration changes. Accepted, as D10/D12 accept setup.
 - **The uv and Python that build an install** come from the person's machine: mise picks `uv` from the installs root's
   config chain (global config, unless the person put a `mise.toml` above it); an untrusted config there makes the mise
@@ -683,7 +693,7 @@ worktree (O6's interim) stays the way to run the factory until I3 is built; the 
 
 - Time and correctness of exporting ~300 files through one `cat-file` per blob (`Repo.tree(...).read`); a shelf
   `archive` operation is the fallback if it is slow (not proposed now).
-- That `uv --directory <source> sync --frozen --no-editable --no-dev --reinstall-package iorlas-task-loop` with
+- That `uv --project <source> sync --frozen --no-editable --no-dev --reinstall-package iorlas-task-loop` with
   `UV_PROJECT_ENVIRONMENT` outside the project and the installs root as cwd builds a working environment whose
   `venv/bin/tl` and `python -I -m taskloop` run from any working directory.
 - `Repo.history([<tree id>], limit=1)` raising or answering empty on the real repository and the fake (the tree-id
@@ -726,3 +736,25 @@ counts a prefix as managed only under this home's installs root, and reports an 
 `{"invalid": <why>, "file": <path or null>}` in JSON. Unrelated stale-test repair in the same change:
 `tests/rules/test_isolation.py` expected the shelf tag `git-porcelain-v0.16.0` after `pyproject.toml` moved to v0.17.0
 (dfba4675c); it now expects v0.17.0.
+
+**I2 as built (2026-11-12).** `install_op.install` over `install_op.Ports`; the real ports are
+`cli_composition.install_ports` (`UvTools`: `shutil.which`, `stream_proc.run` and `stream_proc.capture`; the checkout through
+`inspect_checkout`, then the hardened `checkouts` view). Deviations and additions: Git is read through `install_op.Objects`,
+the three `Repo` reads, and its test fake is `install_doubles.TagRepo` (git_porcelain's `FakeRepo` models no annotated tag
+or file mode); a tag is peeled as `Repo.tree("refs/tags/<REV>")`, never the bare name, so a branch of the same name cannot
+answer; a Ctrl-C during the export, the build or the verification is `unavailable interrupted`, exit 130 (section 11), and
+leaves the directory incomplete; the tree check (`tree`) and `uv` on `PATH` (`uv`) are decided under the lock before the directory is
+made, so they write nothing; any stop after it is made (an unreadable blob, a write error,
+`build`, `verify`) leaves it incomplete, and the refusal says so and how to remove it ("left without a manifest"; the
+`incomplete` refusal says "an earlier install did not finish"); uv's lines go first to `install.log` (with the `Build:`
+line), then to standard output with the progress lines; a closed terminal (a broken pipe) is ignored, a failed log write is
+`unavailable write`, never a silent truncation; the log also records the verification answer; the verification runs with the build's environment; `already`
+with another tag name prints `(given as <tag>)`. The installs root and the lock file are made by any run that reaches the
+lock (`busy`, `broken`, `incomplete` included); nothing removes either. `process-lock-owners` admits `install_op`;
+`entry-never-imports-the-command-surface` and `start-decides-before-the-cli` forbid it. No policy change: `stream_proc`'s
+`run`/`capture` are the shelf's owning API and no factory source imports `subprocess`. Verified in the real-Git test (section
+20): `Repo.history([<tree id>], limit=1)` is empty and `Repo.tree` of a blob id is None. After an independent review of I2: uv runs as `uv --project <commit>/source ...`
+(its working directory stays the installs root), with the wider stripped environment and `UV_NO_CONFIG=1` of section 6.1;
+the lightweight check is only "the ref names the peeled commit itself" (a lightweight ref to an annotated tag object is
+accepted, 6.1); `.git` parts and case-only collisions are `refused tree`; a signal and uv's surviving processes are named
+in `refused build`.

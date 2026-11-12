@@ -1,7 +1,9 @@
-"""The install commands' surface; built so far: `tl version [--json]` (tl-8bh9.8.3 section 6.3).
+"""The install commands' surface; built so far: `tl version [--json]` and `tl install REV --checkout PATH`
+(tl-8bh9.8.3 sections 6.1 and 6.3).
 
-Read-only: this process's install (`sys.prefix` and the manifest beside it, through `installs.state`) and the pin of the
-machine config in use. No factory.db, no lock, no listing of the installs.
+`tl version` is read-only: this process's install (`sys.prefix` and the manifest beside it, through `installs.state`) and
+the pin of the machine config in use; no factory.db, no lock, no listing of the installs. `tl install` runs the one
+operation `install_op.install` over `cli_composition.install_ports` and prints its progress as it goes; text only.
 """
 
 import argparse
@@ -10,7 +12,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop import pin_file
+from taskloop import cli_composition, install_op, pin_file
+from taskloop.install_op import Installed, Refused, Unavailable
 from taskloop.installs import LocalFiles, Manifest, Reads, installs_root, state
 from taskloop.pin_file import Pin, PinInvalid
 
@@ -73,6 +76,40 @@ def register(commands: Parsers) -> None:
     text = "Which install runs and which is pinned for this machine config (read-only)"
     version = commands.add_parser("version", help=text, description=text, allow_abbrev=False)
     version.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data")
+    text = ("Build one immutable install of a commit under ~/.local/share/task-loop/installs/<commit>/ from the checkout's Git "
+            "objects (never pins)")
+    install = commands.add_parser("install", help=text, description=text, allow_abbrev=False)
+    install.add_argument("rev", metavar="REV", help="An annotated tag name or a full commit id")
+    install.add_argument("--checkout", required=True, metavar="PATH", help="The checkout whose Git objects are read (no fetch)")
+
+
+def installed_line(result: Installed) -> str:
+    """The last line: a new install and how to pin it, or `already` naming the recorded and the given tag when they differ."""
+    manifest = result.manifest
+    if result.already:
+        asked = "" if result.asked is None or result.asked == manifest.tag else f" (given as {result.asked})"
+        return f"Installed: already {_named(manifest.commit, manifest.tag)}{asked} ({result.install})"
+    return (f"Installed: {_named(manifest.commit, manifest.tag)}; not pinned (tl pin {manifest.tag or manifest.commit} runs it "
+            "from the next start)")
+
+
+def _say(text: str) -> None:
+    print(text, flush=True)
+
+
+def run_install(arguments: argparse.Namespace) -> int:
+    """`tl install`: 0 installed or already, 1 refused, 3 unavailable (rerun is safe), 130 interrupted by Ctrl-C."""
+    result = install_op.install(arguments.rev, arguments.checkout, cli_composition.install_ports(_say))
+    match result:
+        case Installed():
+            print(installed_line(result))
+            return 0
+        case Refused(word=word, detail=detail):
+            print(f"tl install: refused {word}: {detail}", file=sys.stderr)
+            return 1
+        case Unavailable(word=word, detail=detail):
+            print(f"tl install: unavailable {word}: {detail}", file=sys.stderr)
+            return 130 if word == "interrupted" else 3
 
 
 def run(arguments: argparse.Namespace) -> int:

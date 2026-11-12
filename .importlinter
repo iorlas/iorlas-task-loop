@@ -123,6 +123,7 @@ forbidden_modules =
     taskloop.installs
     taskloop.pin_file
     taskloop.cli_install
+    taskloop.install_op
 
 [importlinter:contract:start-decides-before-the-cli]
 name = The console script resolves the pin before any CLI, composition or shelf library is imported (directly or indirectly)
@@ -134,6 +135,7 @@ forbidden_modules =
     taskloop.cli_step
     taskloop.cli_composition
     taskloop.composition
+    taskloop.install_op
     git_porcelain
     sqlite_store
     stream_proc
@@ -152,13 +154,14 @@ forbidden_modules =
 allow_indirect_imports = True
 
 [importlinter:contract:process-lock-owners]
-name = Only slot custody and the rounds lock import the process lock library
+name = Only slot custody, the rounds lock and the install lock (`install_op`) import the process lock library
 type = forbidden
 source_modules = taskloop
 forbidden_modules = process_lock
 ignore_imports =
     taskloop.slot_lock -> process_lock
     taskloop.rounds_lock -> process_lock
+    taskloop.install_op -> process_lock
 
 [importlinter:contract:one-signal-owner]
 name = Only the rounds process's SIGINT handler imports signal
