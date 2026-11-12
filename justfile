@@ -26,3 +26,8 @@ rules:
 [private]
 pin tool:
     @python3 -c "import pathlib, sys, tomllib; print(tomllib.loads(pathlib.Path('mise.toml').read_text())['tools'][sys.argv[1]])" {{tool}}
+
+# Compile the dashboard stylesheet with the standalone Tailwind CLI (v4.1.11, not an npm or Python dependency;
+# see docs/design/dashboard-ui.md). The compiled dash.css is committed, so running the page never needs it.
+css:
+    tailwindcss -i src/taskloop/dash/static/dash.input.css -o src/taskloop/dash/static/dash.css --minify
