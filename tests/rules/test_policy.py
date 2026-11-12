@@ -3,7 +3,6 @@
 import ast
 import io
 import re
-import sys
 import tokenize
 import tomllib
 from collections import Counter
@@ -258,8 +257,7 @@ def test_the_one_signal_owner_installs_only_a_sigint_handler_and_nothing_sends_a
     assert not any(isinstance(node, ast.Import) and any(alias.name == "os" for alias in node.names) for node in ast.walk(tree))
 
 
-# Replacing or forking this process, or another way to start one: only `start.py`'s one `os.execv` of the pinned (or the
-# started) interpreter, before the CLI is imported (tl-8bh9.8.3 section 5.3).
+# Replacing or forking this process, or another way to start one: none exists in the factory (the layer above owns versions).
 REPLACING = frozenset({
     "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe", "posix_spawn", "posix_spawnp", "fork",
     "forkpty", "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe", "system", "popen",
@@ -338,39 +336,7 @@ def test_the_process_replacement_matcher_sees_uses_and_not_words(source: str, na
     assert sorted(process_replacements(ast.parse(source))) == sorted(names)
 
 
-def test_only_start_replaces_the_process() -> None:
-    """CLAUDE.md: no spawn, fork or exec escape hatch in factory source or tests; the one exec is `start.py`'s, once."""
+def test_nothing_forks_execs_or_spawns() -> None:
+    """CLAUDE.md: no spawn, fork or exec escape hatch in factory source or tests."""
     uses = Counter((name, str(path.relative_to(ROOT))) for path in FILES for name in process_replacements(ast.parse(path.read_text())))
-    assert uses == Counter({("execv", "src/taskloop/start.py"): 1})
-
-
-DECIDING = ("start.py", "installs.py", "pin_file.py")
-DECIDING_IMPORTS = frozenset({"taskloop.installs", "taskloop.pin_file", "taskloop.machine_config"})  # and the standard library
-
-
-def factory_imports(path: Path) -> set[str]:
-    """The modules one file imports (a `from taskloop import x` as `taskloop.x`), a dynamic import as `<dynamic>`."""
-    found: set[str] = set()
-    for node in ast.walk(ast.parse(path.read_text())):
-        if isinstance(node, ast.Import):
-            found.update(alias.name for alias in node.names)
-        if isinstance(node, ast.ImportFrom):
-            module = node.module or ""
-            found.update(f"taskloop.{alias.name}" for alias in node.names) if module == "taskloop" else found.add(module)
-        if isinstance(node, ast.Call) and _called(node) in DYNAMIC_IMPORTS:
-            found.add("<dynamic>")
-    return found
-
-
-def test_nothing_but_the_standard_library_is_imported_before_the_decision() -> None:
-    """`start` decides before the CLI: it, `installs` and `pin_file` import the standard library and each other, plus the
-    machine config's fixed location (itself standard library only); no dynamic import."""
-    folder = ROOT / "src" / "taskloop"
-    for name in (*DECIDING, "machine_config.py"):
-        imported = factory_imports(folder / name)
-        outside = {module for module in imported if module.split(".")[0] not in sys.stdlib_module_names}
-        assert outside <= (DECIDING_IMPORTS if name in DECIDING else set()), (name, outside)
-
-
-def test_the_console_script_is_the_resolving_start() -> None:
-    assert tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"] == {"tl": "taskloop.start:main"}
+    assert uses == Counter()

@@ -6,11 +6,12 @@ import shlex
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
-from taskloop import cli_install, cli_step
+from taskloop import cli_step
 from taskloop.git_views import GitProfileFiles, inspect_checkout
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
@@ -99,6 +100,13 @@ def show_profile(arguments: argparse.Namespace) -> int:
     return code
 
 
+def show_version(arguments: argparse.Namespace) -> int:
+    """`tl version [--json]`: the version of the package this process runs."""
+    found = package_version("iorlas-task-loop")
+    print(json.dumps({"version": found}) if arguments.json_output else found)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Present implemented commands and render truthful inspection failures."""
     tracker_located()  # before any bd call: the given tracker root decides the tracker, never an inherited BEADS_DIR
@@ -131,16 +139,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                               "(default: main)")
     profile_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     cli_step.register(commands)
-    cli_install.register(commands)
+    commands.add_parser("version", help="Print the running package version", allow_abbrev=False).add_argument(
+        "--json", action="store_true", dest="json_output")
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
         return 0
     if arguments.command in cli_step.COMMANDS:
         return cli_step.run(arguments)
-    handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": cli_install.run,
-                "install": cli_install.run_install,
-                "pin": cli_install.run_pin}
+    handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": show_version}
     return handlers[arguments.command](arguments)
 
 

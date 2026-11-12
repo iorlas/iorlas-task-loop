@@ -11,7 +11,7 @@ from urllib.parse import unquote, urlparse
 import pytest
 
 import taskloop
-from taskloop import start
+from taskloop import cli
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,8 +33,8 @@ def test_noneditable_install_matches_current_source() -> None:
     for path in source.glob("*.py"):
         assert (installed / path.name).read_bytes() == path.read_bytes(), path.name
     entries = [entry for entry in distribution.entry_points if entry.group == "console_scripts"]
-    assert [(entry.name, entry.value) for entry in entries] == [("tl", "taskloop.start:main")]
-    assert entries[0].load() is start.main
+    assert [(entry.name, entry.value) for entry in entries] == [("tl", "taskloop.cli:main")]
+    assert entries[0].load() is cli.main
 
 
 # Every shared dependency and the shelf tag it is pinned at. stream-proc is pinned at any-agent's tag (its own

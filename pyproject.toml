@@ -19,7 +19,7 @@ beads-client = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "
 stream-proc = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/stream-proc", tag = "any-agent-v0.5.0" }
 
 [project.scripts]
-tl = "taskloop.start:main"
+tl = "taskloop.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/taskloop"]

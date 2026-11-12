@@ -48,12 +48,6 @@ ENVIRONMENT: Final = (
     "outside the repository. Your runs are evidence for you: after this step the checks run again outside your control, "
     "and only those results count."
 )
-# `tl` resolves the owner pin for every start, an agent's in a slot included (tl-8bh9.8.3 section 13, Q14): it never runs
-# the code under test. Generic (every repository gets it): no command named.
-PINNED: Final = (
-    "`tl` on this machine runs the owner's pinned factory install, never this checkout's code; exercise the code under test "
-    "through its checks or tests."
-)
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
     "unsafe": "This listed path, or a `.git*` file near it, cannot be committed: a symlink or under one, not a plain file, "
@@ -100,7 +94,7 @@ def _closing_words(task_id: str, rules: StepRules) -> str:
         f"You may add, change and delete plain files anywhere in the repository, at most {rules.max_paths} files of at most "
         f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, anything under "
         f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. The plan's own folder may change too (for example "
-        f"an \"As built\" section). {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} {PINNED} With "
+        f"an \"As built\" section). {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
         "`implemented`, list in `paths` every file you changed, "
         "added or deleted and give a one-line commit `message`; the factory commits exactly those paths. Remove any other "
         "file you created. Anything left uncommitted is reported back to you as a failed step. In `explanation`, name each "
