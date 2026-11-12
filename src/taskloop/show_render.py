@@ -143,6 +143,9 @@ def show_lines(result: Shown) -> list[str]:
     land's."""
     each = result.view
     if each.checks is None:
-        return [*_agent_lines(each), setup_line(result.setup), *hold_lines(each)]
+        failed = result.failed
+        held = [] if failed is None else [check_line(row, log, failed.row.required, "Failed check")
+                                          for row, log in zip(failed.results, failed.logs, strict=True)]
+        return [*_agent_lines(each), setup_line(result.setup), *held, *hold_lines(each)]
     land = [] if each.land is None else land_lines(each.land, each.checks.row.required)
     return [*_checks_lines(each, each.checks, setup_line(result.setup)), *land, *hold_lines(each)]

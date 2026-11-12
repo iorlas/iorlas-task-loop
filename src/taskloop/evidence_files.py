@@ -14,6 +14,7 @@ from taskloop.round_log import WORD
 from taskloop.slot_state import shown
 
 ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
+TERMINATED: Final = "terminated_by_signal"  # the entry log's cause word when a signal ended the entry (`attempt_entry`)
 ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
 LOG_CAP: Final = 32 << 20  # bytes of one setup run's or one check's log, and of one agent attempt's stdout or stderr; then `[truncated]`
 TRUNCATED: Final = b"[truncated]\n"

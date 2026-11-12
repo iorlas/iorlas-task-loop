@@ -315,6 +315,11 @@ call and no line in later rounds (it is not in the ready read until the person a
 release attempt (and at most one bd call) per round, as a pending publication does today. Per-task hold words never
 stop admission or back the rounds off.
 
+**Start by hand of a held task (tl-8bh9.14.32, trial 2 F3).** A `tl step start` (no label) of a task whose settled hold
+(labels `moved` or `absent`, not cleared by a round yet) is refused `on_hold` with that guide: it would plan the
+unedited task and clear the hold unanswered. The answer is the description edit plus the label back (a round starts it).
+A `not_ours` hold is answered by the hand start, as its comment says, and a hold that never labelled is not refused.
+
 `round.py` is 361 lines; the additions are about 25. If it passes 400, `_verified` and `_publish` move to a new
 `round_publish.py` (no behavior change).
 

@@ -145,7 +145,7 @@ def test_a_hold_records_moves_the_labels_abandons_then_comments_once(bench: Benc
     assert (row.cause_id, row.reason, row.held_at, row.labels, row.commented_at) == ("a", "failed:needs_owner", 10.0, "moved", 10.0)
     text = bench.tracker.texts[0]
     assert text.startswith("taskloop hold: failed:needs_owner\nStep plan, attempt 1 (a)")
-    assert "task/tl-1 at not published." in text and "removed `auto` and added `held` and returned its claim." in text
+    assert "task branch task/tl-1 is not published." in text and "removed `auto` and added `held` and returned its claim." in text
     assert "`bd label add tl-1 auto`" in text and f"Evidence: {bench.root}/attempts/" in text
 
 

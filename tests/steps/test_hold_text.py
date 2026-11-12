@@ -87,7 +87,7 @@ def test_the_check_and_leftover_lines_and_an_unpublished_branch() -> None:
     checks = tuple(FailedCheck(f"c{number}", "failed", f"/logs/c{number}.log") for number in range(12))
     left = Leftovers("uncommitted", tuple(f"p{number}" for number in range(22)))
     found = lines(replace(FACTS, published=None, explanation="", checks=checks, leftovers=left))
-    assert found[1].endswith("task branch task/tl-1 at not published.") and found[2] == "Failed checks: c0 failed /logs/c0.log"
+    assert found[1].endswith("task branch task/tl-1 is not published.") and found[2] == "Failed checks: c0 failed /logs/c0.log"
     assert [each for each in found if each.startswith("Failed checks")][-2:] == ["Failed checks: c9 failed /logs/c9.log",
                                                                                 "Failed checks: and 2 more"]
     assert found[13] == "Left in the slot: uncommitted " + ", ".join(f"p{number}" for number in range(20)) + " and 2 more"
@@ -133,3 +133,9 @@ def test_an_explanation_cannot_forge_a_header_a_claim_line_or_an_answer() -> Non
 def test_an_unknown_slot_or_pid_is_named_neutrally(outcome: Kept, says: str) -> None:
     line = lines(outcome=outcome)[-2]
     assert says in line and "None" not in line and "slot  " not in line
+
+
+def test_an_entry_ended_by_a_signal_is_said_so_and_its_agent_session_is_not_continued() -> None:
+    found = lines(replace(FACTS, reason="stuck:entry_lost", entry="failed terminated_by_signal"))
+    assert found[2] == "The attempt's entry was terminated by a signal; its agent was stopped with it and its session was not continued."
+    assert not any("terminated" in line for line in lines(replace(FACTS, entry="collected valid verify=verified")))

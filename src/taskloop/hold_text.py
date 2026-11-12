@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final, Literal
 
+from taskloop.evidence_files import TERMINATED
+
 EXPLANATION: Final = 2000
 CHECKS: Final = 10
 PATHS: Final = 20
@@ -79,6 +81,7 @@ class HoldFacts:
     checks: tuple[FailedCheck, ...]
     leftovers: Leftovers | None
     evidence: str  # the attempt's evidence directory
+    entry: str | None = None  # the entry log's last line of fixed words (`Last entry result`), None when there is none
 
 
 def part(text: str, cap: int = PART) -> str:
@@ -101,10 +104,13 @@ def _listed[T](items: tuple[T, ...], cap: int) -> tuple[tuple[T, ...], str]:
 
 def _details(facts: HoldFacts) -> list[str]:
     when = f"{datetime.fromtimestamp(facts.held_at, UTC):%Y-%m-%d %H:%M:%S} UTC"
-    at = part(facts.published) if facts.published else "not published"
+    branch = f"task branch task/{part(facts.task_id)}"
+    at = f"{branch} at {part(facts.published)}" if facts.published else f"{branch} is not published"
     lines = [f"taskloop hold: {part(facts.reason)}",
-             f"Step {part(facts.step)}, attempt {facts.number} ({part(facts.attempt_id)}), {when}; task branch "
-             f"task/{part(facts.task_id)} at {at}."]
+             f"Step {part(facts.step)}, attempt {facts.number} ({part(facts.attempt_id)}), {when}; {at}."]
+    if facts.entry is not None and facts.entry.endswith(TERMINATED):
+        lines.append("The attempt's entry was terminated by a signal; its agent was stopped with it and its session was not "
+                     "continued.")
     if facts.explanation and (text := explained(facts.explanation)):
         lines.extend(["The agent explained:", text])
     shown, more = _listed(facts.checks, CHECKS)
