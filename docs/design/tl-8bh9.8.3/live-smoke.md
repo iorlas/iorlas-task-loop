@@ -1,6 +1,9 @@
 # M5 live smoke, B8 part: install, pin and the version a running factory keeps (owner- or authorized-agent-run, after I3)
 
-**Status: not run.** Written with I3 (2026-11-12), from [plan.md](plan.md) section 17.
+**Status: passed on Linux 2026-11-12** at `e6c1a2ab2` (steps 0-7 and 9; step 8, macOS, not run), with six command
+adjustments and one build-environment finding (the installs are built by the `uv` the installs root resolves: here
+the system 0.11.21, not the pinned 0.13.0) ([findings](m5-smoke-findings.md)). Written with I3 (2026-11-12), from
+[plan.md](plan.md) section 17.
 
 Milestone M5 of the [roadmap](../self-hosting-roadmap.md), its B8 part: `tl install` builds one immutable install per
 commit, `tl pin` chooses one for a machine config, every start of `tl` resolves the pin once (one exec), a running
