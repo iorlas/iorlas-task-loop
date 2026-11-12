@@ -13,10 +13,11 @@ from any_agent.testing import FakeRun
 from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
 from doubles import FakeSlotFiles, PinnedViews
+from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
 
-from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission
+from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
@@ -572,3 +573,16 @@ def test_an_abandon_still_returning_its_claim_keeps_the_task_attempted(
     assert release.release(first.key, True) == Released("s1", None, False, "unclaimed", True)
     assert raced == [AdmitRefused("task_attempted")] * 2 and contender.calls == []
     assert isinstance(admit(factory, tmp_path, repo, contender), Admitted) and contender.calls == ["claim:tl-1"]
+
+
+def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_other_git_faults_stay_unavailable(tmp_path: Path) -> None:
+    """tl-8bh9.14.60: a missing path or a directory outside any repository is the person's input (exit 1), not `unavailable git`."""
+    def missing(_path: Path, *, git_dir: Path | None = None) -> Repo:
+        raise NotARepo("git rev-parse exited 128")
+
+    def broken(_path: Path, *, git_dir: Path | None = None) -> Repo:
+        raise GitTimeout("git timed out")
+
+    refused = checkout_repo(missing, tmp_path / "nowhere")
+    assert isinstance(refused, AdmitRefused) and refused.reason == "checkout" and str(tmp_path / "nowhere") in refused.detail
+    assert isinstance(checkout_repo(broken, tmp_path), AdmitUnavailable)

@@ -95,6 +95,19 @@ def test_a_failed_validation_pushes_nothing_and_leaves_its_slot_released(b: Land
     assert row.released_at is not None and b.reservations() == [] and b.origin_main() == main and b.repo.pushes == 0
 
 
+def test_an_artifacts_directory_that_cannot_be_written_is_unavailable_log_naming_it_and_the_rerun_lands(b: LandBench) -> None:
+    """tl-8bh9.14.41: not a failed setup: no branch advice, the directory named, a rerun after the fix pushes."""
+    b.advance({"OTHER": "another task\n"})
+    blocked = b.root / "art" / "attempts"
+    blocked.parent.mkdir(parents=True, exist_ok=True)
+    blocked.write_text("a file where the folder belongs")
+    found = b.land()
+    assert isinstance(found, Failed) and (found.kind, found.reason) == ("unavailable", "log") and str(b.root / "art") in found.detail
+    assert b.repo.pushes == 0 and b.execs() == []
+    blocked.unlink()
+    assert isinstance(b.land(), Landed)
+
+
 def test_a_conflict_is_refused_with_its_paths_and_nothing_recorded(b: LandBench) -> None:
     main = b.advance({"src/x.py": "X = 2\n"})
     found = b.land()

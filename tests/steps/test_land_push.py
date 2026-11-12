@@ -101,6 +101,16 @@ def test_a_push_rejected_after_the_read_reads_origin_again_and_answers_target_mo
     assert isinstance(found, Landed) and found.how == "pushed" and found.row.number == 2 and b.execs() == RUN
 
 
+def test_a_remote_rejected_push_while_main_moved_is_the_race_not_a_policy_refusal(b: LandBench) -> None:
+    """tl-8bh9.14.35: origin answered the lost ref update (a lock held by the winner) as a rejection while main differs from O."""
+    b.repo.after_ls = [None, lambda: b.advance({"OTHER": "won the race\n"})]  # right after the delivery's read: R was O
+    b.repo.answer = RemoteRejected("! [remote rejected] main -> main (failed to update ref)")
+    assert word(b.land()) == ("unavailable", "target_moved")  # as any lost race: never `remote_rejected`
+    assert b.repo.pushes == 1 and b.rows()[0].superseded == "moved" and b.rows()[0].delivery is None
+    found = b.land()
+    assert isinstance(found, Landed) and found.how == "pushed" and found.row.number == 2
+
+
 @pytest.mark.parametrize(("answer", "expected"), [
     (Transient("reset by peer"), ("unavailable", "remote")),
     (RemoteRejected("[remote rejected] main (protected branch hook declined)"), ("refused", "remote_rejected")),

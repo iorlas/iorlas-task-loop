@@ -115,6 +115,9 @@ def _land_flags(parser: argparse.ArgumentParser) -> None:
                       "first, nothing pushed) so the task can be abandoned")
     parser.add_argument("--no-change", action="store_true", help="Accept that origin's main already holds X's changes: "
                         "recorded and closed with no push")
+    parser.add_argument("--accept-gate-changes", action="store_true", help="Accept that S changes what decides a pass (a check's "
+                        "argv, timeout, setup or required names, a configuration file, a weakened test): without it the land "
+                        "refuses and lists them")
     _common(parser, "--db", "--artifacts")
 
 
@@ -202,7 +205,7 @@ def _land(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     unwinding already stopped a running check's tree, and the rerun reconciles what is left (as the rounds' abrupt stop)."""
     mode: Literal["land", "summary", "withdraw"] = "summary" if arguments.summary else "withdraw" if arguments.withdraw else "land"
     request = land.LandRequest(arguments.backlog, arguments.task_id, Path(arguments.checkout), arguments.minutes, mode,
-                               arguments.no_change)
+                               arguments.no_change, arguments.accept_gate_changes)
     try:
         with cli_composition.open_land(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
             return ports if isinstance(ports, Failed) else land.land(ports, request)

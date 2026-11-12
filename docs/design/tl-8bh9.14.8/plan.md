@@ -1370,3 +1370,65 @@ ancestry, each reading `origin` as the person's Git configuration resolves it, a
 A person who points origin's fetch and push at different repositories owns what land then reads and records. The
 D10 residual (a block editing `.git/config`) is accepted without this mitigation (section 15). git-porcelain stays
 pinned at 0.17.0 (released; no revert).
+
+## 30. Trial defects repaired (tl-8bh9.14.34, .35, .41, .42, .43, .60; 2026-11-12)
+
+Evidence: `docs/design/self-hosting-trial-2.md`, `-trial-4.md`, `-trial-5.md` and the beads.
+
+### 30.1 Decision: a change of the gate is refused unless accepted (.42, .43)
+
+**Problem.** A task could change what decides a pass (check argv, `setup`, `ruff.toml`, a test) and land with the plain
+output `pushed ... Closed ...`: only `--summary` listed it, and the person may never run it. After the pull, every later
+task passed the weakened gate.
+
+**Decision (this slice, proposed to the owner with the PR).** One module, `land_gate`, reads the facts between O and S
+(what would land, not X against O, so a main that moved since the branch is not shown as the task's doing) and is shared
+by `--summary` and the land:
+
+1. every changed file with its diffstat (`Worktree.diff(O, S)`);
+2. each check added, removed or changed (argv or timeout), a changed `setup`, a changed `required` list;
+3. each changed configuration file, by **one short shape rule** instead of a name list: a file at the repository root
+   that is not documentation (`.md`, `.rst`, `.txt`), any `conftest.py`, any tracked file a check's or `setup`'s argv
+   names. `ruff.toml`, `pyrefly.toml`, `uv.lock`, `justfile`, `.importlinter` and a tool nobody listed are covered; the
+   cost is a few more root files shown, the same acceptance as a profile change;
+4. each changed test module that was **weakened**: deleted, no longer parsing, fewer test functions, fewer `assert`
+   statements, or more `skip`/`skipif`/`xfail` markers (parsed with `ast` at O and at S; no text matching). A rewrite
+   that keeps the counts is not detected: the diffstat lists it.
+
+Items 2 to 4 are *decisive*. A land whose S has any decisive fact is **refused** `refused:gate_changed` (exit 1, nothing
+recorded), the detail being the same lines `--summary` prints (`land_summary.gate_lines`), until the person reruns with
+`--accept-gate-changes`. The flag belongs to the person's call, never to rounds (which never land). The accepted land's
+output says nothing more: the person saw the facts in the refusal or `--summary`. A land that changes none of it lands
+exactly as before (no flag, no extra output). `--no-change` has no S to compare and needs no flag.
+
+Why refuse and not just print: the plain land is the person's one command, often run in a loop; a line printed after
+the push cannot be acted on. Why not derive "what the checks read": that needs each tool's own rules, which a list or a
+tracer would always lag; the shape rule is short and documented here. Replaces section 10 items 4 and 5 (X against O,
+a fixed name list).
+
+### 30.2 Decision: a freed slot is left to a waiting land (.34)
+
+Rounds refilled every freed slot within seconds, so `tl step land` answered `no_free_slot` for as long as the backlog
+lasted. **Decision:** while any task of the backlog is at `Next: land` (checks passed, not landed), a round does not
+start a step into the **last** free slot: new tasks and advances stop with `no_free_slot` before it, and only a land
+(or a release) takes it. No new state: `Next: land` is already read by the round. The cost is one slot idle while a land
+is pending, so a single slot runs nothing new until the person lands; that is the person's pending action. A land
+waiting for its own turn queues nowhere: the rerun finds the free slot.
+
+### 30.3 A lost ref race is the race (.35)
+
+A push answered `remote_rejected` is read again by the delivery rule: when origin's `main` is no longer at O (the
+winner's push, or its ref lock held at that moment) it is the `rejected` race of section 7 (candidate N+1, at most
+`target_moved`); `remote_rejected` stays for a policy refusal with `main` unchanged.
+
+### 30.4 Setup log failures name the artifacts directory (.41)
+
+An artifacts directory that cannot be written when a setup or check log opens is `unavailable:log`, no longer
+`environment:files` (which is the slot's own folders). The land names the directory, advises fixing its permissions or
+space and says nothing about the task branch or main; a rerun is safe (the candidate resumes).
+
+### 30.5 A checkout that is not a repository is a refusal (.60)
+
+`checkout_repo` answers `refused:checkout` naming the path when Git says `NotARepo` (a missing directory, a directory
+outside any repository), exit 1; `unavailable:git` stays for transient Git faults. Shared by `tl step next`, `start`
+and the land.

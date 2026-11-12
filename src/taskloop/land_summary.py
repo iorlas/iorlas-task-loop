@@ -8,10 +8,10 @@ trailer; the trailers are always the message's last paragraph and only the facto
 author and committer are the person (their Git identity); the task branch keeps the agent's commits.
 
 **The summary** (`--summary`): facts, no judgment. The checks attempt for exactly X with each required name's result; the
-required names at O against the checks attempt's; each required check whose argv at X differs from its argv at O; checks
-added, removed or changed at X against O and a changed `setup`; every changed check-configuration file between
-merge-base(O, X) and X (by tree listings); O and whether S's tree is X's, a conflict's paths, or no change; the message
-and the diff command. `lines` renders it, every outside text shown printable.
+required names at O against the checks attempt's; each required check whose argv at X differs from its argv at O; the gate
+facts of S against O (`land_gate`: every changed file with its diffstat, checks, `setup` and `required` changed,
+configuration files, weakened tests); O and whether S's tree is X's, a conflict's paths, or no change; the message and the
+diff command. `lines` renders it, every outside text shown printable.
 """
 
 import shlex
@@ -23,13 +23,14 @@ from typing import Final, Literal
 from git_porcelain import Conflicted, GitUnavailable, MissingRevision, Repo, Sha, Squashed
 
 from taskloop.check_store import ChecksRow, Required, ResultRow
+from taskloop.land_gate import ACCEPT, FILES, Changed, Gate, gate_of
+from taskloop.land_push import Origin
 from taskloop.operations import Failed
 from taskloop.profile import Argv, Check, Profile, ProfileFiles, Refused, Unavailable, read_profile
 
 TITLE: Final = 72  # a title's and a listed subject's characters
 SUBJECTS: Final = 50  # listed commit subjects, then `- ... and <n> more`
 CONFLICTS: Final = 20  # listed conflicted paths
-CONFIG: Final = frozenset({".task-loop.json", "justfile", "pyproject.toml", "uv.lock", "mise.toml", ".importlinter"})
 type Files = Mapping[str, tuple[str, Sha]]
 type State = Literal["same_tree", "moved", "conflict", "no_change"]
 
@@ -70,20 +71,10 @@ def message_at(repo: Repo, title: str, checks: ChecksRow, o: str) -> str:
 
 
 @dataclass(frozen=True)
-class Changed:
-    """One check at O and at X (None: absent there)."""
-
-    name: str
-    at_o: Check | None
-    at_x: Check | None
-
-
-@dataclass(frozen=True)
 class LandSummary:
     """Section 10's facts. `results`: each name the checks attempt required with its latest-block conclusion; `added` and
     `removed`: required at O and not by the checks attempt, and the reverse; `argv`: required at O with another argv at X;
-    `checks`: every check added, removed or changed at X; `setup`: (at O, at X) when changed; `files`: changed check
-    configuration; `base`: merge-base(O, X)."""
+    `gate`: what S changes in the gate against O (None for a conflict: no S); `base`: merge-base(O, X)."""
 
     checks_id: str
     conclusion: str | None
@@ -94,9 +85,7 @@ class LandSummary:
     added: tuple[str, ...]
     removed: tuple[str, ...]
     argv: tuple[Changed, ...]
-    checks: tuple[Changed, ...]
-    setup: tuple[tuple[Argv, ...], tuple[Argv, ...]] | None
-    files: tuple[str, ...]
+    gate: Gate | None
     base: str
     state: State
     conflicts: tuple[str, ...]
@@ -108,47 +97,20 @@ class LandSummary:
         return self.state == "moved" or (self.state == "same_tree" and bool(self.added or self.removed))
 
 
-def _changed(at_o: Profile, at_x: Profile) -> tuple[Changed, ...]:
-    """Checks added, removed or changed (argv or timeout) at X against O, by name."""
-    before, after = {check.name: check for check in at_o.checks}, {check.name: check for check in at_x.checks}
-    names = sorted(before.keys() | after.keys())
-    return tuple(Changed(name, before.get(name), after.get(name)) for name in names if before.get(name) != after.get(name))
-
-
-def _named(at_x: Profile, tree_x: Files) -> set[str]:
-    """Tracked files a check's or `setup`'s argv at X names: an element that is a file, or a folder holding files, in X
-    (an option, `.`, an absolute or `..` path names none: X's tree paths are relative and normalized)."""
-    found: set[str] = set()
-    for argv in (*at_x.setup, *(check.argv for check in at_x.checks)):
-        for element in argv:
-            path = element.removeprefix("./").rstrip("/")
-            found.update(each for each in tree_x if each == path or each.startswith(f"{path}/"))
-    return found
-
-
-def config_files(base: Files, tree_x: Files, at_x: Profile) -> tuple[str, ...]:
-    """Every check-configuration file changed between merge-base(O, X) and X (section 10 item 5)."""
-    changed = {path for path in base.keys() | tree_x.keys() if base.get(path) != tree_x.get(path)}
-    named = _named(at_x, tree_x)
-    return tuple(sorted(path for path in changed if path in CONFIG or path.startswith("tests/rules/")
-                        or path.rsplit("/", 1)[-1] == "conftest.py" or path in named))
-
-
 @dataclass(frozen=True)
 class Trees:
-    """The tree listings the summary compares: merge-base(O, X) and its commit, X, O, and S (None: a conflict)."""
+    """The tree listings the summary compares: merge-base(O, X), X, O, and S (None: a conflict)."""
 
     base: str
-    at_base: Files
     x: Files
     o: Files
     s: Files | None
 
 
 def summary(checks: ChecksRow, results: Sequence[ResultRow], profiles: tuple[Profile, Profile], required_o: Required,
-            made: Squashed | Conflicted, trees: Trees, text: str, o: str) -> LandSummary:
+            made: Squashed | Conflicted, trees: Trees, text: tuple[str, Gate | None], o: str) -> LandSummary:
     """Section 10's facts from the checks attempt, its latest block's results, the profiles at O and X, the required names
-    at O, the squash and the tree listings."""
+    at O, the squash, the tree listings, and the message with the gate facts."""
     at_o, at_x = profiles
     concluded = {row.name: row.conclusion or "unfinished" for row in results}
     names_o, names_c = [name for name, _ in required_o], [name for name, _ in checks.required]
@@ -162,9 +124,7 @@ def summary(checks: ChecksRow, results: Sequence[ResultRow], profiles: tuple[Pro
         checks.key.attempt_id, checks.conclusion, checks.target, checks.commit,
         tuple((name, concluded.get(name, "no result")) for name in names_c), o,
         tuple(name for name in names_o if name not in names_c), tuple(name for name in names_c if name not in names_o), argv,
-        _changed(at_o, at_x), None if at_o.setup == at_x.setup else (at_o.setup, at_x.setup),
-        config_files(trees.at_base, trees.x, at_x), trees.base, state,
-        made.paths if isinstance(made, Conflicted) else (), text)
+        text[1], trees.base, state, made.paths if isinstance(made, Conflicted) else (), text[0])
 
 
 def _listing(repo: Repo, rev: str) -> Files:
@@ -174,9 +134,9 @@ def _listing(repo: Repo, rev: str) -> Files:
     return dict(tree.files)
 
 
-def summarized(repo: Repo, files: ProfileFiles, checks: ChecksRow, results: Sequence[ResultRow], made: Squashed | Conflicted,
+def summarized(repo: Origin, files: ProfileFiles, checks: ChecksRow, results: Sequence[ResultRow], made: Squashed | Conflicted,
                title: str, origin: tuple[str, Required]) -> LandSummary | Failed:
-    """The summary read from Git: the profiles at O and X, merge-base(O, X), the tree listings, the message."""
+    """The summary read from Git: the profiles at O and X, merge-base(O, X), the tree listings, the message, the gate."""
     o, x = origin[0], checks.commit
     at_o, at_x = read_profile(files, o), read_profile(files, x)
     for rev, bad in ((o, at_o), (x, at_x)):
@@ -186,13 +146,14 @@ def summarized(repo: Repo, files: ProfileFiles, checks: ChecksRow, results: Sequ
     if not isinstance(at_o, Profile) or not isinstance(at_x, Profile):
         return Failed("unavailable", "git")
     try:
-        base = repo.merge_base(o, x) or o
-        trees = Trees(base, _listing(repo, base), _listing(repo, x), _listing(repo, o),
-                      None if isinstance(made, Conflicted) else _listing(repo, made.sha))
-        text = message_at(repo, title, checks, o)
+        base = repo.repo.merge_base(o, x) or o
+        trees = Trees(base, _listing(repo.repo, x), _listing(repo.repo, o),
+                      None if isinstance(made, Conflicted) else _listing(repo.repo, made.sha))
+        text = message_at(repo.repo, title, checks, o)
     except (GitUnavailable, MissingRevision) as error:
         return Failed("unavailable", "git", f"Git could not read the land's commits ({type(error).__name__}): rerun.")
-    return summary(checks, results, (at_o, at_x), origin[1], made, trees, text, o)
+    gate = None if isinstance(made, Conflicted) else gate_of(repo, files, o, made.sha)
+    return gate if isinstance(gate, Failed) else summary(checks, results, (at_o, at_x), origin[1], made, trees, (text, gate), o)
 
 
 def _argv(argv: Argv | None) -> str:
@@ -218,20 +179,37 @@ def lines(found: LandSummary) -> tuple[str, ...]:
     names = "same" if not (found.added or found.removed) else "; ".join(
         part for part in (f"added {', '.join(found.added)}" if found.added else "",
                           f"removed {', '.join(found.removed)}" if found.removed else "") if part) + " (the checks run again)"
-    setup = [] if found.setup is None else [
-        f"Setup changed: {'; '.join(_argv(argv) for argv in found.setup[0]) or '(none)'} -> "
-        f"{'; '.join(_argv(argv) for argv in found.setup[1]) or '(none)'}"]
     return (
         f"Checks: {found.checks_id} {found.conclusion or 'unconcluded'} at X {found.x} (main at {found.target})",
         *(f"Check: {name} {result}" for name, result in found.results),
         f"Required at origin main {found.origin}: {names}",
         *(f"Argv changed: {each.name}: {_argv(None if each.at_o is None else each.at_o.argv)} -> "
           f"{_argv(None if each.at_x is None else each.at_x.argv)}" for each in found.argv),
-        *(f"Check {'added' if each.at_o is None else 'removed' if each.at_x is None else 'changed'}: {each.name}: "
-          f"{_check(each.at_o)} -> {_check(each.at_x)}" for each in found.checks),
-        *setup,
-        *(f"Configuration changed: {one_line(path, 200)}" for path in found.files),
+        *([] if found.gate is None else gate_lines(found.gate)),
         f"Origin main: {found.origin}; {_state(found)}",
         "Message:", *(f"  {line}" for line in found.message.splitlines()),
         f"Diff: git diff {found.base}..{found.x}",
     )
+
+
+def _joined(setup: tuple[Argv, ...]) -> str:
+    return "; ".join(_argv(argv) for argv in setup) or "(none)"
+
+
+def gate_lines(gate: Gate) -> list[str]:
+    """The gate facts as printed (`--summary` and the refusal of a land that needs `--accept-gate-changes`): every changed
+    file with its diffstat, then each fact that decides a pass, every outside text printable."""
+    added, deleted = sum(each.added for each in gate.changes), sum(each.deleted for each in gate.changes)
+    shown = [f"  {each.kind} {one_line(each.path, 200)} +{each.added} -{each.deleted}" for each in gate.changes[:FILES]]
+    more = [f"  ... and {len(gate.changes) - FILES} more"] if len(gate.changes) > FILES else []
+    return [
+        f"Files changed: {len(gate.changes)} (+{added} -{deleted})", *shown, *more,
+        *(f"Check {'added' if each.at_o is None else 'removed' if each.at_x is None else 'changed'}: {each.name}: "
+          f"{_check(each.at_o)} -> {_check(each.at_x)}" for each in gate.checks),
+        *([] if gate.setup is None else [f"Setup changed: {_joined(gate.setup[0])} -> {_joined(gate.setup[1])}"]),
+        *([] if gate.required is None else [f"Required changed: {', '.join(gate.required[0]) or '(none)'} -> "
+                                              f"{', '.join(gate.required[1]) or '(none)'}"]),
+        *(f"Configuration changed: {one_line(path, 200)}" for path in gate.configs),
+        *(f"Test weakened: {one_line(each.path, 200)}: {each.why}" for each in gate.weakened),
+        *([f"These change what decides a pass: `tl step land` needs {ACCEPT}."] if gate.decisive else []),
+    ]

@@ -3,10 +3,11 @@
 remote URL, Git output or log content. `synced` is always false: the land never shares the tracker (O4)."""
 
 from taskloop.land import Landed
+from taskloop.land_gate import Changed, Gate
 from taskloop.land_push import Withdrawn
 from taskloop.land_status import LandView
 from taskloop.land_store import LandRow
-from taskloop.land_summary import Changed, LandSummary
+from taskloop.land_summary import LandSummary
 
 
 def candidate_data(row: LandRow) -> dict[str, object]:
@@ -56,14 +57,25 @@ def _changed(each: Changed) -> dict[str, object]:
             "argv_at_x": None if each.at_x is None else list(each.at_x.argv)}
 
 
+def gate_data(gate: Gate | None) -> dict[str, object] | None:
+    """What S changes in the gate against O (`land_gate`)."""
+    if gate is None:
+        return None
+    setup = None if gate.setup is None else {"at_origin": [list(each) for each in gate.setup[0]],
+                                             "at_s": [list(each) for each in gate.setup[1]]}
+    required = None if gate.required is None else {"at_origin": list(gate.required[0]), "at_s": list(gate.required[1])}
+    return {"files": [{"path": each.path, "kind": each.kind, "added": each.added, "deleted": each.deleted} for each in gate.changes],
+            "checks": [_changed(each) for each in gate.checks], "setup": setup, "required": required,
+            "configs": list(gate.configs), "weakened": [{"path": each.path, "why": each.why} for each in gate.weakened],
+            "decisive": gate.decisive}
+
+
 def summary_data(found: LandSummary) -> dict[str, object]:
     """The summary's facts (section 10), its message whole."""
-    setup = None if found.setup is None else {"at_origin": [list(each) for each in found.setup[0]],
-                                              "at_x": [list(each) for each in found.setup[1]]}
     return {
         "status": "summary", "checks_attempt_id": found.checks_id, "conclusion": found.conclusion, "target": found.target,
         "commit": found.x, "results": [{"name": name, "conclusion": result} for name, result in found.results], "origin": found.origin,
         "added": list(found.added), "removed": list(found.removed), "argv": [_changed(each) for each in found.argv],
-        "checks": [_changed(each) for each in found.checks], "setup": setup, "files": list(found.files), "base": found.base,
+        "gate": gate_data(found.gate), "base": found.base,
         "state": found.state, "again": found.again, "conflicts": list(found.conflicts), "message": found.message,
     }

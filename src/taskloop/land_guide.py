@@ -42,6 +42,9 @@ LAND_GUIDE: Final = {
     "no_change": "origin's main already holds X's changes (a hand land, say): confirm with `git log origin/main`, then `tl step "
     "land TASK --no-change` records it and closes the task.",
     "changes": "There is something to land: drop `--no-change`.",
+    "gate_changed": "The land changes what decides a pass (the lines above: checks, setup, required names, configuration files, "
+    "weakened tests). Read the diff (`tl step land TASK --summary`); if the person means it, rerun `tl step land TASK "
+    "--accept-gate-changes`, else fix the task branch (abandon and restart).",
     "conflict": "X does not merge onto origin's main: merge `main` into `task/<id>` by hand and push it, then `tl step release "
     "--abandon` and `tl step start` (the restarted steps check the merge).",
     "checks_failed": "A check failed on S (the `Land check:` lines and logs say which): rerun `tl step land` if it is flaky; "
@@ -111,6 +114,8 @@ LAND_GUIDE: Final = {
     "not_listed": "The candidate's slot is not listed by `git worktree list` any more: restore it, then rerun.",
     "deadline": "--minutes is out of range: from 1 to the maximum.",
     "expired": "The validation's deadline passed: rerun `tl step land` (a rerun renews it from --minutes).",
+    "log": "The artifacts directory (named above) cannot be written for the validation's logs: fix its permissions or free "
+    f"its space. Nothing is wrong with the task branch or main. {RERUN}",
     "environment": "S's `setup` refused or failed in the slot (its `setup-<run>.log` beside the candidate's check logs says why): "
     "fix it on the task branch or main, then rerun.",
     "check_running": "A check of the land's validation still runs in the process group named: wait for it (or stop only its "
