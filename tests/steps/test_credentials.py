@@ -151,3 +151,8 @@ def test_the_worker_is_gone_only_with_its_process_and_its_group(
     monkeypatch.setattr(owned_processes, "group_alive", lambda pgid: asked.append(pgid) or group)
     assert worker_gone(Worker(pid=42, pgid=41, start="s", boot="b")) is expected
     assert asked[0] == OwnedProcess(42, 41, "s", "b")
+
+
+def test_a_mise_shim_path_keeps_its_trust_and_the_xdg_and_ca_names() -> None:
+    names = {"MISE_TRUSTED_CONFIG_PATHS": "/w", "MISE_DATA_DIR": "/d", "XDG_CONFIG_HOME": "/c", "NODE_EXTRA_CA_CERTS": "/ca"}
+    assert scrubbed({**BASE, **names}) == BASE | names | BAR

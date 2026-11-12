@@ -9,12 +9,12 @@ CODEX_HOME, the HTTP(S)/ALL/NO proxy names and SSL_CERT_FILE/DIR. Everything els
 `TASKLOOP_ENV_PASS=UV_INDEX_URL,REDIS_URL`. Alternative: a machine-config key; not taken (a new typed key and a reader for
 one rarely used list). Proxy URLs can carry credentials; they stay because the agent's network is off and checks need them.
 
-## Output cap (.45)
+## Output cap (.45): partial
 Stored `stdout.txt` / `stderr.txt` are capped at `LOG_CAP` (32 MiB) with one `[truncated]` line. The harness (`any-agent`
 supervisor) still holds the whole stream in memory until it returns: bounding that needs an `any-agent` change (cap in
 `_pump` while the summary parser keeps the tail). Open owner decision: do it in the shelf, or accept the memory bound.
 
-## Settlement refusals (.46 .47 .48)
+## Settlement refusals (.47 .48 done; .46 partial)
 Unreadable listed file: `unsafe` naming the path (it joins repeat feedback). `unsafe` also lists the unlisted leftovers
 beside the first path. `slot_dirty` (release, hold comment, guide) names `git -C <slot> status --short`; the factory still
 resets nothing. `head_moved` lists tags and branches made beside the moved HEAD and the guide names
@@ -44,3 +44,13 @@ Not done. The stop proof checks the agent's process group only. A proof by "any 
 begun inside the attempt" needs a cross-platform process-table field (cwd) that `stream_proc` does not expose (Linux
 `/proc/<pid>/cwd`, macOS libproc); a Linux-only scan in the factory would silently pass on the owner's Mac. Open: add
 `stream_proc.in_dir(path)` in the shelf, then refuse verify/release naming the pids.
+
+## Still open on .46
+The hold comment does not list the leftover paths (only the slot and `git -C <slot> status --short`), no test covers a staged
+gitlink, and `release --abandon` still refuses a dirty slot by design ("nothing is reset for you"). Owner decision:
+keep (safe; a person cleans) or let an abandon `reset --hard` and `clean` its own slot (frees a slot at once; deletes whatever
+the agent left, including a person's stray files).
+
+## head_moved listing (.48)
+Refs reachable from `main` or any `origin` ref are never listed (the agent may have reset to the person's `main`); the guide
+says to inspect and delete only what the agent made. The fake has no annotated tags, so peeling is not covered by a test.

@@ -27,7 +27,7 @@ from taskloop.attempt_types import (
     Unsettled,
     dot_git,
 )
-from taskloop.prepare import task_branch
+from taskloop.prepare import MAIN, task_branch
 from taskloop.slot_state import SlotState, bounded, listing, observe_slot, pointer, staged
 from taskloop.steps import kind
 
@@ -174,12 +174,24 @@ def _unwritten(checkouts: Checkouts, files: SlotFiles, admission: Admission, bas
 
 
 def _moved(repo: Repo, head: str, base: str, admission: Admission) -> Unsettled:
-    """`head_moved`, listing the tags and branches that name a commit the agent made beside the moved HEAD (B excluded,
-    the task's own branch excluded): they live in the shared repository and the release does not remove them."""
+    """`head_moved`, listing the tags and branches that name a commit the agent made beside the moved HEAD (B excluded, the
+    task's own branch excluded; annotated tags peeled to their commit). A ref whose commit is reachable from `main` or an
+    `origin` ref can be the person's (the agent reset to `main`): never listed. The release does not remove any of them."""
     made = {head, *(each.sha for each in repo.history([head], not_on=[base]))}
     own = "refs/heads/" + task_branch(admission.task.task_id)
-    named = [each.name for each in repo.refs(["refs/tags/", "refs/heads/"]) if each.sha in made and each.name != own]
+    theirs = [commit for each in repo.refs([MAIN, "refs/remotes/"]) if (commit := _peeled(repo, each.sha)) is not None]
+    named = []
+    for each in repo.refs(["refs/tags/", "refs/heads/"]):
+        commit = _peeled(repo, each.sha)
+        if each.name != own and commit in made and not any(repo.is_ancestor(commit, tip) for tip in theirs):
+            named.append(each.name)
     return Unsettled("head_moved", bounded(named))
+
+
+def _peeled(repo: Repo, sha: str) -> str | None:
+    """The commit a ref's object names (an annotated tag is peeled); None when it names no commit."""
+    tree = repo.tree(f"{sha}^{{commit}}")
+    return None if tree is None else tree.sha
 
 
 def git_file(dirty: tuple[str, ...], rules: StepRules, paths: tuple[str, ...]) -> str | None:
@@ -212,7 +224,7 @@ def _base_files(view: Repo, base: str) -> Mapping[str, tuple[str, str]]:
 def secret(data: bytes) -> bool:
     """Bytes that look like a credential the sandbox may let the agent read: a PEM private key header, or a Codex login
     (`auth.json` holds both token names). A committed copy would be published to `origin`; no content of the person's own
-    files is read to compare (tl-8bh9.14.50, docs/design/self-hosting-trial-5.md)."""
+    files is read to compare (tl-8bh9.14.50, docs/design/self-hosting-trial-5-fixes.md)."""
     key = b"-----BEGIN " in data and b"PRIVATE KEY-----" in data
     return key or (b'"access_token"' in data and b'"refresh_token"' in data)
 

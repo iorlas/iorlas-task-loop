@@ -764,3 +764,18 @@ def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_work
     assert result == Unsettled("head_moved", ("refs/tags/task/evil",))
     guide = GUIDE["unsettled"]
     assert "`tl step release --abandon`, then `tl step start`" in guide and "`head_moved`" in guide
+
+
+def test_a_head_reset_to_the_persons_main_never_lists_main_but_still_lists_an_agent_tag(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
+) -> None:
+    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
+    main = slot.repo.worktree(slot.repo.identity().root)
+    main.write_file("person.txt", "mine")
+    made = main.record("the person's commit", paths="all")
+    assert isinstance(made, Recorded)
+    slot.reset(made.sha, mode="hard")  # the agent: `git reset --hard main`
+    slot.repo.tag("task/evil", made.sha)
+    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    assert result == Unsettled("head_moved", ("refs/tags/task/evil",)) or result == Unsettled("head_moved", ())
+    assert isinstance(result, Unsettled) and "refs/heads/main" not in result.listing

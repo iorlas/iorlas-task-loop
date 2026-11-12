@@ -68,11 +68,13 @@ def _clash(names: Sequence[str], task_id: str) -> bool:
     return bool(twin) or any(name == HEADS or name.startswith(ours + "/") for name in names)
 
 
-def _foreign_unpublished(repo: Repo, local: str, seen: str) -> bool:
-    """A commit on the local branch that `seen` (origin's tip, else `main`) lacks and that no factory attempt made (no
-    `TRAILER` line): the person's own work, which a publish would push. The factory's own unpublished commits (an abandoned
-    attempt's X) are resumed."""
-    return any(not any(line.startswith(f"{TRAILER}:") for line in each.body.splitlines()) for each in repo.history([local], not_on=[seen]))
+def _foreign_unpublished(repo: Repo, local: str, seen: Sequence[str]) -> bool:
+    """A commit on the local branch that no `seen` tip (origin's, `main`'s: a merge of `main` is not new work) holds and that
+    no factory attempt made (no `TRAILER` line): the person's own work, which a publish would push. The factory's own
+    unpublished commits (an abandoned attempt's X) are resumed."""
+    if not seen:
+        return False
+    return any(not any(line.startswith(f"{TRAILER}:") for line in each.body.splitlines()) for each in repo.history([local], not_on=seen))
 
 
 def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefusal | Branch:
@@ -96,7 +98,7 @@ def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefu
     passing = tuple(head for head in heads if all(repo.is_ancestor(head, tip) for tip in tips))
     if heads and not passing:
         return "branch_diverged"
-    unpublished = local is not None and _foreign_unpublished(repo, local, remote or target or local)
+    unpublished = local is not None and _foreign_unpublished(repo, local, [tip for tip in (remote, target) if tip is not None])
     return "branch_unpublished" if unpublished else Branch(passing, local, remote, tips[0])
 
 

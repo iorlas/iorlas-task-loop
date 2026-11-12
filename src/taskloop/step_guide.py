@@ -86,7 +86,8 @@ GUIDE = {
     "changed": "Another attempt of the task became current since the round read the store; the next round follows it (`tl step show`).",
     "unsettled": "The slot has files the step did not commit (listed), or the slot pointer or HEAD changed. Remove the "
     "listed files and `tl step verify`, or run `tl step start` again to repeat the step; for `redirected` "
-    "inspect first; for `head_moved` (a commit the sandbox should have refused; any listed tag or branch is the agent's: delete it) "
+    "inspect first; for `head_moved` (a commit the sandbox should have refused; inspect any listed tag or branch, delete "
+    "only what the agent made) "
     "`tl step start` refuses too, so run `tl step release --abandon`, then `tl step start`; for `worker_alive` stop the worker "
     "first; for `staged` unstage the listed paths first.",
     "registration_conflict": "Another start registered its entry first; `tl step show` follows that attempt.",

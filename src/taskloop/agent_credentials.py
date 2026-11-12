@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Protocol
 
 from taskloop.attempt import CredentialsUnavailable
-from taskloop.git_views import appended
 
 # The base environment of an agent and of every checks command: an allow-list. Everything else (DATABASE_URL, KUBECONFIG, GIT_DIR,
 # BASH_ENV, LD_PRELOAD, PYTHONPATH, GIT_CONFIG_*, tokens, cloud and registry settings) is dropped, whatever its name. A variable a
@@ -17,7 +16,8 @@ BASE_NAMES = frozenset(
     {
         "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LANGUAGE", "TERM", "TZ", "TMPDIR", "CODEX_HOME",
         "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy",
-        "SSL_CERT_FILE", "SSL_CERT_DIR",
+        "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "CURL_CA_BUNDLE", "UV_NATIVE_TLS",
+        "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",
     }
 )
 PASS_NAMES = "TASKLOOP_ENV_PASS"
@@ -29,7 +29,7 @@ class Which(Protocol):
 
 
 def _kept(name: str, extra: frozenset[str]) -> bool:
-    return name in BASE_NAMES or name.startswith("LC_") or name in extra
+    return name in BASE_NAMES or name.startswith(("LC_", "MISE_")) or name in extra  # MISE_*: a shim PATH needs its trusted paths
 
 
 def codex_machine_credentials(
@@ -73,4 +73,4 @@ def scrubbed(environ: Mapping[str, str]) -> dict[str, str]:
 def push_bar() -> dict[str, str]:
     """One git env-config entry rewriting every push URL (the empty prefix matches all) to a scheme git cannot run, so a push
     by the agent fails whatever the credentials; fetch is untouched. The environment's own `GIT_CONFIG_*` is never passed on."""
-    return appended({}, [(f"url.{PUSH_REFUSED}.pushInsteadOf", "")]) or {}
+    return {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": f"url.{PUSH_REFUSED}.pushInsteadOf", "GIT_CONFIG_VALUE_0": ""}

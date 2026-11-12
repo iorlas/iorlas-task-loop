@@ -50,7 +50,7 @@ class CappedLog:
 
 def capped(text: str, cap: int = LOG_CAP) -> str:
     """`text` as stored: at most `cap` bytes of it, then one `[truncated]` line. (The harness still holds the whole stream in
-    memory until it returns: that bound is any-agent's, recorded in docs/design/self-hosting-trial-5.md.)"""
+    memory until it returns: that bound is any-agent's, recorded in docs/design/self-hosting-trial-5-fixes.md.)"""
     data = text.encode("utf-8")
     if len(data) <= cap:
         return text
