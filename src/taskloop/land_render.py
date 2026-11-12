@@ -10,7 +10,7 @@ from taskloop.land_close import NOT_SYNCED
 from taskloop.land_guide import LAND_GUIDE
 from taskloop.land_push import Withdrawn
 from taskloop.land_store import LandRow
-from taskloop.land_summary import LandSummary, lines, one_line
+from taskloop.land_summary import LandSummary, gate_lines, lines, one_line
 from taskloop.operations import Failed
 from taskloop.step_guide import GUIDE
 
@@ -35,6 +35,7 @@ def landed_lines(found: Landed) -> list[str]:
     row = found.row
     lines_ = [f"{found.how}: {row.task_id} (backlog {row.backlog}) on origin main; {HOW[found.how]}", _candidate(row)]
     lines_ += [f"Pushed: origin main at {row.remote_head}"] if row.delivery == "pushed" else []
+    lines_ += [] if found.gate is None else ["Gate changes accepted:", *gate_lines(found.gate)[:-1]]
     lines_ += [] if found.release is None else [f"Release: {one_line(found.release, 200)}"]
     if row.close is None:
         return [*lines_, "Closed: not yet: rerun `tl step land` to close the task (the code is on main)."]

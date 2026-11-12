@@ -27,8 +27,8 @@ INTERRUPTED: Final = "interrupted"  # `tl step land` stopped by Ctrl-C (`cli_ste
 LAND_NEXT: Final = {
     "land": "The checks passed, or a land is under way: read the diff and `tl step land TASK --summary`, then `tl step land "
     "TASK`. It fetches origin's main, squashes X onto it as one commit S, runs every check again on S in a free slot (in "
-    "your shell) only when main moved or its required names changed, pushes S to origin's main as you, never forced, and "
-    "closes the task in your local tracker. Rounds never land; a rerun does only what is missing.",
+    "your shell; rounds leave the last free slot for it) only when main moved or its required names changed, pushes S to "
+    "origin's main as you, never forced, and closes the task in your local tracker. Rounds never land; a rerun does only what is missing.",
     "landed": "S is on origin's main and the task is closed in your local tracker: nothing is left. Run `git pull --ff-only` in "
     "your checkout; `bd dolt push` shares the tracker if others read it. (From `tl step release --abandon`: the code is on "
     "main, nothing to abandon; if `tl step show` still says `Next: land`, rerun `tl step land` to finish the close.)",

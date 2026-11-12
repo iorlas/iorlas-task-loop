@@ -38,7 +38,8 @@ def _task(row: LandRow) -> dict[str, object]:
 
 
 def landed_data(found: Landed) -> dict[str, object]:
-    return {"status": found.how, **_task(found.row), "release": found.release, "synced": False}
+    return {"status": found.how, **_task(found.row), "release": found.release, "synced": False,
+            "gate": gate_data(found.gate)}
 
 
 def withdrawn_data(found: Withdrawn) -> dict[str, object]:

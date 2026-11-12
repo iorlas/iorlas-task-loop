@@ -86,6 +86,14 @@ def test_changed_required_names_validate_although_the_tree_is_the_same(b: LandBe
     assert isinstance(found, Landed) and found.row.tree_same and found.row.validation == "passed" and b.execs() == RUN
 
 
+def test_the_land_validates_in_the_one_free_slot_rounds_leave_it(b: LandBench) -> None:
+    """tl-8bh9.14.34: the slot a round stops `slot_for_land` on (the only free one) is the land's: it takes it, validates, frees it."""
+    assert b.con.execute("SELECT count(*) FROM slot WHERE name='s1'").fetchone() == (1,) and b.reservations() == []
+    b.advance({"OTHER": "another task\n"})
+    found = b.land()
+    assert isinstance(found, Landed) and found.row.slot == "s1" and b.reservations() == []
+
+
 def test_a_failed_validation_pushes_nothing_and_leaves_its_slot_released(b: LandBench) -> None:
     main = b.advance({"OTHER": "y\n"})
     b.environment.process.script = [Command(), Command(), Command(rc=1)]

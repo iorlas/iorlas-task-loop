@@ -40,6 +40,7 @@ from taskloop.check_status import latest
 from taskloop.check_store import ChecksRow
 from taskloop.land_check import LandPorts, inserted, released, validated
 from taskloop.land_close import closed
+from taskloop.land_gate import Gate, gate_of
 from taskloop.land_push import REMOTE, Delivered, Origin, Withdrawn, deliver, observed, remote_tips, withdraw
 from taskloop.land_store import LandRow
 from taskloop.land_summary import LandSummary, summarized
@@ -82,6 +83,7 @@ class Landed:
     row: LandRow
     how: Literal["pushed", "already_pushed", "no_change", "delivered", "already_landed"]
     release: str | None = None
+    gate: Gate | None = None  # with `--accept-gate-changes`: what the pushed S changed in the gate (`land_gate`), read after the push
 
 
 type LandResult = Landed | Withdrawn | LandSummary | Failed
@@ -339,7 +341,14 @@ def _resumed(ports: LandPorts, request: LandRequest, task: _Task) -> LandResult:
     read = _tracker(ports, origin, task, release)
     if not isinstance(read, TaskInspection):
         return _closing(ports, read)
-    return _closing(ports, _delivered(ports, request, replace(task, title=read.title), origin, release))
+    done = _closing(ports, _delivered(ports, request, replace(task, title=read.title), origin, release))
+    return _accepted(ports, origin, done) if request.accept and isinstance(done, Landed) and done.how == "pushed" else done
+
+
+def _accepted(ports: LandPorts, origin: Origin, done: Landed) -> Landed:
+    """An accepted land shows what it changed in the gate: the facts, read from the delivered S against its O."""
+    gate = gate_of(origin, ports.profiles(origin.checkout), done.row.origin, done.row.commit)
+    return replace(done, gate=gate) if isinstance(gate, Gate) and gate.decisive else done
 
 
 def _summary(ports: LandPorts, request: LandRequest, task: _Task) -> LandSummary | Failed:

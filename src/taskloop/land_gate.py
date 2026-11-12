@@ -11,6 +11,8 @@ parsing the module with `ast` at O and at S, never by reading text.
 """
 
 import ast
+import io
+import tokenize
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Final
@@ -22,7 +24,8 @@ from taskloop.operations import Failed
 from taskloop.profile import Argv, Check, Profile, ProfileFiles, Refused, read_profile
 
 DOCS: Final = frozenset({".md", ".rst", ".txt"})
-SKIPS: Final = frozenset({"skip", "skipif", "xfail", "importorskip"})  # `pytest.mark.skip`, `pytest.skip`, `unittest.skip`, ...
+TOOL_SUFFIXES: Final = frozenset({".toml", ".ini", ".cfg"})  # a tool's configuration at any depth (`src/ruff.toml`, `tests/pytest.ini`)
+SKIPS: Final = frozenset({"skip", "skipif", "xfail", "importorskip"})  # `pytest.mark.skip`, `skip()` after `from pytest import skip`
 FILES: Final = 50  # changed files listed, then `... and <n> more`
 ACCEPT: Final = "--accept-gate-changes"
 
@@ -63,9 +66,11 @@ class Gate:
 
 def configuration(path: str, named: frozenset[str]) -> bool:
     """The short rule: a file at the repository root that is not documentation (`ruff.toml`, `pyproject.toml`, `justfile`,
-    `.task-loop.json`, `uv.lock`, ...), any `conftest.py`, or a file a check's or `setup`'s argv names."""
+    `.task-loop.json`, `uv.lock`, ...), a `.toml`, `.ini` or `.cfg` file at any depth, any `conftest.py`, or a file a check's
+    or `setup`'s argv names."""
     pure = PurePosixPath(path)
-    return (len(pure.parts) == 1 and pure.suffix not in DOCS) or pure.name == "conftest.py" or path in named
+    return (len(pure.parts) == 1 and pure.suffix not in DOCS) or pure.suffix in TOOL_SUFFIXES or pure.name == "conftest.py" \
+        or path in named
 
 
 def _named(profile: Profile, paths: frozenset[str]) -> frozenset[str]:
@@ -84,8 +89,17 @@ def _is_test(path: str) -> bool:
     return pure.suffix == ".py" and (pure.name.startswith("test_") or pure.stem.endswith("_test") or "tests" in pure.parts[:-1])
 
 
+def _noqa(source: bytes) -> int:
+    """File-level `# ruff: noqa` comments (they switch rules off for the whole module)."""
+    try:
+        return sum(1 for token in tokenize.tokenize(io.BytesIO(source).readline)
+                   if token.type == tokenize.COMMENT and token.string.lower().replace(" ", "").startswith("#ruff:noqa"))
+    except (tokenize.TokenError, SyntaxError):
+        return 0
+
+
 def _shape(source: bytes | None) -> tuple[int, int, int] | None:
-    """(test functions, assert statements, skip/xfail markers) of one test module; None when it does not parse."""
+    """(test functions, assert statements, skip/xfail/`ruff: noqa` markers) of one test module; None when it does not parse."""
     try:
         tree = ast.parse(source or b"")
     except (SyntaxError, ValueError):
@@ -94,8 +108,8 @@ def _shape(source: bytes | None) -> tuple[int, int, int] | None:
     for node in ast.walk(tree):
         tests += isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test")
         asserts += isinstance(node, ast.Assert)
-        skips += isinstance(node, ast.Attribute) and node.attr in SKIPS
-    return tests, asserts, skips
+        skips += (isinstance(node, ast.Attribute) and node.attr in SKIPS) or (isinstance(node, ast.Name) and node.id in SKIPS)
+    return tests, asserts, skips + _noqa(source or b"")
 
 
 def _weakened(change: Change, before: bytes | None, after: bytes | None) -> Weakened | None:
@@ -109,7 +123,7 @@ def _weakened(change: Change, before: bytes | None, after: bytes | None) -> Weak
     for index, what in enumerate(("tests", "assertions")):
         if s[index] < o[index]:
             return Weakened(change.path, f"{what} {o[index]} -> {s[index]}")
-    return Weakened(change.path, f"skip or xfail markers {o[2]} -> {s[2]}") if s[2] > o[2] else None
+    return Weakened(change.path, f"skip, xfail or noqa markers {o[2]} -> {s[2]}") if s[2] > o[2] else None
 
 
 def _changed(at_o: Profile, at_s: Profile) -> tuple[Changed, ...]:
@@ -123,9 +137,9 @@ def gate_of(origin: Origin, files: ProfileFiles, o: str, s: str) -> Gate | Faile
     answer."""
     try:
         at_o, at_s = read_profile(files, o), read_profile(files, s)
-        for bad in (at_s, at_o):
+        for rev, bad in ((s, at_s), (o, at_o)):
             if isinstance(bad, Refused):
-                return Failed("refused", "profile", f"The profile at S ({s}): {bad.detail}")
+                return Failed("refused", "profile", f"The profile at {'S' if rev == s else 'origin main'} ({rev}): {bad.detail}")
         if not isinstance(at_s, Profile) or not isinstance(at_o, Profile):
             return Failed("unavailable", "git", "The profiles at O and S could not be read: rerun.")
         tree_o, tree_s = origin.repo.tree(f"{o}^{{commit}}"), origin.repo.tree(f"{s}^{{commit}}")

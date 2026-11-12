@@ -326,7 +326,7 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_w
     assert rig.tracker.ready_reads == reads and rig.next_words()["tl-2"] == ("implement", "advance")  # tl-2 and tl-3 wait
     rig.finish("tl-1", "passed")
     # tl-1 waits for its land: the slot it freed is left to that land (tl-8bh9.14.34), so tl-2 and tl-3 still wait
-    assert rig.round() == [LAND_LINE] and rig.last.stopped == "no_free_slot"
+    assert rig.round() == [LAND_LINE] and rig.last.stopped == "slot_for_land"
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.next_words()["tl-2"] == ("implement", "advance")
 
 
@@ -464,5 +464,7 @@ def test_a_task_waiting_for_its_land_keeps_the_last_free_slot_from_new_starts(ri
     rig.bodies = ["passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     ready(rig, "tl-2")
-    assert rig.round() == [LAND_LINE] and rig.last.stopped == "no_free_slot" and rig.launched == ["tl-1", "tl-1"]
+    assert rig.round() == [LAND_LINE] and rig.last.stopped == "slot_for_land" and rig.launched == ["tl-1", "tl-1"]
+    free = "SELECT count(*) FROM slot WHERE (repo_id,name) NOT IN (SELECT repo_id,slot FROM reservation)"
+    assert rig.con.execute(free).fetchone() == (1,)
     assert rig.next_words() == {"tl-1": ("check", "land")}

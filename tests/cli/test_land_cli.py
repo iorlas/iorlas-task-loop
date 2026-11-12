@@ -142,7 +142,7 @@ def test_a_land_prints_what_it_did_the_close_and_the_tracker_line(
     ]
     code, out, _ = run([*LAND, "--json"], found, capsys, monkeypatch)
     data = json.loads(out)
-    assert code == 0 and set(data) == {"status", "backlog", "task", "candidate", "release", "synced"}
+    assert code == 0 and set(data) == {"status", "backlog", "task", "candidate", "release", "synced", "gate"}
     assert set(data["candidate"]) == CANDIDATE and (data["status"], data["synced"]) == ("pushed", False)
     assert (data["candidate"]["delivery"], data["candidate"]["close"]) == ("pushed", "closed")
 

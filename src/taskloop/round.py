@@ -305,13 +305,15 @@ def _verified(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
     return Move(each.task_id, "verify", verified.word, each.attempt_id, verified.detail, each.step)
 
 
-def _full(store: AttemptStore, reserve: int = 0) -> bool:
-    """True when at most `reserve` adopted slots (any repo) lack a reservation row: none can be free for a start, so the tracker
-    is not read. `reserve` is 1 while a task waits at `Next: land` (the last free slot is left to the person's land, .14.34)."""
+def _full(store: AttemptStore, reserve: int = 0) -> str:
+    """The free-slot read: `no_free_slot` when every adopted slot (any repo) has a reservation row, `slot_for_land` when
+    only the last `reserve` ones lack it (a task waits at `Next: land`: that slot is the person's land's, .14.34), else "".
+    Either way the tracker is not read. A failed read falls through: admission meets the store itself."""
     try:
-        return store.slot_use().free <= reserve
+        free = store.slot_use().free
     except StoreUnavailable:
-        return False
+        return ""
+    return "no_free_slot" if free == 0 else "slot_for_land" if free <= reserve else ""
 
 
 def _stops(result: Failed, stops: frozenset[str] = STOPS) -> bool:
@@ -332,8 +334,8 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
     for each in sorted(waiting, key=lambda view: (view.release.released_at if view.release else 0.0, view.task_id)):
         if ports.stopping():
             return INTERRUPTED
-        if _full(ports.reads.store, reserve):
-            return "no_free_slot"
+        if word := _full(ports.reads.store, reserve):
+            return word
         result = start(ports.starting, _request(request, each.task_id), advancing=each.attempt_id)
         if isinstance(result, Started):
             trail.add(Move(each.task_id, "advance", result.status, result.attempt_id, step=result.step or ""))
@@ -357,8 +359,8 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
     stopped admission early ("" when the candidates ran out). With every slot reserved: `no_free_slot`, no tracker call."""
     if ports.stopping():
         return INTERRUPTED
-    if _full(ports.reads.store, reserve):
-        return "no_free_slot"
+    if word := _full(ports.reads.store, reserve):
+        return word
     try:
         rows = ready_rows(ports.ready, request.label)
     except TaskInspectionError as error:
@@ -380,8 +382,8 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
     for row in ordered:
         if ports.stopping():
             return INTERRUPTED
-        if reserve and _full(ports.reads.store, reserve):
-            return "no_free_slot"
+        if reserve and (word := _full(ports.reads.store, reserve)):
+            return word
         result = start(ports.starting, _request(request, row.task_id))
         if isinstance(result, Started):
             trail.add(Move(row.task_id, "start", result.status, result.attempt_id, step=result.step or ""))

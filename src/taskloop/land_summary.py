@@ -211,5 +211,6 @@ def gate_lines(gate: Gate) -> list[str]:
                                               f"{', '.join(gate.required[1]) or '(none)'}"]),
         *(f"Configuration changed: {one_line(path, 200)}" for path in gate.configs),
         *(f"Test weakened: {one_line(each.path, 200)}: {each.why}" for each in gate.weakened),
-        *([f"These change what decides a pass: `tl step land` needs {ACCEPT}."] if gate.decisive else []),
+        *([f"These change what decides a pass: rerun `tl step land` with {ACCEPT} to land them (a test module split, or its "
+           "assertions merged, shows as weakened and is accepted the same way)."] if gate.decisive else []),
     ]

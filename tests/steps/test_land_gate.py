@@ -13,6 +13,7 @@ from land_bench import PROFILE, LandBench, bench
 from taskloop.land import Landed
 from taskloop.land_gate import ACCEPT, Gate, configuration, gate_of
 from taskloop.land_push import Origin
+from taskloop.land_render import landed_lines
 from taskloop.land_summary import LandSummary, gate_lines, lines
 from taskloop.operations import Failed
 
@@ -52,9 +53,11 @@ def landed(tmp_path: Path, change: dict[str, str | None]) -> Gate:
     ("ruff.toml", frozenset[str](), True), ("pyrefly.toml", frozenset[str](), True), ("justfile", frozenset[str](), True),
     (".importlinter", frozenset[str](), True), ("uv.lock", frozenset[str](), True), ("deep/conftest.py", frozenset[str](), True),
     ("scripts/setup.sh", frozenset({"scripts/setup.sh"}), True), ("README.md", frozenset[str](), False),
-    ("src/a.py", frozenset[str](), False), ("docs/ruff.toml", frozenset[str](), False),
+    ("src/a.py", frozenset[str](), False), ("src/ruff.toml", frozenset[str](), True), ("tests/pytest.ini", frozenset[str](), True),
+    ("tox.cfg", frozenset[str](), True),
+    ("docs/data.json", frozenset[str](), False), ("tests/rules/test_policy.py", frozenset[str](), False),
 ])
-def test_a_configuration_file_is_a_non_documentation_file_at_the_root_a_conftest_or_one_a_check_names(
+def test_a_configuration_file_is_a_root_file_a_toml_ini_or_cfg_at_any_depth_a_conftest_or_one_a_check_names(
     path: str, named: frozenset[str], expected: bool
 ) -> None:
     assert configuration(path, named) is expected
@@ -66,16 +69,19 @@ def test_a_replaced_tool_configuration_is_flagged_with_the_diffstat_of_every_cha
     assert [(each.path, each.kind) for each in gate.changes] == [("ruff.toml", "M"), ("src/b.py", "A")]
     text = gate_lines(gate)
     assert text[0] == "Files changed: 2 (+2 -1)" and "  M ruff.toml +1 -1" in text and "Configuration changed: ruff.toml" in text
-    assert f"These change what decides a pass: `tl step land` needs {ACCEPT}." in text
+    assert any(line.startswith(f"These change what decides a pass: rerun `tl step land` with {ACCEPT}") for line in text)
 
 
 @pytest.mark.parametrize(("change", "why"), [
     ({"tests/test_a.py": None}, "deleted"),
     ({"tests/test_a.py": "def test_a() -> None:\n    assert True\n"}, "tests 2 -> 1"),
     ({"tests/test_a.py": TESTS.replace("assert 3 == 3\n", "")}, "assertions 3 -> 2"),
-    ({"tests/test_a.py": "import pytest\n\npytestmark = pytest.mark.skip\n" + TESTS}, "skip or xfail markers 0 -> 1"),
+    ({"tests/test_a.py": "import pytest\n\npytestmark = pytest.mark.skip\n" + TESTS}, "skip, xfail or noqa markers 0 -> 1"),
+    ({"tests/test_a.py": "from pytest import skip\n\n\ndef test_a() -> None:\n    skip()\n    assert 1 == 1\n\n\ndef test_b() -> None:\n"
+                         "    assert 2 == 2\n    assert 3 == 3\n"}, "skip, xfail or noqa markers 0 -> 1"),
+    ({"tests/test_a.py": "# ruff: noqa\n" + TESTS}, "skip, xfail or noqa markers 0 -> 1"),
     ({"tests/test_a.py": "def test_a(:\n"}, "does not parse"),
-], ids=["deleted", "rewritten", "fewer_assertions", "skip_marker", "unparseable"])
+], ids=["deleted", "rewritten", "fewer_assertions", "skip_marker", "bare_skip_call", "file_noqa", "unparseable"])
 def test_a_deleted_rewritten_skipped_or_unreadable_test_is_flagged(tmp_path: Path, change: dict[str, str | None], why: str) -> None:
     gate = landed(tmp_path, change)
     assert [(each.path, each.why) for each in gate.weakened] == [("tests/test_a.py", why)] and gate.decisive
@@ -86,6 +92,16 @@ def test_added_tests_and_ordinary_source_changes_are_listed_but_decide_nothing(t
     gate = landed(tmp_path, {"src/a.py": "A = 2\n", "tests/test_b.py": TESTS, "tests/test_a.py": TESTS + "\n\ndef test_c() -> None:\n"
                              "    assert 4 == 4\n"})
     assert not gate.decisive and len(gate.changes) == 3 and gate.checks == () and gate.setup is None and gate.required is None
+
+
+@pytest.mark.parametrize("element", ["./src/a.py", "src/", "src", ".", "..", "/abs/src/a.py"],
+                         ids=["dot_slash", "folder_slash", "folder", "dot", "dotdot", "absolute"])
+def test_a_file_a_check_argv_names_is_configuration_in_each_spelling_and_only_the_naming_ones(tmp_path: Path, element: str) -> None:
+    """`_named` must not be silently empty: a changed source file is configuration exactly when an argv names it."""
+    profile = {**PROFILE, "checks": [{"name": "check", "argv": ["python", element], "timeout": 60},
+                                     {"name": "test", "argv": ["just", "test"], "timeout": 60}]}
+    gate = landed(tmp_path, {".task-loop.json": json.dumps(profile), "src/a.py": "A = 2\n"})
+    assert ("src/a.py" in gate.configs) is (element in ("./src/a.py", "src/", "src"))
 
 
 def test_a_changed_check_argv_setup_and_required_list_are_each_a_fact(tmp_path: Path) -> None:
@@ -113,6 +129,9 @@ def test_a_land_that_changes_a_tool_configuration_is_refused_naming_it_until_acc
     assert "Files changed: 2" in found.detail and b.rows() == () and b.repo.pushes == 0 and b.origin_main() == b.base
     again = b.land(accept=True)
     assert isinstance(again, Landed) and again.how == "pushed" and b.origin_main() == again.row.commit and b.repo.pushes == 1
+    assert again.gate is not None and again.gate.configs == ("ruff.toml",)
+    shown = landed_lines(again)  # the accepted land's plain output carries the facts (.14.43)
+    assert "Gate changes accepted:" in shown and "Configuration changed: ruff.toml" in shown and "  A ruff.toml +2 -0" in shown
 
 
 def test_a_land_that_changes_a_check_argv_is_refused_and_a_land_changing_nothing_of_it_lands_as_before(tmp_path: Path) -> None:
@@ -134,3 +153,21 @@ def test_the_summary_lists_the_same_facts_the_refusal_names(hollowed: LandBench)
     refused = hollowed.land()
     assert isinstance(summary, LandSummary) and isinstance(refused, Failed)
     assert all(line in lines(summary) for line in refused.detail.splitlines()[1:])
+
+
+def test_a_land_changing_nothing_in_the_gate_prints_no_gate_lines_even_with_the_flag(tmp_path: Path) -> None:
+    found = bench(tmp_path).land(accept=True)
+    assert isinstance(found, Landed) and found.gate is None and "Gate changes accepted:" not in landed_lines(found)
+
+
+def test_a_refused_profile_names_whose_it_is(tmp_path: Path) -> None:
+    remote = FakeRemote("https://example.invalid/repo.git")
+    o = remote.advance("main", {".task-loop.json": "not json"}, "base")
+    repo = FakeRepo.clone(remote, tmp_path / "main")
+    root = repo.worktree(repo.identity().root)
+    root.checkout_new("task/t")
+    root.write_file(".task-loop.json", json.dumps(PROFILE))
+    made = root.record("fix it", paths="all")
+    assert isinstance(made, Recorded)
+    found = gate_of(Origin(repo, tmp_path / "main"), Files(repo), o, made.sha)
+    assert isinstance(found, Failed) and found.reason == "profile" and found.detail.startswith(f"The profile at origin main ({o})")
