@@ -21,7 +21,7 @@ from sqlite_store import begin_immediate
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.slot_files import RealSlotFiles
@@ -31,7 +31,7 @@ from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")

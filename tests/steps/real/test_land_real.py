@@ -21,6 +21,7 @@ from land_bench import NoBeats, database
 from stream_proc import group_alive
 
 from taskloop.agent_credentials import scrubbed
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, argv_digest
 from taskloop.claim_lease import Beat, Heartbeat
@@ -41,7 +42,7 @@ from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import CloseAnswer
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 CHECK = ["/bin/sh", "-c", "test -f src/x.py"]
 PROFILE = {"setup": [["/bin/sh", "-c", "true"]], "required": ["has-x"], "checks": [{"name": "has-x", "argv": CHECK, "timeout": 60}]}

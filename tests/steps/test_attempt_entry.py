@@ -6,6 +6,7 @@ import json
 import os
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,7 @@ from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Evidenc
 from taskloop.claim_lease import Beat, Heartbeat, KeepAlive
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitViews
 from taskloop.slot_lock import SlotBusy, acquire, lock_path
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -407,13 +409,37 @@ def test_a_failed_run_that_left_files_keeps_its_slot_held_and_the_claim(
     assert slot.branch() == "task/tl-1" and entry.unclaimed == []
 
 
+class Claims:
+    """The tracker's claim port as `main` only reads it: a heartbeat factory and the fenced unclaim."""
+
+    heartbeat_for = None
+    unclaim = None
+
+
 @pytest.mark.parametrize(
     "argv",
     [[], ["db", "/a", "600", "tasks", "tl-1"], ["/db", "a", "600", "tasks", "tl-1"], ["/db", "/a", "", "tasks", "tl-1"],
-     ["/db", "/a", "6x", "tasks", "tl-1"], ["/db", "/a", "600", "", "tl-1"], ["/db", "/a", "600", "tasks", "tl-1", "x"]],
+     ["/db", "/a", "6x", "tasks", "tl-1"], ["/db", "/a", "29", "tasks", "tl-1"], ["/db", "/a", "86401", "tasks", "tl-1"],
+     ["/db", "/a", "9" * 5000, "tasks", "tl-1"], ["/db", "/a", "600", "", "tl-1"], ["/db", "/a", "600", "tasks", "tl-1", "x"]],
 )
 def test_arguments_are_two_absolute_paths_the_git_bound_a_backlog_and_a_task(argv: list[str]) -> None:
     assert arguments(argv) is None
+
+
+def test_a_valid_argv_parses_to_the_entry_arguments() -> None:
+    assert arguments(["/db", "/a", "45", "tasks", "tl-1"]) == EntryArgs(Path("/db"), Path("/a"), 45, "tasks", "tl-1")
+    assert arguments(["/db", "/a", "86400", "tasks", "tl-1"]) is not None
+
+
+def test_main_builds_the_git_views_with_the_argv_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[Callable[..., object], object]] = []
+    monkeypatch.setattr("taskloop.attempt_entry.tracker_located", lambda: None)
+    monkeypatch.setattr("taskloop.attempt_entry.tracker_claims", Claims)
+    monkeypatch.setattr("taskloop.attempt_entry.enter", lambda _args, opened, *rest: seen.append((opened, rest[-1])) or 0)
+    assert main(["/db", "/a", "45", "tasks", "tl-1"]) == 0
+    opened, remotes = seen[0]
+    assert isinstance(opened, partial) and opened.keywords == {"views": GitViews(45)}
+    assert getattr(remotes, "__self__", None) == GitViews(45)
 
 
 def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:

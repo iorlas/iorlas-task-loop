@@ -20,6 +20,7 @@ from taskloop.access import CODEX_ACCESS
 from taskloop.attempt import Attempts, Credentials, CredentialsUnavailable, Execution, report
 from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import (
+    DEFAULT_GIT_READ_SECONDS,
     Admission,
     Answer,
     AnswerState,
@@ -427,7 +428,7 @@ def test_usage_unknown_is_not_zero_and_answer_grace_facts_are_kept(tmp_path: Pat
 
 
 def test_real_file_database_composition_opens_and_collects(tmp_path: Path) -> None:
-    attempts = open_attempts(tmp_path / "factory.db", tmp_path, GitViews(), lambda: ("/bin/codex", {}))
+    attempts = open_attempts(tmp_path / "factory.db", tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS), lambda: ("/bin/codex", {}))
     assert attempts.collect(KEY).status == "refused"
     assert attempts.execute(KEY, ENTRY).status == "refused"
     assert (tmp_path / "factory.db").exists()
@@ -635,7 +636,7 @@ def test_an_entry_replaced_between_load_and_dispatch_fences_the_dispatch(tmp_pat
 
 
 def test_composition_bounds_only_the_registration_connection(tmp_path: Path) -> None:
-    attempts = open_attempts(tmp_path / "factory.db", tmp_path, GitViews(), lambda: ("/bin/codex", {}))
+    attempts = open_attempts(tmp_path / "factory.db", tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS), lambda: ("/bin/codex", {}))
     registration_store, main = attempts.registration_store.connect(), attempts.store.connect()
     assert registration_store is not None and main is not None and registration_store is not main
     assert registration_store.execute("PRAGMA busy_timeout").fetchone() == (1500,)

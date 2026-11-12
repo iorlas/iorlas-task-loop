@@ -24,7 +24,7 @@ from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
@@ -37,7 +37,7 @@ from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")

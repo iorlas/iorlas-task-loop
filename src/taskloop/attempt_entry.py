@@ -36,6 +36,8 @@ from taskloop.admit import Unclaim
 from taskloop.attempt import ACCEPTED, Attempts, judged, succeeded
 from taskloop.attempt_store import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import (
+    MAX_GIT_READ_SECONDS,
+    MIN_GIT_READ_SECONDS,
     Admission,
     AttemptKey,
     AttemptRecord,
@@ -87,8 +89,14 @@ class EntryArgs:
 
 
 def arguments(argv: Sequence[str]) -> EntryArgs | None:
-    """Two absolute paths, the Git read bound in seconds, a backlog and a task id; anything else is refused."""
-    if len(argv) != 5 or not all(argv) or not (argv[2].isascii() and argv[2].isdigit()):
+    """Two absolute paths, the Git read bound in seconds (`MIN_GIT_READ_SECONDS` to `MAX_GIT_READ_SECONDS`), a backlog and a
+    task id; anything else is refused."""
+    if len(argv) != 5 or not all(argv):
+        return None
+    seconds = argv[2]
+    if not (seconds.isascii() and seconds.isdigit() and len(seconds) <= len(str(MAX_GIT_READ_SECONDS))):  # no huge int() parse
+        return None
+    if not MIN_GIT_READ_SECONDS <= int(seconds) <= MAX_GIT_READ_SECONDS:
         return None
     database, artifacts = Path(argv[0]), Path(argv[1])
     if not (database.is_absolute() and artifacts.is_absolute()):

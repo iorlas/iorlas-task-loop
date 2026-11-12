@@ -12,7 +12,7 @@ from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from sqlite_store import begin_immediate
 
-from taskloop.attempt_types import Seen
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Seen
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.git_views import GitViews
@@ -22,7 +22,7 @@ from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody
 from taskloop.slot_release import Released
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 
 def gone(_process: object) -> ProcessSeen:

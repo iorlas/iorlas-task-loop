@@ -7,6 +7,7 @@ import pytest
 from git_porcelain import GitTimeout, RealRepo
 
 from taskloop import cli_composition
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.cli import main
 from taskloop.cli_step import views_for
 from taskloop.git_views import PUSH_TIMEOUT, GitViews
@@ -31,7 +32,7 @@ def test_the_config_value_bounds_every_view(tmp_path: Path, monkeypatch: pytest.
 
 
 def test_views_without_a_configured_bound_keep_the_default(tmp_path: Path) -> None:
-    view = GitViews().checkouts(tmp_path)
+    view = GitViews(DEFAULT_GIT_READ_SECONDS).checkouts(tmp_path)
     assert isinstance(view, RealRepo) and view.read_timeout == 600
 
 

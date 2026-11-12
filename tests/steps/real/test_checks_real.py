@@ -17,6 +17,7 @@ from git_porcelain.testing import apply_hermetic_env, git
 from stream_proc import group_alive
 
 from taskloop.agent_credentials import scrubbed
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, BlockTarget, CheckSink, check_env
 from taskloop.evidence_files import EvidenceFiles
@@ -26,7 +27,7 @@ from taskloop.profile import Check
 from taskloop.slot_env import setup_process
 from taskloop.slot_files import RealSlotFiles
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 PASS = Check("pass", ("/bin/sh", "-c", "echo ok"), 30)
 UNTRACKED = Check("untracked", ("/bin/sh", "-c", "touch untracked-file"), 30)

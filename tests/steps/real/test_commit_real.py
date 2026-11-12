@@ -14,7 +14,7 @@ from git_porcelain import GitUnavailable
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 
-from taskloop.attempt_types import Admission, AnswerState, AttemptKey, ChainLink, FileRef, Rejected, Unsettled
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Admission, AnswerState, AttemptKey, ChainLink, FileRef, Rejected, Unsettled
 from taskloop.factory_commit import Committed, clean_at, settle
 from taskloop.git_views import GitViews
 from taskloop.repo import RepoId
@@ -24,7 +24,7 @@ from taskloop.steps import IMPLEMENT
 from taskloop.task import TaskReference, TaskScope
 from taskloop.verdict import judge
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 P = "docs/design/tl-1/plan.md"
 HOOKS = ("pre-commit", "commit-msg", "prepare-commit-msg", "post-commit", "post-index-change", "reference-transaction")

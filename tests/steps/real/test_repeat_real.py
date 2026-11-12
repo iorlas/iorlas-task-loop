@@ -20,7 +20,7 @@ from sqlite_store import begin_immediate
 from taskloop.admit_chain import ChainAdmission
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Unsettled, Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Unsettled, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.launch import Launched, LaunchResult
@@ -30,7 +30,7 @@ from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, repeating
 from taskloop.verifier import Verifier
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")

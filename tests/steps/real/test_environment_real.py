@@ -18,7 +18,7 @@ from stream_proc import group_alive
 
 from taskloop.access import folders
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey
 from taskloop.environment import EnvironmentPorts, Preparation, Renewal
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
@@ -27,7 +27,7 @@ from taskloop.prepare import Prepared
 from taskloop.setup_store import SetupStore
 from taskloop.slot_env import RealEnvFiles, setup_process
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 # fails unless the reset emptied `.venv` first; prints the slot's folders

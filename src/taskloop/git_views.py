@@ -8,7 +8,7 @@ from pathlib import Path
 
 from git_porcelain import GitUnavailable, RealRepo, Repo
 
-from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Checkouts
+from taskloop.attempt_types import Checkouts
 from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 
@@ -22,7 +22,7 @@ class GitViews:
     kills it and raises `GitTimeout` (a `GitUnavailable`, so `unavailable:git` with the command and the seconds as detail).
     The machine config's `git_read_seconds`, passed down by the composition and to each entry process in its argv."""
 
-    read_seconds: int = DEFAULT_GIT_READ_SECONDS
+    read_seconds: int
 
     def inspect_checkout(self, path: str) -> RepoInspection:
         """Resolve the native path once and request fresh shared-library observations."""

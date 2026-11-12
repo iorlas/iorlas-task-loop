@@ -12,12 +12,13 @@ from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 
 from taskloop import cli_composition
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.composition import real_slots
 from taskloop.git_views import GitViews
 from taskloop.operations import Adoption
 from taskloop.slots import Adopted, NotAdopted
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 
 def test_a_blocked_status_is_git_unavailable_and_the_slot_adopts_once_it_clears(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -12,10 +12,11 @@ from stream_proc import OwnedProcess, ProcessObservation
 from taskloop import owned_processes
 from taskloop.agent_credentials import codex_machine_credentials, scrubbed
 from taskloop.attempt import CredentialsUnavailable
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.git_views import GitViews, hardened
 from taskloop.owned_processes import worker_gone
 
-VIEWS = GitViews()
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 BASE = {"PATH": "/usr/bin:/bin", "HOME": "/home/me"}
 BAR = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "url.delegate-push-refused://.pushInsteadOf", "GIT_CONFIG_VALUE_0": ""}

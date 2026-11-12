@@ -20,7 +20,7 @@ from taskloop.admit import AdmitRequest, AdmitResult, Admitted
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, SetupShown, Shown
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, AttemptResult, EntryIdentity
 from taskloop.cli import main
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
@@ -575,7 +575,7 @@ def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_pa
     con = Store(SCHEMA).open_rw(db)
     assert con is not None
     con.close()
-    with cli_composition.open_next(db, tmp_path / "artifacts", GitViews(), str(tmp_path)) as ports:
+    with cli_composition.open_next(db, tmp_path / "artifacts", GitViews(DEFAULT_GIT_READ_SECONDS), str(tmp_path)) as ports:
         assert not isinstance(ports, Failed) and ports.holding.status("tasks", "tl-1") is None
         found = run_round(ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", "m", "high", 30))
     assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
@@ -652,7 +652,7 @@ def test_a_second_ctrl_c_exits_130(structured: bool, monkeypatch: pytest.MonkeyP
 def test_a_factory_db_that_exists_but_cannot_be_opened_backs_off_while_an_absent_one_ends(tmp_path: Path) -> None:
     db = tmp_path / "factory.db"
     request = cli_step.NextRequest("tasks", str(tmp_path), Path("/checkout"), "auto", "m", "high", 30)
-    once = cli_composition.one_round(db, tmp_path / "art", GitViews(), request, lambda: False)
+    once = cli_composition.one_round(db, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS), request, lambda: False)
     absent = once(frozenset())
     assert isinstance(absent, Failed) and (absent.kind, absent.reason) == ("refused", "database")
     db.write_bytes(b"not a database, or one locked past the busy timeout")
@@ -717,3 +717,36 @@ def test_a_running_agents_time_since_its_last_command_is_listed_and_shown(
     assert capsys.readouterr().out.splitlines()[1].endswith("\twait\t42 s ago")
     assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
     assert "Last command: 42 s ago\n" in capsys.readouterr().out
+
+
+LANDING = ["step", "land", "tl-1", "--backlog", "tasks", "--checkout", "/checkout", "--minutes", "20"]
+
+
+@pytest.mark.parametrize(
+    ("argv", "opener"),
+    [(START, "open_start"), (NEXT, "open_next"), (ROUNDS, "open_rounds"), (["step", "list"], "open_reads"),
+     (["step", "verify", "tl-1", "--backlog", "tasks"], "open_verify"), (RELEASE, "open_release"), (PUBLISH, "open_publish"),
+     (LANDING, "open_land"), (["slot", "adopt", "/checkout"], "adopt")],
+)
+def test_every_operation_gets_the_configured_git_read_seconds(
+    argv: list[str], opener: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    given: list[object] = []
+
+    @contextmanager
+    def opened(*args: object, **_kwargs: object) -> Generator[Failed]:
+        given.extend(args)
+        yield Failed("refused", "database", "stub")
+
+    def adopted(*args: object) -> Failed:
+        given.extend(args)
+        return Failed("refused", "database", "stub")
+
+    monkeypatch.setattr(cli_composition, opener, adopted if opener == "adopt" else opened)
+    config = tmp_path / "c.toml"
+    config.write_text("git_read_seconds = 45\n")
+    main(["--config", str(config), *argv])
+    seen = [item for item in given if isinstance(item, GitViews)]
+    seen += [item.checkouts.__self__ for item in given if isinstance(item, SlotGit) and hasattr(item.checkouts, "__self__")]
+    assert seen == [GitViews(45)]

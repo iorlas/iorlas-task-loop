@@ -168,7 +168,7 @@ def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
 def open_checks_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
     """`open_launcher` for checks attempts: `CheckStore`'s attempts and registration, the checks entry module."""
     return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable,
-                    CheckStore, CHECK_ENTRY_MODULE, views.read_seconds)
+                    CheckStore, CHECK_ENTRY_MODULE, read_seconds=views.read_seconds)
 
 
 def adopt_slots(
