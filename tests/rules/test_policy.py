@@ -212,7 +212,7 @@ def test_only_tracker_client_constructs_the_tracker_client() -> None:
     assert bd_importers() == {"tracker_client.py"}
 
 
-SIGNAL_USES = frozenset({"signal", "SIGINT", "SIG_IGN", "default_int_handler", "getsignal"})
+SIGNAL_USES = frozenset({"signal", "SIGINT", "SIGTERM", "SIG_IGN", "SIG_DFL", "default_int_handler", "getsignal"})
 # Sending or timing signals, under any receiver (`os.kill`, `signal.alarm`, `proc.kill`): no factory source or test uses one.
 SIGNALLING = frozenset({
     "kill", "killpg", "alarm", "setitimer", "pthread_kill", "pthread_sigmask", "set_wakeup_fd", "pidfd_send_signal",
@@ -243,7 +243,7 @@ def signal_uses(path: Path) -> tuple[set[str], set[str], set[str]]:
 
 def test_the_one_signal_owner_installs_only_a_sigint_handler_and_nothing_sends_a_signal() -> None:
     """CLAUDE.md's one exception: only `interrupts.py` imports `signal`, plainly (no alias, no `from`, no `_signal`, no
-    dynamic import anywhere), and uses only what installs and restores a SIGINT handler; no factory source or test sends
+    dynamic import anywhere), and uses only what installs and restores the SIGINT and SIGTERM handlers; no factory source or test sends
     or times a signal (`SIGNALLING`), and tests never import `signal` (so never install a handler)."""
     owner = ROOT / "src" / "taskloop" / "interrupts.py"
     for path in FILES:
@@ -325,7 +325,7 @@ def process_replacements(tree: ast.AST) -> list[str]:
     ("from multiprocessing import Process", ["multiprocessing"]), ('importlib.import_module("pty")', ["pty"]),
     ('__import__("multiprocessing")', ["multiprocessing"]), ('import_module("concurrent.futures.process")', ["concurrent.futures.process"]),
     ("os.execv(p, a)\nos.execv(p, a)", ["execv", "execv"]),
-    ('WORDS = ("execv", "fork")', []), ("executable = sys.executable", []), ("keep_awake_spawn(argv)", []),
+    ('WORDS = ("execv", "fork")', []), ("executable = sys.executable", []), ("popen_held(argv)", []),
     ('getattr(os, "getcwd")', []), ('vars(o)["name"]', []), ("from concurrent.futures import ThreadPoolExecutor", []),
 ], ids=["execv", "execvpe", "from_os", "posix_spawnp", "fork", "forkpty", "spawnv", "spawn_reference", "system", "popen",
         "asyncio_exec", "asyncio_shell", "process_pool", "fork_exec", "posixsubprocess", "futures_process", "futures_process_from",

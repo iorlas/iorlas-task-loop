@@ -24,17 +24,16 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     assert output.err == ""
 
 
-@pytest.mark.parametrize(
-    "arguments",
-    [["step", "-h"], ["step", "start", "-h"], ["step", "show", "-h"], ["step", "list", "-h"], ["step", "verify", "-h"],
-     ["step", "release", "-h"]],
-)
-def test_step_help_names_the_steps_built(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit) as result:
-        main(arguments)
-    assert result.value.code == 0
-    built = "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round"
-    assert built in " ".join(capsys.readouterr().out.split())
+BUILT = "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round"
+
+
+def test_step_help_names_the_steps_built_once_and_each_command_help_does_not_repeat_it(capsys: pytest.CaptureFixture[str]) -> None:
+    for arguments in (["step", "-h"], ["step", "start", "-h"], ["step", "show", "-h"], ["step", "list", "-h"],
+                      ["step", "verify", "-h"], ["step", "release", "-h"]):
+        with pytest.raises(SystemExit) as result:
+            main(arguments)
+        assert result.value.code == 0
+        assert (BUILT in " ".join(capsys.readouterr().out.split())) == (arguments == ["step", "-h"])
 
 
 def test_publish_help_says_it_pushes_as_you_never_forced(capsys: pytest.CaptureFixture[str]) -> None:

@@ -223,9 +223,9 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _
             trail.add(_held(ports.holding, each))
         case "release" if each.checks is not None and each.checks.row.released_at is None:  # its entry is gone (`checks_next`)
             trail.add(_checks_released(ports, each, each.checks.row.key))
-        case "wait":
-            trail.add(Move(task, "report", "running", attempt, step=step))
-        case "publish" | "advance" | "land" | "landed" | "on_hold":  # only the person's `tl step land` lands (`rounds-never-land`)
+        case "wait" | "land":  # `land`: passed checks, one line while unchanged: the person's sign to run `tl step land`
+            trail.add(Move(task, "report", "running" if each.next == "wait" else "land", attempt, step=step))
+        case "publish" | "advance" | "landed" | "on_hold":  # only the person's `tl step land` lands (`rounds-never-land`)
             return
         case "done" if succeeded(each.result):
             return

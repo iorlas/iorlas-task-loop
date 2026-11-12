@@ -65,6 +65,13 @@ def test_ctrl_c_during_the_block_is_repeated_whole_by_the_rerun_with_a_renewed_d
     assert b.rows()[0].deadline == 1000.0 + 5 * 60 and b.rows()[0].validation == "passed"
 
 
+def test_a_pending_candidate_is_not_resumed_without_minutes(b: LandBench) -> None:
+    interrupted(b)
+    pending = b.rows()[0]
+    assert word(b.land(minutes=None)) == ("refused", "minutes")
+    assert b.rows() == (pending,) and b.reservations() == [("s1", pending.key.attempt_id)]
+
+
 def test_a_killed_land_s_running_check_holds_the_rerun_until_it_ended(b: LandBench) -> None:
     """`kill -9` of `tl step land`: its check may still run in its own session; nothing is reset or run until it is gone,
     and the next land process replaces the dead one's identity under the slot's custody."""

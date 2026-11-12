@@ -54,7 +54,7 @@ The repo already has contracts in `.importlinter` (`one-signal-owner`, `process-
    `".local/share/task-loop"`: that needs the existing policy AST test extended (a literal scan of `src/taskloop`).
 2. `host-only-in-adapters`: type `forbidden`, `source_modules` the domain and store modules (the factory core listed in
    section 4), forbidden `shutil`, `platform` and `sys` (platform use), `ignore_imports` for the named adapter
-   modules (`composition`, `cli_composition`, `slot_env`, `keep_awake` if it stays, `agent_credentials`, `slot_files`).
+   modules (`composition`, `cli_composition`, `slot_env`, `agent_credentials`, `slot_files`).
    Whether `os`/`sys` can be included depends on how much the core uses them today: measure first.
 3. `factory-layers`: type `layers` over the factory's own internals: `cli` over `operations` over the step machinery
    over stores over `factory_schema`, with `exhaustive = true` so a new module must be placed. That enforces "each layer
@@ -85,7 +85,7 @@ Source: `cli.py`, `cli_step.py`, `cli_install.py` (6 install modules and 3 comma
 | `tl step verify` | factory | settle a stored answer |
 | `tl step release` | factory | free a slot reservation |
 | `tl step next` | factory | one scheduling round |
-| `tl step rounds` | factory | rounds until stopped; also starts keep-awake (see flag) |
+| `tl step rounds` | factory | rounds until stopped |
 | `tl step publish` | factory | push the verified plan to `task/<id>` |
 | `tl step land` | factory | squash, validate, push, close |
 
@@ -102,12 +102,6 @@ tracker and Git.
 ### Removed: package-manager layer (6)
 
 `cli_install`, `install_op`, `installs`, `pin_file`, `pin_op`, `start`.
-
-### Host (1, flagged)
-
-| Module | Role |
-|---|---|
-| `keep_awake` | Asks the OS not to idle-sleep while rounds run (`caffeinate`, `systemd-inhibit`). Flagged below. |
 
 ### Factory (82)
 
@@ -127,17 +121,14 @@ tracker and Git.
 | Tracker and Git adapters | `tracker`, `tracker_client`, `task`, `repo`, `git_views` |
 | Package | `__init__` |
 
-Counts: removed 6, host 1, factory 82 (total 89). A script check of this table against the directory should be part of
+Counts: removed 6, host 0, factory 82 (total 88; `keep_awake` deleted). A script check of this table against the directory should be part of
 the task that adopts it, so a new module has to be placed.
 
 ## 5. Flagged items (all recommendations are proposed)
 
-1. **`keep_awake.py` (proposed: host; recommend moving out of the factory).** It spawns a platform tool and knows
-   `sys.platform`, `caffeinate` and `systemd-inhibit`: host machine state, the same family as the removed layer. It
-   is best effort and the factory never verifies it, so correctness does not depend on it. Recommendation: delete it
-   from the factory (and its `cli_composition` and `composition` wiring and the `rounds` log line) and let the person
-   wrap rounds (`caffeinate -i tl step rounds ...`), the OS power setting or a launcher script do it. Fallback if the
-   owner wants it kept: leave it, but as the single host adapter listed in contract 2 above.
+1. **`keep_awake.py` (done: deleted, tl-8bh9.14.26-.29, trial).** It spawned a platform tool and knew `sys.platform`,
+   `caffeinate` and `systemd-inhibit`; the trial logged a false `started` line and left a zombie on OrbStack. The person
+   wraps rounds (`caffeinate -i tl step rounds ...`) or sets the OS power setting instead.
 2. **Agent uv folders, `slot_env`, `access`, `environment` (proposed: keep in the factory as one agent-environment
    adapter, shrink later).** The factory legitimately decides what an agent may write (Codex `writable_roots`, scratch
    `TMPDIR`) and runs the repo's `setup`: that is its child's sandbox. What is doubtful is `UV_CACHE_DIR`, `UV_TOOL_DIR`
