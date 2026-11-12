@@ -1467,12 +1467,16 @@ A plain land of task A moves origin `main` while task B's checks run; B's checks
 (`validate._moved`). Holding B was wrong twice: the cause is nobody's fault, and the hold's recovery (re-add the label)
 abandons the attempt and replans and re-implements from scratch, though only the checks need to run again on the new `main`.
 Decision, the smallest correct behaviour: `main_moved` is not a hold cause (`hold_status.cause` returns none for it), and a
-round re-runs the checks of a done task whose latest checks attempt failed so (`round._failed` calls `start`, which routes
-to `check_status.route` `rerun`: attempt number + 1, the same commit, the required names read again from `main`; no plan,
-no implement, claim kept; the move is `<task> check advance started <id>`). A free slot is needed as for any checks
-admission; `no_free_slot` and the like are the move's word and the next round tries again. Further lands re-run again: each
-re-run follows an actual move of `main`, so the loop is bounded by lands, not by time. Every other check failure stays a
-hold. A hand-started task is as before (`tl step start` re-runs the checks; the `main_moved` guide says so).
+round re-runs the checks of a done task whose latest checks attempt failed so (`round._rerun` puts such a view in the advance phase, oldest release first, so
+`_advance` handles it as any advance: `start` routes to `check_status.route` `rerun`, attempt number + 1, the same commit,
+the required names read again from `main`; no plan, no implement, claim kept; the move is `<task> check advance started
+<id>`; a refusal is classified as the advance's: `claim_lost`/`branch_moved` hold the round-taken task, a stop word
+(`ADVANCE_STOPS`, `no_free_slot` included) ends the phase, another is a per-task skip tried again next round).
+**Cap (decided):** the third checks attempt of a task failing `main_moved` in a row (`hold_status.MAIN_MOVED_RUNS` = 3) is
+held, as every other failure, with `hold_cause` text naming it (main moved while each of the last checks runs ran); a pusher
+faster than the checks cannot loop the task. Every other check failure stays a hold. **A hand-started task is not re-run
+by rounds** (`_rerun` needs the round's label): it is reported `failed:main_moved` and `tl step start` re-runs the checks
+by hand, as the `main_moved` guide says.
 
 ### 31.2 A deleted task is `task_missing` whichever bd command says so (.65)
 

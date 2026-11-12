@@ -68,7 +68,8 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             told = guide(each.next, checks=each.checks is not None, land=each.land is not None)
             told = LAND_GUIDE["abandoning"] if abandoning else told
             told = told if ended is None or not ended.abandoned else GUIDE["abandoned"] if each.next == "start" else UNCLAIMING
-            told = ({"done": NEEDS_OWNER, "release": f"{told} {NEEDS_OWNER}"}.get(each.next, told)) if result.explanation else told
+            asked = result.explanation and not (ended and ended.abandoned)  # an abandoned one's guide is its own
+            told = ({"done": NEEDS_OWNER, "release": f"{told} {NEEDS_OWNER}"}.get(each.next, told)) if asked else told
             told = hold_guide(each) if each.next in ("hold", "on_hold") else told
             steps = [told, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []

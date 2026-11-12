@@ -28,7 +28,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher, LaunchResult
-from taskloop.operations import LATE, ChecksPorts, Failed, StartPorts, StartRequest, start
+from taskloop.operations import LATE, ChecksPorts, Failed, Started, StartPorts, StartRequest, start
 from taskloop.round import RoundPorts
 from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody
@@ -481,3 +481,35 @@ def test_a_task_waiting_for_its_land_keeps_the_last_free_slot_from_new_starts(ri
     free = "SELECT count(*) FROM slot WHERE (repo_id,name) NOT IN (SELECT repo_id,slot FROM reservation)"
     assert rig.con.execute(free).fetchone() == (1,)
     assert rig.next_words() == {"tl-1": ("check", "land")}
+
+
+def test_a_third_main_moved_in_a_row_holds_the_task_naming_the_cause(rig: Checking) -> None:
+    """tl-8bh9.14.64: a pusher faster than the checks cannot loop a task: the first two are re-run, the third is held."""
+    implemented(rig)
+    rig.bodies = ["main_moved"] * 3
+    assert rig.round(frozenset()) == [("tl-1", "check", "advance", "started")]
+    assert rig.round(rig.last.written) == [("tl-1", "check", "advance", "started")]
+    assert rig.round(rig.last.written) == [("tl-1", "check", "advance", "started")]
+    assert rig.round(rig.last.written) == [("tl-1", "check", "hold", "held failed:main_moved")]
+    assert [row[1] for row in rig.rows()] == [1, 2, 3] and rig.starts == 3
+    assert "main` moved while each of the last checks runs ran" in rig.tracker.comments[0][1]
+
+
+def test_a_refused_re_run_after_main_moved_is_classified_as_an_advance_s_never_left_to_sit(rig: Checking) -> None:
+    """The claim taken by another actor holds the round-taken task (`claim_lost`), as an advance's refusal does."""
+    implemented(rig)
+    rig.bodies = ["main_moved"]
+    assert rig.round(frozenset()) == [("tl-1", "check", "advance", "started")]
+    rig.tracker.beads["tl-1"] = replace(rig.tracker.beads["tl-1"], assignee="someone")
+    assert rig.round(rig.last.written) == [("tl-1", "check", "hold", "held claim_lost")]
+    assert rig.starts == 1
+
+
+def test_a_task_started_by_hand_that_failed_main_moved_is_reported_never_re_run_by_a_round(rig: Checking) -> None:
+    rig.by_hand("tl-1")
+    rig.by_hand("tl-1")  # plan, then implement; the label-less task is now at its check advance
+    rig.bodies = ["main_moved"]
+    request = StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30)
+    assert isinstance(start(rig.starting(), request), Started)
+    assert rig.round() == [("tl-1", "check", "report", "failed:main_moved")]
+    assert rig.starts == 1 and rig.tracker.holds == []

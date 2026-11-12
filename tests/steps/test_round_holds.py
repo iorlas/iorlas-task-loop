@@ -128,6 +128,18 @@ def test_show_of_a_hand_started_needs_owner_prints_the_agent_s_question_and_a_ne
     assert factory.tracker.holds == []
 
 
+def test_the_needs_owner_guide_is_not_repeated_once_the_attempt_is_abandoned(factory: Factory, tmp_path: Path) -> None:
+    asks(factory, "tl-1", "plan")
+    factory.by_hand("tl-1")
+    found = factory.store.attempt_of("tasks", "tl-1")
+    assert found is not None and factory.releaser().release(found[0], True)  # the person's `tl step release --abandon`
+    reads = StatusPorts(factory.store, lambda _entry: "gone", lambda: factory.now, lambda _key: None, lambda: "boot")
+    shown = show_attempt(reads, tmp_path, "tasks", "tl-1")
+    assert isinstance(shown, Shown)
+    text = "\n".join(human("show", shown, tmp_path / "factory.db"))
+    assert "answered `needs_owner`" not in text and "`tl step start`" in text
+
+
 def test_a_task_started_by_hand_that_fails_is_reported_never_held(factory: Factory) -> None:
     asks(factory, "tl-1", "plan")
     factory.by_hand("tl-1")

@@ -25,7 +25,7 @@ from taskloop.attempt_status import AttemptView, agent_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_facts import Pending, facts, outcome, refusal
-from taskloop.hold_status import cause
+from taskloop.hold_status import MAIN_MOVED, cause
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
 from taskloop.hold_text import Kept, Returned, comment
 from taskloop.operations import ChecksReleasing, Clock, Failed, Release, release_task
@@ -132,7 +132,9 @@ def _caused(ports: HoldPorts, row: HoldRow) -> bool:
         return True
     if fresh.attempt_id != row.cause_id:
         return False
-    return fresh.next in ROUND_WORDS if row.reason in ROUND_CAUSES else cause(fresh) is not None
+    if row.reason not in ROUND_CAUSES:
+        return cause(fresh) is not None
+    return fresh.next in ROUND_WORDS or (fresh.checks is not None and fresh.result.reason == MAIN_MOVED)  # or a checks re-run's
 
 
 def _retired(ports: HoldPorts, row: HoldRow, move: Move) -> HoldMove:

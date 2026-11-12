@@ -143,3 +143,15 @@ def test_a_claimed_task_the_tracker_lost_is_skipped_and_the_next_advance_and_new
     assert factory.last.stopped == ""
     assert ("tl-1", "plan", "skip", "task_missing") in factory.round() and factory.last.stopped == ""
     assert factory.con.execute("SELECT count(*) FROM attempt WHERE task_id='tl-1' AND step='implement'").fetchone() == (0,)
+
+
+@pytest.mark.parametrize("words", ['resolving tl-1: no issue found matching "tl-1"', "no issues found matching the provided IDs"])
+def test_a_task_deleted_at_its_next_advance_is_skipped_task_missing_in_either_of_bd_s_words(factory: Factory, words: str) -> None:
+    """tl-8bh9.14.65: `bd show` answers a deleted task with an error whose words differ by command; neither stops the round."""
+    factory.adopt("s2")
+    factory.by_hand("tl-1")
+    factory.by_hand("tl-2")
+    factory.tracker.beads.pop("tl-1")
+    factory.tracker.deleted_as = words
+    assert factory.round() == [("tl-1", "plan", "skip", "task_missing"), ("tl-2", "implement", "advance", "started")]
+    assert factory.last.stopped == ""

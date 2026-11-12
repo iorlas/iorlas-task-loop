@@ -143,13 +143,19 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
             return trail.close(INTERRUPTED)
         _settle(ports, request, each, trail)
     reserve = int(any(each.next == "land" for each in current))
-    stopped = _advance(ports, request, tuple(each for each in current if each.next == "advance"), trail, reserve)
+    stopped = _advance(ports, request, tuple(each for each in current if each.next == "advance" or _rerun(each)), trail, reserve)
     stopped = stopped or _admit(ports, request, current, trail, reserve)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
     if stopped != INTERRUPTED and not ports.stopping():
         _cleared(ports.holding, trail)
     return trail.close(INTERRUPTED if ports.stopping() else stopped)
+
+
+def _rerun(each: AttemptView) -> bool:
+    """A round-taken task whose checks failed `main_moved` (and is not held for it, `hold_status.cause`): its checks run
+    again in the advance phase, as an advance (tl-8bh9.14.64). A hand-started task is only reported."""
+    return each.next == "done" and each.label is not None and each.checks is not None and each.result.reason == MAIN_MOVED
 
 
 def _backlog(listed: Listed, backlog: str) -> tuple[AttemptView, ...]:
@@ -182,22 +188,13 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: T
             trail.add(Move(task, "report", "running" if each.next == "wait" else "land", attempt, step=step))
         case "publish" | "advance" | "landed" | "on_hold":  # only the person's `tl step land` lands (`rounds-never-land`)
             return
-        case "done" if succeeded(each.result):
+        case "done" if succeeded(each.result) or _rerun(each):  # a re-run is the advance phase's
             return
-        case "done":
-            trail.add(_failed(ports, request, each))
+        case "done":  # a checks attempt's reason is already `failed:<reason>` (`check report failed:test:failed`)
+            word = each.result.reason if each.checks is not None else f"failed:{each.result.reason}"
+            trail.add(Move(task, "report", word, attempt, step=step))
         case _:
             trail.add(Move(task, "report", each.next, attempt, step=step))
-
-
-def _failed(ports: RoundPorts, request: NextRequest, each: AttemptView) -> Move:
-    """A done attempt that did not succeed: reported (a checks attempt's reason is already `failed:<reason>`: `check report
-    failed:test:failed`); `main` moved while its checks ran (tl-8bh9.14.64): only the checks run again."""
-    if each.checks is not None and each.result.reason == MAIN_MOVED:
-        found = start(ports.starting, _request(request, each.task_id))
-        return Move(each.task_id, "advance", _word(found), each.attempt_id, _detail(found), each.step)
-    word = each.result.reason if each.checks is not None else f"failed:{each.result.reason}"
-    return Move(each.task_id, "report", word, each.attempt_id, step=each.step)
 
 
 def _resume(ports: StartPorts, backlog: str, minutes: int, each: AttemptView) -> Started | Failed:
@@ -299,7 +296,8 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
             return INTERRUPTED
         if word := _full(ports.reads.store, reserve):
             return word
-        result = start(ports.starting, _request(request, each.task_id), advancing=each.attempt_id)
+        done = each.attempt_id if each.checks is None else each.checks.row.after  # a re-run follows the implement attempt
+        result = start(ports.starting, _request(request, each.task_id), advancing=done, rerun=each.checks is not None)
         if isinstance(result, Started):
             trail.add(Move(each.task_id, "advance", result.status, result.attempt_id, step=result.step or ""))
             continue

@@ -93,6 +93,8 @@ def _repeats(_rest: str) -> Cause:
 
 OWNER = {
     "needs_owner": Cause("The agent needs a decision only the owner can give (its explanation is quoted above)."),
+    "main_moved": Cause("`main` moved while each of the last checks runs ran (more landing or pushing than the checks take), so "
+                        "none of them could conclude.", ""),
     "incomplete": Cause("The agent stopped without finishing (its explanation is quoted above)."),
 }
 BY_PREFIX: tuple[tuple[str, Callable[[str], Cause]], ...] = (  # the first prefix of the word that fits builds the cause
