@@ -39,7 +39,7 @@ export function closeDrawer() {
   $("backdrop").classList.add("pointer-events-none", "opacity-0");
 }
 
-const VIEWS = [["attempts", "Attempts"], ["task", "Task"], ["comments", "Comments"]];
+const VIEWS = [["attempts", "Attempts"], ["task", "Task"]];
 
 function render() {
   if (!open) return;
@@ -53,14 +53,8 @@ function render() {
   const head = el("header", "flex items-start gap-4 px-6 pb-3 pt-5");
   const title = el("div", "min-w-0 flex-1");
   const status = el("div", "flex items-center gap-2");
-  status.append(el("span", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), tag(`${col.emoji} ${col.label}`, { cls: "text-slate-700 dark:text-slate-200" }), el("span", "truncate text-xs text-slate-500 dark:text-slate-400", col.help));
-  const facts = el("dl", "mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs");
-  for (const [k, v] of [["Slot", t.slot], ["Priority", detail.fields.priority], ["Task branch", detail.fields.branch], ["Created", ago(detail.fields.created_at)]]) {
-    const item = el("div", "flex gap-1.5");
-    item.append(el("dt", "text-slate-500 dark:text-slate-400", k), el("dd", "font-medium", v ?? "none"));
-    facts.append(item);
-  }
-  title.append(status, el("h2", "mt-1.5 text-lg font-semibold leading-snug", t.title), facts);
+  status.append(el("span", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), tag(`${col.emoji} ${col.label}`, { cls: "text-slate-700 dark:text-slate-200" }), ...(t.slot ? [tag(`slot ${t.slot}`, { cls: "font-mono" })] : []), el("span", "truncate text-xs text-slate-500 dark:text-slate-400", col.help));
+  title.append(status, el("h2", "mt-1.5 text-lg font-semibold leading-snug", t.title));
   const close = el("button", "rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", "Close");
   close.type = "button";
   close.addEventListener("click", closeDrawer);
@@ -73,7 +67,7 @@ function render() {
   }
 
   const bar = el("div", "flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
-  const counts = { attempts: detail.attempts.length, comments: detail.comments.length };
+  const counts = { attempts: detail.attempts.length };
   for (const [id, label] of VIEWS) {
     const on = id === view;
     const b = el("button", `-mb-px border-b-2 pb-2 text-sm ${on ? "border-slate-900 font-semibold dark:border-slate-100" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`, counts[id] ? `${label} ${counts[id]}` : label);
@@ -83,8 +77,7 @@ function render() {
   }
   drawer.append(bar);
 
-  if (view === "task") return drawer.append(taskView(detail.fields));
-  if (view === "comments") return drawer.append(commentsView(detail.comments));
+  if (view === "task") return drawer.append(taskView(detail));
   if (!detail.attempts.length) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
   const body = el("div", "flex min-h-0 flex-1");
   body.append(rail(t), pane());
@@ -103,30 +96,33 @@ const section = (title, text) => {
   return node;
 };
 
-function taskView(f) {
-  const box = el("div", "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5");
-  const props = el("dl", "grid grid-cols-3 gap-x-6 gap-y-3 text-xs");
-  for (const [k, v] of [["Priority", f.priority], ["Labels", f.labels.join(", ")], ["Task branch", f.branch], ["Claim", f.claimed_by], ["Created", ago(f.created_at)], ["Updated", ago(f.updated_at)], ["Depends on", f.depends_on.join(", ")]]) {
-    const item = el("div", "min-w-0");
-    item.append(el("dt", "text-slate-500 dark:text-slate-400", k), el("dd", "mt-0.5 truncate font-medium", v || "none"));
-    props.append(item);
-  }
-  box.append(props, section("Description", f.description));
-  for (const [title, text] of [["Acceptance criteria", f.acceptance], ["Design", f.design], ["Notes", f.notes]]) if (text) box.append(section(title, text));
-  return box;
-}
-
-function commentsView(comments) {
-  const box = el("div", "flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5");
-  if (!comments.length) box.append(el("p", "text-sm text-slate-500", "No comments on this task."));
+// The task as the tracker holds it: its text and the discussion on the left, its metadata in a sidebar on the right.
+function taskView({ fields: f, comments }) {
+  const wrap = el("div", "flex min-h-0 flex-1");
+  const main = el("div", "flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5");
+  main.append(section("Description", f.description));
+  for (const [title, text] of [["Acceptance criteria", f.acceptance], ["Design", f.design], ["Notes", f.notes]]) if (text) main.append(section(title, text));
+  const thread = el("section", "border-t border-slate-200 pt-5 dark:border-slate-800");
+  thread.append(el("h4", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", `Comments · ${comments.length}`));
+  if (!comments.length) thread.append(el("p", "text-sm text-slate-500", "No comments on this task."));
   for (const c of comments) {
-    const item = el("article", "border-l-2 border-slate-200 pl-3 dark:border-slate-700");
+    const item = el("article", "mb-4 border-l-2 border-slate-200 pl-3 dark:border-slate-700");
     const who = el("div", "mb-1 flex items-center gap-2 text-xs");
     who.append(tag(c.author, { cls: c.author === "factory" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-200" }), el("span", "text-slate-500 dark:text-slate-400", ago(c.at)));
     item.append(who, prose(c.text));
-    box.append(item);
+    thread.append(item);
   }
-  return box;
+  main.append(thread);
+  const side = el("aside", "w-60 shrink-0 overflow-y-auto border-l border-slate-200 px-5 py-5 dark:border-slate-800");
+  const props = el("dl", "flex flex-col gap-4 text-xs");
+  for (const [k, v] of [["Priority", f.priority], ["Labels", f.labels.join(", ")], ["Task branch", f.branch], ["Claim", f.claimed_by], ["Depends on", f.depends_on.join(", ")], ["Created", ago(f.created_at)], ["Updated", ago(f.updated_at)]]) {
+    const item = el("div", "min-w-0");
+    item.append(el("dt", "text-slate-500 dark:text-slate-400", k), el("dd", "mt-0.5 break-words font-medium", v || "none"));
+    props.append(item);
+  }
+  side.append(el("h4", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", "Details"), props);
+  wrap.append(main, side);
+  return wrap;
 }
 
 // ---------- rail ----------

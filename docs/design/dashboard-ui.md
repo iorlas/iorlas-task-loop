@@ -16,12 +16,21 @@ below. Terms: [dashboard, board, live tail](../glossary.md). This is separate fr
 - A card shows task id and title, attempt number, a *repeat* or *restarted at plan* badge with its reason, time in the
   current step, slot, and the hold cause. A card that changes column animates to its new place.
 - Clicking a card opens a wide drawer (see below): task fields, then the task's history, then the lines of one attempt.
-- The drawer has three top-level tabs: **Attempts** (below), **Task** (the task as the tracker holds it, complete:
-  description, acceptance criteria, design, notes, labels, priority, claim, dependencies, dates) and **Comments** (the
-  tracker's discussion: the factory's hold and landing comments and the person's answers, oldest first). Above the tabs:
-  id, a badge for where the task is on the board with one sentence of what that means (hover help on each column header
-  says the same: *Held* is the glossary's hold, the factory will not advance the task until a person acts), the title,
-  one line of facts (slot, priority, task branch, created) and, for a held task, the hold cause.
+- Two screens, chosen in the header: **Board** and **Logs**. The layout switch (Steps, By slot) belongs to the Board.
+- **Logs** is the factory's one log, `rounds.log`: append-only, beside `attempts/` in the factory's artifacts folder, one
+  line per move (a round's action or sight for one task), written by the rounds process for all tasks and slots. Slots
+  have no log of their own, so one stream is faithful: newest first, grouped by day, live, with the time, the task (click
+  to open its drawer), the move and its words, and a filter *All moves / Needs attention* (hold, skip, repeat, failed,
+  unusable slot, no free slot). The per-attempt evidence files (stdout, `entry.log`, check logs) stay per attempt and are
+  read in the drawer. If one factory serves several repos with separate artifacts folders, the reader merges their
+  lines by time; each line carries its backlog. Display only, never control state (CLAUDE.md: no control from logs).
+- The drawer has two top-level tabs: **Attempts** (below) and **Task**: the task as the tracker holds it, laid out like
+  a Jira issue. Left, the full text (description, acceptance criteria, design, notes) and under it the **comments**,
+  the tracker's discussion oldest first (the factory's hold and landing comments, the person's answers). Right, a
+  **Details** sidebar (priority, labels, task branch, claim, dependencies, created, updated). Above the tabs: id, a
+  badge for where the task is on the board, the slot, one sentence of what the badge means (hover help on each column
+  header says the same: *Held* is the glossary's hold, the factory will not advance the task until a person acts), the
+  title and, for a held task, the hold cause.
 - The Attempts tab is a master and a detail. Left, the **attempt rail**: every attempt of the task, **newest first** so
   the running attempt is what the drawer shows on opening (Lines still follow the tail: new lines at the bottom), one
   aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
@@ -47,7 +56,7 @@ below. Terms: [dashboard, board, live tail](../glossary.md). This is separate fr
   content, duration right-aligned (with the exit code in red when not 0). Before a command, when the agent took 2 s or
   more to issue it, a faint "agent thought 33s" line. That number is the time from the previous line to this command's
   start; it is *not* part of the command's own duration (the first mock showed both as unlabeled durations).
-- Stack: plain HTML and vanilla JS ES modules (`app.js` board, `drawer.js`, `ui.js`), no framework, no bundler, no npm
+- Stack: plain HTML and vanilla JS ES modules (`app.js` board, `drawer.js`, `logs.js`, `ui.js`), no framework, no bundler, no npm
   at runtime. `mock.js` is the throwaway fake source, deleted when the server slice lands. Styling is Tailwind compiled once; `dash.css` is committed, so nobody
   installs Tailwind to use or serve the page. Light and dark theme follow the system; the switch overrides and is
   remembered in `localStorage` (optional, failure ignored).
@@ -110,6 +119,19 @@ event. `slot` is `null` when the task holds none. `hold_cause` is the sentence t
 
 `slots` lists every slot, so By slot shows idle ones.
 
+### Factory log: `GET /api/log`
+
+```json
+{"backlog": "tl", "rows": [
+  {"at": "2026-11-12T10:22:00Z", "backlog": "tl", "task": "tl-7d5", "move": "hold", "words": ["held", "repeats_exhausted"]}
+]}
+```
+
+The last 200 lines of `rounds.log` read through its reader, oldest first. `task` is `null` for a line about no task
+(`no_free_slot`, `unusable:s4:dirty`). `move` is the line's verb (`admit advance repeat report hold skip land` in the
+mock; the grammar is `round_log.py`'s) and `words` are its fixed words, shown as written. A live line arrives on the
+stream as `{"kind": "log", "row": <row>}`.
+
 ### Task detail: `GET /api/tasks/<id>`
 
 ```json
@@ -162,6 +184,7 @@ Each message is one of:
 
 ```json
 {"kind": "task", "task": <card>}
+{"kind": "log", "row": <log row>}
 {"kind": "feed", "task_id": "tl-7c4", "step": "implement", "attempt": 1, "event": <live event>}
 ```
 
@@ -171,7 +194,7 @@ the named attempt's lines. The page loads the snapshot first, then the stream, a
 
 ## Mock mode
 
-`fixtures.json` holds `tasks` (ages as `*_ago_s` seconds so the data never goes stale), `slots`, `history` (per task: stages of
+`fixtures.json` holds `tasks` (ages as `*_ago_s` seconds so the data never goes stale), `slots`, `rounds` (the log), `comments`, `history` (per task: stages of
 attempts with lines, grouped by start from plan; `mock.js` flattens them) and `script`: timed steps (`after_s`) that replay as stream messages, with task steps as patches
 merged into the current card. `mock.js` keeps its own detail in step with them. The fixture covers every column, a
 task restarted at plan, repeats, a held task with its cause, landed tasks and one long feed.

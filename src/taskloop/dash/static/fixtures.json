@@ -2169,5 +2169,784 @@
     "text": "Landed as a squash on main. Closed locally, not synced (bd dolt push shares it)."
    }
   ]
- }
+ },
+ "rounds": [
+  {
+   "ago_s": 40000,
+   "task": "tl-3d1",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 39900,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 37000,
+   "task": "tl-3d1",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 36400,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 34000,
+   "task": "tl-3d1",
+   "move": "advance",
+   "words": [
+    "step=checks",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 33830,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=1",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 31000,
+   "task": "tl-3d1",
+   "move": "repeat",
+   "words": [
+    "step=checks",
+    "attempt=2"
+   ]
+  },
+  {
+   "ago_s": 30830,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=2",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 28000,
+   "task": "tl-3d1",
+   "move": "repeat",
+   "words": [
+    "step=checks",
+    "attempt=3"
+   ]
+  },
+  {
+   "ago_s": 27830,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=3",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 26000,
+   "task": "tl-5a8",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 25890,
+   "task": "tl-5a8",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 25000,
+   "task": "tl-5a8",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 25000,
+   "task": "tl-3d1",
+   "move": "advance",
+   "words": [
+    "step=plan",
+    "attempt=2"
+   ]
+  },
+  {
+   "ago_s": 24900,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=2",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 23200,
+   "task": "tl-5a8",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=1",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 22000,
+   "task": "tl-3d1",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=2"
+   ]
+  },
+  {
+   "ago_s": 21400,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=2",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 21000,
+   "task": "tl-5a8",
+   "move": "repeat",
+   "words": [
+    "step=implement",
+    "attempt=2"
+   ]
+  },
+  {
+   "ago_s": 19200,
+   "task": "tl-5a8",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=2",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 19000,
+   "task": "tl-3d1",
+   "move": "advance",
+   "words": [
+    "step=checks",
+    "attempt=4"
+   ]
+  },
+  {
+   "ago_s": 18830,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=4",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 17000,
+   "task": "tl-7d5",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 16890,
+   "task": "tl-7d5",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 16800,
+   "task": "tl-7d5",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 16020,
+   "task": "tl-7d5",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=1",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 16000,
+   "task": "tl-3d1",
+   "move": "repeat",
+   "words": [
+    "step=checks",
+    "attempt=5"
+   ]
+  },
+  {
+   "ago_s": 15830,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=5",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 15500,
+   "task": "tl-7d5",
+   "move": "repeat",
+   "words": [
+    "step=implement",
+    "attempt=2"
+   ]
+  },
+  {
+   "ago_s": 14000,
+   "task": "tl-4c0",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 13890,
+   "task": "tl-4c0",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 13700,
+   "task": "tl-7d5",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=2",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 13500,
+   "task": "tl-4c0",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 13200,
+   "task": "tl-4c0",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 13180,
+   "task": "tl-3d1",
+   "move": "hold",
+   "words": [
+    "held",
+    "repeats_exhausted"
+   ]
+  },
+  {
+   "ago_s": 13000,
+   "task": "tl-3d1",
+   "move": "repeat",
+   "words": [
+    "step=checks",
+    "attempt=6"
+   ]
+  },
+  {
+   "ago_s": 12830,
+   "task": "tl-3d1",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=6",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 12800,
+   "task": "tl-4c0",
+   "move": "advance",
+   "words": [
+    "step=checks",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 12760,
+   "task": "tl-4c0",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=1",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 11000,
+   "task": "tl-4c0",
+   "move": "repeat",
+   "words": [
+    "step=checks",
+    "attempt=2"
+   ]
+  },
+  {
+   "ago_s": 10830,
+   "task": "tl-4c0",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=2",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 9100,
+   "task": "tl-4c0",
+   "move": "advance",
+   "words": [
+    "step=land",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 9100,
+   "task": "tl-4c0",
+   "move": "land",
+   "words": [
+    "landed",
+    "closed_locally"
+   ]
+  },
+  {
+   "ago_s": 9030,
+   "task": "tl-4c0",
+   "move": "report",
+   "words": [
+    "step=land",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 8000,
+   "task": "tl-5b9",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 7890,
+   "task": "tl-5b9",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 7600,
+   "task": "tl-5b9",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 7200,
+   "task": "tl-5a8",
+   "move": "repeat",
+   "words": [
+    "step=implement",
+    "attempt=3"
+   ]
+  },
+  {
+   "ago_s": 7200,
+   "task": "tl-7d5",
+   "move": "report",
+   "words": [
+    "restart_at_plan",
+    "protected_config"
+   ]
+  },
+  {
+   "ago_s": 6700,
+   "task": "tl-5b9",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 6000,
+   "task": "tl-7d5",
+   "move": "advance",
+   "words": [
+    "step=plan",
+    "attempt=2"
+   ]
+  },
+  {
+   "ago_s": 6000,
+   "task": "tl-5b9",
+   "move": "advance",
+   "words": [
+    "step=checks",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 5905,
+   "task": "tl-7d5",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=2",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 5820,
+   "task": "tl-5b9",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 5400,
+   "task": "tl-5a8",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=3",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 5400,
+   "task": "tl-5a8",
+   "move": "hold",
+   "words": [
+    "held",
+    "repeats_exhausted"
+   ]
+  },
+  {
+   "ago_s": 3600,
+   "task": "tl-6e6",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 3490,
+   "task": "tl-6e6",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 3300,
+   "task": "tl-6e6",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 3000,
+   "task": "tl-6e6",
+   "move": "advance",
+   "words": [
+    "step=checks",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 2880,
+   "task": "tl-6e6",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 2810,
+   "task": "tl-6e6",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=1",
+    "failed"
+   ]
+  },
+  {
+   "ago_s": 2700,
+   "task": "tl-5b9",
+   "move": "advance",
+   "words": [
+    "step=land",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 2700,
+   "task": "tl-5b9",
+   "move": "land",
+   "words": [
+    "landed",
+    "closed_locally"
+   ]
+  },
+  {
+   "ago_s": 2640,
+   "task": "tl-5b9",
+   "move": "report",
+   "words": [
+    "step=land",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 2400,
+   "task": "tl-6f7",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 2290,
+   "task": "tl-6f7",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 2200,
+   "task": "tl-6f7",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 1700,
+   "task": "tl-7c4",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 1700,
+   "task": "tl-6f7",
+   "move": "report",
+   "words": [
+    "step=implement",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 1590,
+   "task": "tl-7c4",
+   "move": "report",
+   "words": [
+    "step=plan",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 1500,
+   "task": "tl-6f7",
+   "move": "advance",
+   "words": [
+    "step=checks",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 1425,
+   "task": "tl-7c4",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 1350,
+   "task": "tl-6f7",
+   "move": "report",
+   "words": [
+    "step=checks",
+    "attempt=1",
+    "succeeded"
+   ]
+  },
+  {
+   "ago_s": 1200,
+   "task": null,
+   "move": "report",
+   "words": [
+    "no_free_slot"
+   ]
+  },
+  {
+   "ago_s": 900,
+   "task": "tl-9a1",
+   "move": "skip",
+   "words": [
+    "paused"
+   ]
+  },
+  {
+   "ago_s": 880,
+   "task": null,
+   "move": "report",
+   "words": [
+    "unusable:s4:dirty"
+   ]
+  },
+  {
+   "ago_s": 410,
+   "task": "tl-7d5",
+   "move": "advance",
+   "words": [
+    "step=implement",
+    "attempt=3"
+   ]
+  },
+  {
+   "ago_s": 300,
+   "task": "tl-6f7",
+   "move": "report",
+   "words": [
+    "land",
+    "ready"
+   ]
+  },
+  {
+   "ago_s": 188,
+   "task": "tl-6e6",
+   "move": "repeat",
+   "words": [
+    "step=checks",
+    "attempt=2"
+   ]
+  },
+  {
+   "ago_s": 95,
+   "task": "tl-8f3",
+   "move": "admit",
+   "words": [
+    "step=plan",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 52,
+   "task": "tl-6f7",
+   "move": "advance",
+   "words": [
+    "step=land",
+    "attempt=1"
+   ]
+  },
+  {
+   "ago_s": 44,
+   "task": "tl-9a2",
+   "move": "skip",
+   "words": [
+    "paused"
+   ]
+  }
+ ]
 }

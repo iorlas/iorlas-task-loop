@@ -108,6 +108,14 @@ function applyFeed(d, step, n, e) {
   attempt.feed = attempt.feed.slice(-FEED_LIMIT);
 }
 
+// The round log's line for a move, as the rounds process would write it.
+function logRow(task) {
+  const base = { at: now(), backlog: "tl", task: task.id };
+  if (task.column === "held") return { ...base, move: "hold", words: ["held", "repeats_exhausted"] };
+  if (task.column === "landed") return { ...base, move: "land", words: ["landed", "closed_locally"] };
+  return { ...base, move: task.attempt > 1 ? "repeat" : "advance", words: [`step=${task.column}`, `attempt=${task.attempt}`] };
+}
+
 export async function mockSource() {
   const fx = await (await fetch("fixtures.json")).json();
   const snapshot = { generated_at: now(), slots: fx.slots, tasks: fx.tasks.map(card) };
@@ -124,6 +132,7 @@ export async function mockSource() {
   return {
     label: "mock data",
     snapshot: async () => structuredClone(snapshot),
+    logs: async () => ({ backlog: "tl", rows: fx.rounds.map(({ ago_s, ...r }) => ({ ...r, backlog: "tl", at: iso(ago_s) })) }),
     detail: async (id) => structuredClone(withDerived(detail[id])),
     subscribe(on) {
       const current = new Map(snapshot.tasks.map((t) => [t.id, t]));
@@ -140,6 +149,7 @@ export async function mockSource() {
           detail[next.id].task = next;
           current.set(next.id, next);
           on({ kind: "task", task: next });
+          on({ kind: "log", row: logRow(next) });
         }, step.after_s * 1000);
       }
     },

@@ -2,6 +2,7 @@
 // It consumes the shapes in docs/design/dashboard-ui.md. Only the mock source exists so far (mock.js).
 
 import { initDrawer, onFeed, onTaskMoved, openDrawer } from "./drawer.js";
+import { initLogs, loadLogs, onLog } from "./logs.js";
 import { mockSource } from "./mock.js";
 import { $, COLUMNS, STEPS, callout, el, quietSpan, tag, tick } from "./ui.js";
 
@@ -133,6 +134,17 @@ function setLanes(on) {
   renderBoard(first);
 }
 
+const navButton = (on) => `rounded px-2.5 py-1 text-sm font-medium ${on ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`;
+
+function showScreen(name) {
+  $("board").hidden = name !== "board";
+  $("logs").hidden = name !== "logs";
+  $("layout").hidden = name !== "board";
+  $("nav-board").className = navButton(name === "board");
+  $("nav-logs").className = navButton(name === "logs");
+  if (name === "logs") loadLogs(source);
+}
+
 function toggleTheme() {
   const root = document.documentElement;
   const dark = root.classList.contains("dark") || (!root.classList.contains("light") && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -147,6 +159,8 @@ async function start() {
     if (saved) document.documentElement.classList.add(saved);
   } catch { /* storage may be blocked */ }
   $("theme").addEventListener("click", toggleTheme);
+  $("nav-board").addEventListener("click", () => showScreen("board"));
+  $("nav-logs").addEventListener("click", () => showScreen("logs"));
   $("view-columns").addEventListener("click", () => setLanes(false));
   $("view-lanes").addEventListener("click", () => setLanes(true));
   source = await mockSource();
@@ -155,9 +169,12 @@ async function start() {
   slotNames = snap.slots;
   for (const t of snap.tasks) tasks.set(t.id, t);
   initDrawer(source, tasks);
+  initLogs(openDrawer);
   setLanes(false);
+  showScreen("board");
   source.subscribe((msg) => {
     if (msg.kind === "feed") return onFeed(msg);
+    if (msg.kind === "log") return onLog(msg.row);
     tasks.set(msg.task.id, msg.task);
     renderBoard();
     onTaskMoved(msg.task);
