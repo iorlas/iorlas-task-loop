@@ -284,8 +284,9 @@ def leftovers(
             return None
         if state.head is None or state.branch != task_branch(admission.task.task_id):  # as `settle` reports it
             return Unsettled("unborn" if state.head is None else "branch")
-        if state.head != base:
-            return None
+        if state.head != base:  # moved: the adopt rule's commit settles, else `head_moved` with the refs the agent made
+            repo = checkouts(state.root)
+            return None if _ours(repo, state.head, base, admission) else _moved(repo, state.head, base, admission)
         return refusal(checkouts(Path(admission.slot_path), git_dir=state.gitdir), files, admission, base, answer)
     found = clean_at(checkouts, files, admission, end_commit or base)
     return found if isinstance(found, Unsettled) else None

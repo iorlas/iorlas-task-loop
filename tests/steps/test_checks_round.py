@@ -19,7 +19,8 @@ from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess, ProcessObservation
 
 from taskloop import land_store
-from taskloop.admit import issued, reserve
+from taskloop.admit import issued
+from taskloop.admit_rows import reserve
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.check_release import ChecksRelease

@@ -88,10 +88,10 @@ WRITERS = {
     ("INSERT", "setup_run"): "setup_store.py",
     ("UPDATE", "setup_run"): "setup_store.py",
     ("INSERT", "slot"): "slots.py",
-    ("INSERT", "reservation"): "admit.py",
-    ("INSERT", "attempt"): "admit.py",
+    ("INSERT", "reservation"): "admit_rows.py",
+    ("INSERT", "attempt"): "admit_rows.py",
     ("UPDATE", "reservation"): "admit_chain.py",  # a repeat's takeover
-    ("UPDATE", "slot"): "admit.py",
+    ("UPDATE", "slot"): "admit_rows.py",
     ("INSERT", "slot_release"): "slot_release.py",
     ("UPDATE", "slot_release"): "slot_release.py",
     ("DELETE FROM", "reservation"): "slot_release.py",

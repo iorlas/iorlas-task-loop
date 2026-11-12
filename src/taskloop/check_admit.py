@@ -36,11 +36,11 @@ from taskloop.admit import (
     issued,
     open_store,
     read_task,
-    reserve,
     unheld,
     why,
 )
 from taskloop.admit_chain import CURRENT, Task, task_of
+from taskloop.admit_rows import reserve
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.check_status import HALF_DONE

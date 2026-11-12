@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from itertools import pairwise
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from stream_proc import OwnedProcess
 
@@ -40,6 +40,7 @@ type Next = (
             "landed", "hold", "on_hold"]
     | Stuck
 )
+SHOWN: Final = frozenset({"head_moved", "branch", "unborn"})  # leftovers `tl step show` prints though no repeat hands them back
 type Leftovers = Callable[[AttemptKey], Unsettled | None]  # read-only Git and file reads of a step still to settle
 
 
@@ -202,7 +203,8 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
              "last_command": _idle(reads, row.key) if entry == "running" else None}
     late = expired if row.phase != "captured" or result.execution is None else result.execution.facts.timed_out
     if left is None or left.reason not in REPEATABLE:
-        return AttemptView(*found, entry, result, late, next_word, row.entry, row.worker, (), *chain, **ended)
+        shown = (left.reason, *left.listing) if left is not None and left.reason in SHOWN else ()  # `head_moved`: the agent's refs
+        return AttemptView(*found, entry, result, late, next_word, row.entry, row.worker, shown, *chain, **ended)
     next_word = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
     held = AttemptResult("pending", next_word, result.execution)
     return AttemptView(*found, entry, held, late, next_word, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
