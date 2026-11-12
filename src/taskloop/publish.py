@@ -211,7 +211,7 @@ class BranchPublish:
             return _unavailable("remote", f"`{REMOTE}` could not be reached (network or credentials): rerun.")
         if isinstance(pushed, HookRejected):
             return _unavailable("git", "A hook refused the push although hooks are off: rerun.")
-        return _refused("remote_rejected", f"`{REMOTE}` refused the push by its own policy: push {x} by hand to see why.")
+        return _refused("remote_rejected", _policy(repo, branch, x))
 
     def _record(self, key: AttemptKey, x: str) -> PublishResult:
         """After `Pushed` only, one fenced transaction: the published row in, once; a lost fence records nothing (the
@@ -235,6 +235,18 @@ class BranchPublish:
         except (sqlite3.Error, StoreUnavailable) as error:
             return NotPublished("unavailable", "store", f"{type(error).__name__}: {pushed}; rerun to record it.")
         return BranchPublished(x, x)
+
+
+def _policy(repo: Repo, branch: str, x: str) -> str:
+    """Why `origin` refused a push that is not a stale tip: a ref name collision (a branch under `<branch>/`, or a branch
+    named `task`, which Git cannot hold beside it) is named; else the remote's own policy."""
+    try:
+        clash = [ref.name for ref in repo.ls_remote(REMOTE, [f"refs/heads/{branch}/*", "refs/heads/task"])]
+    except GitUnavailable:
+        clash: list[str] = []
+    if clash:
+        return f"`{REMOTE}` holds {', '.join(clash)}, which cannot exist beside {branch} (a ref name collision): rename or delete it."
+    return f"`{REMOTE}` refused the push by its own policy: push {x} by hand to see why."
 
 
 def _rejected(repo: Repo, branch: str, x: str) -> NotPublished:

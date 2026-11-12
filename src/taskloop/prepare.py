@@ -22,10 +22,10 @@ from typing import Final, Literal
 
 from git_porcelain import BranchHeld, GitUnavailable, MissingRevision, Repo
 
-from taskloop.attempt_types import AttemptRecord, AttemptResult, Checkouts, SlotFiles
+from taskloop.attempt_types import TRAILER, AttemptRecord, AttemptResult, Checkouts, SlotFiles
 from taskloop.slot_state import SlotState, observe_slot, pointer, staged
 
-type BranchRefusal = Literal["branch_name", "branch_held", "branch_diverged", "target"]
+type BranchRefusal = Literal["branch_name", "branch_held", "branch_diverged", "branch_unpublished", "target"]
 MAIN: Final = "refs/heads/main"  # the target (O1: the person's local `main`): a new task branch starts at its tip, checks read it
 HEADS: Final = "refs/heads/task"
 REMOTES: Final = "refs/remotes/origin/task"
@@ -68,11 +68,19 @@ def _clash(names: Sequence[str], task_id: str) -> bool:
     return bool(twin) or any(name == HEADS or name.startswith(ours + "/") for name in names)
 
 
+def _foreign_unpublished(repo: Repo, local: str, seen: str) -> bool:
+    """A commit on the local branch that `seen` (origin's tip, else `main`) lacks and that no factory attempt made (no
+    `TRAILER` line): the person's own work, which a publish would push. The factory's own unpublished commits (an abandoned
+    attempt's X) are resumed."""
+    return any(not any(line.startswith(f"{TRAILER}:") for line in each.body.splitlines()) for each in repo.history([local], not_on=[seen]))
+
+
 def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefusal | Branch:
     """The one branch rule, in order: the name (no Git), one refs read (`branch_name` on a conflict), the worktree
     listing (`branch_held` when any worktree is on the branch), then history: each given head D passes when the local
     tip and the local remote-tracking tip, where present, both contain it, or, with neither, when `main`'s tip (where a
-    new branch starts) contains it (`branch_diverged` when none does; `target` when a new branch has no `main`)."""
+    new branch starts) contains it (`branch_diverged` when none does; `target` when a new branch has no `main`). An existing local
+    branch with commits beyond its remote-tracking tip (else beyond `main`) is `branch_unpublished`: a publish would push them."""
     if not named(task_id):
         return "branch_name"
     found = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES, MAIN])}
@@ -86,7 +94,10 @@ def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefu
     if not tips:
         return "target"
     passing = tuple(head for head in heads if all(repo.is_ancestor(head, tip) for tip in tips))
-    return "branch_diverged" if heads and not passing else Branch(passing, local, remote, tips[0])
+    if heads and not passing:
+        return "branch_diverged"
+    unpublished = local is not None and _foreign_unpublished(repo, local, remote or target or local)
+    return "branch_unpublished" if unpublished else Branch(passing, local, remote, tips[0])
 
 
 DIVERGED: Final = (
@@ -96,6 +107,13 @@ DIVERGED: Final = (
     "old/task/{task}`) or delete it. Only origin's remote-tracking ref: delete the branch on origin (`git push origin "
     "--delete task/{task}`), or drop the local ref (`git update-ref -d refs/remotes/origin/task/{task}`) and do not fetch "
     "it again."
+)
+
+
+UNPUBLISHED: Final = (
+    "The local task/{task} has commits that are not on origin (`git log --oneline main..task/{task}` or `git log "
+    "--oneline origin/task/{task}..task/{task}` lists them) and a publish would push them: rename the branch (`git branch -m "
+    "task/{task} old/task/{task}`) or delete it, or push it by hand, then start again."
 )
 
 

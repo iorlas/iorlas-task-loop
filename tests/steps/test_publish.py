@@ -383,3 +383,15 @@ def test_two_publishers_at_once_record_one_row(
     repo.during = other
     outer = publisher(registered, checkouts, slot_files).publish(KEY)
     assert inner == [BranchPublished(x, x)] and outer == PublishedRow(x, x, 40.0) and len(rows(registered)) == 1
+
+
+def test_a_ref_name_collision_on_origin_is_named_not_reported_as_the_remotes_policy(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    slot_files: SlotFiles,
+) -> None:
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    remote.advance("task/tl-1/x", {"other.md": "unrelated"})
+    repo.answer = RemoteRejected("! [remote rejected] task/tl-1 (cannot lock ref)")
+    found = publisher(registered, checkouts, slot_files).publish(KEY)
+    assert isinstance(found, NotPublished) and (found.kind, found.reason) == ("refused", "remote_rejected")
+    assert "refs/heads/task/tl-1/x" in found.detail and "ref name collision" in found.detail and "policy" not in found.detail

@@ -84,7 +84,7 @@ def test_the_factory_commit_runs_no_hook_carries_the_trailer_and_leaves_the_slot
     assert list(markers.iterdir()) == []  # neither --no-verify's two nor the four it leaves running
     assert git(slot, "log", "-1", "--format=%B").strip() == "Plan tl-1\n\nTask-Loop-Attempt: attempt"
     assert git(slot, "rev-parse", "HEAD^").strip() == base and git(slot, "status", "--porcelain").strip() == ""
-    assert git(slot, "log", "-1", "--format=%an <%ae>").strip() == "Person <person@example.invalid>"
+    assert git(slot, "log", "-1", "--format=%an <%ae>").strip() == "task-loop <task-loop@localhost>"  # not the repository's
 
 
 def test_a_symlinked_listed_path_is_unsafe_and_nothing_is_staged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
