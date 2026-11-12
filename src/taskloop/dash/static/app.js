@@ -3,7 +3,7 @@
 
 import { initDrawer, onFeed, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
-import { mockSource } from "./mock.js";
+import { apiSource } from "./api.js";
 import { $, COLUMNS, STEPS, callout, el, quietSpan, tag, tick } from "./ui.js";
 
 const tasks = new Map(); // id -> board card
@@ -145,6 +145,15 @@ function showScreen(name) {
   if (name === "logs") loadLogs(source);
 }
 
+// After a reconnect the stream may have missed moves: load the board again and drop cards that are gone.
+async function resync() {
+  const snap = await source.snapshot();
+  const ids = new Set(snap.tasks.map((t) => t.id));
+  for (const [id, node] of cards) if (!ids.has(id)) { node.remove(); cards.delete(id); tasks.delete(id); }
+  for (const t of snap.tasks) tasks.set(t.id, t);
+  renderBoard();
+}
+
 function toggleTheme() {
   const root = document.documentElement;
   const dark = root.classList.contains("dark") || (!root.classList.contains("light") && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -163,7 +172,7 @@ async function start() {
   $("nav-logs").addEventListener("click", () => showScreen("logs"));
   $("view-columns").addEventListener("click", () => setLanes(false));
   $("view-lanes").addEventListener("click", () => setLanes(true));
-  source = await mockSource();
+  source = apiSource();
   $("mode").replaceChildren(tag(source.label, { dotCls: "bg-amber-500", cls: "text-amber-800 dark:text-amber-300" }));
   const snap = await source.snapshot();
   slotNames = snap.slots;
@@ -172,7 +181,8 @@ async function start() {
   initLogs(openDrawer);
   setLanes(false);
   showScreen("board");
-  source.subscribe((msg) => {
+  source.subscribe(async (msg) => {
+    if (msg.kind === "resync") return resync();
     if (msg.kind === "feed") return onFeed(msg);
     if (msg.kind === "log") return onLog(msg.row);
     tasks.set(msg.task.id, msg.task);
