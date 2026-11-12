@@ -146,4 +146,4 @@ the named attempt's lines. The page loads the snapshot first, then the stream, a
 `fixtures.json` holds `tasks` (ages as `*_ago_s` seconds so the data never goes stale), `slots`, `history` (per task: stages of
 attempts with lines, grouped by start from plan; `mock.js` flattens them) and `script`: timed steps (`after_s`) that replay as stream messages, with task steps as patches
 merged into the current card. `mock.js` keeps its own detail in step with them. The fixture covers every column, a
-task restarted at plan (two tabs), repeats, a held task with its cause, landed tasks and one long feed.
+task restarted at plan, repeats, a held task with its cause, landed tasks and one long feed.
