@@ -16,22 +16,29 @@ below. Terms: [dashboard, board, live tail](../glossary.md). This is separate fr
 - A card shows task id and title, attempt number, a *repeat* or *restarted at plan* badge with its reason, time in the
   current step, slot, and the hold cause. A card that changes column animates to its new place.
 - Clicking a card opens a wide drawer (see below): task fields, then the task's history, then the lines of one attempt.
-- The drawer is a master and a detail. Top: id, title, one line of facts (column, slot, priority, task branch, created),
-  the description and, for a held task, the hold cause. Left, the **attempt rail**: every attempt of the task in the
-  order it happened, one aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
+- The drawer has three top-level tabs: **Attempts** (below), **Task** (the task as the tracker holds it, complete:
+  description, acceptance criteria, design, notes, labels, priority, claim, dependencies, dates) and **Comments** (the
+  tracker's discussion: the factory's hold and landing comments and the person's answers, oldest first). Above the tabs:
+  id, a badge for where the task is on the board with one sentence of what that means (hover help on each column header
+  says the same: *Held* is the glossary's hold, the factory will not advance the task until a person acts), the title,
+  one line of facts (slot, priority, task branch, created) and, for a held task, the hold cause.
+- The Attempts tab is a master and a detail. Left, the **attempt rail**: every attempt of the task, **newest first** so
+  the running attempt is what the drawer shows on opening (Lines still follow the tail: new lines at the bottom), one
+  aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
   jump names how the next attempt began: `↻ Repeat` (the same step again) or `↩ Back to plan` (restarted at plan, D4)
-  with its reason when that adds something. Steps still to come are dim. A task with ten attempts is ten rows and the
-  rail scrolls. Right, the selected attempt, in three tabs:
+  with its reason when that adds something; the label sits under the attempt it began. Steps still to come are dim rows
+  above the newest. A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
   - **Lines**: the log grid (below). Opens first for a running attempt.
   - **Result**: the conclusion, the agent's answer (disposition and text) and for checks each check's result with its
     full output (a failed check shows its output at once). Opens first for an ended attempt.
   - **Prompt**: exactly what the agent was told in that attempt, repeat feedback included; a step that runs commands
     (checks, land) has none. The chosen tab stays when another attempt is selected, so prompts can be compared.
   An attempt that began as a jump also shows why, naming the attempt it follows ("Repeat of Checks #5").
-- Design language: no emoji in the page chrome. A state is a coloured dot and a word, a badge is one outlined label, a
+- Design language: emoji only as step and column icons (Plan, Implement, Checks, Land, Held, Landed), never for state
+  or log lines. A state is a coloured dot and a word, a badge is one outlined label, a
   reason is a callout (one accent line, no fill: amber repeat, violet back to plan, rose held or failed, sky running,
   green succeeded), numbers are tabular and right-aligned, colour means status only. The first mocks used emoji for
-  everything and read as noise.
+  everything and read as noise; the owner accepts a few.
 - Header: id, title, then the facts line, the description and, for a held task, the cause.
 - **Quiet**: a running step that has produced no line for 2 minutes shows `Quiet 5m 40s` (amber; red from 15 minutes)
   on its card, with a coloured card border, and in the drawer. Any new line resets it. Display only, from the time of
@@ -109,7 +116,9 @@ event. `slot` is `null` when the task holds none. `hold_cause` is the sentence t
 {
   "task": <card>,
   "fields": {"priority": "P1", "labels": ["auto"], "branch": "task/tl-7d5", "claimed_by": "factory@devbox",
-             "created_at": "...", "description": "..."},
+             "created_at": "...", "updated_at": "...", "depends_on": ["tl-6e6"],
+             "description": "...", "acceptance": "...", "design": "...", "notes": "..."},
+  "comments": [{"author": "factory", "at": "...", "text": "..."}],
   "attempts": [
     {"step": "implement", "n": 2, "state": "failed", "started_at": "...", "ended_at": "...",
      "summary": "failed: deadline exceeded after 30m",
@@ -130,7 +139,8 @@ while running. `after` says how the attempt began: `null` (the previous step suc
 with the `reason` the engine recorded. `input` is the prompt text the agent was given (`null` for a step that runs commands). `result.answer` is the
 agent's answer (`null` before it ends or for checks and land); `result.checks` are the check results of a checks attempt
 with the full output of each failed one; `result.output` is any other failure output, such as a stopped command's.
-`feed` is the last 20 lines of that attempt, oldest first. Lines, prompt and outputs are read behind the evidence reader;
+`feed` is the last 20 lines of that attempt, oldest first. `fields` and `comments` are the tracker's, shown as given (empty
+text is omitted from the page); `comments` are oldest first. Lines, prompt and outputs are read behind the evidence reader;
 all of it is display only, never control state.
 
 ### Live event

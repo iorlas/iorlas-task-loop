@@ -1,13 +1,13 @@
 // Shared constants and small DOM helpers for the dashboard page.
 
 export const COLUMNS = [
-  { id: "waiting", label: "Ready", dot: "bg-slate-400" },
-  { id: "plan", label: "Plan", dot: "bg-slate-400" },
-  { id: "implement", label: "Implement", dot: "bg-slate-400" },
-  { id: "checks", label: "Checks", dot: "bg-slate-400" },
-  { id: "land", label: "Land", dot: "bg-slate-400" },
-  { id: "held", label: "Held", dot: "bg-rose-500" },
-  { id: "landed", label: "Landed", dot: "bg-emerald-500" },
+  { id: "waiting", label: "Ready", emoji: "⏳", help: "Approved by the person and not yet admitted to a slot." },
+  { id: "plan", label: "Plan", emoji: "🧭", help: "A plan attempt is running in a slot." },
+  { id: "implement", label: "Implement", emoji: "🛠️", help: "An implement attempt is running in a slot." },
+  { id: "checks", label: "Checks", emoji: "🧪", help: "A checks attempt is running the profile's checks." },
+  { id: "land", label: "Land", emoji: "🚀", help: "The land is delivering the checked change to main." },
+  { id: "held", label: "Held", emoji: "⛔", help: "The factory will not advance this task until a person acts. The hold cause says what to do." },
+  { id: "landed", label: "Landed", emoji: "✅", help: "Delivered to main and closed." },
 ];
 export const STEPS = COLUMNS.slice(1, 5);
 export const STATE = {

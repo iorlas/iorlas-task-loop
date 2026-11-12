@@ -116,7 +116,8 @@ export async function mockSource() {
     const { created_ago_s, ...fields } = t.fields;
     detail[t.id] = {
       task: card(t),
-      fields: { ...fields, created_at: iso(created_ago_s) },
+      fields: { ...fields, created_at: iso(created_ago_s), updated_at: iso(fields.updated_ago_s) },
+      comments: (fx.comments[t.id] || []).map(({ ago_s, ...c }) => ({ ...c, at: iso(ago_s) })),
       attempts: fx.history[t.id] ? buildAttempts(fx.history[t.id]) : plainAttempts(t),
     };
   }

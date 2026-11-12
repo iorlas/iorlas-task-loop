@@ -3,7 +3,7 @@
 
 import { initDrawer, onFeed, onTaskMoved, openDrawer } from "./drawer.js";
 import { mockSource } from "./mock.js";
-import { $, COLUMNS, STEPS, callout, dot, el, quietSpan, tag, tick } from "./ui.js";
+import { $, COLUMNS, STEPS, callout, el, quietSpan, tag, tick } from "./ui.js";
 
 const tasks = new Map(); // id -> board card
 const cards = new Map(); // id -> element
@@ -30,8 +30,9 @@ function buildBoard() {
   if (lanes) board.append(el("div", sticky));
   for (const col of COLUMNS) {
     const head = el("div", `${sticky} flex items-center gap-2 px-1 pb-2`);
+    head.title = col.help;
     const count = el("span", "ml-auto text-xs tabular-nums text-slate-400 dark:text-slate-500", "0");
-    head.append(dot(col.dot), el("h2", "text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300", col.label), count);
+    head.append(el("span", "text-sm", col.emoji), el("h2", "text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300", col.label), count);
     board.append(head);
     columnHeads.set(col.id, count);
   }

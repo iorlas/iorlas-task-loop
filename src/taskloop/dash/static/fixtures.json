@@ -19,7 +19,12 @@
     "branch": null,
     "claimed_by": null,
     "created_ago_s": 86400,
-    "description": "`tl step list` prints a table only. Add `--json` with the same fields, one object per task, so scripts need no text parsing."
+    "description": "`tl step list` prints a table only. Add `--json` with the same fields, one object per task, so scripts need no text parsing.",
+    "acceptance": "- `tl step list --json` prints one object per task.\n- The fields match the table columns.\n- The table output is unchanged without the flag.",
+    "design": "Reuse the status renderer's data and add a JSON encoder next to the table encoder. No new module.",
+    "notes": "",
+    "depends_on": [],
+    "updated_ago_s": 1260
    }
   },
   {
@@ -40,7 +45,12 @@
     "branch": null,
     "claimed_by": null,
     "created_ago_s": 50000,
-    "description": "An empty title reaches the plan step and fails there. Refuse it at admission with a clear reason."
+    "description": "An empty title reaches the plan step and fails there. Refuse it at admission with a clear reason.",
+    "acceptance": "- An empty or whitespace title is refused at admission.\n- The refusal names the task and says why.",
+    "design": "Check in the admission validation, before any slot is reserved.",
+    "notes": "",
+    "depends_on": [],
+    "updated_ago_s": 640
    }
   },
   {
@@ -61,7 +71,12 @@
     "branch": "task/tl-8f3",
     "claimed_by": "factory@devbox",
     "created_ago_s": 7200,
-    "description": "Every `skip` in a round should say why in one line, naming the task and the cause."
+    "description": "Every `skip` in a round should say why in one line, naming the task and the cause.",
+    "acceptance": "- Every `skip` line names the task and the cause.\n- No new log file.",
+    "design": "One helper formats every skip move; rounds call it.",
+    "notes": "Plan step: keep the diff small.",
+    "depends_on": [],
+    "updated_ago_s": 1320
    }
   },
   {
@@ -83,7 +98,12 @@
     "branch": "task/tl-7c4",
     "claimed_by": "factory@devbox",
     "created_ago_s": 18000,
-    "description": "The deadline of the running attempt is stored but not shown. Print it as an absolute time and the minutes left."
+    "description": "The deadline of the running attempt is stored but not shown. Print it as an absolute time and the minutes left.",
+    "acceptance": "- `tl step show` prints the deadline as an absolute time and the minutes left.\n- A past deadline prints `expired`.\n- One focused test.",
+    "design": "The deadline is already in the attempt row. Format it in the status renderer only.",
+    "notes": "",
+    "depends_on": [],
+    "updated_ago_s": 2
    }
   },
   {
@@ -108,7 +128,14 @@
     "branch": "task/tl-7d5",
     "claimed_by": "factory@devbox",
     "created_ago_s": 172800,
-    "description": "A relaunched entry loses its lease renewal. Carry the lease through relaunch without a new claim."
+    "description": "A relaunched entry loses its lease renewal. Carry the lease through relaunch without a new claim.",
+    "acceptance": "- A relaunched entry keeps its lease renewal.\n- No new claim is taken on relaunch.\n- A test covers relaunch of an admitted attempt.",
+    "design": "Carry the lease object through `relaunch` instead of re-reading the claim. The change stays in entry code; check configuration is untouched.",
+    "notes": "Attempt 1 produced no diff; attempt 2 touched justfile and was rejected at plan.",
+    "depends_on": [
+     "tl-6e6"
+    ],
+    "updated_ago_s": 9
    }
   },
   {
@@ -132,7 +159,12 @@
     "branch": "task/tl-6e6",
     "claimed_by": "factory@devbox",
     "created_ago_s": 40000,
-    "description": "A hold reason names the task but not the slot it ran in. Add the slot name."
+    "description": "A hold reason names the task but not the slot it ran in. Add the slot name.",
+    "acceptance": "- A hold reason names the task and the slot.\n- Existing hold text tests pass.",
+    "design": "Pass the slot name into the hold text builder.",
+    "notes": "",
+    "depends_on": [],
+    "updated_ago_s": 14
    }
   },
   {
@@ -154,7 +186,12 @@
     "branch": "task/tl-6f7",
     "claimed_by": "factory@devbox",
     "created_ago_s": 9000,
-    "description": "Table columns carry trailing spaces that break copy and paste."
+    "description": "Table columns carry trailing spaces that break copy and paste.",
+    "acceptance": "- No trailing space in any table column.",
+    "design": "Strip in the one row formatter.",
+    "notes": "",
+    "depends_on": [],
+    "updated_ago_s": 340
    }
   },
   {
@@ -178,7 +215,12 @@
     "branch": "task/tl-5a8",
     "claimed_by": null,
     "created_ago_s": 260000,
-    "description": "A pass should be reusable when the checked diff is byte-identical."
+    "description": "A pass should be reusable when the checked diff is byte-identical.",
+    "acceptance": "- A stored pass is reused when the checked diff is byte-identical.\n- A different diff never reuses a pass.",
+    "design": "Key the pass on a digest of the diff; look it up before running a check.",
+    "notes": "Three implement attempts ran into the 30 minute deadline running the whole suite.",
+    "depends_on": [],
+    "updated_ago_s": 5400
    }
   },
   {
@@ -200,7 +242,12 @@
     "branch": "task/tl-5b9",
     "claimed_by": null,
     "created_ago_s": 30000,
-    "description": "List changed check configuration files in the land summary."
+    "description": "List changed check configuration files in the land summary.",
+    "acceptance": "- The land summary lists changed check configuration files.",
+    "design": "Reuse the changed-files list the land already computes.",
+    "notes": "",
+    "depends_on": [],
+    "updated_ago_s": 2700
    }
   },
   {
@@ -224,7 +271,12 @@
     "branch": "task/tl-4c0",
     "claimed_by": null,
     "created_ago_s": 120000,
-    "description": "The message blamed the network when the clock was ahead."
+    "description": "The message blamed the network when the clock was ahead.",
+    "acceptance": "- The lease message names clock skew when the clock is ahead.",
+    "design": "Compare local and tracker time before choosing the message.",
+    "notes": "",
+    "depends_on": [],
+    "updated_ago_s": 9100
    }
   },
   {
@@ -248,7 +300,12 @@
     "branch": "task/tl-3d1",
     "claimed_by": null,
     "created_ago_s": 90000,
-    "description": "Round log lines come out in dictionary order. Sort them by task id so two rounds on the same state print the same lines."
+    "description": "Round log lines come out in dictionary order. Sort them by task id so two rounds on the same state print the same lines.",
+    "acceptance": "- Round log lines are sorted by task id.\n- Two rounds on the same state print the same lines.\n- Types check cleanly.",
+    "design": "Sort once in the log writer, not in each move.",
+    "notes": "Six checks attempts failed on types in two starts from plan.",
+    "depends_on": [],
+    "updated_ago_s": 13180
    }
   }
  ],
@@ -2053,5 +2110,64 @@
   "s3",
   "s4",
   "s5"
- ]
+ ],
+ "comments": {
+  "tl-9a1": [
+   {
+    "ago_s": 80000,
+    "author": "denis",
+    "text": "Keep the column names the same as the table so scripts can switch."
+   }
+  ],
+  "tl-7d5": [
+   {
+    "ago_s": 15000,
+    "author": "factory",
+    "text": "Plan admitted. Implement attempt 1 ended without a diff."
+   },
+   {
+    "ago_s": 6200,
+    "author": "factory",
+    "text": "Plan rejected: the change touches protected check configuration. The task restarts at plan."
+   },
+   {
+    "ago_s": 6000,
+    "author": "denis",
+    "text": "Keep it out of justfile. The lease fix belongs in the entry code only."
+   }
+  ],
+  "tl-5a8": [
+   {
+    "ago_s": 26000,
+    "author": "factory",
+    "text": "Plan admitted."
+   },
+   {
+    "ago_s": 5500,
+    "author": "factory",
+    "text": "Held: repeats_exhausted. Three implement attempts failed at the 30 minute deadline. Edit the task to narrow it, then add `auto` again."
+   }
+  ],
+  "tl-3d1": [
+   {
+    "ago_s": 3000,
+    "author": "factory",
+    "text": "Held: repeats_exhausted. Checks failed three times after a restart at plan. Narrow the task, then add `auto` again."
+   }
+  ],
+  "tl-5b9": [
+   {
+    "ago_s": 2700,
+    "author": "factory",
+    "text": "Landed as a squash on main. Closed locally, not synced (bd dolt push shares it)."
+   }
+  ],
+  "tl-4c0": [
+   {
+    "ago_s": 9100,
+    "author": "factory",
+    "text": "Landed as a squash on main. Closed locally, not synced (bd dolt push shares it)."
+   }
+  ]
+ }
 }

@@ -27,7 +27,7 @@ function select(step, n) {
 }
 
 export async function openDrawer(id) {
-  open = { id, detail: await source.detail(id), tab: null };
+  open = { id, detail: await source.detail(id), tab: null, view: null };
   select();
   $("drawer").classList.remove("translate-x-full");
   $("backdrop").classList.remove("pointer-events-none", "opacity-0");
@@ -39,38 +39,53 @@ export function closeDrawer() {
   $("backdrop").classList.add("pointer-events-none", "opacity-0");
 }
 
+const VIEWS = [["attempts", "Attempts"], ["task", "Task"], ["comments", "Comments"]];
+
 function render() {
   if (!open) return;
   const { detail } = open;
   const t = tasks.get(open.id) || detail.task;
   const col = COLUMNS.find((c) => c.id === t.column);
-  const f = detail.fields;
+  const view = open.view ?? (detail.attempts.length ? "attempts" : "task");
   const drawer = $("drawer");
   drawer.replaceChildren();
 
-  const head = el("header", "flex items-start gap-4 border-b border-slate-200 px-6 py-4 dark:border-slate-800");
+  const head = el("header", "flex items-start gap-4 px-6 pb-3 pt-5");
   const title = el("div", "min-w-0 flex-1");
+  const status = el("div", "flex items-center gap-2");
+  status.append(el("span", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), tag(`${col.emoji} ${col.label}`, { cls: "text-slate-700 dark:text-slate-200" }), el("span", "truncate text-xs text-slate-500 dark:text-slate-400", col.help));
   const facts = el("dl", "mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs");
-  for (const [k, v] of [["Column", col.label], ["Slot", t.slot], ["Priority", f.priority], ["Task branch", f.branch], ["Created", ago(f.created_at)]]) {
+  for (const [k, v] of [["Slot", t.slot], ["Priority", detail.fields.priority], ["Task branch", detail.fields.branch], ["Created", ago(detail.fields.created_at)]]) {
     const item = el("div", "flex gap-1.5");
     item.append(el("dt", "text-slate-500 dark:text-slate-400", k), el("dd", "font-medium", v ?? "none"));
     facts.append(item);
   }
-  title.append(el("p", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), el("h2", "mt-0.5 text-lg font-semibold leading-snug", t.title), facts);
+  title.append(status, el("h2", "mt-1.5 text-lg font-semibold leading-snug", t.title), facts);
   const close = el("button", "rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", "Close");
   close.type = "button";
   close.addEventListener("click", closeDrawer);
   head.append(title, close);
   drawer.append(head);
-
-  const notes = el("div", "flex flex-col gap-3 border-b border-slate-200 px-6 py-3 dark:border-slate-800");
-  notes.append(el("p", "line-clamp-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300", f.description));
-  if (t.hold_cause) notes.append(callout("border-rose-500", "Held", t.hold_cause));
-  drawer.append(notes);
-  if (!detail.attempts.length) {
-    drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
-    return;
+  if (t.hold_cause) {
+    const hold = el("div", "px-6 pb-3");
+    hold.append(callout("border-rose-500", "Held", t.hold_cause));
+    drawer.append(hold);
   }
+
+  const bar = el("div", "flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
+  const counts = { attempts: detail.attempts.length, comments: detail.comments.length };
+  for (const [id, label] of VIEWS) {
+    const on = id === view;
+    const b = el("button", `-mb-px border-b-2 pb-2 text-sm ${on ? "border-slate-900 font-semibold dark:border-slate-100" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`, counts[id] ? `${label} ${counts[id]}` : label);
+    b.type = "button";
+    b.addEventListener("click", () => { open.view = id; render(); });
+    bar.append(b);
+  }
+  drawer.append(bar);
+
+  if (view === "task") return drawer.append(taskView(detail.fields));
+  if (view === "comments") return drawer.append(commentsView(detail.comments));
+  if (!detail.attempts.length) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
   const body = el("div", "flex min-h-0 flex-1");
   body.append(rail(t), pane());
   drawer.append(body);
@@ -79,24 +94,61 @@ function render() {
   if (tail) tail.scrollTop = tail.scrollHeight;
 }
 
+// ---------- the task as the tracker holds it ----------
+
+const prose = (text) => el("div", "whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-slate-200", text);
+const section = (title, text) => {
+  const node = el("section");
+  node.append(el("h4", "mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500", title), prose(text));
+  return node;
+};
+
+function taskView(f) {
+  const box = el("div", "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5");
+  const props = el("dl", "grid grid-cols-3 gap-x-6 gap-y-3 text-xs");
+  for (const [k, v] of [["Priority", f.priority], ["Labels", f.labels.join(", ")], ["Task branch", f.branch], ["Claim", f.claimed_by], ["Created", ago(f.created_at)], ["Updated", ago(f.updated_at)], ["Depends on", f.depends_on.join(", ")]]) {
+    const item = el("div", "min-w-0");
+    item.append(el("dt", "text-slate-500 dark:text-slate-400", k), el("dd", "mt-0.5 truncate font-medium", v || "none"));
+    props.append(item);
+  }
+  box.append(props, section("Description", f.description));
+  for (const [title, text] of [["Acceptance criteria", f.acceptance], ["Design", f.design], ["Notes", f.notes]]) if (text) box.append(section(title, text));
+  return box;
+}
+
+function commentsView(comments) {
+  const box = el("div", "flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5");
+  if (!comments.length) box.append(el("p", "text-sm text-slate-500", "No comments on this task."));
+  for (const c of comments) {
+    const item = el("article", "border-l-2 border-slate-200 pl-3 dark:border-slate-700");
+    const who = el("div", "mb-1 flex items-center gap-2 text-xs");
+    who.append(tag(c.author, { cls: c.author === "factory" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-200" }), el("span", "text-slate-500 dark:text-slate-400", ago(c.at)));
+    item.append(who, prose(c.text));
+    box.append(item);
+  }
+  return box;
+}
+
 // ---------- rail ----------
 
+// Newest first, so the attempt that is running now is at the top when the drawer opens. A jump label sits under the
+// attempt it began, between it and the one before; steps still to come are dim rows above.
 function rail(t) {
   const list = open.detail.attempts;
   const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
-  wrap.append(el("h3", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", `Attempts · ${list.length}`));
+  wrap.append(el("h3", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", `Attempts · ${list.length} · newest first`));
   const ol = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700");
-  list.forEach((a, i) => {
-    if (a.after) ol.append(jump(a, list[i - 1]));
-    ol.append(railRow(a));
-  });
   const last = list.at(-1);
   if (STEPS.some((s) => s.id === t.column) && last.state !== "failed") {
-    for (const s of STEPS.slice(STEPS.findIndex((x) => x.id === last.step) + 1)) {
+    for (const s of STEPS.slice(STEPS.findIndex((x) => x.id === last.step) + 1).reverse()) {
       const li = el("li", "relative py-1.5 pl-4 text-[13px] text-slate-400 dark:text-slate-600");
-      li.append(el("span", "absolute -left-[3px] top-[0.8rem] h-1.5 w-1.5 rounded-full border border-slate-300 dark:border-slate-600"), s.label);
+      li.append(el("span", "absolute -left-[3px] top-[0.8rem] h-1.5 w-1.5 rounded-full border border-slate-300 dark:border-slate-600"), `${s.emoji} ${s.label}`);
       ol.append(li);
     }
+  }
+  for (let i = list.length - 1; i >= 0; i--) {
+    ol.append(railRow(list[i]));
+    if (list[i].after) ol.append(jump(list[i], list[i - 1]));
   }
   wrap.append(ol);
   return wrap;
@@ -123,7 +175,7 @@ function railRow(a) {
   const dur = a.ended_at ? fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at)) : since(a.started_at);
   const row = el("span", "flex items-baseline gap-2");
   row.append(
-    el("span", `text-[13px] ${selected ? "font-semibold" : "font-medium"}`, STEPS.find((s) => s.id === a.step).label),
+    el("span", `text-[13px] ${selected ? "font-semibold" : "font-medium"}`, `${STEPS.find((s) => s.id === a.step).emoji} ${STEPS.find((s) => s.id === a.step).label}`),
     el("span", "text-[11px] text-slate-500 dark:text-slate-400", `#${a.n}`),
     el("span", "ml-auto text-[11px] tabular-nums text-slate-500 dark:text-slate-400", dur),
   );
@@ -144,7 +196,7 @@ function pane() {
   const tab = tabOf(a);
   const wrap = el("section", "flex min-w-0 flex-1 flex-col");
   const head = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
-  head.append(el("h3", "text-sm font-semibold", `${STEPS.find((s) => s.id === a.step).label}, attempt ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
+  head.append(el("h3", "text-sm font-semibold", `${STEPS.find((s) => s.id === a.step).emoji} ${STEPS.find((s) => s.id === a.step).label}, attempt ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.ended_at ? `ran ${fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at))}` : "still running";
   head.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `started ${ago(a.started_at)}, ${timing}`));
   if (a.state === "running") head.append(quietSpan(a.feed.at(-1)?.at ?? a.started_at));
