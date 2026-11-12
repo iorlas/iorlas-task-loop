@@ -53,7 +53,7 @@ KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
 BEFORE_REBOOT = (7, "entry-start", "old-boot")  # registered in another boot than the bench's "boot"
 HEAD, X = "d" * 40, "x" * 40
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "effort-e", 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "high", 30)
 STAMP = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks "
 STEPPED = r"\S+ plan (start|relaunch|repeat|verify|publish|report|skip)( \S+)+"  # every attempt-bearing move names its step
 LINE = re.compile(STAMP + rf"({STEPPED}|\S+ (start|report) (refused|unavailable|claim_leaked)\S*|round( \S+)+)")
@@ -342,7 +342,7 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
     assert (moves(found), found.stopped, exit_code(found)) == (expected + ([("t-9", "start", "started")] if not stopped else []), stopped,
                                                                code)
     sent = advances.requests[0]
-    assert (sent.previous, sent.checkout, sent.model, sent.effort, sent.deadline) == (KEY, Path("/checkout"), "model-m", "effort-e", 1810)
+    assert (sent.previous, sent.checkout, sent.model, sent.effort, sent.deadline) == (KEY, Path("/checkout"), "model-m", "high", 1810)
     assert ready.ready_reads == ([] if stopped else ["auto"]) and bench.launcher.calls == ([] if stopped else ["t-9"])
     lines = len(bench.lines)
     bench.round(replace(REQUEST, quiet=found.written))

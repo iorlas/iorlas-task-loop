@@ -122,7 +122,7 @@ def test_list_shows_the_check_step_s_row_and_json(capsys: pytest.CaptureFixture[
 
 def test_a_checks_start_names_its_step(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     started = Started("already_dispatched", "tasks", "tl-1", "checks", True, result="failed:test:failed", step="check")
-    argv = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/t", "--checkout", "/c", "--model", "m", "--effort", "e",
+    argv = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/t", "--checkout", "/c", "--model", "m", "--effort", "high",
             "--minutes", "5"]
     out = run(argv, started, capsys, monkeypatch)
     assert "already_dispatched: attempt checks for tl-1 (backlog tasks)" in out and "Result: failed:test:failed" in out
@@ -169,7 +169,7 @@ def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
 def test_the_half_done_refusal_names_its_own_action_without_the_release_guide(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    argv = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/t", "--checkout", "/c", "--model", "m", "--effort", "e",
+    argv = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/t", "--checkout", "/c", "--model", "m", "--effort", "high",
             "--minutes", "5"]
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "start"), lambda _arguments, _loaded: Failed("refused", "release", HALF_DONE))
     assert main(argv) == 1

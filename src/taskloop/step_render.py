@@ -5,12 +5,12 @@ from pathlib import Path
 
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
-from taskloop.hold_guide import hold_guide
+from taskloop.hold_guide import hold_guide, pending_guide
 from taskloop.land import Landed
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.land_push import Withdrawn
 from taskloop.land_render import COMMAND, land_lines
-from taskloop.land_summary import LandSummary
+from taskloop.land_summary import LandSummary, block
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     UNCLAIMING,
@@ -45,7 +45,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
     stuck = [] if db is None else [discard(db)]
     match result:
         case Failed():
-            lines = [f"{command}: {result.word}", *([result.detail] if result.detail else [])]
+            lines = [f"{command}: {result.word}", *(block(result.detail).split("\n") if result.detail else [])]  # an echoed id is untrusted
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
             named = "`tl step release --abandon`" in result.detail  # the detail names the action (`HALF_DONE`, `UNCLAIMING`)
             lines += [] if named else _guides(result)
@@ -110,10 +110,10 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     lines += [] if result.moves or result.stopped else [f"Nothing to do in backlog {result.backlog}."]
     words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves
              if each.action in ("report", "skip", "advance")]
-    words += ["hold"] if any(each.action == "hold" and each.word.startswith("pending ") for each in result.moves) else []
+    pending = dict.fromkeys(pending_guide(each.word) for each in result.moves if each.action == "hold" and each.word.startswith("pending "))
     keys = dict.fromkeys(key for word in [*words, result.stopped] for key in (word, word.split(":")[0]) if key in GUIDE)
     leaked = [f"claim_leaked: {leaked_claim(each.task_id)}" for each in result.moves if each.word == "claim_leaked"]
-    return lines + [f"{key}: {GUIDE[key]}" for key in keys] + leaked
+    return lines + [f"{key}: {GUIDE[key]}" for key in keys] + [f"hold: {each}" for each in pending] + leaked
 
 
 def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:

@@ -5,6 +5,7 @@ import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 from any_agent import RunOutcome, Summary
@@ -17,7 +18,7 @@ from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
 
-from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo
+from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
@@ -30,7 +31,7 @@ from taskloop.git_views import GitViews
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt
-from taskloop.task import TaskBinding, TaskInspection, TaskScope
+from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import BD_DISCOVERY, tracker_claims, tracker_located
 
@@ -586,3 +587,11 @@ def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_ot
     refused = checkout_repo(missing, tmp_path / "nowhere")
     assert isinstance(refused, AdmitRefused) and refused.reason == "checkout" and str(tmp_path / "nowhere") in refused.detail
     assert isinstance(checkout_repo(broken, tmp_path), AdmitUnavailable)
+
+
+def test_a_task_the_tracker_does_not_have_is_refused_in_the_factory_s_words_not_the_tracker_s() -> None:
+    def missing(task_id: str, backlog: str, root: str) -> NoReturn:
+        raise TaskInspectionError("not_found", "no issues found matching the provided IDs")
+
+    found = read_task(missing, "nonexist", "tasks", "/tracker")
+    assert found == AdmitRefused("task", detail="No task nonexist in the tracker at /tracker")

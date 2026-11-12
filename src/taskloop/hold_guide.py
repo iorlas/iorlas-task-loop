@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Final
 
 from taskloop.attempt_status import AttemptView
+from taskloop.hold_cause import cause
 from taskloop.hold_store import HoldRow
 from taskloop.hold_text import part
 
@@ -25,12 +26,13 @@ KEPT_ACTIONS: Final = {
 }
 OPEN: Final = ("The factory holds this task for a person but has not finished the hold: the next round (or `tl step next` "
                "now) records it, moves the labels, abandons the attempt and writes one comment on the task. The round's "
-               "`hold pending <step>` line in rounds.log names what keeps it open; ")
-TRANSIENT: Final = ("`unavailable:slot_busy`, `unsettled:worker_unknown`, `unavailable:*` need nothing: the next round tries again.")
-HOLD: Final = OPEN + "; ".join(f"`{word}`: {action}" for word, action in KEPT_ACTIONS.items()) + "; " + TRANSIENT + (
-    " Once that is cleared, the next round returns the claim and finishes the hold.")
-ON_HOLD: Final = ("Held: the factory abandoned the attempt and waits for a person (the hold's comment on the task says why). "
-                  "To answer, edit the task's description or acceptance criteria (the agent reads those, not comments), then "
+               "`hold pending <step> <word>` line (`tl step next`) names what keeps it open and what to do; "
+               "`tl step release --abandon` says it too. Once that is cleared, the next round returns the claim and finishes "
+               "the hold.")
+TRANSIENT: Final = "needs nothing: the next round tries again."
+HOLD: Final = OPEN
+LEAD: Final = "Held: the factory abandoned the attempt and waits for a person (the hold's comment on the task says why)."
+ON_HOLD: Final = (LEAD + " To answer, edit the task's description or acceptance criteria (the agent reads those, not comments), then "
                   "add back the label the task was taken under (`bd label add <task> <label>`): the next round under that "
                   "label starts it again at plan on task/<task> as it is. To give up, `bd close <task>`.")
 LABELS: Final = {"moved": "`{label}` removed, `held` added", "absent": "`held` added (`{label}` was not on the task)",
@@ -62,6 +64,12 @@ def hold_lines(view: AttemptView) -> list[str]:
     return [f"Hold: {part(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", _tracker(row), f"Hold claim: {claim}"]
 
 
+def pending_guide(word: str) -> str:
+    """What keeps a round's pending hold open (`pending <step> <refusal>`) and the action, for that refusal only."""
+    refusal = word.rsplit(" ", 1)[-1]
+    return f"`{refusal}`: {KEPT_ACTIONS.get(refusal, TRANSIENT)}"
+
+
 def hold_guide(view: AttemptView) -> str:
     """The guide of `Next: hold` or `Next: on_hold`, with the stored label and the reason's own line once recorded."""
     if view.next == "hold":
@@ -72,11 +80,14 @@ def hold_guide(view: AttemptView) -> str:
     if row.labels in ("closed", "missing"):
         return "Held: the task is closed or gone in the tracker; nothing to answer."
     task, label = view.task_id, part(row.label, 200)
-    if row.labels == "not_ours":
-        answer = (f"Held while another actor holds the task: rounds do not take it again. To answer, edit its description or "
-                  f"acceptance criteria, then `tl step start {task}`.")
-    else:
-        answer = ON_HOLD.replace("<task>", task).replace("<label>", label)
+    found, ours = cause(row.reason), row.labels != "not_ours"
+    edit = "edit the task's description or acceptance criteria (the agent reads those, not comments)"
+    fix = found.fix if found is not None and found.fix else edit
+    again = f"the next round under that label starts it again at plan on task/{task} as it is"
+    back = (f"add back the label the task was taken under (`bd label add {task} {label}`): {again}" if ours
+            else f"start it by hand (`tl step start {task}`): rounds do not take it again")
+    what = "" if found is None else " " + found.what
+    answer = f"{LEAD}{what} To fix it, {fix}, then {back}. To give up, `bd close {task}`."
     if row.reason == "branch_moved":
         answer += f" First restore task/{task} to contain the verified commit, or delete it locally and on origin."
     if row.reason == "claim_lost":

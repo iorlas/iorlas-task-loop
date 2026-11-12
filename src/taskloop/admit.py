@@ -267,6 +267,8 @@ def read_task(tasks: Tasks, task_id: str, backlog: str, tracker_root: str) -> Ta
     except TaskInspectionError as error:
         if error.kind == "tracker_unavailable":
             return AdmitUnavailable("tracker", detail=why(error))
+        if error.kind == "not_found":
+            return AdmitRefused("task", detail=f"No task {task_id} in the tracker at {tracker_root}")
         return AdmitRefused("task", detail=f"{error.kind}: {why(error)}")
 
 

@@ -120,12 +120,17 @@ def test_the_decoder_alone_owns_the_rules_and_bounds_the_schema_leaves_out(chang
 
 @pytest.mark.parametrize(
     "change",
-    [{"paths": [EXPECTED]}, {"message": "Plan"}, {"plan_path": None}, {"plan_path": "docs/design/tl-2/plan.md"}],
-    ids=["paths", "message", "no_plan_path", "other_plan_path"],
+    [{"paths": [EXPECTED]}, {"message": "Plan"}, {"plan_path": "docs/design/tl-2/plan.md"}],
+    ids=["paths", "message", "other_plan_path"],
 )
-def test_unchanged_changes_nothing_and_names_the_expected_plan(change: dict[str, object]) -> None:
+def test_unchanged_changes_nothing_and_names_no_other_plan(change: dict[str, object]) -> None:
     with pytest.raises(ValueError, match="Invalid plan answer"):
         decode(UNCHANGED | change, RULES)
+
+
+def test_an_unchanged_answer_without_a_plan_is_a_valid_answer_that_verification_rejects_as_plan_missing() -> None:
+    found = decode(UNCHANGED | {"plan_path": None}, RULES)  # not `schema_invalid`: the answer fits the contract
+    assert (found.disposition, found.effect) == ("unchanged", "keep")
 
 
 def test_the_decoder_accepts_each_disposition_in_its_shape() -> None:

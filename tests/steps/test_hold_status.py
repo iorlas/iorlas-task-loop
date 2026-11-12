@@ -179,6 +179,16 @@ def test_show_prints_the_hold_lines_and_the_answer_with_the_stored_label(factory
                             "labelled_at": 11.0, "commented_at": 13.0, "cleared_at": None}
 
 
+def test_the_on_hold_guide_gives_the_one_fix_of_the_cause(factory: sqlite3.Connection, tmp_path: Path) -> None:
+    plan(factory, released="unclaimed")
+    recorded(factory, reason="failed:run:timeout")
+    shown = show_attempt(reads(factory), tmp_path, "tasks", "tl-1")
+    assert isinstance(shown, Shown)
+    text = "\n".join(human("show", shown, tmp_path / "factory.db"))
+    assert "did not finish before its deadline" in text and "Raise `--minutes`" in text and "`bd label add tl-1 auto`" in text
+    assert "edit the task's description" not in text
+
+
 def test_show_of_a_pending_hold_names_each_action_and_the_claim_kept(factory: sqlite3.Connection, tmp_path: Path) -> None:
     plan(factory)
     recorded(factory, comment=False)
@@ -187,8 +197,7 @@ def test_show_of_a_pending_hold_names_each_action_and_the_claim_kept(factory: sq
     lines = human("show", shown, tmp_path / "factory.db")
     assert "Hold tracker: `auto` removed, `held` added, not commented yet" in lines
     assert "Hold claim: kept: the abandon has not finished" in lines
-    assert lines[-1] == HOLD and all(f"`{word}`: {action}" in HOLD for word, action in KEPT_ACTIONS.items())
-    assert "`unavailable:slot_busy`" in HOLD and "held:slot_busy" not in HOLD  # the word a round's line prints
+    assert lines[-1] == HOLD and "hold pending <step> <word>" in HOLD and not any(word in HOLD for word in KEPT_ACTIONS)
 
 
 def test_list_prints_the_hold_word_and_its_guide_once_and_json_says_due(factory: sqlite3.Connection) -> None:

@@ -19,7 +19,7 @@ from typing import Final
 
 from taskloop.attempt_reads import SlotUse
 from taskloop.evidence_files import EvidenceError
-from taskloop.operations import Ended, Failed, Quiet, Round, minutes_refused
+from taskloop.operations import Ended, Failed, Quiet, Round, choices_refused, minutes_refused
 from taskloop.round import STOPPING_UNKNOWN, NextRequest
 from taskloop.round_log import IDENT, INTERRUPTED, fixed, stamped
 
@@ -53,14 +53,12 @@ class RoundsPorts:
 
 def inputs(request: NextRequest) -> Failed | None:
     """The round's choices, checked once before the lock or any read: a plain-word backlog (it names the lock file), a
-    non-blank label, model and effort, minutes in range."""
+    non-blank label, a plausible model and a known effort, minutes in range."""
     if not IDENT.fullmatch(request.backlog) or "/" in request.backlog:
         return Failed("refused", "backlog", "The backlog must be one word of letters, digits and ._:@+-")
     if not request.label.strip():
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    if not request.model.strip() or not request.effort.strip():
-        return Failed("refused", "choices", "--model and --effort must not be blank")
-    return minutes_refused(request.minutes)
+    return choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
 
 
 class _Log:

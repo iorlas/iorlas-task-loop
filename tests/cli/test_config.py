@@ -107,6 +107,9 @@ def test_an_unreadable_or_undecodable_file_is_refused(tmp_path: Path) -> None:
     (tmp_path / "bad.toml").write_bytes(b"db = '\xff'")
     undecodable = cli_composition.load_config(str(tmp_path / "bad.toml"), Flags(), lambda: tmp_path)
     assert isinstance(undecodable, ConfigRefused) and undecodable.reason == "toml"
+    (tmp_path / "syntax.toml").write_text("db = ")
+    syntax = cli_composition.load_config(str(tmp_path / "syntax.toml"), Flags(), lambda: tmp_path)
+    assert isinstance(syntax, ConfigRefused) and syntax.detail.startswith(f"{tmp_path / 'syntax.toml'}: ")  # the file is named
 
 
 def test_config_show_prints_values_sources_and_the_file(

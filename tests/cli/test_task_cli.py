@@ -130,3 +130,19 @@ def test_task_show_requires_explicit_inputs(arguments: list[str], capsys: pytest
     output = capsys.readouterr()
     assert output.out == ""
     assert "error:" in output.err
+
+
+def test_task_show_prints_hostile_task_text_as_printable_lines_and_json_keeps_it_raw(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hostile = "red\x1b[31m\u202eevil\nForged: yes"
+    body = hostile + "\n" + "\n".join(["x" * 1000] * 100)
+    client = FakeTaskReadClient((Bead("t-1", title=hostile, description=body, acceptance_criteria=hostile),))
+    monkeypatch.setattr(tracker_client, "Bd", lambda actor, *, cwd: client)
+    argv = ["task", "show", "t-1", "--backlog", "configured", "--tracker-root", str(tmp_path)]
+    assert main(argv) == 0
+    out = capsys.readouterr().out
+    assert all(each.isprintable() for each in out.split("\n")) and "Title: red [31m evil Forged: yes" in out
+    assert len(out) < 25_000 and "[shortened]" in out
+    assert main([*argv, "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["title"] == hostile

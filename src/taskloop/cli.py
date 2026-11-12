@@ -14,6 +14,7 @@ from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 from taskloop import cli_step
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.git_views import GitProfileFiles, GitViews
+from taskloop.land_summary import block, one_line
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
 from taskloop.step_guide import STEP_ONLY
@@ -58,11 +59,13 @@ def show_task(arguments: argparse.Namespace) -> int:
         print(json.dumps(shown))
     else:
         scope = result.reference.scope
-        print(f"Task: {result.reference.task_id}\nBacklog: {scope.adapter}/{scope.backlog}\nTitle: {result.title}")
-        print(f"Requirements:\n{result.requirements}\nAcceptance:\n{result.acceptance}")
+        print(f"Task: {one_line(result.reference.task_id, 200)}\nBacklog: {one_line(f'{scope.adapter}/{scope.backlog}', 200)}")
+        print(f"Title: {one_line(result.title, 500)}")
+        print(f"Requirements:\n{block(result.requirements)}\nAcceptance:\n{block(result.acceptance)}")
         print("Dependencies:")
         for dependency in result.dependencies:
-            print(f"  {dependency.relationship}: {dependency.reference.task_id} ({dependency.status}) {dependency.title}")
+            name, status = one_line(dependency.reference.task_id, 200), one_line(dependency.status, 40)
+            print(f"  {one_line(dependency.relationship, 40)}: {name} ({status}) {one_line(dependency.title, 500)}")
     return 0
 
 

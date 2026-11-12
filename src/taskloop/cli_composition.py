@@ -70,10 +70,12 @@ def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Pat
             return ConfigRefused("missing", detail=f"No config file at {path}")
         text = None
     except UnicodeError as error:
-        return ConfigRefused("toml", detail=str(error))
+        return ConfigRefused("toml", detail=f"{path}: {error}")
     except OSError as error:
         return ConfigRefused("unreadable", detail=f"{type(error).__name__}: {path}")
     settings = resolve(text, flags, base)
+    if isinstance(settings, ConfigRefused) and settings.reason == "toml":
+        settings = replace(settings, detail=f"{path}: {settings.detail}")
     return settings if isinstance(settings, ConfigRefused) else Loaded(path, text is not None, settings)
 
 

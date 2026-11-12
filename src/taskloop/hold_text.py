@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Final, Literal
 
 from taskloop.evidence_files import TERMINATED
+from taskloop.hold_cause import cause
 
 EXPLANATION: Final = 2000
 CHECKS: Final = 10
@@ -82,6 +83,7 @@ class HoldFacts:
     leftovers: Leftovers | None
     evidence: str  # the attempt's evidence directory
     entry: str | None = None  # the entry log's last line of fixed words (`Last entry result`), None when there is none
+    deadline: float | None = None  # the attempt's deadline, epoch seconds
 
 
 def part(text: str, cap: int = PART) -> str:
@@ -159,13 +161,18 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
                     f"{part(facts.task_id)}` says where), and {back}.")
 
 
-def _answer(facts: HoldFacts) -> list[str]:
-    task, edit = part(facts.task_id), "edit this task's description or acceptance criteria (the agent reads those, not comments)"
+def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
+    """The cause's own line, then its one next step: an owner's answer only for a cause an answer fixes."""
+    task, found = part(facts.task_id), cause(facts.reason, facts.deadline)
     if facts.labels == "not_ours":
-        lines = [f"To answer, {edit}, then start it by hand (`tl step start {task}`): rounds do not take it again."]
+        retry = f"start it by hand (`tl step start {task}`): rounds do not take it again"
     else:
-        lines = [f"To answer, {edit}, then run `bd label add {task} {part(facts.label, 200)}`: the next round starts it again "
-                 f"at plan on task/{task} as it is."]
+        retry = f"run `bd label add {task} {part(facts.label, 200)}`: the next round starts it again at plan on task/{task} as it is"
+    edit = "edit this task's description or acceptance criteria (the agent reads those, not comments)"
+    lines = [] if found is None else [found.what]
+    lines.append(f"{'To answer, ' + edit if found is None or found.fix is None else found.fix}, then {retry}.")
+    if isinstance(outcome, Kept):
+        lines.append("Do that once the slot or process above is cleared: until then the task is not taken again.")
     if facts.reason == "branch_moved":
         lines.append(f"Restore task/{task} to contain {part(facts.end_commit or '')}, or delete it locally and on origin, "
                      "before adding the label.")
@@ -176,7 +183,7 @@ def _answer(facts: HoldFacts) -> list[str]:
 
 def comment(facts: HoldFacts, outcome: Returned | Kept) -> str:
     """The comment, at most `TOTAL` characters: the details shortened (marked `CUT`) before the claim line and answer."""
-    tail = "\n".join([claim_line(facts, outcome), *_answer(facts)])
+    tail = "\n".join([claim_line(facts, outcome), *_answer(facts, outcome)])
     head = "\n".join(_details(facts))
     room = TOTAL - len(tail) - 1
     if len(head) > room:

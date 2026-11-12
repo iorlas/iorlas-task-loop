@@ -69,3 +69,8 @@ def test_the_attributes_files_follow_the_step_root_and_the_listed_paths() -> Non
     old = (".gitattributes", "docs/.gitattributes", "docs/design/.gitattributes", "docs/design/tl-1/")
     assert attributes(PLAN.rules("tl-1"), ("docs/design/tl-1/plan.md", "docs/design/tl-1/notes/a.md")) == old
     assert attributes(StepRules(""), ("src/a.py", "README.md")) == (".gitattributes", "src/.gitattributes", "src/a.py", "README.md")
+
+
+def test_the_plan_input_sends_an_infeasible_or_empty_task_to_needs_owner_at_plan() -> None:
+    text = PLAN.input_text(TASK, StepRules("docs/design/tl-1/"))
+    assert "answer `needs_owner`" in text and "write no plan" in text

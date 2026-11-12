@@ -42,6 +42,13 @@ def one_line(text: str, cap: int) -> str:
     return " ".join(kept.split())[:cap].rstrip()
 
 
+def block(text: str, line: int = 2000, total: int = 20000) -> str:
+    """`text` for a terminal: each line through `one_line` (at most `line` characters, its leading spaces kept up to 20), at
+    most `total` characters in all."""
+    body = "\n".join(each[:len(each) - len(each.lstrip(" "))][:20] + one_line(each, line) for each in text.split("\n"))
+    return body if len(body) <= total else body[:total].rstrip() + "\n[shortened]"
+
+
 def commits(repo: Repo, o: str, x: str) -> tuple[tuple[str, str], ...]:
     """The branch's commits, X's not on O, oldest first: (sha, subject)."""
     return tuple((entry.sha, entry.subject) for entry in reversed(repo.history([x], not_on=[o])))

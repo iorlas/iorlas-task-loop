@@ -47,6 +47,7 @@ from taskloop.operations import (
     StartRequest,
     VerifiedTask,
     Verify,
+    choices_refused,
     launched,
     minutes_refused,
     publish_task,
@@ -175,7 +176,7 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     label = request.label.strip()
     if not label:
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    refused = minutes_refused(request.minutes)
+    refused = choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
     if refused is not None:
         return refused
     request = replace(request, label=label)

@@ -56,8 +56,8 @@ GUIDE = {
     "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl step start` admits a "
     "fresh attempt. Its deadline passed with no relaunchable entry from before a reboot (none registered, one from this boot, or "
     "the boot unknown); such an entry would instead be relaunched with the deadline renewed once from --minutes.",
-    "failed": "The step ended without a verified result; the claim stays held, so rounds never retry it. Read `tl step show`; "
-    "to try it afresh, `tl step release --abandon` then `tl step start`.",
+    "failed": "Ended without a verified result; a hand-started step is never held, its claim stays and rounds never retry it: "
+    "`tl step show`, then `tl step release --abandon` and `tl step start` to try afresh.",
     "running": "Its entry runs; the round leaves it alone.",
     "attempted": "Open in the tracker while factory.db holds its attempt: the claim was returned or lapsed. `tl step show` it; "
     "rounds never take it again.",

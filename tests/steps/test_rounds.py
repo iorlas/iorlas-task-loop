@@ -250,7 +250,8 @@ REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high
 
 @pytest.mark.parametrize("change, reason", [
     ({"backlog": "a/b"}, "backlog"), ({"backlog": ""}, "backlog"), ({"backlog": "a b"}, "backlog"), ({"label": " "}, "label"),
-    ({"model": ""}, "choices"), ({"effort": " "}, "choices"), ({"minutes": 0}, "choices"), ({"minutes": 7 * 24 * 60 + 1}, "choices"),
+    ({"model": ""}, "choices"), ({"effort": " "}, "choices"), ({"effort": "ultra"}, "choices"), ({"model": "-m"}, "choices"),
+    ({"minutes": 0}, "choices"), ({"minutes": 7 * 24 * 60 + 1}, "choices"),
 ])
 def test_the_rounds_choices_are_checked_before_anything(change: dict[str, str | int], reason: str) -> None:
     fields = {"backlog": "tasks", "label": "auto", "model": "m", "effort": "high", "minutes": 30} | change
