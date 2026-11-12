@@ -48,6 +48,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.slot_lock import hold
 from taskloop.slot_state import pointer
+from taskloop.step_guide import GUIDE
 from taskloop.steps import kind
 from taskloop.verdict import judge
 from taskloop.verifier import Verifier, VerifyHold
@@ -172,6 +173,13 @@ def contents(path: str, data: bytes) -> After:
     return override
 
 
+def unreadable(path: str) -> After:
+    def override(slot: FakeWorktree, files: FakeSlotFiles) -> None:
+        files.unreadable.add(slot.path / path)
+
+    return override
+
+
 def unregistered(slot: FakeWorktree, files: FakeSlotFiles) -> None:
     """Git forgets the slot; its pointer files stay readable (the fake port saw the slot listed at dispatch)."""
     assert files.lstat(slot.path / ".git") is not None
@@ -201,6 +209,9 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "unsettled:unsafe", 0),
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
     ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
+    ("unreadable_listed_file", None, PLANNED, PLAN, unreadable(P), None, "unsettled:unsafe", 0),  # named, not unavailable:git forever
+    ("committed_private_key", None, {P: "# Plan\n-----BEGIN OPENSSH PRIVATE KEY-----\nx\n"}, PLAN, None, None, "unsettled:unsafe", 0),
+    ("committed_codex_login", None, {P: '{"access_token": "a", "refresh_token": "r"}'}, PLAN, None, None, "unsettled:unsafe", 0),
     ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "unsettled:unsafe", 0),
     ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "unsettled:ignored", 0),
     ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "unsettled:ignored", 0),
@@ -741,3 +752,30 @@ def test_no_git_write_while_the_worker_may_still_run(
     assert found == Unsettled("worker_alive") and seen == [WORKER]
     assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
     assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)  # once it is gone
+
+
+def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_working_recovery(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
+) -> None:
+    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
+    commit(slot, {}, "agent commit")
+    slot.repo.tag("task/evil", head(slot))
+    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    assert result == Unsettled("head_moved", ("refs/tags/task/evil",))
+    guide = GUIDE["unsettled"]
+    assert "`tl step release --abandon`, then `tl step start`" in guide and "`head_moved`" in guide
+
+
+def test_a_head_reset_to_the_persons_main_never_lists_main_but_still_lists_an_agent_tag(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
+) -> None:
+    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
+    main = slot.repo.worktree(slot.repo.identity().root)
+    main.write_file("person.txt", "mine")
+    made = main.record("the person's commit", paths="all")
+    assert isinstance(made, Recorded)
+    slot.reset(made.sha, mode="hard")  # the agent: `git reset --hard main`
+    slot.repo.tag("task/evil", made.sha)
+    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    assert result == Unsettled("head_moved", ("refs/tags/task/evil",)) or result == Unsettled("head_moved", ())
+    assert isinstance(result, Unsettled) and "refs/heads/main" not in result.listing

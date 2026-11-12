@@ -54,7 +54,7 @@ ACCEPTED = ("accepted", "already_same")
 class CredentialsUnavailable(Exception):
     """The credential source has no usable login, executable or environment; `reason` is one fixed word."""
 
-    def __init__(self, reason: Literal["path", "codex", "home", "auth", "git_config"]) -> None:
+    def __init__(self, reason: Literal["path", "codex", "home", "auth"]) -> None:
         super().__init__(reason)
         self.reason = reason
 

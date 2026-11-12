@@ -13,6 +13,12 @@ from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 
 HARDENED = (("core.hooksPath", "/dev/null"), ("core.fsmonitor", "false"), ("commit.gpgSign", "false"), ("maintenance.auto", "false"))
+# The identity of every commit the factory makes in a slot, whatever the repository's or the person's config (the agent may
+# have rewritten `user.email` in the shared config). Environment variables beat every config file.
+IDENTITY = {
+    "GIT_AUTHOR_NAME": "task-loop", "GIT_AUTHOR_EMAIL": "task-loop@localhost",
+    "GIT_COMMITTER_NAME": "task-loop", "GIT_COMMITTER_EMAIL": "task-loop@localhost",
+}
 PUSH_TIMEOUT = 120.0  # seconds a publication's push or ls-remote may take (the library's default is 600)
 
 
@@ -36,9 +42,10 @@ class GitViews:
     def checkouts(self, path: Path, *, git_dir: Path | None = None) -> Repo:
         """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment, its discovery ceiling
         at that path: calls that run on a slot open their view from the slot itself, pinned to the verified `git_dir`
-        (git_porcelain's `pins`: `<slot>/.git` is never read again, any other path is `NotARepo`)."""
+        (git_porcelain's `pins`: `<slot>/.git` is never read again, any other path is `NotARepo`). A pinned (slot) view
+        also carries the factory's own commit identity (`IDENTITY`)."""
         pins = None if git_dir is None else {path: git_dir}
-        env = hardened(os.environ) | ceiling(path, os.environ)
+        env = hardened(os.environ) | ceiling(path, os.environ) | ({} if git_dir is None else IDENTITY)
         return RealRepo(path, memoize=False, env=env, read_timeout=self.read_seconds, pins=pins)
 
     def remotes(self, path: Path, *, git_dir: Path | None = None) -> Repo:

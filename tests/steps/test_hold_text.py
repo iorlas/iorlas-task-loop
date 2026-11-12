@@ -51,8 +51,8 @@ def test_the_claim_line_says_only_what_the_label_step_and_the_abandon_recorded(
 
 
 @pytest.mark.parametrize(("outcome", "says"), [
-    (Kept("slot_dirty", slot="/slots/r/s1"), "slot /slots/r/s1 has files left by this attempt. Save what you need, remove them, and "
-     "the next round returns the claim. The factory never removes work."),
+    (Kept("slot_dirty", slot="/slots/r/s1"), "slot /slots/r/s1 has files left by this attempt. Save what you need, remove or restore them "
+     "(`git -C /slots/r/s1 status --short` lists them), and the next round returns the claim. The factory never removes work."),
     (Kept("worker_alive", pid=42, pgid=40), "a process of this attempt still runs (pid 42, group 40). When it has ended (or after "
      "you stop it by that pid), the next round returns the claim."),
     (Kept("setup_running", pid=43), "a process of this attempt still runs (pid 43). When it has ended"),

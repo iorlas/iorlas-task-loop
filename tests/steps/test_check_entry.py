@@ -398,7 +398,7 @@ def test_a_completed_block_is_not_concluded_once_main_moved(bench: Bench) -> Non
 
 
 def test_a_fault_of_the_environment_is_counted_once_the_attempt_is_the_entry_s_own(bench: Bench) -> None:
-    bench.credentials = CredentialsUnavailable("git_config")
+    bench.credentials = CredentialsUnavailable("home")
     assert bench() == 1 and bench() == 1
     assert bench.lines == ["unavailable fault:CredentialsUnavailable"] * 2
     assert bench.attempt()[:5] == ("admitted", None, None, "fault:CredentialsUnavailable", 2)

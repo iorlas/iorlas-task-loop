@@ -98,6 +98,7 @@ class FakeSlotFiles:
         self.entries: dict[Path, FileStat | None] = {}
         self.contents: dict[Path, bytes] = {}
         self.resolved: dict[Path, Path | None] = {}
+        self.unreadable: set[Path] = set()  # regular files the factory may not open (mode 000)
 
     @property
     def slots(self) -> tuple[FakeWorktree, ...]:
@@ -158,7 +159,7 @@ class FakeSlotFiles:
 
     def read(self, path: Path, cap: int) -> bytes | None:
         entry = self.lstat(path)
-        return None if entry is None or entry.kind != "file" or entry.size > cap else self._data(path)
+        return None if entry is None or entry.kind != "file" or entry.size > cap or path in self.unreadable else self._data(path)
 
 
 class PinnedViews:

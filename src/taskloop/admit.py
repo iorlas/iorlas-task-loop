@@ -33,7 +33,7 @@ from git_porcelain import GitUnavailable, NotARepo, Repo
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.prepare import DIVERGED, MAIN, branch_refusal
+from taskloop.prepare import DIVERGED, MAIN, UNPUBLISHED, branch_refusal
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe
 from taskloop.steps import STEPS, kind
@@ -44,7 +44,8 @@ type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; F
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
 type Refusal = Literal[
     "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
-    "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged", "claim_lost", "not_advanceable", "branch_moved",
+    "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged", "branch_unpublished", "claim_lost",
+    "not_advanceable", "branch_moved",
     "commit_missing", "target", "target_profile", "no_required",  # the checks admission's (`check_admit`)
     "landing", "landed",  # a checks re-run refused by the task's land candidates (`factory_schema.LANDING`)
 ]
@@ -324,7 +325,10 @@ def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free
     return passing or AdmitRefused("no_free_slot")
 
 
-DETAILS = {"branch_diverged": DIVERGED, "target": f"The checkout has no local branch `{MAIN}` to start task/{{task}} from"}
+DETAILS = {
+    "branch_diverged": DIVERGED,
+    "branch_unpublished": UNPUBLISHED,
+    "target": f"The checkout has no local branch `{MAIN}` to start task/{{task}} from"}
 
 
 def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey) -> None:
