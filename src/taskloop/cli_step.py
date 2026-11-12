@@ -162,7 +162,7 @@ def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_co
     if arguments.dash_port is None:
         return None
     return dash_composition.DashRequest(arguments.backlog, arguments.tracker_root, arguments.label, arguments.dash_port,
-                                        settings.db.value, settings.artifacts.value, settings.slot_count.value)
+                                        settings.db.value, settings.artifacts.value)
 
 
 def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:

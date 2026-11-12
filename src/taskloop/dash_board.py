@@ -49,7 +49,6 @@ class BoardPorts:
     reads: StatusPorts
     files: EvidenceFiles
     tracker: DashTracker
-    slots: tuple[str, ...]
 
 
 def card_of(view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float) -> Card:
@@ -75,4 +74,4 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now) for view in listed.attempts]
     cards += [Card(each.task_id, each.title, "waiting", 0, None, each.since, each.since, None, None) for each in ready]
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return Board(stamp, ports.slots, tuple(cards), ports.tracker.notice())
+    return Board(stamp, ports.reads.store.slot_names(), tuple(cards), ports.tracker.notice())

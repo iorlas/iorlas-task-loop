@@ -13,7 +13,7 @@ from taskloop.operations import Failed
 
 
 def request(tmp_path: Path, port: int) -> DashRequest:
-    return DashRequest("tl", str(tmp_path), "auto", port, tmp_path / "factory.db", tmp_path / "artifacts", 3)
+    return DashRequest("tl", str(tmp_path), "auto", port, tmp_path / "factory.db", tmp_path / "artifacts")
 
 
 def board_answer(address: tuple[str, int]) -> tuple[int, dict[str, str]]:

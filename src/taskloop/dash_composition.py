@@ -17,7 +17,6 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow, read_round_log
-from taskloop.slots import slot_names
 
 STATIC = Path(__file__).parent / "dash" / "static"
 LOG_LINES = 200
@@ -31,7 +30,6 @@ class DashRequest:
     port: int
     db: Path
     artifacts: Path
-    slot_count: int
 
 
 def _ports(request: DashRequest, views: GitViews) -> DashPorts:
@@ -42,7 +40,7 @@ def _ports(request: DashRequest, views: GitViews) -> DashPorts:
         with open_reads(request.db, request.artifacts, views) as reads:
             if isinstance(reads, Failed):
                 return reads
-            return build_board(BoardPorts(reads, files, tracker, slot_names(request.slot_count)))
+            return build_board(BoardPorts(reads, files, tracker))
 
     def task(task_id: str) -> TaskDetail | Failed | None:
         with open_reads(request.db, request.artifacts, views) as reads:
