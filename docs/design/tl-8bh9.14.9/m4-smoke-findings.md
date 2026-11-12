@@ -114,7 +114,7 @@ authorized", 2026-11-11). No circuit breaker exists or was tested (plan section 
 
 ## Git read timeout (BLOCKED)
 
-Step 9 (G1/G2) not run: needs git-porcelain 0.17.0 released and pinned.
+Step 9 (G1/G2) not run then; git-porcelain 0.18.0 is released and pinned since (tl-isfa.5).
 
 ## Findings
 

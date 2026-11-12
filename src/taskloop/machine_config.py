@@ -13,6 +13,8 @@ from typing import Final, Literal
 
 type Source = Literal["flag", "file", "default"]
 MIN_SECONDS: Final = 5
+MIN_GIT_READ_SECONDS: Final = 30
+MAX_GIT_READ_SECONDS: Final = 86400  # a day; a larger value overflows the process timeout
 type Refusal = Literal["missing", "unreadable", "toml", "unknown_key", "type", "relative_path", "count", "interval"]
 
 
@@ -29,11 +31,12 @@ class Effective:
     slots_root: Setting[Path]
     slot_count: Setting[int]
     round_seconds: Setting[int]  # `tl step rounds`: seconds from the end of one regular round to the next
+    git_read_seconds: Setting[int]  # seconds a Git read (status, diff, ls-files, ...) may take before it is `unavailable:git`
 
     def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int]], ...]:
         """Every key with its setting, in key order."""
         return (("db", self.db), ("artifacts", self.artifacts), ("slots_root", self.slots_root), ("slot_count", self.slot_count),
-                ("round_seconds", self.round_seconds))
+                ("round_seconds", self.round_seconds), ("git_read_seconds", self.git_read_seconds))
 
 
 KEYS: Final = tuple(field.name for field in fields(Effective))  # the file's only keys
@@ -48,6 +51,7 @@ class Flags:
     slots_root: str | None = None
     slot_count: int | None = None
     round_seconds: int | None = None
+    git_read_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,7 @@ def defaults(home: Path) -> Effective:
         Setting(home / ".local" / "share" / "task-loop" / "slots", "default"),
         Setting(1, "default"),
         Setting(60, "default"),
+        Setting(600, "default"),
     )
 
 
@@ -111,11 +116,18 @@ def _count(key: str, value: object) -> int:
     return _integer(key, value)
 
 
-def _seconds(key: str, value: object) -> int:
-    """A rounds interval: whole seconds, at least 5 (the local check runs every 2 s between rounds)."""
-    if _integer(key, value) < MIN_SECONDS:
-        raise _Refusal(ConfigRefused("interval", key, f"{key} must be at least {MIN_SECONDS} seconds"))
-    return _integer(key, value)
+def _between(minimum: int, maximum: int | None = None) -> Callable[[str, object], int]:
+    def checked(key: str, value: object) -> int:
+        number = _integer(key, value)
+        if number < minimum or (maximum is not None and number > maximum):
+            bound = f"at least {minimum}" if maximum is None else f"between {minimum} and {maximum}"
+            raise _Refusal(ConfigRefused("interval", key, f"{key} must be {bound} seconds"))
+        return number
+
+    return checked
+
+
+_seconds = _between(MIN_SECONDS)  # a rounds interval: whole seconds (the local check runs every 2 s between rounds)
 
 
 def _chosen[T](key: str, table: dict[str, object], flag: object, default: Setting[T], check: Callable[[str, object], T]) -> Setting[T]:
@@ -144,6 +156,8 @@ def resolve(text: str | None, flags: Flags, home: Path) -> Effective | ConfigRef
             _chosen("slots_root", table, flags.slots_root, built.slots_root, path),
             _chosen("slot_count", table, flags.slot_count, built.slot_count, _count),
             _chosen("round_seconds", table, flags.round_seconds, built.round_seconds, _seconds),
+            _chosen("git_read_seconds", table, flags.git_read_seconds, built.git_read_seconds,
+                    _between(MIN_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS)),
         )
     except _Refusal as refusal:
         return refusal.refused

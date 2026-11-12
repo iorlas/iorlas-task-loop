@@ -345,8 +345,8 @@ class SlotRelease:
         try:
             slot = park_slot(self.checkouts, self.slot_files, path, row.repo_id, row.slot_head, task_branch(row.task_id))
         except GitUnavailable as error:
-            return NotReleased("unavailable", "git", f"Git could not read or park the slot ({type(error).__name__}): it may be half "
-                               "checked out; inspect it, then rerun. Nothing was recorded.")
+            return NotReleased("unavailable", "git", f"Git could not read or park the slot ({type(error).__name__}: {error}): "
+                               "it may be half checked out; inspect it, then rerun. Nothing was recorded.")
         if isinstance(slot, NotReleased):
             return slot
         head, parked = slot

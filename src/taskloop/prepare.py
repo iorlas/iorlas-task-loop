@@ -249,5 +249,5 @@ def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: C
         return AttemptResult("unavailable", "git")
     if isinstance(state, AttemptResult) or state.head is None:
         return state if isinstance(state, AttemptResult) else _refused("slot_unborn")
-    # the Git reads have no timeout: the deadline is checked again right before the dispatch write
+    # a Git read is bounded (`git_read_seconds`), not by the attempt deadline: that is checked again right before the dispatch write
     return _refused("expired") if clock() >= deadline else Prepared(state.head, state.gitdir, state.root)
