@@ -6,6 +6,7 @@ This is the one module that imports the standard library's HTTP server (`.import
 import json
 import queue
 import threading
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,12 +21,13 @@ from taskloop.round_reader import LogRow
 PAGES = {"": "index.html", "index.html": "index.html", "app.js": "app.js", "api.js": "api.js", "drawer.js": "drawer.js",
          "logs.js": "logs.js", "ui.js": "ui.js", "dash.css": "dash.css"}
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
-PING_SECONDS = 15.0
 
 
 @dataclass(frozen=True)
 class DashPorts:
-    """What the server reads: the board, one task, the round log's tail, and the folder of the static page."""
+    """What the server reads: the board, one task, the round log's tail, and the folder of the static page. `interval`: seconds
+    between polls; `ping`: seconds of silence before a keep-alive on the stream; `max_streams`, `queue_depth`: how many pages
+    may listen and how many unsent messages one may hold before it is dropped (it reconnects and reloads)."""
 
     board: Callable[[], Board | Failed]
     task: Callable[[str], TaskDetail | Failed | None]
@@ -33,57 +35,103 @@ class DashPorts:
     backlog: str
     static: Path
     interval: float = 2.0
+    ping: float = 15.0
+    max_streams: int = 16
+    queue_depth: int = 256
 
 
 def _message(kind: str, **fields: object) -> str:
     return "data: " + json.dumps({"kind": kind, **fields}) + "\n\n"
 
 
+class Channel:
+    """One connected page's unsent messages; `closed` once it is dropped or has gone."""
+
+    def __init__(self, depth: int) -> None:
+        self.messages: queue.Queue[str] = queue.Queue(depth)
+        self.closed = threading.Event()
+
+
 class Hub:
-    """The stream's subscribers and the last board and log line each was told of. `poll` publishes only what changed since
-    the last poll; with nobody connected it forgets the baseline, so a first subscriber is told nothing stale."""
+    """The stream's subscribers and what each was last told. `poll` publishes only what changed since the last poll; the first
+    subscriber takes the baseline at once, so nothing between its connection and the next poll is lost, and with nobody
+    connected the baseline is forgotten. A board that cannot be read is said once (`error`), never shown stale; when it can be
+    read again every page is told to reload (`resync`)."""
 
     def __init__(self, ports: DashPorts) -> None:
         self.ports, self.lock = ports, threading.Lock()
-        self.subscribers: list[queue.Queue[str]] = []
+        self.subscribers: list[Channel] = []
         self.cards: dict[str, Card] | None = None
-        self.last: LogRow | None = None
+        self.seen: Counter[LogRow] | None = None
+        self.failure: str | None = None
 
-    def subscribe(self) -> queue.Queue[str]:
-        channel: queue.Queue[str] = queue.Queue()
+    def subscribe(self) -> Channel | None:
+        """A channel for a new page, None when `max_streams` pages already listen."""
         with self.lock:
+            if len(self.subscribers) >= self.ports.max_streams:
+                return None
+            channel, first = Channel(self.ports.queue_depth), not self.subscribers
             self.subscribers.append(channel)
+        if first:
+            self._guarded()
         return channel
 
-    def unsubscribe(self, channel: queue.Queue[str]) -> None:
+    def unsubscribe(self, channel: Channel) -> None:
+        channel.closed.set()
         with self.lock:
-            self.subscribers.remove(channel)
+            if channel in self.subscribers:
+                self.subscribers.remove(channel)
 
     def poll(self) -> None:
         with self.lock:
             listening = list(self.subscribers)
         if not listening:
-            self.cards, self.last = None, None
+            self.cards, self.seen, self.failure = None, None, None
             return
-        for text in (*self._board(), *self._log()):
+        for text in self._guarded():
             for channel in listening:
-                channel.put(text)
+                try:
+                    channel.messages.put_nowait(text)
+                except queue.Full:
+                    self.unsubscribe(channel)  # a page that cannot keep up is dropped; it reconnects and reloads
+
+    def _guarded(self) -> list[str]:
+        """The messages of one poll. Whatever a read raises is reported to the pages and the poller carries on."""
+        try:
+            return [*self._board(), *self._log()]
+        except Exception as error:
+            return self._failed(f"{type(error).__name__}: {error}")
+
+    def _failed(self, text: str) -> list[str]:
+        self.cards, self.seen = None, None
+        if self.failure == text:
+            return []
+        self.failure = text
+        return [_message("error", error=text)]
 
     def _board(self) -> list[str]:
         board = self.ports.board()
         if isinstance(board, Failed):
+            return self._failed(board.word)
+        known, recovered = self.cards, self.failure is not None
+        self.cards, self.failure = {card.id: card for card in board.tasks}, None
+        if recovered:
+            return [_message("resync")]
+        if known is None:
             return []
-        now = {card.id: card for card in board.tasks}
-        known = self.cards
-        self.cards = now
-        return [] if known is None else [_message("task", task=asdict(card)) for card in board.tasks if known.get(card.id) != card]
+        changed = [_message("task", task=asdict(card)) for card in board.tasks if known.get(card.id) != card]
+        return changed + [_message("gone", id=each) for each in known if each not in self.cards]
 
     def _log(self) -> list[str]:
-        rows = self.ports.log()
-        seen, self.last = self.last, rows[-1] if rows else None
-        if seen is None or seen not in rows:
-            return []
-        return [_message("log", row=asdict(row)) for row in rows[rows.index(seen) + 1:]]
+        """The lines not seen before. Identical lines of one second are told apart by how often each stands in the tail."""
+        rows, before, running = self.ports.log(), self.seen, Counter[LogRow]()
+        self.seen = Counter(rows)
+        found: list[str] = []
+        for row in rows:
+            running[row] += 1
+            if before is not None and running[row] > before[row]:
+                found.append(_message("log", row=asdict(row)))
+        return found
 
 
 JSON = "application/json"
@@ -97,6 +145,7 @@ class Reply:
 
 
 NOT_FOUND = Reply(404, b'{"error":"not_found"}', JSON)
+FORBIDDEN = Reply(403, b'{"error":"forbidden_host"}', JSON)
 
 
 def _json(found: Board | TaskDetail | Failed | None) -> Reply:
@@ -118,17 +167,13 @@ def respond(ports: DashPorts, path: str) -> Reply:
     return NOT_FOUND
 
 
-def _handler(ports: DashPorts, hub: Hub) -> type[BaseHTTPRequestHandler]:
+def _handler(ports: DashPorts, hub: Hub, hosts: set[str]) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         @override
         def log_message(self, format: str, *args: object) -> None:
             """Quiet: the rounds process's own output is the person's terminal."""
 
-        def do_GET(self) -> None:
-            path = self.path.split("?", 1)[0].strip("/")
-            if path == "api/events":
-                return self._stream()
-            reply = respond(ports, path)
+        def _reply(self, reply: Reply) -> None:
             self.send_response(reply.status)
             self.send_header("Content-Type", reply.kind)
             self.send_header("Content-Length", str(len(reply.body)))
@@ -136,18 +181,32 @@ def _handler(ports: DashPorts, hub: Hub) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(reply.body)
 
-        def _stream(self) -> None:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            channel = hub.subscribe()
+        def do_GET(self) -> None:
+            if self.headers.get("Host") not in hosts:  # a page served under another name (DNS rebinding) never reads this
+                return self._reply(FORBIDDEN)
+            path = self.path.split("?", 1)[0].strip("/")
+            if path == "api/events":
+                return self._stream()
             try:
+                reply = respond(ports, path)
+            except Exception as error:  # a read that raises is the page's error, not a dropped connection and a traceback
+                reply = Reply(500, json.dumps({"error": f"{type(error).__name__}: {error}"}).encode(), JSON)
+            self._reply(reply)
+
+        def _stream(self) -> None:
+            channel = hub.subscribe()
+            if channel is None:
+                return self._reply(Reply(503, b'{"error":"too_many_pages"}', JSON))
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
                 self.wfile.write(b": open\n\n")
                 self.wfile.flush()
-                while True:
+                while not channel.closed.is_set():
                     try:
-                        text = channel.get(timeout=PING_SECONDS)
+                        text = channel.messages.get(timeout=ports.ping)
                     except queue.Empty:
                         text = ": ping\n\n"
                     self.wfile.write(text.encode())
@@ -161,12 +220,14 @@ def _handler(ports: DashPorts, hub: Hub) -> type[BaseHTTPRequestHandler]:
 
 
 class DashServer:
-    """Serves until `stop`: the HTTP server and the poller, both daemon threads. `port` 0 picks a free one (`address`)."""
+    """Serves until `stop`: the HTTP server and the poller, both daemon threads. `port` 0 picks a free one (`address`). Binding
+    raises OSError when the port is taken. Only requests addressed to 127.0.0.1 or localhost on that port are answered."""
 
     def __init__(self, ports: DashPorts, port: int) -> None:
-        self.hub = Hub(ports)
-        self.http = ThreadingHTTPServer(("127.0.0.1", port), _handler(ports, self.hub))
+        self.hub, self.hosts = Hub(ports), set[str]()
+        self.http = ThreadingHTTPServer(("127.0.0.1", port), _handler(ports, self.hub, self.hosts))
         self.http.daemon_threads = True
+        self.hosts |= {f"127.0.0.1:{self.address[1]}", f"localhost:{self.address[1]}"}
         self.ports, self.done = ports, threading.Event()
         self.threads = [threading.Thread(target=self.http.serve_forever, daemon=True), threading.Thread(target=self._poll, daemon=True)]
 

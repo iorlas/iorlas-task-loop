@@ -179,7 +179,9 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                        + ("stop with Ctrl-C" if ports.ctrl_c else "Ctrl-C is ignored here: stop with SIGTERM"))
             print(started, flush=True)
             with dash_composition.serving(_dash_request(arguments, settings), views_for(loaded)) as address:
-                if address is not None:
+                if isinstance(address, Failed):
+                    print(f"Dashboard not started ({address.detail}); the rounds go on without it", file=sys.stderr, flush=True)
+                elif address is not None:
                     print(f"Dashboard: http://{address[0]}:{address[1]}/", flush=True)
                 return run_rounds(ports, request)
     except KeyboardInterrupt:

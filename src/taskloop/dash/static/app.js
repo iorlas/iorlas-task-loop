@@ -146,13 +146,39 @@ function showScreen(name) {
   if (name === "logs") loadLogs(source);
 }
 
-// After a reconnect the stream may have missed moves: load the board again and drop cards that are gone.
+// The board cannot be read (factory.db gone or of another version, the server failing): say so and show no cards at all, never
+// the last ones. The stream's `resync` brings the board back when it can be read again.
+function fail(error) {
+  $("banner").textContent = `The factory cannot be read: ${error.message ?? error}`;
+  $("banner").hidden = false;
+  for (const node of cards.values()) node.remove();
+  cards.clear();
+  tasks.clear();
+  notice = null;
+  renderBoard();
+}
+
+function drop(id) {
+  cards.get(id)?.remove();
+  cards.delete(id);
+  tasks.delete(id);
+}
+
+// After a reconnect or an error the stream may have missed moves: load the board again and drop cards that are gone.
 async function resync() {
-  const snap = await source.snapshot();
+  let snap;
+  try {
+    snap = await source.snapshot();
+  } catch (error) {
+    return fail(error);
+  }
+  $("banner").hidden = true;
   const ids = new Set(snap.tasks.map((t) => t.id));
-  for (const [id, node] of cards) if (!ids.has(id)) { node.remove(); cards.delete(id); tasks.delete(id); }
+  for (const id of [...cards.keys()]) if (!ids.has(id)) drop(id);
+  slotNames = snap.slots;
   for (const t of snap.tasks) tasks.set(t.id, t);
   notice = snap.notice;
+  if (lanes) buildBoard();
   renderBoard();
 }
 
@@ -176,16 +202,18 @@ async function start() {
   $("view-lanes").addEventListener("click", () => setLanes(true));
   source = apiSource();
   $("mode").replaceChildren(tag(source.label, { dotCls: "bg-emerald-500", cls: "text-slate-600 dark:text-slate-300" }));
-  const snap = await source.snapshot();
-  slotNames = snap.slots;
-  notice = snap.notice;
-  for (const t of snap.tasks) tasks.set(t.id, t);
   initDrawer(source, tasks);
   initLogs(openDrawer);
   setLanes(false);
   showScreen("board");
+  await resync();
   source.subscribe(async (msg) => {
     if (msg.kind === "resync") return resync();
+    if (msg.kind === "error") return fail(new Error(msg.error));
+    if (msg.kind === "gone") {
+      drop(msg.id);
+      return renderBoard();
+    }
     if (msg.kind === "feed") return onFeed(msg);
     if (msg.kind === "log") return onLog(msg.row);
     tasks.set(msg.task.id, msg.task);
