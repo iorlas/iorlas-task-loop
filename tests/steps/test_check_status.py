@@ -7,6 +7,7 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 
 import pytest
+from any_agent import events
 from doubles import ChecksBench, Done, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRepo
 from stream_proc import OwnedProcess
@@ -19,8 +20,11 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity, Seen
 from taskloop.check_status import commands_seen
 from taskloop.check_store import CheckStore, ResultRow
+from taskloop.command_sink import CommandSink
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.result_data import as_data
 from taskloop.setup_store import ProcessSeen, SetupStore
+from taskloop.step_render import human
 
 ENTRY = (7, "entry-start", "boot")
 
@@ -76,6 +80,25 @@ def test_with_no_checks_attempt_the_done_implement_attempt_says_advance(status: 
 
 def registered(status: Status) -> None:
     assert status.store().register_entry(status.key, ENTRY, 10) == "accepted"
+
+
+def test_running_checks_never_display_agent_command_age(status: Status, tmp_path: Path) -> None:
+    registered(status)
+    status.seen, status.now = "matching", 20
+    files = EvidenceFiles(tmp_path / "artifacts")
+    sink = CommandSink(files, status.key, lambda: 12.0)
+    sink.feed(events.Cmd(id="check", text="just test"))
+    sink.end("ok")
+    assert files.last_command(status.key) == 12.0
+    reads = dataclasses.replace(status.reads(), last_command=files.last_command)
+    shown, listed = show_attempt(reads, files.root, "tasks", "tl-1"), list_attempts(reads)
+    assert isinstance(shown, Shown) and isinstance(listed, Listed)
+    assert shown.view.entry == "running" and shown.view.step == "check" and shown.view.last_command is None
+    assert not any(line.startswith("Last command:") for line in human("tl step show", shown, None))
+    assert human("tl step list", listed, None)[1].endswith("\twait\t-")
+    assert as_data(shown)["last_command"] is None
+    rows = as_data(listed)["attempts"]
+    assert isinstance(rows, list) and isinstance(rows[0], dict) and rows[0]["last_command"] is None
 
 
 def refused(times: int) -> Callable[[Status], object]:

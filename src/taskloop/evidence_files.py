@@ -9,7 +9,7 @@ from typing import Final, Literal
 
 from any_agent import RunOutcome
 
-from taskloop.activity_file import ActivityPage, follow, tail
+from taskloop.activity_file import ActivityPage, command_time, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
 from taskloop.round_log import WORD
 from taskloop.slot_state import shown
@@ -177,23 +177,12 @@ class EvidenceFiles:
                 return shown(line)
         return None
 
-    def note_command(self, key: AttemptKey, at: float) -> None:
-        """Overwrite `last-command` in the attempt's directory with the wall-clock time of the agent's latest command. A
-        display-only artifact (`tl step list` and `show`); nothing reads it for control. OSError propagates."""
-        path = self._path(self.directory(key) + "/last-command")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name("last-command.tmp")  # one writer per attempt; replaced whole, never read half-written
-        temporary.write_text(repr(at), encoding="utf-8")
-        os.replace(temporary, path)
-
     def last_command(self, key: AttemptKey) -> float | Literal["none", "unreadable"]:
-        """Read-only: that time, `none` when no command was noted yet, `unreadable` when the file cannot be read or is not
-        a number; creates nothing."""
+        """Read-only: the latest command start in the event stream, `none` if absent, `unreadable` for damaged evidence.
+        Display only; creates nothing and does not consult the retired sidecar."""
         try:
-            return float(self._path(self.directory(key) + "/last-command").read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return "none"
-        except (OSError, ValueError, EvidenceError):
+            return command_time(self.events_path(key), EVENTS_CAP, TRUNCATED)
+        except (OSError, EvidenceError):
             return "unreadable"
 
     def started_at(self, key: AttemptKey) -> float | None:

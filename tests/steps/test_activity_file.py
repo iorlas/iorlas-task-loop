@@ -25,7 +25,7 @@ class Wall:
 
 
 def run(files: EvidenceFiles, *items: events.HarnessEvent, start: float = 1000.0) -> CommandSink:
-    sink = CommandSink(files, KEY, Wall(start), Wall())
+    sink = CommandSink(files, KEY, Wall(start))
     for item in items:
         sink.feed(item)
     return sink
