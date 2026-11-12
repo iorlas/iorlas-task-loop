@@ -10,6 +10,7 @@ from git_porcelain import Conflicted, GitUnavailable, MissingRevision, Repo, Sha
 from taskloop.check_admit import named
 from taskloop.check_store import ChecksRow, Required
 from taskloop.land_gate import gate_of
+from taskloop.land_guide import restart
 from taskloop.land_push import Origin, fetched
 from taskloop.land_summary import gate_lines, message_at
 from taskloop.operations import Failed
@@ -66,7 +67,7 @@ def squashed_onto(origin: Origin, checks: ChecksRow, title: str, o: str) -> tupl
     if isinstance(made, Conflicted):
         shown = ", ".join(made.paths[:20])
         return Failed("refused", "conflict", f"X does not merge onto origin's main at {o} ({len(made.paths)} paths: "
-                      f"{shown}). Nothing was recorded.")
+                      f"{shown}). Nothing was recorded. To land it, {restart(checks.task_id, x)}")
     if isinstance(made, Failed):
         return made
     try:

@@ -581,6 +581,7 @@ LONGEST = ("unavailable evidence publish=accepted then=collected:verified verify
     ("collected failed:expired:a.b-c claim=lost release=held:check_running\n",
      "collected failed:expired:a.b-c claim=lost release=held:check_running"),
     ("refused a b c d e f g h\n", None),
+    ("failed terminated_by_signal\n", "failed terminated_by_signal"),
 ])
 def test_only_a_line_of_the_entrys_fixed_words_is_shown(tail: str | None, expected: str | None, tmp_path: Path) -> None:
     files = EvidenceFiles(tmp_path)

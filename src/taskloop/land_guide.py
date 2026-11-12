@@ -5,6 +5,21 @@
 
 from typing import Final
 
+
+def restart(task_id: str = "<id>", x: str = "<X>") -> str:
+    """The one recovery from a conflict (or a failed validation that needs new code): a new chain on the current main. The
+    task branch is the chain's memory, so the stale one is set aside under a name no earlier recovery used (X's first 12
+    characters) and dropped from origin; local `main`, where a new branch starts, is brought up to date first."""
+    aside = f"old/{task_id}-{x[:12]}"
+    return (
+        f"start the task again on the current main, in your checkout: `git switch main && git pull --ff-only` (if that "
+        f"cannot fast-forward, local main holds commits origin lacks: push or move them first, a new chain starts at local "
+        f"main); `git branch -m task/{task_id} {aside}`; `git push origin --delete task/{task_id}` (the old commits then "
+        f"stay only in your checkout, on `{aside}`); then `tl step release {task_id} --abandon` and `tl step start {task_id}` "
+        f"(plan and implement run again on the new main)."
+    )
+
+
 RERUN: Final = "Nothing was lost: rerun `tl step land` (a rerun does only what is missing)."
 INTERRUPTED: Final = "interrupted"  # `tl step land` stopped by Ctrl-C (`cli_step._land`): exit 130, the rerun reconciles
 
@@ -45,10 +60,9 @@ LAND_GUIDE: Final = {
     "gate_changed": "The land changes what decides a pass (the lines above: checks, setup, required names, configuration files, "
     "weakened tests). Read the diff (`tl step land TASK --summary`); if the person means it, rerun `tl step land TASK "
     "--accept-gate-changes`, else fix the task branch (abandon and restart).",
-    "conflict": "X does not merge onto origin's main: merge `main` into `task/<id>` by hand and push it, then `tl step release "
-    "--abandon` and `tl step start` (the restarted steps check the merge).",
+    "conflict": "X does not merge onto origin's main: the detail above gives the restart to run.",
     "checks_failed": "A check failed on S (the `Land check:` lines and logs say which): rerun `tl step land` if it is flaky; "
-    "otherwise fix it as for a conflict (merge `main` into `task/<id>`, abandon, restart). Nothing was pushed.",
+    f"otherwise {restart()} Nothing was pushed.",
     "target_moved": "Rerun `tl step land`: it squashes X onto the new main as a new candidate and runs the checks again on it "
     "when its tree differs from X's (a slot and the checks' time).",
     "no_remote": "The checkout has no `origin`: add it (`git remote add origin <url>`), then rerun.",

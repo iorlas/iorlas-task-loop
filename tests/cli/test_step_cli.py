@@ -184,21 +184,21 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Step: plan", "Phase: captured", "Result: pending verification", "Setup: none\nDirectory: /a/d", "Entry log: /a/d/entry.log",
       "Next: verify", "Run `tl step verify`."],
-     STATUS_KEYS | {"directory", "entry_log", "setup"}),
+     STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(REPEAT, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Worker: last known pid 42, process group 41 (not checked)", "Result: pending repeat", "Unsettled: uncommitted",
       "  ?? docs/design/tl-1/note.md", "  +3 more", f"Next: repeat\n{step_guide.GUIDE['repeat']}",
       "Attempt: attempt (2 of at most 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1"],
-     STATUS_KEYS | {"directory", "entry_log", "setup"}),
+     STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), FAILED_SETUP), 0,
      [f"Deadline passed: no\nSetup: run 2 failed at {D}; log /a/d/setup-2.log\nDirectory"],
-     STATUS_KEYS | {"directory", "entry_log", "setup"}),
+     STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), RUNNING_SETUP), 0,
-     [f"Setup: run 3 unfinished at {D}; log /a/d/setup-3.log"], STATUS_KEYS | {"directory", "entry_log", "setup"}),
+     [f"Setup: run 3 unfinished at {D}; log /a/d/setup-3.log"], STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (["step", "list", "--stuck"], Listed((STATUS,)), 0,
      ["task\tbacklog\tstep\tattempt\tslot", "tl-1\ttasks\tplan\t1/3\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
-     ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log", "setup"}),
+     ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (["step", "verify", "tl-1", "--backlog", "tasks"], VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
      ["reused: attempt attempt", "Release: released\nPublish: published"], CHECKED),
     (["step", "verify", "tl-1", "--backlog", "tasks"],
@@ -222,11 +222,11 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (PUBLISH, Failed("unavailable", "remote"), 3, ["tl step publish: unavailable:remote", step_guide.GUIDE["remote"]], ERROR),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(DONE, Path("/a/d"), Path("/a/d/entry.log")), 0,
      [f"Published: task/tl-1 at {X} on origin, 1970-01-01 00:00:40 UTC\n", "Next: done"],
-     STATUS_KEYS | {"directory", "entry_log", "setup"}),
+     STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(ABANDONED, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Earlier: first abandoned", f"Released: 1970-01-01 00:00:30 UTC, slot parked at {D}; claim unclaimed; abandoned",
       f"Next: start\n{step_guide.GUIDE['abandoned']}"],
-     STATUS_KEYS | {"directory", "entry_log", "setup"}),
+     STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (RELEASE, ReleasedTask("tasks", "tl-1", "attempt", Released("s1", D, True, "kept", False)), 0,
      ["released: attempt attempt for tl-1 (backlog tasks)\n", f"Slot s1 parked at {D}\nReservation of s1 removed\nClaim kept"], FREED),
     ([*RELEASE, "--abandon"], ReleasedTask("tasks", "tl-1", "attempt", Released("s1", None, True, "not_held", True)), 0,
@@ -447,7 +447,8 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     shown = json.loads(capsys.readouterr().out)
     assert (shown["step"], shown["phase"], shown["entry"], shown["next"]) == ("plan", "admitted", "none", "stuck:expired_admitted")
-    assert set(shown) == STATUS_KEYS | {"directory", "entry_log", "setup"} and (shown["entry_process"], shown["worker"]) == (None, None)
+    assert set(shown) == STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}
+    assert (shown["entry_process"], shown["worker"]) == (None, None)
     assert shown["setup"] is None
     con = sqlite3.connect(db)
     with con:

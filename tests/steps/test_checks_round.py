@@ -28,7 +28,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher, LaunchResult
-from taskloop.operations import LATE, ChecksPorts, Failed, Started, StartPorts, StartRequest, start
+from taskloop.operations import LATE, ChecksPorts, Failed, StartPorts, StartRequest, start
 from taskloop.round import RoundPorts
 from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody
@@ -257,9 +257,9 @@ def test_an_admitted_checks_attempt_is_relaunched_with_the_checks_launcher_only(
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.logged("tl-1", "check", "relaunch", "relaunched", checks) == 1
 
 
-def test_two_counted_refusals_hold_the_task_without_stopping_new_work_and_a_start_by_hand_begins_at_plan(rig: Checking) -> None:
-    """`stuck:checks_refused` of a round-taken task is held; the person's `tl step start` then admits a fresh plan attempt
-    (D4: the hold is an abandon), started by hand (no label)."""
+def test_two_counted_refusals_hold_the_task_without_stopping_new_work_and_a_start_by_hand_is_refused_until_answered(rig: Checking) -> None:
+    """`stuck:checks_refused` of a round-taken task is held; the person's `tl step start` is refused `on_hold` until the
+    hold is answered (F3): the hold's abandon is recorded and `held` is on the task."""
     implemented(rig)
     rig.bodies = ["counted", "counted", "passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
@@ -271,8 +271,8 @@ def test_two_counted_refusals_hold_the_task_without_stopping_new_work_and_a_star
     assert held not in rig.round(rig.last.written) and rig.starts == 2 and rig.counted("tl-1") == ("checks:running", 2)
     rig.now += 1
     by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
-    assert isinstance(by_hand, Started) and (by_hand.status, by_hand.step) == ("started", "plan")
-    assert rig.con.execute("SELECT label FROM attempt WHERE attempt_id=?", (by_hand.attempt_id,)).fetchone() == (None,)
+    assert isinstance(by_hand, Failed) and by_hand.word == "refused:on_hold"
+    assert rig.con.execute("SELECT count(*) FROM attempt WHERE task_id='tl-1' AND step='plan'").fetchone() == (1,)
 
 
 @pytest.mark.parametrize(("late", "word"), [("unstartable", "unavailable:start"), ("crash", "relaunched")])
