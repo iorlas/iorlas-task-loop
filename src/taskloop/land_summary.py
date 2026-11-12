@@ -15,7 +15,6 @@ diff command. `lines` renders it, every outside text shown printable.
 """
 
 import shlex
-import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Literal
@@ -26,6 +25,7 @@ from taskloop.check_store import ChecksRow, Required, ResultRow
 from taskloop.land_gate import ACCEPT, FILES, Changed, Gate, gate_of
 from taskloop.land_push import Origin
 from taskloop.operations import Failed
+from taskloop.printable import one_line
 from taskloop.profile import Argv, Check, Profile, ProfileFiles, Refused, Unavailable, read_profile
 
 TITLE: Final = 72  # a title's and a listed subject's characters
@@ -33,20 +33,6 @@ SUBJECTS: Final = 50  # listed commit subjects, then `- ... and <n> more`
 CONFLICTS: Final = 20  # listed conflicted paths
 type Files = Mapping[str, tuple[str, Sha]]
 type State = Literal["same_tree", "moved", "conflict", "no_change"]
-
-
-def one_line(text: str, cap: int) -> str:
-    """`text` as one printable line of at most `cap` characters: every control, format, surrogate, private-use or
-    unassigned character becomes a space, then every run of whitespace (line and paragraph separators included) one."""
-    kept = "".join(" " if unicodedata.category(char).startswith("C") else char for char in text)
-    return " ".join(kept.split())[:cap].rstrip()
-
-
-def block(text: str, line: int = 2000, total: int = 20000) -> str:
-    """`text` for a terminal: each line through `one_line` (at most `line` characters, its leading spaces kept up to 20), at
-    most `total` characters in all."""
-    body = "\n".join(each[:len(each) - len(each.lstrip(" "))][:20] + one_line(each, line) for each in text.split("\n"))
-    return body if len(body) <= total else body[:total].rstrip() + "\n[shortened]"
 
 
 def commits(repo: Repo, o: str, x: str) -> tuple[tuple[str, str], ...]:

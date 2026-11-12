@@ -292,17 +292,16 @@ def minutes_refused(minutes: int) -> Failed | None:
     return None if ok else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
 
 
-EFFORTS: Final = ("none", "minimal", "low", "medium", "high", "xhigh", "max")  # the reasoning efforts the agent CLIs accept
+def _word(value: str) -> bool:
+    return bool(value) and value.isprintable() and not any(char.isspace() for char in value) and not value.startswith("-")
 
 
 def choices_refused(model: str, effort: str) -> Failed | None:
-    """`--model` and `--effort` of every agent launch, checked before a slot or claim is taken: a model is one printable
-    word that cannot read as a flag, an effort one of EFFORTS. A well-formed model the vendor does not offer still fails
-    in the agent (the factory has no list of them)."""
-    if not model.strip() or not model.isprintable() or model != model.strip() or " " in model or model.startswith("-"):
-        return Failed("refused", "choices", "--model must be one printable word that does not start with `-`")
-    if effort not in EFFORTS:
-        return Failed("refused", "choices", f"--effort must be one of {', '.join(EFFORTS)}")
+    """`--model` and `--effort` of every agent launch, checked before a slot or claim is taken, by shape only: one printable
+    word that cannot read as a flag. Which models and efforts exist is the vendor's to say (its catalog changes); a value it
+    refuses fails in the agent."""
+    if not _word(model) or not _word(effort):
+        return Failed("refused", "choices", "--model and --effort must each be one printable word that does not start with `-`")
     return None
 
 

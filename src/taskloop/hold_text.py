@@ -8,13 +8,13 @@ explanation 2000 characters, 10 failed checks, 20 left paths, each other part `P
 what the abandon recorded: "returned" only when the claim is `unclaimed`.
 """
 
-import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final, Literal
 
 from taskloop.evidence_files import TERMINATED
-from taskloop.hold_cause import cause
+from taskloop.hold_cause import cause, next_step
+from taskloop.printable import one_line
 
 EXPLANATION: Final = 2000
 CHECKS: Final = 10
@@ -86,15 +86,9 @@ class HoldFacts:
     deadline: float | None = None  # the attempt's deadline, epoch seconds
 
 
-def part(text: str, cap: int = PART) -> str:
-    """One printable line of at most `cap` characters (no control, format or other `C*` character; no newline)."""
-    kept = "".join(" " if unicodedata.category(char).startswith("C") else char for char in text)
-    return " ".join(kept.split())[:cap].rstrip()
-
-
 def explained(text: str) -> str:
     """The agent's explanation: its printable lines (at most `EXPLANATION` characters in all), each quoted `> `."""
-    lines = (part(line, EXPLANATION) for line in text.split("\n"))
+    lines = (one_line(line, EXPLANATION) for line in text.split("\n"))
     capped = "\n".join(line for line in lines if line)[:EXPLANATION].rstrip()
     return "\n".join(QUOTE + line for line in capped.split("\n")) if capped else ""
 
@@ -106,28 +100,28 @@ def _listed[T](items: tuple[T, ...], cap: int) -> tuple[tuple[T, ...], str]:
 
 def _details(facts: HoldFacts) -> list[str]:
     when = f"{datetime.fromtimestamp(facts.held_at, UTC):%Y-%m-%d %H:%M:%S} UTC"
-    branch = f"task branch task/{part(facts.task_id)}"
-    at = f"{branch} at {part(facts.published)}" if facts.published else f"{branch} is not published"
-    lines = [f"taskloop hold: {part(facts.reason)}",
-             f"Step {part(facts.step)}, attempt {facts.number} ({part(facts.attempt_id)}), {when}; {at}."]
+    branch = f"task branch task/{one_line(facts.task_id)}"
+    at = f"{branch} at {one_line(facts.published)}" if facts.published else f"{branch} is not published"
+    lines = [f"taskloop hold: {one_line(facts.reason)}",
+             f"Step {one_line(facts.step)}, attempt {facts.number} ({one_line(facts.attempt_id)}), {when}; {at}."]
     if facts.entry is not None and facts.entry.endswith(TERMINATED):
         lines.append("The attempt's entry was terminated by a signal; its agent was stopped with it and its session was not "
                      "continued.")
     if facts.explanation and (text := explained(facts.explanation)):
         lines.extend(["The agent explained:", text])
     shown, more = _listed(facts.checks, CHECKS)
-    lines.extend(f"Failed checks: {part(each.name, 100)} {part(each.conclusion, 40)} {part(each.log)}" for each in shown)
+    lines.extend(f"Failed checks: {one_line(each.name, 100)} {one_line(each.conclusion, 40)} {one_line(each.log)}" for each in shown)
     if more:
         lines.append(f"Failed checks:{more}")
     if facts.leftovers is not None:
         paths, more = _listed(facts.leftovers.paths, PATHS)
-        lines.append(f"Left in the slot: {part(facts.leftovers.reason, 40)} {', '.join(part(path) for path in paths)}{more}")
-    lines.append(f"Evidence: {part(facts.evidence)}")
+        lines.append(f"Left in the slot: {one_line(facts.leftovers.reason, 40)} {', '.join(one_line(path) for path in paths)}{more}")
+    lines.append(f"Evidence: {one_line(facts.evidence)}")
     return lines
 
 
 def _labelled(facts: HoldFacts) -> str:
-    label = part(facts.label, 200)
+    label = one_line(facts.label, 200)
     return {"moved": f"The factory removed `{label}` and added `held`",
             "absent": f"The factory added `held` (`{label}` is no longer on the task)",
             "not_ours": "The factory changed no label (another actor holds this task)"}[facts.labels]
@@ -142,39 +136,40 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
     kept = f"{done}, but still holds the claim: " if claim == "ours" else f"{done}, but keeps the attempt's slot: "
     back = {"ours": "the next round returns the claim", "not_ours": "the next round frees the slot (the claim is not the factory's)",
             "unknown": "the next round frees the slot and returns the claim if it is still the factory's"}[claim]
-    slot = f"slot {part(outcome.slot)}" if part(outcome.slot) else "its slot"
+    slot = f"slot {one_line(outcome.slot)}" if one_line(outcome.slot) else "its slot"
     match outcome.word:
         case "slot_dirty":
-            where = part(outcome.slot) or "<slot>"
+            where = one_line(outcome.slot) or "<slot>"
             return (kept + f"{slot} has files left by this attempt. Save what you need, remove or restore them "
                     f"(`git -C {where} status --short` lists them), and {back}. The factory never removes work.")
         case "worker_alive" | "setup_running" | "check_running":
             group = "" if outcome.pgid is None else f", group {outcome.pgid}"
-            pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else f"pid unknown: `tl step show {part(facts.task_id)}` names it"
+            task = one_line(facts.task_id)
+            pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else f"pid unknown: `tl step show {task}` names it"
             return (kept + f"a process of this attempt still runs ({pid}). When it has ended (or after you "
                     f"stop it by that pid), {back}.")
         case "landing" | "landed":
             return (kept + f"a land of this task holds its slot or may be on origin ({outcome.word}). Finish or withdraw it "
-                    f"(`tl step land {part(facts.task_id)}`), and {back}.")
+                    f"(`tl step land {one_line(facts.task_id)}`), and {back}.")
         case _:
             return (kept + f"{slot} is not where the factory left it ({outcome.word}). Put it back (`tl step show "
-                    f"{part(facts.task_id)}` says where), and {back}.")
+                    f"{one_line(facts.task_id)}` says where), and {back}.")
 
 
 def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     """The cause's own line, then its one next step: an owner's answer only for a cause an answer fixes."""
-    task, found = part(facts.task_id), cause(facts.reason, facts.deadline)
+    task, found = one_line(facts.task_id), cause(facts.reason, facts.deadline)
     if facts.labels == "not_ours":
         retry = f"start it by hand (`tl step start {task}`): rounds do not take it again"
     else:
-        retry = f"run `bd label add {task} {part(facts.label, 200)}`: the next round starts it again at plan on task/{task} as it is"
+        retry = f"run `bd label add {task} {one_line(facts.label, 200)}`: the next round starts it again at plan on task/{task} as it is"
     edit = "edit this task's description or acceptance criteria (the agent reads those, not comments)"
     lines = [] if found is None else [found.what]
-    lines.append(f"{'To answer, ' + edit if found is None or found.fix is None else found.fix}, then {retry}.")
+    lines.append(next_step(found, retry, edit))
     if isinstance(outcome, Kept):
         lines.append("Do that once the slot or process above is cleared: until then the task is not taken again.")
     if facts.reason == "branch_moved":
-        lines.append(f"Restore task/{task} to contain {part(facts.end_commit or '')}, or delete it locally and on origin, "
+        lines.append(f"Restore task/{task} to contain {one_line(facts.end_commit or '')}, or delete it locally and on origin, "
                      "before adding the label.")
     if facts.reason == "claim_lost":
         lines.append("Someone else changed this task's claim while the factory worked on it.")

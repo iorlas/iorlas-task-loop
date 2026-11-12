@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 from typing import Final
 
 from taskloop.attempt_status import AttemptView
-from taskloop.hold_cause import cause
+from taskloop.hold_cause import cause, next_step
 from taskloop.hold_store import HoldRow
-from taskloop.hold_text import part
+from taskloop.printable import one_line
 
 # Section 12: what keeps a hold open, by the abandon's refusal word, and what the person does. A transient word needs nothing.
 KEPT_ACTIONS: Final = {
@@ -47,7 +47,7 @@ def _when(at: float) -> str:
 def _tracker(row: HoldRow) -> str:
     if row.labels is None:
         return "Hold tracker: labels not yet, not commented"
-    written = LABELS[row.labels].format(label=part(row.label, 200))
+    written = LABELS[row.labels].format(label=one_line(row.label, 200))
     said = "commented" if row.commented_at is not None else "no comment" if row.labels in ("closed", "missing") else "not commented yet"
     return f"Hold tracker: {written}, {said}{'' if row.cleared_at is None else ', `held` cleared'}"
 
@@ -56,12 +56,12 @@ def hold_lines(view: AttemptView) -> list[str]:
     """`Hold:`, `Hold tracker:` and `Hold claim:` of a recorded hold; `Hold: due` of one the next round records."""
     row = view.hold
     if row is None:
-        return [] if view.hold_due is None else [f"Hold: due {part(view.hold_due)} (the next round holds it)"]
+        return [] if view.hold_due is None else [f"Hold: due {one_line(view.hold_due)} (the next round holds it)"]
     ended = view.release if view.checks is None else None
     claim = ("returned" if ended is not None and ended.claim == "unclaimed" else
              "not held (it was no longer the factory's)" if ended is not None and ended.claim == "not_held" else
              "kept: the abandon has not finished")
-    return [f"Hold: {part(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", _tracker(row), f"Hold claim: {claim}"]
+    return [f"Hold: {one_line(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", _tracker(row), f"Hold claim: {claim}"]
 
 
 def pending_guide(word: str) -> str:
@@ -79,15 +79,14 @@ def hold_guide(view: AttemptView) -> str:
         return ON_HOLD
     if row.labels in ("closed", "missing"):
         return "Held: the task is closed or gone in the tracker; nothing to answer."
-    task, label = view.task_id, part(row.label, 200)
+    task, label = view.task_id, one_line(row.label, 200)
     found, ours = cause(row.reason), row.labels != "not_ours"
     edit = "edit the task's description or acceptance criteria (the agent reads those, not comments)"
-    fix = found.fix if found is not None and found.fix else edit
     again = f"the next round under that label starts it again at plan on task/{task} as it is"
     back = (f"add back the label the task was taken under (`bd label add {task} {label}`): {again}" if ours
             else f"start it by hand (`tl step start {task}`): rounds do not take it again")
     what = "" if found is None else " " + found.what
-    answer = f"{LEAD}{what} To fix it, {fix}, then {back}. To give up, `bd close {task}`."
+    answer = f"{LEAD}{what} {next_step(found, back, edit)} To give up, `bd close {task}`."
     if row.reason == "branch_moved":
         answer += f" First restore task/{task} to contain the verified commit, or delete it locally and on origin."
     if row.reason == "claim_lost":

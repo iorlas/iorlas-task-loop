@@ -10,7 +10,7 @@ from taskloop.land import Landed
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.land_push import Withdrawn
 from taskloop.land_render import COMMAND, land_lines
-from taskloop.land_summary import LandSummary, block
+from taskloop.land_summary import LandSummary
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     UNCLAIMING,
@@ -24,6 +24,7 @@ from taskloop.operations import (
     Started,
     VerifiedTask,
 )
+from taskloop.printable import block
 from taskloop.publish import is_published, publish_word
 from taskloop.result_data import Result, StepResult
 from taskloop.show_render import last_command, show_lines

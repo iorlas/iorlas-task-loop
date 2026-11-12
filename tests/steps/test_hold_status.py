@@ -185,7 +185,8 @@ def test_the_on_hold_guide_gives_the_one_fix_of_the_cause(factory: sqlite3.Conne
     shown = show_attempt(reads(factory), tmp_path, "tasks", "tl-1")
     assert isinstance(shown, Shown)
     text = "\n".join(human("show", shown, tmp_path / "factory.db"))
-    assert "did not finish before its deadline" in text and "Raise `--minutes`" in text and "`bd label add tl-1 auto`" in text
+    assert "did not finish before its deadline" in text and "To fix it, raise `--minutes` for the next run, then add back" in text
+    assert "`bd label add tl-1 auto`" in text
     assert "edit the task's description" not in text
 
 
@@ -255,6 +256,25 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
     probed.clear()
     found = list_attempts(ports, stuck=True)
     assert isinstance(found, Listed) and found.attempts == () and probed == []
+
+
+def test_deadline_passed_of_a_captured_agent_attempt_is_whether_its_run_timed_out_not_whether_the_clock_passed(
+    factory: sqlite3.Connection,
+) -> None:
+    plan(factory)
+    factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
+    factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state)
+        VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','json_invalid','complete')""")
+
+    def seen(now: float) -> list[bool]:
+        found = list_attempts(reads(factory, now))
+        assert isinstance(found, Listed)
+        return [each.deadline_passed for each in found.attempts]
+
+    assert (seen(50), seen(500)) == ([False], [False])  # the run ended in time; the deadline (100) passing later changes nothing
+    factory.execute("UPDATE execution SET timed_out=1,rc=124")
+    assert (seen(50), seen(500)) == ([True], [True])
 
 
 def test_show_of_a_task_held_for_failed_checks_names_each_failed_check_with_its_exit_and_log(checking: sqlite3.Connection,

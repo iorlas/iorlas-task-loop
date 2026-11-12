@@ -1,27 +1,56 @@
 """What a hold's cause is and the one right next step for it (tl-8bh9.14.56), by the reason word the hold stored. Fixed
 English; the deadline is the only value filled in. `fix` None means an owner's answer fixes the cause (edit the task, then
-add its label back); a text names the step that does, after which the label is added back. Text only; the comment
+add its label back); "" means the same attempt is worth a retry as it is; a text is an imperative clause naming the step that
+fixes it (lower case, no final stop), after which the label is added back. Text only; the comment
 (`hold_text`) and the answer guide (`hold_guide`) place it."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from taskloop.attempt_types import MiB, StepRules
 
+CHECK_GIT = "look at the task branch and the slot (`tl step show` names them)"
 EVIDENCE = "its `stdout.txt`, `stderr.txt` and `diagnostics.txt` in the evidence directory"
-PLAN_RULES = {
-    "plan_missing": "`plan.md` is absent from the commit (an `unchanged` answer needs an existing plan)",
-    "plan_encoding": "`plan.md` is not valid UTF-8 text",
-    "plan_empty": "`plan.md` is empty or only whitespace",
-    "plan_size": f"`plan.md` is over the {StepRules('').file_cap // MiB} MiB limit",
+RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the fix ("" = retry as it is)
+    "plan_missing": ("`plan.md` is absent from the commit (an `unchanged` answer needs an existing plan)", ""),
+    "plan_encoding": ("`plan.md` is not valid UTF-8 text", ""),
+    "plan_empty": ("`plan.md` is empty or only whitespace", ""),
+    "plan_size": (f"`plan.md` is over the {StepRules('').file_cap // MiB} MiB limit", ""),
+    "paths": ("a listed path is not allowed (outside the step's folder, a Git file, or too many paths)", ""),
+    "mode": ("a listed file is not a plain, non-executable file", ""),
+    "file_size": ("a listed file is over the size limit", ""),
+    "commit_absent": ("the step's commit is not in the slot's repository", CHECK_GIT),
+    "not_descendant": ("the step's commit does not descend from the commit the step started from", CHECK_GIT),
+    "chain_length": ("the step's commit is more than one commit past the commit the step started from", CHECK_GIT),
+    "nothing_written": ("the agent reported work but wrote no file, so there is nothing to commit", None),
+}
+RUN = {  # the run's classified end words the shelf names: what happened, and the fix
+    "vendor_blip": ("The agent CLI failed with an error the factory cannot tell from a blip; often `--model` or `--effort` is "
+                    f"not offered to the account. The vendor's message is in {EVIDENCE}.",
+                    "correct `--model` or `--effort` if the message says so"),
+    "bad_request": (f"The vendor rejected the request, often because of `--model` or `--effort`; its message is in {EVIDENCE}.",
+                    "correct `--model` or `--effort`"),
+    "hung": ("The agent printed nothing for too long and was stopped.", ""),
+    "crash": ("The agent process crashed.", ""),
+    "killed": ("The agent process was killed by a signal.", ""),
+    "secrets": ("A command of the agent exposed a secret, so the run was stopped.",
+                f"find what printed it in {EVIDENCE} and remove that source"),
+    "exit": (f"The agent exited with an error and no answer; see {EVIDENCE}.", "read it and fix what it names"),
+    "worker_failed": (f"The agent failed after starting work; see {EVIDENCE}.", "read it and fix what it names"),
+    "logged_out": ("The agent's vendor refused the login.", "sign in again"),
+    "rate_limited": ("The agent's vendor refused for a limit.", "wait for the limit to clear"),
+    "credit_exhausted": ("The agent's vendor refused: credit is exhausted.", "restore the credit"),
+    "network": ("The agent could not reach its vendor.", "restore the network"),
+    "setup": ("The slot's setup failed before the agent started.", "fix the setup or environment named in the setup log"),
 }
 STUCK = {
-    "expired_admitted": "The attempt's deadline passed before its entry started",
-    "entry_lost": "The attempt's entry process ended without recording a result",
-    "uncollected": "The attempt's result could not be read back in full",
-    "conflict": "The attempt's stored session facts conflict",
-    "setup_failed": "The slot's setup command failed",
+    "expired_admitted": ("The attempt's deadline passed before its entry started.", "raise `--minutes` for the next run"),
+    "entry_lost": ("The attempt's entry process ended without recording a result.", ""),
+    "uncollected": ("The attempt's result could not be read back in full.", ""),
+    "conflict": ("The attempt's stored session facts conflict.", ""),
+    "setup_failed": ("The slot's setup command failed.", "fix the setup or environment first (the setup log is beside the attempt's "
+                     "entry log)"),
 }
 
 
@@ -35,30 +64,26 @@ def _at(deadline: float | None) -> str:
     return "" if deadline is None else f" ({datetime.fromtimestamp(deadline, UTC):%Y-%m-%d %H:%M:%S} UTC)"
 
 
-NO_EDIT = "Nothing in the task needs editing"
-EXACT = {
-    "run:vendor_blip": Cause(
-        "The agent CLI failed with an error the factory cannot tell from a blip; often `--model` or `--effort` is not offered to "
-        f"the account. The vendor's message is in {EVIDENCE}.",
-        "Correct `--model` or `--effort` of the rounds if it says so (editing the task does not help)"),
-    "needs_owner": Cause("The agent needs a decision only the owner can give (its explanation is quoted above)."),
-    "incomplete": Cause("The agent stopped without finishing (its explanation is quoted above)."),
-}
+def _known(table: Mapping[str, tuple[str, str | None]], word: str, fallback: Cause) -> Cause:
+    found = table.get(word)
+    return fallback if found is None else Cause(*found)
 
 
 def _run(rest: str) -> Cause:
-    return Cause(f"The agent run failed ({rest}); the vendor's message is in {EVIDENCE}.",
-                 "Clear what it names (login, limit, setup), not the task")
-
-
-def _answer(_rest: str) -> Cause:
-    return Cause("The agent's answer did not fit the answer contract; `diagnostics.txt` in the evidence directory says how.", NO_EDIT)
+    return _known(RUN, rest, Cause(f"The agent run failed ({rest}); see {EVIDENCE}.", "read it and fix what it names"))
 
 
 def _rejected(rest: str) -> Cause:
-    found = PLAN_RULES.get(rest, f"a listed file broke the commit rule `{rest}`")
-    return Cause(f"The factory rejected the agent's work: {found}. The agent's own claim of success was not what was checked.",
-                 NO_EDIT + ": the next attempt writes it again")
+    what, fix = RULES.get(rest, (f"the step broke the commit rule `{rest}`", ""))
+    return Cause(f"The factory rejected the agent's work: {what}. The agent's own claim of success was not what was checked.", fix)
+
+
+def _stuck(rest: str) -> Cause:
+    return _known(STUCK, rest, Cause(f"The attempt is stuck ({rest}).", ""))
+
+
+def _answer(_rest: str) -> Cause:
+    return Cause("The agent's answer did not fit the answer contract; `diagnostics.txt` in the evidence directory says how.", "")
 
 
 def _repeats(_rest: str) -> Cause:
@@ -66,13 +91,11 @@ def _repeats(_rest: str) -> Cause:
                  "(`Left in the slot` names them).")
 
 
-def _stuck(rest: str) -> Cause:
-    if rest not in STUCK:
-        return Cause(f"The attempt is stuck ({rest}).")
-    return Cause(f"{STUCK[rest]}; the entry log in the evidence directory says more.", NO_EDIT)
-
-
-BY_PREFIX: tuple[tuple[str, Callable[[str], Cause]], ...] = (  # the first prefix of the word that fits builds the cause from the rest
+OWNER = {
+    "needs_owner": Cause("The agent needs a decision only the owner can give (its explanation is quoted above)."),
+    "incomplete": Cause("The agent stopped without finishing (its explanation is quoted above)."),
+}
+BY_PREFIX: tuple[tuple[str, Callable[[str], Cause]], ...] = (  # the first prefix of the word that fits builds the cause
     ("run:", _run), ("answer:", _answer), ("rejected:", _rejected), ("repeats_exhausted", _repeats), ("stuck:", _stuck),
 )
 
@@ -81,7 +104,12 @@ def cause(reason: str, deadline: float | None = None) -> Cause | None:
     """The cause line and fix of a hold's `reason`, None for a reason without one of its own (the owner's answer then)."""
     word = reason.removeprefix("failed:")
     if word == "run:timeout":
-        return Cause(f"The agent did not finish before its deadline{_at(deadline)}.",
-                     "Raise `--minutes` of the rounds that take it (editing the task does not help)")
-    found = EXACT.get(word)
-    return found or next((build(word.removeprefix(prefix)) for prefix, build in BY_PREFIX if word.startswith(prefix)), None)
+        return Cause(f"The agent did not finish before its deadline{_at(deadline)}.", "raise `--minutes` for the next run")
+    return OWNER.get(word) or next((build(word.removeprefix(prefix)) for prefix, build in BY_PREFIX if word.startswith(prefix)), None)
+
+
+def next_step(found: Cause | None, back: str, owner: str) -> str:
+    """The one sentence of what to do: the fix then `back` (how the task is taken again); `owner` is the owner's answer."""
+    if found is None or found.fix is None:
+        return f"To answer, {owner}, then {back}."
+    return f"To try again, {back}." if found.fix == "" else f"To fix it, {found.fix}, then {back}."

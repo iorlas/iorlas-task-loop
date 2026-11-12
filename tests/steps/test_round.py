@@ -419,14 +419,17 @@ def test_a_failed_ready_read_stops_admission_but_settling_still_ran(
     assert bench.lines[-1].endswith(f" tasks round moves=1 stopped={stopped}")
 
 
-@pytest.mark.parametrize("label, minutes, reason", [(" ", 30, "label"), ("auto", 0, "choices"), ("auto", 7 * 24 * 60 + 1, "choices")])
-def test_an_empty_label_or_minutes_out_of_range_are_refused_before_any_read(
-    factory: sqlite3.Connection, label: str, minutes: int, reason: str
+@pytest.mark.parametrize("label, minutes, model, effort, reason", [
+    (" ", 30, "m", "high", "label"), ("auto", 0, "m", "high", "choices"), ("auto", 7 * 24 * 60 + 1, "m", "high", "choices"),
+    ("auto", 30, "-m", "high", "choices"), ("auto", 30, "m", "a b", "choices"),
+])
+def test_an_empty_label_a_bad_choice_or_minutes_out_of_range_are_refused_before_any_read(
+    factory: sqlite3.Connection, label: str, minutes: int, model: str, effort: str, reason: str
 ) -> None:
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     ready = ReadyTracker([bead("t-1")], ready=["t-1"])
     bench = Bench(factory, ready)
-    found = run_round(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, "m", "e", minutes))
+    found = run_round(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, model, effort, minutes))
     assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", reason) and exit_code(found) == 1
     assert ready.ready_reads == [] and bench.lines == [] and bench.launcher.calls == []
 

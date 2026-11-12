@@ -143,20 +143,36 @@ def test_an_entry_ended_by_a_signal_is_said_so_and_its_agent_session_is_not_cont
 
 
 @pytest.mark.parametrize(("reason", "says", "answer"), [
-    ("failed:run:timeout", "did not finish before its deadline (1970-01-01 00:15:00 UTC).", "Raise `--minutes` of the rounds"),
-    ("failed:run:vendor_blip", "`--model` or `--effort` is not offered", "Correct `--model` or `--effort`"),
-    ("failed:answer:schema_invalid", "did not fit the answer contract", "Nothing in the task needs editing"),
-    ("failed:rejected:plan_encoding", "`plan.md` is not valid UTF-8 text", "Nothing in the task needs editing"),
-    ("failed:rejected:plan_empty", "`plan.md` is empty", "Nothing in the task needs editing"),
-    ("failed:rejected:plan_size", "over the 1 MiB limit", "Nothing in the task needs editing"),
-    ("failed:rejected:plan_missing", "an `unchanged` answer needs an existing plan", "Nothing in the task needs editing"),
+    ("failed:run:timeout", "before its deadline (1970-01-01 00:15:00 UTC).", "To fix it, raise `--minutes` for the next run"),
+    ("failed:run:vendor_blip", "`--model` or `--effort` is not offered", "To fix it, correct `--model` or `--effort`"),
+    ("failed:run:bad_request", "rejected the request", "To fix it, correct `--model` or `--effort`"),
+    ("failed:run:secrets", "exposed a secret", "To fix it, find what printed it"),
+    ("failed:run:hung", "printed nothing for too long", "To try again, run"),
+    ("failed:run:crash", "process crashed", "To try again, run"),
+    ("failed:run:exit", "exited with an error", "To fix it, read it and fix what it names"),
+    ("failed:run:logged_out", "refused the login", "To fix it, sign in again"),
+    ("failed:answer:schema_invalid", "did not fit the answer contract", "To try again, run"),
+    ("failed:rejected:plan_encoding", "`plan.md` is not valid UTF-8 text", "To try again, run"),
+    ("failed:rejected:plan_empty", "`plan.md` is empty", "To try again, run"),
+    ("failed:rejected:plan_size", "over the 1 MiB limit", "To try again, run"),
+    ("failed:rejected:plan_missing", "an `unchanged` answer needs an existing plan", "To try again, run"),
+    ("failed:rejected:commit_absent", "commit is not in the slot's repository", "To fix it, look at the task branch and the slot"),
+    ("failed:rejected:paths", "a listed path is not allowed", "To try again, run"),
+    ("failed:rejected:nothing_written", "wrote no file", "To answer, edit this task's description"),
     ("failed:needs_owner", "needs a decision only the owner can give", "To answer, edit this task's description"),
     ("repeats_exhausted:uncommitted", "did not manage it", "To answer, edit this task's description"),
+    ("stuck:setup_failed", "setup command failed", "To fix it, fix the setup or environment first"),
+    ("stuck:entry_lost", "ended without recording a result", "To try again, run"),
 ], ids=lambda value: value if isinstance(value, str) and ":" in value else "")
 def test_each_cause_class_names_its_cause_and_the_one_right_next_step(reason: str, says: str, answer: str) -> None:
     found = comment(replace(FACTS, reason=reason, deadline=900.0), RETURNED)
     assert says in found and answer in found
     assert ("edit this task's description" in found) == answer.startswith("To answer")  # an answer only where an answer fixes it
+
+
+def test_the_next_step_reads_right_when_no_round_took_the_task() -> None:
+    found = comment(replace(FACTS, reason="failed:run:timeout", labels="not_ours"), Returned("not_held"))
+    assert "To fix it, raise `--minutes` for the next run, then start it by hand (`tl step start tl-1`)" in found
 
 
 def test_a_kept_slot_says_to_act_after_it_is_cleared_and_a_closed_cause_needs_no_edit_advice() -> None:

@@ -215,7 +215,7 @@ def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int
 
 
 @pytest.mark.parametrize(("model", "effort"), [
-    ("", "high"), ("-x", "high"), ("a b", "high"), ("a\nb", "high"), ("m", "ultra"), ("m", ""),
+    ("", "high"), ("-x", "high"), ("a b", "high"), ("a\nb", "high"), ("m", "-high"), ("m", "a b"), ("m", ""),
 ])
 def test_an_impossible_model_or_effort_is_refused_before_any_read_or_launch(model: str, effort: str) -> None:
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))

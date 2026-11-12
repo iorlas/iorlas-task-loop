@@ -250,7 +250,7 @@ REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high
 
 @pytest.mark.parametrize("change, reason", [
     ({"backlog": "a/b"}, "backlog"), ({"backlog": ""}, "backlog"), ({"backlog": "a b"}, "backlog"), ({"label": " "}, "label"),
-    ({"model": ""}, "choices"), ({"effort": " "}, "choices"), ({"effort": "ultra"}, "choices"), ({"model": "-m"}, "choices"),
+    ({"model": ""}, "choices"), ({"effort": " "}, "choices"), ({"effort": "-high"}, "choices"), ({"model": "-m"}, "choices"),
     ({"minutes": 0}, "choices"), ({"minutes": 7 * 24 * 60 + 1}, "choices"),
 ])
 def test_the_rounds_choices_are_checked_before_anything(change: dict[str, str | int], reason: str) -> None:
@@ -260,6 +260,7 @@ def test_the_rounds_choices_are_checked_before_anything(change: dict[str, str | 
     refused = inputs(request)
     assert refused is not None and (refused.kind, refused.reason) == ("refused", reason)
     assert inputs(REQUEST) is None
+    assert inputs(replace(REQUEST, effort="ultra")) is None  # which efforts exist is the vendor's to say
 
 
 def test_the_abrupt_line_is_best_effort() -> None:

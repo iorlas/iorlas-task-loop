@@ -14,7 +14,7 @@ from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 from taskloop import cli_step
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.git_views import GitProfileFiles, GitViews
-from taskloop.land_summary import block, one_line
+from taskloop.printable import block, one_line
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
 from taskloop.step_guide import STEP_ONLY
