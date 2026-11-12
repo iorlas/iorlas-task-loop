@@ -30,6 +30,7 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.4.3.1.16.2 M1 smoke](tl-8bh9.4.3.1.16.2/m1-smoke-findings.md) | M1 end-to-end live smoke: plan, round advance, implement on a scratch remote (2026-11-11) | evidence |
 | [tl-8bh9.14.8 live smoke](tl-8bh9.14.8/live-smoke.md) | M3 live smoke runbook: `tl step land` on a scratch bare remote and tracker (same tree, moved main, interrupts, `target_moved`, refusals) | runbook; passed 2026-11-12 |
 | [tl-8bh9.14.8 M3 smoke](tl-8bh9.14.8/m3-smoke-findings.md) | M3 live smoke: `tl step land` on a scratch remote (same tree, moved main, Ctrl-C and `kill -9`, `target_moved`, `remote_rejected`, withdraw, lost answer, no change, conflict) (2026-11-12) | evidence |
+| [tl-8bh9.14.9 M4 smoke](tl-8bh9.14.9/m4-smoke-findings.md) | M4 live smoke ([runbook](tl-8bh9.14.9/live-smoke.md)): holds in the rounds (needs_owner, failed check, closed, hand-started, `kill -9` entry, dirty slot, `branch_moved`, label rule, re-ingestion) and keep-awake exits on a scratch remote (2026-11-12) | evidence; passed, Git read timeout blocked |
 | [tl-8bh9.14.6 M2 smoke](tl-8bh9.14.6/m2-smoke-findings.md) | M2 live smoke: the check step in the rounds (pass, fail, lingering, interrupt, abandon) on a scratch remote (2026-11-11) | evidence |
 | [tl-8bh9.4.3.1.2](tl-8bh9.4.3.1.2/plan.md) | Admit one plan attempt (admission only) | built |
 | [tl-8bh9.4.3.1.3](tl-8bh9.4.3.1.3/plan.md) | Managed slots: the smallest slot state admission needs | built |
