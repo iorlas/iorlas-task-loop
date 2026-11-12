@@ -20,11 +20,12 @@ from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, Ad
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.claim_lease import BD_TIMEOUT_S
-from taskloop.composition import adopt_slots, open_admission
+from taskloop.composition import adopt_slots, open_admission, real_slots
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitViews
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt
@@ -406,9 +407,9 @@ def test_a_v1_file_database_is_refused_by_the_real_store(repo: FakeRepo, tmp_pat
 
 
 def test_composition_constructs_without_running_git_or_bd(tmp_path: Path) -> None:
-    assert isinstance(open_admission(tmp_path / "factory.db", tmp_path / "artifacts"), AttemptAdmission)
+    assert isinstance(open_admission(tmp_path / "factory.db", tmp_path / "artifacts", GitViews(DEFAULT_GIT_READ_SECONDS)), AttemptAdmission)
     with pytest.raises(ValueError, match="at least 1"):  # refused before the real Git boundary is asked anything
-        adopt_slots(tmp_path / "factory.db", tmp_path, tmp_path / "slots", 0)
+        adopt_slots(tmp_path / "factory.db", tmp_path, tmp_path / "slots", 0, real_slots(GitViews(DEFAULT_GIT_READ_SECONDS)))
     assert not (tmp_path / "factory.db").exists()
 
 

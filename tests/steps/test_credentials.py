@@ -12,8 +12,11 @@ from stream_proc import OwnedProcess, ProcessObservation
 from taskloop import owned_processes
 from taskloop.agent_credentials import codex_machine_credentials, scrubbed
 from taskloop.attempt import CredentialsUnavailable
-from taskloop.git_views import checkouts, hardened
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
+from taskloop.git_views import GitViews, hardened
 from taskloop.owned_processes import worker_gone
+
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 BASE = {"PATH": "/usr/bin:/bin", "HOME": "/home/me"}
 BAR = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "url.delegate-push-refused://.pushInsteadOf", "GIT_CONFIG_VALUE_0": ""}
@@ -182,14 +185,14 @@ def test_every_factory_git_view_runs_hardened_after_existing_git_config_entries(
     }
     monkeypatch.setenv("GIT_CONFIG_COUNT", "0")
     monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
-    view = checkouts(Path("/slots/s1"))
+    view = VIEWS.checkouts(Path("/slots/s1"))
     assert isinstance(view, RealRepo) and view.extra_env == hardened({}) | {"GIT_CEILING_DIRECTORIES": "/slots"}
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", "/home")  # the person's own ceiling stays, after the checkout's parent
-    other = checkouts(Path("/slots/s1"))
+    other = VIEWS.checkouts(Path("/slots/s1"))
     assert isinstance(other, RealRepo) and other.extra_env["GIT_CEILING_DIRECTORIES"] == "/slots:/home"
     monkeypatch.setenv("GIT_CONFIG_COUNT", "two")
     with pytest.raises(GitUnavailable, match="GIT_CONFIG_COUNT"):
-        checkouts(Path("/nowhere"))
+        VIEWS.checkouts(Path("/nowhere"))
 
 
 @pytest.mark.parametrize(

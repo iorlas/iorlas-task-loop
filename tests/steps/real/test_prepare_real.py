@@ -21,15 +21,17 @@ from sqlite_store import begin_immediate
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Verified
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.git_views import checkouts
+from taskloop.git_views import GitViews
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, lock_path, probe
 from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
+
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -57,15 +59,15 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     (main / "README").write_text("one\n")
     git(main, "add", "README")
     git(main, "commit", "-q", "-m", "base")
-    slot = slots / checkouts(main).identity().key / "s1"
+    slot = slots / VIEWS.checkouts(main).identity().key / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
-    adopt(lambda: factory, begin_immediate, checkouts(main), SlotGit(checkouts, RealSlotFiles()), slots, 1)
+    adopt(lambda: factory, begin_immediate, VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
     (main / "README").write_text("two\n")
     git(main, "commit", "-q", "-am", "main moves on")
     m = git(main, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
-        lambda: factory, begin_immediate, EvidenceFiles(art), tasks, checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
+        lambda: factory, begin_immediate, EvidenceFiles(art), tasks, VIEWS.checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
     )
     admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), main, "m", "high", "workspace-write", 100, None))
     assert isinstance(admitted, Admitted) and admitted.slot == "s1"
@@ -80,9 +82,9 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
-    attempts = Attempts(store, EvidenceFiles(art), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
+    attempts = Attempts(store, EvidenceFiles(art), lambda: ("/bin/codex", {}), run, lambda: 10, VIEWS.checkouts, files)
     assert attempts.execute(admitted.key, ENTRY).reason == "verification"
-    verdict = Verifier(store, checkouts, files, lambda _worker: True, lambda: 20, hold).verify(admitted.key)
+    verdict = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold).verify(admitted.key)
     assert isinstance(verdict, Verified) and not verdict.reused
     x = git(slot, "rev-parse", "HEAD").strip()
     assert git(main, "rev-parse", "refs/heads/task/tl-1").strip() == x and git(slot, "rev-parse", "HEAD^").strip() == m != d

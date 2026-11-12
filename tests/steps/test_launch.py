@@ -21,11 +21,12 @@ from stream_proc import (
 
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
-from taskloop.attempt_types import AttemptKey, EntryIdentity
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryIdentity
 from taskloop.check_store import CheckStore
 from taskloop.composition import open_checks_launcher, open_launcher
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitViews
 from taskloop.launch import CHECK_ENTRY_MODULE, AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -106,7 +107,8 @@ class Observe:
 
 
 def launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:
-    return Launcher(db, EvidenceFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python")
+    return Launcher(db, EvidenceFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python",
+                    read_seconds=DEFAULT_GIT_READ_SECONDS)
 
 
 def stored(db: Path) -> tuple[object, ...]:
@@ -125,6 +127,14 @@ def register(db: Path, entry: EntryIdentity) -> None:
     con.close()
 
 
+def test_the_launchers_git_bound_is_in_the_entry_argv(admitted: Path) -> None:
+    start = FakeStart()
+    built = Launcher(admitted, EvidenceFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python", read_seconds=45)
+    assert isinstance(built.launch("tasks", "tl-1", 30), Launched)
+    argv = start.calls[0]["argv"]
+    assert isinstance(argv, list) and argv[-3:] == ["45", "tasks", "tl-1"]
+
+
 def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted: Path) -> None:
     seen: list[tuple[object, ...]] = []
     start = FakeStart()
@@ -134,7 +144,7 @@ def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted:
     assert seen == [(None, None, None, "admitted")] and stored(admitted) == (9, "new-start", "boot", "admitted")
     call = start.calls[0]
     root = str(admitted.parent)
-    assert call["argv"] == ["/venv/bin/python", "-I", "-m", "taskloop.attempt_entry", str(admitted), root, "tasks", "tl-1"]
+    assert call["argv"] == ["/venv/bin/python", "-I", "-m", "taskloop.attempt_entry", str(admitted), root, "600", "tasks", "tl-1"]
     assert KEY.dispatch_token not in str(call["argv"])  # the dispatch token is never in argv
     assert (call["cwd"], call["env"], call["session"], call["timeout"]) == (root, None, True, 5.0)
     assert start.child.stdin.closed and start.child.stdout.closed
@@ -239,15 +249,17 @@ def test_a_foreign_schema_version_is_unavailable(admitted: Path) -> None:
 
 
 def test_composition_starts_with_the_released_registered_start(tmp_path: Path) -> None:
-    built = open_launcher(tmp_path / "factory.db", tmp_path)
+    built = open_launcher(tmp_path / "factory.db", tmp_path, GitViews(45))
     assert built.start is popen_registered and built.observe is observe_owned and built.executable == sys.executable
-    assert open_launcher(Path("factory.db"), tmp_path).database == Path.cwd() / "factory.db"
+    assert built.read_seconds == 45
+    assert open_launcher(Path("factory.db"), tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS)).database == Path.cwd() / "factory.db"
 
 
 def test_a_relative_database_is_refused_before_any_read_registration_or_start(admitted: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(admitted.parent)
     start = FakeStart()
-    built = Launcher(Path(admitted.name), EvidenceFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python")
+    built = Launcher(Path(admitted.name), EvidenceFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python",
+                     read_seconds=DEFAULT_GIT_READ_SECONDS)
     assert built.launch("tasks", "tl-1", 30) == LaunchRefused("database")
     assert start.calls == [] and stored(admitted) == (None, None, None, "admitted")
 
@@ -279,7 +291,7 @@ CHECKS = AttemptKey("checks", "checks-token", 1)
 
 def checks_launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:
     return Launcher(db, EvidenceFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python", CheckStore,
-                    CHECK_ENTRY_MODULE)
+                    CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS)
 
 
 def checks_row(db: Path) -> tuple[object, ...]:
@@ -296,7 +308,7 @@ def test_a_checks_attempt_past_its_deadline_is_still_launched_to_conclude_expire
     assert checks_launcher(on_slot, start, now=500).launch("tasks", "tl-1", 30) == Launched(CHECKS, (9, "new-start", "boot"))
     assert start.permitted and checks_row(on_slot) == (9, "new-start", "boot", 100.0)
     argv = start.calls[0]["argv"]
-    assert argv == ["/venv/bin/python", "-I", "-m", "taskloop.check_entry", str(on_slot), str(on_slot.parent), "tasks", "tl-1"]
+    assert argv == ["/venv/bin/python", "-I", "-m", "taskloop.check_entry", str(on_slot), str(on_slot.parent), "600", "tasks", "tl-1"]
     log = on_slot.parent / EvidenceFiles(on_slot.parent).directory(CHECKS) / "entry.log"
     assert log.exists()  # the checks attempt's own entry log
     observe = Observe("matching")
@@ -316,6 +328,6 @@ def test_only_an_admitted_unreleased_checks_attempt_launches(on_slot: Path, chan
 
 
 def test_composition_launches_checks_attempts_with_their_store_and_entry(tmp_path: Path) -> None:
-    built = open_checks_launcher(tmp_path / "factory.db", tmp_path)
+    built = open_checks_launcher(tmp_path / "factory.db", tmp_path, GitViews(45))
     assert (built.targets, built.module, built.start) == (CheckStore, CHECK_ENTRY_MODULE, popen_registered)
-    assert open_launcher(tmp_path / "factory.db", tmp_path).module == "taskloop.attempt_entry"
+    assert open_launcher(tmp_path / "factory.db", tmp_path, GitViews(45)).module == "taskloop.attempt_entry"

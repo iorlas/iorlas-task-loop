@@ -9,6 +9,7 @@ import os
 import sqlite3
 import threading
 from collections.abc import Generator
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -22,12 +23,14 @@ from taskloop.attempt import CredentialsUnavailable
 from taskloop.attempt_entry import EntryArgs
 from taskloop.attempt_types import AttemptResult, EntryIdentity
 from taskloop.check_entry import Verdict, concluded, enter
+from taskloop.check_entry import main as check_main
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
 from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitViews
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import custody
 
@@ -121,7 +124,8 @@ class Bench:
 
     def __call__(self, inspect: object = inspect_process) -> int:
         observe = inspect_process if inspect is inspect_process else self.other
-        return enter(EntryArgs(self.db, self.db.parent, "tasks", "tl-1"), self.checking, observe, self.lines.append, self.heartbeat_for,
+        args = EntryArgs(self.db, self.db.parent, 600, "tasks", "tl-1")
+        return enter(args, self.checking, observe, self.lines.append, self.heartbeat_for,
                      Stop(self.go))
 
     @staticmethod
@@ -252,6 +256,21 @@ def moved(bench: Bench) -> str:
     made = root.record("a person's commit", paths="all")
     assert isinstance(made, Recorded)
     return made.sha
+
+
+class Claims:
+    """The tracker's claim port as `main` only reads it."""
+
+    heartbeat_for = None
+
+
+def test_main_builds_the_git_views_with_the_argv_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[object] = []
+    monkeypatch.setattr("taskloop.check_entry.tracker_located", lambda: None)
+    monkeypatch.setattr("taskloop.check_entry.tracker_claims", Claims)
+    monkeypatch.setattr("taskloop.check_entry.enter", lambda _args, opened, *_rest: seen.append(opened) or 0)
+    assert check_main(["/db", "/a", "45", "tasks", "tl-1"]) == 0
+    assert isinstance(seen[0], partial) and seen[0].keywords == {"views": GitViews(45)}
 
 
 def test_main_moved_before_the_block_concludes_with_main_s_commit(bench: Bench) -> None:

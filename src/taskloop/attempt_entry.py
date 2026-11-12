@@ -24,6 +24,7 @@ import time
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from git_porcelain import GitUnavailable
@@ -36,6 +37,8 @@ from taskloop.attempt import ACCEPTED, Attempts
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_result import judged, succeeded
 from taskloop.attempt_types import (
+    MAX_GIT_READ_SECONDS,
+    MIN_GIT_READ_SECONDS,
     Admission,
     AttemptKey,
     AttemptRecord,
@@ -57,7 +60,7 @@ from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import open_attempts
 from taskloop.environment import Renew
 from taskloop.factory_schema import SCHEMA
-from taskloop.git_views import remotes
+from taskloop.git_views import GitViews
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish, publish_word
 from taskloop.slot_env import RealEnvFiles
@@ -82,18 +85,25 @@ class _Registered:
 class EntryArgs:
     database: Path
     artifacts: Path
+    read_seconds: int
     backlog: str
     task_id: str
 
 
 def arguments(argv: Sequence[str]) -> EntryArgs | None:
-    """Two absolute paths, a backlog and a task id; anything else is refused."""
-    if len(argv) != 4 or not all(argv):
+    """Two absolute paths, the Git read bound in seconds (`MIN_GIT_READ_SECONDS` to `MAX_GIT_READ_SECONDS`), a backlog and a
+    task id; anything else is refused."""
+    if len(argv) != 5 or not all(argv):
+        return None
+    seconds = argv[2]
+    if not (seconds.isascii() and seconds.isdigit() and len(seconds) <= len(str(MAX_GIT_READ_SECONDS))):  # no huge int() parse
+        return None
+    if not MIN_GIT_READ_SECONDS <= int(seconds) <= MAX_GIT_READ_SECONDS:
         return None
     database, artifacts = Path(argv[0]), Path(argv[1])
     if not (database.is_absolute() and artifacts.is_absolute()):
         return None
-    return EntryArgs(database, artifacts, argv[2], argv[3])
+    return EntryArgs(database, artifacts, int(argv[2]), argv[3], argv[4])
 
 
 def database_exists(database: Path) -> bool:
@@ -294,9 +304,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args is None:
             log("refused usage")
             return 2
-        claims = tracker_claims()
-        return enter(args, open_attempts, inspect_process, time.time, time.sleep, log, worker_gone, claims.heartbeat_for,
-                     threading.Event(), claims.unclaim, remotes)
+        claims, views = tracker_claims(), GitViews(args.read_seconds)
+        return enter(args, partial(open_attempts, views=views), inspect_process, time.time, time.sleep, log, worker_gone,
+                     claims.heartbeat_for, threading.Event(), claims.unclaim, views.remotes)
     except BaseException as error:  # the type name only, never its text
         log("failed " + type(error).__name__)
         return 1

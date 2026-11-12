@@ -13,7 +13,9 @@ import pytest
 from sqlite_store import Store
 
 from taskloop import cli_composition
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitViews
 from taskloop.interrupts import Interrupts
 from taskloop.keep_awake import Helper, Host, Unavailable, command
 from taskloop.round import NextRequest
@@ -94,7 +96,8 @@ def logged(tmp_path: Path) -> list[str]:
 def rounds(database: Path, machine: Machine, body: Callable[[Interrupts], None] = lambda _interrupts: None) -> None:
     """`open_rounds` with the machine; the body stands for the rounds and gets the handler's flag (press it for a
     graceful stop)."""
-    with cli_composition.open_rounds(database, database.parent / "art", request(database.parent), machine.host,
+    with cli_composition.open_rounds(database, database.parent / "art", GitViews(DEFAULT_GIT_READ_SECONDS), request(database.parent),
+                                     machine.host,
                                      machine.install) as ports:
         assert not isinstance(ports, cli_composition.Failed)
         machine.events.append("rounds")
@@ -155,7 +158,8 @@ def test_without_a_helper_the_rounds_run_anyway_after_one_line_each(
 
 def test_refused_rounds_start_no_helper(tmp_path: Path) -> None:
     machine = Machine()
-    with cli_composition.open_rounds(tmp_path / "absent.db", tmp_path / "art", request(tmp_path), machine.host,
+    with cli_composition.open_rounds(tmp_path / "absent.db", tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS), request(tmp_path),
+                                     machine.host,
                                      machine.install) as ports:
         assert isinstance(ports, cli_composition.Failed) and ports.reason == "database"
     assert machine.events == machine.argv == []

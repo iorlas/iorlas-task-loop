@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from taskloop.attempt_types import Checkouts
 from taskloop.cli import main
 from taskloop.profile import NoCommit, Unavailable
 
@@ -28,7 +29,7 @@ class Files:
 def wired(monkeypatch: pytest.MonkeyPatch, commits: dict[str, bytes] | None) -> list[Path]:
     seen: list[Path] = []
 
-    def files(checkout: Path) -> Files:
+    def files(checkout: Path, _repos: Checkouts) -> Files:
         seen.append(checkout)
         return Files(checkout, commits)
 

@@ -9,7 +9,8 @@ import pytest
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 
-from taskloop.git_views import GitProfileFiles
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
+from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.profile import PROFILE_PATH, NoCommit, NotAFile, Refused, Resolved, Unavailable, read_profile, resolve
 
 
@@ -26,7 +27,7 @@ def test_the_profile_is_read_at_the_commit_not_from_the_working_tree(tmp_path: P
     git(main, "add", PROFILE_PATH)
     git(main, "commit", "-q", "-m", "profile")
     (main / PROFILE_PATH).write_text(json.dumps({"checks": [], "target": "edited"}))
-    files = GitProfileFiles(main)
+    files = GitProfileFiles(main, GitViews(DEFAULT_GIT_READ_SECONDS).checkouts)
     assert files.blob("HEAD", PROFILE_PATH) == json.dumps(committed).encode()
     assert files.blob("HEAD~1", PROFILE_PATH) is None
     assert files.blob("no-such-branch", PROFILE_PATH) == NoCommit()
@@ -52,7 +53,7 @@ def test_a_symlink_or_submodule_entry_is_not_a_file(tmp_path: Path, monkeypatch:
     git(main, "rm", "-q", "--cached", PROFILE_PATH)
     git(main, "update-index", "--add", "--cacheinfo", f"160000,{'1' * 40},{PROFILE_PATH}")
     git(main, "commit", "-q", "-m", "submodule")
-    files = GitProfileFiles(main)
+    files = GitProfileFiles(main, GitViews(DEFAULT_GIT_READ_SECONDS).checkouts)
     assert files.blob("HEAD~1", PROFILE_PATH) == NotAFile("120000")
     assert files.blob("HEAD", PROFILE_PATH) == NotAFile("160000")
     assert read_profile(files, "HEAD") == Refused(
@@ -61,5 +62,5 @@ def test_a_symlink_or_submodule_entry_is_not_a_file(tmp_path: Path, monkeypatch:
 
 def test_a_path_that_is_no_repository_is_unavailable_not_no_commit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     apply_hermetic_env(monkeypatch, identity=Identity("Person", "person@example.invalid"), config={})
-    found = GitProfileFiles(tmp_path.resolve()).blob("HEAD", PROFILE_PATH)
+    found = GitProfileFiles(tmp_path.resolve(), GitViews(DEFAULT_GIT_READ_SECONDS).checkouts).blob("HEAD", PROFILE_PATH)
     assert isinstance(found, Unavailable)

@@ -21,13 +21,14 @@ from land_bench import NoBeats, database
 from stream_proc import group_alive
 
 from taskloop.agent_credentials import scrubbed
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, argv_digest
 from taskloop.claim_lease import Beat, Heartbeat
 from taskloop.composition import Checking
 from taskloop.environment import EnvironmentPorts, Preparation
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.git_views import GitProfileFiles, checkouts, remotes, slot_profiles
+from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.land import Landed, LandRequest, LandResult, land
 from taskloop.land_check import LandPorts
 from taskloop.land_store import LandStore
@@ -40,6 +41,8 @@ from taskloop.slot_lock import landing
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import CloseAnswer
+
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 CHECK = ["/bin/sh", "-c", "test -f src/x.py"]
 PROFILE = {"setup": [["/bin/sh", "-c", "true"]], "required": ["has-x"], "checks": [{"name": "has-x", "argv": CHECK, "timeout": 60}]}
@@ -76,7 +79,7 @@ class Real:
         git(self.main, "remote", "add", "origin", self.remote.as_uri())
         git(self.main, "push", "-q", "origin", "main")
         self.base = self.rev(self.main, "HEAD")
-        repo_id = checkouts(self.main).identity().key
+        repo_id = VIEWS.checkouts(self.main).identity().key
         self.slot = root / "slots" / repo_id / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         git(self.main, "switch", "-q", "-c", "task/tl-1")
@@ -117,14 +120,14 @@ class Real:
         art, con = self.root / "art", self.con
         setup = SetupStore(lambda: con)
         preparation = Preparation(EnvironmentPorts(
-            setup, checkouts, slot_profiles, RealEnvFiles(), setup_process, setup_seen, group_alive, EvidenceFiles(art), time.time,
-            sys.platform, shutil.rmtree.avoids_symlink_attacks, lambda *_probe: True, (art,), 4096))  # tmp_path is long
+            setup, VIEWS.checkouts, VIEWS.slot_profiles, RealEnvFiles(), setup_process, setup_seen, group_alive, EvidenceFiles(art),
+            time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks, lambda *_probe: True, (art,), 4096))  # tmp_path is long
         environ = {"PATH": os.environ["PATH"], "HOME": str(self.root)}
-        work = Checking(CheckStore(lambda: con), setup, EvidenceFiles(art), checkouts, RealSlotFiles(), slot_profiles, preparation,
-                        Block(BlockPorts(setup_process, group_alive, time.time)), setup_seen, entry_seen,
+        work = Checking(CheckStore(lambda: con), setup, EvidenceFiles(art), VIEWS.checkouts, RealSlotFiles(),
+                        VIEWS.slot_profiles, preparation, Block(BlockPorts(setup_process, group_alive, time.time)), setup_seen, entry_seen,
                         RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(environ))
-        return LandPorts(work, LandStore(lambda: con), remotes, lambda path: GitProfileFiles(path, remotes), self.tasks, heartbeat_for,
-                         NoBeats, this_process, lambda _path: True, landing, dict(os.environ), self.close)
+        return LandPorts(work, LandStore(lambda: con), VIEWS.remotes, lambda path: GitProfileFiles(path, VIEWS.remotes),
+                         self.tasks, heartbeat_for, NoBeats, this_process, lambda _path: True, landing, dict(os.environ), self.close)
 
     def tasks(self, task_id: str, backlog: str, root: str) -> TaskInspection:
         return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self.tracker, task_id)

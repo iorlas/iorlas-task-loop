@@ -11,10 +11,10 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Final, Literal
 
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS, MIN_GIT_READ_SECONDS
+
 type Source = Literal["flag", "file", "default"]
 MIN_SECONDS: Final = 5
-MIN_GIT_READ_SECONDS: Final = 30
-MAX_GIT_READ_SECONDS: Final = 86400  # a day; a larger value overflows the process timeout
 type Refusal = Literal["missing", "unreadable", "toml", "unknown_key", "type", "relative_path", "count", "interval"]
 
 
@@ -82,7 +82,7 @@ def defaults(home: Path) -> Effective:
         Setting(home / ".local" / "share" / "task-loop" / "slots", "default"),
         Setting(1, "default"),
         Setting(60, "default"),
-        Setting(600, "default"),
+        Setting(DEFAULT_GIT_READ_SECONDS, "default"),
     )
 
 
