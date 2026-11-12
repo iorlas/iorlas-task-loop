@@ -7,12 +7,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
-from taskloop import attempt_status, cli_composition, land, operations, result_data
+from taskloop import attempt_status, cli_composition, dash_composition, land, operations, result_data
 from taskloop.composition import real_slots
 from taskloop.exit_codes import exit_code
 from taskloop.git_views import GitViews
 from taskloop.land_guide import INTERRUPTED
-from taskloop.machine_config import ConfigRefused, Flags, Loaded
+from taskloop.machine_config import ConfigRefused, Effective, Flags, Loaded
 from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
 from taskloop.round import NextRequest, run_round
@@ -86,6 +86,8 @@ def register(commands: Parsers) -> None:
     rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
+    rounds.add_argument("--dash-port", type=int, metavar="PORT", help="Serve the read-only dashboard on 127.0.0.1:PORT while the "
+                        "rounds run (0 picks a free port); without it nothing is served")
     _round_flags(rounds)
     publish = _add(step, "publish", "Push the step's verified commit to origin's task/<id> as you, never forced; nothing merges or lands")
     publish.add_argument("task_id", metavar="TASK")
@@ -156,6 +158,13 @@ def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return ports if isinstance(ports, Failed) else run_round(ports, _next_request(arguments))
 
 
+def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_composition.DashRequest | None:
+    if arguments.dash_port is None:
+        return None
+    return dash_composition.DashRequest(arguments.backlog, arguments.tracker_root, arguments.label, arguments.dash_port,
+                                        settings.db.value, settings.artifacts.value, settings.slot_count.value)
+
+
 def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     """The start line once the rounds are set up, then the rounds; a `KeyboardInterrupt` anywhere (the second Ctrl-C) is
     the abrupt stop, exit 130 (the operation writes its `rounds stopped abrupt` line once its rounds started)."""
@@ -169,7 +178,10 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                        f"Rounds for backlog {request.backlog} every {request.every} s; log: {log}; "
                        + ("stop with Ctrl-C" if ports.ctrl_c else "Ctrl-C is ignored here: stop with SIGTERM"))
             print(started, flush=True)
-            return run_rounds(ports, request)
+            with dash_composition.serving(_dash_request(arguments, settings), views_for(loaded)) as address:
+                if address is not None:
+                    print(f"Dashboard: http://{address[0]}:{address[1]}/", flush=True)
+                return run_rounds(ports, request)
     except KeyboardInterrupt:
         return Ended(request.backlog, "abrupt")
 

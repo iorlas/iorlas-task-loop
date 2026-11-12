@@ -38,6 +38,7 @@ class Board:
     generated_at: str
     slots: tuple[str, ...]
     tasks: tuple[Card, ...]
+    notice: str | None = None  # why part of the board is stale or missing (the tracker could not be read)
 
 
 @dataclass(frozen=True)
@@ -136,3 +137,5 @@ class DashTracker(Protocol):
     def titles(self, task_ids: tuple[str, ...]) -> dict[str, str]: ...
 
     def fields(self, task_id: str) -> tuple[Fields, tuple[Comment, ...]] | None: ...
+
+    def notice(self) -> str | None: ...

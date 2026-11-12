@@ -1,5 +1,5 @@
 // Task loop dashboard page: the board. Plain ES modules, no framework, no build step.
-// It consumes the shapes in docs/design/dashboard-ui.md. Only the mock source exists so far (mock.js).
+// It consumes the shapes in docs/design/dashboard-ui.md from the JSON endpoints and the event stream (api.js).
 
 import { initDrawer, onFeed, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
@@ -11,6 +11,7 @@ const cards = new Map(); // id -> element
 const columnHeads = new Map(); // column id -> count element
 const cells = new Map(); // "lane|column" -> element
 let slotNames = [];
+let notice = null; // why the board may be stale (the tracker could not be read)
 let lanes = false;
 let source = null;
 
@@ -120,7 +121,7 @@ function renderBoard(first = rects()) {
     }
   }
   const running = all.filter((t) => STEPS.some((s) => s.id === t.column)).length;
-  $("summary").textContent = `${all.length} tasks · ${running} running · ${all.filter((t) => t.column === "held").length} held`;
+  $("summary").textContent = `${all.length} tasks · ${running} running · ${all.filter((t) => t.column === "held").length} held${notice ? ` · ${notice}` : ""}`;
 }
 
 const viewButton = (on) => `rounded px-2.5 py-1 text-xs font-medium ${on ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`;
@@ -151,6 +152,7 @@ async function resync() {
   const ids = new Set(snap.tasks.map((t) => t.id));
   for (const [id, node] of cards) if (!ids.has(id)) { node.remove(); cards.delete(id); tasks.delete(id); }
   for (const t of snap.tasks) tasks.set(t.id, t);
+  notice = snap.notice;
   renderBoard();
 }
 
@@ -173,9 +175,10 @@ async function start() {
   $("view-columns").addEventListener("click", () => setLanes(false));
   $("view-lanes").addEventListener("click", () => setLanes(true));
   source = apiSource();
-  $("mode").replaceChildren(tag(source.label, { dotCls: "bg-amber-500", cls: "text-amber-800 dark:text-amber-300" }));
+  $("mode").replaceChildren(tag(source.label, { dotCls: "bg-emerald-500", cls: "text-slate-600 dark:text-slate-300" }));
   const snap = await source.snapshot();
   slotNames = snap.slots;
+  notice = snap.notice;
   for (const t of snap.tasks) tasks.set(t.id, t);
   initDrawer(source, tasks);
   initLogs(openDrawer);
