@@ -26,6 +26,8 @@ Never kill processes by name; act only on a confirmed owned process identity.
 Python 3.15+. `just check` and `just test` are the required focused gates. Read the justfile before running them.
 The successor has its own declared environment and installed package; baseline editable installs or PYTHONPATH
 must not supply missing code. Do not copy the old conftest/runners: they load the old application and kernel.
+`tl` runs the owner's pinned factory install, never this checkout (it resolves the pin at every start, in a slot too):
+run the code under test as `uv run --frozen --no-sync python -I -m taskloop ...` after `just install`, or through the tests.
 Do not run whole-suite/live tests as an agent. Use focused behavior/contract tests; new tests are pytest functions
 or classes, never unittest. No test for every private helper or a test that merely repeats its implementation.
 Retain caps: 400 source lines per file, 80 per function and 800 per test file. No new Any, cast or ignore escape.

@@ -44,7 +44,7 @@ from taskloop.git_views import GitProfileFiles, checkouts, inspect_checkout, rem
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
 from taskloop.install_op import Answer, Opened, Ports, Ran
-from taskloop.installs import LocalFiles
+from taskloop.installs import LocalFiles, running
 from taskloop.interrupts import Interrupts, installed
 from taskloop.keep_awake import Host, awake
 from taskloop.land_check import LandPorts
@@ -242,9 +242,10 @@ def open_rounds(database: Path, artifacts: Path, request: NextRequest, host: Hos
         return
     log, pid = EvidenceFiles(artifacts).log_round, os.getpid()
     try:
+        runs_from = running(LocalFiles(), Path(sys.prefix), Path.home())  # display only: the `rounds install` line
         with awake(host or keep_awake_host(), pid, request.backlog, log, time.time, _say), install(_say) as interrupts:
             yield RoundsPorts(one_round(database, artifacts, request, interrupts.stopping), _slot_use(database), time.time, time.monotonic,
-                         time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid)
+                         time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid, runs_from)
     finally:
         release()
 

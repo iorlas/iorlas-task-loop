@@ -20,8 +20,8 @@ def test_a_managed_process_with_its_pin(tmp_path: Path) -> None:
     pin = make_pin(tmp_path, A, "factory-v0.2.0")
     found = describe(install / "venv", tmp_path, None, FILES)
     venv = (install / "venv").resolve()
-    assert lines(found) == [f"Running: 3f2a9c4e1b07 factory-v0.2.0 ({venv})",
-                            f"Pinned: 3f2a9c4e1b07 factory-v0.2.0 since 2026-11-20T10:05:00Z ({pin})"]
+    assert lines(found) == [f"Running: 3f2a9c4e1b07 (factory-v0.2.0) ({venv})",
+                            f"Pinned: 3f2a9c4e1b07 (factory-v0.2.0) since 2026-11-20T10:05:00Z ({pin})"]
     assert data(found) == {"running": {"prefix": str(venv), "install": A, "tag": "factory-v0.2.0"},
                            "pinned": {"commit": A, "tag": "factory-v0.2.0", "pinned_at": "2026-11-20T10:05:00Z", "file": str(pin)}}
 
@@ -105,7 +105,7 @@ def test_the_command_reads_this_process_and_the_homes_pin(tmp_path: Path, monkey
                                                      "file": str(pin)}}
     else:
         assert output.out == (f"Running: unmanaged ({prefix})\n"
-                              f"Pinned: 3f2a9c4e1b07 factory-v0.2.0 since 2026-11-20T10:05:00Z ({pin})\n")
+                              f"Pinned: 3f2a9c4e1b07 (factory-v0.2.0) since 2026-11-20T10:05:00Z ({pin})\n")
 
 
 def test_the_command_honours_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

@@ -1,21 +1,28 @@
-"""The install commands' surface; built so far: `tl version [--json]` and `tl install REV --checkout PATH`
-(tl-8bh9.8.3 sections 6.1 and 6.3).
+"""The install commands' surface: `tl version [--json]`, `tl install REV --checkout PATH`, `tl pin REV` and `tl pin --clear`
+(tl-8bh9.8.3 sections 6.1-6.3).
 
 `tl version` is read-only: this process's install (`sys.prefix` and the manifest beside it, through `installs.state`) and
 the pin of the machine config in use; no factory.db, no lock, no listing of the installs. `tl install` runs the one
-operation `install_op.install` over `cli_composition.install_ports` and prints its progress as it goes; text only.
+operation `install_op.install` over `cli_composition.install_ports` and prints its progress as it goes; `tl pin` runs
+`pin_op` over the local files (no Git, no factory.db, no config file read). Text only.
 """
 
 import argparse
 import json
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final
 
-from taskloop import cli_composition, install_op, pin_file
+from taskloop import cli_composition, install_op, pin_file, pin_op
 from taskloop.install_op import Installed, Refused, Unavailable
-from taskloop.installs import LocalFiles, Manifest, Reads, installs_root, state
+from taskloop.installs import LocalFiles, Manifest, Reads, running
 from taskloop.pin_file import Pin, PinInvalid
+from taskloop.pin_op import Cleared, Pinned, Was
+
+EFFECT: Final = ("Takes effect at the next start of tl; a running `tl step rounds` and its entries keep their version. Drain "
+                 "before pinning: stop the rounds, wait for or abandon running attempts.")
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
 
@@ -31,16 +38,14 @@ class Version:
 def describe(prefix: Path, home: Path, config: str | None, files: Reads) -> Version:
     """The running install is the complete install under this home's installs root whose `venv` is `prefix` (both
     resolved); the pin is the one start reads."""
-    resolved, root = prefix.resolve(), installs_root(home).resolve()
-    install = resolved.parent
-    found = state(files, root, install.name) if resolved.name == "venv" and install.parent == root else None
     path = pin_file.pin_path(config, home)
     pinned = pin_file.nameless(config) if path is None else pin_file.read(files, path)
-    return Version(resolved, found.manifest if found is not None else None, path, pinned)
+    return Version(prefix.resolve(), running(files, prefix, home), path, pinned)
 
 
 def _named(commit: str, tag: str | None) -> str:
-    return commit[:12] if tag is None else f"{commit[:12]} {tag}"
+    """The one human form of an install or pin: `<commit12>` or `<commit12> (<tag>)`."""
+    return commit[:12] if tag is None else f"{commit[:12]} ({tag})"
 
 
 def lines(version: Version) -> list[str]:
@@ -81,6 +86,12 @@ def register(commands: Parsers) -> None:
     install = commands.add_parser("install", help=text, description=text, allow_abbrev=False)
     install.add_argument("rev", metavar="REV", help="An annotated tag name or a full commit id")
     install.add_argument("--checkout", required=True, metavar="PATH", help="The checkout whose Git objects are read (no fetch)")
+    text = ("Choose the install tl runs from its next start for this machine config (<config stem>.pin.toml beside it), or "
+            "--clear the choice; never reads factory.db or Git")
+    pin = commands.add_parser("pin", help=text, description=text, allow_abbrev=False)
+    chosen = pin.add_mutually_exclusive_group(required=True)
+    chosen.add_argument("rev", metavar="REV", nargs="?", help="A full commit id or a tag name recorded by a complete install")
+    chosen.add_argument("--clear", action="store_true", help="Remove the pin: tl runs the install it is started from")
 
 
 def installed_line(result: Installed) -> str:
@@ -117,3 +128,56 @@ def run(arguments: argparse.Namespace) -> int:
     found = describe(Path(sys.prefix), Path.home(), arguments.config, LocalFiles())
     print(json.dumps(data(found)) if arguments.json_output else "\n".join(lines(found)))
     return 0
+
+
+def drain(was: Was) -> str:
+    """The drain procedure (plan sections 7 and 10), with the way back to the earlier choice when rounds still run: the
+    new choice already applies to every new start, so the old version's commands need it back first."""
+    match was:
+        case Pin(commit=commit, tag=tag):
+            back = f"tl pin {tag or commit}"
+        case None:
+            back = "tl pin --clear"
+        case PinInvalid():
+            return f"{EFFECT} The earlier pin was invalid: nothing to go back to."
+    return f"{EFFECT} If rounds or attempts still run: {back} back, drain, then make this change again."
+
+
+def _was(was: Was) -> str:
+    match was:
+        case None:
+            return "none"
+        case PinInvalid(detail=detail):
+            return f"invalid ({detail})"
+        case Pin(commit=commit, tag=tag):
+            return _named(commit, tag)
+
+
+def pinned_lines(result: Pinned | Cleared) -> list[str]:
+    """`Pinned:` (or `Pinned: already`), what it replaced and the drain procedure; `Pin cleared` likewise."""
+    match result:
+        case Pinned(pin=pin, path=path, already=True):
+            return [f"Pinned: already {_named(pin.commit, pin.tag)}, in {path}"]
+        case Pinned(pin=pin, path=path, was=was):
+            return [f"Pinned: {_named(pin.commit, pin.tag)}, in {path}", f"Was: {_was(was)}", drain(was)]
+        case Cleared(was=None):
+            return ["Pin cleared: already"]
+        case Cleared(was=was):
+            return [f"Pin cleared (was {_was(was)}); tl runs the install it is started from", drain(was)]
+
+
+def run_pin(arguments: argparse.Namespace) -> int:
+    """`tl pin REV` or `tl pin --clear`: 0 pinned, cleared or already, 1 refused, 3 unavailable (rerun is safe)."""
+    files, home = LocalFiles(), Path.home()
+    result = (pin_op.clear(files, home, arguments.config) if arguments.clear else
+              pin_op.pin(files, home, arguments.config, arguments.rev, datetime.now(UTC)))
+    match result:
+        case Pinned() | Cleared():
+            print("\n".join(pinned_lines(result)))
+            return 0
+        case pin_op.Refused(word=word, detail=detail):
+            print(f"tl pin: refused {word}: {detail}", file=sys.stderr)
+            return 1
+        case pin_op.Unavailable(word=word, detail=detail):
+            print(f"tl pin: unavailable {word}: {detail}", file=sys.stderr)
+            return 3

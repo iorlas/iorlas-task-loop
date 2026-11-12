@@ -13,8 +13,9 @@ after an independent review (section 21). Docs only: nothing built, installed, t
 
 Every choice not listed in section 2 is **proposed** (a recommendation, open to veto); section 19 collects them with a
 recommendation each. **Owner questions that block something:** Q9 (dropping the baseline `devbox-ok` and macOS pin
-policy) blocks the first release made under this design, not the slices; Q13 (rollback onto a newer factory.db never
-refused at pin time) needs the owner's sign-off before I3 is built. Q1 and Q2 are the others most worth a look.
+policy) blocks the first release made under this design, not the slices. Q13 (rollback onto a newer factory.db never
+refused at pin time) stays proposed: I3 is built per its recommendation (notice-only), and it needs the owner's sign-off
+(section 19). Q1 and Q2 are the others most worth a look.
 
 ## 1. Goal: what changes for the owner
 
@@ -315,7 +316,7 @@ Install: factory-v0.2.0 = 3f2a9c4e1b07... (annotated tag) from /home/u/src/task-
 Export: 293 files to /home/u/.local/share/task-loop/installs/3f2a9c4e1b07.../source
 Build: uv --project 3f2a9c4e1b07.../source sync --frozen --no-editable --no-dev --reinstall-package iorlas-task-loop (log .../install.log)
 Verify: running from /home/u/.local/share/task-loop/installs/3f2a9c4e1b07.../venv
-Installed: 3f2a9c4e1b07 factory-v0.2.0; not pinned (tl pin factory-v0.2.0 runs it from the next start)
+Installed: 3f2a9c4e1b07 (factory-v0.2.0); not pinned (tl pin factory-v0.2.0 runs it from the next start)
 ```
 
 `tl install` never pins, never removes anything, never edits `PATH`, a shell profile, `~/.local/bin` or another install,
@@ -335,19 +336,19 @@ file is written (section 4.4). `tl pin` never opens factory.db (Q13).
 ```
 Pinned: 3f2a9c4e1b07 (factory-v0.2.0), in /home/u/.config/task-loop/config.pin.toml
 Was: 9b1e07d2aa31 (factory-v0.1.0)
-Takes effect at the next start of tl. Before relying on it: stop the rounds, wait for or abandon running attempts, then start them again (a running `tl step rounds` and its entries keep their version).
+Takes effect at the next start of tl; a running `tl step rounds` and its entries keep their version. Drain before pinning: stop the rounds, wait for or abandon running attempts. If rounds or attempts still run: tl pin factory-v0.1.0 back, drain, then make this change again.
 ```
 
 Pinning the already-pinned commit prints `Pinned: already ...`, exit 0, file unchanged. `tl pin --clear`: `Pin cleared
-(was 3f2a9c4e1b07 factory-v0.2.0); tl runs the install it is started from`, or `Pin cleared: already` with no file.
+(was 3f2a9c4e1b07 (factory-v0.2.0)); tl runs the install it is started from`, or `Pin cleared: already` with no file.
 
 ### 6.3 `tl version [--json]` (built in I1)
 
 Read-only: this process and the pin of the machine config in use (`--config` honoured). No factory.db read, no listing.
 
 ```
-Running: 3f2a9c4e1b07 factory-v0.2.0 (/home/u/.local/share/task-loop/installs/3f2a9c4e1b07.../venv)
-Pinned: 3f2a9c4e1b07 factory-v0.2.0 since 2026-11-20T10:05:00Z (/home/u/.config/task-loop/config.pin.toml)
+Running: 3f2a9c4e1b07 (factory-v0.2.0) (/home/u/.local/share/task-loop/installs/3f2a9c4e1b07.../venv)
+Pinned: 3f2a9c4e1b07 (factory-v0.2.0) since 2026-11-20T10:05:00Z (/home/u/.config/task-loop/config.pin.toml)
 ```
 
 A process whose `sys.prefix` has no complete install beside it says `Running: unmanaged (<sys.prefix>)`; no pin says
@@ -407,7 +408,8 @@ a pin change affects the next start; the drain is the person's step.
   writes the pin anyway (it never opens factory.db) and the older code refuses `schema` at its first command, naming
   both versions; the person pins forward again or discards factory.db. Nothing restores, migrates or deletes factory.db
   automatically, which meets the INSTALL-OWNER acceptance ("explicit rollback refuses an incompatible runtime DB")
-  through the refusal at use, not at pin time. This reading needs the owner's sign-off (**Q13**).
+  through the refusal at use, not at pin time (**Q13**, proposed: built per the recommendation, notice-only; needs the
+  owner's sign-off).
 - A factory.db discard never touches the pin file or `installs/`.
 
 ## 9. Release
@@ -465,9 +467,11 @@ leaves its own incomplete directory (section 6.4).
 | `tl install` | `verify` | the new install's `version --json` failed, timed out or named another prefix |
 | `tl install` | unavailable `uv`, `git`, `write` | uv not on `PATH`; Git unreadable; the installs folder, a file of the export, `install.log` or the manifest cannot be written. Once the install's directory exists, the detail says it is left without a manifest and how to check (`ps`) and remove it (as built, I2) |
 | `tl install` | unavailable `interrupted` (exit 130) | Ctrl-C during the export, the build or the verification (as built, I2); the directory is left incomplete, with the same recovery text |
-| `tl pin` | `not_installed`, `incomplete`, `broken` | `installs.state` of REV's install |
-| `tl pin` | `ambiguous` | a tag name recorded by two installs |
-| `tl pin` | unavailable `write` | the pin file cannot be written or removed |
+| `tl pin` | `not_installed`, `incomplete`, `broken` | `installs.state` of REV's install (a tag recorded by no install: `not_installed`; only by a broken one: `broken`) |
+| `tl pin` | `revision` | REV is neither a full commit id nor a tag name (as built, I3) |
+| `tl pin` | `config` | `--config` names no file (empty, or `/`), so there is no pin file (as built, I3; the resolver says `pin:invalid`) |
+| `tl pin` | `ambiguous` | a tag name recorded by two installs (as built, I3: a broken one counts) |
+| `tl pin` | unavailable `write`, `read` | the pin file cannot be written or removed; the installs folder cannot be listed (`read`, as built, I3) |
 | every factory.db command | `schema` | unchanged (section 8) |
 
 ## 12. Installed as a pip/uv package, and macOS
@@ -511,8 +515,11 @@ leaves its own incomplete directory (section 6.4).
   keeps `HOME`). Before B8 it ran the slot's code against the same config. Resolution stays unconditional (no
   environment switch that an agent could also set). The sandbox still keeps an implement agent from writing outside its
   slot; checks run on the host (D10) and this repository's checks never start `tl` (its tests call `cli.main`
-  in-process). Proposed, slice I3: the implement input (`implement_step`) and AGENTS.md/CLAUDE.md (mirrored) say "`tl`
-  runs the owner's pinned factory; run the code under test as `uv run python -I -m taskloop ...` or through the tests".
+  in-process). Built in I3: the implement input (`implement_step.PINNED`) says "`tl` on this machine runs the owner's
+  pinned factory install, never this checkout's code; exercise the code under test through its checks or tests"
+  (generic, as every repository's agent gets it: no command and no `taskloop` named), and
+  AGENTS.md/CLAUDE.md (mirrored) say to run it as `uv run --frozen --no-sync python -I -m taskloop ...` after `just
+  install`, or through the tests.
 - **Mixed versions on one factory.db** (section 7) are avoided by the drain, not by the schema check.
 - **Removing an install by hand while something runs from it** breaks that process: the person checks `ps` first
   (section 14).
@@ -533,7 +540,7 @@ leaves its own incomplete directory (section 6.4).
 - Session hooks, a `tl doctor`, PATH or shell-profile edits, the baseline cutover of `~/.local/bin/tl`.
 - Windows.
 
-## 15. Glossary changes (slice I3)
+## 15. Glossary changes (slice I3; made)
 
 Add **install** ("one immutable build of one commit under `~/.local/share/task-loop/installs/<commit>/`, complete when
 its manifest exists and `installs.state` accepts it; made only by `tl install`, removed only by the person"), **pin**
@@ -677,8 +684,8 @@ worktree (O6's interim) stays the way to run the factory until I3 is built; the 
     `tl version`); revisit with the dashboard, batched into a later schema change if wanted.
 12. **Q12. Unpinned behaviour.** **Recommendation: run the started `tl`'s own install** (the installation manager's
     selection, INSTALL-OWNER), never refuse for a missing pin; the `rounds install` line shows `unmanaged` or the id.
-13. **Q13. Rollback onto a newer factory.db. Needs the owner's sign-off.** **Recommendation: notice-only through the
-    existing refusal**: `tl pin <older>` never opens factory.db and never refuses; the older code's `refused schema` at
+13. **Q13. Rollback onto a newer factory.db. Proposed; built per the recommendation (notice-only); needs the owner's
+    sign-off.** **Recommendation: notice-only through the existing refusal**: `tl pin <older>` never opens factory.db and never refuses; the older code's `refused schema` at
     its first command is the refusal the INSTALL-OWNER acceptance asks for. Alternatives: `tl pin` refuses when the
     install's known schema is older than factory.db's (needs a schema record in the manifest and a database read in
     `tl pin`, both cut as over-building), or prints a notice (the same reads, no refusal).
@@ -758,3 +765,33 @@ lock (`busy`, `broken`, `incomplete` included); nothing removes either. `process
 the lightweight check is only "the ref names the peeled commit itself" (a lightweight ref to an annotated tag object is
 accepted, 6.1); `.git` parts and case-only collisions are `refused tree`; a signal and uv's surviving processes are named
 in `refused build`.
+
+**I3 as built (2026-11-12).** `tl pin REV` and `tl pin --clear` are one operation, `pin_op` (`pin`, `clear`, `chosen`)
+over `pin_op.Files` (`installs.state`'s reads, the atomic writes, `names` for the one listing of `installs/` and
+`make_folder` for the config folder, both added to `installs.LocalFiles`); `cli_install.run_pin` renders it, text only,
+and reads no config file (the pin path comes from `--config` alone, as `tl version`). Deviations and additions: two
+refusal words beyond section 11's (`revision` for a REV that is neither a full commit id nor a tag name; `config` for
+a `--config` without a name) and one unavailable word (`read`: the installs folder cannot be listed; an installs path
+that is a file is `refused broken`); a tag is matched exactly (case included) against the manifest of every install
+directory: complete ones by `installs.state`, broken ones by a loose read of their manifest's `tag`, so a moved tag whose
+other install is broken is still `ambiguous` and a tag recorded only by a broken install is `broken` (an incomplete one
+has no manifest, so it names no tag); the drain line (`cli_install.drain`) says to drain before pinning and, if rounds or
+attempts still run, to pin the earlier choice back (`tl pin <was>` or `tl pin --clear`), drain and change it again, since
+the new choice already applies to every new start (sections 7 and 10); `--clear` prints it too; one human form for an
+install or pin everywhere, `<commit12> (<tag>)` (`tl version`, `tl install`'s last line and `tl pin`, as the resolver's
+refusals; the `rounds install` log line keeps plain words); `Was:` is `none`, `<commit12> (<tag>)` or `invalid (<why>)`, and a pin
+over an invalid pin file replaces it; the config folder is made when missing (a fresh home has no
+`~/.config/task-loop/`); a failed write or folder is `unavailable write` (exit 3) with the old pin kept; REV and
+`--clear` are an argparse mutually exclusive pair (neither or both: usage, exit 2). The `rounds install` line is
+written by `rounds.run_rounds` right after `rounds started` (so after the rounds lock, which `open_rounds` takes first),
+inside the part that writes `rounds stopped abrupt` on a second Ctrl-C, from `RoundsPorts.install`, the
+`installs.running` manifest of `sys.prefix` read once in `open_rounds` inside the part that releases the rounds lock; the tag passes
+`round_log.ident` (a `/` is kept), the commit `fixed`. `installs.running` is now the one rule for "which install is this
+prefix" (`tl version` uses it too). The schema-word tests (`tests/steps/test_schema_words.py`) run `tl step list`,
+`show`, `start`, `next` and `land --summary` through `cli.main` and `slot adopt` through `cli_composition.adopt` (the
+CLI checks a real checkout first) against a v15 and a v13 file: `refused schema` ("update it" for the newer), the
+database file's bytes unchanged and SQLite's write-ahead log empty (SQLite may create its empty `-wal`/`-shm` on open).
+Q13 stays proposed (built per its recommendation, notice-only; needs the owner's sign-off); Q9 stays open and blocks the
+first release.
+The M5 runbook is [live-smoke.md](live-smoke.md) (section 17): it makes its tags and branches in a scratch clone, never
+in the person's checkout, and its C adds one no-op table with version 15.

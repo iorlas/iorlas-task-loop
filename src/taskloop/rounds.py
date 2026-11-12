@@ -19,9 +19,10 @@ from typing import Final
 
 from taskloop.attempt_reads import SlotUse
 from taskloop.evidence_files import EvidenceError
+from taskloop.installs import Manifest
 from taskloop.operations import Ended, Failed, Quiet, Round, minutes_refused
 from taskloop.round import STOPPING_UNKNOWN, NextRequest
-from taskloop.round_log import IDENT, INTERRUPTED, fixed, stamped
+from taskloop.round_log import IDENT, INTERRUPTED, fixed, ident, stamped
 
 CHECK: Final = 2.0  # seconds between two reads of the reservation rows
 CAP: Final = 300  # the longest backoff delay, unless the interval is longer
@@ -37,7 +38,8 @@ class RoundsRequest:
 class RoundsPorts:
     """`round`: one `round.run_round` over fresh ports, with the given `quiet`; `slot_use`: factory.db's reservation rows read
     now (None when unreadable); `clock`, the wall clock for log stamps; `monotonic` and `wait` pace; `warn`, said when
-    the round log stops being written; `stopping`, True once a graceful stop is asked."""
+    the round log stops being written; `stopping`, True once a graceful stop is asked; `install`, the install this process
+    runs from (None: unmanaged), shown once in the `rounds install` line."""
 
     round: Callable[[Quiet], Round | Failed]
     slot_use: Callable[[], SlotUse | None]
@@ -48,6 +50,7 @@ class RoundsPorts:
     warn: Callable[[], None]
     stopping: Callable[[], bool]
     pid: int
+    install: Manifest | None
 
 
 def inputs(request: NextRequest) -> Failed | None:
@@ -60,6 +63,13 @@ def inputs(request: NextRequest) -> Failed | None:
     if not request.model.strip() or not request.effort.strip():
         return Failed("refused", "choices", "--model and --effort must not be blank")
     return minutes_refused(request.minutes)
+
+
+def install_words(install: Manifest | None) -> tuple[str, ...]:
+    """The `rounds install` line's words: the running install's short commit and its tag, or `unmanaged`; display only."""
+    if install is None:
+        return ("unmanaged",)
+    return (fixed(install.commit[:12]), *(() if install.tag is None else (ident(install.tag),)))
 
 
 class _Log:
@@ -111,6 +121,7 @@ def run_rounds(ports: RoundsPorts, request: RoundsRequest) -> Ended:
     log = _Log(ports, request.backlog)
     log.write("started", f"every={request.every}", f"pid={ports.pid}")
     try:
+        log.write("install", *install_words(ports.install))
         return _rounds(ports, request, log)
     except KeyboardInterrupt:
         abrupt(ports.log, ports.clock, request.backlog)

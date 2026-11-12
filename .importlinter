@@ -124,6 +124,7 @@ forbidden_modules =
     taskloop.pin_file
     taskloop.cli_install
     taskloop.install_op
+    taskloop.pin_op
 
 [importlinter:contract:start-decides-before-the-cli]
 name = The console script resolves the pin before any CLI, composition or shelf library is imported (directly or indirectly)
@@ -136,6 +137,7 @@ forbidden_modules =
     taskloop.cli_composition
     taskloop.composition
     taskloop.install_op
+    taskloop.pin_op
     git_porcelain
     sqlite_store
     stream_proc

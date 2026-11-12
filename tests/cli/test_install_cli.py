@@ -52,7 +52,7 @@ def test_an_install_prints_its_progress_and_how_to_pin_it(tmp_path: Path, repo: 
         f"(log {folder / 'install.log'})",
         "Resolved 12 packages", "Installed 12 packages",
         f"Verify: running from {folder / 'venv'}",
-        f"Installed: {commit[:12]} factory-v0.2.0; not pinned (tl pin factory-v0.2.0 runs it from the next start)",
+        f"Installed: {commit[:12]} (factory-v0.2.0); not pinned (tl pin factory-v0.2.0 runs it from the next start)",
     ] and err == ""
 
 
@@ -71,10 +71,10 @@ def test_already_names_the_recorded_and_the_given_tag(tmp_path: Path, repo: TagR
     folder = make_install(tmp_path, commit, "factory-v0.1.0")
     wire(monkeypatch, tmp_path, repo, FakeTools())
     assert install("factory-v0.2.0") == 0
-    assert capsys.readouterr().out.splitlines()[-1] == (f"Installed: already {commit[:12]} factory-v0.1.0 (given as factory-v0.2.0) "
+    assert capsys.readouterr().out.splitlines()[-1] == (f"Installed: already {commit[:12]} (factory-v0.1.0) (given as factory-v0.2.0) "
                                                         f"({folder})")
     assert install(commit) == 0
-    assert capsys.readouterr().out.splitlines()[-1] == f"Installed: already {commit[:12]} factory-v0.1.0 ({folder})"
+    assert capsys.readouterr().out.splitlines()[-1] == f"Installed: already {commit[:12]} (factory-v0.1.0) ({folder})"
 
 
 @pytest.mark.parametrize(("rev", "tools", "code", "line"), [

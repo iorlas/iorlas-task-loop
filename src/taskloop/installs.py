@@ -79,6 +79,16 @@ class LocalFiles:
     def replace(self, source: Path, target: Path) -> None:
         os.replace(source, target)
 
+    def names(self, folder: Path) -> tuple[str, ...]:
+        """The entries' names in `folder`, none when it does not exist (`tl pin TAG`'s one listing of the installs)."""
+        try:
+            return tuple(sorted(os.listdir(folder)))
+        except FileNotFoundError:
+            return ()
+
+    def make_folder(self, folder: Path) -> None:
+        folder.mkdir(parents=True, exist_ok=True)
+
     def remove(self, path: Path) -> bool:
         try:
             path.unlink()
@@ -112,6 +122,15 @@ class State:
 def installs_root(home: Path) -> Path:
     """The fixed installs root: no config key, no environment variable."""
     return home / ".local" / "share" / "task-loop" / "installs"
+
+
+def running(files: Reads, prefix: Path, home: Path) -> Manifest | None:
+    """The complete install under this home's installs root whose `venv` is `prefix` (both resolved); None: unmanaged.
+    `tl version` and the rounds' `rounds install` line read it."""
+    resolved, root = prefix.resolve(), installs_root(home).resolve()
+    if resolved.name != "venv" or resolved.parent.parent != root:
+        return None
+    return state(files, root, resolved.parent.name).manifest
 
 
 def python_of(install: Path) -> Path:
