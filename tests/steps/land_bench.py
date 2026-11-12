@@ -188,9 +188,10 @@ class LandBench:
         return LandPorts(self.checking(), self.lands, self.views, lambda path: GitProfileFiles(path, self.views), self.inspect,
                          self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing, self.environ, self.close)
 
-    def land(self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None) -> LandResult:
+    def land(self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None,
+             accept: bool = False) -> LandResult:
         modes: dict[str, Literal["land", "summary", "withdraw"]] = {"withdraw": "withdraw", "summary": "summary"}
-        request = LandRequest("tasks", "tl-1", checkout or self.repo.path, minutes, modes.get(mode, "land"), no_change)
+        request = LandRequest("tasks", "tl-1", checkout or self.repo.path, minutes, modes.get(mode, "land"), no_change, accept)
         return land(self.ports(), request)
 
     def rows(self) -> tuple[LandRow, ...]:
@@ -237,8 +238,9 @@ def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) ->
     return con
 
 
-def bench(tmp_path: Path) -> LandBench:
-    """The bench's world: origin's `main` at B, the person's clone, slot s1 at B, `task/tl-1` at X on both sides."""
+def bench(tmp_path: Path, x_files: dict[str, str] | None = None) -> LandBench:
+    """The bench's world: origin's `main` at B, the person's clone, slot s1 at B, `task/tl-1` at X on both sides (X writes
+    `x_files`, default one source file)."""
     where = tmp_path.resolve()
     remote = FakeRemote("https://example.invalid/repo.git")
     base = remote.advance("main", {"README": "one\n", ".task-loop.json": json.dumps(PROFILE)}, "base")
@@ -246,7 +248,8 @@ def bench(tmp_path: Path) -> LandBench:
     slot = repo.add_worktree(where / "slots" / repo.identity().key / "s1", "HEAD")
     root = repo.worktree(repo.identity().root)
     root.checkout_new("task/tl-1")
-    root.write_file("src/x.py", "X = 1\n")
+    for path, text in (x_files or {"src/x.py": "X = 1\n"}).items():
+        root.write_file(path, text)
     made = root.record("the task's commit", paths="all")
     assert isinstance(made, Recorded)
     assert isinstance(root.push("task/tl-1", remote="origin", head=made.sha), Pushed)

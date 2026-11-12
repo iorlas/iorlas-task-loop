@@ -147,7 +147,7 @@ class Block:
         """Block `block` over the profile's `checks` at X. None when it ended (every check ran, or a `lingering` or
         `dirty` result stopped it): its results decide (`conclusion`). Otherwise the attempt's word: `refused
         expired:<name>` (the deadline reached before or during that check), `unavailable checks:uncertain`, `git` (the
-        slot unreadable after a check; its result stays unfinished for the reconcile) or `environment:files` (a log)."""
+        slot unreadable after a check; its result stays unfinished for the reconcile) or `log` (the artifacts directory)."""
         defined = {check.name for check in checks}
         missing = [name for name, _ in target.required if name not in defined]
         for offset, name in enumerate(missing):
@@ -169,7 +169,7 @@ class Block:
         try:
             log = sink.log(block, check.name)
         except OSError:
-            return _unavailable("environment:files")
+            return _unavailable("log")  # the artifacts directory cannot be written
         with closing(log):
             sink.start(block, position, check.name, argv_digest(check.argv), check.timeout)
             log.write(f"$ {shlex.join(check.argv)}\n".encode())

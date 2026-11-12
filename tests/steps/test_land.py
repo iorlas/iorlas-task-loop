@@ -86,6 +86,14 @@ def test_changed_required_names_validate_although_the_tree_is_the_same(b: LandBe
     assert isinstance(found, Landed) and found.row.tree_same and found.row.validation == "passed" and b.execs() == RUN
 
 
+def test_the_land_validates_in_the_one_free_slot_rounds_leave_it(b: LandBench) -> None:
+    """tl-8bh9.14.34: the slot a round stops `slot_for_land` on (the only free one) is the land's: it takes it, validates, frees it."""
+    assert b.con.execute("SELECT count(*) FROM slot WHERE name='s1'").fetchone() == (1,) and b.reservations() == []
+    b.advance({"OTHER": "another task\n"})
+    found = b.land()
+    assert isinstance(found, Landed) and found.row.slot == "s1" and b.reservations() == []
+
+
 def test_a_failed_validation_pushes_nothing_and_leaves_its_slot_released(b: LandBench) -> None:
     main = b.advance({"OTHER": "y\n"})
     b.environment.process.script = [Command(), Command(), Command(rc=1)]
@@ -93,6 +101,19 @@ def test_a_failed_validation_pushes_nothing_and_leaves_its_slot_released(b: Land
     row = b.rows()[0]
     assert (row.validation, row.reason, row.delivery) == ("failed", "test:failed", None)
     assert row.released_at is not None and b.reservations() == [] and b.origin_main() == main and b.repo.pushes == 0
+
+
+def test_an_artifacts_directory_that_cannot_be_written_is_unavailable_log_naming_it_and_the_rerun_lands(b: LandBench) -> None:
+    """tl-8bh9.14.41: not a failed setup: no branch advice, the directory named, a rerun after the fix pushes."""
+    b.advance({"OTHER": "another task\n"})
+    blocked = b.root / "art" / "attempts"
+    blocked.parent.mkdir(parents=True, exist_ok=True)
+    blocked.write_text("a file where the folder belongs")
+    found = b.land()
+    assert isinstance(found, Failed) and (found.kind, found.reason) == ("unavailable", "log") and str(b.root / "art") in found.detail
+    assert b.repo.pushes == 0 and b.execs() == []
+    blocked.unlink()
+    assert isinstance(b.land(), Landed)
 
 
 def test_a_conflict_is_refused_with_its_paths_and_nothing_recorded(b: LandBench) -> None:

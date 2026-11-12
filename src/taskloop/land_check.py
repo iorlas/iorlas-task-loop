@@ -196,7 +196,8 @@ def _custody(ports: LandPorts, row: LandRow, slot_path: str, me: EntryIdentity) 
     if isinstance(ended, AttemptResult):
         verdict = concluded(ended)
         if verdict is None:
-            return Failed("unavailable", ended.reason, "The validation could not go on: rerun `tl step land`.")
+            where = f"The artifacts directory {ports.work.files.root} cannot be written. " if ended.reason == "log" else ""
+            return Failed("unavailable", ended.reason, f"{where}The validation could not go on: rerun `tl step land`.")
         ended = verdict
     try:
         lands.conclude(key, ended.outcome, ended.reason, ports.work.clock())

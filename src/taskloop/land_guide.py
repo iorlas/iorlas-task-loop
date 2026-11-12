@@ -27,8 +27,8 @@ INTERRUPTED: Final = "interrupted"  # `tl step land` stopped by Ctrl-C (`cli_ste
 LAND_NEXT: Final = {
     "land": "The checks passed, or a land is under way: read the diff and `tl step land TASK --summary`, then `tl step land "
     "TASK`. It fetches origin's main, squashes X onto it as one commit S, runs every check again on S in a free slot (in "
-    "your shell) only when main moved or its required names changed, pushes S to origin's main as you, never forced, and "
-    "closes the task in your local tracker. Rounds never land; a rerun does only what is missing.",
+    "your shell; rounds leave the last free slot for it) only when main moved or its required names changed, pushes S to "
+    "origin's main as you, never forced, and closes the task in your local tracker. Rounds never land; a rerun does only what is missing.",
     "landed": "S is on origin's main and the task is closed in your local tracker: nothing is left. Run `git pull --ff-only` in "
     "your checkout; `bd dolt push` shares the tracker if others read it. (From `tl step release --abandon`: the code is on "
     "main, nothing to abandon; if `tl step show` still says `Next: land`, rerun `tl step land` to finish the close.)",
@@ -57,6 +57,9 @@ LAND_GUIDE: Final = {
     "no_change": "origin's main already holds X's changes (a hand land, say): confirm with `git log origin/main`, then `tl step "
     "land TASK --no-change` records it and closes the task.",
     "changes": "There is something to land: drop `--no-change`.",
+    "gate_changed": "The land changes what decides a pass (the lines above: checks, setup, required names, configuration files, "
+    "weakened tests). Read the diff (`tl step land TASK --summary`); if the person means it, rerun `tl step land TASK "
+    "--accept-gate-changes`, else fix the task branch (abandon and restart).",
     "conflict": "X does not merge onto origin's main: the detail above gives the restart to run.",
     "checks_failed": "A check failed on S (the `Land check:` lines and logs say which): rerun `tl step land` if it is flaky; "
     f"otherwise {restart()} Nothing was pushed.",
@@ -125,6 +128,8 @@ LAND_GUIDE: Final = {
     "not_listed": "The candidate's slot is not listed by `git worktree list` any more: restore it, then rerun.",
     "deadline": "--minutes is out of range: from 1 to the maximum.",
     "expired": "The validation's deadline passed: rerun `tl step land` (a rerun renews it from --minutes).",
+    "log": "The artifacts directory (named above) cannot be written for the validation's logs: fix its permissions or free "
+    f"its space. Nothing is wrong with the task branch or main. {RERUN}",
     "environment": "S's `setup` refused or failed in the slot (its `setup-<run>.log` beside the candidate's check logs says why): "
     "fix it on the task branch or main, then rerun.",
     "check_running": "A check of the land's validation still runs in the process group named: wait for it (or stop only its "

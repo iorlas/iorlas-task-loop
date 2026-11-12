@@ -9,7 +9,10 @@ fetch, never from a log. `origin` is trusted as configured: how its fetch and pu
 (section 27.1, decided 2026-11-12). With R the `ls_remote` answer for `main`: R is S is delivered (`already_pushed`); R
 is O pushes S; anything else fetches, then S an ancestor of the fetched tip F is
 delivered (`remote_head` F, which contains S), else the candidate is superseded `moved` and, at most once per invocation,
-the caller makes candidate N+1 onto the moved `main` (`Again`); a second time is `target_moved`. The push names no
+the caller makes candidate N+1 onto the moved `main` (`Again`); a second time is `target_moved`. A push answered
+`remote_rejected` is read again by the same rule: origin's `main` no longer at O (the lost race for the ref: a lock held by the
+other land, or its push won) is the race above, `remote_rejected` stays for a policy refusal with `main` unchanged
+(tl-8bh9.14.35). The push names no
 expected old tip: Git's fast-forward rule accepts it only while origin's `main` is an ancestor of S. An S no longer in
 the repository (pruned) is superseded `gone` the same way.
 
@@ -156,7 +159,15 @@ def _step(lands: LandStore, clock: Callable[[], float], origin: Origin, row: Lan
     if gone or seen[0] == "moved":
         return "gone" if gone else "moved"
     pushed = _pushed(origin, row.commit)
+    if isinstance(pushed, Failed) and pushed.reason == "remote_rejected" and _raced(origin, row):
+        return "rejected"  # a lost race for the ref (lock held, or main moved) answers as a policy refusal: it is the race
     return _recorded(lands, clock(), row, row.commit, "pushed") if pushed == "pushed" else pushed
+
+
+def _raced(origin: Origin, row: LandRow) -> bool:
+    """A remote-rejected push is the race when origin's `main` is no longer at O (read again by the rule); policy otherwise."""
+    seen = _seen(origin, row)
+    return not isinstance(seen, Failed) and seen[0] != "at_origin"
 
 
 def deliver(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow, again: Again | None) -> Delivered | Failed:

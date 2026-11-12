@@ -188,8 +188,9 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
         if ports.stopping():
             return trail.close(INTERRUPTED)
         _settle(ports, request, each, trail)
-    stopped = _advance(ports, request, tuple(each for each in current if each.next == "advance"), trail)
-    stopped = stopped or _admit(ports, request, current, trail)
+    reserve = int(any(each.next == "land" for each in current))
+    stopped = _advance(ports, request, tuple(each for each in current if each.next == "advance"), trail, reserve)
+    stopped = stopped or _admit(ports, request, current, trail, reserve)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
     if stopped != INTERRUPTED and not ports.stopping():
@@ -304,13 +305,15 @@ def _verified(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
     return Move(each.task_id, "verify", verified.word, each.attempt_id, verified.detail, each.step)
 
 
-def _full(store: AttemptStore) -> bool:
-    """The free-slot read: True when every adopted slot in factory.db (any repo) has a reservation row, so no slot can be
-    free and the tracker is not read. A failed read falls through: admission meets the store itself."""
+def _full(store: AttemptStore, reserve: int = 0) -> str:
+    """The free-slot read: `no_free_slot` when every adopted slot (any repo) has a reservation row, `slot_for_land` when
+    only the last `reserve` ones lack it (a task waits at `Next: land`: that slot is the person's land's, .14.34), else "".
+    Either way the tracker is not read. A failed read falls through: admission meets the store itself."""
     try:
-        return store.slot_use().free == 0
+        free = store.slot_use().free
     except StoreUnavailable:
-        return False
+        return ""
+    return "no_free_slot" if free == 0 else "slot_for_land" if free <= reserve else ""
 
 
 def _stops(result: Failed, stops: frozenset[str] = STOPS) -> bool:
@@ -318,7 +321,7 @@ def _stops(result: Failed, stops: frozenset[str] = STOPS) -> bool:
     return result.kind in STOPPING_UNKNOWN or (result.kind == "refused" and result.reason in stops)
 
 
-def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView, ...], trail: _Trail) -> str:
+def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView, ...], trail: _Trail, reserve: int) -> str:
     """The snapshot's done attempts whose step has a following one (`Next: advance`), oldest settled release first (.15
     Q3): each one's next step admitted into a free slot (one tracker read; no claim, no label) and launched, before any
     new task. An unknown or a round-wide refusal (`ADVANCE_STOPS`) ends both phases (`no_free_slot` unwritten, as
@@ -328,11 +331,11 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
     attempt) hold it instead. With every slot reserved: no tracker call."""
     if not waiting:
         return ""
-    if _full(ports.reads.store):
-        return "no_free_slot"
     for each in sorted(waiting, key=lambda view: (view.release.released_at if view.release else 0.0, view.task_id)):
         if ports.stopping():
             return INTERRUPTED
+        if word := _full(ports.reads.store, reserve):
+            return word
         result = start(ports.starting, _request(request, each.task_id), advancing=each.attempt_id)
         if isinstance(result, Started):
             trail.add(Move(each.task_id, "advance", result.status, result.attempt_id, step=result.step or ""))
@@ -351,13 +354,13 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
     return ""
 
 
-def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: _Trail) -> str:
+def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: _Trail, reserve: int) -> str:
     """Eligible ready tasks in priority order, one start each, until a slot or the round's inputs run out; the word that
     stopped admission early ("" when the candidates ran out). With every slot reserved: `no_free_slot`, no tracker call."""
     if ports.stopping():
         return INTERRUPTED
-    if _full(ports.reads.store):
-        return "no_free_slot"
+    if word := _full(ports.reads.store, reserve):
+        return word
     try:
         rows = ready_rows(ports.ready, request.label)
     except TaskInspectionError as error:
@@ -372,13 +375,15 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
     for task_id, reason in skipped:
         attempt, step = ids.get(task_id, ("", ""))
         trail.add(Move(task_id, "skip", reason, attempt, step=step))  # attempted/abandoned: the attempt that holds it
-    return _start_each(ports, request, ordered, trail)
+    return _start_each(ports, request, ordered, trail, reserve)
 
 
-def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow, ...], trail: _Trail) -> str:
+def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow, ...], trail: _Trail, reserve: int) -> str:
     for row in ordered:
         if ports.stopping():
             return INTERRUPTED
+        if reserve and (word := _full(ports.reads.store, reserve)):
+            return word
         result = start(ports.starting, _request(request, row.task_id))
         if isinstance(result, Started):
             trail.add(Move(row.task_id, "start", result.status, result.attempt_id, step=result.step or ""))

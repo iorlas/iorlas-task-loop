@@ -29,32 +29,30 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, Literal
 
-from git_porcelain import Conflicted, GitUnavailable, MissingRemote, MissingRevision, Repo, Sha, Squashed
+from git_porcelain import GitUnavailable, MissingRemote
 
 from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo, open_store, read_task
 from taskloop.admit_chain import CURRENT, task_of
 from taskloop.agent_credentials import PUSH_REFUSED
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey
-from taskloop.check_admit import named
 from taskloop.check_status import latest
-from taskloop.check_store import ChecksRow, Required
+from taskloop.check_store import ChecksRow
 from taskloop.land_check import LandPorts, inserted, released, validated
 from taskloop.land_close import closed
-from taskloop.land_guide import restart
-from taskloop.land_push import REMOTE, Delivered, Origin, Withdrawn, deliver, fetched, observed, remote_tips, withdraw
+from taskloop.land_gate import Gate, gate_of
+from taskloop.land_push import REMOTE, Delivered, Origin, Withdrawn, deliver, observed, remote_tips, withdraw
 from taskloop.land_store import LandRow
-from taskloop.land_summary import LandSummary, message_at, summarized
+from taskloop.land_summary import LandSummary, summarized
+from taskloop.land_target import fetched_target, gated, made_s, squashed_onto
 from taskloop.operations import Failed, deadline_after, minutes_refused
 from taskloop.prepare import HEADS, REMOTES
-from taskloop.profile import Unavailable, read_profile
 from taskloop.steps import CHECK, following
 from taskloop.task import TaskInspection
 from taskloop.tracker import ACTOR
 
 BAR: Final = f"url.{PUSH_REFUSED}.pushinsteadof"  # the agent's push bar (`agent_credentials.push_bar`), as Git reads keys
 SHOW: Final = "`tl step show TASK` names the next step."
-type Files = dict[str, tuple[str, Sha]]
 
 
 NEEDS_MINUTES = Failed("refused", "minutes", "--minutes is required here: S must be validated (main moved, its required names changed, or "
@@ -72,6 +70,7 @@ class LandRequest:
     minutes: int | None
     mode: Literal["land", "summary", "withdraw"] = "land"
     no_change: bool = False
+    accept: bool = False  # `--accept-gate-changes`: S may change what decides a pass (`land_gate`)
 
 
 @dataclass(frozen=True)
@@ -84,6 +83,7 @@ class Landed:
     row: LandRow
     how: Literal["pushed", "already_pushed", "no_change", "delivered", "already_landed"]
     release: str | None = None
+    gate: Gate | None = None  # with `--accept-gate-changes`: what the pushed S changed in the gate (`land_gate`), read after the push
 
 
 type LandResult = Landed | Withdrawn | LandSummary | Failed
@@ -210,71 +210,13 @@ def _tracker(ports: LandPorts, origin: Origin, task: _Task, release: str | None)
     return read
 
 
-def _required(ports: LandPorts, checkout: Path, o: str) -> Required | Failed:
-    """The profile at O (the remote target's immutable objects) and its required names with their argv digests at O:
-    `target_profile`, `target`, `no_required` as the checks admission refuses them."""
-    profile = read_profile(ports.profiles(checkout), o)
-    if isinstance(profile, Unavailable):
-        return Failed("unavailable", "git", profile.detail)
-    found = named(o, profile)
-    return found[1] if isinstance(found, tuple) else Failed("refused", found.reason, found.detail.replace("at main", f"at origin main {o}"))
-
-
-def _squash(origin: Origin, task: _Task, o: str) -> Squashed | Conflicted | Failed:
-    """S made in Git objects only, with section 9's message."""
-    x = task.checks.commit
-    try:
-        return origin.repo.squash(o, x, message_at(origin.repo, task.title, task.checks, o))
-    except MissingRevision:
-        return Failed("refused", "commit_missing", f"The checked commit {x} is not in the repository.")
-    except GitUnavailable as error:
-        return Failed("unavailable", "git", f"Git could not merge X onto origin's main ({type(error).__name__}): rerun.")
-
-
-def _squashed(origin: Origin, task: _Task, o: str) -> tuple[str, Files, Files, Files] | Failed:
-    """S, with the tree listings of S, X and O; a conflict is refused with its first paths."""
-    x, squashed = task.checks.commit, _squash(origin, task, o)
-    if isinstance(squashed, Conflicted):
-        shown = ", ".join(squashed.paths[:20])
-        return Failed("refused", "conflict", f"X does not merge onto origin's main at {o} ({len(squashed.paths)} paths: "
-                      f"{shown}). Nothing was recorded. To land it, {restart(task.checks.task_id, x)}")
-    if isinstance(squashed, Failed):
-        return squashed
-    try:
-        return squashed.sha, _files(origin.repo, squashed.sha), _files(origin.repo, x), _files(origin.repo, o)
-    except MissingRevision:
-        return Failed("refused", "commit_missing", f"The checked commit {x} is not in the repository.")
-    except GitUnavailable as error:
-        return Failed("unavailable", "git", f"Git could not merge X onto origin's main ({type(error).__name__}): rerun.")
-
-
-def _files(repo: Repo, rev: str) -> Files:
-    """A commit's tree listing (path to mode and blob): two trees are the same exactly when their listings are."""
-    tree = repo.tree(rev)
-    if tree is None:
-        raise MissingRevision(rev)
-    return dict(tree.files)
-
-
-def _target(ports: LandPorts, origin: Origin) -> tuple[str, Required] | Failed:
-    """Origin's `main` as fetched now (O) and the required names at O."""
-    try:
-        o = fetched(origin.repo)
-    except GitUnavailable as error:
-        return Failed("unavailable", "remote", f"`origin` could not be fetched ({type(error).__name__}): rerun.")
-    if o is None:
-        return Failed("refused", "target", "`origin` has no branch `main` to land on.")
-    required = _required(ports, origin.checkout, o)
-    return required if isinstance(required, Failed) else (o, required)
-
-
 def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, number: int) -> LandRow | Failed:
     """Section 5: a new candidate S onto origin's `main` as fetched now, inserted (and validated when it must be)."""
-    target = _target(ports, origin)
+    target = fetched_target(ports.profiles, origin)
     if isinstance(target, Failed):
         return target
     o, required = target
-    squashed = _squashed(origin, task, o)
+    squashed = squashed_onto(origin, task.checks, task.title, o)
     if isinstance(squashed, Failed):
         return squashed
     s, tree_s, tree_x, tree_o = squashed
@@ -282,6 +224,9 @@ def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, n
     if no_change != request.no_change:
         return Failed("refused", "no_change", f"origin's main at {o} already holds X's changes: confirm, then `tl step land "
                       "--no-change`.") if no_change else Failed("refused", "changes", "There is something to land: drop --no-change.")
+    refused = None if no_change else gated(ports.profiles, origin, request.accept, o, s)
+    if refused is not None:
+        return refused
     same, names = tree_s == tree_x, {name for name, _ in required} != {name for name, _ in task.checks.required}
     settled = "no_change" if no_change else "same_tree" if same and not names else None
     deadline = _deadline(ports, request.minutes, settled is None)
@@ -396,7 +341,14 @@ def _resumed(ports: LandPorts, request: LandRequest, task: _Task) -> LandResult:
     read = _tracker(ports, origin, task, release)
     if not isinstance(read, TaskInspection):
         return _closing(ports, read)
-    return _closing(ports, _delivered(ports, request, replace(task, title=read.title), origin, release))
+    done = _closing(ports, _delivered(ports, request, replace(task, title=read.title), origin, release))
+    return _accepted(ports, origin, done) if request.accept and isinstance(done, Landed) and done.how == "pushed" else done
+
+
+def _accepted(ports: LandPorts, origin: Origin, done: Landed) -> Landed:
+    """An accepted land shows what it changed in the gate: the facts, read from the delivered S against its O."""
+    gate = gate_of(origin, ports.profiles(origin.checkout), done.row.origin, done.row.commit)
+    return replace(done, gate=gate) if isinstance(gate, Gate) and gate.decisive else done
 
 
 def _summary(ports: LandPorts, request: LandRequest, task: _Task) -> LandSummary | Failed:
@@ -407,13 +359,13 @@ def _summary(ports: LandPorts, request: LandRequest, task: _Task) -> LandSummary
     checks, read = task.checks, _read(ports, task.checks)
     if isinstance(read, Failed):
         return read
-    target = _target(ports, origin)
+    target = fetched_target(ports.profiles, origin)
     if isinstance(target, Failed):
         return target
-    made = _squash(origin, replace(task, title=read.title), target[0])
+    made = made_s(origin, task.checks, read.title, target[0])
     if isinstance(made, Failed):
         return made
-    return summarized(origin.repo, ports.profiles(origin.checkout), checks, ports.work.store.results(checks.key), made,
+    return summarized(origin, ports.profiles(origin.checkout), checks, ports.work.store.results(checks.key), made,
                       read.title, target)
 
 
