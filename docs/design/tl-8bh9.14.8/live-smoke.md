@@ -1,6 +1,7 @@
 # M3 live smoke: land and close with `tl step land` (owner-run, after L5)
 
-**Status: not run.** Milestone M3 of the [roadmap](../self-hosting-roadmap.md) is reached when this run passes: tasks of
+**Status: passed 2026-11-12** at `ececcf8d3`, with three runbook corrections ([findings](m3-smoke-findings.md)).
+Milestone M3 of the [roadmap](../self-hosting-roadmap.md) is reached when this run passes: tasks of
 **this repository**, taken through plan, implement and the check step by `tl step rounds` from a runner worktree, are
 landed by the person's `tl step land TASK` on a scratch bare remote: one squash commit S onto origin's `main` at O,
 validated when its tree is not X's, pushed never forced from the person's checkout, and the task closed in the scratch
@@ -46,7 +47,9 @@ PERSON() {  # the person's checkout as Git sees it: HEAD, local main, the index 
 
 The prerequisites of M1 section 0 apply unchanged (factory.db new, db and slots not nested, `.t/<slot>` at most 64
 bytes, mise trust, `codex` and `bd` on `PATH`, network for `setup`). `sqlite3` reads factory.db read-only
-(`sqlite3 -readonly "$M3/state/factory.db" ...`); nothing edits it.
+(`sqlite3 -readonly "$M3/state/factory.db" ...`); nothing edits it. Where the `sqlite3` CLI is missing, Python's module
+reads it read-only: `python3 -I -c 'import sqlite3,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro", uri=True);
+[print(*r, sep="|") for r in c.execute(sys.argv[2])]' "$M3/state/factory.db" "<query>"`.
 
 ## 1. The smoke profile and the tasks
 
@@ -157,7 +160,7 @@ TL step show "$B" --backlog m3   # tab B, while it runs (about 90 s)
 Task C (its O is the old `main`, so it validates):
 
 1. `LAND "$C"`; when `TL step show "$C"` shows `Land check: slow unfinished, process group <pgid>`, press Ctrl-C in the
-   land's shell. The land ends (Python's `KeyboardInterrupt`; `stream_proc` stops the check's tree): `ps -o pid= -g
+   land's shell. The land ends (Python's `KeyboardInterrupt` traceback, exit 130; `stream_proc` stops the check's tree): `ps -o pid= -g
    <pgid>` prints nothing. `TL step show "$C"`: `Land result: pending`, `Land process: gone (pid ...)`, `Next: land`.
 2. `LAND "$C"` again: the reconcile marks block 1's unfinished check `interrupted` and the block repeats whole
    (`check-2-*.log`); before `slow` ends, take the land process's pid from `TL step show "$C"` (`Land process: running
@@ -208,8 +211,8 @@ chmod +x "$M3/remote.git/hooks/pre-receive"
    was lost: `S_F=$(sqlite3 -readonly "$M3/state/factory.db" "select l.commit_sha from land_candidate l join
    checks_attempt c on c.attempt_id=l.checks_attempt_id join attempt a on a.attempt_id=c.after_attempt_id where
    a.task_id='$F'")`, `G -C "$M3/repo" push -q origin "$S_F:refs/heads/main"`. Then `LAND "$F"`: `already_pushed: ...
-   origin's main was found to hold S: recorded, not pushed again`, `Closed: closed`; the remote's reflog (or `G -C
-   "$M3/remote.git" rev-parse main`) shows no second update.
+   origin's main was found to hold S: recorded, not pushed again`, `Closed: closed`; `G -C "$M3/remote.git" rev-parse main` is still S (a bare remote keeps no reflog unless
+   `core.logAllRefUpdates` was set before the hand push).
 
 ## 8. A hand land is `no_change`; `--no-change` records it
 
