@@ -15,7 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import NoAdvance
+from doubles import NO_CHECKS, NoAdvance, NoChecks, no_holds
 from git_porcelain.testing import FakeWorktree
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
@@ -26,6 +26,8 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Seen, SlotFiles, Unsettled, Verified, VerifyResult
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
+from taskloop.hold import HoldPorts
+from taskloop.hold_store import HoldStore
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     Advance,
@@ -167,8 +169,10 @@ class Bench:
 
     def ports(self) -> RoundPorts:
         reads = StatusPorts(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
-        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance)
-        return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, self.ready, self.log, self.stopping)
+        starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance, NO_CHECKS)
+        holding = HoldPorts(HoldStore(self.store.connect), self.store, no_holds(), self.releaser, NoChecks(), lambda: self.now,
+                            EvidenceFiles(Path("/artifacts")), lambda _backlog, _task: None)  # no label here: nothing is held
+        return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, holding, self.ready, self.log, self.stopping)
 
     def round(self, request: NextRequest = REQUEST) -> Round:
         found = run_round(self.ports(), request)
@@ -576,6 +580,33 @@ def test_the_closing_line_is_written_when_the_stopped_word_changes(factory: sqli
     assert len(bench.lines) == 2 and bench.lines[-1].endswith(" tasks round moves=0 stopped=unavailable:tracker")
 
 
+def test_the_first_round_without_moves_after_one_with_moves_closes_moves_0(factory: sqlite3.Connection) -> None:
+    bench = Bench(factory, FakeTaskReadClient([bead("t-1")], ready=["t-1"]))
+    first = bench.round(replace(REQUEST, quiet=frozenset()))
+    assert bench.lines[-1].endswith(" tasks round moves=1")
+    bench.ready = FakeTaskReadClient()
+    second = bench.round(replace(REQUEST, quiet=first.written))
+    assert len(bench.lines) == 3 and bench.lines[-1].endswith(" tasks round moves=0")
+    bench.round(replace(REQUEST, quiet=second.written))
+    assert len(bench.lines) == 3  # the same closing line is not written again
+
+
+def test_an_admission_skip_stays_quiet_across_rounds_with_no_free_slot(factory: sqlite3.Connection) -> None:
+    """A round with every slot held never reads the ready rows: the previous round's `skip abandoned` stands unchanged, so
+    the next round with a free slot does not write it again."""
+    seed(factory, "t-1", "gone-1")
+    released(factory, "gone-1", "unclaimed")
+    bench = Bench(factory, FakeTaskReadClient([bead("t-1")], ready=["t-1"]))
+    found = bench.round(replace(REQUEST, quiet=frozenset()))
+    factory.execute("DELETE FROM slot WHERE repo_id='other'")
+    found = bench.round(replace(REQUEST, quiet=found.written))
+    assert found.stopped == "no_free_slot" and found.moves == ()
+    factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('other','s1','/other/s1')")
+    found = bench.round(replace(REQUEST, quiet=found.written))
+    assert moves(found) == [("t-1", "skip", "abandoned")]
+    assert sum(line.endswith(" tasks t-1 plan skip abandoned gone-1") for line in bench.lines) == 1
+
+
 def test_after_a_failed_log_write_the_next_round_writes_the_state_again(factory: sqlite3.Connection) -> None:
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     bench = Bench(factory)
@@ -631,3 +662,18 @@ def test_a_stop_between_two_candidates_never_claims_the_second(factory: sqlite3.
     found = bench.round()
     assert moves(found) == [("t-1", "start", "started")] and found.stopped == "interrupted"
     assert bench.admission.requests == ["t-1"]
+
+
+def test_a_skip_repeated_every_round_is_a_move_so_moves_0_closes_only_once_the_skips_stop(factory: sqlite3.Connection) -> None:
+    """M3 finding 6: an abandoned ready task is skipped by every round, quietly after the first, so the unchanged closing
+    line `round moves=1` is quiet too; the first round without the skip writes `round moves=0`."""
+    seed(factory, "t-1", "gone-1")
+    released(factory, "gone-1", "unclaimed")
+    bench = Bench(factory, FakeTaskReadClient([bead("t-1")], ready=["t-1"]))
+    found = bench.round(replace(REQUEST, quiet=frozenset()))
+    assert [line.split(" ")[2:] for line in bench.lines] == [["t-1", "plan", "skip", "abandoned", "gone-1"], ["round", "moves=1"]]
+    found = bench.round(replace(REQUEST, quiet=found.written))
+    assert moves(found) == [("t-1", "skip", "abandoned")] and len(bench.lines) == 2
+    bench.ready = FakeTaskReadClient()
+    bench.round(replace(REQUEST, quiet=found.written))
+    assert len(bench.lines) == 3 and bench.lines[-1].endswith(" tasks round moves=0")

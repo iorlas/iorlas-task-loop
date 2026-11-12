@@ -4,21 +4,69 @@ import json
 import os
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from git_porcelain import GitUnavailable, Repo
+from beads_client import Bead
+from git_porcelain import GitUnavailable, Recorded, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop.access import TMP_BYTES, Folders
 from taskloop.admit import AdmitResult
 from taskloop.admit_chain import NextStepRequest
-from taskloop.attempt_types import Checkouts, FileStat
+from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat
+from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitProfileFiles
+from taskloop.launch import LaunchResult
+from taskloop.operations import ChecksPorts
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
 from taskloop.setup_store import ProcessSeen, SetupStore
+from taskloop.slot_release import ReleaseResult
+from taskloop.task import TaskBinding, TaskInspection, TaskScope
+from taskloop.tracker import inspect_task
+from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
+
+# The `checking` fixture's checks attempt: its key, its slot's HEAD D, the implement attempt's X, its target (`main`'s
+# commit at admission), and the required names with their argv digests at the target.
+CHECKS = AttemptKey("checks", "checks-token", 1)
+D, X, TARGET = "d" * 40, "c" * 40, "f" * 40
+REQUIRED = (("check", "1" * 64), ("test", "2" * 64))
+# The `landing` fixture's land candidate of `CHECKS`: its key, O (origin's `main` as fetched) and S (the squash commit).
+CANDIDATE = AttemptKey("candidate", "candidate-token", 1)
+ORIGIN, SQUASH = "0" * 40, "5" * 40
+
+
+# A profile at `main` requiring `check` and `test` and defining a third, non-required check.
+MAIN_PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"], "checks": [
+    {"name": "check", "argv": ["just", "check"], "timeout": 600}, {"name": "test", "argv": ["just", "test"], "timeout": 600},
+    {"name": "slow", "argv": ["sleep", "1"], "timeout": 60}]}
+
+
+def main_at(slot: FakeWorktree) -> str:
+    """The person's `main` fast-forwarded to the slot's detached HEAD (a commit made there before dispatch): a new task
+    branch starts at `main`'s tip, so this is where B is."""
+    found = next(info.head for info in slot.repo.worktrees() if info.path == slot.path)
+    assert found is not None
+    slot.repo.worktree(slot.repo.identity().root).merge_ff(found)
+    return found
+
+
+@dataclass(frozen=True)
+class Done:
+    """The `done` fixture: its factory.db, the implement attempt's key and X, `main`'s commit (the target) and the free
+    slot's HEAD D."""
+
+    path: Path
+    implement: AttemptKey
+    x: str
+    target: str
+    d: str
 
 
 class FakeSlotFiles:
@@ -138,6 +186,37 @@ class NoAdvance:
         raise AssertionError(f"no advance expected: {request.previous}")
 
 
+class NoChecks:
+    """The checks admission and launcher of a start that never reaches the check step."""
+
+    def admit_checks(self, request: ChecksRequest) -> AdmitResult:
+        raise AssertionError(f"no checks admission expected: {request.previous}")
+
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
+        raise AssertionError(f"no checks launch expected: {task_id}")
+
+    def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        raise AssertionError(f"no checks release expected: {key.attempt_id}")
+
+    def release_candidate(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        raise AssertionError(f"no land candidate release expected: {key.attempt_id}")
+
+
+def no_holds() -> TrackerHolds:
+    """The tracker's hold writes of a round that never holds a task nor clears a hold."""
+
+    def refuse(*args: str) -> HoldAnswer[LabelStep]:
+        raise AssertionError(f"no hold tracker write expected: {args}")
+
+    def unexpected(*args: str) -> HoldAnswer[HoldWrite]:
+        raise AssertionError(f"no hold tracker write expected: {args}")
+
+    return TrackerHolds(refuse, unexpected, unexpected)
+
+
+NO_CHECKS = ChecksPorts(NoChecks(), NoChecks(), NoChecks())
+
+
 type Blob = bytes | NoCommit | NotAFile | Unavailable | None
 
 
@@ -169,8 +248,9 @@ class Command:
     uncertain: bool = False
     spawn_error: bool = False  # the start fails before any registration
     lingering: bool = False  # a process stays in its group after it ended
+    survivors: bool = False  # the stop (a timeout) left a process of its tree alive
     supervision_error: bool = False  # the supervision fails (OSError) after the command started
-    effect: Callable[[], None] | None = None
+    effect: Callable[[], object] | None = None
     output: bytes = b"done\n"
 
 
@@ -216,7 +296,7 @@ class FakeSetupProcess:
             self.groups.add(pid)
         if command.supervision_error:
             raise OSError("pump")
-        return SetupEnded(command.rc, command.timed_out, command.exec_failed, pid)
+        return SetupEnded(command.rc, command.timed_out, command.exec_failed, pid, survivors=command.survivors)
 
     def lingering(self, pgid: int) -> bool:
         self.events.append(f"group {pgid}")
@@ -296,3 +376,68 @@ class Environment:
             self.process.lingering, EvidenceFiles(self.artifacts), self.clock, self.platform, self.safe_removal, self.probe,
             self.protected, self.tmp_bytes,
         ))
+
+
+@dataclass
+class ChecksBench:
+    """A checks admission's ports over the `done` factory.db (the person's checkout and its profile reader, the slot
+    ports): `status`/`assignee` are the task in the tracker (each read in `reads`); `racing` runs once right before the
+    admission's write transaction (another actor's commit)."""
+
+    done: Done
+    repo: FakeRepo
+    views: PinnedViews
+    files: FakeSlotFiles
+    status: str = "in_progress"
+    assignee: str = "taskloop"
+    now: float = 10
+    reads: list[str] = field(default_factory=list)
+    racing: Callable[[], object] = lambda: None
+
+    def __post_init__(self) -> None:
+        con = Store(SCHEMA).open_rw(self.done.path)
+        assert con is not None
+        self.con: sqlite3.Connection = con
+        self.root = self.repo.worktree(self.repo.identity().root)
+
+    def show(self, task_id: str) -> Bead:
+        return Bead(task_id, title="Widget", description="It must do X", status=self.status, assignee=self.assignee)
+
+    def inspect(self, task_id: str, backlog: str, root: str) -> TaskInspection:
+        self.reads.append(task_id)
+        return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self, task_id)
+
+    def begin(self, con: sqlite3.Connection) -> AbstractContextManager[None]:
+        racing, self.racing = self.racing, lambda: None
+        racing()
+        return begin_immediate(con)
+
+    def admission(self) -> ChecksAdmission:
+        return ChecksAdmission(lambda: self.con, self.begin, self.inspect, self.views, lambda: self.now, lambda _p: True, self.files,
+                               lambda path: GitProfileFiles(path, self.views))
+
+    def admit(self, number: int = 1, checkout: Path | None = None) -> AdmitResult:
+        return self.admission().admit_checks(ChecksRequest(self.done.implement, checkout or self.repo.path, 100.0, number))
+
+    def stored(self) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]:
+        rows = "SELECT number,slot,slot_head,target_commit,required,deadline,phase,after_attempt_id FROM checks_attempt ORDER BY number"
+        held = "SELECT slot,attempt_id,generation FROM reservation ORDER BY attempt_id"
+        return self.con.execute(rows).fetchall(), self.con.execute(held).fetchall()
+
+    def main(self, profile: dict[str, object] | None) -> str:
+        """A commit on the person's `main` with this profile (None: without one); returns it."""
+        if profile is None:
+            self.root.remove_file(".task-loop.json")
+        else:
+            self.root.write_file(".task-loop.json", json.dumps(profile))
+        made = self.root.record("main moves", paths="all")
+        assert isinstance(made, Recorded)
+        return made.sha
+
+    def concluded(self, conclusion: str = "failed", released: bool = True, abandoned: bool = False) -> None:
+        """The latest checks attempt concluded as given (and released, abandoned), as the entry and a release leave it."""
+        reason = "test:failed" if conclusion == "failed" else None
+        self.con.execute("UPDATE checks_attempt SET phase='concluded',conclusion=?,reason=?,concluded_at=20", (conclusion, reason))
+        if released:
+            self.con.execute("UPDATE checks_attempt SET released_at=30,parked=?,abandoned=?", (self.done.d, int(abandoned)))
+            self.con.execute("DELETE FROM reservation")

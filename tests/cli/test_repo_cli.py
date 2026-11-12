@@ -7,7 +7,7 @@ import pytest
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeRepo
 
-from taskloop import composition
+from taskloop import git_views
 from taskloop.cli import main
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 
@@ -93,7 +93,7 @@ def test_composition_resolves_input_and_disables_memoization(tmp_path: Path, mon
         observed.append(path)
         return repo
 
-    monkeypatch.setattr(composition, "RealRepo", make_repo)
-    result = composition.inspect_checkout("repo/../repo")
+    monkeypatch.setattr(git_views, "RealRepo", make_repo)
+    result = git_views.inspect_checkout("repo/../repo")
     assert result.checkout_path == repo.path
     assert observed == [repo.path]

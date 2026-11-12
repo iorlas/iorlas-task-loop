@@ -22,11 +22,13 @@ class ReleaseRow:
     head: str
     released_at: float
     claim: str
+    checks_abandoned: bool = False  # a checks attempt's own abandon flag: its claim is its implement attempt's, still kept
 
     @property
     def abandoned(self) -> bool:
-        """An abandon never keeps the claim; a settled release always does."""
-        return self.claim != "kept"
+        """An abandon never keeps the claim; a settled release always does. A checks attempt's abandon keeps it (the
+        implement attempt's abandon, which follows, returns it)."""
+        return self.claim != "kept" or self.checks_abandoned
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,8 @@ class AttemptRow:
     held: bool = False  # it still holds its reservation
     release: ReleaseRow | None = None
     published: PublishedRow | None = None
+    label: str | None = None  # the approval label a round took the task under (`attempt.label`); None: started by hand
+    end_commit: str | None = None  # X, once stored
 
 
 @dataclass(frozen=True)
@@ -158,7 +162,10 @@ def _step(row: tuple[object, ...]) -> ChainLink:
     return ChainLink(as_int(row[0]), base, commit, stored_effect(row[5]), as_listed(row[6]), FileRef(as_text(row[3]), as_text(row[4])))
 
 
-class AttemptReads:
+class StoreConnection:
+    """factory.db's connection for one store: the current schema checked on every use, a write in `begin`'s transaction,
+    and any sqlite3 error reported as StoreUnavailable. No query of its own: each store adds the reads of its own tables."""
+
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
@@ -180,6 +187,10 @@ class AttemptReads:
                 yield con
         except sqlite3.Error as error:
             raise StoreUnavailable("Factory database operation failed") from error
+
+
+class AttemptReads(StoreConnection):
+    """The status reads of agent attempts (the `attempt` table and its chain)."""
 
     def state(self, key: AttemptKey) -> tuple[str, bool] | None:
         """Dispatch phase and recorded session conflict, without needing a live reservation (historical reads)."""
@@ -232,8 +243,8 @@ class AttemptReads:
                 p.entry_boot,p.deadline,p.worker_pid,p.worker_pgid,p.number,p.previous_attempt_id,p.repeat_reason,
                 EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),p.seq,
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
-                 AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step
-                FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
+                 AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step,
+                p.label,p.end_commit FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
                 WHERE p.adapter='beads' AND (?1 IS NULL OR p.backlog=?1) AND (?2 IS NULL OR p.task_id=?2)
                 ORDER BY p.backlog,p.task_id,p.seq DESC""",
@@ -249,9 +260,20 @@ class AttemptReads:
             found.append(
                 AttemptRow(key, as_text(row[3]), as_text(row[4]), as_text(row[5]), as_text(row[6]), entry, float(row[10]), worker,
                            as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[25]),
-                           as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]))
+                           as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]),
+                           as_nullable_text(row[26]), as_nullable_text(row[27]))
             )
         return tuple(found)
+
+    def slot_path(self, attempt_id: str) -> str | None:
+        """Where the adopted slot of an agent attempt or of a checks attempt is (the `slot` row's path); None for an
+        attempt id factory.db does not hold."""
+        with self._connection() as con:
+            row = con.execute(
+                """SELECT s.path FROM slot s JOIN attempt p ON p.repo_id=s.repo_id
+                WHERE (p.attempt_id=?1 AND s.name=p.slot) OR EXISTS (SELECT 1 FROM checks_attempt c WHERE c.attempt_id=?1
+                 AND c.after_attempt_id=p.attempt_id AND c.slot=s.name) LIMIT 1""", (attempt_id,)).fetchone()
+        return None if row is None else as_text(row[0])
 
     def slot_use(self) -> SlotUse:
         """Two SELECTs, no write: the free-slot read and the slot-released check both use them."""

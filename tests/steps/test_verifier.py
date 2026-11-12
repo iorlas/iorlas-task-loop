@@ -14,7 +14,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles, PinnedViews, linked_into
+from doubles import FakeSlotFiles, PinnedViews, linked_into, main_at
 from git_porcelain import Dirty, Recorded, Repo, Tree
 from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
@@ -240,7 +240,8 @@ def test_the_stage_commit_and_verdict_table(
     commits: int,
 ) -> None:
     if before is not None:
-        commit(slot, before)  # before dispatch: B is this commit
+        commit(slot, before)  # before dispatch, then on `main`: B is this commit
+        main_at(slot)
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, written, answer)
     if after is not None:
@@ -294,6 +295,7 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     base = commit(slot, PLANNED)
+    main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {NOTE: "n"}, UNCHANGED)
     check = verifier(registered, checkouts, slot_files)
     assert shown(check.verify(KEY)) == "unsettled:uncommitted" and end_commit(registered) is None

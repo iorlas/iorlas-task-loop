@@ -8,7 +8,7 @@ import pytest
 from beads_client import BdError, Bead, TaskReadClient
 from beads_client.testing import FakeTaskReadClient
 
-from taskloop import composition
+from taskloop import tracker_client
 from taskloop.cli import main
 from taskloop.task import TaskReference, TaskScope
 
@@ -26,7 +26,7 @@ def test_task_show_preserves_requirements(
         assert cwd == str(tmp_path)
         return client
 
-    monkeypatch.setattr(composition, "Bd", make_client)
+    monkeypatch.setattr(tracker_client, "Bd", make_client)
     assert (
         main(["task", "show", "t-1", "--backlog", "configured", "--tracker-root", str(tmp_path), *(["--json"] if structured else [])]) == 0
     )
@@ -71,7 +71,7 @@ def test_task_failures_remain_distinct(
     def make_client(actor: str, *, cwd: str) -> TaskReadClient:
         return client
 
-    monkeypatch.setattr(composition, "Bd", make_client)
+    monkeypatch.setattr(tracker_client, "Bd", make_client)
     assert (
         main(["task", "show", "t-1", "--backlog", "configured", "--tracker-root", str(tmp_path), *(["--json"] if structured else [])]) == 1
     )
@@ -98,7 +98,7 @@ def test_invalid_binding_never_constructs_or_reads_a_tracker(
     def forbidden_client(actor: str, *, cwd: str) -> TaskReadClient:
         pytest.fail("an invalid binding must not access a tracker")
 
-    monkeypatch.setattr(composition, "Bd", forbidden_client)
+    monkeypatch.setattr(tracker_client, "Bd", forbidden_client)
     assert main(["task", "show", "t-1", "--backlog", backlog, "--tracker-root", root, "--json"]) == 1
     output = capsys.readouterr()
     assert output.out == ""

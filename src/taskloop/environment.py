@@ -1,6 +1,6 @@
-"""The slot's environment before an implement agent: the repository's `setup` run by the entry, outside the sandbox, with
-network, recorded in factory.db (`setup_store`), its output kept as an evidence file (S5e, design tl-8bh9.4.3.1.16.2
-section 4).
+"""The slot's environment before an implement agent or a checks block: the repository's `setup` run by the entry, outside
+the sandbox, with network, recorded in factory.db (`setup_store`), its output kept as an evidence file (S5e, design
+tl-8bh9.4.3.1.16.2 section 4; checks: tl-8bh9.14.6 section 8).
 
 In the entry process, after `prepare.base` and before the dispatch write, under the slot custody lock the entry holds
 and inside the claim keep-alive; only for a step kind with `environment`. Order (a repeat skips 5-8: its slot keeps
@@ -14,6 +14,10 @@ listing, and the uv folders emptied); 7 each setup command in order, through
 the registered start, its process group proven empty after it; 8 the slot clean afterwards; 9 the scratch emptied again;
 10 the claim renewed once; 11 the deadline. Every refusal leaves the attempt `admitted` with nothing dispatched; no
 process is ever signalled here.
+
+A checks slot (`SetupFor.commit` set) differs in three points: no sandbox probe (`probe=None`), no reuse of a passed run
+(a block ran task code on the host), and the reset first puts tracked files back to exactly X (`reset --hard X`) before
+the same `clean`; it expects `(X, detached)` after setup. The implement path never resets tracked files.
 """
 
 import hashlib
@@ -25,12 +29,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
 
-from git_porcelain import GitUnavailable
+from git_porcelain import GitUnavailable, Repo
 from stream_proc import OwnedProcess
 
 from taskloop.access import TMP_BYTES, Folders, folders
 from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Checkouts
-from taskloop.evidence_files import EvidenceFiles, SetupLog
+from taskloop.evidence_files import CappedLog, EvidenceFiles
 from taskloop.prepare import Prepared, task_branch
 from taskloop.profile import ProfileFiles, Refused, Unavailable, read_profile
 from taskloop.setup_store import SETUP_RUNS, Conclusion, SetupSeen, SetupStore
@@ -55,6 +59,7 @@ class SetupEnded:
     exec_failed: bool
     pgid: int
     uncertain: bool = False
+    survivors: bool = False  # the stop left a process of its tree alive (`Result.survivors`): it is lingering
 
 
 class SetupProcess(Protocol):
@@ -104,6 +109,21 @@ def _ending(ended: SetupEnded) -> bytes:
     return b"ended by a signal\n" if ended.rc is None else f"exit {ended.rc}\n".encode()
 
 
+def reset_to(view: Repo, path: Path, commit: str) -> bool:
+    """A checks slot back to exactly `commit` through its pinned `view`: tracked files and index (`git reset --hard`),
+    then untracked and ignored files and nested repositories (`git clean -ffdx`); only while the view lists it detached
+    at `commit` (an attached HEAD would carry its branch to it): False, and nothing written, otherwise. The checks
+    setup's first step, and the checks release's before its park (the untracked leftovers of a passed block would
+    otherwise refuse the park, `held:slot_dirty`). The one owner of `reset` and `clean`."""
+    listed = next((info for info in view.worktrees() if info.path == path), None)
+    if listed is None or (listed.head, listed.branch) != (commit, None):
+        return False
+    worktree = view.worktree(path)
+    worktree.reset(commit, mode="hard")
+    worktree.clean(ignored=True, nested=True)
+    return True
+
+
 def _nested(one: Path, other: Path) -> bool:
     return one.is_relative_to(other) or other.is_relative_to(one)
 
@@ -135,17 +155,31 @@ class EnvironmentPorts:
 
 
 @dataclass(frozen=True)
+class SetupFor:
+    """Whose slot is set up: `commit` None for an implement slot (B is the prepared HEAD on `branch`, `task/<id>`); for a
+    checks slot X, the slot reset hard to it and expected detached there (`branch` None). `first`: the setup runs (an
+    implement repeat keeps attempt 1's environment)."""
+
+    key: AttemptKey
+    slot: Path
+    commit: str | None
+    branch: str | None
+    deadline: float
+    first: bool
+
+
+@dataclass(frozen=True)
 class _Run:
-    """One setup run under way: whose, which, at which B, with which environment and log."""
+    """One setup run under way: whose, which, at which commit, with which environment and log."""
 
     key: AttemptKey
     run: int
     slot: Path
-    head: str  # B
-    branch: str  # task/<id>
+    head: str  # B, or X for a checks slot
+    branch: str | None  # task/<id>, None for a checks slot (detached)
     deadline: float
     env: Mapping[str, str]
-    log: SetupLog
+    log: CappedLog
 
 
 class Preparation:
@@ -156,18 +190,24 @@ class Preparation:
         """Section 4's order; None when the agent may be dispatched. `launch`: the agent's executable and the credentials'
         scrubbed environment (setup gets it with the folders, the probe with the agent's additions)."""
         admission = record.admission
-        key, path = admission.key, Path(admission.slot_path)
-        found = folders(path)
-        stopped = self._ready(key, path, slot, launch)
-        if stopped is None and admission.number == 1:
+        target = SetupFor(admission.key, Path(admission.slot_path), None, task_branch(admission.task.task_id),
+                          admission.deadline, admission.number == 1)
+        return self.prepare_for(target, slot, renew, launch[1], probe=launch)
+
+    def prepare_for(self, target: SetupFor, slot: Prepared, renew: Renew, env: Mapping[str, str], *,
+                    probe: Launch | None) -> AttemptResult | None:
+        """Both paths: `env` is the scrubbed environment setup gets with the folders; `probe` the agent's Codex and
+        environment for the sandbox probe, None for no probe (a checks slot)."""
+        found = folders(target.slot)
+        stopped = self._ready(target.key, target.slot, slot, probe)
+        if stopped is None and target.first:
             try:
-                branch = task_branch(admission.task.task_id)
-                stopped = self._setup(key, (path, branch), slot, admission.deadline, setup_env(launch[1], found))
+                stopped = self._setup(target, slot, setup_env(env, found))
             except GitUnavailable:
                 stopped = _unavailable("git")
-        return stopped or self._finish(found, renew, admission.deadline)
+        return stopped or self._finish(found, renew, target.deadline)
 
-    def _ready(self, key: AttemptKey, path: Path, slot: Prepared, launch: Launch) -> AttemptResult | None:
+    def _ready(self, key: AttemptKey, path: Path, slot: Prepared, probe: Launch | None) -> AttemptResult | None:
         """Steps 1-4: the failure count (before the probe: a dead attempt costs nothing), the reconcile, the preflight,
         the scratch emptied, then the sandbox probe in it (never in the slot, whose ignored files are not reset yet)."""
         if self.ports.store.failures(key) >= SETUP_RUNS:
@@ -178,7 +218,9 @@ class Preparation:
             return stopped
         if not self.ports.files.empty(found.tmp):
             return _unavailable("environment:files")
-        exe, env = launch
+        if probe is None:
+            return None
+        exe, env = probe
         return None if self.ports.probe(exe, env, found) else _refused("environment:sandbox")
 
     def _finish(self, found: Folders, renew: Renew, deadline: float) -> AttemptResult | None:
@@ -236,22 +278,22 @@ class Preparation:
             return False
         return not any(other is None or _nested(root, other) for root in expected for other in kept)
 
-    def _setup(
-        self, key: AttemptKey, where: tuple[Path, str], slot: Prepared, deadline: float, env: Mapping[str, str]
-    ) -> AttemptResult | None:
-        """Steps 5-8: the profile at B, reuse of a passed run, else the reset and a new run. `where`: the slot and its
-        task branch."""
-        ports, (path, branch) = self.ports, where
-        profile = read_profile(ports.profiles(path, slot.gitdir), slot.head)
+    def _setup(self, target: SetupFor, slot: Prepared, env: Mapping[str, str]) -> AttemptResult | None:
+        """Steps 5-8: the profile at B (X for a checks slot), reuse of a passed run (never for a checks slot), else the
+        reset and a new run."""
+        ports, key, path = self.ports, target.key, target.slot
+        head = target.commit or slot.head
+        profile = read_profile(ports.profiles(path, slot.gitdir), head)
         if isinstance(profile, Refused):
             return _refused("environment:profile")
         if isinstance(profile, Unavailable):
             return _unavailable("environment:profile")
         digest = setup_digest(profile.setup)
         latest = ports.store.latest(key)
-        if latest is not None and (latest.conclusion, latest.commit, latest.digest) == ("passed", slot.head, digest):
+        reusable = latest is not None and (latest.conclusion, latest.commit, latest.digest) == ("passed", head, digest)
+        if reusable and target.commit is None:
             return None  # no agent ran since it passed: this attempt is still `admitted`
-        reset = self._reset(path, slot.gitdir, folders(path))
+        reset = self._reset(path, slot.gitdir, folders(path), target.commit)
         if reset is not None:
             return reset
         run = 1 if latest is None else latest.run + 1
@@ -260,14 +302,21 @@ class Preparation:
         except OSError:
             return _unavailable("environment:files")
         with closing(log):
-            ports.store.start(key, run, slot.head, digest, ports.clock())
-            return self._run(_Run(key, run, path, slot.head, branch, deadline, env, log), slot.gitdir, profile.setup)
+            ports.store.start(key, run, head, digest, ports.clock())
+            return self._run(_Run(key, run, path, head, target.branch, target.deadline, env, log), slot.gitdir, profile.setup)
 
-    def _reset(self, path: Path, gitdir: Path, found: Folders) -> AttemptResult | None:
-        """The slot's ignored files and nested repositories removed (`git clean -ffdx` on the pinned view), then an empty
-        ignored listing; `.env/<slot>` emptied and its two folders made again."""
-        worktree = self.ports.checkouts(path, git_dir=gitdir).worktree(path)
-        worktree.clean(ignored=True, nested=True)
+    def _reset(self, path: Path, gitdir: Path, found: Folders, commit: str | None) -> AttemptResult | None:
+        """A checks slot's tracked files and index back to exactly `commit` first (`git reset --hard`, so a check killed
+        mid-rewrite cannot poison the next block), only while the pinned view lists it detached at `commit` (an attached
+        HEAD would carry its branch to X: `environment:moved`); then the slot's ignored files and nested repositories
+        removed (`git clean -ffdx` on the pinned view), then an empty ignored listing; `.env/<slot>` emptied and its two
+        folders made again."""
+        view = self.ports.checkouts(path, git_dir=gitdir)
+        worktree = view.worktree(path)
+        if commit is None:
+            worktree.clean(ignored=True, nested=True)
+        elif not reset_to(view, path, commit):
+            return _refused("environment:moved")
         if worktree.dirty(ignored_under=["."]).ignored:
             return _refused("environment:reset")
         files = self.ports.files
@@ -276,7 +325,7 @@ class Preparation:
 
     def _run(self, run: _Run, gitdir: Path, setup: Sequence[Sequence[str]]) -> AttemptResult | None:
         """Each command in order; the first that does not end cleanly concludes the run. Then, through the pinned view,
-        the slot must still be at B on its task branch (`dirty`, word `moved`) and clean (`dirty`)."""
+        the slot must still be at B on its task branch, or at X detached (`dirty`, word `moved`), and clean (`dirty`)."""
         for index, argv in enumerate(setup):
             stopped = self._command(run, index, argv)
             if stopped is not None:
@@ -316,12 +365,13 @@ class Preparation:
         return self._judged(run, ended)
 
     def _judged(self, run: _Run, ended: SetupEnded) -> AttemptResult | None:
-        """A command that ended: stopped by the deadline, a process left in its group, a failed or never-run command."""
-        if ended.timed_out:
-            return self._concluded(run, "timed_out", ended.rc, _refused("expired"))
-        if not ended.exec_failed and self.ports.lingering(ended.pgid):
+        """A command that ended, whatever the end: a process left (its stop's survivors, or its group still alive), then
+        stopped by the deadline, then a failed or never-run command."""
+        if not ended.exec_failed and (ended.survivors or self.ports.lingering(ended.pgid)):
             run.log.write(b"lingering\n")
             return self._concluded(run, "lingering", ended.rc, _unavailable("environment:lingering"))
+        if ended.timed_out:
+            return self._concluded(run, "timed_out", ended.rc, _refused("expired"))
         if ended.exec_failed or ended.rc != 0:
             return self._concluded(run, "failed", ended.rc, _unavailable("environment:exit"))
         return None

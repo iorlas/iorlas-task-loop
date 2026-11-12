@@ -5,9 +5,11 @@ import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
-from taskloop import attempt_status, cli_composition, operations, result_data
+from taskloop import attempt_status, cli_composition, land, operations, result_data
 from taskloop.exit_codes import exit_code
+from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
@@ -47,7 +49,8 @@ def register(commands: Parsers) -> None:
     adopt.add_argument("--count", type=int, help="Slots s1..sN (overrides the machine config's slot_count)")
     _common(adopt, "--root", "--db")
     step = _add(commands, "step", f"Step attempts ({STEP_ONLY})").add_subparsers(dest="operation", required=True)
-    start = _add(step, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim); {STEP_ONLY}. {HELD}")
+    start = _add(step, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
+                 f"re-run failed checks on the same commit; {STEP_ONLY}. {HELD}")
     start.add_argument("task_id", metavar="TASK")
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         start.add_argument(flag, required=True)
@@ -58,15 +61,16 @@ def register(commands: Parsers) -> None:
     status.add_argument("--backlog", required=True)
     _common(status, "--db", "--artifacts")
     listing = _add(step, "list", f"Every task's current attempt with its next action (read-only; {STEP_ONLY})")
-    listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:* or unknown")
+    listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:*, hold or unknown")
     _common(listing, "--db")
     verify = _add(step, "verify", f"Commit the step's listed files and verify them, then release a clean slot and publish a verified "
-                  f"result ({STEP_ONLY})")
+                  f"result; an agent step's only, never the checks ({STEP_ONLY})")
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
     _common(verify, "--db")
     release = _add(step, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept); with --abandon, "
-                   f"of any step whose entry and agent are stopped, and return the tracker claim ({STEP_ONLY})")
+                   "of any step whose entry and agent or checks are stopped, and return the tracker claim (a land candidate's slot "
+                   f"first, then the check step's, then its implement step's claim) ({STEP_ONLY})")
     release.add_argument("task_id", metavar="TASK")
     release.add_argument("--backlog", required=True)
     release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl step start` "
@@ -74,7 +78,9 @@ def register(commands: Parsers) -> None:
     _common(release, "--db")
     _round_flags(_add(step, "next", "Run one scheduling round: settle existing attempts, advance claimed tasks whose "
                       "step is done to the next step (no label check), start approved ready tasks in the free slots left, publish "
-                      f"verified results; {STEP_ONLY}. {HELD}"))
+                      "verified results, hold each task a round took that stopped (its label removed, `held` added, the claim "
+                      "returned, one comment: `bd list --label held`; adding the label back takes it again at plan) and remove "
+                      f"`held` once a held task is taken again; {STEP_ONLY}. {HELD}"))
     rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
@@ -83,6 +89,29 @@ def register(commands: Parsers) -> None:
     publish.add_argument("task_id", metavar="TASK")
     publish.add_argument("--backlog", required=True)
     _common(publish, "--db")
+    _land_flags(_add(step, "land", LAND))
+
+
+LAND = ("Land the task's checked commit X yourself: fetch origin's main (O), squash X onto it as one commit S (Git objects only), "
+        "run every check again on S in a free slot, in this shell, only when main moved or its required names changed, push S "
+        "to origin's main as you (never forced), then close the task in your local tracker (never synced: `bd dolt push` is "
+        "yours). A rerun does only what is missing; rounds never land. Your checkout and local main are never written. Exit 0 landed "
+        "(or already), 1 refused, 3 unknown (a rerun is safe), 130 interrupted by Ctrl-C (a rerun reconciles it)")
+
+
+def _land_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("task_id", metavar="TASK")
+    parser.add_argument("--backlog", required=True)
+    parser.add_argument("--checkout", required=True, help="Your checkout of the repository: its origin is fetched and pushed")
+    parser.add_argument("--minutes", type=int, required=True, help="Deadline of a validation block of S if one runs, from now")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--summary", action="store_true", help="Print the land summary (the facts to read before landing); "
+                      "records, reserves, pushes and closes nothing")
+    mode.add_argument("--withdraw", action="store_true", help="Give up a validated, undelivered candidate (origin read "
+                      "first, nothing pushed) so the task can be abandoned")
+    parser.add_argument("--no-change", action="store_true", help="Accept that origin's main already holds X's changes: "
+                        "recorded and closed with no push")
+    _common(parser, "--db", "--artifacts")
 
 
 def _round_flags(parser: argparse.ArgumentParser) -> None:
@@ -157,6 +186,19 @@ def _publish(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return opened if isinstance(opened, Failed) else operations.publish_task(*opened, arguments.backlog, arguments.task_id)
 
 
+def _land(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    """The one land; a `KeyboardInterrupt` (Ctrl-C) anywhere in it is `unavailable:interrupted`, exit 130: the land's own
+    unwinding already stopped a running check's tree, and the rerun reconciles what is left (as the rounds' abrupt stop)."""
+    mode: Literal["land", "summary", "withdraw"] = "summary" if arguments.summary else "withdraw" if arguments.withdraw else "land"
+    request = land.LandRequest(arguments.backlog, arguments.task_id, Path(arguments.checkout), arguments.minutes, mode,
+                               arguments.no_change)
+    try:
+        with cli_composition.open_land(loaded.settings.db.value, loaded.settings.artifacts.value) as ports:
+            return ports if isinstance(ports, Failed) else land.land(ports, request)
+    except KeyboardInterrupt:
+        return Failed("unavailable", INTERRUPTED)
+
+
 def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings = loaded.settings
     return cli_composition.adopt(settings.db.value, Path(arguments.checkout), settings.slots_root.value, settings.slot_count.value)
@@ -173,6 +215,7 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
     ("step", "verify"): _verify,
     ("step", "release"): _release,
     ("step", "publish"): _publish,
+    ("step", "land"): _land,
 }
 
 

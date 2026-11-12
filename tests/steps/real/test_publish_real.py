@@ -1,6 +1,6 @@
 """Real layer, the publication's wiring on the real Git adapter: a bare `remote.git` under tmp_path is `origin` (a
 `file://` URL) of a person's checkout with one adopted `--detach` slot; the task is admitted, run with a `FakeRun` agent,
-verified (X on `task/tl-1`), released, then published through `composition.remotes` (hooks off, bounded transport).
+verified (X on `task/tl-1`), released, then published through `git_views.remotes` (hooks off, bounded transport).
 Set-up runs through `git_porcelain.testing`'s runner; nothing leaves tmp_path."""
 
 import json
@@ -25,10 +25,11 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Verified
-from taskloop.composition import RealSlotFiles, checkouts, remotes
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.git_views import checkouts, remotes
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.repo import RepoId
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.slots import SlotGit, adopt
@@ -88,7 +89,7 @@ class Published:
         admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
         )
-        admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), self.main, "m", "high", "workspace-write", 100))
+        admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), self.main, "m", "high", "workspace-write", 100, None))
         assert isinstance(admitted, Admitted) and self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
         self.key: AttemptKey = admitted.key
         attempts = Attempts(self.store, EvidenceFiles(root / "art"), lambda: ("/bin/codex", {}), write_plan(self.slot), lambda: 10,

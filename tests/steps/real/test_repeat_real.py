@@ -21,11 +21,12 @@ from taskloop.admit_chain import ChainAdmission
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Unsettled, Verified
-from taskloop.composition import RealSlotFiles, checkouts
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.git_views import checkouts
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import Started
 from taskloop.repeat import StepRepeat
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, repeating
 from taskloop.verifier import Verifier
 

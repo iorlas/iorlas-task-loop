@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import get_args
 
 import pytest
-from doubles import NoAdvance
+from doubles import NO_CHECKS, NoAdvance
 from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess
 
@@ -39,6 +39,7 @@ from taskloop.operations import (
 )
 from taskloop.publish import BranchPublished, PublishResult
 from taskloop.result_data import Result
+from taskloop.round import NextRequest, run_round
 from taskloop.setup_store import SetupRow
 from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.slots import Adopted, NotAdopted, SlotView
@@ -56,6 +57,7 @@ ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step star
 STATUS_KEYS = {
     "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process",
     "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release", "published",
+    "checks", "land", "label", "hold", "hold_due",  # the hold's keys are additive (tl-8bh9.14.9 section 10)
 }
 REPEAT = AttemptView(
     "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
@@ -69,7 +71,8 @@ ABANDONED = AttemptView(
 FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, "failed"), Path("/a/d/setup-2.log"))
 RUNNING_SETUP = SetupShown(SetupRow(3, D, "f" * 64, 1, OwnedProcess(5, 5, "s", "b"), None), Path("/a/d/setup-3.log"))
 RELEASE = ["step", "release", "tl-1", "--backlog", "tasks"]
-FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned"}
+FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned", "checks", "land",
+         "candidate"}
 X, T = "a" * 40, "b" * 40
 PUBLISH = ["step", "publish", "tl-1", "--backlog", "tasks"]
 PUBLISHED = {"status", "backlog", "task", "attempt_id", "commit", "remote_head"}
@@ -129,7 +132,7 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     @contextmanager
     def opener(database: Path, artifacts: Path) -> Generator[StartPorts | Failed]:
         opened.append((database, artifacts))
-        yield StartPorts(AttemptStore(lambda: con), admission, FakeLauncher(), lambda: 1000, NoRepeat(), NoAdvance())
+        yield StartPorts(AttemptStore(lambda: con), admission, FakeLauncher(), lambda: 1000, NoRepeat(), NoAdvance(), NO_CHECKS)
 
     monkeypatch.setattr(cli_composition, "open_start", opener)
     config = tmp_path / "scratch.toml"
@@ -361,20 +364,20 @@ class Releases:
 def test_release_flags_reach_the_operation_through_the_opener(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], abandon: bool
 ) -> None:
-    db, releases, opened = tmp_path / "factory.db", Releases(), list[Path]()
+    db, releases, checks, opened = tmp_path / "factory.db", Releases(), Releases(), list[Path]()
     admitted(db)
     con = Store(SCHEMA).open_ro(db)
     assert con is not None
 
     @contextmanager
-    def opener(database: Path) -> Generator[tuple[AttemptStore, Releases]]:
+    def opener(database: Path) -> Generator[tuple[AttemptStore, Releases, Releases]]:
         opened.append(database)
-        yield AttemptStore(lambda: con), releases
+        yield AttemptStore(lambda: con), releases, checks
 
     monkeypatch.setattr(cli_composition, "open_release", opener)
     assert main([*RELEASE, *(["--abandon"] if abandon else []), "--db", str(db), "--json"]) == 0
     con.close()
-    assert opened == [db] and releases.calls == [(KEY, abandon)]
+    assert opened == [db] and releases.calls == [(KEY, abandon)] and checks.calls == []  # no checks attempt: never called
     assert json.loads(capsys.readouterr().out)["abandoned"] is abandon
 
 
@@ -562,7 +565,8 @@ def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, c
     assert ("Run one scheduling round: settle existing attempts, advance claimed tasks whose step is done to the next step "
             "(no label check), start approved ready tasks in the free slots left") in shown
     assert "read only when a new task is taken; a claimed task advances without it" in shown
-    assert "steps built: plan, implement; publishes task/<id>; no merge or land" in shown
+    assert "hold each task a round took that stopped" in shown and "`bd list --label held`" in shown
+    assert "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round" in shown
 
 
 def test_next_refuses_an_unusable_tracker_root_and_a_missing_database(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -572,6 +576,18 @@ def test_next_refuses_an_unusable_tracker_root_and_a_missing_database(tmp_path: 
     admitted(db)
     assert main([*NEXT[:5], str(tmp_path / "absent"), *NEXT[6:], "--db", str(db), "--json"]) == 1
     assert json.loads(capsys.readouterr().err)["error"]["reason"] == "tracker_root"
+
+
+def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_path: Path) -> None:
+    """`open_next`'s real ports, the hold's included: no attempt and no slot, so no tracker call and no process."""
+    db = tmp_path / "factory.db"
+    con = Store(SCHEMA).open_rw(db)
+    assert con is not None
+    con.close()
+    with cli_composition.open_next(db, tmp_path / "artifacts", str(tmp_path)) as ports:
+        assert not isinstance(ports, Failed) and ports.holding.status("tasks", "tl-1") is None
+        found = run_round(ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", "m", "high", 30))
+    assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
 
 
 ROUNDS = ["step", "rounds", *NEXT[2:]]
@@ -675,7 +691,8 @@ def test_rounds_require_every_choice_and_the_help_names_the_stop(missing: str, c
     shown = " ".join(capsys.readouterr().out.split())
     assert "Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot" in shown
     assert "Ctrl-C once stops after the current move, twice exits at once; launched steps keep running." in shown
-    assert "each round advances claimed tasks whose step is done to their next step, then starts approved ready tasks" in shown
+    assert ("each round holds the tasks it took that stopped (`bd list --label held`), advances claimed tasks whose step is "
+            "done to their next step, then starts approved ready tasks") in shown
 
 
 def test_the_real_opener_refuses_inputs_a_missing_database_and_a_second_rounds_process_before_any_round(

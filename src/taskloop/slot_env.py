@@ -27,7 +27,8 @@ def setup_process(
         done = run_registered(argv, registered=registered, cwd=cwd, env=env, timeout=timeout, on_line=line)
     except RegisteredStartUncertainError as error:
         return SetupEnded(None, False, False, error.identity.pgid, uncertain=True)
-    return SetupEnded(done.returncode, done.timed_out is not None, done.exec_errno is not None, done.pgid)
+    return SetupEnded(done.returncode, done.timed_out is not None, done.exec_errno is not None, done.pgid,
+                      survivors=bool(done.survivors))
 
 
 REMOVERS = (os.unlink, os.rmdir)  # an entry's own removal: a PermissionError there is its parent's mode

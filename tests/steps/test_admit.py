@@ -21,7 +21,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore, StoreRefused
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.claim_lease import BD_TIMEOUT_S
-from taskloop.composition import BD_DISCOVERY, adopt_slots, open_admission, tracker_claims, tracker_located
+from taskloop.composition import adopt_slots, open_admission
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.slot_lock import custody
@@ -29,6 +29,7 @@ from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
+from taskloop.tracker_client import BD_DISCOVERY, tracker_claims, tracker_located
 
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 ENTRY = (7, "entry-start", "boot")
@@ -93,8 +94,9 @@ def slots(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> No
     adopt(lambda: con, begin_immediate, repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
 
 
-def request(tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str = "chosen", task_id: str = "tl-1") -> AdmitRequest:
-    return AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, model, "high", "workspace-write", deadline)
+def request(tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str = "chosen", task_id: str = "tl-1",
+            label: str | None = None) -> AdmitRequest:
+    return AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, model, "high", "workspace-write", deadline, label)
 
 
 def time() -> float:
@@ -157,6 +159,17 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
     assert (refused.status, refused.reason) == ("refused", "unregistered_entry") and run.calls == []
     pending = attempts(factory, tmp_path, run, checkouts, slot_files).collect(key)
     assert (pending.status, pending.reason) == ("pending", "admitted")
+
+
+@pytest.mark.parametrize("label", ["auto", None], ids=["round", "by_hand"])
+def test_the_admission_stores_the_label_the_task_is_ingested_under(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, label: str | None
+) -> None:
+    slots(factory, repo, root, 1)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    result = admission(factory, tmp_path, tracker, repo).admit(request(tmp_path, repo, label=label))
+    assert isinstance(result, Admitted)
+    assert factory.execute("SELECT attempt_id,label FROM attempt").fetchall() == [(result.key.attempt_id, label)]
 
 
 def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
@@ -359,7 +372,7 @@ def test_invalid_request_or_store_refuses_before_any_claim(
     if change in ("task", "input"):
         wanted = request(tmp_path, repo, task_id="tl-404" if change == "task" else "tl-3")
     elif change == "checkout":
-        wanted = AdmitRequest("tl-1", "tasks", str(tmp_path), repo.path / "subdir", "chosen", "high", "workspace-write", 100)
+        wanted = AdmitRequest("tl-1", "tasks", str(tmp_path), repo.path / "subdir", "chosen", "high", "workspace-write", 100, None)
     elif change == "version":
         factory.execute("PRAGMA user_version=1")
     elif change == "reservations":

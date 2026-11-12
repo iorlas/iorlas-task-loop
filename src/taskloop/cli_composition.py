@@ -4,49 +4,60 @@ slot openers over `composition`'s real wiring. The attempt entry process never i
 import os
 import sqlite3
 import sys
+import threading
 import time
 from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import Store
 
 from taskloop.attempt_reads import SlotUse
-from taskloop.attempt_status import StatusPorts
+from taskloop.attempt_status import StatusPorts, current_view
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
+from taskloop.check_release import ChecksRelease
 from taskloop.composition import (
-    RealSlotFiles,
     adopt_slots,
-    checkouts,
-    current_boot,
-    entry_seen,
+    keep_awake_host,
     open_admission,
     open_advance,
     open_chain,
+    open_checking,
+    open_checks_admission,
+    open_checks_launcher,
+    open_checks_releaser,
     open_launcher,
     open_publisher,
     open_releaser,
     open_verifier,
     real_slots,
-    tracker_reads,
-    worker_gone,
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
-from taskloop.interrupts import installed
+from taskloop.git_views import GitProfileFiles, checkouts, remotes
+from taskloop.hold import HoldPorts
+from taskloop.hold_store import HoldStore
+from taskloop.interrupts import Interrupts, installed
+from taskloop.keep_awake import Host, awake
+from taskloop.land_check import LandPorts
+from taskloop.land_store import LandStore
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
-from taskloop.operations import Adoption, Failed, Quiet, Round, StartPorts, require_database
+from taskloop.operations import Adoption, ChecksPorts, Failed, Quiet, Round, StartPorts, require_database
+from taskloop.owned_processes import current_boot, entry_seen, setup_seen, this_process, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
 from taskloop.round import NextRequest, RoundPorts, run_round
 from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
-from taskloop.slot_lock import refused, repeating
+from taskloop.slot_files import RealSlotFiles
+from taskloop.slot_lock import landing, probe, refused, repeating
 from taskloop.slot_release import SlotRelease
 from taskloop.slots import SlotGit
 from taskloop.task import TaskInspectionError
+from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_holds, tracker_reads
 from taskloop.verifier import Verifier
 
 
@@ -93,7 +104,7 @@ def open_reads(database: Path) -> Generator[StatusPorts | Failed]:
         else:
             reader = _reader(con)
             verifier = Verifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused)  # never verifies
-            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot)
+            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen)
 
 
 @contextmanager
@@ -115,13 +126,16 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
     admission, launcher, chain = open_admission(database, artifacts), open_launcher(database, artifacts), open_chain(database, artifacts)
     repeat = StepRepeat(reader, open_verifier(database, store), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
                         time.time, repeating)
-    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts))
+    releaser = open_checks_releaser(database, store)
+    checks = ChecksPorts(open_checks_admission(database), open_checks_launcher(database, artifacts), releaser)
+    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts), checks)
 
 
 @contextmanager
 def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[RoundPorts | Failed]:
     """`tl step next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
-    refuses `tracker_root`), the start, verify, release and publish ports on one shared writer (closed here), the reads
+    refuses `tracker_root`), the start, verify, release, publish and hold ports on one shared writer (closed here; the
+    hold's abandon uses the release ports `tl step release --abandon` uses, its tracker writes `tracker_holds`), the reads
     and the round log appended under the artifacts root."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
@@ -136,9 +150,12 @@ def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[R
                 return
             reader = _reader(con)
             leftovers = Verifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused).leftovers
-            reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot)
-            yield RoundPorts(reads, _starting(reader, database, artifacts, store), open_verifier(database, store),
-                            open_releaser(database, store), open_publisher(database, store), ready, EvidenceFiles(artifacts).log_round)
+            reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen)
+            releaser = open_releaser(database, store)
+            holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
+                                open_checks_releaser(database, store), time.time, EvidenceFiles(artifacts), partial(current_view, reads))
+            yield RoundPorts(reads, _starting(reader, database, artifacts, store), open_verifier(database, store), releaser,
+                             open_publisher(database, store), holding, ready, EvidenceFiles(artifacts).log_round)
         finally:
             store.close_shared()
 
@@ -206,18 +223,23 @@ def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | F
 
 
 @contextmanager
-def open_rounds(database: Path, artifacts: Path, request: NextRequest) -> Generator[RoundsPorts | Failed]:
-    """`tl step rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock and
-    the SIGINT handler (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
-    `time.sleep`, the round log and the `Log: not written` warning on stderr."""
+def open_rounds(database: Path, artifacts: Path, request: NextRequest, host: Host | None = None,
+                install: Callable[[Callable[[str], object]], AbstractContextManager[Interrupts]] = installed,
+                ) -> Generator[RoundsPorts | Failed]:
+    """`tl step rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock,
+    then the keep-awake helper (`keep_awake.awake`, its spawn's signal hold replayed first) and only then the SIGINT
+    handler (`interrupts`), both for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
+    `time.sleep`, the round log and the `Log: not written` warning on stderr. `host` and `install` are this machine's and
+    the real handler unless a test passes its own."""
     release = _rounds_lock(database, request)
     if isinstance(release, Failed):
         yield release
         return
+    log, pid = EvidenceFiles(artifacts).log_round, os.getpid()
     try:
-        with installed(_say) as interrupts:
+        with awake(host or keep_awake_host(), pid, request.backlog, log, time.time, _say), install(_say) as interrupts:
             yield RoundsPorts(one_round(database, artifacts, request, interrupts.stopping), _slot_use(database), time.time, time.monotonic,
-                         time.sleep, EvidenceFiles(artifacts).log_round, _unlogged(artifacts), interrupts.stopping, os.getpid())
+                         time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid)
     finally:
         release()
 
@@ -249,12 +271,13 @@ def open_publish(database: Path) -> Generator[tuple[AttemptStore, BranchPublish]
 
 
 @contextmanager
-def open_release(database: Path) -> Generator[tuple[AttemptStore, SlotRelease] | Failed]:
-    """The database guard first, then the releaser's shared writer (`tl step release`)."""
+def open_release(database: Path) -> Generator[tuple[AttemptStore, SlotRelease, ChecksRelease] | Failed]:
+    """The database guard first, then the releasers' shared writer (`tl step release`: the agent attempt's and the
+    checks attempt's)."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
-            yield con if isinstance(con, Failed) else (_reader(con), open_releaser(database, store))
+            yield con if isinstance(con, Failed) else (_reader(con), open_releaser(database, store), open_checks_releaser(database, store))
         finally:
             store.close_shared()
 
@@ -278,3 +301,26 @@ def adopt(database: Path, checkout: Path, root: Path, count: int, git: SlotGit |
                 return con
     database.parent.mkdir(parents=True, exist_ok=True)
     return Adoption(adopt_slots(database, path, root, count, git))
+
+
+def _land_profiles(checkout: Path) -> GitProfileFiles:
+    """The target profile at O, read from Git objects on the person's checkout through the remote-capable view."""
+    return GitProfileFiles(checkout, remotes)
+
+
+@contextmanager
+def open_land(database: Path, artifacts: Path) -> Generator[LandPorts | Failed]:
+    """`tl step land` (tl-8bh9.14.8): the database guard first, then the land's ports over `composition.open_checking`'s
+    real wiring (the validation's), the candidates' store on its connections, the person's checkout through the
+    remote-capable view (`remotes`: hooks off, bounded transport, the person's credentials), the tracker read and claim
+    heartbeat, a new stop event per keep-alive, this process's identity, the slot lock's probe and custody (`landing`),
+    this process's environment, and the tracker's close. Here, never in `composition`: neither entry may import the land
+    (`rounds-never-land`)."""
+    with _read_only(database) as con:
+        if isinstance(con, Failed):
+            yield con
+            return
+        work = open_checking(database, artifacts)
+        claims = tracker_claims()
+        yield LandPorts(work, LandStore(work.store.connect, work.store.begin), remotes, _land_profiles, inspect_tracker_task,
+                        claims.heartbeat_for, threading.Event, this_process, probe, landing, os.environ, claims.close)

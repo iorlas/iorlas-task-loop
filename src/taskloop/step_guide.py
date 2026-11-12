@@ -3,7 +3,10 @@ them to do, and the whole-DB discard steps. Text only; `step_render` places it, 
 
 from pathlib import Path
 
-STEP_ONLY = "steps built: plan, implement; publishes task/<id>; no merge or land"
+from taskloop.hold_guide import HOLD, ON_HOLD
+from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
+
+STEP_ONLY = "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round"
 PUBLISH = ("The step's result is verified but not on `origin` yet: `tl step publish`. A `refused` word names what to fix; "
            "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
            "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl step publish`), rerunning does not "
@@ -16,7 +19,8 @@ HELD = ("The tracker claim stays held, and the slot until the step ends on a cle
         "its attempt, and rounds skip it (`attempted`).")
 ABANDON = "`tl step release --abandon` frees the slot and gives the task back."
 ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot frees; "
-          "each round advances claimed tasks whose step is done to their next step, then starts approved ready tasks; "
+          "each round holds the tasks it took that stopped (`bd list --label held`), advances claimed tasks whose step is "
+          "done to their next step, then starts approved ready tasks; "
           f"the tracker is read only when a slot is free; writes `<artifacts>/rounds.log`; {STEP_ONLY}. Runs in this terminal "
           "until stopped: Ctrl-C once stops after the current move, twice exits at once; launched steps keep running. A move "
           "in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
@@ -33,15 +37,19 @@ GUIDE = {
     "repeats_exhausted": "Repeated twice and still unsettled: inspect the slot, tidy it, then `tl step verify` (which releases "
     "the slot), or `tl step release --abandon`.",
     "release": "The step ended; its slot is still held. Remove the listed files if any, then `tl step release`; `--abandon` also "
-    "gives the task back.",
+    "gives the task back (not once a land's S is, or may be, on origin's main: then `tl step land`, which retries its "
+    "candidate's release first).",
     "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl step start` admits a fresh "
     "attempt.",
     "publish": PUBLISH,
     "advance": "The step is verified and on `origin`. The next `tl step next` round (or `tl step rounds`) starts the next step "
     "once a slot is free, before any new task, oldest first; by hand, `tl step start <task>`. Either way one tracker read "
     "first confirms the task is in progress for taskloop (no new claim, no label check: removing the label does not stop it, "
-    "`tl step release --abandon` does); it starts from that published commit.",
-    "done": "Collected: `succeeded` tells whether the step's result was verified.",
+    "`tl step release --abandon` does); it starts from that published commit (the check step runs the profile's checks on it, "
+    "detached, with the required names read from your local `main`).",
+    "done": "Collected: `succeeded` tells whether the step's result was verified (the check step: every check required by `main` "
+    "passed). A failed check step keeps the claim and nothing retries it: read the `Check:` lines and logs, then `tl step start` "
+    "re-runs the checks on the same commit (no new plan or implement), or `tl step release --abandon` starts the task afresh.",
     "unknown": "The entry or the store could not be read; run `tl step show` again.",
     "stuck:expired_admitted": f"Nothing ran; rounds only report it. {ABANDON} Then `tl step start` admits a "
     "fresh attempt. Its deadline passed with no relaunchable entry from before a reboot (none registered, one from this boot, or "
@@ -96,14 +104,18 @@ GUIDE = {
     "not record it as its publication and never forces.",
     "no_remote": "Add the remote (`git remote add origin <url>`) in the person's checkout, then rerun `tl step publish`.",
     "not_advanceable": "Only the task's current attempt advances, once it is verified, released with its claim kept and "
-    "published, and only when its step has a following one: `tl step show` names its `Next`.",
+    "published, and only when its step has a following one: `tl step show` names its `Next`. A check step is not admitted "
+    "while the task's abandon is half done: rerun `tl step release --abandon`.",
     "claim_lost": "The tracker no longer shows the task in progress for taskloop (claim reverted, taken by another actor, or "
     "the task closed): check `bd show <task>`; nothing retakes the claim. `tl step release --abandon` (its claim answers "
     "`not_held`), then `tl step start` admits it afresh at plan.",
-    "environment": "The slot's setup (the profile's `setup`, run before an implement agent) refused or failed; the attempt "
-    "stays admitted and no agent ran. Its output is `setup-<run>.log` beside the attempt's entry.log. `exit` or `lingering`: "
-    "the next relaunch runs it once more, two failed runs refuse `failed`; `dirty` or `moved`: setup left files in the slot "
-    "or moved its HEAD, restore it (the `slot_dirty` guide); `running`: a process of an earlier setup still runs (the "
+    "environment": "The slot's setup (the profile's `setup`, run before an implement agent or a checks block) refused or "
+    "failed; nothing after it ran. Its output is `setup-<run>.log` beside the attempt's entry.log. `exit`: a relaunch "
+    "before the deadline runs it once more, two failed runs refuse `failed`; `lingering`: a process of it (its group, or a "
+    "survivor of the deadline's stop) still runs, and nothing reuses or releases the slot until it is gone (the "
+    "`setup_running` guide), then a relaunch runs setup again or, past the deadline, ends as `expired`; `dirty` or "
+    "`moved`: setup left files in the slot or moved its HEAD (a checks slot: not detached at X), restore it (the "
+    "`slot_dirty` guide); `running`: a process of an earlier setup still runs (the "
     "`setup_running` guide); `profile`: fix `.task-loop.json` on the task branch; `platform`: implement runs on Linux only; "
     "`path_long`: the agent's `TMPDIR` (`<slots root>/<repo id>/.t/<slot>`) is over 64 bytes, set a shorter `slots_root`; "
     "`roots`: a folder the agent may write (`.t/<slot>`, `.env/<slot>/uv-cache`, `.env/<slot>/uv-tools` beside the slots) "
@@ -119,13 +131,74 @@ GUIDE = {
     "(`ps -o pid=,lstart=,command= -g <pgid>`), check each member's working directory is the slot (`lsof -a -p <pid> -d "
     "cwd`), stop only those pids, then run it again. The factory never stops it.",
     "setup_unknown": "The process table could not be read to show the slot's setup stopped: run it again.",
+    "stuck:checks_refused": "The checks were relaunched twice without concluding (every relaunch the entry counts, and each "
+    "round's relaunch past the deadline, `late_relaunch`; `Refused:` names the last word, the entry log says why), so rounds no "
+    "longer relaunch them. Fix the cause (a check's process still running, a busy slot, the store, an entry that cannot start: "
+    "its `entry.log`), then `tl step start` relaunches them by hand; or `tl step release --abandon`.",
+    "check_running": "A check's process still runs in the process group named (from an entry that died, or left behind by a "
+    "check: `lingering`). Wait for it. To stop it yourself, list the group (`ps -o pid=,lstart=,command= -g <pgid>`), check each "
+    "member's working directory is the slot (`lsof -a -p <pid> -d cwd`), stop only those pids, then run it again. The factory "
+    "never stops it.",
+    "check_unknown": "The process table could not be read to show a check's process stopped: run it again.",
+    "checks": "A checks entry did not conclude: `checks:running`, a check's process from an earlier entry still runs (wait for "
+    "it); `unknown`, the process table could not be read; `uncertain`, a check's start could not be confirmed. A relaunch "
+    "reconciles it; each relaunch counts toward `stuck:checks_refused`.",
+    "no_required": "The profile at your local `main` requires no check, so nothing would decide a pass: add the required check "
+    "names to `.task-loop.json` on `main`. Every done task waits (skipped each round, logged once) until then.",
+    "target": "A new task branch starts at your local `main`'s tip and the required checks are read from it: `main` is "
+    "missing, or its profile names another `target` (only `main` is checked yet). Fix `main`, then rerun.",
+    "target_profile": "The profile at your local `main` is refused (the detail names why; `tl profile show --at main` shows it): "
+    "fix `.task-loop.json` on `main`, then rerun. Every done task waits until then.",
+    "commit_missing": "The implement step's commit is not in the repository any more: fetch `task/<id>` back, or `tl step "
+    "release --abandon` to start the task afresh at plan.",
+    "main_moved": "`main` moved while the checks ran (`Main:` shows both commits), so the required names it gave may be stale: "
+    "`tl step start` re-runs the checks against `main` as it is now.",
     "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl step release --abandon`.",
     "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl step publish`.",
     "diverged": "The remote task/<id> does not contain the verified commit: compare them, then merge or move the remote branch "
     "aside yourself; the factory never forces.",
     "remote_rejected": "The remote's policy refused it: push the verified commit by hand (`git push origin <commit>:refs/heads/"
     "task/<id>`, never `--force`) to see why.",
+    "land": LAND_NEXT["land"],
+    "landed": LAND_NEXT["landed"],
+    "landing": LAND_GUIDE["landing"],
+    "hold": HOLD,
+    "on_hold": ON_HOLD,
+    "held": "A round is holding this task and has not finished (`tl step show` says what keeps it): let the next round "
+    "finish the hold (`tl step next` does it now), or `tl step release --abandon` first; then `tl step start` admits it "
+    "afresh at plan.",
 }
+
+# A checks attempt's own words for the `Next` words whose agent text would mislead (S6d): its entry is
+# `taskloop.check_entry` and its commands are check process groups.
+CHECKS_GUIDE = {
+    "start": "Each `tl step next` round relaunches the checks entry (`taskloop.check_entry`), and so does `tl step start`. "
+    "Every refusal the entry counts (`Refused:`) brings `stuck:checks_refused` nearer (two in a row). Relaunches the entry "
+    "never counts (a failed or uncertain launch, an entry refusing `identity`, `stale_reservation`, `absent` or `unavailable "
+    "store`, a crash before it counts) repeat each round until the deadline, as an agent attempt's do; past it each round's "
+    "relaunch counts (`late_relaunch`), and the relaunched entry concludes `expired` once nothing of the attempt still runs. "
+    "`tl step release --abandon` gives the task back.",
+    "wait": "Its entry runs, or (the entry gone) a check's or setup's process group from it still runs: rounds wait without "
+    "relaunching or counting, then relaunch once it ends. `tl step show` again.",
+    "stuck:hung": "The checks entry, or a check's process group that outlived its entry, runs past the deadline (nothing ends "
+    "it now). Verify before stopping anything: `ps -o command= -p <entry pid>` must show taskloop.check_entry, and each process "
+    "group a `Check:` line names (`ps -o pid=,lstart=,command= -g <pgid>`) must work in the slot (`lsof -a -p <pid> -d cwd`). "
+    "Stop only the pids you verified, the check groups first, then the entry; then rounds or `tl step start` relaunch it (it "
+    "concludes `expired`), or `tl step release --abandon`.",
+    "unsettled": "A process of the checks attempt still holds its slot (the word after `unsettled:` names it); nothing "
+    "changed. Once it ends, `tl step release` again.",
+    "release": "The checks concluded; their slot is still held (the last entry or `tl step release` says why: `held:check_running` "
+    "waits for a check's process group, `held:slot_dirty` for files a person removes). Once the entry is gone each round "
+    "retries the settled release (`check release ...`); `tl step release` does it by hand; `--abandon` also gives the task back.",
+}
+
+
+def guide(word: str, *, checks: bool, land: bool = False) -> str:
+    """The guide of a `Next` word: a land's own (`LAND_NEXT`: its `release` is the candidate's slot) once the task has a
+    land candidate, else a checks attempt's own (`CHECKS_GUIDE`) where the agent text would mislead."""
+    if land and word in LAND_NEXT:
+        return LAND_NEXT[word]
+    return CHECKS_GUIDE.get(word, GUIDE[word]) if checks else GUIDE[word]
 
 
 def discard(db: Path) -> str:

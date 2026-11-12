@@ -1,5 +1,5 @@
 """Real layer, one wiring test of the step commit on the real Git adapter (git_porcelain's own contract suite covers
-`stage`, `record`, `dirty` and `history`): through `composition.checkouts` and `RealSlotFiles` no repository hook runs,
+`stage`, `record`, `dirty` and `history`): through `git_views.checkouts` and `RealSlotFiles` no repository hook runs,
 the commit carries the trailer and the slot ends clean; a symlinked listed path is refused before anything is staged.
 The slot pointer is judged with Git's own resolution: a pointer that names the right Git directory only lexically (a
 symlink inside the slot redirects it to the person's `.git` or to a fake Git directory whose filter would run) is
@@ -15,9 +15,10 @@ from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 
 from taskloop.attempt_types import Admission, AnswerState, AttemptKey, ChainLink, FileRef, Rejected, Unsettled
-from taskloop.composition import RealSlotFiles, checkouts
 from taskloop.factory_commit import Committed, clean_at, settle
+from taskloop.git_views import checkouts
 from taskloop.repo import RepoId
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_state import pointer
 from taskloop.steps import IMPLEMENT
 from taskloop.task import TaskReference, TaskScope

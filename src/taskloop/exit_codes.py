@@ -1,8 +1,9 @@
 """The exit code of every step command's result: 0 done (a graceful rounds stop too), 1 refused, 3 unknown, 130 an abrupt
-rounds stop. Command surface policy over operations' values; nothing here runs, reads or writes."""
+rounds stop or an interrupted land. Command surface policy over operations' values; nothing here runs, reads or writes."""
 
 from typing import Final
 
+from taskloop.land_guide import INTERRUPTED
 from taskloop.operations import (
     UNKNOWN_KINDS,
     Adoption,
@@ -29,8 +30,10 @@ def _round_exit(result: Round) -> int:
 
 def exit_code(result: Result) -> int:
     """0 done or already so (a graceful rounds stop too); 1 refused; 3 unknown, re-running is safe; 130 an abrupt rounds
-    stop (2, usage, is argparse's). Rounds never end 3: they rerun by themselves."""
+    stop or a land interrupted by Ctrl-C (2, usage, is argparse's). Rounds never end 3: they rerun by themselves."""
     match result:
+        case Failed(reason=reason) if reason == INTERRUPTED:
+            return ABRUPT
         case Failed(kind=kind):
             return 3 if kind in UNKNOWN_KINDS else 1
         case Adoption(slots=slots):

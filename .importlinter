@@ -17,7 +17,7 @@ layers =
     taskloop.cli_composition
 
 [importlinter:contract:cli-never-imports-the-attempt-entry]
-name = The command surface, its operations, their JSON shape and the machine config never import the attempt entry process
+name = The command surface, its operations, their JSON shape, the machine config and the shared validation never import an entry process (agent or checks)
 type = forbidden
 source_modules =
     taskloop.cli
@@ -26,6 +26,7 @@ source_modules =
     taskloop.exit_codes
     taskloop.step_guide
     taskloop.step_render
+    taskloop.show_render
     taskloop.operations
     taskloop.attempt_status
     taskloop.round
@@ -36,17 +37,71 @@ source_modules =
     taskloop.rounds
     taskloop.rounds_lock
     taskloop.interrupts
+    taskloop.keep_awake
+    taskloop.validate
+    taskloop.land
+    taskloop.land_check
+    taskloop.land_push
+    taskloop.land_close
+    taskloop.land_summary
+    taskloop.land_status
+    taskloop.land_guide
+    taskloop.land_render
+    taskloop.land_data
+    taskloop.hold
+    taskloop.hold_status
+    taskloop.hold_facts
+    taskloop.hold_guide
 forbidden_modules =
     taskloop.attempt_entry
+    taskloop.check_entry
+
+[importlinter:contract:rounds-never-land]
+name = Rounds, the step operations, both entry processes and the wiring they import never import the land (only the person's `tl step land` runs it, wired in `cli_composition`)
+type = forbidden
+source_modules =
+    taskloop.round
+    taskloop.rounds
+    taskloop.keep_awake
+    taskloop.operations
+    taskloop.attempt_entry
+    taskloop.check_entry
+    taskloop.composition
+    taskloop.validate
+    taskloop.check_release
+    taskloop.land_store
+    taskloop.hold_store
+    taskloop.hold_text
+    taskloop.hold
+    taskloop.hold_status
+    taskloop.hold_facts
+forbidden_modules =
+    taskloop.land
+    taskloop.land_check
+    taskloop.land_push
+    taskloop.land_close
+    taskloop.land_summary
 
 [importlinter:contract:entry-never-imports-the-command-surface]
-name = The attempt entry process imports no command surface, operations or machine config (its import closure stays small)
+name = The attempt and checks entry processes import no command surface, operations or machine config (their import closure stays small)
 type = forbidden
 source_modules =
     taskloop.attempt_entry
+    taskloop.check_entry
+    taskloop.validate
+    taskloop.check_release
+    taskloop.check_store
+    taskloop.check_admit
+    taskloop.check_status
     taskloop.composition
+    taskloop.git_views
+    taskloop.agent_credentials
+    taskloop.owned_processes
+    taskloop.slot_files
+    taskloop.tracker_client
     taskloop.slot_env
     taskloop.access
+    taskloop.checks
 forbidden_modules =
     taskloop.cli
     taskloop.cli_step
@@ -54,6 +109,7 @@ forbidden_modules =
     taskloop.exit_codes
     taskloop.step_guide
     taskloop.step_render
+    taskloop.show_render
     taskloop.operations
     taskloop.attempt_status
     taskloop.round
@@ -61,6 +117,8 @@ forbidden_modules =
     taskloop.machine_config
     taskloop.rounds
     taskloop.interrupts
+    taskloop.land_render
+    taskloop.land_data
 
 [importlinter:contract:no-runtime-mechanisms]
 name = The foundation has no direct network or process mechanisms
@@ -98,7 +156,7 @@ protected_modules =
 allowed_importers = taskloop.steps
 
 [importlinter:contract:profile-is-domain]
-name = The repository profile reader is domain: no command surface, composition, store or Git library (Git enters through its port)
+name = The repository profile reader is domain: no command surface, composition (or the real ports it wires), store or Git library (Git enters through its port)
 type = forbidden
 source_modules = taskloop.profile
 forbidden_modules =
@@ -106,6 +164,11 @@ forbidden_modules =
     taskloop.cli_step
     taskloop.cli_composition
     taskloop.composition
+    taskloop.git_views
+    taskloop.agent_credentials
+    taskloop.owned_processes
+    taskloop.slot_files
+    taskloop.tracker_client
     taskloop.exit_codes
     taskloop.step_render
     taskloop.result_data

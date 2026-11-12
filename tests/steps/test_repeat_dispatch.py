@@ -12,7 +12,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles
+from doubles import FakeSlotFiles, main_at
 from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
@@ -275,6 +275,7 @@ def test_show_judges_leftovers_before_the_commit_as_the_verify_does(
 ) -> None:
     if before is not None:
         commit(slot, before)
+        main_at(slot)
     step.run(KEY, ENTRY, Agent(slot, written, PLAN))
     assert step.verifier.leftovers(KEY) == expected == step.verifier.verify(KEY)
 
@@ -320,6 +321,7 @@ def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_aga
     stray = D + "x.log"
     if reason == "ignored":
         commit(slot, {".gitignore": "*.log\n"})
+        main_at(slot)
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", **({stray: "x"} if reason == "ignored" else {})}, PLAN))
     if reason == "unsafe":
@@ -352,6 +354,7 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
 ) -> None:
     if reason == "ignored":
         commit(slot, {".gitignore": "*.md\n!plan.md\n"})
+        main_at(slot)
         written = {P: "# Plan\n", EVIL: "x"} | {f"{D}n{n:04}.md": "x" for n in range(1000)}
         step.run(KEY, ENTRY, Agent(slot, written, PLAN))
     else:

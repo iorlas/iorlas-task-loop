@@ -1,9 +1,11 @@
-"""The one writer of `setup_run`: the record of the slot setup an implement attempt's entry runs before its agent.
+"""The one writer of `setup_run`: the record of the slot setup an attempt's entry runs before its agent or its checks.
 
 State only; the output is an evidence file (`EvidenceFiles.setup_log`). "Latest" is always the highest `run` of one
 attempt, never a wall-clock order. Every write is fenced by the attempt's key against its held reservation while the
-attempt is still `admitted` (setup runs only before dispatch): a mismatch is `StoreRefused("stale_reservation")`, and a
-run already concluded or replaced is `StoreRefused("setup_changed")`. Reads need the key only.
+attempt is still `admitted` (an agent's setup runs only before dispatch, a checks attempt's before its conclusion, a land
+candidate's while it is pending): a
+mismatch is `StoreRefused("stale_reservation")`, and a run already concluded or replaced is
+`StoreRefused("setup_changed")`. Reads need the key only.
 """
 
 import sqlite3
@@ -17,6 +19,7 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey
+from taskloop.check_store import RESULT_HELD
 
 type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "interrupted"]
 CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "interrupted")
@@ -28,9 +31,13 @@ LIVE_AFTER: Final[tuple[Conclusion, ...]] = ("lingering", "timed_out")
 type ProcessSeen = Literal["gone", "alive", "unknown"]
 type SetupSeen = Callable[[OwnedProcess], ProcessSeen]  # a registered setup command and its group; another boot is gone
 COLUMNS: Final = "run,commit_sha,digest,command,pid,pgid,proc_start,boot,conclusion"
+# The run's attempt is an agent attempt, a checks attempt or a land candidate (`setup_run` has no foreign key): an agent or
+# checks attempt `admitted`, or a candidate pending, holding its reservation at the key's generation. Bound with the key
+# three times.
 HELD: Final = """SELECT 1 FROM attempt p JOIN reservation r ON r.repo_id=p.repo_id AND r.slot=p.slot
 AND r.attempt_id=p.attempt_id AND r.generation=p.generation
-WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.phase='admitted'"""
+WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.phase='admitted'
+UNION ALL """ + RESULT_HELD
 
 
 @dataclass(frozen=True)
@@ -106,7 +113,7 @@ class SetupStore(AttemptReads):
             return as_int(row[0])
 
     def _held(self, con: sqlite3.Connection, key: AttemptKey) -> None:
-        if con.execute(HELD, astuple(key)).fetchone() is None:
+        if con.execute(HELD, astuple(key) * 3).fetchone() is None:
             raise StoreRefused("stale_reservation")
 
     def start(self, key: AttemptKey, run: int, commit: str, digest: str, now: float) -> None:

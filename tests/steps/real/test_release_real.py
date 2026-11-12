@@ -23,9 +23,10 @@ from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Verified
-from taskloop.composition import RealSlotFiles, checkouts
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.git_views import checkouts
 from taskloop.repo import RepoId
+from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, observe
@@ -91,7 +92,7 @@ class Repository:
 
     def run(self, agent: Agent) -> AttemptKey:
         """Admit the task, register its entry, run the attempt once."""
-        admitted = self.admission.admit(AdmitRequest("tl-1", "tasks", str(self.root), self.main, "m", "high", "workspace-write", 100))
+        admitted = self.admission.admit(AdmitRequest("tl-1", "tasks", str(self.root), self.main, "m", "high", "workspace-write", 100, None))
         assert isinstance(admitted, Admitted) and admitted.slot == "s1"
         assert self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
         attempts = Attempts(self.store, EvidenceFiles(self.art), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, self.files)

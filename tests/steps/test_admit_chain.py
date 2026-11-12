@@ -14,7 +14,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
-from doubles import Environment, PinnedViews
+from doubles import NO_CHECKS, Environment, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
@@ -128,6 +128,22 @@ def test_a_done_plan_advances_to_implement_attempt_one_after_its_commit(
     assert registered.execute("SELECT attempt_id FROM reservation").fetchone() == (admitted.key.attempt_id,)
 
 
+@pytest.mark.parametrize("landed", [True, False])
+def test_with_no_task_branch_left_the_advance_starts_from_main_which_must_hold_the_previous_commit(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    landed: bool,
+) -> None:
+    """The local and remote-tracking `task/tl-1` deleted: the slot would start at `main`'s tip (as a new branch does),
+    never at its own D, so only a `main` holding the plan's X advances."""
+    repo = slot.repo
+    repo.delete_branch("task/tl-1", expected=Sha(planned))
+    repo.plumbing().delete_ref_at(repo.path, "refs/remotes/origin/task/tl-1", planned)
+    if landed:
+        repo.worktree(repo.identity().root).merge_ff(planned)
+    found = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(repo))
+    assert isinstance(found, Admitted) if landed else isinstance(found, AdmitRefused) and found.reason == "branch_moved"
+
+
 @pytest.mark.parametrize("bead", [replace(CLAIMED, status="open"), replace(CLAIMED, assignee="someone"), replace(CLAIMED, status="closed")])
 def test_a_task_no_longer_in_progress_for_taskloop_is_claim_lost_with_nothing_written(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
@@ -199,7 +215,7 @@ def test_another_repository_checkout_is_refused(
     assert isinstance(found, AdmitRefused) and found.reason == "checkout"
 
 
-def test_the_implement_step_commits_on_the_plan_and_is_published_then_done(
+def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_to_check(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     """Code, its test and a deletion, committed by the factory as one commit on the published plan commit."""
@@ -222,7 +238,7 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_done(
     shown = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert isinstance(shown, Shown)
     view = shown.view
-    assert (view.step, view.next, view.earlier) == ("implement", "done", (("attempt", "advanced"),))
+    assert (view.step, view.next, view.earlier) == ("implement", "advance", (("attempt", "advanced"),))
 
 
 def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
@@ -244,17 +260,40 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
     assert row == ("implement", 2, None, key.attempt_id)
 
 
+@pytest.mark.parametrize("label", ["auto", None])
+def test_the_advance_and_the_repeat_copy_the_label_the_task_was_taken_under(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    label: str | None,
+) -> None:
+    registered.execute("UPDATE attempt SET label=? WHERE attempt_id='attempt'", (label,))  # as its admission stored it
+    key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
+    answer = {"disposition": "implemented", "paths": ["src/a.py"], "message": "A", "explanation": "x"}
+
+    def change() -> None:
+        slot.write_file("src/a.py", "A = 1\n")
+        slot.write_file("scratch.log", "left over\n")
+
+    execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files)
+    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10).admit_repeat(
+        RepeatRequest(key, "feedback", 100, "uncommitted"))
+    assert isinstance(repeated, Admitted)
+    found = registered.execute("SELECT attempt_id,label FROM attempt ORDER BY seq").fetchall()
+    assert found == [("attempt", label), (key.attempt_id, label), (repeated.key.attempt_id, label)]
+
+
 def test_an_abandoned_implement_restarts_the_task_at_plan(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
+    registered.execute("UPDATE attempt SET label='auto' WHERE attempt_id='attempt'")  # the round took it
     key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
     abandon(registered, checkouts, slot_files, key)
     fresh = AttemptAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), tasks(CLAIMED), checkouts,
                              lambda _r, _t: True, lambda _r, _t: True, lambda: 10, lambda _p: True, slot_files)
-    admitted = fresh.admit(AdmitRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", "workspace-write", 100))
+    admitted = fresh.admit(AdmitRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", "workspace-write", 100, None))
     assert isinstance(admitted, Admitted)
-    row = registered.execute("SELECT step,number,seq,after_commit FROM attempt WHERE attempt_id=?", (admitted.key.attempt_id,)).fetchone()
-    assert row == ("plan", 1, 3, None)
+    row = registered.execute("SELECT step,number,seq,after_commit,label FROM attempt WHERE attempt_id=?",
+                             (admitted.key.attempt_id,)).fetchone()
+    assert row == ("plan", 1, 3, None, None)  # started again by hand (`tl step start`): no label
 
 
 def test_abandoning_the_done_plan_while_implement_holds_the_claim_is_refused(
@@ -317,7 +356,7 @@ def test_step_start_on_a_done_plan_admits_and_launches_implement(
 ) -> None:
     launcher, never = Launcher(), Never()
     ports = StartPorts(AttemptStore(lambda: registered), never, launcher, lambda: 10, never,
-                       advancing(registered, tmp_path, checkouts, slot_files))
+                       advancing(registered, tmp_path, checkouts, slot_files), NO_CHECKS)
     started = start(ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", 1))
     assert isinstance(started, Started) and (started.status, started.step, started.existing) == ("started", "implement", False)
     assert launcher.calls == ["tl-1"]

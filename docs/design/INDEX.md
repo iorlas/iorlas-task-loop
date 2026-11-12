@@ -11,6 +11,9 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.1](tl-8bh9.1/plan.md) | Repository binding and storage ownership | design |
 | [tl-8bh9.13](tl-8bh9.13/plan.md) | Untouched-file and workflow gap analysis | design |
 | [tl-8bh9.14.1](tl-8bh9.14.1/plan.md) | Repository profile reader: `.task-loop.json` at a commit, `tl profile show` (block B3) | built |
+| [tl-8bh9.14.6](tl-8bh9.14.6/plan.md) | The checks step: the factory runs the profile's checks on X (block B4, milestone M2) | S6a built (schema v12, check store), S6b built (block, checks setup, detach at X), S6c built (checks entry, launcher, checks release), S6d built (checks admission, `steps.ORDER`, `tl step` routing and status); S6e design |
+| [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) | Questions and holds with keep-awake and the Git read timeout: every stop of a round-taken task held with its reason in the tracker, answered by editing the task and re-adding its label (block B7 with B11 and B13, milestone M4) | H1 built (schema v14: `attempt.label`, `task_hold`; `hold_store`, `TrackerHolds`, `hold_text`, the unclaim of a closed or deleted task); H2 built (`hold.hold_task`, `clear_holds`, the cause rule, `Next: hold`/`on_hold`, show/list/JSON, guides); H3 built (the round holds round-taken tasks, re-ingests an answered hold under its stored label, stores the round's label, clears `held`); K1 built (`keep_awake`: one `caffeinate`/`systemd-inhibit` helper for the life of `tl step rounds`, best effort); G1-G2, M4 smoke design |
+| [tl-8bh9.14.8](tl-8bh9.14.8/plan.md) | Land and close: `tl step land TASK`, one squash of X onto origin's `main`, validated when its tree changed, pushed never forced, task closed (block B6, milestone M3) | L0-L5 built (git-porcelain 0.17.0; schema v13, land store; shared validation and release; the land operation through delivery, `--withdraw`, `open_land`; the tracker close, S's message, `--summary`; `tl step land`, status and `Next` words, the abandon order, guide); M3 smoke passed 2026-11-12; `origin` trusted as configured, no push-URL guard (owner decision 2026-11-12, plan section 29.3) |
 | [tl-8bh9.2](tl-8bh9.2/plan.md) | Workspace ownership and concurrency | design |
 | [tl-8bh9.3.2.1](tl-8bh9.3.2.1/plan.md) | First one-shot plan execution | built |
 | [tl-8bh9.4.3.1.1](tl-8bh9.4.3.1.1/plan.md) | Collect one already admitted plan attempt | built |
@@ -19,12 +22,16 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.4.3.1.12](tl-8bh9.4.3.1.12/plan.md) | Publish the verified plan: push `task/<id>` to the remote | built |
 | [tl-8bh9.4.3.1.13](tl-8bh9.4.3.1.13/plan.md) | Scheduling: the factory takes ready tasks into free slots (`tl plan next`) | built |
 | [tl-8bh9.4.3.1.14](tl-8bh9.4.3.1.14/plan.md) | Trigger: rounds start by themselves (`tl plan rounds`) | built |
-| [tl-8bh9.4.3.1.15](tl-8bh9.4.3.1.15/plan.md) | Generalize the step machinery once: plan becomes the first step kind | built |
+| [tl-8bh9.4.3.1.15](tl-8bh9.4.3.1.15/plan.md) | Generalize the step machinery once: plan becomes the first step kind | built; section 17 (a new task branch starts at the local `main`'s tip, M2 finding 1) built, open to veto |
 | [tl-8bh9.4.3.1.16](tl-8bh9.4.3.1.16/plan.md) | Step sequencing and the implement step kind (slice S5) | design; S5a, S5b, S5c built |
 | [tl-8bh9.4.3.1.16 Run S](tl-8bh9.4.3.1.16/run-s-findings.md) | Run S: sandbox and environment spike for block B2 (2026-11-11) | evidence |
 | [tl-8bh9.4.3.1.16.2](tl-8bh9.4.3.1.16.2/plan.md) | S5e: the environment for running checks and tests in the agent sandbox (block B2) | design; S5e-1, S5e-2 built |
 | [tl-8bh9.4.3.1.16.2 live smoke](tl-8bh9.4.3.1.16.2/live-smoke.md) | S5e and M1 end to end (plan, round advance, implement): owner-run live smoke steps | M1 passed; S5e checklist partly |
 | [tl-8bh9.4.3.1.16.2 M1 smoke](tl-8bh9.4.3.1.16.2/m1-smoke-findings.md) | M1 end-to-end live smoke: plan, round advance, implement on a scratch remote (2026-11-11) | evidence |
+| [tl-8bh9.14.8 live smoke](tl-8bh9.14.8/live-smoke.md) | M3 live smoke runbook: `tl step land` on a scratch bare remote and tracker (same tree, moved main, interrupts, `target_moved`, refusals) | runbook; passed 2026-11-12 |
+| [tl-8bh9.14.8 M3 smoke](tl-8bh9.14.8/m3-smoke-findings.md) | M3 live smoke: `tl step land` on a scratch remote (same tree, moved main, Ctrl-C and `kill -9`, `target_moved`, `remote_rejected`, withdraw, lost answer, no change, conflict) (2026-11-12) | evidence |
+| [tl-8bh9.14.9 M4 smoke](tl-8bh9.14.9/m4-smoke-findings.md) | M4 live smoke ([runbook](tl-8bh9.14.9/live-smoke.md)): holds in the rounds (needs_owner, failed check, closed, hand-started, `kill -9` entry, dirty slot, `branch_moved`, label rule, re-ingestion) and keep-awake exits on a scratch remote (2026-11-12) | evidence; passed, Git read timeout blocked |
+| [tl-8bh9.14.6 M2 smoke](tl-8bh9.14.6/m2-smoke-findings.md) | M2 live smoke: the check step in the rounds (pass, fail, lingering, interrupt, abandon) on a scratch remote (2026-11-11) | evidence |
 | [tl-8bh9.4.3.1.2](tl-8bh9.4.3.1.2/plan.md) | Admit one plan attempt (admission only) | built |
 | [tl-8bh9.4.3.1.3](tl-8bh9.4.3.1.3/plan.md) | Managed slots: the smallest slot state admission needs | built |
 | [tl-8bh9.4.3.1.4](tl-8bh9.4.3.1.4/plan.md) | Registered attempt entry: launch an admitted attempt into a surviving process | built |

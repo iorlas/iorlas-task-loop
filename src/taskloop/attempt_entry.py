@@ -51,13 +51,16 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
     WorkerGone,
 )
-from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping
-from taskloop.composition import entry_seen, open_attempts, remotes, setup_seen, tracker_claims, tracker_located, worker_gone
-from taskloop.environment import Renew, Renewal
+from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
+from taskloop.composition import open_attempts
+from taskloop.environment import Renew
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import remotes
+from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish, publish_word
 from taskloop.slot_env import RealEnvFiles
 from taskloop.slot_release import SlotRelease, release_word
+from taskloop.tracker_client import tracker_claims, tracker_located
 from taskloop.verifier import Verifier
 
 CAPTURE_RETRIES = 3
@@ -91,7 +94,7 @@ def arguments(argv: Sequence[str]) -> EntryArgs | None:
     return EntryArgs(database, artifacts, argv[2], argv[3])
 
 
-def _exists(database: Path) -> bool:
+def database_exists(database: Path) -> bool:
     """factory.db is opened read-only first, so a missing file is refused, never created."""
     con = open_ro(database, SCHEMA)
     if con is None:
@@ -137,7 +140,7 @@ def _registered(
 ) -> _Registered | str:
     """The attempt this process is the registered entry of, with its tracker root; otherwise the refusal's log words."""
     try:
-        if not _exists(args.database):
+        if not database_exists(args.database):
             return "refused database"
         app = attempts(args.database, args.artifacts)
         seen = inspect(os.getpid())
@@ -175,18 +178,6 @@ def _held(_admission: Admission) -> AbstractContextManager[None]:
 def _unheld(_slot_path: str, _attempt_id: str) -> AbstractContextManager[None]:
     """The entry's release runs inside the slot lock the entry already holds."""
     return nullcontext()
-
-
-def renewal(alive: KeepAlive) -> Renew:
-    """One renewal now through the keep-alive (an implement step's, after its setup): `lost` and `held` as its word says,
-    anything else `unrenewed`."""
-
-    def renew() -> Renewal:
-        alive.renew()
-        word = alive.word()
-        return "lost" if word == "lost" else "held" if word == "held" else "unrenewed"
-
-    return renew
 
 
 def _step(

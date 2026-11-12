@@ -5,6 +5,13 @@ from taskloop.attempt import succeeded
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
+from taskloop.check_status import ChecksView
+from taskloop.checks import differs
+from taskloop.hold_store import HoldRow
+from taskloop.land import Landed
+from taskloop.land_data import land_data, view_data
+from taskloop.land_push import Withdrawn
+from taskloop.land_summary import LandSummary
 from taskloop.machine_config import Loaded
 from taskloop.operations import (
     Adoption,
@@ -22,7 +29,8 @@ from taskloop.slots import Adopted, NotAdopted, SlotView
 
 # every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
 # `exit_codes`
-type Result = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
+type StepResult = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
+type Result = StepResult | Landed | Withdrawn | LandSummary
 
 
 def _entry_data(entry: EntryIdentity | None) -> dict[str, object] | None:
@@ -40,8 +48,32 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
         "repeat_reason": each.repeat_reason, "earlier": [attempt_id for attempt_id, _reason in each.earlier],
         "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
-        "published": _published_data(each.published),
+        "published": _published_data(each.published), "checks": _checks_data(each.checks), "land": view_data(each.land),
+        "label": each.label, "hold": _hold_data(each.hold), "hold_due": each.hold_due,
     }
+
+
+def _hold_data(row: HoldRow | None) -> dict[str, object] | None:
+    """A hold's record (tl-8bh9.14.9 section 10): its reason, cause, the label it removes, when, and its phases."""
+    if row is None:
+        return None
+    return {"reason": row.reason, "cause": row.cause_id, "label": row.label, "held_at": row.held_at, "labels": row.labels,
+            "labelled_at": row.labelled_at, "commented_at": row.commented_at, "cleared_at": row.cleared_at}
+
+
+def _checks_data(checks: ChecksView | None) -> dict[str, object] | None:
+    """A checks attempt's own facts (tl-8bh9.14.6 section 9): X, the target and the required names, the profile digest,
+    the counted refusals and its latest block's results (`log`: `tl step show` only)."""
+    if checks is None:
+        return None
+    row, required = checks.row, dict(checks.row.required)
+    logs = checks.logs or (None,) * len(checks.results)
+    results = [{"name": each.name, "required": each.name in required, "conclusion": each.conclusion, "rc": each.rc,
+                "block": each.block, "started_at": each.started_at, "ended_at": each.ended_at,
+                "argv_differs": differs(row.required, each), "log": None if log is None else str(log)}
+               for each, log in zip(checks.results, logs, strict=True)]
+    return {"commit": row.commit, "target": row.target, "target_seen": row.target_seen, "required": list(required),
+            "profile_digest": row.profile_digest, "refusal": row.refusal, "refusals": row.refusals, "results": results}
 
 
 def _release_data(release: ReleaseRow | None) -> dict[str, object] | None:
@@ -66,7 +98,9 @@ def _released_data(result: VerifiedTask | ReleasedTask | PublishedTask) -> dict[
     changed = (found.parked, found.reservation_removed) if isinstance(found, Released) else (None, False)
     status = release_word(found)
     return {"status": status, "backlog": result.backlog, "task": result.task_id, "attempt_id": result.attempt_id, "slot": found.slot,
-            "parked": changed[0], "reservation_removed": changed[1], "claim": found.claim, "abandoned": found.abandoned}
+            "parked": changed[0], "reservation_removed": changed[1], "claim": found.claim, "abandoned": found.abandoned,
+            "checks": None if result.checks is None else _released_data(result.checks),
+            "land": None if result.land is None else _released_data(result.land), "candidate": result.candidate}
 
 
 def _publish_data(result: PublishedTask) -> dict[str, object]:
@@ -87,6 +121,13 @@ def _slot_data(each: SlotView | Adopted | NotAdopted) -> dict[str, object]:
 
 
 def as_data(result: Result, *, admission: bool = False) -> dict[str, object]:
+    """`_step_data`'s shapes, and `tl step land`'s answers (`land_data`)."""
+    if isinstance(result, Landed | Withdrawn | LandSummary):
+        return land_data(result)
+    return _step_data(result, admission=admission)
+
+
+def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
     """The one JSON shape per result (a refusal or unknown is `{"error": {kind, reason, message}}`, plus `claim_leaked`,
     `admitted` and `slots` for an admission's, `tl step start`); no dispatch token, no version field. An empty diagnostic
     or result text is null, as every other absent field."""

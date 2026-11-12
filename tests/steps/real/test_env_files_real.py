@@ -11,7 +11,7 @@ import pytest
 from stream_proc import OwnedProcess, group_alive
 
 from taskloop import slot_env
-from taskloop.composition import setup_seen
+from taskloop.owned_processes import setup_seen
 from taskloop.slot_env import RealEnvFiles, setup_process
 
 

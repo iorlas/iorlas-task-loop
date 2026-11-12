@@ -6,14 +6,16 @@ import json
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import replace
 from pathlib import Path
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError
+from beads_client.testing import Script
 from doubles import FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeWorktree
@@ -31,6 +33,7 @@ from taskloop.setup_store import ProcessSeen
 from taskloop.slot_lock import custody, lock_path, probe
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease, release_word
 from taskloop.slots import SlotGit, adopt, observe
+from taskloop.tracker_client import tracker_claims
 from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -326,6 +329,27 @@ def test_abandoning_a_settled_release_flips_it_and_returns_the_claim_with_no_git
     assert stored(registered) == ([], [(d, 30.0, "unclaimed")])
 
 
+@pytest.mark.parametrize(("reply", "claim"), [
+    (("", "", 0), "unclaimed"),  # an open task the factory holds: unchanged
+    (('{"error": "cannot unclaim closed issue tl-1", "schema_version": 1}', "", 1), "not_held"),
+    (('{"error": "resolving tl-1: no issue found matching \\"tl-1\\"", "schema_version": 1}', "", 1), "not_held"),
+], ids=["open", "closed", "deleted"])
+def test_the_abandon_through_the_real_unclaim_ends_for_a_closed_or_deleted_task(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    reply: tuple[str, str, int], claim: Literal["unclaimed", "not_held"],
+) -> None:
+    """bd refuses the unclaim of a closed task and writes nothing; the abandon records `not_held` instead of staying
+    `unclaiming` forever (tl-8bh9.14.9 5.3)."""
+    d = head(slot)
+    verified(registered, tmp_path, slot, checkouts, slot_files)
+    assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
+    ports, script = Ports(registered, checkouts, slot_files), Script().say(*reply)
+    releaser = SlotRelease(AttemptStore(lambda: registered), ports.checkouts, slot_files, ports.observe, ports.gone, ports.hold,
+                           tracker_claims(script).unclaim, lambda: 30, ports.setup_seen, ports.scratch)
+    assert releaser.release(KEY, True) == Released("s1", None, False, claim, True)
+    assert stored(registered) == ([], [(d, 30.0, claim)]) and len(script.calls) == 1
+
+
 def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free_again(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, root: Path,
     occupy: Callable[[Path], AbstractContextManager[None]],
@@ -414,3 +438,87 @@ def test_an_unfinished_setup_that_never_registered_a_command_does_not_hold_the_s
     registered.execute("INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at) "
                        "VALUES ('attempt',1,'dispatch',1,?,?,1)", ("b" * 40, "d" * 64))
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, True), Released)
+
+
+CHECKS_ROW = """INSERT INTO checks_attempt (attempt_id,dispatch_token,generation,after_attempt_id,number,slot,slot_head,target_commit,
+required,deadline,phase,conclusion,reason,concluded_at,released_at,parked,abandoned)
+VALUES (?,?,1,'attempt',?,'s2',?,?,'[]',100,?,?,?,?,?,?,?)"""
+
+
+def checks_attempt(con: sqlite3.Connection, number: int, abandoned: bool) -> None:
+    """A checks attempt of `attempt`, as an admission writes it (admitted), or released by an abandon."""
+    d, t = "d" * 40, "f" * 40
+    later = ("concluded", "failed", "abandoned", 5, 6, d, 1) if abandoned else ("admitted", None, None, None, None, None, 0)
+    con.execute(CHECKS_ROW, (f"checks-{number}", f"checks-token-{number}", number, d, t, *later))
+
+
+def settled(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> Ports:
+    verified(con, tmp_path, slot, checkouts, files)
+    assert isinstance(Ports(con, checkouts, files).releaser().release(KEY, False), Released)
+    return Ports(con, checkouts, files)
+
+
+@pytest.mark.parametrize(("checks", "current"), [((False,), False), ((True,), True), ((True, False), False), ((False, True), True)],
+                         ids=["admitted", "abandoned", "latest_admitted", "latest_abandoned"])
+def test_an_abandon_of_a_released_attempt_is_refused_while_its_latest_checks_attempt_is_not_abandoned(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    checks: tuple[bool, ...], current: bool,
+) -> None:
+    """`SUCCESSOR` in `ROW`: the claim is the checks attempt's while the latest one stands; the task's abandon goes checks
+    first, then this one passes."""
+    ports = settled(registered, tmp_path, slot, checkouts, slot_files)
+    for number, abandoned in enumerate(checks, 1):
+        checks_attempt(registered, number, abandoned)
+    found = ports.releaser().release(KEY, True)
+    if current:
+        assert found == Released("s1", None, False, "unclaimed", True)
+    else:
+        assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("refused", "changed") and "checks attempt" in found.detail
+        assert stored(registered)[1] == [(head(slot), 30.0, "kept")] and ports.unclaimed == []
+
+
+def test_a_checks_admission_committed_between_the_abandons_read_and_its_flip_refuses_the_flip(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+) -> None:
+    """The admission commits first (`SUCCESSOR` in `FLIP`): the abandon read a current attempt, but its flip sees the checks
+    attempt and changes nothing; the person reruns `--abandon`, which now refuses until the checks attempt is abandoned."""
+    ports = settled(registered, tmp_path, slot, checkouts, slot_files)
+    opened = 0
+
+    def connect() -> sqlite3.Connection:
+        nonlocal opened
+        opened += 1
+        if opened == 2:  # after the release's read, before its write transaction
+            checks_attempt(registered, 1, False)
+        return registered
+
+    releaser = replace(ports.releaser(), store=AttemptStore(connect))
+    found = releaser.release(KEY, True)
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed") and opened == 2
+    assert stored(registered)[1] == [(head(slot), 30.0, "kept")] and ports.unclaimed == []
+    assert release_word(ports.releaser().release(KEY, True)) == "refused:changed"
+
+
+def test_a_checks_admission_committed_under_the_releases_lock_fails_its_fence(
+    registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    """`SUCCESSOR` in `FENCE`: an unreleased attempt's release records nothing once a checks attempt names it."""
+    slot.take_branch("task/tl-1", "HEAD", mode="resume")
+    before, ports = stored(registered), Ports(registered, checkouts, slot_files)
+    ports.inside = lambda: checks_attempt(registered, 1, False)
+    found = ports.releaser().release(KEY, True)
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed")
+    assert stored(registered) == before and ports.unclaimed == []
+
+
+def test_an_abandon_whose_flip_committed_first_finishes_returning_the_claim(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+) -> None:
+    """The abandon's flip commits first: the claim is `unclaiming`, which the checks admission's re-read refuses
+    (`not_advanceable`, S6d). A checks row written anyway never strands the abandon: its rerun returns the claim."""
+    ports = settled(registered, tmp_path, slot, checkouts, slot_files)
+    ports.answers = [BdError("other", "down"), True]
+    assert release_word(ports.releaser().release(KEY, True)) == "unavailable:tracker"
+    assert stored(registered)[1] == [(head(slot), 30.0, "unclaiming")]
+    checks_attempt(registered, 1, False)
+    assert ports.releaser().release(KEY, True) == Released("s1", None, False, "unclaimed", True)

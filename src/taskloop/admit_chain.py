@@ -47,16 +47,16 @@ from taskloop.admit import (
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER
-from taskloop.prepare import HEADS, REMOTES, lacks
+from taskloop.prepare import HEADS, MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
-from taskloop.steps import next_step
+from taskloop.steps import is_agent, next_step
 from taskloop.task import TaskInspection
 from taskloop.tracker import ACTOR
 
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
 # clean answer with its session complete, of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
-# tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D and step (all carried on).
+# tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D, step and label (all carried on).
 PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
 EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),
 p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
@@ -64,7 +64,7 @@ p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.rep
 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
  AND e.effect IN ('commit','keep') AND e.session_state='complete')
 AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
-p.tracker_root,p.seq,p.slot_head,p.step
+p.tracker_root,p.seq,p.slot_head,p.step,p.label
 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 
 
@@ -137,7 +137,7 @@ class ChainAdmission:
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
                 "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": request.reason, "seq": as_count(row[13]) + 1, "slot_head": row[14], "step": row[15],
-                "after_commit": None,  # a repeat starts at E, the chain's own
+                "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
             })
             moved = con.execute(
                 """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
@@ -151,12 +151,12 @@ class ChainAdmission:
 
 
 # The task's current attempt (its highest `seq`) under the write lock: its key, whether it is done (verified, released
-# settled with the claim kept, its X published), its step, X, tracker root and order.
+# settled with the claim kept, its X published), its step, X, tracker root, order and label (the next step's copy).
 CURRENT = """SELECT p.attempt_id,p.dispatch_token,p.generation,
 EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id AND v.verdict='verified')
 AND EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id AND x.claim='kept')
 AND EXISTS (SELECT 1 FROM published_branch b WHERE b.attempt_id=p.attempt_id AND b.commit_sha=p.end_commit),
-p.step,p.end_commit,p.tracker_root,p.seq
+p.step,p.end_commit,p.tracker_root,p.seq,p.label
 FROM attempt p WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1"""
 
 
@@ -173,8 +173,9 @@ class NextStepRequest:
 
 
 @dataclass(frozen=True)
-class _Task:
-    """The previous attempt's task, read before any effect; `current`: it is still the task's current attempt."""
+class Task:
+    """The previous attempt's task, read before any effect; `current`: it is still the task's current attempt (also the
+    checks admission's read, `check_admit`)."""
 
     backlog: str
     task_id: str
@@ -190,7 +191,7 @@ class _Ready:
     """Everything an advance read before any effect."""
 
     con: sqlite3.Connection
-    found: _Task
+    found: Task
     step: str
     task: TaskInspection
     free: tuple[Free, ...]
@@ -233,7 +234,7 @@ class NextAdmission:
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
 
-    def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, _Task, str] | AdmitRefused | AdmitUnavailable:
+    def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, Task, str] | AdmitRefused | AdmitUnavailable:
         """The choices, the deadline, then the previous attempt's task and the step after it; a superseded previous
         attempt is `task_attempted` before any tracker read (the transaction checks it again)."""
         if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
@@ -243,12 +244,12 @@ class NextAdmission:
             return refused
         try:
             con = open_store(self.connect)
-            found = _task_of(con, request.previous)
+            found = task_of(con, request.previous)
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
         step = None if found is None else next_step(found.step, True)
-        if found is None or step is None or found.end_commit is None:
-            return AdmitRefused("not_advanceable")
+        if found is None or step is None or not is_agent(step) or found.end_commit is None:
+            return AdmitRefused("not_advanceable")  # the check step is the checks admission's (`check_admit`)
         return (con, found, step) if found.current else AdmitRefused("task_attempted")
 
     def _ready(self, request: NextStepRequest) -> _Ready | AdmitRefused | AdmitUnavailable:
@@ -270,7 +271,7 @@ class NextAdmission:
                                 f"assigned to {task.assignee or 'nobody'}")
         return _Ready(con, found, step, task, free)
 
-    def _free(self, con: sqlite3.Connection, request: NextStepRequest, found: _Task) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
+    def _free(self, con: sqlite3.Connection, request: NextStepRequest, found: Task) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
         """The checkout is the previous attempt's repository; its free slots whose D the task branch rule passes and
         whose start (as the entry takes it) contains the previous X."""
         checked = checkout_repo(self.checkouts, request.checkout)
@@ -306,12 +307,12 @@ class NextAdmission:
                 "step": step, "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None, "seq": as_count(row[7]) + 1, "slot_head": head,
-                "after_commit": row[5],
+                "after_commit": row[5], "label": row[8],
             })
         return Admitted(key, name)
 
 
-def _task_of(con: sqlite3.Connection, previous: AttemptKey) -> _Task | None:
+def task_of(con: sqlite3.Connection, previous: AttemptKey) -> Task | None:
     row: tuple[object, ...] | None = con.execute(
         "SELECT p.backlog,p.task_id,p.tracker_root,p.repo_id,p.step,NOT " + LATER + ",p.end_commit FROM attempt p "
         "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?",
@@ -322,17 +323,17 @@ def _task_of(con: sqlite3.Connection, previous: AttemptKey) -> _Task | None:
     backlog, task_id, root, repo_id, step, current, end = row
     if not all(isinstance(each, str) for each in row[:5]) or not isinstance(end, (str, type(None))):
         raise sqlite3.DatabaseError("Malformed attempt row")
-    return _Task(str(backlog), str(task_id), str(root), str(repo_id), str(step), bool(current), end)
+    return Task(str(backlog), str(task_id), str(root), str(repo_id), str(step), bool(current), end)
 
 
-def _containing(repo: Repo, found: _Task, free: tuple[Free, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
-    """Read-only, before anything is reserved (the entry checks it again): the free slots whose start, the local
-    `task/<id>`, else origin's remote-tracking one, else the slot's D, contains the previous X."""
+def _containing(repo: Repo, found: Task, free: tuple[Free, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
+    """Read-only, before anything is reserved (the entry checks it again): the free slots, when the start every slot
+    takes, the local `task/<id>`, else origin's remote-tracking one, else `main`'s tip, contains the previous X."""
     after, task_id = found.end_commit or "", found.task_id
     try:
-        tips = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES])}
-        tip = tips.get(f"{HEADS}/{task_id}") or tips.get(f"{REMOTES}/{task_id}")
-        keep = tuple(each for each in free if not lacks(repo, after, tip or each.head))
+        tips = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES, MAIN])}
+        tip = tips.get(f"{HEADS}/{task_id}") or tips.get(f"{REMOTES}/{task_id}") or tips.get(MAIN)
+        keep = free if tip is not None and not lacks(repo, after, tip) else ()
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
     return keep or AdmitRefused("branch_moved", detail=f"task/{task_id} does not contain the previous step's commit {after}")

@@ -11,7 +11,7 @@ from taskloop.attempt_types import AttemptKey, StepRules, Unsettled
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import attributes
 from taskloop.step_text import GIT_WRITES
-from taskloop.steps import IMPLEMENT, PLAN, STEPS, following, kind, next_step
+from taskloop.steps import IMPLEMENT, ORDER, PLAN, STEPS, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 
 TASK = TaskInspection(
@@ -59,14 +59,23 @@ def test_plan_then_implement_are_the_built_step_kinds_in_order() -> None:
 
 
 @pytest.mark.parametrize(("current", "done", "expected"), [
-    (None, False, "plan"), (None, True, "plan"), ("plan", True, "implement"), ("implement", True, None), ("plan", False, None),
-    ("implement", False, None),
+    (None, False, "plan"), (None, True, "plan"), ("plan", True, "implement"), ("implement", True, "check"), ("check", True, None),
+    ("plan", False, None), ("implement", False, None),
 ])
 def test_next_step_follows_the_fixed_order_only_after_a_done_step(current: str | None, done: bool, expected: str | None) -> None:
     """None: a fresh start (or after an abandon returned the claim) is the first step; a done step advances; the last
-    built step is done; an attempt not done keeps its own `Next`."""
+    built step (`check`) is done; an attempt not done keeps its own `Next`."""
     assert next_step(current, done) == expected
-    assert following("plan") == "implement" and following("implement") is None
+
+
+def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
+    """`ORDER` is every built step; only plan and implement have a kind (an agent): `check` is the checks admission's."""
+    assert ORDER == ("plan", "implement", "check") and [following(step) for step in ORDER] == ["implement", "check", None]
+    assert [is_agent(step) for step in ORDER] == [True, True, False] and not is_agent("review")
+    with pytest.raises(ValueError, match="Unknown step"):
+        following("review")
+    with pytest.raises(ValueError, match="Unknown step"):
+        kind("check")
 
 
 def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environment() -> None:

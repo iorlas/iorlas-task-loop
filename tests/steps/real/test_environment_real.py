@@ -19,9 +19,10 @@ from stream_proc import group_alive
 from taskloop.access import folders
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
-from taskloop.composition import checkouts, setup_seen, slot_profiles
 from taskloop.environment import EnvironmentPorts, Preparation, Renewal
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.git_views import checkouts, slot_profiles
+from taskloop.owned_processes import setup_seen
 from taskloop.prepare import Prepared
 from taskloop.setup_store import SetupStore
 from taskloop.slot_env import RealEnvFiles, setup_process

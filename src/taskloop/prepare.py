@@ -6,9 +6,12 @@ ancestry), used by admission before anything is held and again by the entry righ
 clean detached slot takes `task/<task-id>` (`take_branch(mode="resume")`, the only factory call of it, and `park` back
 to D when a branch made after the rule turns out not to contain D); attempt 1 of a later step first requires that
 branch to contain the previous step's published X (`after_commit`, else `branch_moved`); B is then the
-HEAD on that branch. No fetch: only local refs, including the local remote-tracking ones, are read. Every refusal is one
+HEAD on that branch. An existing branch (local, else origin's remote-tracking one) is resumed as it is; a new one starts
+at the target's tip, the person's local `main` (`MAIN`, tl-8bh9.14.23), never at the slot's own commit D, which stays
+only the release's park point. No fetch: only local refs, including the local remote-tracking ones, are read. Every refusal is one
 fixed word and leaves the attempt `admitted`; `GitUnavailable` (a missing revision or a failed read included) is
 `unavailable:git`, never "absent", except that a missing `after_commit` is `branch_moved` (the branch lost it).
+`detach_at` is a checks slot's preparation: X taken detached (`park`), never a branch.
 """
 
 import re
@@ -22,7 +25,8 @@ from git_porcelain import BranchHeld, GitUnavailable, MissingRevision, Repo
 from taskloop.attempt_types import AttemptRecord, AttemptResult, Checkouts, SlotFiles
 from taskloop.slot_state import SlotState, observe_slot, pointer, staged
 
-type BranchRefusal = Literal["branch_name", "branch_held", "branch_diverged"]
+type BranchRefusal = Literal["branch_name", "branch_held", "branch_diverged", "target"]
+MAIN: Final = "refs/heads/main"  # the target (O1: the person's local `main`): a new task branch starts at its tip, checks read it
 HEADS: Final = "refs/heads/task"
 REMOTES: Final = "refs/remotes/origin/task"
 NAME: Final = re.compile(r"[A-Za-z0-9._-]+")
@@ -35,12 +39,14 @@ def task_branch(task_id: str) -> str:
 
 @dataclass(frozen=True)
 class Branch:
-    """The task branch as read now: the given heads (D) that every existing tip contains, and the local and local
-    remote-tracking tips (None when absent)."""
+    """The task branch as read now: the given heads (D) that its start contains, the local and local remote-tracking tips
+    (None when absent), and `start`, the commit the slot takes: the local tip, else the remote-tracking one, else (a new
+    branch) `main`'s tip."""
 
     passing: tuple[str, ...]
     local: str | None
     remote: str | None
+    start: str
 
 
 def named(task_id: str) -> bool:
@@ -65,22 +71,28 @@ def _clash(names: Sequence[str], task_id: str) -> bool:
 def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefusal | Branch:
     """The one branch rule, in order: the name (no Git), one refs read (`branch_name` on a conflict), the worktree
     listing (`branch_held` when any worktree is on the branch), then history: each given head D passes when the local
-    tip and the local remote-tracking tip, where present, both contain it (`branch_diverged` when none does)."""
+    tip and the local remote-tracking tip, where present, both contain it, or, with neither, when `main`'s tip (where a
+    new branch starts) contains it (`branch_diverged` when none does; `target` when a new branch has no `main`)."""
     if not named(task_id):
         return "branch_name"
-    found = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES])}
+    found = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES, MAIN])}
     if _clash(tuple(found), task_id):
         return "branch_name"
     if any(info.branch == task_branch(task_id) for info in repo.worktrees()):
         return "branch_held"
     local, remote = found.get(f"{HEADS}/{task_id}"), found.get(f"{REMOTES}/{task_id}")
-    tips = [tip for tip in (local, remote) if tip is not None]
+    target = found.get(MAIN)
+    tips = tuple(tip for tip in (local, remote) if tip is not None) or ((target,) if target is not None else ())
+    if not tips:
+        return "target"
     passing = tuple(head for head in heads if all(repo.is_ancestor(head, tip) for tip in tips))
-    return "branch_diverged" if heads and not passing else Branch(passing, local, remote)
+    return "branch_diverged" if heads and not passing else Branch(passing, local, remote, tips[0])
 
 
 DIVERGED: Final = (
-    "An existing task/{task} does not contain the slot's commit. A local branch: rename it (`git branch -m task/{task} "
+    "Where task/{task} would start does not contain any free slot's commit. With no task/{task}, it starts at your local "
+    "main: the slots sit at commits outside main's history; detach the free slots at a commit of main (`git -C <slot> "
+    "checkout --detach main`). An existing task/{task} is resumed as it is: a local branch: rename it (`git branch -m task/{task} "
     "old/task/{task}`) or delete it. Only origin's remote-tracking ref: delete the branch on origin (`git push origin "
     "--delete task/{task}`), or drop the local ref (`git update-ref -d refs/remotes/origin/task/{task}`) and do not fetch "
     "it again."
@@ -105,7 +117,7 @@ def _observed(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord) -> 
 def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: SlotState) -> AttemptResult | None:
     """Attempt 1 on a clean detached slot at D: the branch rule again, the pointer again, then `take_branch` on the slot's
     own view. An existing local branch is checked out as it is; a new one starts at the remote-tracking tip when that
-    exists (it contains D), else at D. None once the slot is on its branch."""
+    exists, else at `main`'s tip (either contains D). None once the slot is on its branch."""
     admission, head = record.admission, state.head or ""
     task_id = admission.task.task_id
     repo = checkouts(state.root)
@@ -113,15 +125,14 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     if isinstance(found, str):
         return _refused(found)
     after = admission.after_commit
-    if after is not None and lacks(repo, after, found.local or found.remote or head):
+    if after is not None and lacks(repo, after, found.start):
         return _refused("branch_moved")
     named = pointer(files, Path(admission.slot_path))
     if named is None or named.root != state.root or named.gitdir != state.gitdir:
         return _refused("slot_redirected")
-    start = found.remote if found.local is None and found.remote is not None else head
     slot = Path(admission.slot_path)
     worktree = checkouts(slot, git_dir=state.gitdir).worktree(slot)
-    taken = worktree.take_branch(task_branch(task_id), start, mode="resume")
+    taken = worktree.take_branch(task_branch(task_id), found.start, mode="resume")
     if isinstance(taken, BranchHeld):
         return _refused("branch_held")
     diverged = not repo.is_ancestor(head, taken.head)
@@ -135,7 +146,7 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
 
 
 def lacks(repo: Repo, after: str, tip: str) -> bool:
-    """The tip the slot would take (the local branch, else the remote-tracking one, else D) does not contain the previous
+    """The tip the slot would take (the local branch, else the remote-tracking one, else `main`'s) does not contain the previous
     step's published X, or X is gone from the repository: someone reset or deleted the branch after that step."""
     try:
         return not repo.is_ancestor(after, tip)
@@ -179,6 +190,49 @@ class Prepared:
     head: str
     gitdir: Path
     root: Path
+
+
+def detach_at(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str, commit: str) -> Prepared | AttemptResult:
+    """A checks slot takes X detached (the checks entry, under the slot's custody lock; never `task/<id>`). In order: a
+    redirected pointer `slot:redirected`, an unborn slot `slot_unborn`, a slot on a branch `slot:branch`, X gone from the
+    repository `commit_missing`; a slot already detached at X passes in any state (the environment's reset makes it
+    exactly X); a detached slot elsewhere with changes is `slot_dirty` (a free slot is clean at admission); a clean one is
+    parked at X through its pinned view and read again, which must give `(X, detached)` (else `slot:moved`). `prepare`'s
+    other words (`unavailable` `repo`, `not_listed`, `git`) as for an agent slot."""
+    try:
+        state = slot_listed(checkouts, files, slot_path, repo_id)
+        if isinstance(state, AttemptResult):
+            return state
+        problem = _detached_problem(checkouts, state, commit)
+        if problem is not None or state.head == commit:
+            return problem or Prepared(commit, state.gitdir, state.root)
+        path = Path(slot_path)
+        checkouts(path, git_dir=state.gitdir).worktree(path).park(commit)
+        again = slot_listed(checkouts, files, slot_path, repo_id)
+    except GitUnavailable:
+        return AttemptResult("unavailable", "git")
+    if isinstance(again, AttemptResult) or (again.head, again.branch) == (commit, None):
+        return again if isinstance(again, AttemptResult) else Prepared(commit, again.gitdir, again.root)
+    return _refused("slot:moved")
+
+
+def slot_listed(checkouts: Checkouts, files: SlotFiles, slot_path: str, repo_id: str) -> SlotState | AttemptResult:
+    """`observe_slot` in `detach_at`'s words (also the checks entry's read of the slot's pinned Git directory before X is taken)."""
+    state = observe_slot(checkouts, files, slot_path, repo_id)
+    if state == "redirected":
+        return _refused("slot:redirected")
+    return AttemptResult("unavailable", state) if isinstance(state, str) else state
+
+
+def _detached_problem(checkouts: Checkouts, state: SlotState, commit: str) -> AttemptResult | None:
+    """`detach_at`'s refusals of a listed slot before any write."""
+    if state.head is None:
+        return _refused("slot_unborn")
+    if state.branch is not None:
+        return _refused("slot:branch")
+    if lacks(checkouts(state.root), commit, commit):
+        return _refused("commit_missing")
+    return _refused("slot_dirty") if state.dirty and state.head != commit else None
 
 
 def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: Callable[[], float]) -> Prepared | AttemptResult:

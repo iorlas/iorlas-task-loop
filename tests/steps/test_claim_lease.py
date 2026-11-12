@@ -5,7 +5,7 @@ import threading
 
 import pytest
 
-from taskloop.claim_lease import BEAT_EVERY_S, LEASE_TTL_S, Beat, ClaimWord, KeepAlive, keeping
+from taskloop.claim_lease import BEAT_EVERY_S, LEASE_TTL_S, Beat, ClaimWord, KeepAlive, keeping, renewal
 
 
 class Stop:
@@ -123,3 +123,12 @@ def test_keeping_starts_one_daemon_thread_and_stops_and_joins_it_on_exit() -> No
         assert any(each.name == "claim-lease" and each.daemon for each in threading.enumerate())
     assert event.is_set() and woke.is_set() and beats.calls == 0 and alive.word() == "unrenewed"
     assert not any(each.name == "claim-lease" for each in threading.enumerate())
+
+
+def test_the_one_renewal_shared_by_the_entries_and_the_land_answers_a_faulted_beat_unrenewed() -> None:
+    """`renewal` lives here (tl-8bh9.14.8 slice L2) so the checks entry, the shared validation and the land renew the claim
+    without importing the agent attempt's entry; a beat that raised is never `held`."""
+    clock = Clock()
+    alive = KeepAlive(Beats(clock, RuntimeError("bd")), Stop(clock, 0), clock)
+    renew = renewal(alive)
+    assert (renew(), alive.word()) == ("unrenewed", "fault")

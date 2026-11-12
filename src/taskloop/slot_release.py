@@ -1,5 +1,6 @@
 """Release a slot reservation (a lease), and abandon an attempt: the one writer of `slot_release` and the only deleter of
-a `reservation`; its one Git write is `park`, under the slot's lock.
+a `reservation` (`free`, also called by the checks release, `check_release`); its one Git write is `park`, under the
+slot's lock (`park_slot`, shared with the checks release).
 
 Two modes of one operation. settled: the attempt's result is collected; the slot is parked at the attempt's admission
 base D and the tracker claim is kept (a verified plan is not task completion; land is). abandon: any phase; the slot is
@@ -35,7 +36,7 @@ from taskloop.attempt import collect
 from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe, SlotFiles, WorkerGone
-from taskloop.factory_schema import LATER, RELEASE, current, marks
+from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks
 from taskloop.prepare import task_branch
 from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
@@ -50,20 +51,20 @@ ROW: Final = """SELECT p.task_id,p.repo_id,p.slot,p.phase,p.rev,p.entry_pid,p.en
 p.worker_start,p.worker_boot,p.slot_head,p.tracker_root,
 (SELECT s.path FROM reservation r JOIN slot s ON s.repo_id=r.repo_id AND s.name=r.slot
  WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id AND r.generation=p.generation),
-""" + LATER + """,x.claim
+""" + SUCCESSOR + """,x.claim
 FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 # Inside the write transaction: still the attempt the proof read (same rev and phase), still the task's current attempt,
 # the reservation held at the key's generation, and no release row.
 FENCE: Final = """SELECT 1 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? AND p.rev=? AND p.phase=?
-AND NOT """ + LATER + """
+AND NOT """ + SUCCESSOR + """
 AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
 AND NOT EXISTS (SELECT 1 FROM slot_release x WHERE x.attempt_id=p.attempt_id)"""
 
 # An abandon of a settled release, fenced again in its transaction: still `kept` and still the task's current attempt.
 FLIP: Final = """UPDATE slot_release SET claim='unclaiming' WHERE attempt_id=? AND claim='kept'
-AND NOT EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=slot_release.attempt_id AND """ + LATER + ")"
+AND NOT EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=slot_release.attempt_id AND """ + SUCCESSOR + ")"
 
 
 @dataclass(frozen=True)
@@ -130,17 +131,20 @@ class Stopping:
     worker: Worker | None
 
 
-def entry_stopped(observe: Observe, me: EntryIdentity | None, entry: EntryIdentity | None) -> NotReleased | None:
+def entry_stopped(
+    observe: Observe, me: EntryIdentity | None, entry: EntryIdentity | None, process: str | None = None,
+) -> NotReleased | None:
     """The registered entry, by its boot-aware identity (a native process-table read, never by name): running refuses
     unless it is `me` (the entry releasing itself after its own verify); unknown is unavailable; gone, a different process
-    or no registered entry passes."""
+    or no registered entry passes. `process` names it in the detail (a land candidate's `land process`)."""
     if entry is None or entry == me:
         return None
     seen = observe(entry)
     if seen == "matching":
-        running = f"The attempt's entry runs as pid {entry[0]}: wait, or stop it by verified pid. {NOTHING}"
+        running = f"The {process or "attempt's entry"} runs as pid {entry[0]}: wait, or stop it by verified pid. {NOTHING}"
         return NotReleased("refused", "entry_running", running)
-    return NotReleased("unavailable", "observe", f"The registered entry could not be observed. {NOTHING}") if seen == "unknown" else None
+    unknown = f"The {process or 'registered entry'} could not be observed. {NOTHING}"
+    return NotReleased("unavailable", "observe", unknown) if seen == "unknown" else None
 
 
 def worker_stopped(gone: WorkerGone, phase: str, worker: Worker | None) -> NotReleased | None:
@@ -160,6 +164,52 @@ def stop_proof(observe: Observe, gone: WorkerGone, me: EntryIdentity | None, row
     return entry_stopped(observe, me, row.entry) or worker_stopped(gone, row.phase, row.worker)
 
 
+def setup_stopped(seen: SetupSeen, setup: OwnedProcess | None) -> NotReleased | None:
+    """The latest setup run's unsettled command, by the entry's rule (`setup_seen`): gone with an empty group, or from
+    another boot, passes; alive refuses; unknown is unavailable. The release never stops it (the factory signals
+    nothing); the person waits, or stops the group once its members are shown to be the slot's setup. Shared with the
+    checks release."""
+    found = "gone" if setup is None else seen(setup)
+    if setup is None or found == "gone":
+        return None
+    if found == "unknown":
+        return NotReleased("unavailable", "setup_unknown", f"The slot's setup could not be observed. {NOTHING}")
+    alive = f"The slot's setup (process group {setup.pgid}, recorded this boot) still runs: wait, or see the guide. {NOTHING}"
+    return NotReleased("unsettled", "setup_running", alive)
+
+
+def park_slot(
+    checkouts: Checkouts, slot_files: SlotFiles, path: Path, repo_id: str, slot_head: str, branch: str | None
+) -> tuple[str, str | None] | NotReleased:
+    """The release's one Git write, shared with the checks release (under the slot's lock): the slot on its own hardened
+    view, the pointer first (`redirected` makes no Git call); on exactly `branch` (the implement attempt's `task/<id>`;
+    None for a checks slot, which is only ever detached) and clean it is parked at D (the branch keeps its tip);
+    detached and clean it is left where it is (never prepared, or parked by an earlier call that died before its
+    transaction) when it is at D, else parked at D. Dirty, on another branch, redirected or unborn refuses: it never
+    resets work. Returns where the slot is left and the park."""
+    state = observe_slot(checkouts, slot_files, str(path), repo_id)
+    if isinstance(state, str):
+        reason = "slot_redirected" if state == "redirected" else state
+        return NotReleased("refused" if state == "redirected" else "unavailable", reason, f"Inspect the slot. {NOTHING}")
+    if state.head is None:
+        return NotReleased("refused", "slot_unborn", f"The slot has no commit. {NOTHING}")
+    if state.dirty:
+        left = listing(checkouts(path, git_dir=state.gitdir), path)
+        return NotReleased("refused", "slot_dirty", "\n".join([*left, f"Remove the listed files. {NOTHING}"]))
+    if state.branch is None and state.head == slot_head:
+        return state.head, None
+    if state.branch not in (None, branch):
+        return NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}")
+    return slot_head, str(checkouts(path, git_dir=state.gitdir).worktree(path).park(slot_head))
+
+
+def free(con: sqlite3.Connection, repo_id: str, slot: str, attempt_id: str, generation: int) -> None:
+    """The one deletion of a reservation, inside the caller's release transaction after its fenced record (an agent
+    attempt's release row, or a checks attempt's `check_store.record_release`)."""
+    con.execute("DELETE FROM reservation WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",
+                (repo_id, slot, attempt_id, generation))
+
+
 @dataclass(frozen=True)
 class _Row:
     key: AttemptKey
@@ -171,7 +221,7 @@ class _Row:
     slot_head: str  # D
     tracker_root: str
     slot_path: str | None  # the held reservation's slot path; None when it is not held at the key's generation
-    successor: bool  # a later attempt of the task exists: this one is no longer current
+    successor: bool  # `SUCCESSOR`: a later attempt of the task, or its unabandoned latest checks attempt; no longer current
     released: Claimed | None  # the claim of an existing release row: abandoned unless `kept`
     setup: OwnedProcess | None = None  # the latest setup run's unsettled command (`SetupRow.unsettled`), if any
 
@@ -260,26 +310,15 @@ class SlotRelease:
                 return NotReleased("unavailable", "store", f"The result could not be read. {NOTHING}")
             if result.status != "collected":
                 return NotReleased("refused", "not_terminal", f"The step has not ended: finish it, repeat it, or abandon it. {NOTHING}")
-        return stop_proof(self.observe, self.gone, me, row.stopping) or self._setup_stopped(row.setup)
-
-    def _setup_stopped(self, setup: OwnedProcess | None) -> NotReleased | None:
-        """The latest setup run's unsettled command, by the entry's rule (`setup_seen`): gone with an empty group, or from
-        another boot, passes; alive refuses; unknown is unavailable. The release never stops it (the factory signals
-        nothing); the person waits, or stops the group once its members are shown to be the slot's setup."""
-        seen = "gone" if setup is None else self.setup_seen(setup)
-        if setup is None or seen == "gone":
-            return None
-        if seen == "unknown":
-            return NotReleased("unavailable", "setup_unknown", f"The slot's setup could not be observed. {NOTHING}")
-        alive = f"The slot's setup (process group {setup.pgid}, recorded this boot) still runs: wait, or see the guide. {NOTHING}"
-        return NotReleased("unsettled", "setup_running", alive)
+        return stop_proof(self.observe, self.gone, me, row.stopping) or setup_stopped(self.setup_seen, row.setup)
 
     def _pending(self, row: _Row, abandon: bool) -> ReleaseResult:
         """Released before: only what is pending is finished, with no Git and no lock. Abandoning a settled release flips
         it, then returns the claim; an `unclaiming` claim is retried."""
         claim = row.released or "kept"
         if abandon and claim == "kept" and row.successor:  # the claim is the later attempt's now (a next step holds it)
-            return NotReleased("refused", "changed", f"A later attempt of the task is current: release that one. {NOTHING}")
+            current = "A later attempt or a checks attempt of the task is current: release that one first."
+            return NotReleased("refused", "changed", f"{current} {NOTHING}")
         if abandon and claim == "kept":
             with self._writing() as con:
                 flipped = con.execute(FLIP, (row.key.attempt_id,)).rowcount
@@ -304,7 +343,7 @@ class SlotRelease:
     def _parked(self, row: _Row, path: Path, abandon: bool) -> Released | NotReleased:
         """Under the lock: the slot read and its park, then the transaction."""
         try:
-            slot = self._slot(row, path)
+            slot = park_slot(self.checkouts, self.slot_files, path, row.repo_id, row.slot_head, task_branch(row.task_id))
         except GitUnavailable as error:
             return NotReleased("unavailable", "git", f"Git could not read or park the slot ({type(error).__name__}): it may be half "
                                "checked out; inspect it, then rerun. Nothing was recorded.")
@@ -321,26 +360,6 @@ class SlotRelease:
         self.scratch(path)  # best effort: the next preparation empties it again before any agent
         return Released(row.slot, parked, True, "kept", abandon)
 
-    def _slot(self, row: _Row, path: Path) -> tuple[str, str | None] | NotReleased:
-        """The slot on its own hardened view, the pointer first (`redirected` makes no Git call): on exactly `task/<id>`
-        and clean it is parked at D (the branch keeps its tip); detached and clean it is left where it is (never prepared,
-        or parked by an earlier call that died before its transaction) when it is at D, else parked at D (a person moved
-        it while it was reserved). Returns where the slot is left and the park."""
-        state = observe_slot(self.checkouts, self.slot_files, str(path), row.repo_id)
-        if isinstance(state, str):
-            reason = "slot_redirected" if state == "redirected" else state
-            return NotReleased("refused" if state == "redirected" else "unavailable", reason, f"Inspect the slot. {NOTHING}")
-        if state.head is None:
-            return NotReleased("refused", "slot_unborn", f"The slot has no commit. {NOTHING}")
-        if state.dirty:
-            left = listing(self.checkouts(path, git_dir=state.gitdir), path)
-            return NotReleased("refused", "slot_dirty", "\n".join([*left, f"Remove the listed files. {NOTHING}"]))
-        if state.branch is None and state.head == row.slot_head:
-            return state.head, None
-        if state.branch not in (None, task_branch(row.task_id)):
-            return NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}")
-        return row.slot_head, str(self.checkouts(path, git_dir=state.gitdir).worktree(path).park(row.slot_head))
-
     def _record(self, row: _Row, head: str, abandon: bool) -> bool:
         """One write transaction, fenced on what the proof read: the release row in, the reservation out."""
         key = row.key
@@ -349,10 +368,7 @@ class SlotRelease:
                 return False
             values = (*astuple(key), head, self.clock(), "unclaiming" if abandon else "kept")
             con.execute(f"INSERT INTO slot_release ({RELEASE}) VALUES ({marks(RELEASE)})", values)
-            con.execute(
-                "DELETE FROM reservation WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",
-                (row.repo_id, row.slot, key.attempt_id, key.reservation_generation),
-            )
+            free(con, row.repo_id, row.slot, key.attempt_id, key.reservation_generation)
         return True
 
     def _unclaim(self, row: _Row) -> Literal["unclaimed", "not_held"] | NotReleased:

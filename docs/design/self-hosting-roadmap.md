@@ -45,9 +45,12 @@ section 2.9 and its decision 8.7 now run `setup` from the task branch.
 | Implement step and step chaining (S5) | design ([.16](tl-8bh9.4.3.1.16/plan.md)); S5a, S5b (implement kind, hand advance, factory.db v11), S5c (round advance) built, gated; live smoke not run | f5ee65990, 872e6d2c9, da4245d9c; S5c: .16 section 14 |
 | Test environment inside the agent sandbox (B2, [S5e](tl-8bh9.4.3.1.16.2/plan.md)) | S5e-0 pins, S5e-1 setup and S5e-2 access built, gated (Linux only); live smoke not run ([checklist and M1 runbook](tl-8bh9.4.3.1.16.2/live-smoke.md)) | 06b656747, bbbb0c775, 5cfcaa2fb; S5e-2: plan section 18 |
 | Repository profile reader (`.task-loop.json`, B3) | built, gated; `tl profile show` | 85c9e68fc, 2bb02d106 |
-| Checks step, review step, land (merge, close, sync) | not built; contracts agreed in candidate-checks and delivery-publication | none |
+| Checks step (B4, [tl-8bh9.14.6](tl-8bh9.14.6/plan.md)): factory.db v12, the block, the checks entry and release, admission and `tl step`, the round's routing | S6a-S6e built, gated; M2 live smoke not run ([M2 runbook](tl-8bh9.14.6/live-smoke.md)) | 3ce982650, 89a4a0608, f28337f41, a7dc16784, eba237919 (each with its review repairs) |
+| Land and close (B6, [tl-8bh9.14.8](tl-8bh9.14.8/plan.md)): factory.db v13, `tl step land TASK` (squash onto origin `main`, validated when its tree changed, pushed never forced, task closed locally), `Next: land`/`landed`, the abandon going candidate first | L0-L5 built, gated; M3 live smoke not run ([M3 runbook](tl-8bh9.14.8/live-smoke.md)); `origin` trusted as configured, no push-URL guard (owner decision 2026-11-12, plan section 29.3) | L0-L5 commits with their review repairs (plan sections 25-29) |
+| Review step | not built; contract agreed in candidate-checks | none |
 | Questions and holds; a failed result today leaves the task claimed with no signal | not built | none |
-| Install, pin, release; session resume; dashboard; keep-awake; account routing | not built | none |
+| Install, pin, release; session resume; dashboard; account routing | not built | none |
+| Keep-awake while rounds run (B11) | K1 built, gated; live smoke not run (M4 step 6) | tl-8bh9.14.9 section 27 |
 | Tracker entries for the roadmap (B14) | filed (D13): epic tl-8bh9.14 with 25 children (blocks B3 to B15 and audits; tl-8bh9.14.1 and .14.2 closed), S5 slices under tl-8bh9.4.3.1.16; stale-entry hygiene remains open (tl-8bh9.14.15) | none |
 
 Today a `tl step rounds` loop takes an `auto` task, plans it, verifies and publishes the plan, then advances it in a
@@ -57,6 +60,13 @@ profile's checks (S5e); the implement commit is verified and published on the sa
 every block of M1 is built (B14 filed, B3, B13 pinned `git_dir`, B2, S5a-c): **M1 is reached once the owner-run live smoke
 ([M1 end to end](tl-8bh9.4.3.1.16.2/live-smoke.md)) passes**. A result that is not `verified` ends as a failed `done`:
 the slot is released, the claim kept, and nothing tells the person.
+
+Since S6e the loop goes on: a done implement attempt advances (claimed work first) to the **check step**, which runs
+every check of the profile at X on the host in a free slot (reset to X, `setup` at X) and concludes `passed` only when
+every check `main` requires passed (`tl step show`: one `Check:` line per check, `Next: done`). A failed checks attempt
+is a visible failed `done` (`check report failed:<reason>` once in `rounds.log`, the claim kept, never re-run by a
+round; `tl step start` re-runs it). **M2 is reached once the owner-run [M2 live smoke](tl-8bh9.14.6/live-smoke.md)
+passes.**
 
 ## 2. "Self-hosting ready": observable checklist
 
@@ -204,7 +214,8 @@ credentials and push-barred. One `SANDBOX` value for every step; `StepKind` has 
 | Depends on | B1, B3; B2 for the same prepared environment |
 | Size | 3 slices: schema and result store; the check runner and step in `tl step` (show, list); the round phase |
 | Open decisions | O1 (not blocking), O2; where they run is decided (D10) |
-| Design / smoke | yes (own plan, tasks tl-8bh9.5, tl-8bh9.5.1, tl-8bh9.5.2) / yes |
+| Design / smoke | yes ([tl-8bh9.14.6](tl-8bh9.14.6/plan.md); earlier tasks tl-8bh9.5, tl-8bh9.5.1, tl-8bh9.5.2) / yes ([M2 runbook](tl-8bh9.14.6/live-smoke.md)) |
+| Built | S6a-S6e (5 slices, each reviewed): failure route as in O2's M2 reading (a failed `done`, claim kept, no hold); holds are B7 |
 
 ### B5. Review step
 
@@ -216,6 +227,7 @@ reading every diff. Depends on B4. Size about 2 slices. Design: yes (later). Not
 
 | | |
 |---|---|
+| As built | L0-L5 of [tl-8bh9.14.8](tl-8bh9.14.8/plan.md) (sections 25-29): squash in Git objects, no slot unless S's tree differs from X's or the required names changed; non-forced push from the person's checkout with no lease (the read right before it and Git's fast-forward rule); close as `taskloop`, never synced (O3, O4 decided there). M3 is reached once the [M3 live smoke](tl-8bh9.14.8/live-smoke.md) passes, owner- or authorized-agent-run. |
 | What | `tl step land TASK` (proposed name), person-run at first: requires checks passed on X; in a slot, squash X onto the current origin target; if the target moved, the new candidate runs the checks again (B4); conditional non-force push to origin `main` naming the expected old tip; then `bd close` with the land commit; records each action so a rerun does only what is missing (delivery-publication, D9). |
 | Glossary | land = accepted integration, confirmed task completion and any required task sync; merge and push are its actions, not steps. Publishing `task/<id>` does not land. |
 | Repository rule | CLAUDE.md: the main checkout is the person's; local Git permission does not authorize remote publication or merge. The factory never writes the main checkout; the person pulls. A factory push to origin `main` needs the owner's explicit permission (O3). Task sync (`bd dolt push`) is a remote operation (O4). |
@@ -237,11 +249,16 @@ reading every diff. Depends on B4. Size about 2 slices. Design: yes (later). Not
 | Size | 2 slices (hold operation and words; the round applies it) |
 | Open decisions | O5 |
 | Design / smoke | short plan / yes |
+| Built | H1-H3 of [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) (each reviewed): schema v14 and the hold record, the hold operation and its words, the round applying it; the M4 smoke waits for B11 and B13 |
 
 ### B11. Keep-awake
 
 Lifetime-scoped while `tl step rounds` runs (accepted, .4.6): macOS `caffeinate -i -w <pid>`, Linux `systemd-inhibit`,
 through the shelf process API. Needed for M4 on a laptop. 1 slice, no design, small smoke.
+
+| | |
+|---|---|
+| Built | K1 of [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) (section 27): `keep_awake.py`, spawned before the rounds' SIGINT handler with the shelf's hold replayed first, stopped with `stop_tree` on every way out; best effort (`rounds keep_awake unavailable:<why>`). Gated; not observed on macOS, ineffective on a Linux host whose logind refuses the inhibitor (seen on OrbStack); M4 not reached (smoke step 6) |
 
 ### B8. Install, pin, release
 
@@ -280,7 +297,7 @@ One Codex login (`auth.json`) and one model pair (.15 Q4). A usage-limit failure
 | Check environment shaping (credential strip, scratch HOME) | .13 audit | Decided (D10): the agent's scrubbed environment and push bar, no scratch HOME. |
 | Review verdict rewriting, stray-file quarantine | .13 audit | Not carried; review is B5, strays are repeats. |
 | `tl step verify` does not check the claim | .9 known gap | Unchanged until a case appears. |
-| Branch rule D for a later step (`branch_diverged`) | .15 section 5 | Adopt all slots at one base; revisit if S5's smoke hits it. |
+| Branch rule D for a later step (`branch_diverged`) | .15 section 5 | Adopt all slots from `main`'s history. Since .15 section 17 a new task branch starts at the local `main`'s tip (it must contain the slot's D), so slots no longer need moving and the rule holds for every later `main`. |
 | Claim lease between steps (`bd reclaim`) | .15, .16 section 7 | Hold via B7 on `claim_lost`. |
 | `rounds_lock.holder`, entry.log `publish=` word, three "outcome" comments | .14, glossary | Small cleanup tasks, good first self-hosted tasks. |
 
@@ -297,9 +314,9 @@ S5a ─────────┼─> B3 profile ─> B13 pinned git_dir ─> R
 | Milestone | Blocks | The owner can | Still by hand |
 |---|---|---|---|
 | **M1 semi-assisted** | B14, S5 (a-c), B3, B13 pinned `git_dir`, B2 | Label an own task `auto`, run `tl step rounds` from a runner worktree, get plan and implementation (with new tests the agent ran) on `task/<id>` | Run `just check`/`just test` on `task/<id>`; read the diff; squash-merge, push, `bd close`; spot failed tasks in `tl step list` and abandon them; stop rounds before any factory upgrade |
-| **M2 checks in the factory** | B4 | See per-check passed/failed on X in `tl step show` | Read the diff; land and close; handle failures |
-| **M3 land and close** | B6 | Run `tl step land TASK` after reading diff and checks: squash on origin `main`, task closed | Decide each land; tracker sync if O4 says so; failures |
-| **M4 unattended loop** | B7, B11, B13 Git read timeout | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
+| **M2 checks in the factory** | B4 (built S6a-S6e; reached once the [M2 live smoke](tl-8bh9.14.6/live-smoke.md) passes) | See per-check passed/failed on X in `tl step show`; rounds run the checks after implement | Read the diff; land and close; handle failures (re-run with `tl step start`, or abandon) |
+| **M3 land and close** | B6 (built L0-L5; reached once the [M3 live smoke](tl-8bh9.14.8/live-smoke.md) passes) | Run `tl step land TASK` after reading diff and checks: squash on origin `main`, task closed | Decide each land; tracker sync if O4 says so; failures |
+| **M4 unattended loop** | B7 (built H1-H3), B11 (built K1), B13 Git read timeout; not reached until the M4 live smoke passes | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
 | **M5 daily self-hosting** | B8, B10 (then the dashboard) | Run a pinned version; land factory changes and adopt them by changing the pin and restarting; see time since last command | Land decisions; pin changes; anything deferred (section 6) |
 
 ## 5. The simplest path to the first self-implemented task
