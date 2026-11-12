@@ -19,7 +19,6 @@ const STATE = {
   succeeded: { emoji: "✅", cls: "text-slate-700 bg-slate-100 dark:text-slate-300 dark:bg-slate-800" },
   failed: { emoji: "❌", cls: "text-rose-800 bg-rose-50 dark:text-rose-300 dark:bg-rose-400/10" },
 };
-const OUTCOME = { running: "▶️", restarted: "↩️", held: "⛔", landed: "✅" };
 
 const tasks = new Map(); // id -> board card
 const cards = new Map(); // id -> element
@@ -28,7 +27,7 @@ const cells = new Map(); // "lane|column" -> element
 let slotNames = [];
 let lanes = false;
 let source = null;
-let open = null; // {id, detail, planStart, step, n}
+let open = null; // {id, detail, step, n}: the open task and its selected attempt
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -51,7 +50,20 @@ function fmtDur(ms) {
 }
 const since = (iso) => fmtDur(Date.now() - Date.parse(iso));
 const ago = (iso) => `${since(iso)} ago`;
+// Quiet time of running work: nothing shown under 2 minutes, then amber, then red from 15 minutes. Display only.
+const QUIET_AFTER_S = 120;
+const QUIET_LONG_S = 900;
+function tickQuiet(node) {
+  const s = (Date.now() - Date.parse(node.dataset.quiet)) / 1000;
+  const level = s >= QUIET_LONG_S ? "long" : s >= QUIET_AFTER_S ? "slow" : "";
+  node.hidden = !level;
+  node.textContent = `💤 quiet ${fmtDur(s * 1000)}`;
+  node.className = `${node.closest("article") ? "mt-2 block w-fit" : ""} rounded px-1.5 text-xs font-medium ${level === "long" ? "bg-rose-100 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300" : "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300"}`;
+  const card = node.closest("article");
+  if (card) card.dataset.quietLevel = level;
+}
 const tick = (node) => {
+  if (node.dataset.quiet) return tickQuiet(node);
   node.textContent = `${node.dataset.prefix || ""}${since(node.dataset.since)}${node.dataset.suffix || ""}`;
 };
 
@@ -104,13 +116,18 @@ function fillCard(node, t) {
     node.append(el("p", "mt-2 rounded-md bg-rose-50 px-2 py-1 text-xs leading-snug text-rose-800 dark:bg-rose-400/10 dark:text-rose-300", `⛔ ${t.hold_cause}`));
   }
   const foot = el("div", "mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400");
-  const time = el("span", "tabular-nums");
+  const time = el("span", "whitespace-nowrap tabular-nums");
   time.dataset.since = t.step_started_at;
   time.dataset.prefix = t.column === "landed" ? "✅ " : "⏱ ";
   time.dataset.suffix = t.column === "landed" ? " ago" : "";
   foot.append(time);
   if (t.slot && !lanes) foot.append(el("span", "ml-auto whitespace-nowrap rounded bg-slate-100 px-1.5 font-mono dark:bg-slate-700", `🧩 ${t.slot}`));
   node.append(foot);
+  if (STEPS.some((s) => s.id === t.column)) {
+    const quiet = quietSpan(t.last_activity_at);
+    node.append(quiet);
+    tick(quiet);
+  }
   tick(time);
 }
 
@@ -125,7 +142,7 @@ function renderBoard(first = rects()) {
         .forEach((t, i) => {
           let node = cards.get(t.id);
           if (!node) {
-            node = el("article", "relative cursor-pointer rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm transition-colors hover:border-indigo-300 dark:border-slate-700/70 dark:bg-slate-800 dark:hover:border-indigo-400/60");
+            node = el("article", "relative cursor-pointer rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm transition-colors hover:border-indigo-300 data-[quiet-level=slow]:border-amber-400 data-[quiet-level=long]:border-rose-400 dark:border-slate-700/70 dark:bg-slate-800 dark:hover:border-indigo-400/60");
             node.addEventListener("click", () => openDrawer(t.id));
             cards.set(t.id, node);
           }
@@ -166,24 +183,20 @@ function setLanes(on) {
 
 // ---------- drawer ----------
 
-const stagesOf = (detail, step) => detail.plan_starts.flatMap((c) => c.stages).filter((s) => s.step === step);
-const planStartOf = () => open.detail.plan_starts[open.planStart];
-const attemptOf = () => planStartOf().stages.find((s) => s.step === open.step)?.attempts.find((a) => a.n === open.n);
+const attemptOf = () => open.detail.attempts.find((a) => a.step === open.step && a.n === open.n);
 
-// Select a planStart, then a step (default: the planStart's last) and an attempt (default: that step's last).
-function select(planStart, step, n) {
-  open.planStart = planStart;
-  const stages = open.detail.plan_starts[planStart].stages;
-  const stage = stages.find((s) => s.step === step) || stages.at(-1);
-  open.step = stage?.step;
-  open.n = n ?? stage?.attempts.at(-1).n;
+// Select an attempt: the given one, else the last of the step, else the last of the task.
+function select(step, n) {
+  const list = open.detail.attempts;
+  const a = n != null ? list.find((x) => x.step === step && x.n === n) : list.findLast((x) => !step || x.step === step) ?? list.at(-1);
+  open.step = a?.step;
+  open.n = a?.n;
   renderDrawer();
 }
 
 async function openDrawer(id) {
-  const detail = await source.detail(id);
-  open = { id, detail };
-  select(Math.max(detail.plan_starts.length - 1, 0));
+  open = { id, detail: await source.detail(id) };
+  select();
   $("drawer").classList.remove("translate-x-full");
   $("backdrop").classList.remove("pointer-events-none", "opacity-0");
 }
@@ -194,8 +207,6 @@ function closeDrawer() {
   $("backdrop").classList.add("pointer-events-none", "opacity-0");
 }
 
-const pill = (text, cls = "") => el("span", `rounded-full bg-slate-100 px-2.5 py-1 text-xs dark:bg-slate-800 ${cls}`, text);
-
 function renderDrawer() {
   if (!open) return;
   const { detail } = open;
@@ -205,86 +216,78 @@ function renderDrawer() {
   const drawer = $("drawer");
   drawer.replaceChildren();
 
-  const head = el("div", "flex items-start gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800");
+  const head = el("div", "flex items-start gap-3 px-6 pt-5");
   const title = el("div", "min-w-0 flex-1");
-  title.append(el("p", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), el("h2", "mt-0.5 text-lg font-semibold leading-snug", t.title));
-  const chips = el("div", "mt-2 flex flex-wrap gap-2");
-  chips.append(pill(`${col.emoji} ${col.label}`, "font-medium"));
-  if (t.slot) chips.append(pill(`🧩 slot ${t.slot}`, "font-mono"));
-  chips.append(pill(f.priority), pill(f.branch ?? "no task branch", "font-mono"), pill(`created ${ago(f.created_at)}`));
-  title.append(chips);
+  const meta = [`${col.emoji} ${col.label}`, t.slot && `🧩 slot ${t.slot}`, f.priority, f.branch ?? "no task branch", `created ${ago(f.created_at)}`].filter(Boolean);
+  title.append(
+    el("p", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id),
+    el("h2", "mt-0.5 text-xl font-semibold leading-snug", t.title),
+    el("p", "mt-1.5 text-xs text-slate-500 dark:text-slate-400", meta.join("  ·  ")),
+  );
   const close = el("button", "rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800", "✕");
   close.type = "button";
   close.title = "Close (Esc)";
   close.addEventListener("click", closeDrawer);
   head.append(title, close);
-  drawer.append(head);
-  if (t.hold_cause) drawer.append(el("p", "mx-5 mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-400/10 dark:text-rose-300", `⛔ ${t.hold_cause}`));
-  drawer.append(el("p", "line-clamp-2 px-5 pt-3 text-sm text-slate-600 dark:text-slate-300", f.description));
-  if (!detail.plan_starts.length) {
-    drawer.append(el("p", "p-5 text-sm text-slate-500", "Not started: no attempt yet."));
+  drawer.append(head, el("p", "line-clamp-2 px-6 pt-3 text-sm text-slate-600 dark:text-slate-300", f.description));
+  if (t.hold_cause) drawer.append(el("p", "mx-6 mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-400/10 dark:text-rose-300", `⛔ ${t.hold_cause}`));
+  if (!detail.attempts.length) {
+    drawer.append(el("p", "px-6 pt-5 text-sm text-slate-500", "Not started: no attempt yet."));
     return;
   }
-  drawer.append(planStartTabs(), strip(), attemptPanel());
+  drawer.append(trail(t), attemptPanel());
   const tail = $("tail");
   if (tail) tail.scrollTop = tail.scrollHeight;
 }
 
-function planStartTabs() {
-  const bar = el("div", "mt-4 flex gap-1 border-b border-slate-200 px-5 dark:border-slate-800");
-  for (const c of open.detail.plan_starts) {
-    const active = c.n - 1 === open.planStart;
-    const tab = el("button", `-mb-px rounded-t-lg border border-b-0 px-3 py-1.5 text-sm ${active ? "border-slate-200 bg-white font-medium dark:border-slate-700 dark:bg-slate-900" : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"}`, `${OUTCOME[c.outcome]} From plan ${c.n}`);
-    tab.type = "button";
-    tab.addEventListener("click", () => select(c.n - 1));
-    bar.append(tab);
+const JUMP = {
+  repeat: { text: "↻ repeat", cls: "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300" },
+  restart_at_plan: { text: "↩ back to plan", cls: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-400/15 dark:text-fuchsia-300" },
+};
+
+// Every attempt in the order it happened; a label between two nodes names a jump (repeat, back to plan) and the
+// dashed nodes at the end are the steps still to come.
+function trail(t) {
+  const list = open.detail.attempts;
+  const row = el("div", "flex flex-wrap items-center gap-x-1.5 gap-y-2 px-6 pt-5");
+  const link = (a) => {
+    const jump = a?.after && JUMP[a.after];
+    const node = jump ? el("span", `rounded-full px-2 py-0.5 text-xs font-medium ${jump.cls}`, jump.text) : el("span", "text-slate-400", "→");
+    if (jump) node.title = a.reason ?? "";
+    return node;
+  };
+  list.forEach((a, i) => {
+    if (i) row.append(link(a));
+    const step = STEPS.find((s) => s.id === a.step);
+    const on = open.step === a.step && open.n === a.n;
+    const tone = a.state === "failed" ? "border-rose-300 dark:border-rose-400/50" : a.state === "running" ? "border-emerald-400 dark:border-emerald-400/60" : "border-slate-200 dark:border-slate-700";
+    const node = el("button", `rounded-lg border px-2.5 py-1.5 text-left text-xs ${tone} ${on ? "ring-2 ring-indigo-400" : "hover:border-indigo-300 dark:hover:border-indigo-400/60"} ${a.state === "running" ? "bg-emerald-50/60 dark:bg-emerald-400/10" : "bg-white dark:bg-slate-800"}`);
+    node.type = "button";
+    node.title = a.summary;
+    const dur = a.ended_at ? fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at)) : since(a.started_at);
+    node.append(el("span", "block text-sm font-medium", `${step.emoji} ${step.label}`), el("span", "text-slate-500 dark:text-slate-400", `#${a.n} ${STATE[a.state].emoji} ${dur}`));
+    node.addEventListener("click", () => select(a.step, a.n));
+    row.append(node);
+  });
+  const last = list.at(-1);
+  if (STEPS.some((s) => s.id === t.column) && last.state !== "failed") {
+    for (const step of STEPS.slice(STEPS.findIndex((s) => s.id === last.step) + 1)) {
+      row.append(el("span", "text-slate-300 dark:text-slate-600", "→"), el("span", "rounded-lg border border-dashed border-slate-300 px-2.5 py-1.5 text-sm text-slate-400 dark:border-slate-700 dark:text-slate-600", `${step.emoji} ${step.label}`));
+    }
   }
-  const c = planStartOf();
-  if (c.reason) bar.append(el("span", "ml-auto self-center truncate pb-1 text-xs text-fuchsia-700 dark:text-fuchsia-300", `↩️ restarted at plan: ${c.reason}`));
-  return bar;
+  return row;
 }
 
-function strip() {
-  const row = el("div", "flex items-start gap-1 px-5 py-4");
-  STEPS.forEach((step, i) => {
-    const stage = planStartOf().stages.find((s) => s.step === step.id);
-    const last = stage?.attempts.at(-1);
-    const selected = open.step === step.id;
-    const box = el("div", "flex min-w-0 flex-1 flex-col gap-1.5");
-    const chip = el("button", `rounded-lg border px-3 py-2 text-left text-sm ${!stage ? "cursor-default border-dashed border-slate-300 text-slate-400 dark:border-slate-700 dark:text-slate-600" : selected ? "border-indigo-400 bg-indigo-50 dark:border-indigo-400/70 dark:bg-indigo-400/10" : "border-slate-200 hover:border-indigo-300 dark:border-slate-700 dark:hover:border-indigo-400/50"}`);
-    chip.type = "button";
-    chip.append(el("span", "font-medium", `${step.emoji} ${step.label}`));
-    if (stage) {
-      const dur = last.ended_at ? fmtDur(Date.parse(last.ended_at) - Date.parse(last.started_at)) : since(last.started_at);
-      chip.append(el("span", "mt-0.5 block text-xs text-slate-500 dark:text-slate-400", `${STATE[last.state].emoji} ${dur}`));
-      chip.addEventListener("click", () => select(open.planStart, step.id));
-    }
-    box.append(chip);
-    if (stage) {
-      const atts = el("div", "flex flex-wrap gap-1");
-      for (const a of stage.attempts) {
-        const on = selected && open.n === a.n;
-        const p = el("button", `rounded px-1.5 py-0.5 text-xs ${on ? "ring-2 ring-indigo-400" : "hover:ring-1 hover:ring-slate-300 dark:hover:ring-slate-600"} ${STATE[a.state].cls}`, `#${a.n} ${STATE[a.state].emoji}`);
-        p.type = "button";
-        p.title = a.summary;
-        p.addEventListener("click", () => select(open.planStart, step.id, a.n));
-        atts.append(p);
-      }
-      box.append(atts);
-    }
-    row.append(box);
-    if (i < STEPS.length - 1) row.append(el("span", "pt-2 text-slate-400", "→"));
-  });
-  return row;
+function quietSpan(since) {
+  const node = el("span", "rounded px-1.5 text-xs font-medium");
+  node.dataset.quiet = since;
+  tick(node);
+  return node;
 }
 
 function attemptPanel() {
   const a = attemptOf();
-  const panel = el("div", "flex min-h-0 flex-1 flex-col gap-3 px-5 pb-5");
-  if (!a) {
-    panel.append(el("p", "text-sm text-slate-500", "Nothing ran yet."));
-    return panel;
-  }
+  const panel = el("div", "flex min-h-0 flex-1 flex-col gap-3 px-6 pb-6 pt-5");
   const step = STEPS.find((s) => s.id === open.step);
   const live = a.state === "running";
   const bar = el("div", `flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-sm ${STATE[a.state].cls}`);
@@ -292,7 +295,9 @@ function attemptPanel() {
     el("span", "font-medium", `${step.emoji} ${step.label} · attempt ${a.n} · ${STATE[a.state].emoji} ${a.state}`),
     el("span", "text-xs opacity-80", `started ${ago(a.started_at)} · ${a.ended_at ? `ran ${fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at))}` : "still running"}`),
   );
-  if (!live) bar.append(el("span", "w-full", a.summary));
+  if (live) bar.append(quietSpan(a.feed.at(-1)?.at ?? a.started_at));
+  else bar.append(el("span", "w-full", a.summary));
+  if (a.after) bar.append(el("span", "w-full text-xs opacity-80", `${JUMP[a.after].text}${a.reason ? `: ${a.reason}` : ""}`));
   const head = el("h3", "flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500");
   head.append(live ? "Live tail" : "Last lines");
   if (live) head.append(el("span", "h-2 w-2 animate-pulse-dot rounded-full bg-emerald-500"));
@@ -345,11 +350,21 @@ function feedLine(e) {
   return row;
 }
 
+// Any agent line is activity: it resets the quiet time on the card and in the open drawer.
 function onFeed(msg) {
-  if (!open || open.id !== msg.task_id) return;
-  const attempt = stagesOf(open.detail, msg.step).flatMap((s) => s.attempts).find((a) => a.n === msg.attempt);
-  if (!attempt) return;
   const e = msg.event;
+  const task = tasks.get(msg.task_id);
+  if (task) task.last_activity_at = e.at;
+  for (const q of [cards.get(msg.task_id), $("drawer")]) {
+    const span = q?.querySelector("[data-quiet]");
+    if (span && (q !== $("drawer") || open?.id === msg.task_id)) {
+      span.dataset.quiet = e.at;
+      tick(span);
+    }
+  }
+  if (!open || open.id !== msg.task_id) return;
+  const attempt = open.detail.attempts.find((a) => a.step === msg.step && a.n === msg.attempt);
+  if (!attempt) return;
   const at = e.id ? attempt.feed.findIndex((x) => x.id === e.id) : -1;
   if (at >= 0) attempt.feed[at] = e;
   else attempt.feed.push(e);
@@ -365,14 +380,14 @@ function onFeed(msg) {
   tail.scrollTo({ top: tail.scrollHeight, behavior: "smooth" });
 }
 
-// A card moved: the open task's structure changed (a new stage or attempt), so reload its detail.
+// A card moved: the open task's attempts changed (one ended, one began), so reload its detail.
 async function onTask(task) {
   tasks.set(task.id, task);
   renderBoard();
   if (open?.id !== task.id) return;
-  const follow = open.planStart === open.detail.plan_starts.length - 1 && attemptOf()?.state === "running";
+  const follow = attemptOf()?.state === "running" && attemptOf() === open.detail.attempts.at(-1);
   open.detail = await source.detail(open.id);
-  if (follow || !attemptOf()) select(open.detail.plan_starts.length - 1);
+  if (follow || !attemptOf()) select();
   else renderDrawer();
 }
 
@@ -403,7 +418,7 @@ async function start() {
   for (const t of snap.tasks) tasks.set(t.id, t);
   setLanes(false);
   source.subscribe((msg) => (msg.kind === "feed" ? onFeed(msg) : onTask(msg.task)));
-  setInterval(() => document.querySelectorAll("[data-since]").forEach(tick), 1000);
+  setInterval(() => document.querySelectorAll("[data-since],[data-quiet]").forEach(tick), 1000);
 }
 
 start();

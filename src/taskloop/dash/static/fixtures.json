@@ -49,10 +49,10 @@
    "column": "plan",
    "attempt": 1,
    "repeat": null,
-   "step_started_ago_s": 95,
+   "step_started_ago_s": 1500,
    "slot": "s3",
    "hold_cause": null,
-   "last_activity_ago_s": 95,
+   "last_activity_ago_s": 1320,
    "fields": {
     "priority": "P2",
     "labels": [
@@ -141,10 +141,10 @@
    "column": "land",
    "attempt": 1,
    "repeat": null,
-   "step_started_ago_s": 52,
+   "step_started_ago_s": 400,
    "slot": "s5",
    "hold_cause": null,
-   "last_activity_ago_s": 52,
+   "last_activity_ago_s": 340,
    "fields": {
     "priority": "P3",
     "labels": [
@@ -377,7 +377,7 @@
    }
   }
  ],
- "plan_starts": {
+ "history": {
   "tl-7d5": [
    {
     "outcome": "restarted",
