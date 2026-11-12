@@ -12,8 +12,9 @@ close; `check_result.attempt_id` names a checks attempt or a land candidate, so 
 No migration: an older factory.db is refused (`schema`)."""
 
 import sqlite3
+from pathlib import Path
 
-from sqlite_store import Schema
+from sqlite_store import Schema, SchemaError
 
 SCHEMA = Schema(
     version=14,
@@ -265,3 +266,30 @@ def prefixed(alias: str, columns: str) -> str:
 def current(con: sqlite3.Connection) -> bool:
     """The connection's database is exactly this code's schema version."""
     return con.execute("PRAGMA user_version").fetchone() == (SCHEMA.version,)
+
+
+def refusal(error: SchemaError, path: Path) -> str:
+    """The words of `refused schema`: the store's for a newer file (this code must be updated); for an older one, which
+    nothing upgrades (`SCHEMA.steps` is empty), the truth that an older version wrote it and that the owner discards it."""
+    found = _recorded(path)
+    if found is None or found >= SCHEMA.version:
+        return str(error)
+    if found == 0:
+        return (f"factory.db records no schema version, this code knows v{SCHEMA.version}: it is not a factory.db; the "
+                "owner moves it aside, then tl slot adopt")
+    return (f"factory is schema v{found}, this code knows v{SCHEMA.version}: an older version wrote it and nothing upgrades "
+            "it; the owner discards factory.db (moves it aside), then tl slot adopt")
+
+
+def _recorded(path: Path) -> int | None:
+    """The schema version the file records, read-only (only to word a refusal); None when it cannot be read."""
+    try:
+        con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    except (sqlite3.Error, OSError, ValueError):
+        return None
+    try:
+        return int(con.execute("PRAGMA user_version").fetchone()[0])
+    except sqlite3.Error:
+        return None
+    finally:
+        con.close()

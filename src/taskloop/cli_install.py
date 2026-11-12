@@ -130,17 +130,19 @@ def run(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def drain(was: Was) -> str:
+def drain(was: Was, back: Pin | None) -> str:
     """The drain procedure (plan sections 7 and 10), with the way back to the earlier choice when rounds still run: the
-    new choice already applies to every new start, so the old version's commands need it back first."""
-    match was:
-        case Pin(commit=commit, tag=tag):
-            back = f"tl pin {tag or commit}"
-        case None:
-            back = "tl pin --clear"
-        case PinInvalid():
-            return f"{EFFECT} The earlier pin was invalid: nothing to go back to."
-    return f"{EFFECT} If rounds or attempts still run: {back} back, drain, then make this change again."
+    new choice already applies to every new start, so the old version's commands need it back first. The way back is
+    the earlier pin only while it names a complete install (`back`), `tl pin --clear` when there was no pin."""
+    if back is not None:
+        again = f"tl pin {back.commit} back" + (f" ({back.tag})" if back.tag else "")
+    elif was is None:
+        again = "tl pin --clear"
+    elif isinstance(was, Pin):
+        return f"{EFFECT} The earlier pin {_named(was.commit, was.tag)} names no complete install: nothing to go back to."
+    else:
+        return f"{EFFECT} The earlier pin was invalid: nothing to go back to."
+    return f"{EFFECT} If rounds or attempts still run: {again}, drain, then make this change again."
 
 
 def _was(was: Was) -> str:
@@ -158,12 +160,12 @@ def pinned_lines(result: Pinned | Cleared) -> list[str]:
     match result:
         case Pinned(pin=pin, path=path, already=True):
             return [f"Pinned: already {_named(pin.commit, pin.tag)}, in {path}"]
-        case Pinned(pin=pin, path=path, was=was):
-            return [f"Pinned: {_named(pin.commit, pin.tag)}, in {path}", f"Was: {_was(was)}", drain(was)]
+        case Pinned(pin=pin, path=path, was=was, back=back):
+            return [f"Pinned: {_named(pin.commit, pin.tag)}, in {path}", f"Was: {_was(was)}", drain(was, back)]
         case Cleared(was=None):
             return ["Pin cleared: already"]
-        case Cleared(was=was):
-            return [f"Pin cleared (was {_was(was)}); tl runs the install it is started from", drain(was)]
+        case Cleared(was=was, back=back):
+            return [f"Pin cleared (was {_was(was)}); tl runs the install it is started from", drain(was, back)]
 
 
 def run_pin(arguments: argparse.Namespace) -> int:

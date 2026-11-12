@@ -1,7 +1,7 @@
 """Rollback and upgrade across factory.db versions stay `refused schema` (tl-8bh9.8.3 section 8, Q13): a newer factory.db
-met by this code ("update it") and an older one are refused by every command that opens factory.db, before any tracker,
-Git or slot is touched, and nothing is written. No pin or install is involved: the older code's own refusal at its first
-command is the refusal of a rollback onto a newer database."""
+met by this code ("update it") and an older one (an older version wrote it; the owner discards it) are refused by every
+command that opens factory.db, before any tracker, Git or slot is touched, and nothing is written. No pin or install is
+involved: the older code's own refusal at its first command is the refusal of a rollback onto a newer database."""
 
 import hashlib
 import json
@@ -66,8 +66,8 @@ def test_another_schema_version_is_refused_schema_and_nothing_is_written(
     assert main([*COMMANDS[command], "--db", str(path), *artifacts, "--json"]) == 1
     error = json.loads(capsys.readouterr().err)["error"]
     assert (error["kind"], error["reason"]) == ("refused", "schema")
-    if direction == "newer":
-        assert "update it" in error["message"]
+    words = {"newer": "update it", "older": "an older version wrote it and nothing upgrades it; the owner discards factory.db"}
+    assert words[direction] in error["message"] and "not upgraded" not in error["message"]
     assert digest(path) == before and not (tmp_path / "art").exists()
 
 

@@ -78,7 +78,9 @@ without the answer; the first `factory-v*` release waits for it.
 - A newer or older factory.db is refused: `sqlite_store._validate_version` raises `SchemaError` ("this code knows vN:
   update it" for a newer file; "the writer has not upgraded it yet" read-only for an older one; `migrate.upgrade`
   "missing upgrade step" read-write, as `factory_schema.SCHEMA.steps` is empty), and `operations.require_database` maps
-  it to `Failed("refused", "schema", ...)`.
+  it to `Failed("refused", "schema", ...)`. The factory words an older file's refusal itself (`factory_schema.refusal`:
+  "an older version wrote it and nothing upgrades it; the owner discards factory.db (moves it aside), then tl slot
+  adopt"), since no upgrade will come.
 - On the owner's machine the **baseline** factory still lives in `~/.config/task-loop/` (its `factory.db`, `bin/`,
   `pinned.json`, `worktrees/`, ...), its launcher is `~/.local/bin/tl` (a shell script running the baseline's
   `tl.py`), and its release tags are `v0.23.*` in this repository. B8 collides with none of these (sections 4, 9).
@@ -336,8 +338,13 @@ file is written (section 4.4). `tl pin` never opens factory.db (Q13).
 ```
 Pinned: 3f2a9c4e1b07 (factory-v0.2.0), in /home/u/.config/task-loop/config.pin.toml
 Was: 9b1e07d2aa31 (factory-v0.1.0)
-Takes effect at the next start of tl; a running `tl step rounds` and its entries keep their version. Drain before pinning: stop the rounds, wait for or abandon running attempts. If rounds or attempts still run: tl pin factory-v0.1.0 back, drain, then make this change again.
+Takes effect at the next start of tl; a running `tl step rounds` and its entries keep their version. Drain before pinning: stop the rounds, wait for or abandon running attempts. If rounds or attempts still run: tl pin 9b1e07d2aa31... back (factory-v0.1.0), drain, then make this change again.
 ```
+
+The way back names the earlier pin by its full commit id (its tag only in parentheses: a tag may since name another
+install), and only while it names a complete install; over no pin it is `tl pin --clear`; an earlier pin that was
+invalid or names no complete install ends the line instead with `The earlier pin was invalid: nothing to go back to.`
+or `The earlier pin <commit> (<tag>) names no complete install: nothing to go back to.`
 
 Pinning the already-pinned commit prints `Pinned: already ...`, exit 0, file unchanged. `tl pin --clear`: `Pin cleared
 (was 3f2a9c4e1b07 (factory-v0.2.0)); tl runs the install it is started from`, or `Pin cleared: already` with no file.

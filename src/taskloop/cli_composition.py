@@ -16,7 +16,7 @@ from pathlib import Path
 
 import stream_proc
 from git_porcelain import GitUnavailable, NotARepo
-from sqlite_store import Store
+from sqlite_store import SchemaError, Store
 
 from taskloop.attempt_reads import SlotUse
 from taskloop.attempt_status import StatusPorts, current_view
@@ -39,7 +39,7 @@ from taskloop.composition import (
     real_slots,
 )
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.factory_schema import SCHEMA
+from taskloop.factory_schema import SCHEMA, refusal
 from taskloop.git_views import GitProfileFiles, checkouts, inspect_checkout, remotes
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
@@ -85,9 +85,16 @@ def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Pat
     return settings if isinstance(settings, ConfigRefused) else Loaded(path, text is not None, settings)
 
 
+def _open_ro(database: Path) -> sqlite3.Connection | None:
+    try:
+        return Store(SCHEMA).open_ro(database)
+    except SchemaError as error:
+        raise SchemaError(refusal(error, database)) from error
+
+
 @contextmanager
 def _read_only(database: Path) -> Generator[sqlite3.Connection | Failed]:
-    found = require_database(lambda: Store(SCHEMA).open_ro(database))
+    found = require_database(lambda: _open_ro(database))
     try:
         yield found
     finally:

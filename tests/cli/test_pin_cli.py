@@ -46,7 +46,7 @@ def test_pinning_a_commit_writes_the_pin_beside_the_default_config_and_prints_th
     path = default_pin(home)  # the config folder did not exist: it is made
     assert (code, err) == (0, "")
     assert out == [f"Pinned: 3f2a9c4e1b07 (factory-v0.2.0), in {path}", "Was: none",
-                   f"{EFFECT} If rounds or attempts still run: tl pin --clear back, drain, then make this change again."]
+                   f"{EFFECT} If rounds or attempts still run: tl pin --clear, drain, then make this change again."]
     found = read(FILES, path)
     assert isinstance(found, Pin) and (found.commit, found.tag) == (A, "factory-v0.2.0")
 
@@ -62,8 +62,8 @@ def test_pinning_a_tag_finds_its_install_among_the_manifests_and_names_the_pin_i
     code, out, _err = run(capsys, "pin", "factory-v0.2.0")
     assert code == 0 and out == [f"Pinned: 3f2a9c4e1b07 (factory-v0.2.0), in {default_pin(home)}",
                                   "Was: 9b1e07d2aa31 (factory-v0.1.0)",
-                                  f"{EFFECT} If rounds or attempts still run: tl pin factory-v0.1.0 back, drain, then make this "
-                                  "change again."]
+                                  f"{EFFECT} If rounds or attempts still run: tl pin {B} back (factory-v0.1.0), drain, then "
+                                  "make this change again."]
     assert start.resolve(["step", "list"], home, "/launcher/python", FILES) == start.Exec(
         str(python_of(installs_root(home) / A)), ("step", "list"))  # the next start runs it
 
@@ -157,11 +157,20 @@ def test_the_config_and_its_factory_db_are_never_opened(home: Path, capsys: pyte
 
 def test_clear_removes_the_pin_then_says_already(home: Path, capsys: pytest.CaptureFixture[str]) -> None:
     path = make_pin(home, A, "factory-v0.2.0")  # no install needed: the pin is removed, not checked
+    make_install(home, B, "factory-v0.2.0")  # the tag now names another install: never offered as the way back
     assert run(capsys, "pin", "--clear") == (0, ["Pin cleared (was 3f2a9c4e1b07 (factory-v0.2.0)); tl runs the install it is "
-                                                 "started from", f"{EFFECT} If rounds or attempts still run: tl pin factory-v0.2.0 "
-                                                 "back, drain, then make this change again."], "")
+                                                 "started from", f"{EFFECT} The earlier pin 3f2a9c4e1b07 (factory-v0.2.0) names "
+                                                 "no complete install: nothing to go back to."], "")
     assert not path.exists() and sorted(child.name for child in path.parent.iterdir()) == []
     assert run(capsys, "pin", "--clear") == (0, ["Pin cleared: already"], "")
+
+
+def test_clearing_a_pin_of_a_complete_install_names_its_commit_as_the_way_back(
+        home: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    make_install(home, A, "factory-v0.2.0")
+    make_pin(home, A, "factory-v0.2.0")
+    assert run(capsys, "pin", "--clear")[1][1] == (f"{EFFECT} If rounds or attempts still run: tl pin {A} back (factory-v0.2.0), "
+                                                   "drain, then make this change again.")
 
 
 def test_clear_removes_an_invalid_pin(home: Path, capsys: pytest.CaptureFixture[str]) -> None:

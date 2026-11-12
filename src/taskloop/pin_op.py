@@ -35,12 +35,14 @@ class Pinned:
     path: Path
     was: Was  # the pin before this call
     already: bool  # the pin already named this commit: the file is unchanged
+    back: Pin | None = None  # `was` when it still names a complete install: the way back to it
 
 
 @dataclass(frozen=True)
 class Cleared:
     path: Path
     was: Was  # None: there was no pin file
+    back: Pin | None = None  # `was` when it still names a complete install: the way back to it
 
 
 @dataclass(frozen=True)
@@ -140,7 +142,7 @@ def pin(files: Files, home: Path, config: str | None, rev: str, now: datetime) -
         written = pin_file.write(files, path, manifest.commit, manifest.tag, now)
     except OSError as error:
         return Unavailable("write", f"{path}: {error}; the pin is unchanged")
-    return Pinned(written, path, was, already=False)
+    return Pinned(written, path, was, already=False, back=_back(files, home, was))
 
 
 def clear(files: Files, home: Path, config: str | None) -> Cleared | Refused | Unavailable:
@@ -153,4 +155,11 @@ def clear(files: Files, home: Path, config: str | None) -> Cleared | Refused | U
         removed = pin_file.clear(files, path)
     except OSError as error:
         return Unavailable("write", f"{path}: {error}")
-    return Cleared(path, was if removed else None)
+    return Cleared(path, was if removed else None, _back(files, home, was) if removed else None)
+
+
+def _back(files: Files, home: Path, was: Was) -> Pin | None:
+    """The earlier pin when `tl pin` could choose it again: it was valid and names a complete install."""
+    if isinstance(was, Pin) and isinstance(_by_commit(files, installs_root(home), was.commit), Manifest):
+        return was
+    return None
