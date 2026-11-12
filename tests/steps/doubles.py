@@ -3,12 +3,13 @@
 import json
 import os
 import sqlite3
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from beads_client import Bead
+from beads_client import BdError, Bead
+from beads_client.testing import FakeTaskReadClient
 from git_porcelain import GitUnavailable, Recorded, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
@@ -459,3 +460,15 @@ class ChecksBench:
         if released:
             self.con.execute("UPDATE checks_attempt SET released_at=30,parked=?,abandoned=?", (self.done.d, int(abandoned)))
             self.con.execute("DELETE FROM reservation")
+
+
+class ReadyTracker(FakeTaskReadClient):
+    """The shelf fake plus the in-progress list (`find`) a round reads after the ready set."""
+
+    def __init__(self, records: Iterable[Bead] = (), *, faults: Mapping[str, BdError] | None = None, ready: Iterable[str] = (),
+                 ready_fault: BdError | None = None) -> None:
+        self.records = list(records)
+        super().__init__(self.records, faults=faults, ready=ready, ready_fault=ready_fault)
+
+    def find(self, status: str = "", label: str = "", *, include_closed: bool = False) -> list[Bead]:
+        return [each for each in self.records if each.status == status and (not label or label in each.labels)]

@@ -35,7 +35,7 @@ from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
 from taskloop.prepare import DIVERGED, MAIN, branch_refusal
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
-from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe
+from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
 from taskloop.steps import STEPS, kind
 from taskloop.task import TaskInspection, TaskInspectionError
 
@@ -266,7 +266,8 @@ def read_task(tasks: Tasks, task_id: str, backlog: str, tracker_root: str) -> Ta
     except TaskInspectionError as error:
         if error.kind == "tracker_unavailable":
             return AdmitUnavailable("tracker", detail=why(error))
-        return AdmitRefused("task", detail=f"{error.kind}: {why(error)}")
+        gone = f"gone from the tracker: `tl step release --abandon {task_id}` clears its attempt. " if error.kind == "not_found" else ""
+        return AdmitRefused("task", detail=f"{gone}{error.kind}: {why(error)}")
 
 
 def checkout_repo(checkouts: Checkouts, path: Path) -> tuple[Repo, RepoId] | AdmitRefused | AdmitUnavailable:
@@ -305,7 +306,7 @@ def free_slots(
     if any(view.reason == "store_unavailable" for view in views):
         return AdmitUnavailable("store", detail="Reservations unreadable")
     free = tuple(view for view in views if view.state == "free")
-    return free or AdmitRefused("no_free_slot", views)
+    return free or AdmitRefused("no_free_slot", views, detail=unusable_text(views))
 
 
 def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:

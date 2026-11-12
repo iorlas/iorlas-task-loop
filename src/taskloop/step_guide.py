@@ -61,8 +61,10 @@ GUIDE = {
     "attempted": "Open in the tracker while factory.db holds its attempt: the claim was returned or lapsed. `tl step show` it; "
     "rounds never take it again.",
     "abandoned_skip": "Abandoned here: rounds never re-admit it; `tl step start` admits a fresh attempt.",
-    "no_free_slot": "Every slot is held: `tl step rounds` fills it seconds after a slot frees; by hand, the next `tl step next` "
-    "after a step ends.",
+    "no_free_slot": "No slot is free: each one is reserved, or unusable (missing, dirty, on another branch: the detail and the round log's "
+    "`unusable` lines name it and why; fix it or `tl slot adopt`). `tl step rounds` fills a freed slot seconds after.",
+    "unusable": "A slot no attempt holds cannot be used (missing, dirty, redirected or on a branch: `unusable:<slot>:<why>`, the path "
+    "in the move's detail): put it right (`git worktree add --detach`, `git switch --detach`, a clean tree) or `tl slot adopt`.",
     "rounds_running": "Another `tl step rounds` runs for this backlog (the pid is its lock record's, informational): use its "
     "terminal, or stop it there with Ctrl-C first. `tl step next` runs beside it.",
     "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5; "

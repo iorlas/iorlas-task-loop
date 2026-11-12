@@ -68,8 +68,8 @@ from taskloop.slot_release import SlotRelease, release_word
 from taskloop.tracker_client import tracker_claims, tracker_located
 from taskloop.verifier import Verifier
 
-CAPTURE_RETRIES = 3
 RETRY_WAIT = 2.0
+RESUMES = 30  # re-runs of a captured but unfinished step (`Attempts.execute` resumes without the agent)
 
 
 @dataclass(frozen=True)
@@ -79,6 +79,7 @@ class _Registered:
     me: EntryIdentity
     tracker_root: str
     slot_path: str  # the slot, from its stored `slot` row: its custody lock is beside it
+    deadline: float
 
 
 @dataclass(frozen=True)
@@ -118,18 +119,17 @@ def database_exists(database: Path) -> bool:
 def _capture(
     app: Attempts, result: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]
 ) -> CaptureResult | None:
-    """Retry an unfinished capture only while it is unavailable: at most CAPTURE_RETRIES, never past the deadline."""
+    """Retry an unfinished capture while it is unavailable (a busy factory.db) until the attempt's deadline."""
     pending, captured = result.pending, None
     if pending is None or result.status != "unavailable":  # a conflict is never retried
         return None
-    for _ in range(CAPTURE_RETRIES):
+    while True:
         wait(RETRY_WAIT)
         if clock() >= pending.admission.deadline:
-            break
+            return captured
         captured = app.capture(pending)
         if captured.status != "unavailable":
-            break
-    return captured
+            return captured
 
 
 def shown(result: VerifyResult) -> str:
@@ -167,7 +167,7 @@ def _registered(
     if me is None or me != entry:
         return "refused identity"
     record = _record(app, key)
-    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path)
+    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path, record.admission.deadline)
 
 
 def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
@@ -204,11 +204,22 @@ def _step(
     verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
     # newly stored facts or a stored verdict: read the terminal result back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
+    if accepted:  # captured but not finished (the store was busy again): resume without the agent, not a hold
+        latest = _resumed(found, latest, clock, wait)
     line = f"{latest.status} {latest.reason}"
     if captured is not None:  # `publish=` is the log word of the capture retry's DB acceptance, not the branch push
         then = f" then={latest.status}:{latest.reason}" if accepted else ""
         line = f"{result.status} {result.reason} publish={captured.status}{then}"
     return f"{line} verify={shown(verified)}", succeeded(latest), latest.status == "collected"
+
+
+def _resumed(found: _Registered, latest: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]) -> AttemptResult:
+    for _ in range(RESUMES):
+        if latest.status not in ("pending", "unavailable") or clock() >= found.deadline:
+            break
+        wait(RETRY_WAIT)
+        latest = found.app.execute(found.key, found.me)
+    return latest
 
 
 def enter(

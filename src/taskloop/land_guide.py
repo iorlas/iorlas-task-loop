@@ -77,7 +77,7 @@ LAND_GUIDE: Final = {
     "minutes": "S needs validating (main moved or its required names changed): rerun with `--minutes N`, the validation's deadline.",
     "choices": "Fix the flags: `--minutes` from 1 to the maximum; `--summary`, `--withdraw` and `--no-change` exclude each other.",
     "slot_busy": "Another land or entry holds the candidate's slot: wait for it, then rerun.",
-    "no_free_slot": "Every slot is held and S must be validated in one: rerun once a slot is free, or stop `tl step rounds`.",
+    "no_free_slot": "No slot is free (reserved, or unusable: see the detail) and S needs one: rerun when one is, or stop `tl step rounds`.",
     "checks": "A check of an earlier land process still runs (`checks:running`, see `Land check:`), or the process table could "
     "not be read (`checks:unknown`): wait for it to end, then rerun; the block repeats whole.",
     "changed": f"The land candidate changed meanwhile (another land or release). {RERUN}",

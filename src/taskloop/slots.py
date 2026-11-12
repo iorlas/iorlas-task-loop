@@ -32,6 +32,16 @@ class SlotView:
     attempt_id: str | None = None
 
 
+def unusable(views: tuple[SlotView, ...]) -> tuple[SlotView, ...]:
+    """The slots no admission can use although no attempt holds them (`unknown`: missing, dirty, redirected, on a branch...)."""
+    return tuple(each for each in views if each.state == "unknown")
+
+
+def unusable_text(views: tuple[SlotView, ...]) -> str:
+    """`s4 not_listed (/path)`, one per unusable slot: the part of `no_free_slot` that is not about reservations."""
+    return "; ".join(f"{each.name} {each.reason} ({each.path})" for each in unusable(views))
+
+
 @dataclass(frozen=True)
 class SlotGit:
     """How a slot is read: Git views (`Checkouts`) and the slot file port its pointer check reads through."""

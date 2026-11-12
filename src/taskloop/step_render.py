@@ -145,6 +145,9 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
     return lines + ([f"Abandoned: `tl step start {task}` admits a fresh attempt"] if fresh else [])
 
 
+SLOT_COUNT_NOTE = "slot_count only adds slots (`tl slot adopt`); lowering it retires none: rounds use every slot adopted in factory.db."
+
+
 def _setup_lines(result: Adoption | Loaded) -> list[str]:
     if isinstance(result, Adoption):
         slots = result.slots
@@ -154,4 +157,5 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         hints = ["Make each not_listed slot with `git worktree add --detach <path>`, then adopt again."] if missing else []
         return lines + hints + (["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else [])
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
-    return lines + [f"{key} = {each.value} ({each.source})" for key, each in result.settings.pairs()]
+    lines += [f"{key} = {each.value} ({each.source})" for key, each in result.settings.pairs()]
+    return [*lines, SLOT_COUNT_NOTE]

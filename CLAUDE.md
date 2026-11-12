@@ -42,7 +42,7 @@ Retain caps: 400 source lines per file, 80 per function and 800 per test file. N
 - One owner per fact and one application operation shared by CLI, dashboard and agent consumers.
 - State/time/IO enter through narrow explicit ports. Use owning shelf Git/process/agent/lock APIs and semantic
   fakes. Factory source and tests have no subprocess imports/usage or direct spawn/signal/wait escape hatch. The only
-  signal use is `interrupts.py`'s SIGINT handler (sets a flag) and SIGTERM handler (the abrupt stop) while `tl step rounds` runs (signals no process), enforced
+  signal use is `interrupts.py`'s SIGINT handler (sets a flag) and SIGTERM and SIGHUP handlers (the abrupt stop) while `tl step rounds` runs (signals no process), enforced
   by the import-linter contract `one-signal-owner` and the policy AST test.
 - Prefer native Python even in libraries. A subprocess needs a concrete external-tool or lifecycle reason;
   moving a wrapper to shelf does not justify it. Retain safety behavior, not every existing mechanism.

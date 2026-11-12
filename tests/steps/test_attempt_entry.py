@@ -254,10 +254,11 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
     [
         (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
          "branch=published", 1, 2),
-        (9, 10, "unavailable evidence publish=unavailable verify=refused:not_captured claim=held", 3, 4),
+        (4, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
+         "branch=published", 4, 5),
         (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
     ],
-    ids=["second_try_captures", "three_retries_at_most", "never_past_the_deadline"],
+    ids=["second_try_captures", "retries_until_it_captures", "never_past_the_deadline"],
 )
 def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
     admitted: Path,
@@ -271,7 +272,7 @@ def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
     captures: int,
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), failures, wait_to, written=(slot, {P: "# Plan\n"}, [P]))
-    assert entry() == (0 if failures == 1 else 1)
+    assert entry() == (0 if failures < 9 and wait_to < 100 else 1)
     assert entry.lines == [line] and len(entry.waits) == waits and entry.files.captures == captures
     assert len(entry.run.calls) == 1
     assert all("credential" not in text and "SECRET" not in text for text in entry.lines)

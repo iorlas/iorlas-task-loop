@@ -48,7 +48,7 @@ def register(commands: Parsers) -> None:
     slot = _add(commands, "slot", "Managed slots (setup)").add_subparsers(dest="operation", required=True)
     adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo_id>/sN`; creates factory.db")
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
-    adopt.add_argument("--count", type=int, help="Slots s1..sN (overrides the machine config's slot_count)")
+    adopt.add_argument("--count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
     _common(adopt, "--root", "--db")
     step = _add(commands, "step", f"Step attempts ({STEP_ONLY})").add_subparsers(dest="operation", required=True)
     start = _add(step, "start", "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
