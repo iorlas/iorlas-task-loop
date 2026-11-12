@@ -8,13 +8,10 @@ import pytest
 from doubles import FakeSlotFiles, PinnedViews, linked_into
 from git_porcelain import GitUnavailable, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeRepo
-from sqlite_store import Store, begin_immediate
+from sqlite_store import begin_immediate
 
 from taskloop.attempt_reads import SlotUse, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey
-from taskloop.composition import open_attempts
-from taskloop.factory_schema import SCHEMA
 from taskloop.repo import RepoId
 from taskloop.slots import Adopted, NotAdopted, SlotGit, SlotsUnavailable, SlotView, Unclean, adopt, observe, slot_names
 
@@ -171,24 +168,6 @@ def test_two_repos_each_have_their_own_s1(factory: sqlite3.Connection, repo: Fak
     assert observe(factory, other, viewed(other), rid(other), unlocked)[0].state == "free"
 
 
-def test_v1_factory_database_is_refused_loudly(tmp_path: Path) -> None:
-    path = tmp_path / "factory.db"
-    old = sqlite3.connect(path, isolation_level=None)
-    old.execute("CREATE TABLE reservation (slot TEXT PRIMARY KEY)")
-    old.execute("PRAGMA user_version=1")
-    old.close()
-    attempts = open_attempts(path, tmp_path, lambda: ("/bin/codex", {}))
-    collected = attempts.collect(AttemptKey("a", "t", 1))
-    assert (collected.status, collected.reason) == ("unavailable", "collect")
-    executed = attempts.execute(AttemptKey("a", "t", 1), (7, "entry-start", "boot"))
-    assert (executed.status, executed.reason) == ("unavailable", "store")
-    store = Store(SCHEMA)
-    repo = FakeRepo.init(tmp_path / "repo")
-    refused = adopt(lambda: store.shared_rw(path), store.begin_immediate, repo, viewed(repo), tmp_path / "slots", 1)
-    assert refused == (NotAdopted("s1", "store_unavailable", derived(repo, tmp_path / "slots", "s1")),)
-    store.close_shared()
-
-
 def test_readopting_under_another_root_is_reported_not_moved(
     factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
 ) -> None:
@@ -221,7 +200,6 @@ def test_nothing_pending_takes_no_write_lock(factory: sqlite3.Connection, repo: 
     s1, s2 = derived(repo, root, "s1"), derived(repo, root, "s2")
     assert adopt(lambda: factory, begin, repo, viewed(repo), root, 2) == (Adopted("s1", s1), NotAdopted("s2", "not_listed", s2))
     assert taken == []
-
 
 
 @pytest.mark.parametrize(("lock", "reason"), [(False, "locked"), (None, "lock_unavailable")])

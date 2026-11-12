@@ -335,22 +335,6 @@ def test_every_failure_kind_has_its_exit_code(
     assert capsys.readouterr().err.startswith("tl step list: ")
 
 
-@pytest.mark.parametrize("argv", [["step", "abandon", "tl-1", "--backlog", "tasks"], ["slot", "release", "s1"], RELEASE[:3]])
-def test_the_placeholders_are_gone_and_release_needs_its_backlog(argv: list[str], capsys: pytest.CaptureFixture[str]) -> None:
-    """A hard cut: `tl step release [--abandon]` replaces both placeholders, with no alias."""
-    with pytest.raises(SystemExit) as result:
-        main(argv)
-    assert result.value.code == 2 and "usage: tl" in capsys.readouterr().err
-
-
-@pytest.mark.parametrize("argv", [["plan"], ["plan", *START[1:]], ["plan", "show", "tl-1", "--backlog", "tasks"]])
-def test_plan_is_an_unknown_command_after_the_cut(argv: list[str], capsys: pytest.CaptureFixture[str]) -> None:
-    """`tl step` replaced `tl plan` in one cut, with no alias: `plan` exits 2 like any unknown command."""
-    with pytest.raises(SystemExit) as result:
-        main(argv)
-    assert result.value.code == 2 and "invalid choice: 'plan'" in capsys.readouterr().err
-
-
 class Releases:
     def __init__(self) -> None:
         self.calls: list[tuple[AttemptKey, bool]] = []

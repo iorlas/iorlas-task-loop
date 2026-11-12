@@ -1,7 +1,6 @@
 """Rollback and upgrade across factory.db versions stay `refused schema` (tl-8bh9.8.3 section 8, Q13): a newer factory.db
 met by this code ("update it") and an older one (an older version wrote it; the owner discards it) are refused by every
-command that opens factory.db, before any tracker, Git or slot is touched, and nothing is written. No pin or install is
-involved: the older code's own refusal at its first command is the refusal of a rollback onto a newer database."""
+command that opens factory.db, before any tracker, Git or slot is touched, and nothing is written."""
 
 import hashlib
 import json

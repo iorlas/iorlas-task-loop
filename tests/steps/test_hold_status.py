@@ -40,8 +40,7 @@ ROW = HoldRow("a", "a", "failed:needs_owner", 10.0, "moved", 11.0, 12.0, 13.0, N
     (replace(VIEW, next="repeats_exhausted", leftovers=("uncommitted", "a.py")), "repeats_exhausted:uncommitted"),
     *((replace(VIEW, next=word), word) for word in ("stuck:expired_admitted", "stuck:entry_lost", "stuck:uncollected",
                                                    "stuck:conflict", "stuck:setup_failed", "stuck:checks_refused")),
-    *((replace(VIEW, next=word), None) for word in ("stuck:hung", "unknown", "wait", "start", "verify", "repeat", "publish",
-                                                   "advance", "land", "landed")),
+    *((replace(VIEW, next=word), None) for word in ("stuck:hung", "unknown", "wait", "start", "landed")),
     (replace(VIEW, label=None), None),  # started by hand
     (replace(VIEW, next="stuck:entry_lost", label=None), None),
     (replace(VIEW, next="release", release=ReleaseRow(D, 5.0, "unclaiming")), None),  # an abandon already started

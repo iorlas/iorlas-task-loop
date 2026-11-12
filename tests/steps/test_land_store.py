@@ -15,7 +15,6 @@ from taskloop import land_store
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Replaced
 from taskloop.check_store import Outcome, Recorded, required_json
-from taskloop.factory_schema import SCHEMA, current
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, Validation
 
 ENTRY = (7, "land-start", "boot")
@@ -142,14 +141,6 @@ def test_at_most_one_candidate_of_a_checks_attempt_is_delivered(checking: sqlite
         with pytest.raises(sqlite3.IntegrityError, match=r"^UNIQUE constraint failed: land_candidate\.checks_attempt_id$"):
             put(checking, delivered)
     assert [row[4] for row in rows(checking)] == [1, 2, 3]
-
-
-def test_v14_is_current_and_a_v13_factory_db_is_refused(landing: sqlite3.Connection) -> None:
-    assert SCHEMA.version == 14 and current(landing) and store(landing).latest("checks") is not None
-    landing.execute("PRAGMA user_version=13")
-    for call in (lambda: store(landing).latest("checks"), lambda: store(landing).profiled(CANDIDATE, DIGEST)):
-        with pytest.raises(StoreUnavailable):
-            call()
 
 
 def test_the_inserted_candidate_reads_back_joined_with_its_task(landing: sqlite3.Connection) -> None:

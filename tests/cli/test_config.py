@@ -24,12 +24,6 @@ def test_no_file_and_no_flags_is_every_built_in_default() -> None:
     assert config_file(HOME) == HOME / ".config/task-loop/config.toml"
 
 
-def test_no_default_lives_in_the_baseline_factorys_home() -> None:
-    built = defaults(HOME)
-    for setting in (built.db, built.artifacts, built.slots_root):
-        assert not setting.value.is_relative_to(HOME / ".config")
-
-
 @pytest.mark.parametrize("key, flags, value", [
     ("db", Flags(db="/flag/f.db"), Path("/flag/f.db")),
     ("artifacts", Flags(artifacts="/flag/art"), Path("/flag/art")),

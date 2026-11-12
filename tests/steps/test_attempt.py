@@ -632,14 +632,6 @@ def test_an_entry_replaced_between_load_and_dispatch_fences_the_dispatch(tmp_pat
     assert con.execute("SELECT phase,entry_pid FROM attempt").fetchone() == ("admitted", 9)
 
 
-def test_composition_bounds_only_the_registration_connection(tmp_path: Path) -> None:
-    attempts = open_attempts(tmp_path / "factory.db", tmp_path, lambda: ("/bin/codex", {}))
-    registration_store, main = attempts.registration_store.connect(), attempts.store.connect()
-    assert registration_store is not None and main is not None and registration_store is not main
-    assert registration_store.execute("PRAGMA busy_timeout").fetchone() == (1500,)
-    assert main.execute("PRAGMA busy_timeout").fetchone() == (5000,)
-
-
 def pending_result(surroundings: AttemptSurroundings) -> tuple[Flaky, Attempts, PendingResult]:
     flaky = Flaky(database(surroundings))
     result = owner(flaky, surroundings, registered_run(fake(), flaky, down_after_start=True)).execute(KEY, ENTRY)

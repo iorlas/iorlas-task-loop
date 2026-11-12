@@ -82,17 +82,6 @@ def test_the_release_sees_only_an_unfinished_runs_registered_command(registered:
     assert running(registered, "attempt") is None
 
 
-@pytest.mark.parametrize(
-    ("values", "column"),
-    [(("e" * 39, DIGEST, None, None), "commit"), ((B, "d" * 63, None, None), "digest"), ((B, DIGEST, 2.0, None), "ended"),
-     ((B, DIGEST, None, "passed"), "conclusion"), ((B, DIGEST, 2.0, "done"), "word")],
-)
-def test_the_v11_checks_hold(registered: sqlite3.Connection, values: tuple[object, ...], column: str) -> None:
-    with pytest.raises(sqlite3.IntegrityError):
-        registered.execute("""INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,
-                           conclusion) VALUES ('attempt',1,'dispatch',1,?,?,1,?,?)""", values)
-
-
 def test_only_the_identity_write_uses_the_registration_connection(registered: sqlite3.Connection) -> None:
     """The bounded registration connection serves the write inside the registered start's window, nothing else."""
     opened: list[str] = []

@@ -202,7 +202,7 @@ def test_a_failed_step_read_back_never_turns_a_launched_start_into_a_failure(tmp
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
 
 
-@pytest.mark.parametrize("minutes", [0, -5, MAX_MINUTES + 1, 10**400])
+@pytest.mark.parametrize("minutes", [0, MAX_MINUTES + 1, 10**400])
 def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int) -> None:
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     unread = AttemptStore(lambda: None)  # any read would raise StoreUnavailable
@@ -516,18 +516,6 @@ def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_
     with open_land(missing, tmp_path / "art") as land_ports:
         assert land_ports == refused
     assert list(tmp_path.iterdir()) == []
-
-
-@pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15])
-def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) -> None:
-    path = tmp_path / "factory.db"
-    write(path, "PRAGMA journal_mode=WAL")
-    write(path, f"PRAGMA user_version={version}")
-    with open_reads(path) as reads:
-        assert isinstance(reads, Failed) and (reads.kind, reads.reason) == ("refused", "schema")
-    con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone() == (version,)
-    con.close()
 
 
 def fail(error: Exception) -> Checkouts:

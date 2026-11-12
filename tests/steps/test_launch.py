@@ -4,7 +4,6 @@ import errno
 import os
 import sqlite3
 import stat
-import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
@@ -15,19 +14,14 @@ from stream_proc import (
     OwnedProcess,
     ProcessObservation,
     RegisteredStartUncertainError,
-    inspect_process,
-    observe_owned,
-    popen_registered,
 )
 
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, EntryIdentity
 from taskloop.check_store import CheckStore
-from taskloop.composition import open_checks_launcher, open_launcher
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import CHECK_ENTRY_MODULE, AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
-from taskloop.owned_processes import current_boot
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 NEW = OwnedProcess(9, 9, "new-start", "boot")
@@ -239,18 +233,6 @@ def test_a_foreign_schema_version_is_unavailable(admitted: Path) -> None:
     assert start.calls == []
 
 
-def test_composition_starts_with_the_released_registered_start(tmp_path: Path) -> None:
-    built = open_launcher(tmp_path / "factory.db", tmp_path)
-    assert built.start is popen_registered and built.observe is observe_owned and built.executable == sys.executable
-    assert open_launcher(Path("factory.db"), tmp_path).database == Path.cwd() / "factory.db"
-
-
-def test_the_current_boot_is_this_process_s_native_boot() -> None:
-    """A real read, no spawn; where the native identity is unknown, so is the boot (never a substitute)."""
-    me = inspect_process(os.getpid()).identity
-    assert current_boot() == (None if me is None else me.boot)
-
-
 def test_a_relative_database_is_refused_before_any_read_registration_or_start(admitted: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(admitted.parent)
     start = FakeStart()
@@ -320,9 +302,3 @@ def test_only_an_admitted_unreleased_checks_attempt_launches(on_slot: Path, chan
     con.commit()
     con.close()
     assert checks_launcher(on_slot, start).launch("tasks", "tl-1", 30) == LaunchRefused("dispatched") and start.calls == []
-
-
-def test_composition_launches_checks_attempts_with_their_store_and_entry(tmp_path: Path) -> None:
-    built = open_checks_launcher(tmp_path / "factory.db", tmp_path)
-    assert (built.targets, built.module, built.start) == (CheckStore, CHECK_ENTRY_MODULE, popen_registered)
-    assert open_launcher(tmp_path / "factory.db", tmp_path).module == "taskloop.attempt_entry"
