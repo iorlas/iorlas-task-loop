@@ -171,6 +171,7 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 | `--count N` | `config show`, `slot adopt` | Slot count s1..sN (config `slot_count`). |
 | `--every SECONDS` | `step rounds` | Seconds between rounds, at least 5 (config `round_seconds`). |
 | config `git_read_seconds` | commands that read the machine config | Seconds a Git read may take, 30 to 86400, default 600; a longer read is `unavailable:git`. An attempt's entry process does not read the config: the launcher passes the value in its argv. No flag. |
+| `TASKLOOP_ENV_PASS` | the factory process's own environment | Comma-separated variable names added to the allow-listed environment an agent and the checks get (PATH, HOME, USER, LOGNAME, SHELL, locale, TERM, TZ, TMPDIR, CODEX_HOME, proxy and CA names, `XDG_*_HOME`, `MISE_*`). Every other variable is dropped, e.g. `UV_INDEX_URL`, `DATABASE_URL`. |
 | `--label LABEL` | `step next`, `step rounds` | Required on `next` and `rounds` (approves a task); not on `start`, whose task is named. |
 | `--minutes N` | `step start\|next\|rounds` | An attempt's deadline from now (and its renewal after a reboot). |
 | `--model`, `--effort` | `step start\|next\|rounds` | The agent model and effort for the attempt. |

@@ -27,7 +27,7 @@ from taskloop.attempt_types import (
     Unsettled,
     dot_git,
 )
-from taskloop.prepare import task_branch
+from taskloop.prepare import MAIN, task_branch
 from taskloop.slot_state import SlotState, bounded, listing, observe_slot, pointer, staged
 from taskloop.steps import kind
 
@@ -96,9 +96,10 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     if head is None or state.branch != task_branch(admission.task.task_id):
         return Unsettled("unborn" if head is None else "branch")
     if answer.effect == "keep":  # X is B: a `keep` step never adopts a commit
-        return Committed(base) if head == base else Unsettled("head_moved")
+        return Committed(base) if head == base else _moved(checkouts(state.root), head, base, admission)
     if head != base:
-        return Committed(head) if _ours(checkouts(state.root), head, base, admission) else Unsettled("head_moved")
+        view = checkouts(state.root)
+        return Committed(head) if _ours(view, head, base, admission) else _moved(view, head, base, admission)
     return _commit(checkouts, files, admission, state, base, answer, quiet)
 
 
@@ -149,12 +150,12 @@ def refusal(view: Repo, files: SlotFiles, admission: Admission, base: str, answe
     rules = kind(admission.step).rules(admission.task.task_id)
     path = Path(admission.slot_path)
     unsafe = unsafe_path(files, path, rules, answer.paths, _base_files(view, base))
-    if unsafe is not None:
-        return Unsettled("unsafe", bounded((unsafe,)))
     dirt = view.worktree(path).dirty(base, ignored_under=attributes(rules, answer.paths))
-    unsafe = git_file(dirt.tracked + dirt.untracked, rules, answer.paths)
-    if unsafe is not None:
-        return Unsettled("unsafe", bounded((unsafe,)))
+    if unsafe is None:
+        unsafe = git_file(dirt.tracked + dirt.untracked, rules, answer.paths)
+    if unsafe is not None:  # the leftovers beside it are listed too, so one repeat can clear them all
+        beside = sorted(set(dirt.tracked + dirt.untracked) - {unsafe, *answer.paths})
+        return Unsettled("unsafe", bounded((unsafe, *beside)))
     return Unsettled("ignored", bounded(dirt.ignored)) if dirt.ignored else None
 
 
@@ -169,7 +170,28 @@ def _unwritten(checkouts: Checkouts, files: SlotFiles, admission: Admission, bas
         return Unsettled("unborn" if head is None else "branch")
     if head == base:
         return Rejected("nothing_written")
-    return Committed(head) if _ours(checkouts(state.root), head, base, admission) else Unsettled("head_moved")
+    return Committed(head) if _ours(checkouts(state.root), head, base, admission) else _moved(checkouts(state.root), head, base, admission)
+
+
+def _moved(repo: Repo, head: str, base: str, admission: Admission) -> Unsettled:
+    """`head_moved`, listing the tags and branches that name a commit the agent made beside the moved HEAD (B excluded, the
+    task's own branch excluded; annotated tags peeled to their commit). A ref whose commit is reachable from `main` or an
+    `origin` ref can be the person's (the agent reset to `main`): never listed. The release does not remove any of them."""
+    made = {head, *(each.sha for each in repo.history([head], not_on=[base]))}
+    own = "refs/heads/" + task_branch(admission.task.task_id)
+    theirs = [commit for each in repo.refs([MAIN, "refs/remotes/"]) if (commit := _peeled(repo, each.sha)) is not None]
+    named = []
+    for each in repo.refs(["refs/tags/", "refs/heads/"]):
+        commit = _peeled(repo, each.sha)
+        if each.name != own and commit in made and not any(repo.is_ancestor(commit, tip) for tip in theirs):
+            named.append(each.name)
+    return Unsettled("head_moved", bounded(named))
+
+
+def _peeled(repo: Repo, sha: str) -> str | None:
+    """The commit a ref's object names (an annotated tag is peeled); None when it names no commit."""
+    tree = repo.tree(f"{sha}^{{commit}}")
+    return None if tree is None else tree.sha
 
 
 def git_file(dirty: tuple[str, ...], rules: StepRules, paths: tuple[str, ...]) -> str | None:
@@ -199,11 +221,20 @@ def _base_files(view: Repo, base: str) -> Mapping[str, tuple[str, str]]:
     return tree.files
 
 
+def secret(data: bytes) -> bool:
+    """Bytes that look like a credential the sandbox may let the agent read: a PEM private key header, or a Codex login
+    (`auth.json` holds both token names). A committed copy would be published to `origin`; no content of the person's own
+    files is read to compare (tl-8bh9.14.50, docs/design/self-hosting-trial-5-fixes.md)."""
+    key = b"-----BEGIN " in data and b"PRIVATE KEY-----" in data
+    return key or (b'"access_token"' in data and b'"refresh_token"' in data)
+
+
 def unsafe_path(
     files: SlotFiles, slot: Path, rules: StepRules, paths: tuple[str, ...], committed: Mapping[str, tuple[str, str]]
 ) -> str | None:
     """The first listed path that is not a plain regular file reached through plain directories: no component a symlink
-    (`lstat` per component), no execute bit, at most `file_cap` bytes; None when every one is safe. In `committed` (B's
+    (`lstat` per component), no execute bit, at most `file_cap` bytes,
+    readable by the factory and not a credential copy (`secret`); None when every one is safe. In `committed` (B's
     files) the path is absent or a 100644 file, and none of its folders is a file there (a symlink, gitlink or executable
     replaced by a plain file is a type change the step may not make). An absent listed path is a deletion only when the
     step may delete and it is a 100644 file in B reached through plain or absent directories; any other is unsafe."""
@@ -219,6 +250,9 @@ def unsafe_path(
         if not all(folder is not None and folder.kind == "dir" for folder in folders):
             return path
         if entry is None or entry.kind != "file" or entry.executable or entry.size > rules.file_cap:
+            return path
+        data = files.read(slot.joinpath(*parts), rules.file_cap)
+        if data is None or secret(data):  # unreadable by the factory (mode 000: `git add` fails on it), or a credential copy
             return path
     return None
 

@@ -5,7 +5,6 @@ import tomllib
 from pathlib import Path
 
 from taskloop.access import CODEX_ACCESS, PROBE, SANDBOX, agent_env, folders, prepared_access, probe_argv
-from taskloop.agent_credentials import codex_machine_credentials
 
 FOUND = folders(Path("/home/u/.local/share/task-loop/slots/0123456789ab/s1"))
 ROOTS = ["/home/u/.local/share/task-loop/slots/0123456789ab/.t/s1", "/home/u/.local/share/task-loop/slots/0123456789ab/.env/s1/uv-cache",
@@ -41,15 +40,12 @@ def test_the_implement_access_adds_exactly_the_three_roots_and_the_shells_variab
     assert [str(path) for path in (FOUND.tmp, FOUND.cache, FOUND.tools)] == ROOTS
 
 
-def test_the_agent_environment_points_uv_and_tmpdir_at_the_roots_and_survives_the_scrub() -> None:
-    """No name holds KEY, SECRET or TOKEN (Codex's default policy drops those), and the factory's own scrub would keep
-    them (setup gets the first three in its environment)."""
+def test_the_agent_environment_points_uv_and_tmpdir_at_the_roots() -> None:
+    """No name holds KEY, SECRET or TOKEN (Codex's default policy drops those); they reach only the agent's shell
+    (`shell_environment_policy.set`), never the allow-listed environment of Codex's own process."""
     added = agent_env(FOUND)
     assert added == {"TMPDIR": ROOTS[0], "UV_CACHE_DIR": ROOTS[1], "UV_TOOL_DIR": ROOTS[2], "UV_OFFLINE": "1"}
     assert not any(marker in name for name in added for marker in ("KEY", "SECRET", "TOKEN"))
-    environ = {"PATH": "/bin", "HOME": "/home/u", **added}
-    _exe, env = codex_machine_credentials(environ, which=which, exists=lambda _path: True)
-    assert {name: env[name] for name in added} == added
 
 
 def test_the_probe_runs_codex_sandbox_with_the_agents_keys_on_the_three_roots() -> None:

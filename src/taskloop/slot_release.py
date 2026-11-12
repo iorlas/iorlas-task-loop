@@ -195,7 +195,8 @@ def park_slot(
         return NotReleased("refused", "slot_unborn", f"The slot has no commit. {NOTHING}")
     if state.dirty:
         left = listing(checkouts(path, git_dir=state.gitdir), path)
-        return NotReleased("refused", "slot_dirty", "\n".join([*left, f"Remove the listed files. {NOTHING}"]))
+        again = f"List them again with `git -C {path} status --short`; remove or restore each, then run it again. {NOTHING}"
+        return NotReleased("refused", "slot_dirty", "\n".join([*left, again]))
     if state.branch is None and state.head == slot_head:
         return state.head, None
     if state.branch not in (None, branch):

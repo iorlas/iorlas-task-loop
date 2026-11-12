@@ -24,9 +24,9 @@ from taskloop import prepare
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AttemptAdmission
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, FileRef, SlotFiles
+from taskloop.attempt_types import TRAILER, AttemptKey, AttemptResult, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.prepare import Branch, BranchRefusal, branch_refusal, named
+from taskloop.prepare import UNPUBLISHED, Branch, BranchRefusal, branch_refusal, named
 from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
@@ -71,18 +71,19 @@ def head(repo: FakeRepo, path: Path) -> Sha | None:
     return next(worktree.head for worktree in repo.worktrees() if worktree.path == path)
 
 
-def advance(worktree: FakeWorktree) -> Sha:
+def advance(worktree: FakeWorktree, message: str = "someone's commit") -> Sha:
     worktree.write_file("README", f"moved {worktree.path.name}")
-    made = worktree.record("someone's commit", paths="all")
+    made = worktree.record(message, paths="all")
     assert isinstance(made, Recorded)
     return made.sha
 
 
-def leave(repo: FakeRepo, tmp_path: Path, name: str, start: str = "HEAD", *, extra: bool = False) -> Sha:
-    """A person's branch `name` at `start` (one more commit with `extra`), held by no worktree afterwards."""
+def leave(repo: FakeRepo, tmp_path: Path, name: str, start: str = "HEAD", *, extra: bool = False, own: bool = True) -> Sha:
+    """A branch `name` at `start` (one more commit with `extra`: an earlier attempt's, with its trailer, unless `own` is
+    False: the person's), held by no worktree afterwards."""
     other = repo.add_worktree(tmp_path / "other", "HEAD")
     other.checkout_new(name, start)
-    tip = advance(other) if extra else head(repo, other.path)
+    tip = advance(other, f"Plan\n\n{TRAILER}: a1" if own else "someone's commit") if extra else head(repo, other.path)
     other.park("HEAD")
     repo.drop_worktree(other.path)
     assert tip is not None
@@ -477,3 +478,14 @@ def test_an_unreadable_slot_is_unknown(
 
     monkeypatch.setattr(FakeRepo, "is_ancestor", unreadable)  # never `commit_missing`: only a missing revision is
     assert detached(checkouts, slot_files, slot, x) == AttemptResult("unavailable", "git")
+
+
+def test_a_local_task_branch_with_the_persons_unpublished_commit_is_refused_but_an_attempts_own_resumes(
+    repo: FakeRepo, tmp_path: Path
+) -> None:
+    tip = leave(repo, tmp_path, BRANCH, extra=True, own=False)
+    assert branch_refusal(repo, "tl-1", ()) == "branch_unpublished"
+    assert "git branch -m task/{task} old/task/{task}" in UNPUBLISHED
+    repo.delete_branch(BRANCH, expected=tip)
+    leave(repo, tmp_path, BRANCH, extra=True)  # an abandoned attempt's own commit (trailer): resumed as before
+    assert isinstance(branch_refusal(repo, "tl-1", ()), Branch)

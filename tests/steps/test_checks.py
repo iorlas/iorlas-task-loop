@@ -17,7 +17,7 @@ from taskloop.agent_credentials import PUSH_REFUSED, scrubbed
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import CheckStore, Conclusion, Required, ResultRow, unsettled
 from taskloop.checks import Block, BlockPorts, BlockTarget, CheckSink, argv_digest, check_env, completed, conclusion, differs, main_seen
-from taskloop.evidence_files import CappedLog, EvidenceFiles
+from taskloop.evidence_files import CappedLog, EvidenceFiles, capped
 from taskloop.profile import Check
 
 CHECK, TEST, LINT = Check("check", ("just", "check"), 600), Check("test", ("just", "test"), 30), Check("lint", ("ruff", "."), 20)
@@ -313,3 +313,9 @@ def test_a_capped_log_keeps_the_cap_then_one_truncated_line_and_nothing_more(tmp
     log.close()
     assert (tmp_path / "check.log").read_bytes() == b"12345678[truncated]\n"
     assert (tmp_path / "check.log").stat().st_mode & 0o777 == 0o600
+
+
+def test_agent_output_is_stored_at_most_the_cap_with_one_truncated_line() -> None:
+    assert capped("12345", cap=5) == "12345"
+    assert capped("1234567890é", cap=8) == "12345678\n[truncated]\n"
+    assert capped("12345é", cap=6) == "12345\n[truncated]\n"  # a split character is dropped, never mangled
