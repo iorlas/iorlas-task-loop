@@ -448,10 +448,10 @@ A FIFO or a stuck file system can hang a local Git read; the goal is "not foreve
   G1 uses the next reader that opens a path it does not stat first (`core.excludesFile` or a FIFO `.gitattributes`
   read by `check-attr`) and says which in its commit; the test must hang without the bound before it counts.
 - **Factory (G2), as built:** machine config key `git_read_seconds` (default **600**, 30 to 86400; no flag), pinned
-  git-porcelain 0.18.0. `git_views` builds every `RealRepo` (`checkouts`, `remotes`, `inspect_checkout`) with
-  `read_timeout=READS.seconds`; `cli_step.run` sets it once from the loaded config (`use_read_seconds`). An attempt's
-  entry process (`attempt_entry`, `check_entry`) loads no machine config and keeps the default 600: only the round and the
-  commands the person runs read the key. No new word: a timeout is `unavailable:git` with the shelf's message as
+  git-porcelain 0.18.0. `git_views.GitViews(read_seconds)` builds every `RealRepo` (`checkouts`, `remotes`,
+  `inspect_checkout`); `cli_step.views_for` makes it from the loaded config and the `open_*` ports carry it (tl-isfa.7, no
+  module global). An attempt's entry process (`attempt_entry`, `check_entry`) loads no machine config: the launcher passes
+  the seconds in the entry's argv (after the artifacts path) and the entry builds its own `GitViews`. No new word: a timeout is `unavailable:git` with the shelf's message as
   detail (`admit`, `check_admit`, `land`, `slots` already map `GitUnavailable`; `slot adopt` reports `git_unavailable`),
   an unknown the round backs off from and retries. The real-Git test
   (`tests/steps/real/test_git_read_timeout_real.py`) puts a FIFO at the repository's `info/exclude`, bounds reads at 2 s
