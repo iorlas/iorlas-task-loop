@@ -61,7 +61,7 @@ def register(commands: Parsers) -> None:
     status.add_argument("--backlog", required=True)
     _common(status, "--db", "--artifacts")
     listing = _add(step, "list", f"Every task's current attempt with its next action (read-only; {STEP_ONLY})")
-    listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:* or unknown")
+    listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:*, hold or unknown")
     _common(listing, "--db")
     verify = _add(step, "verify", f"Commit the step's listed files and verify them, then release a clean slot and publish a verified "
                   f"result; an agent step's only, never the checks ({STEP_ONLY})")

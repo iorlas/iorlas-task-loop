@@ -7,6 +7,7 @@ from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
 from taskloop.check_status import ChecksView
 from taskloop.checks import differs
+from taskloop.hold_store import HoldRow
 from taskloop.land import Landed
 from taskloop.land_data import land_data, view_data
 from taskloop.land_push import Withdrawn
@@ -48,7 +49,16 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "repeat_reason": each.repeat_reason, "earlier": [attempt_id for attempt_id, _reason in each.earlier],
         "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
         "published": _published_data(each.published), "checks": _checks_data(each.checks), "land": view_data(each.land),
+        "label": each.label, "hold": _hold_data(each.hold), "hold_due": each.hold_due,
     }
+
+
+def _hold_data(row: HoldRow | None) -> dict[str, object] | None:
+    """A hold's record (tl-8bh9.14.9 section 10): its reason, cause, the label it removes, when, and its phases."""
+    if row is None:
+        return None
+    return {"reason": row.reason, "cause": row.cause_id, "label": row.label, "held_at": row.held_at, "labels": row.labels,
+            "labelled_at": row.labelled_at, "commented_at": row.commented_at, "cleared_at": row.cleared_at}
 
 
 def _checks_data(checks: ChecksView | None) -> dict[str, object] | None:

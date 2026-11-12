@@ -713,3 +713,83 @@ holds a task yet). Code lines by the policy counter: `hold_store` 104 (new), `ho
 
 **Unverified.** The bd texts are as measured in section 5.4 (not re-measured): the unclaim mapping matches both on
 bd's JSON `error` and on stderr. No live bd run in H1.
+
+## 25. As built: H2 (tl-8bh9.14.9.2)
+
+The hold operation, its words in the status and its text; nothing of H3 (the round does not call `hold_task` or
+`clear_holds`, admission still stores a NULL label, `selection` is unchanged), K1 or G1/G2. Code lines by the policy
+counter: `hold` 134 (new), `hold_facts` 63 (new), `hold_guide` 67 (new), `hold_status` 40 (new), `attempt_status` 230
+(+20), `attempt_reads` 206 (+10), `result_data` 139 (+7), `step_guide` 194 (+3), `step_render` 132 (+3), `show_render`
+103 (+1), `operations` 366 (+0: `Action` gains `hold` in place), `cli_step` 195 (+0: the `--stuck` help), `hold_text`
+121 (+0); `test_hold` 293 (new), `test_hold_status` 170 (new), `test_step_cli` 592 (+0: the JSON key set).
+
+- **`hold_status`** (pure): `cause(view)`, section 3 over the view's own word: `done` or `release` with a collected,
+  not succeeded result is `failed:<reason>` (a checks attempt's reason already reads `failed:<reason>`, not doubled);
+  `repeats_exhausted:<repeat reason>`; every `stuck:*` but `stuck:hung`; None for a NULL `label` and for a view whose
+  release is already an abandon (`ReleaseRow.abandoned`: a person's, or a hold's under way). `finished(row, release)`
+  (5.1), `hold_next` and `reingests(word, row, label)` (7.2: `on_hold`, `labels` `moved`/`absent`, stored label equal
+  to the round's), the rule H3 puts in the admission's `attempts` map.
+- **`attempt_status`**: `AttemptView` gains `label`, `hold` and `hold_due`; `Next` gains `hold` and `on_hold`.
+  `with_hold` applies after every other rule except `unknown`: a hold row gives `hold` or `on_hold`; with no row, a
+  labelled view with a cause is `hold` with `hold_due` (due: the next round records it). The hold is read once per
+  show or listing (`HoldStore.of_attempts`) by `agent_attempt(view)`: the view's own attempt, or a checks view's
+  `checks.row.after` (the plan's `after_attempt_id`); an unreadable hold table is `unknown`. `--stuck` lists `hold`,
+  never `on_hold`. `AttemptRow` gains `label` and `end_commit` (one query); `AttemptReads.slot_path(attempt id)` reads
+  an agent or a checks attempt's slot path for the comment.
+- **`hold.hold_task(ports, view, reason=None)`** (5.1): re-reads the hold of A first (a round snapshot may be stale);
+  no hold: `HoldStore.insert` with the reason (default `view.hold_due`; none: `refused:no_cause`), cause the view's
+  attempt (a checks view: the checks attempt); a refused insert is `refused:changed`/`refused:unlabelled`, nothing
+  else done. Labels: A still the task's current attempt (`attempt_of`), else `refused:changed` with no tracker call;
+  `TrackerHolds.labels`; the five words are recorded by `labelled`; `precondition` and `unavailable` are pending
+  `unavailable:tracker` (detail `precondition...` or bd's kind), `bad_label` pending `refused:bad_label`. Abandon: A
+  must still be current again (else `refused:changed`: the abandon acts on the task's current attempt), then
+  `operations.release_task(abandon=True)`. Its outcome (`hold_facts.outcome`): `Returned(claim)` for `unclaimed` or
+  `not_held`; `Kept` for section 12's person-cleared words, naming the slot path (the checks attempt's when the checks
+  release refused) and the process (`worker_alive`: A's registered agent; `setup_running`: the latest setup run's
+  unsettled command; `check_running`: an unsettled check's command); `Pending` otherwise (no comment). Comment (labels
+  `moved`/`absent`/`not_ours`, none yet): under the lease (`commenting`; lost: pending `comment` `refused:leased`),
+  text by `hold_text.comment(facts, outcome)`, then `commented`. Result `HoldMove(task, A, step, reason, word,
+  missing, refusal, detail)`: `held` when this call finished it; `pending` with the first missing step (`labels`,
+  `abandon`, `comment`) and the refusal word (`held:slot_dirty`, `unsettled:worker_alive`, `refused:landing`,
+  `unavailable:tracker`, `unavailable:store`, ...); `refused`.
+- **`hold_facts.facts`**: the cause as the view shows it, A's X (`end_commit`) and publication, a checks view's failed
+  checks (every latest-block result not `passed`; `undefined` has no log), a `repeats_exhausted` hold's leftovers from
+  the view, the cause's evidence directory, and the explanation: the stored valid answer's file read through
+  `EvidenceFiles` (digest-checked) and decoded by the step kind's own `decode` via `any_agent.decode_answer` (no new
+  column and no second parser; an unreadable file is no explanation).
+- **`hold.clear_holds(store, tracker, clock)`** (7.3): each `uncleared()` row; `held_again`: only `cleared` (no
+  tracker call); else `TrackerHolds.clear` with no read (`done` or `missing`), then `cleared` (`superseded` for a NULL
+  label step); `unavailable` leaves the row for the next round. Returns one `Cleared(task, A, word)` per row.
+- **Show, list, JSON, guides**: `tl step show` adds `Hold: <reason> at <UTC> (cause <id>)`, `Hold tracker: <labels
+  words>, commented|not commented yet|no comment` and `Hold claim: returned|not held|kept: the abandon has not
+  finished`, or `Hold: due <reason>`; the `hold` guide (`hold_guide.HOLD`) names every section 12 refusal with its
+  action and the transient ones; `on_hold`'s guide has the task id and stored label filled in, the `branch_moved` and
+  `claim_lost` lines, and the `not_ours` and closed/missing variants; an `on_hold` view no longer gets the abandoned or
+  `UNCLAIMING` text. `tl step list` prints `hold: <guide>` once (no discard steps unless a `stuck:*` row is listed).
+  JSON: `label`, `hold` (`reason`, `cause`, `label`, `held_at`, `labels`, `labelled_at`, `commented_at`,
+  `cleared_at`) or null, and `hold_due`.
+- **Policy**: `.importlinter` lists `hold`, `hold_status`, `hold_facts` (and `hold_guide` for the entry contract) in
+  `rounds-never-land` and `cli-never-imports-the-attempt-entry`.
+
+**Deviations (decided here, open to veto).**
+
+1. `Next: hold` also covers a due hold (a labelled view with a cause and no row), so `tl step list --stuck` shows it
+   and H3's settle needs only `each.next == "hold"` with `each.hold_due` (or the recorded `hold.reason`) as the reason;
+   `cause` still reads the view's own word, before `with_hold` replaces it.
+2. A view whose release is already an abandon (a person's half-done `tl step release --abandon`) has no cause: the
+   person's abandon is not turned into a hold.
+3. The abandon is fenced on A still being the task's current attempt (as the label step is): `release_task` abandons
+   whatever attempt is current, so a stale snapshot must not abandon a task taken again meanwhile.
+4. `check_running` (a check command still running after its checks entry died) is added to `hold_text.KeptWord` and
+   comments now like `setup_running`; section 12 does not list it.
+5. A comment answered `missing` (the task deleted after the label step) is recorded as commented: a deleted task can
+   take no comment, and the hold would otherwise never finish. An `unclaiming` claim (`AlreadyReleased`) is
+   `Pending` (`release:unclaiming`).
+6. The reason of an agent's failed result is `failed:<result reason>` as the result prints it: a valid `needs_owner`
+   answer is `failed:needs_owner` (section 3's example `failed:answer:needs_owner` names the invalid-answer words
+   `answer:<kind>`).
+7. `tl step show` cannot know an abandon's refusal word without attempting it, so `Hold claim:` says `kept: the abandon
+   has not finished` and the guide lists every section 12 word with its action (the round's `hold pending` line names
+   the word).
+
+**Unverified.** No round runs a hold until H3; no live bd or Git run in H2 (tracker and abandon are semantic fakes).

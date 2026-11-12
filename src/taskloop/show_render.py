@@ -1,5 +1,6 @@
 """The `tl step show` lines of one view: an agent attempt's, or (tl-8bh9.14.6 section 9) a checks attempt's with its
-`Check:` lines and (tl-8bh9.14.8 section 14) its latest land candidate's `Land` lines. Fixed words around the status
+`Check:` lines and (tl-8bh9.14.8 section 14) its latest land candidate's `Land` lines, then a hold's `Hold` lines
+(tl-8bh9.14.9 section 10). Fixed words around the status
 values; nothing here decides, reads or writes (`step_render` places them). Every stored text a `Land` line shows (the
 validation's reason, the slot) is printed as one printable line (`land_summary.one_line`). A process is shown by its pid
 only: its stored start is a clock-tick token that proves identity (JSON keeps it), not a time a person reads."""
@@ -13,6 +14,7 @@ from taskloop.attempt_types import ATTEMPTS
 from taskloop.check_status import ChecksView
 from taskloop.check_store import Required, ResultRow
 from taskloop.checks import differs
+from taskloop.hold_guide import hold_lines
 from taskloop.land_close import NOT_SYNCED
 from taskloop.land_status import LandView
 from taskloop.land_summary import one_line
@@ -133,6 +135,6 @@ def show_lines(result: Shown) -> list[str]:
     land's."""
     each = result.view
     if each.checks is None:
-        return [*_agent_lines(each), setup_line(result.setup)]
+        return [*_agent_lines(each), setup_line(result.setup), *hold_lines(each)]
     land = [] if each.land is None else land_lines(each.land, each.checks.row.required)
-    return [*_checks_lines(each, each.checks, setup_line(result.setup)), *land]
+    return [*_checks_lines(each, each.checks, setup_line(result.setup)), *land, *hold_lines(each)]

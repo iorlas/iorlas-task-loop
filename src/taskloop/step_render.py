@@ -5,6 +5,7 @@ from pathlib import Path
 
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
+from taskloop.hold_guide import hold_guide
 from taskloop.land import Landed
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.land_push import Withdrawn
@@ -65,6 +66,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             told = guide(each.next, checks=each.checks is not None, land=each.land is not None)
             told = LAND_GUIDE["abandoning"] if abandoning else told
             told = told if ended is None or not ended.abandoned else GUIDE["abandoned"] if each.next == "start" else UNCLAIMING
+            told = hold_guide(each) if each.next in ("hold", "on_hold") else told
             steps = [told, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
@@ -98,8 +100,9 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
         attempts = result.attempts
         rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
                 f"{a.result.status} {a.result.reason}\t{a.next}" for a in attempts]
-        kinds = dict.fromkeys((a.next, a.checks is not None) for a in attempts if a.next.startswith("stuck:"))
-        steps = [f"{kind}: {guide(kind, checks=checks)}" for kind, checks in kinds] + (stuck if kinds else [])
+        kinds = dict.fromkeys((a.next, a.checks is not None) for a in attempts if a.next.startswith("stuck:") or a.next == "hold")
+        steps = [f"{kind}: {guide(kind, checks=checks)}" for kind, checks in kinds]
+        steps += stuck if any(kind.startswith("stuck:") for kind, _checks in kinds) else []
         return ["task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext", *rows, *steps]
     width = max((len(each.task_id) for each in result.moves), default=0)
     lines = [f"{each.task_id:<{width}}  {each.action:<8} {each.word} {each.attempt_id}".rstrip() for each in result.moves]

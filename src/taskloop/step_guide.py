@@ -3,6 +3,7 @@ them to do, and the whole-DB discard steps. Text only; `step_render` places it, 
 
 from pathlib import Path
 
+from taskloop.hold_guide import HOLD, ON_HOLD
 from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
 
 STEP_ONLY = "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round"
@@ -160,6 +161,8 @@ GUIDE = {
     "land": LAND_NEXT["land"],
     "landed": LAND_NEXT["landed"],
     "landing": LAND_GUIDE["landing"],
+    "hold": HOLD,
+    "on_hold": ON_HOLD,
 }
 
 # A checks attempt's own words for the `Next` words whose agent text would mislead (S6d): its entry is

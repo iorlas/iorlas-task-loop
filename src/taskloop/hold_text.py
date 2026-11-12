@@ -22,7 +22,7 @@ CUT: Final = "[shortened]"
 QUOTE: Final = "> "  # each line of the agent's explanation
 type LabelsWord = Literal["moved", "absent", "not_ours"]  # the label step's words after which a comment is written
 type KeptWord = Literal["slot_dirty", "slot_branch", "slot_redirected", "slot_unborn", "worker_alive", "setup_running",
-                    "landing", "landed"]  # an abandon refusal only the person clears (section 12)
+                    "check_running", "landing", "landed"]  # an abandon refusal only the person clears (section 12)
 
 
 @dataclass(frozen=True)
@@ -133,7 +133,7 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
         case "slot_dirty":
             return (kept + f"{slot} has files left by this attempt. Save what you need, remove them, and the next round "
                     "returns the claim. The factory never removes work.")
-        case "worker_alive" | "setup_running":
+        case "worker_alive" | "setup_running" | "check_running":
             group = "" if outcome.pgid is None else f", group {outcome.pgid}"
             pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else f"pid unknown: `tl step show {part(facts.task_id)}` names it"
             return (kept + f"a process of this attempt still runs ({pid}). When it has ended (or after you "

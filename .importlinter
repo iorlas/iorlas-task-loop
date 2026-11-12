@@ -47,6 +47,10 @@ source_modules =
     taskloop.land_guide
     taskloop.land_render
     taskloop.land_data
+    taskloop.hold
+    taskloop.hold_status
+    taskloop.hold_facts
+    taskloop.hold_guide
 forbidden_modules =
     taskloop.attempt_entry
     taskloop.check_entry
@@ -66,6 +70,9 @@ source_modules =
     taskloop.land_store
     taskloop.hold_store
     taskloop.hold_text
+    taskloop.hold
+    taskloop.hold_status
+    taskloop.hold_facts
 forbidden_modules =
     taskloop.land
     taskloop.land_check
