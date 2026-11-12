@@ -210,6 +210,8 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
     ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
     ("unreadable_listed_file", None, PLANNED, PLAN, unreadable(P), None, "unsettled:unsafe", 0),  # named, not unavailable:git forever
+    ("committed_private_key", None, {P: "# Plan\n-----BEGIN OPENSSH PRIVATE KEY-----\nx\n"}, PLAN, None, None, "unsettled:unsafe", 0),
+    ("committed_codex_login", None, {P: '{"access_token": "a", "refresh_token": "r"}'}, PLAN, None, None, "unsettled:unsafe", 0),
     ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "unsettled:unsafe", 0),
     ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "unsettled:ignored", 0),
     ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "unsettled:ignored", 0),

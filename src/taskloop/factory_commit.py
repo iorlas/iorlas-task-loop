@@ -209,12 +209,20 @@ def _base_files(view: Repo, base: str) -> Mapping[str, tuple[str, str]]:
     return tree.files
 
 
+def secret(data: bytes) -> bool:
+    """Bytes that look like a credential the sandbox may let the agent read: a PEM private key header, or a Codex login
+    (`auth.json` holds both token names). A committed copy would be published to `origin`; no content of the person's own
+    files is read to compare (tl-8bh9.14.50, docs/design/self-hosting-trial-5.md)."""
+    key = b"-----BEGIN " in data and b"PRIVATE KEY-----" in data
+    return key or (b'"access_token"' in data and b'"refresh_token"' in data)
+
+
 def unsafe_path(
     files: SlotFiles, slot: Path, rules: StepRules, paths: tuple[str, ...], committed: Mapping[str, tuple[str, str]]
 ) -> str | None:
     """The first listed path that is not a plain regular file reached through plain directories: no component a symlink
     (`lstat` per component), no execute bit, at most `file_cap` bytes,
-    readable by the factory; None when every one is safe. In `committed` (B's
+    readable by the factory and not a credential copy (`secret`); None when every one is safe. In `committed` (B's
     files) the path is absent or a 100644 file, and none of its folders is a file there (a symlink, gitlink or executable
     replaced by a plain file is a type change the step may not make). An absent listed path is a deletion only when the
     step may delete and it is a 100644 file in B reached through plain or absent directories; any other is unsafe."""
@@ -231,7 +239,8 @@ def unsafe_path(
             return path
         if entry is None or entry.kind != "file" or entry.executable or entry.size > rules.file_cap:
             return path
-        if files.read(slot.joinpath(*parts), rules.file_cap) is None:  # unreadable by the factory (mode 000): `git add` fails on it
+        data = files.read(slot.joinpath(*parts), rules.file_cap)
+        if data is None or secret(data):  # unreadable by the factory (mode 000: `git add` fails on it), or a credential copy
             return path
     return None
 
