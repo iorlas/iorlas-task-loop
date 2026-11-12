@@ -9,6 +9,7 @@ from typing import Literal
 
 from taskloop import attempt_status, cli_composition, land, operations, result_data
 from taskloop.exit_codes import exit_code
+from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
@@ -93,7 +94,7 @@ LAND = ("Land the task's checked commit X yourself: fetch origin's main (O), squ
         "run every check again on S in a free slot, in this shell, only when main moved or its required names changed, push S "
         "to origin's main as you (never forced), then close the task in your local tracker (never synced: `bd dolt push` is "
         "yours). A rerun does only what is missing; rounds never land. Your checkout and local main are never written. Exit 0 landed "
-        "(or already), 1 refused, 3 unknown (a rerun is safe)")
+        "(or already), 1 refused, 3 unknown (a rerun is safe), 130 interrupted by Ctrl-C (a rerun reconciles it)")
 
 
 def _land_flags(parser: argparse.ArgumentParser) -> None:
@@ -184,11 +185,16 @@ def _publish(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _land(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    """The one land; a `KeyboardInterrupt` (Ctrl-C) anywhere in it is `unavailable:interrupted`, exit 130: the land's own
+    unwinding already stopped a running check's tree, and the rerun reconciles what is left (as the rounds' abrupt stop)."""
     mode: Literal["land", "summary", "withdraw"] = "summary" if arguments.summary else "withdraw" if arguments.withdraw else "land"
     request = land.LandRequest(arguments.backlog, arguments.task_id, Path(arguments.checkout), arguments.minutes, mode,
                                arguments.no_change)
-    with cli_composition.open_land(loaded.settings.db.value, loaded.settings.artifacts.value) as ports:
-        return ports if isinstance(ports, Failed) else land.land(ports, request)
+    try:
+        with cli_composition.open_land(loaded.settings.db.value, loaded.settings.artifacts.value) as ports:
+            return ports if isinstance(ports, Failed) else land.land(ports, request)
+    except KeyboardInterrupt:
+        return Failed("unavailable", INTERRUPTED)
 
 
 def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:

@@ -176,9 +176,10 @@ def record_release(
     """The release's record, in the release's transaction: fenced on the `rev` and validation its stop proof `read`, the
     held reservation and no earlier release; settled (`released`) only once validated. An abandon (`abandoned`) releases
     any candidate that is neither pushable nor delivered (pending, failed, or superseded while it still holds its slot)
-    and marks it superseded `abandoned` unless it already is; a delivered one is `landed`, a pushable one `landing` (the
-    checks record's words). `changed` off the fence."""
-    fenced = con.execute("SELECT l.rev,l.validation,l.released_at,l.superseded,l.delivery " + CANDIDATE_RESERVED, astuple(key)).fetchone()
+    and marks it superseded `abandoned` unless it already is; a delivered one is `landed` (`closed` once it closed the
+    task), a pushable one `landing` (the checks record's words). `changed` off the fence."""
+    fenced = con.execute("SELECT l.rev,l.validation,l.released_at,l.superseded,l.delivery,l.close " + CANDIDATE_RESERVED,
+                         astuple(key)).fetchone()
     if fenced is None or (fenced[0], fenced[1]) != read or fenced[2] is not None:
         return "changed"
     if not abandoned:
@@ -187,7 +188,7 @@ def record_release(
         con.execute("UPDATE land_candidate SET released_at=?,parked=? WHERE candidate_id=?", (now, parked, key.attempt_id))
         return "released"
     if fenced[4] is not None:
-        return "landed"
+        return "landed" if fenced[5] is None else "closed"
     if read[1] in PUSHABLE and fenced[3] is None:
         return "landing"
     con.execute("""UPDATE land_candidate SET released_at=?,parked=?,superseded=coalesce(superseded,'abandoned'),

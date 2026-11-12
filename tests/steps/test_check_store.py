@@ -536,6 +536,7 @@ LAND_STATES = [  # (the latest candidate's columns, the abandon's word)
     (SLOTTED | {"validation": "failed", "validated_at": 2, "reason": "test:failed"}, "landing"),  # failed, still holding it
     (SLOTTED | {"validation": "passed", "validated_at": 2, "released_at": 3, "parked": D}, "landing"),  # pushable: passed
     (PUSHED, "landed"), (SLOTTED | {"validation": "passed", "validated_at": 2} | PUSHED, "landed"),  # delivered
+    (PUSHED | {"close": "closed", "closed_at": 5}, "closed"),  # delivered and closed
     ({"superseded": "withdrawn", "superseded_at": 3}, "abandoned"),
     (SLOTTED | {"validation": "failed", "validated_at": 2, "reason": "test:failed", "released_at": 3, "parked": D}, "abandoned"),
     (SLOTTED | {"released_at": 3, "parked": D, "superseded": "abandoned", "superseded_at": 3}, "abandoned"),
@@ -543,12 +544,12 @@ LAND_STATES = [  # (the latest candidate's columns, the abandon's word)
 
 
 @pytest.mark.parametrize(("change", "word"), LAND_STATES, ids=["same_tree", "pending", "failed_held", "passed", "pushed",
-                                                               "pushed_held", "withdrawn", "failed", "abandoned"])
+                                                               "pushed_held", "closed", "withdrawn", "failed", "abandoned"])
 def test_the_abandon_of_a_released_checks_attempt_is_fenced_by_its_land_candidates(
     checking: sqlite3.Connection, change: dict[str, object], word: str
 ) -> None:
-    """A candidate first, then the abandon: `LANDING` refuses it (delivered `landed`; pushable or holding a slot
-    `landing`) and changes nothing; a superseded or released failed one does not."""
+    """A candidate first, then the abandon: `LANDING` refuses it (delivered `landed`, `closed` once it closed the task;
+    pushable or holding a slot `landing`) and changes nothing; a superseded or released failed one does not."""
     checks = store(checking)
     checks.conclude(CHECKS, "passed", None, 5)
     assert released(checking, (1, "concluded"), False) == "released"
@@ -559,8 +560,8 @@ def test_the_abandon_of_a_released_checks_attempt_is_fenced_by_its_land_candidat
     assert found is not None and found.abandoned == (word == "abandoned")
 
 
-@pytest.mark.parametrize(("change", "word"), LAND_STATES[:6],
-                         ids=["same_tree", "pending", "failed_held", "passed", "pushed", "pushed_held"])
+@pytest.mark.parametrize(("change", "word"), LAND_STATES[:7],
+                         ids=["same_tree", "pending", "failed_held", "passed", "pushed", "pushed_held", "closed"])
 def test_the_abandon_release_of_an_unreleased_checks_attempt_is_fenced_by_its_land_candidates(
     checking: sqlite3.Connection, change: dict[str, object], word: str
 ) -> None:

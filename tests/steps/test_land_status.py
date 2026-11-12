@@ -128,10 +128,10 @@ def test_a_validated_land_shows_its_slot_and_land_check_lines_with_their_logs(b:
 def test_a_pending_candidate_whose_land_process_runs_is_next_land_and_names_the_process(b: LandBench) -> None:
     interrupted(b)
     shown_lines = land_lines(lines(b, {ME}))
-    assert "Land slot: s1, held" in shown_lines and "Land process: running (pid 4242, started land-start)" in shown_lines
+    assert "Land slot: s1, held" in shown_lines and "Land process: running (pid 4242)" in shown_lines
     assert "Land result: pending" in shown_lines and any(line.startswith("Land check: test unfinished, process group") for line in
                                                           shown_lines)
-    assert shown(b, {ME}).view.next == "land" and "Land process: gone (pid 4242, started land-start)" in land_lines(lines(b))
+    assert shown(b, {ME}).view.next == "land" and "Land process: gone (pid 4242)" in land_lines(lines(b))
 
 
 def test_a_held_release_after_the_push_is_next_release_with_the_land_s_release_guide(b: LandBench) -> None:
@@ -294,6 +294,8 @@ def test_the_abandon_of_a_pushable_or_delivered_candidate_is_refused_and_nothing
     found = release(b, True, implement)
     assert isinstance(found, Failed) and found.word == f"refused:{word}" and implement.calls == [] and b.rows() == before
     assert LAND_GUIDE[word] in human("tl step release", found, None)
+    closed = "nothing is left to abandon or finish" in found.detail  # worded from the stored close
+    assert closed is (word == "landed") and (word != "landed" or "rerun `tl step land`" not in found.detail)
     assert b.con.execute("SELECT abandoned FROM checks_attempt").fetchone() == (0,)
 
 

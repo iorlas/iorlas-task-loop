@@ -146,7 +146,7 @@ TL step show "$B" --backlog m3   # tab B, while it runs (about 90 s)
 ```
 
 - While it runs: `Land: candidate 1 (...) onto origin main at <S_A>: <S_B>; merged onto a moved main, checks run again`,
-  `Land slot: s1, held` (or s2), `Land process: running (pid <tl pid>, started ...)`, `Land check:` lines
+  `Land slot: s1, held` (or s2), `Land process: running (pid <tl pid>)`, `Land check:` lines
   (`unfinished, process group <pgid>` for the running one), `Land result: pending`, `Next: land`.
 - Then the land prints `pushed: ...`, `Candidate 1 (...): S <S_B> onto origin main at <S_A>; checks passed on S`,
   `Pushed:`, `Closed: closed`, the `Tracker:` line; exit 0. `TL step show "$B"`: `Land slot: s1, released <time>, parked
@@ -160,11 +160,11 @@ TL step show "$B" --backlog m3   # tab B, while it runs (about 90 s)
 Task C (its O is the old `main`, so it validates):
 
 1. `LAND "$C"`; when `TL step show "$C"` shows `Land check: slow unfinished, process group <pgid>`, press Ctrl-C in the
-   land's shell. The land ends (Python's `KeyboardInterrupt` traceback, exit 130; `stream_proc` stops the check's tree): `ps -o pid= -g
+   land's shell. The land ends with `tl step land: unavailable:interrupted` and its guide on stderr, exit 130 (no traceback; `stream_proc` stops the check's tree): `ps -o pid= -g
    <pgid>` prints nothing. `TL step show "$C"`: `Land result: pending`, `Land process: gone (pid ...)`, `Next: land`.
 2. `LAND "$C"` again: the reconcile marks block 1's unfinished check `interrupted` and the block repeats whole
    (`check-2-*.log`); before `slow` ends, take the land process's pid from `TL step show "$C"` (`Land process: running
-   (pid <N>, ...)`), verify it (`ps -o command= -p <N>` shows `.../runner/.venv/bin/tl --config ... step land <C> ...`),
+   (pid <N>)`), verify it (`ps -o command= -p <N>` shows `.../runner/.venv/bin/tl --config ... step land <C> ...`),
    then `kill -9 <N>`. The check keeps running in its own session (`ps -o pid=,sid=,command= -g <pgid>` lists it).
 3. `LAND "$C"` while it runs: `tl step land: unavailable:checks:running` with the `checks` guide, exit 3; nothing reset
    (`Land result: pending`). Once `slow` ended (`ps -g <pgid>` empty), `LAND "$C"`: block 3 runs whole, then

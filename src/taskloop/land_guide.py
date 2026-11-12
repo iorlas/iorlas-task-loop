@@ -6,6 +6,7 @@
 from typing import Final
 
 RERUN: Final = "Nothing was lost: rerun `tl step land` (a rerun does only what is missing)."
+INTERRUPTED: Final = "interrupted"  # `tl step land` stopped by Ctrl-C (`cli_step._land`): exit 130, the rerun reconciles
 
 # The `Next` words of a land; `step_guide.GUIDE` carries `land` and `landed` (a status without a candidate shows them too).
 LAND_NEXT: Final = {
@@ -25,6 +26,8 @@ LAND_NEXT: Final = {
 LAND_GUIDE: Final = {
     **LAND_NEXT,
     "unavailable": RERUN,
+    INTERRUPTED: "The land was interrupted (Ctrl-C) and stopped where it was; a check it was running was stopped with it, and "
+    "the rerun marks that check `interrupted` and repeats its block whole.",
     "push_barred": "This shell carries an agent's push bar: run `tl step land` from your own shell.",
     "not_done": "The task's implement step is not done (verified, released with its claim kept, published): `tl step show "
     "TASK` names its next step.",
@@ -43,8 +46,8 @@ LAND_GUIDE: Final = {
     "--abandon` and `tl step start` (the restarted steps check the merge).",
     "checks_failed": "A check failed on S (the `Land check:` lines and logs say which): rerun `tl step land` if it is flaky; "
     "otherwise fix it as for a conflict (merge `main` into `task/<id>`, abandon, restart). Nothing was pushed.",
-    "target_moved": "origin's main moved during the land: rerun `tl step land` (a new candidate onto the new main, validated "
-    "when its tree differs). Nothing was pushed.",
+    "target_moved": "Rerun `tl step land`: it squashes X onto the new main as a new candidate and runs the checks again on it "
+    "when its tree differs from X's (a slot and the checks' time).",
     "push_url": "origin pushes elsewhere than it fetches from: make them one (`git remote get-url --push origin` against `git "
     "remote get-url origin`), or land by hand.",
     "no_remote": "The checkout has no `origin`: add it (`git remote add origin <url>`), then rerun.",
@@ -56,8 +59,9 @@ LAND_GUIDE: Final = {
     "target_profile": "The profile at origin's main is refused (the detail says why): fix `.task-loop.json` on main, then rerun.",
     "no_required": "origin main's profile requires no check, so nothing would decide a pass: add the required names to "
     "`.task-loop.json` on main, then rerun.",
-    "remote_rejected": "origin refused the push by its own policy (a protected main that requires a pull request, signed "
-    "commits, a hook): land by hand to see why (`git push origin <S>:refs/heads/main`, never `--force`); PR mode is held.",
+    "remote_rejected": "Push S by hand to read origin's reason (`git push origin <S>:refs/heads/main`, never `--force`): often a "
+    "protected main that requires a pull request (PR mode is held), signed commits or a server hook. After a hand push of "
+    "that S, rerun `tl step land`: it finds S on main, records it and closes the task.",
     "remote": "origin could not be fetched or pushed (often credentials): check that `git fetch` and `git push` work from this "
     f"shell. {RERUN}",
     "git": "Git could not answer (reading your checkout, making S, or resetting the candidate's slot): check that `git` works "

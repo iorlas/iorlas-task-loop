@@ -1,7 +1,8 @@
 """The `tl step show` lines of one view: an agent attempt's, or (tl-8bh9.14.6 section 9) a checks attempt's with its
 `Check:` lines and (tl-8bh9.14.8 section 14) its latest land candidate's `Land` lines. Fixed words around the status
 values; nothing here decides, reads or writes (`step_render` places them). Every stored text a `Land` line shows (the
-validation's reason, the slot) is printed as one printable line (`land_summary.one_line`)."""
+validation's reason, the slot) is printed as one printable line (`land_summary.one_line`). A process is shown by its pid
+only: its stored start is a clock-tick token that proves identity (JSON keeps it), not a time a person reads."""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,7 +26,7 @@ def _common(each: AttemptView) -> tuple[list[str], str, list[str]]:
     """The earlier attempts, the entry's registration and the release, as both views show them."""
     earlier = [f"Earlier: {attempt_id} " + (why if why in ("abandoned", "advanced", "re-run") else f"repeated ({why})")
                for attempt_id, why in each.earlier]
-    entry = "" if each.entry_process is None else f" (pid {each.entry_process[0]}, started {each.entry_process[1]})"
+    entry = "" if each.entry_process is None else f" (pid {each.entry_process[0]})"  # its start token is identity, not a time
     ended = each.release
     released = [] if ended is None else [
         f"Released: {_when(ended.released_at)}, slot parked at {ended.head}; claim {ended.claim}{'; abandoned' if ended.abandoned else ''}"
@@ -104,7 +105,7 @@ def _candidate(land: LandView, checked: Required) -> list[str]:
         where = "held" if row.released_at is None else f"released {_when(row.released_at)}, parked at {row.parked}"
         lines.append(f"Land slot: {one_line(row.slot, 40)}, {where}")
     if row.entry is not None and land.process != "none":
-        lines.append(f"Land process: {land.process} (pid {row.entry[0]}, started {one_line(row.entry[1], 80)})")
+        lines.append(f"Land process: {land.process} (pid {row.entry[0]})")
     return lines
 
 

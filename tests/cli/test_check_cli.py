@@ -59,7 +59,7 @@ def test_show_prints_the_checks_attempt_s_lines_in_order(capsys: pytest.CaptureF
     lines = run(SHOW, SHOWN, capsys, monkeypatch).splitlines()
     assert lines[:lines.index("Directory: /a/c")] == [
         "Task: tl-1 (backlog tasks)", "Step: check", "Attempt: checks (run 2)", "Earlier: first re-run", "Earlier: implement advanced",
-        "Slot: s1", "Phase: concluded", "Entry: gone (pid 42, started entry-start)", f"Commit: {X}",
+        "Slot: s1", "Phase: concluded", "Entry: gone (pid 42)", f"Commit: {X}",
         f"Required: check, test, smoke (main at {TARGET})", f"Profile: {'f' * 64} at X",
         f"Setup: run 1 passed at {X}; log /a/c/setup-1.log",
         "Check: check passed, exit 0, 41 s; log /a/c/check-1-check.log",

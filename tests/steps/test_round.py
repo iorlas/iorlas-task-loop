@@ -658,3 +658,18 @@ def test_a_stop_between_two_candidates_never_claims_the_second(factory: sqlite3.
     found = bench.round()
     assert moves(found) == [("t-1", "start", "started")] and found.stopped == "interrupted"
     assert bench.admission.requests == ["t-1"]
+
+
+def test_a_skip_repeated_every_round_is_a_move_so_moves_0_closes_only_once_the_skips_stop(factory: sqlite3.Connection) -> None:
+    """M3 finding 6: an abandoned ready task is skipped by every round, quietly after the first, so the unchanged closing
+    line `round moves=1` is quiet too; the first round without the skip writes `round moves=0`."""
+    seed(factory, "t-1", "gone-1")
+    released(factory, "gone-1", "unclaimed")
+    bench = Bench(factory, FakeTaskReadClient([bead("t-1")], ready=["t-1"]))
+    found = bench.round(replace(REQUEST, quiet=frozenset()))
+    assert [line.split(" ")[2:] for line in bench.lines] == [["t-1", "plan", "skip", "abandoned", "gone-1"], ["round", "moves=1"]]
+    found = bench.round(replace(REQUEST, quiet=found.written))
+    assert moves(found) == [("t-1", "skip", "abandoned")] and len(bench.lines) == 2
+    bench.ready = FakeTaskReadClient()
+    bench.round(replace(REQUEST, quiet=found.written))
+    assert len(bench.lines) == 3 and bench.lines[-1].endswith(" tasks round moves=0")

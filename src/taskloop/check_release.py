@@ -117,15 +117,16 @@ def checks_stopped(seen: SetupSeen, results: tuple[ResultRow, ...]) -> NotReleas
     return None
 
 
-LANDED = "The task's land delivered S to origin's main: rerun `tl step land` to finish the close."
+LANDED = "The task's land delivered S to origin's main but has not closed the task: rerun `tl step land` to finish the close."
+CLOSED = "The task's land delivered S to origin's main and closed the task: nothing is left to abandon or finish."
 LANDING = ("A land candidate of these checks holds its slot or may already be on origin's main: run `tl step land` to land "
            "it, or `tl step land --withdraw`, then abandon.")
 
 
 def _refused_by_land(recorded: Recorded, where: str) -> NotReleased | None:
-    """An abandon refused by `factory_schema.LANDING`, with its guide."""
-    if recorded == "landed":
-        return NotReleased("refused", "landed", f"{LANDED} {where}")
+    """An abandon refused by `factory_schema.LANDING`, with its guide; a landed task's words from its stored close."""
+    if recorded in ("landed", "closed"):
+        return NotReleased("refused", "landed", f"{CLOSED if recorded == 'closed' else LANDED} {where}")
     if recorded == "landing":
         return NotReleased("refused", "landing", f"{LANDING} {where}")
     return None
@@ -218,7 +219,8 @@ def _landing_of(found: LandRow, abandon: bool) -> NotReleased | None:
     """An abandon of a delivered (`landed`) or pushable (`landing`) candidate: S is, or may be, on origin's `main`."""
     if not abandon:
         return None
-    return _refused_by_land("landed" if found.delivery is not None else "landing" if found.pushable else "changed", NOTHING)
+    delivered = "landed" if found.close is None else "closed"
+    return _refused_by_land(delivered if found.delivery is not None else "landing" if found.pushable else "changed", NOTHING)
 
 
 @dataclass(frozen=True)

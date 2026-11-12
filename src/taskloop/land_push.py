@@ -34,7 +34,6 @@ MAIN: Final = "refs/heads/main"
 TRACKING: Final = "refs/remotes/origin/main"
 FETCHED: Final = f"+{MAIN}:{TRACKING}"  # origin's `main` into its remote-tracking ref, never a local branch
 ROUNDS: Final = 3  # delivery steps per invocation: a rejected push reads origin again; a third rejection is `target_moved`
-MOVED: Final = "origin's main moved during the land: rerun `tl step land` (a new candidate onto the new main)."
 
 
 @dataclass(frozen=True)
@@ -160,8 +159,8 @@ def _refusal(result: object, s: str) -> Failed:
         return Failed("unavailable", "remote", f"`{REMOTE}` could not be reached (network or credentials): rerun.")
     if isinstance(result, HookRejected):
         return Failed("unavailable", "git", "A hook refused the push although hooks are off: rerun.")
-    return Failed("refused", "remote_rejected", f"`{REMOTE}` refused the push by its own policy (for example a protected main "
-                  f"that requires a pull request; PR mode is held): push {s} by hand to see why.")
+    return Failed("refused", "remote_rejected", f"`{REMOTE}` refused the push of S {s} to main by its own policy, not a race; "
+                  "nothing was pushed and the candidate stays validated.")
 
 
 def _step(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Failed | str:
@@ -192,12 +191,18 @@ def deliver(lands: LandStore, clock: Callable[[], float], origin: Origin, row: L
             continue
         lands.supersede(row.key, "gone" if step == "gone" else "moved", clock())
         if again is None:
-            return Failed("unavailable", "target_moved", MOVED)
+            return _moved(row)
         made, again = again(), None
         if isinstance(made, Failed) or made.delivery == "no_change":  # main already holds X's changes: nothing to push
             return made if isinstance(made, Failed) else Delivered(made, made.origin, "no_change")
         row = made
-    return Failed("unavailable", "target_moved", MOVED)
+    return _moved(row)
+
+
+def _moved(row: LandRow) -> Failed:
+    """The fact only; `land_guide`'s `target_moved` says what the rerun does."""
+    return Failed("unavailable", "target_moved", f"origin's main moved off {row.origin} during this land (candidate {row.number}, "
+                  f"S {row.commit}); nothing was pushed.")
 
 
 def observed(lands: LandStore, clock: Callable[[], float], origin: Origin, row: LandRow) -> Delivered | Failed | Undelivered:

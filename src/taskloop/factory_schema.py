@@ -224,6 +224,8 @@ CANDIDATE_HELD = "SELECT 1 " + CANDIDATE_RESERVED + " AND l.validation IS NULL A
 OF_TASK = "l.checks_attempt_id IN (SELECT e.attempt_id FROM checks_attempt e WHERE e.after_attempt_id=c.after_attempt_id)"
 # A candidate of `c`'s implement attempt is delivered: its code is on origin's `main` (the word `landed`).
 LANDED = "EXISTS (SELECT 1 FROM land_candidate l WHERE " + OF_TASK + " AND l.delivery IS NOT NULL)"
+# ... and the task is closed in the tracker by it (`close` implies `delivery`): nothing is left to finish.
+CLOSED = "EXISTS (SELECT 1 FROM land_candidate l WHERE " + OF_TASK + " AND l.close IS NOT NULL)"
 # The abandon, re-run and insert fence of checks attempt `c`: a candidate of its implement attempt is delivered, holds its
 # slot, or is pushable (validated `same_tree` or `passed`, not superseded: S may already be on origin). Words `landed`,
 # else `landing`.

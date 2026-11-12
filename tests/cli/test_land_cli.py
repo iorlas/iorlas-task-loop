@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from git_porcelain import Transient
+from git_porcelain import RemoteRejected, Transient
 from land_bench import LandBench, bench
 
 from taskloop import cli_composition, cli_step
@@ -21,7 +21,7 @@ from taskloop.cli import main
 from taskloop.land import Landed, LandRequest
 from taskloop.land_check import LandPorts
 from taskloop.land_close import NOT_SYNCED
-from taskloop.land_guide import LAND_GUIDE
+from taskloop.land_guide import INTERRUPTED, LAND_GUIDE
 from taskloop.land_push import Withdrawn
 from taskloop.land_render import HOW
 from taskloop.land_summary import LandSummary
@@ -187,6 +187,46 @@ def test_a_refusal_exits_1_an_unknown_3_on_stderr_with_the_land_s_guide_first(
     assert (LAND_GUIDE["unavailable"] in lines) is (failed.kind == "unavailable")
     data = json.loads(run([*LAND, "--json"], failed, capsys, monkeypatch)[2])
     assert data == {"error": {"kind": failed.kind, "reason": failed.reason, "message": failed.detail}}
+
+
+def test_a_ctrl_c_during_a_land_is_one_interrupted_answer_exit_130_not_a_traceback(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    @contextmanager
+    def open_land(_database: Path, _artifacts: Path) -> Generator[object]:
+        yield object()
+
+    def interrupted(_ports: LandPorts, _request: LandRequest) -> Failed:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli_composition, "open_land", open_land)
+    monkeypatch.setattr(land_module, "land", interrupted)
+    argv = [*LAND, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art")]
+    assert main(argv) == 130
+    output = capsys.readouterr()
+    assert output.out == "" and output.err.splitlines() == [
+        f"tl step land: unavailable:{INTERRUPTED}", LAND_GUIDE[INTERRUPTED], LAND_GUIDE["unavailable"]]
+    assert main([*argv, "--json"]) == 130
+    assert json.loads(capsys.readouterr().err) == {"error": {"kind": "unavailable", "reason": INTERRUPTED, "message": None}}
+
+
+@pytest.mark.parametrize("reason", ["target_moved", "remote_rejected"])
+def test_a_moved_main_or_a_remote_refusal_says_the_fact_then_a_guide_that_adds_to_it(
+    reason: str, b: LandBench, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if reason == "target_moved":
+        b.racing = lambda: b.advance({"OTHER": "another task\n"})
+    else:
+        b.repo.answer = RemoteRejected("[remote rejected] main (protected branch hook declined)")
+    found = b.land()
+    assert isinstance(found, Failed) and found.reason == reason
+    _, _, err = run(LAND, found, capsys, monkeypatch)
+    detail, guide = err.splitlines()[1:3]
+    row = b.rows()[0]
+    assert row.commit in detail and detail.endswith("nothing was pushed." if reason == "target_moved" else "stays validated.")
+    assert guide == LAND_GUIDE[reason] and guide.startswith(("Rerun `tl step land`", "Push S by hand"))
+    assert not {each.strip(" .").lower() for each in detail.split(";")} & {each.strip(" .").lower() for each in guide.split(";")}
+    assert "protected branch" not in err  # origin's own text is never printed (`land_push`)
 
 
 def test_a_detail_is_printed_as_printable_lines(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:

@@ -674,7 +674,11 @@ commit, a scratch bare remote whose `main` is that commit, scratch tracker, fact
 
 - That `commit-tree` through the `hardened` view takes the person's identity from their configuration as expected.
 - `bd close` with `if_assignee` against a claim whose lease lapsed during a long block (the keep-alive renews it; a lapse
-  between commands is pinned by a tracker-double test and the smoke).
+  between commands is pinned by a tracker-double test and the smoke). **Answered by the M3 smoke (2026-11-12, bd 1.3.1):**
+  once rounds stopped, `bd show` of a task at `Next: land` read `Lease: expires expired (heartbeat ... ago)`, and every
+  land's `bd close` fenced on `if_assignee taskloop` still succeeded (six tasks): the fence is the assignee, not the
+  lease ([m3-smoke-findings.md](m3-smoke-findings.md) finding 5). A later bd that expires the assignee with the lease
+  would turn this into `refused claim_lost` with its close by hand.
 - `git remote get-url --push` on every remote form (SSH aliases, `file://`): L0's contract suite covers the forms it
   tests; the smoke covers a local bare remote only.
 - Line estimates, from the counts at 08784fe34.
@@ -1312,3 +1316,45 @@ test).
 Code lines after the repairs: `land_status` 43, `land_guide` 121, `step_render` 129, `land` 287, `step_guide` 191,
 `operations` 366; `test_land_cli` 182, `test_land_status` 228. **Not verified**: as in section 29 (the M3 live smoke, the
 multi-URL guard, the remote `pre-receive` classification).
+
+### 29.2 M3 smoke findings repaired (2026-11-12)
+
+The [M3 smoke](m3-smoke-findings.md) passed; its low-severity findings 1 to 6 are taken (7 is the host). Nothing of the
+land's Git, store fences or order changed.
+
+1. **Ctrl-C on `tl step land`** (finding 1). `cli_step._land` catches `KeyboardInterrupt` around the composition and the
+   operation (as `_rounds` does; no signal handler: `interrupts.py` stays the one signal owner) and answers
+   `Failed("unavailable", "interrupted")`: `tl step land: unavailable:interrupted`, the guide `LAND_GUIDE["interrupted"]`
+   (a check it ran was stopped with it; the rerun marks it `interrupted` and repeats its block) and the rerun line, on
+   stderr; JSON the usual error. Exit 130 kept (`exit_codes`: a `Failed` with the reason `land_guide.INTERRUPTED`, the
+   shell's convention as the rounds' abrupt stop); the help names it. The land's own unwinding is unchanged (the shelf
+   stops the running check's tree, the store and lock close).
+2. **Process lines** (finding 2). `tl step show` prints a process by its pid only: `Entry: <state> (pid N)` and `Land
+   process: <state> (pid N)`. The stored start is a clock-tick token that proves identity (the JSON keeps it), not a time;
+   the agent's `Entry:` line printed the same token, so both lost it.
+3. **`target_moved` and `remote_rejected`** (finding 3). The detail is the fact, the guide the action, no sentence in both:
+   `target_moved` names O, the candidate and S ("nothing was pushed"), its guide what the rerun does and costs;
+   `remote_rejected` names S and that the candidate stays validated, its guide the hand push to read origin's reason and
+   that a rerun after that hand push records and closes (smoke section 7.4). origin's text is still never printed.
+4. **`refused:landed` from the stored close** (finding 4). `factory_schema.CLOSED` (a candidate of the task closed it);
+   the abandon's record word `closed` (`check_store.Recorded`; `check_store.record_release`, `abandon_released`,
+   `land_store.record_release`, `check_release._landing_of` from the row) keeps the refusal word `landed` but its detail
+   says "delivered S ... and closed the task: nothing is left to abandon or finish"; still unclosed it says "has not
+   closed the task: rerun `tl step land` to finish the close". The checks re-run's `landed` (`check_admit`) keeps its
+   words (not seen in the smoke).
+5. **The lapsed lease** (finding 5): recorded in section 23 (answered), no code.
+6. **No `round moves=0` after skips** (finding 6): already as designed since the S6e repair (the closing line's quiet key
+   is its whole text). An abandoned task that is still ready is skipped by every round, quietly after the first, so each
+   round has the same move count and the unchanged `round moves=2` is quiet; `round moves=0` comes once the skips stop.
+   No code change; a test pins exactly that sequence.
+
+Tests: the Ctrl-C answer, its exit 130, stderr lines and JSON (`test_land_cli`); the two refusals from the real
+operation, fact then guide with no shared sentence and no origin text (`test_land_cli`); the abandon of a landed and
+closed task worded from the close (`test_land_status`) and the store's `closed` for both abandon paths
+(`test_check_store`); the skip sequence (`test_round`); the pid-only process lines (existing assertions changed). The
+runbook ([live-smoke.md](live-smoke.md)) and glossary (`land`, `land candidate`) follow the words. Code lines by the
+policy counter: `cli_step` 195, `exit_codes` 33, `land_guide` 125, `land_push` 146, `show_render` 102, `check_release`
+221, `check_store` 290, `land_store` 215, `factory_schema` 209; `test_land_cli` 216, `test_round` 540, `test_check_store`
+471, `test_land_status` 230. **Not verified**: a real terminal's Ctrl-C after this change (the smoke saw the old
+traceback; the test raises `KeyboardInterrupt` from the replaced operation); a Ctrl-C landing between a push and its
+record still answers `interrupted` and the rerun's `already_pushed` (section 12's row, tested before).

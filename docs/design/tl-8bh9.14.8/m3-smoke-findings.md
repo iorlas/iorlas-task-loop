@@ -178,7 +178,8 @@ H's X adds `docs/design/m3-pcr/plan.md` and `tests/steps/test_m3_H.py`; the othe
 ## Runbook corrections made with this file
 
 1. Section 0: where the `sqlite3` CLI is missing, a read-only Python equivalent.
-2. Section 5 step 1: Ctrl-C ends the land with a traceback and exit 130 (finding 1).
+2. Section 5 step 1: Ctrl-C ends the land with a traceback and exit 130 (finding 1); since plan section 29.2 it reads
+   `tl step land: unavailable:interrupted` with its guide, exit 130.
 3. Section 7 step 4: a bare remote has no reflog unless `core.logAllRefUpdates` is set before the push; `rev-parse main`
    is the check.
 

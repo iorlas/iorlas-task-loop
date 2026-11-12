@@ -25,13 +25,14 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
-from taskloop.factory_schema import CANDIDATE_HELD, CHECK_RESULT, CHECKS_ADMITTED, CHECKS_LOADED, LANDED, LANDING, marks, prefixed
+from taskloop.factory_schema import CANDIDATE_HELD, CHECK_RESULT, CHECKS_ADMITTED, CHECKS_LOADED, CLOSED, LANDED, LANDING, marks, prefixed
 
 type Outcome = Literal["passed", "failed"]
 type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted"]
-# An abandon's record: `abandoned`, or refused by `factory_schema.LANDING` (`landed`: a candidate delivered; `landing`: one
-# holds its slot or is pushable), or `changed` (off the fence). A settled release records `released`.
-type Recorded = Literal["released", "abandoned", "landed", "landing", "changed"]
+# An abandon's record: `abandoned`, or refused by `factory_schema.LANDING` (`landed`: a candidate delivered, its close still
+# to come; `closed`: delivered and closed; `landing`: one holds its slot or is pushable), or `changed` (off the fence). A
+# settled release records `released`.
+type Recorded = Literal["released", "abandoned", "landed", "closed", "landing", "changed"]
 type Required = tuple[tuple[str, str], ...]  # each required name with its check's argv digest at the target, in its order
 OUTCOMES: Final[tuple[Outcome, ...]] = ("passed", "failed")
 CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted")
@@ -229,8 +230,8 @@ def insert(con: sqlite3.Connection, admitted: ChecksAdmitted) -> None:
     con.execute(f"INSERT INTO checks_attempt ({CHECKS_ADMITTED}) VALUES ({marks(CHECKS_ADMITTED)})", values)
 
 
-def _landing(landed: object, landing: object) -> Recorded | None:
-    return "landed" if landed else "landing" if landing else None
+def _landing(landed: object, landing: object, closed: object) -> Recorded | None:
+    return ("closed" if closed else "landed") if landed else "landing" if landing else None
 
 
 def record_release(
@@ -239,10 +240,10 @@ def record_release(
     """The release's record, in the release's (immediate) transaction: fenced on the `rev` and phase its stop proof
     `read`, the held reservation and no earlier release; settled (not `abandoned`) only once concluded; an abandon also
     `NOT LANDING`. `changed` when the fence fails."""
-    fenced = con.execute(f"SELECT c.rev,c.phase,c.released_at,{LANDED},{LANDING} " + RESERVED, astuple(key)).fetchone()
+    fenced = con.execute(f"SELECT c.rev,c.phase,c.released_at,{LANDED},{LANDING},{CLOSED} " + RESERVED, astuple(key)).fetchone()
     if fenced is None or (fenced[0], fenced[1]) != read or fenced[2] is not None or not (abandoned or read[1] == "concluded"):
         return "changed"
-    landing = _landing(fenced[3], fenced[4]) if abandoned else None
+    landing = _landing(fenced[3], fenced[4], fenced[5]) if abandoned else None
     if landing is not None:
         return landing
     con.execute("UPDATE checks_attempt SET released_at=?,parked=?,abandoned=? WHERE attempt_id=?",
@@ -418,5 +419,5 @@ class CheckStore(StoreConnection):
                 AND NOT EXISTS (SELECT 1 FROM checks_attempt c WHERE c.attempt_id=checks_attempt.attempt_id AND {LANDING})""",
                 astuple(key)).rowcount == 1:
                 return "abandoned"
-            found = con.execute(f"SELECT {LANDED},{LANDING} FROM checks_attempt c{KEYED}", astuple(key)).fetchone()
-            return ("changed" if found is None else _landing(found[0], found[1])) or "changed"
+            found = con.execute(f"SELECT {LANDED},{LANDING},{CLOSED} FROM checks_attempt c{KEYED}", astuple(key)).fetchone()
+            return ("changed" if found is None else _landing(found[0], found[1], found[2])) or "changed"
