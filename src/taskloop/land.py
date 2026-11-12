@@ -41,6 +41,7 @@ from taskloop.check_status import latest
 from taskloop.check_store import ChecksRow, Required
 from taskloop.land_check import LandPorts, inserted, released, validated
 from taskloop.land_close import closed
+from taskloop.land_guide import restart
 from taskloop.land_push import REMOTE, Delivered, Origin, Withdrawn, deliver, fetched, observed, remote_tips, withdraw
 from taskloop.land_store import LandRow
 from taskloop.land_summary import LandSummary, message_at, summarized
@@ -236,7 +237,7 @@ def _squashed(origin: Origin, task: _Task, o: str) -> tuple[str, Files, Files, F
     if isinstance(squashed, Conflicted):
         shown = ", ".join(squashed.paths[:20])
         return Failed("refused", "conflict", f"X does not merge onto origin's main at {o} ({len(squashed.paths)} paths: "
-                      f"{shown}). Nothing was recorded.")
+                      f"{shown}). Nothing was recorded. To land it, {restart(task.checks.task_id, x)}")
     if isinstance(squashed, Failed):
         return squashed
     try:

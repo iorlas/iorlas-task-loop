@@ -103,6 +103,7 @@ class Shown:
     directory: Path
     entry_log: Path
     setup: SetupShown | None = None  # None: no setup ran for the step (a plan attempt, or implement before its preparation)
+    failed: ChecksView | None = None  # the unpassed results (with their logs) of the checks attempt that caused the view's hold
 
 
 @dataclass(frozen=True)
@@ -257,7 +258,26 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
     if first is not None and latest is not None:
         other = None if first is rows[0] else first.key.attempt_id
         setup = SetupShown(latest, files.root / files.directory(first.key) / f"setup-{latest.run}.log", other)
-    return Shown(replace(view, earlier=earlier, last_entry=files.last_entry(rows[0].key)), directory, directory / "entry.log", setup)
+    shown = replace(view, earlier=earlier, last_entry=files.last_entry(rows[0].key))
+    try:
+        failed = _failed_checks(reads, files, view.hold)
+    except StoreUnavailable as error:
+        return Failed("unavailable", "store", str(error))
+    return Shown(shown, directory, directory / "entry.log", setup, failed)
+
+
+def _failed_checks(reads: StatusPorts, files: EvidenceFiles, hold: HoldRow | None) -> ChecksView | None:
+    """A hold caused by a checks attempt (`cause_id` is not the agent attempt): that attempt's unpassed results of its latest
+    block with their log paths, from factory.db and the attempt's own directory, never from the tracker comment or a log."""
+    if hold is None or hold.cause_id == hold.attempt_id:
+        return None
+    store = CheckStore(reads.store.connect, reads.store.begin)
+    row = next((each for each in store.of_attempt(hold.attempt_id) if each.key.attempt_id == hold.cause_id), None)
+    if row is None:
+        return None
+    results = tuple(each for each in store.results(row.key) if each.conclusion != "passed")
+    logs = tuple(None if each.conclusion == "undefined" else files.check_path(row.key, each.block, each.name) for each in results)
+    return ChecksView(row, results, logs)
 
 
 def _checks_shown(reads: StatusPorts, files: EvidenceFiles, view: AttemptView, checks: ChecksView) -> Shown:

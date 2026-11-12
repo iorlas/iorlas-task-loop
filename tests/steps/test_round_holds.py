@@ -17,7 +17,7 @@ from round_bench import Factory, Tracker, scripted, scripts, task
 
 from taskloop.attempt_types import SlotFiles
 from taskloop.launch import LaunchUnavailable
-from taskloop.operations import Failed, Round, Started, StartRequest, start
+from taskloop.operations import Failed, Round, StartRequest, start
 from taskloop.round import NextRequest, run_round
 
 AFTER_DEADLINE = 31 * 60  # past an attempt's deadline: the rounds' --minutes is 30
@@ -195,6 +195,16 @@ def test_the_person_s_answer_takes_the_task_again_at_plan_on_its_branch_and_held
     assert factory.tracker.holds == ["labels tl-1 auto", "comment tl-1", "clear tl-1"]  # cleared once
 
 
+def test_a_start_by_hand_of_a_held_task_is_refused_on_hold_and_changes_nothing_until_answered(factory: Factory) -> None:
+    held_plan(factory)
+    request = StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, "m", "high", 30)
+    refused = start(factory.starting(), request)
+    assert isinstance(refused, Failed) and refused.word == "refused:on_hold" and "failed:needs_owner" in refused.detail
+    assert factory.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,) and factory.tracker.beads["tl-1"].labels == ("held",)
+    factory.tracker.answer("tl-1")  # the person's answer: the next round takes it again
+    assert factory.round(frozenset())[0] == ("tl-1", "plan", "start", "started")
+
+
 def test_a_round_under_another_label_skips_a_held_task_even_when_it_carries_that_label(factory: Factory) -> None:
     factory.tracker.beads["tl-1"] = replace(task("tl-1"), labels=("auto", "night"))
     held_plan(factory)
@@ -270,7 +280,7 @@ def test_a_publication_refused_branch_moved_is_held_once_instead_of_pushed_every
 
 def test_a_pending_hold_refuses_the_person_s_relaunch_of_the_attempt_it_will_abandon(factory: Factory) -> None:
     """`stuck:expired_admitted` held while bd is down: `tl step start` would relaunch A, which the hold then abandons;
-    it is refused `held` (nothing launched) until the round finishes the hold or the person abandons."""
+    it is refused `held` (nothing launched) until the round finishes the hold or the person abandons, then `on_hold`."""
     factory.failing = LaunchUnavailable("start")
     factory.round()
     factory.now += AFTER_DEADLINE
@@ -282,7 +292,7 @@ def test_a_pending_hold_refuses_the_person_s_relaunch_of_the_attempt_it_will_aba
     factory.tracker.down = set()
     assert factory.round() == [("tl-1", "plan", "hold", "held stuck:expired_admitted")]
     found = start(factory.starting(), StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, "m", "high", 30))
-    assert isinstance(found, Started) and found.status == "started"  # finished: the person may start it afresh
+    assert isinstance(found, Failed) and found.word == "refused:on_hold" and factory.ran == ran  # finished: answered first (F3)
 
 
 def test_a_hand_started_publication_refused_branch_moved_is_reported_never_held(factory: Factory) -> None:
