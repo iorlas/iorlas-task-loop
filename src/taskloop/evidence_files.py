@@ -15,7 +15,7 @@ from taskloop.slot_state import shown
 
 ENTRY_STATUS: Final = frozenset({"refused", "unavailable", "pending", "collected", "conflict", "failed"})
 ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
-LOG_CAP: Final = 32 << 20  # bytes of one setup run's or one check's log; then one `[truncated]` line
+LOG_CAP: Final = 32 << 20  # bytes of one setup run's or one check's log, and of one agent attempt's stdout or stderr; then `[truncated]`
 TRUNCATED: Final = b"[truncated]\n"
 
 
@@ -45,6 +45,15 @@ class CappedLog:
 
     def close(self) -> None:
         os.close(self._fd)
+
+
+def capped(text: str, cap: int = LOG_CAP) -> str:
+    """`text` as stored: at most `cap` bytes of it, then one `[truncated]` line. (The harness still holds the whole stream in
+    memory until it returns: that bound is any-agent's, recorded in docs/design/self-hosting-trial-5.md.)"""
+    data = text.encode("utf-8")
+    if len(data) <= cap:
+        return text
+    return data[:cap].decode("utf-8", "ignore") + "\n" + TRUNCATED.decode()
 
 
 class EvidenceFiles:
@@ -183,5 +192,5 @@ class EvidenceFiles:
     def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
         directory = self.directory(key)
         diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
-        return Evidence(self._write(directory + "/stdout.txt", raw.out), self._write(directory + "/stderr.txt", raw.err),
+        return Evidence(self._write(directory + "/stdout.txt", capped(raw.out)), self._write(directory + "/stderr.txt", capped(raw.err)),
                         self._write(directory + "/answer.txt", raw.summary.text), self._write(directory + "/diagnostics.txt", diagnostic))

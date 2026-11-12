@@ -281,16 +281,18 @@ def test_an_implement_commit_deletes_and_adds_anywhere_and_an_ignored_venv_does_
     assert clean_at(VIEWS.checkouts, RealSlotFiles(), attempt, made.sha) == main
 
 
-@pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), "gone.py"), (("src/a.py",), ".gitignore")])
+@pytest.mark.parametrize(("paths", "unsafe"), [(("gone.py",), ("gone.py", ".gitignore", "src/a.py")), (("src/a.py",), (".gitignore",))]
+)
 def test_an_absent_path_never_in_b_and_a_changed_gitignore_are_unsafe(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paths: tuple[str, ...], unsafe: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, paths: tuple[str, ...], unsafe: tuple[str, ...]
 ) -> None:
     _main, slot, attempt, base = implementing(tmp_path, monkeypatch)
     (slot / "src").mkdir()
     (slot / "src/a.py").write_text("A = 1\n")
     (slot / ".gitignore").write_text(".venv/\nsrc/b.py\n")
     answer = AnswerState("valid", "implemented", "commit", paths, "Implement")
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet) == Unsettled("unsafe", (unsafe,))
+    found = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
+    assert found == Unsettled("unsafe", unsafe)  # the leftovers beside the first are named too
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
 
 
@@ -328,7 +330,8 @@ def test_a_typed_entry_of_b_replaced_by_a_plain_file_is_unsafe(tmp_path: Path, m
     _main, slot, attempt, base = typed(tmp_path, monkeypatch)
     plain(slot, path)
     answer = AnswerState("valid", "implemented", "commit", (path,), "Implement")
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet) == Unsettled("unsafe", (path,))
+    made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, answer, quiet)
+    assert isinstance(made, Unsettled) and made.reason == "unsafe" and made.listing[0] == path  # its folder is named beside it
     assert git(slot, "rev-parse", "HEAD").strip() == base and git(slot, "diff", "--cached", "--name-only").strip() == ""
 
 

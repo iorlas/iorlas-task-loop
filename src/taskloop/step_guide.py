@@ -93,7 +93,8 @@ GUIDE = {
     "not_terminal": "The step has not ended: wait for it, `tl step start` to repeat it, or `tl step release --abandon`.",
     "entry_running": "Its entry runs: wait, or stop it by verified pid (the `stuck:hung` guide), then run it again.",
     "worker_unknown": "Dispatched with no agent recorded, so it cannot be shown stopped: the whole-DB discard is the only way out.",
-    "slot_dirty": "The slot stays held: remove the listed files (nothing is reset for you), then run it again.",
+    "slot_dirty": "The slot stays held: remove or restore the listed files (`git -C <slot> status --short` lists them again; "
+    "nothing is reset for you), then run it again.",
     "remote": "`origin` could not be reached: often credentials; check that `git push` works from this shell, then rerun. The "
     "factory's Git sets `GIT_SSH_COMMAND` (no prompt), which overrides a `core.sshCommand` in your Git config: use ssh-agent or "
     "`~/.ssh/config` for the key.",

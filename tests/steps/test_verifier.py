@@ -172,6 +172,13 @@ def contents(path: str, data: bytes) -> After:
     return override
 
 
+def unreadable(path: str) -> After:
+    def override(slot: FakeWorktree, files: FakeSlotFiles) -> None:
+        files.unreadable.add(slot.path / path)
+
+    return override
+
+
 def unregistered(slot: FakeWorktree, files: FakeSlotFiles) -> None:
     """Git forgets the slot; its pointer files stay readable (the fake port saw the slot listed at dispatch)."""
     assert files.lstat(slot.path / ".git") is not None
@@ -201,6 +208,7 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "unsettled:unsafe", 0),
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
     ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
+    ("unreadable_listed_file", None, PLANNED, PLAN, unreadable(P), None, "unsettled:unsafe", 0),  # named, not unavailable:git forever
     ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "unsettled:unsafe", 0),
     ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "unsettled:ignored", 0),
     ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "unsettled:ignored", 0),

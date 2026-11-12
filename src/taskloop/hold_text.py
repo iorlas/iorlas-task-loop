@@ -137,8 +137,9 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
     slot = f"slot {part(outcome.slot)}" if part(outcome.slot) else "its slot"
     match outcome.word:
         case "slot_dirty":
-            return (kept + f"{slot} has files left by this attempt. Save what you need, remove them, and {back}. "
-                    "The factory never removes work.")
+            where = part(outcome.slot) or "<slot>"
+            return (kept + f"{slot} has files left by this attempt. Save what you need, remove or restore them "
+                    f"(`git -C {where} status --short` lists them), and {back}. The factory never removes work.")
         case "worker_alive" | "setup_running" | "check_running":
             group = "" if outcome.pgid is None else f", group {outcome.pgid}"
             pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else f"pid unknown: `tl step show {part(facts.task_id)}` names it"

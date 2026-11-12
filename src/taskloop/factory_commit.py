@@ -149,12 +149,12 @@ def refusal(view: Repo, files: SlotFiles, admission: Admission, base: str, answe
     rules = kind(admission.step).rules(admission.task.task_id)
     path = Path(admission.slot_path)
     unsafe = unsafe_path(files, path, rules, answer.paths, _base_files(view, base))
-    if unsafe is not None:
-        return Unsettled("unsafe", bounded((unsafe,)))
     dirt = view.worktree(path).dirty(base, ignored_under=attributes(rules, answer.paths))
-    unsafe = git_file(dirt.tracked + dirt.untracked, rules, answer.paths)
-    if unsafe is not None:
-        return Unsettled("unsafe", bounded((unsafe,)))
+    if unsafe is None:
+        unsafe = git_file(dirt.tracked + dirt.untracked, rules, answer.paths)
+    if unsafe is not None:  # the leftovers beside it are listed too, so one repeat can clear them all
+        beside = sorted(set(dirt.tracked + dirt.untracked) - {unsafe, *answer.paths})
+        return Unsettled("unsafe", bounded((unsafe, *beside)))
     return Unsettled("ignored", bounded(dirt.ignored)) if dirt.ignored else None
 
 
@@ -203,7 +203,8 @@ def unsafe_path(
     files: SlotFiles, slot: Path, rules: StepRules, paths: tuple[str, ...], committed: Mapping[str, tuple[str, str]]
 ) -> str | None:
     """The first listed path that is not a plain regular file reached through plain directories: no component a symlink
-    (`lstat` per component), no execute bit, at most `file_cap` bytes; None when every one is safe. In `committed` (B's
+    (`lstat` per component), no execute bit, at most `file_cap` bytes,
+    readable by the factory; None when every one is safe. In `committed` (B's
     files) the path is absent or a 100644 file, and none of its folders is a file there (a symlink, gitlink or executable
     replaced by a plain file is a type change the step may not make). An absent listed path is a deletion only when the
     step may delete and it is a 100644 file in B reached through plain or absent directories; any other is unsafe."""
@@ -219,6 +220,8 @@ def unsafe_path(
         if not all(folder is not None and folder.kind == "dir" for folder in folders):
             return path
         if entry is None or entry.kind != "file" or entry.executable or entry.size > rules.file_cap:
+            return path
+        if files.read(slot.joinpath(*parts), rules.file_cap) is None:  # unreadable by the factory (mode 000): `git add` fails on it
             return path
     return None
 
