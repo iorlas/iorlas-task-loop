@@ -62,7 +62,7 @@ class Racing(FakeRepo):
         self.after_ls: list[Callable[[], object] | None] = []
         self.answer: PushResult | None = None
         self.pushes = 0
-        self.url_fault = False  # `remote_url` fails as an unreadable config would
+        self.url_fault = False  # `remote_urls` fails as an unreadable config would
 
     @override
     def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> RemoteRefs:
@@ -73,10 +73,10 @@ class Racing(FakeRepo):
         return found
 
     @override
-    def remote_url(self, remote: str, *, push: bool = False) -> str:
+    def remote_urls(self, remote: str, *, push: bool = False) -> tuple[str, ...]:
         if self.url_fault:
             raise GitReadFailure("remote get-url failed")
-        return super().remote_url(remote, push=push)
+        return super().remote_urls(remote, push=push)
 
     @override
     def worktree(self, path: Path) -> FakeWorktree:

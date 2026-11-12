@@ -5,7 +5,7 @@ transport, the person's Git configuration and credentials).
 
 **The delivery rule**, one for the first try and every resume. Delivery is recorded only from a `Pushed` answer for S, or
 from origin's `main` as read by `ls_remote` or by the bounded fetch in an invocation that checked first that the push URL
-is the fetch URL (`same_url`, the land's precondition, so both reads name the repository the push goes to); never from
+is its one fetch URL (`same_url`, the land's precondition, so both reads name the repository the push goes to); never from
 the local remote-tracking ref without that fetch, never from a log. With R the `ls_remote` answer for `main`: R is S is
 delivered (`already_pushed`); R is O pushes S; anything else fetches, then S an ancestor of the fetched tip F is
 delivered (`remote_head` F, which contains S), else the candidate is superseded `moved` and, at most once per invocation,
@@ -69,17 +69,17 @@ type _Seen = tuple[Literal["delivered", "at_origin", "moved"], str]
 
 
 def same_url(repo: Repo) -> Failed | None:
-    """`origin` exists and pushes where it fetches from (Git's `remote get-url --push`, with `pushurl` and
-    `pushInsteadOf`, against `remote get-url`, with `insteadOf`): the land reads origin to decide what was delivered.
-    Both read only the first URL; a second `url` or `pushurl` is not seen yet (section 27.1: git-porcelain 0.17.0's
-    `remote_urls`, unreleased)."""
+    """`origin` exists and pushes only where it fetches from: every URL is compared (`remote_urls`, Git's `remote get-url
+    --all --push`, with `pushurl` and `pushInsteadOf`, against `remote get-url --all`, with `insteadOf`), and both sides
+    must be the same one URL. A fetch reads only the first `url` but a push goes to every `pushurl` (else every `url`),
+    so a second `url` or `pushurl` refuses: the land reads origin to decide what was delivered (section 27.1)."""
     try:
-        fetch, push = repo.remote_url(REMOTE), repo.remote_url(REMOTE, push=True)
+        fetch, push = repo.remote_urls(REMOTE), repo.remote_urls(REMOTE, push=True)
     except MissingRemote:
         return Failed("refused", "no_remote", f"The checkout has no `{REMOTE}` remote: nothing was fetched or pushed.")
     except GitUnavailable as error:
         return Failed("unavailable", "git", f"Git could not read `{REMOTE}`'s URLs ({type(error).__name__}): rerun.")
-    if fetch == push:
+    if len(fetch) == 1 and fetch == push:
         return None
     return Failed("refused", "push_url", f"`{REMOTE}` pushes elsewhere than it fetches from; the land reads origin to decide "
                   f"what was delivered, so it needs one repository: make `git remote get-url --push {REMOTE}` its fetch URL, "

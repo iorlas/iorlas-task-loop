@@ -504,10 +504,9 @@ word only. GUIDE gains `land` ("read the diff and `tl step land TASK --summary`,
 - **Partly mitigated residual (D10)**: code run by a block shares the repository's Git directory with the person's
   checkout and could edit `.git/config` before the land pushes with the person's credentials. A `pushurl` or
   `pushInsteadOf` that sends the push elsewhere than origin's fetch URL is refused (`push_url`, checked before the reads
-  and again right before the push). **Open (L3 review, finding 4):** `remote get-url [--push]` prints only the first
-  value, but `git push` sends to every `pushurl` (or every `url`): a second `pushurl` or `url` is not seen yet. The repair
-  compares every URL (`remote get-url --all [--push]`, exactly one on each side, the same) through git-porcelain 0.17.0's
-  `Repo.remote_urls` (section 27.1); until that is released and pinned, this residual stands. An `insteadOf` that moves both URLs, or `core.sshCommand`, is not detected: accepted
+  and again right before the push). `git push` sends to every `pushurl` (or every `url`), so every URL is compared
+  (`remote get-url --all [--push]` through git-porcelain 0.17.0's `Repo.remote_urls`, exactly one on each side, the
+  same): a second `pushurl` or `url` refuses `push_url` (section 27.1 item 4, closed). An `insteadOf` that moves both URLs, or `core.sshCommand`, is not detected: accepted
   under D10; a later review of the change set for suspicious code (roadmap section 6, deferred) is the place for it.
 - **Remote truth, not local refs**: O and every delivery decision come from `ls_remote` and the bounded fetch of the one
   repository the push goes to; the required names from O's objects; a block rewriting a local ref changes nothing land
@@ -1027,7 +1026,7 @@ test that fails without it (nine hand mutations, each failing a test). One is op
    pushable), `moved` supersedes it and makes the no-change candidate (section 13). Tests: each case.
 3. **(medium) `--withdraw` ran the branch rule**, so a moved task branch left no way out (the abandon refuses
    `landing`). `--withdraw` skips it (section 13). Test: the review's repro (origin's `task/<id>` moved).
-4. **(medium, security, OPEN) only the first URL was compared.** git-porcelain 0.17.0 adds `Repo.remote_urls(remote, *,
+4. **(medium, security, closed 2026-11-12) only the first URL was compared.** git-porcelain 0.17.0 adds `Repo.remote_urls(remote, *,
    push=False)` (`remote get-url --all [--push]`; `FakeRepo.add_config` for a second value), committed locally in a
    new shelf worktree (`/home/iorlas/Workspaces/shelf-wt-l3`, branch `git-porcelain-remote-urls`, f6f7901; shelf
    `just check` and `check-all` green). Pushing the branch and opening the PR were refused by this session's
@@ -1035,6 +1034,10 @@ test that fails without it (nine hand mutations, each failing a test). One is op
    `GitUnavailable`, see 6). The land's side is written and waits for the pin: `fetch, push =
    repo.remote_urls(REMOTE), repo.remote_urls(REMOTE, push=True)`, passing only when `len(fetch) == 1 and fetch ==
    push`, with a real-Git test of two `pushurl` and of two `url` refused with nothing pushed.
+   **Closed:** git-porcelain 0.17.0 was released (`git-porcelain-v0.17.0`, shelf 0d1ad4f) and is pinned; `same_url`
+   reads `remote_urls` as written above. Tests: real Git, a second `pushurl` after one naming origin and a second `url`
+   each refuse `push_url` with nothing pushed to either repository, and one `pushurl` equal to the fetch URL still
+   delivers; the fake land table, a second `url` (`FakeRepo.add_config`).
 5. **(low) A pruned S was superseded `gone` before origin was read.** `_step` reads origin first (R is S: delivered
    although S is gone here); `_seen` treats a missing S as not contained (`MissingRevision`), so `--withdraw` of a
    pruned S supersedes it. Tests: a pruned S already on origin is delivered; `--withdraw` of a pruned S onto a moved main.

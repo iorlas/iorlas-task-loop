@@ -131,12 +131,10 @@ First, against B (`Next: land`), each refusal changes nothing (`land_candidate` 
 - A push URL elsewhere: `G clone -q --bare "$M3/remote.git" "$M3/elsewhere.git"`, `G -C "$M3/repo" config
   remote.origin.pushurl "$M3/elsewhere.git"`; `LAND "$B"`: `refused:push_url`, exit 1, nothing pushed to either remote.
   Then `G -C "$M3/repo" config --unset remote.origin.pushurl`.
-- **BLOCKED until git-porcelain 0.17.0 is released and pinned (plan section 27.1 item 4): do not run.** The multi-URL push
-  guard: with a second push URL (`G -C "$M3/repo" config remote.origin.pushurl "$M3/remote.git"`, then `G -C "$M3/repo"
+- The multi-URL push guard (plan section 27.1 item 4; git-porcelain 0.17.0 is pinned and `same_url` reads `remote_urls`): with a second push URL (`G -C "$M3/repo" config remote.origin.pushurl "$M3/remote.git"`, then `G -C "$M3/repo"
   config --add remote.origin.pushurl "$M3/elsewhere.git"`), or a second `url`, the land must refuse `push_url` with
-  nothing pushed to either remote. Today only the first URL is compared, so this residual stands (section 15); run this
-  step only at a runner whose `uv.lock` pins git-porcelain 0.17.0 or later and whose `land_push.same_url` reads
-  `remote_urls`, and unset both values afterwards.
+  nothing pushed to either remote; run it only at a runner whose `uv.lock` pins git-porcelain 0.17.0 or later, and
+  unset both values afterwards.
 
 Then the land:
 

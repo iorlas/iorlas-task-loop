@@ -184,6 +184,26 @@ def test_a_pushurl_elsewhere_is_refused_and_nothing_is_pushed_anywhere(real: Rea
     assert str(elsewhere) not in found.detail
 
 
+@pytest.mark.parametrize("key", ["remote.origin.pushurl", "remote.origin.url"])
+def test_a_second_url_is_refused_although_the_first_is_origin_and_nothing_is_pushed_anywhere(real: Real, key: str) -> None:
+    """A push goes to every `pushurl` (else every `url`): a second one, after one naming origin itself, refuses."""
+    elsewhere = real.root / "elsewhere.git"
+    git(real.root, "init", "-q", "--bare", "-b", "main", str(elsewhere))
+    if key.endswith("pushurl"):
+        git(real.main, "config", key, real.remote.as_uri())
+    git(real.main, "config", "--add", key, elsewhere.as_uri())
+    found = real.land()
+    assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", "push_url")
+    assert real.origin() == real.base and git(elsewhere, "for-each-ref").strip() == ""
+    assert str(elsewhere) not in found.detail
+
+
+def test_one_pushurl_naming_the_fetch_url_still_delivers(real: Real) -> None:
+    git(real.main, "config", "remote.origin.pushurl", real.remote.as_uri())
+    found = real.land()
+    assert isinstance(found, Landed) and found.how == "pushed" and real.origin() == found.row.commit
+
+
 def test_no_origin_is_refused_no_remote(real: Real) -> None:
     git(real.main, "remote", "remove", "origin")
     found = real.land()
