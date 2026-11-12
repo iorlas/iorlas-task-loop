@@ -11,8 +11,8 @@ Every read before any effect, in order (section 4): `--minutes`; this process's 
 push bar (`push_barred`); the task's current attempt a done implement attempt (`not_done`); its latest checks attempt
 concluded `passed`, released, not abandoned (`not_checked`; with `--no-change` any conclusion); the latest land
 candidate of it, which decides where to resume (one still holding its slot after its validation is released first;
-delivered answers at once); the checkout is the attempt's repository, `origin` pushes where it fetches from
-(`no_remote`, `push_url`); X still the task's work: the local `task/<id>` (else the remote-tracking one) and origin's
+delivered answers at once); the checkout is the attempt's repository, `origin` exists
+(`no_remote`; trusted as configured); X still the task's work: the local `task/<id>` (else the remote-tracking one) and origin's
 are exactly X (`branch_moved`; skipped with `--no-change`), X readable (`commit_missing`), origin has `main`
 (`target`); one tracker read (`claim_lost`; `closed`, unless origin shows a pushable candidate already delivered).
 
@@ -29,7 +29,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, Literal
 
-from git_porcelain import Conflicted, GitUnavailable, MissingRevision, Repo, Sha, Squashed
+from git_porcelain import Conflicted, GitUnavailable, MissingRemote, MissingRevision, Repo, Sha, Squashed
 
 from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo, open_store, read_task
 from taskloop.admit_chain import CURRENT, task_of
@@ -41,7 +41,7 @@ from taskloop.check_status import latest
 from taskloop.check_store import ChecksRow, Required
 from taskloop.land_check import LandPorts, inserted, released, validated
 from taskloop.land_close import closed
-from taskloop.land_push import Delivered, Origin, Withdrawn, deliver, fetched, observed, remote_tips, same_url, withdraw
+from taskloop.land_push import REMOTE, Delivered, Origin, Withdrawn, deliver, fetched, observed, remote_tips, withdraw
 from taskloop.land_store import LandRow
 from taskloop.land_summary import LandSummary, message_at, summarized
 from taskloop.operations import Failed, deadline_after, minutes_refused
@@ -162,11 +162,13 @@ def _origin(ports: LandPorts, request: LandRequest, task: _Task) -> Origin | Fai
 
 
 def _remote(origin: Origin, request: LandRequest, task: _Task) -> Failed | None:
-    """Steps 6-7: one push URL, the fetch URL; origin has `main`; the branch rule, except with `--no-change` (whatever
-    the branch holds) and `--withdraw` (it pushes nothing: a moved branch must not block giving the candidate up)."""
-    refused = same_url(origin.repo)
-    if refused is not None:
-        return refused
+    """Steps 6-7: `origin` exists (its URLs as the person configured them); origin has `main`; the branch rule, except
+    with `--no-change` (whatever the branch holds) and `--withdraw` (it pushes nothing: a moved branch must not block
+    giving the candidate up)."""
+    try:
+        origin.repo.remote_url(REMOTE)  # a presence check only: the URL is never kept, logged or printed
+    except MissingRemote:
+        return Failed("refused", "no_remote", "The checkout has no `origin` remote: nothing was fetched or pushed.")
     try:
         main, task_tip = remote_tips(origin.repo, f"refs/heads/task/{task.checks.task_id}")
     except GitUnavailable as error:

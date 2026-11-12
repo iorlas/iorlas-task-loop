@@ -15,7 +15,7 @@ from typing import Literal, override
 
 from beads_client import Bead
 from doubles import CHECKS, Environment, FakeProfiles, FakeSlotFiles, PinnedViews
-from git_porcelain import GitReadFailure, Pushed, Recorded, RemoteRefs, Sha
+from git_porcelain import Pushed, Recorded, RemoteRefs, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
@@ -62,7 +62,6 @@ class Racing(FakeRepo):
         self.after_ls: list[Callable[[], object] | None] = []
         self.answer: PushResult | None = None
         self.pushes = 0
-        self.url_fault = False  # `remote_urls` fails as an unreadable config would
 
     @override
     def ls_remote(self, remote: str, patterns: Sequence[str] = ()) -> RemoteRefs:
@@ -71,12 +70,6 @@ class Racing(FakeRepo):
         if step is not None:
             step()
         return found
-
-    @override
-    def remote_urls(self, remote: str, *, push: bool = False) -> tuple[str, ...]:
-        if self.url_fault:
-            raise GitReadFailure("remote get-url failed")
-        return super().remote_urls(remote, push=push)
 
     @override
     def worktree(self, path: Path) -> FakeWorktree:

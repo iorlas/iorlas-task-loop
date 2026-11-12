@@ -6,7 +6,7 @@ candidate; a delivery recorded by a concurrent land."""
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS, Command
+from doubles import CHECKS
 from git_porcelain import HookRejected, RemoteRejected, Transient
 from land_bench import RUN, LandBench, bench
 
@@ -231,11 +231,6 @@ def test_withdraw_is_not_blocked_by_a_moved_task_branch(b: LandBench) -> None:
     assert isinstance(found, Withdrawn) and found.row.superseded == "withdrawn"
 
 
-def test_an_unreadable_remote_url_is_unavailable_git(b: LandBench) -> None:
-    b.repo.url_fault = True
-    assert word(b.land()) == ("unavailable", "git") and b.rows() == ()
-
-
 def test_a_pruned_s_already_on_origin_is_delivered_not_gone(b: LandBench) -> None:
     s = lost(b)
     b.repo.prune(s)
@@ -250,9 +245,3 @@ def test_withdraw_of_a_pruned_s_onto_a_moved_main_supersedes_it(b: LandBench) ->
     found = b.land("withdraw")
     assert isinstance(found, Withdrawn) and found.row.superseded == "withdrawn"
 
-
-def test_an_unreadable_remote_url_at_the_push_s_recheck_is_unavailable_git(b: LandBench) -> None:
-    """The recheck right before the push runs outside the reads' handler: its fault is a word, never a crash."""
-    b.advance({"OTHER": "another task\n"})
-    b.environment.process.script = [Command(effect=lambda: setattr(b.repo, "url_fault", True))]
-    assert word(b.land()) == ("unavailable", "git") and b.rows()[0].pushable and b.repo.pushes == 0

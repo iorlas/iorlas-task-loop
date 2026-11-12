@@ -1,7 +1,6 @@
 """The land (tl-8bh9.14.8 sections 4-6, slice L3) over `land_bench`: section 4's refusals in order with nothing written,
 the same-tree land with no slot, a moved `main` and changed required names validated in a slot then pushed, a conflict,
-a failed validation, the no-change disposition, and the push URL refused before any remote read and again right before
-the push."""
+a failed validation, and the no-change disposition."""
 
 import json
 from collections.abc import Callable
@@ -111,10 +110,6 @@ REFUSALS: list[tuple[str, Callable[[LandBench], object], tuple[str, str]]] = [
      ("refused", "not_checked")),
     ("unreleased", lambda b: b.con.execute("UPDATE checks_attempt SET released_at=NULL,parked=NULL"), ("refused", "not_checked")),
     ("abandoned", lambda b: b.con.execute("UPDATE checks_attempt SET abandoned=1"), ("refused", "not_checked")),
-    ("push_url", lambda b: b.repo.set_config("remote.origin.pushurl", "https://elsewhere.invalid/repo.git"), ("refused", "push_url")),
-    ("second_url", lambda b: b.repo.add_config("remote.origin.url", "https://elsewhere.invalid/repo.git"), ("refused", "push_url")),
-    ("push_insteadof",lambda b: b.repo.set_config("url.https://mirror.invalid/.pushInsteadOf", "https://example.invalid/"),
-     ("refused", "push_url")),
     ("offline", lambda b: setattr(b.remote, "offline", True), ("unavailable", "remote")),
     ("target", lambda b: b.remote.state.refs.pop("refs/heads/main"), ("refused", "target")),
     ("branch_moved_local", lambda b: _moved_branch(b, push=False), ("refused", "branch_moved")),
@@ -149,22 +144,6 @@ def test_each_refusal_comes_before_anything_is_written(b: LandBench, arrange: Ca
     assert failed(found) == word
     assert b.rows() == () and b.reservations() == [] and b.repo.pushes == 0 and b.remote.branches().get("main") == main
     assert b.execs() == []
-
-
-def test_the_push_url_is_refused_before_origin_is_read(b: LandBench) -> None:
-    """The check runs before any remote read: an unreachable origin is never asked."""
-    b.repo.set_config("remote.origin.pushurl", "https://elsewhere.invalid/repo.git")
-    b.remote.offline = True
-    assert failed(b.land()) == ("refused", "push_url")
-
-
-def test_a_push_url_set_during_the_validation_is_refused_right_before_the_push(b: LandBench) -> None:
-    """Code a block runs may rewrite the shared Git config: the push URL is compared once more right before the push."""
-    main = b.advance({"OTHER": "y\n"})
-    b.environment.process.script = [Command(effect=lambda: b.repo.set_config("remote.origin.pushurl", "https://evil.invalid/x"))]
-    assert failed(b.land()) == ("refused", "push_url")
-    row = b.rows()[0]
-    assert row.pushable and b.origin_main() == main and b.repo.pushes == 0
 
 
 def test_a_checkout_of_another_repository_is_refused(b: LandBench) -> None:

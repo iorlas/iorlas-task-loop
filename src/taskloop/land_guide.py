@@ -48,8 +48,6 @@ LAND_GUIDE: Final = {
     "otherwise fix it as for a conflict (merge `main` into `task/<id>`, abandon, restart). Nothing was pushed.",
     "target_moved": "Rerun `tl step land`: it squashes X onto the new main as a new candidate and runs the checks again on it "
     "when its tree differs from X's (a slot and the checks' time).",
-    "push_url": "origin pushes elsewhere than it fetches from: make them one (`git remote get-url --push origin` against `git "
-    "remote get-url origin`), or land by hand.",
     "no_remote": "The checkout has no `origin`: add it (`git remote add origin <url>`), then rerun.",
     "branch_moved": "`task/<id>` (local or on origin) is not exactly the checked X: reset it to X, or `tl step release "
     "--abandon` and restart to check the new commits. `--withdraw` and `--no-change` skip this rule.",

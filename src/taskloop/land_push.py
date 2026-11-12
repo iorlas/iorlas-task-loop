@@ -1,13 +1,13 @@
-"""The land's remote side (tl-8bh9.14.8 section 7): the push URL check, the fetch of origin's `main`, the one delivery
-rule, the push of S and `--withdraw`. Its Git writes are `fetch` (a remote-tracking ref, as the person's own `git fetch`
-writes it) and `push` (never forced); both run on the person's checkout through the `remotes` view (hooks off, bounded
-transport, the person's Git configuration and credentials).
+"""The land's remote side (tl-8bh9.14.8 section 7): the fetch of origin's `main`, the one delivery rule, the push of S
+and `--withdraw`. Its Git writes are `fetch` (a remote-tracking ref, as the person's own `git fetch` writes it) and
+`push` (never forced); both run on the person's checkout through the `remotes` view (hooks off, bounded transport, the
+person's Git configuration and credentials).
 
 **The delivery rule**, one for the first try and every resume. Delivery is recorded only from a `Pushed` answer for S, or
-from origin's `main` as read by `ls_remote` or by the bounded fetch in an invocation that checked first that the push URL
-is its one fetch URL (`same_url`, the land's precondition, so both reads name the repository the push goes to); never from
-the local remote-tracking ref without that fetch, never from a log. With R the `ls_remote` answer for `main`: R is S is
-delivered (`already_pushed`); R is O pushes S; anything else fetches, then S an ancestor of the fetched tip F is
+from origin's `main` as read by `ls_remote` or by the bounded fetch; never from the local remote-tracking ref without that
+fetch, never from a log. `origin` is trusted as configured: how its fetch and push URLs are set is the person's choice
+(section 27.1, decided 2026-11-12). With R the `ls_remote` answer for `main`: R is S is delivered (`already_pushed`); R
+is O pushes S; anything else fetches, then S an ancestor of the fetched tip F is
 delivered (`remote_head` F, which contains S), else the candidate is superseded `moved` and, at most once per invocation,
 the caller makes candidate N+1 onto the moved `main` (`Again`); a second time is `target_moved`. The push names no
 expected old tip: Git's fast-forward rule accepts it only while origin's `main` is an ancestor of S. An S no longer in
@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
 
-from git_porcelain import GitUnavailable, HookRejected, MissingRemote, MissingRevision, Pushed, RefRejected, Repo, Sha, Transient
+from git_porcelain import GitUnavailable, HookRejected, MissingRevision, Pushed, RefRejected, Repo, Sha, Transient
 
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.git_views import PUSH_TIMEOUT
@@ -38,8 +38,7 @@ ROUNDS: Final = 3  # delivery steps per invocation: a rejected push reads origin
 
 @dataclass(frozen=True)
 class Origin:
-    """The person's checkout (`checkout`) and its remote-capable view (`repo`), whose push URL was found to be its fetch
-    URL."""
+    """The person's checkout (`checkout`) and its remote-capable view (`repo`), whose `origin` was found to exist."""
 
     repo: Repo
     checkout: Path
@@ -66,24 +65,6 @@ class Withdrawn:
 type Again = Callable[[], LandRow | Failed]  # candidate N+1 onto origin's moved `main`, validated when its tree differs
 type Undelivered = Literal["at_origin", "moved"]
 type _Seen = tuple[Literal["delivered", "at_origin", "moved"], str]
-
-
-def same_url(repo: Repo) -> Failed | None:
-    """`origin` exists and pushes only where it fetches from: every URL is compared (`remote_urls`, Git's `remote get-url
-    --all --push`, with `pushurl` and `pushInsteadOf`, against `remote get-url --all`, with `insteadOf`), and both sides
-    must be the same one URL. A fetch reads only the first `url` but a push goes to every `pushurl` (else every `url`),
-    so a second `url` or `pushurl` refuses: the land reads origin to decide what was delivered (section 27.1)."""
-    try:
-        fetch, push = repo.remote_urls(REMOTE), repo.remote_urls(REMOTE, push=True)
-    except MissingRemote:
-        return Failed("refused", "no_remote", f"The checkout has no `{REMOTE}` remote: nothing was fetched or pushed.")
-    except GitUnavailable as error:
-        return Failed("unavailable", "git", f"Git could not read `{REMOTE}`'s URLs ({type(error).__name__}): rerun.")
-    if len(fetch) == 1 and fetch == push:
-        return None
-    return Failed("refused", "push_url", f"`{REMOTE}` pushes elsewhere than it fetches from; the land reads origin to decide "
-                  f"what was delivered, so it needs one repository: make `git remote get-url --push {REMOTE}` its fetch URL, "
-                  "or land by hand. Nothing was pushed.")
 
 
 def remote_tips(repo: Repo, task_ref: str | None = None) -> tuple[str | None, str | None]:
@@ -140,10 +121,7 @@ def _recorded(lands: LandStore, now: float, row: LandRow, head: str, how: Litera
 
 
 def _pushed(origin: Origin, s: str) -> Literal["pushed", "rejected"] | Failed:
-    """The push URL once more, then one non-forced push of exactly S to origin's `main` from the person's checkout."""
-    refused = same_url(origin.repo)
-    if refused is not None:
-        return refused
+    """One non-forced push of exactly S to origin's `main` from the person's checkout."""
     try:
         result = origin.repo.worktree(origin.checkout).push("main", remote=REMOTE, head=Sha(s))
     except GitUnavailable as error:

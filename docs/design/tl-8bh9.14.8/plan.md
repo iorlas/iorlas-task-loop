@@ -105,11 +105,8 @@ Refusal words are `refused <word>` (exit 1) unless written `unavailable` (exit 3
    candidate still holding its slot is released first (the rerun retries a held release before anything else, closing or
    answering `already_landed` included). A closed one then answers `already_landed` with no Git or tracker call; a
    delivered one goes straight to the close (section 8), whose own `bd show` is its tracker read (no step 6-8 read).
-6. The checkout's repository is the attempt's (`checkout`); `origin` exists (`no_remote`); **the push URL is the fetch
-   URL**: `remote_url("origin", push=True)` (Git's `remote get-url --push`, which applies `pushurl` and `pushInsteadOf`)
-   equals `remote_url("origin")` (which applies `insteadOf`), else **`push_url`** ("origin pushes elsewhere than it
-   fetches from; land reads origin to decide what was delivered, so it needs one repository"). The same comparison runs
-   again right before the push (section 7).
+6. The checkout's repository is the attempt's (`checkout`); `origin` exists (`no_remote`). Its fetch and push URLs
+   are trusted as the person configured them: no URL comparison (decided 2026-11-12, section 29.3).
 7. **X is still the task's work** (skipped with `--no-change`): the local `task/<id>` (else the remote-tracking one) is
    exactly X, and origin's `task/<id>` is exactly X (one `ls_remote` with the two patterns `refs/heads/main` and
    `refs/heads/task/<id>`). Ahead of X or elsewhere is **`branch_moved`** ("commits after the checked X: abandon and
@@ -203,11 +200,10 @@ candidate's evidence directory.
 Through `land_push.py` (new; it shares `publish._relation` and the `remotes` view).
 
 **The delivery rule (decided here, one rule for the first try and every resume).** Delivery is recorded only from (a) a
-`Pushed` answer for S, or (b) origin's `main` as read by `ls_remote` or by the bounded fetch, in an invocation that has
-checked the push URL equals the fetch URL (section 4 step 6) before that read. Never from the local remote-tracking ref
-without that fetch, never from a log. (`publish` records only from `Pushed` because a `pushurl` may make its `ls_remote`
-read another repository; the `push_url` refusal removes that case for land.) With R the `ls_remote` answer for
-`refs/heads/main`:
+`Pushed` answer for S, or (b) origin's `main` as read by `ls_remote` or by the bounded fetch. Never from the local
+remote-tracking ref without that fetch, never from a log. `origin` is trusted as configured (section 29.3): the reads
+and the push go where the person's Git configuration sends them, and a person who points them at different
+repositories owns that choice. With R the `ls_remote` answer for `refs/heads/main`:
 
 1. **R is S**: delivered; record `pushed` with `remote_head` S (the answer says `already_pushed`).
 2. **R is O**: push (step 4 below).
@@ -218,8 +214,8 @@ read another repository; the `push_url` refusal removes that case for land.) Wit
    section 6 when its tree differs) and returns to step 1 for it; if it already made one, it answers **`target_moved`**
    ("main moved during the land; rerun"). At most one new candidate per invocation (decided here), so a busy `main` costs
    a rerun, never an unbounded loop.
-4. **Push** S with the existing push port, exactly as `publish` pushes `task/<id>`: the push URL comparison once more,
-   then `repo.worktree(checkout).push("main", remote="origin", head=Sha(S))` from the person's checkout, never forced, no
+4. **Push** S with the existing push port, exactly as `publish` pushes `task/<id>`:
+   `repo.worktree(checkout).push("main", remote="origin", head=Sha(S))` from the person's checkout, never forced, no
    force-with-lease, no refspec with `+`, hooks off. Git's fast-forward rule is the condition (section 24 finding 10):
    the update is accepted only while origin's `main` is an ancestor of S. `Pushed` records `pushed` (`remote_head` S) in
    one fenced transaction (section 11). `RefRejected`: back to step 1 with a new `ls_remote` (another lander won: step 3).
@@ -501,16 +497,13 @@ word only. GUIDE gains `land` ("read the diff and `tl step land TASK --summary`,
   agent's environment by accident.
 - **What runs before the push**: a validation block runs the candidate's `setup` and checks on the host (D10, accepted),
   as the checks step did; S combines only code the person read (X's diff) with code already on `main`.
-- **Partly mitigated residual (D10)**: code run by a block shares the repository's Git directory with the person's
-  checkout and could edit `.git/config` before the land pushes with the person's credentials. A `pushurl` or
-  `pushInsteadOf` that sends the push elsewhere than origin's fetch URL is refused (`push_url`, checked before the reads
-  and again right before the push). `git push` sends to every `pushurl` (or every `url`), so every URL is compared
-  (`remote get-url --all [--push]` through git-porcelain 0.17.0's `Repo.remote_urls`, exactly one on each side, the
-  same): a second `pushurl` or `url` refuses `push_url` (section 27.1 item 4, closed). An `insteadOf` that moves both URLs, or `core.sshCommand`, is not detected: accepted
-  under D10; a later review of the change set for suspicious code (roadmap section 6, deferred) is the place for it.
-- **Remote truth, not local refs**: O and every delivery decision come from `ls_remote` and the bounded fetch of the one
-  repository the push goes to; the required names from O's objects; a block rewriting a local ref changes nothing land
-  relies on.
+- **Accepted residual (D10)**: code run by a block shares the repository's Git directory with the person's checkout
+  and could edit `.git/config` (a `pushurl`, `pushInsteadOf`, `insteadOf`, `core.sshCommand`) before the land pushes
+  with the person's credentials. Land trusts `origin` as configured and compares no URLs (decided 2026-11-12, section
+  29.3, which removed the earlier `push_url` refusal); a later review of the change set for suspicious code (roadmap
+  section 6, deferred) is the place for it.
+- **Remote truth, not local refs**: O and every delivery decision come from `ls_remote` and the bounded fetch of
+  `origin`; the required names from O's objects; a block rewriting a local ref changes nothing land relies on.
 - Unsigned commits only (`hardened` views): a target that requires signed commits answers `remote_rejected`.
 
 ## 16. Failing-land routes
@@ -524,7 +517,6 @@ word only. GUIDE gains `land` ("read the diff and `tl step land TASK --summary`,
 | `target_moved` | Rerun: a new candidate onto the new `main` (validated if its tree differs) |
 | `no_change` | Confirm `main` holds the work, then `tl step land --no-change` |
 | `changes` (from `--no-change`) | There is something to land: drop `--no-change` |
-| `push_url` | Make origin's push URL its fetch URL (`git remote get-url --push origin`), or land by hand |
 | `remote_rejected` | Origin's policy (protected `main`, signed commits): land by hand or change the policy; PR mode is held |
 | `claim_lost`, `closed` | Another actor owns the task: inspect it in the tracker; a pushed land needs only `bd close` |
 | `push_barred` | Run land from your own shell |
@@ -564,8 +556,8 @@ row says after a land T is S; STEP_ONLY and the CLI flags table (`--summary`, `-
    squash rule unverified on a detached HEAD); `history.merge` (an unpinned module function on a path).
 9. **Commit message** from the tracker title and the branch's commit subjects; author the person; no co-author trailer.
 10. **Branches kept**: land deletes neither `task/<id>` nor anything else.
-11. **One delivery rule** (section 7), recorded only from `Pushed` or from origin read with the push URL equal to the
-    fetch URL (`push_url` otherwise).
+11. **One delivery rule** (section 7), recorded only from `Pushed` or from origin read by `ls_remote` or the bounded
+    fetch; `origin` trusted as configured (section 29.3).
 12. **No lease on the push**: the fast-forward rule and the read right before it; the force-push rewind race accepted.
 13. **A pushable candidate blocks the abandon** (`landing`) until a land delivers it or `--withdraw` supersedes it.
 
@@ -578,7 +570,7 @@ Code lines by the policy counter at 08784fe34 in brackets.
 | 0 | **L0 shelf: git-porcelain squash and push URL** | git-porcelain 0.16.0: `Repo.squash(onto, head, message) -> Squashed(sha, tree) \| Conflicted(paths)` (real: `merge-tree --write-tree`, `commit-tree`; fake over `fake_merge.merge_trees`; one contract suite) and `Repo.remote_url(remote, *, push=False)` (`remote get-url --push`); the pin bump here. No `tree_id` (section 24 finding 12) | shelf ~+130; here `pyproject`/`uv.lock` | shelf ~+250 (clean, conflict, already merged, same tree, identity, no hook; push URL with `pushurl`, `pushInsteadOf`, `insteadOf`) |
 | 1 | **L1 schema v13 and the land store** | DDL (section 11) and column lists; `land_store.py` (`LandRow` joined, `insert`, `latest`, `of_checks`, `hold`, `renew`, `profiled`, `conclude`, `record_release`, `supersede`, `record_delivery`, `record_close`, `HELD`); `check_store.RESULT_HELD` for result and block writes only, `LANDING` in its abandon fences with the word results; `setup_store.HELD` three-way; `WRITERS` and the policy's index pattern | `factory_schema` [153] +50, `land_store` new ~250, `check_store` [~280] +20, `setup_store` [99] +3 | `test_land_store.py` ~460 (each CHECK with its NULL case); `test_check_store` +70 (a candidate key through `RESULT_HELD` only, checks updates never matching it, abandon `landed`/`landing`/`changed`); `test_setup_store` +20; `test_policy` +10 |
 | 2 | **L2 shared validation and release** | `validate.py` extracted from `check_entry` (reconcile, profile, completed block, take, environment, block, conclusion; `moved` and `profiled` parameters; `concluded` moved with it): checks behavior unchanged; `attempt_entry.renewal` moved to `claim_lease.renewal`; `check_release.ChecksRelease` over a `ReleaseTarget` port (row read with the entry identity, and record) with the checks target and `land_store`'s (the abandon mode marks `abandoned`) | `validate` new ~175, `check_entry` [~215] -110, `claim_lease` +12, `attempt_entry` -12, `check_release` [~135] +30, `land_store` +25 | `test_check_entry` unchanged and green (the guard); `test_validate.py` ~200; `test_check_release` +110 (a candidate released settled and abandoned, reset to S, park at D, a live land identity held) |
-| 3 | **L3 the land operation: candidate, validation, delivery** | `land.py` (section 4's reads, the fetch, the target profile, the squash, the candidate insert with its reservation, the identity hold, the validation driver with the keep-alive and release, the resume table of section 12 without the close); `land_push.py` (section 7: the push URL check, the delivery rule, the push, `--withdraw`); `cli_composition.open_land` (over `composition.open_checking`); `GIT_WRITES` owners; contracts `rounds-never-land` and the extended `cli-never-imports-the-attempt-entry` | `land` new ~270, `land_push` new ~150, `cli_composition` [214] +40, `publish` +2 | `test_land.py` ~450 (section 4's refusals with nothing written; same tree pushes; moved target validates; required changed validates; conflict; `push_url`); `test_land_resume.py` ~420 (each row of section 12 but the close, concurrent lands, the abandon race both orders, `--withdraw`); `test_land_push.py` ~380 (the delivery rule's three cases, every push result, the fetch failure, the push URL recheck); `real/test_land_real.py` ~200 (a bare origin: same tree, moved main validated with `sh -c` checks, `RefRejected` after a racing push, a `pushurl` refused) |
+| 3 | **L3 the land operation: candidate, validation, delivery** | `land.py` (section 4's reads, the fetch, the target profile, the squash, the candidate insert with its reservation, the identity hold, the validation driver with the keep-alive and release, the resume table of section 12 without the close); `land_push.py` (section 7: the push URL check (removed, section 29.3), the delivery rule, the push, `--withdraw`); `cli_composition.open_land` (over `composition.open_checking`); `GIT_WRITES` owners; contracts `rounds-never-land` and the extended `cli-never-imports-the-attempt-entry` | `land` new ~270, `land_push` new ~150, `cli_composition` [214] +40, `publish` +2 | `test_land.py` ~450 (section 4's refusals with nothing written; same tree pushes; moved target validates; required changed validates; conflict; `push_url`); `test_land_resume.py` ~420 (each row of section 12 but the close, concurrent lands, the abandon race both orders, `--withdraw`); `test_land_push.py` ~380 (the delivery rule's three cases, every push result, the fetch failure, the push URL recheck); `real/test_land_real.py` ~200 (a bare origin: same tree, moved main validated with `sh -c` checks, `RefRejected` after a racing push, a `pushurl` refused) |
 | 4 | **L4 close, message, summary** | `tracker_client` close port (+18); `land.py` close and record (+45); `land_summary.py` (section 9 message, section 10 summary); `--summary`; `--no-change` | `land_summary` new ~150, `land` +45, `tracker_client` [~70] +18 | `test_land_summary.py` ~300 (each summary item, message bounds and sanitizing); `test_land_close.py` ~260 (close, already closed, two closes, `claim_lost` after push, record lost, `closed` with a pushable candidate, no-change on a moved branch); tracker double +30 |
 | 5 | **L5 surface and words** | `cli_step` `land` subcommand and flags (+30), `cli_composition` (+25), `result_data` `Landed` (+30), `show_render` land lines (+50), `attempt_status`/`check_status` `LandView` and `Next` incl. `release` (+45), `round._settle` silent (+2), `operations.release_task` land first (+30), `step_guide` (+35); glossary (section 17), roadmap B6 row, INDEX status; the M3 runbook `live-smoke.md` | about +250 | `tests/cli/test_land_cli.py` ~320; `test_check_status` +80; `test_check_operations` +100 (release and abandon order with a candidate, `landing` and `landed`); `test_checks_round` +50 (rounds silent on `land`/`landed`, report a land's `release`, never release its slot) |
 | 6 | **M3 live smoke** | Section 21's runbook, owner-run or by an authorized agent; findings file | none | none |
@@ -614,7 +606,7 @@ slice lands green with `just check` and `just test`, independently reviewed. M3 
   result left unfinished, the rerun marks it `interrupted`); each row of section 12 by stopping the operation at that
   point (a port that raises) and rerunning; `RefRejected`; a racing second land (`landing`, then `slot_busy`); the close
   paths; `--summary` writes nothing (factory.db, slots, remote, tracker unchanged); `--withdraw`; `--no-change` with a
-  moved branch; `push_barred`; `push_url` before the reads and at the recheck.
+  moved branch; `push_barred`.
 - **Real** (L3): a temporary bare origin, a checkout and one slot: the same-tree land (origin `main` at S, its parent O,
   its tree X's), a moved `main` with a passing and a failing `sh -c` check, a conflict, a racing push, a `pushurl`.
 - **Surface** (L5): show lines and JSON, `Next` rows (the slot still held after a delivery is `release`), list, the
@@ -648,8 +640,7 @@ commit, a scratch bare remote whose `main` is that commit, scratch tracker, fact
 7. **Conflict**: task E editing the same line as a hand commit on `main`: `conflict` with the path, nothing recorded.
 8. **Refusals**: `--abandon` after A is landed refuses `landed`; a task with a validated, unpushed candidate (stop with
    `kill -9` after `Land result: passed`) refuses the abandon `landing` until `--withdraw`; land from a shell carrying the
-   push bar refuses `push_barred`; `git config remote.origin.pushurl <another bare remote>` refuses `push_url` (unset
-   after); `remote_rejected` by a scratch `pre-receive` hook on the bare remote refusing `main`.
+   push bar refuses `push_barred`; `remote_rejected` by a scratch `pre-receive` hook on the bare remote refusing `main`.
 9. Record findings in `docs/design/tl-8bh9.14.8/m3-smoke-findings.md`.
 
 ## 22. Risks
@@ -697,7 +688,7 @@ names code).
 |---|---|---|
 | 1 (high) | An abandon could reopen a task whose S is already on origin: `LANDING` saw only delivered or slot-holding candidates | `LANDING` also covers a pushable candidate; a `superseded` state (`moved`, `withdrawn`, `gone`, `abandoned`); `--withdraw`; `abandon_released` and the abandon release return `abandoned`/`landed`/`landing`/`changed`; `record_delivery` fenced against an abandoned checks attempt and tested (sections 7, 11, 13) |
 | 2 (high) | Delivered-versus-moved needed a fetch, and sections 7 and 12 disagreed | One delivery rule (section 7): R = S delivered, R = O push, else the bounded fetch (`timeout=PUSH_TIMEOUT`, `GitUnavailable`) and ancestry; an undelivered candidate whose O is gone and whose S is not contained is superseded and the same invocation makes N+1; `closed` with a pushable candidate reads origin first (section 4 step 8) |
-| 3 | Delivery was recorded from fetch-side reads, which `publish` deliberately avoids | `push_url` refusal when the push URL differs from the fetch URL, checked before the reads and again before the push (L0 adds `remote_url(push=True)`); the recording rule written down (section 7) |
+| 3 | Delivery was recorded from fetch-side reads, which `publish` deliberately avoids | `push_url` refusal when the push URL differs from the fetch URL, checked before the reads and again before the push (L0 adds `remote_url(push=True)`); the recording rule written down (section 7). Removed 2026-11-12: `origin` is trusted as configured (section 29.3) |
 | 4 | Import contracts: `land` would import `attempt_entry`, and `open_land` in `composition` would enter `check_entry`'s closure | `renewal` moves to `claim_lease`; `open_land` lives in `cli_composition`; `rounds-never-land` covers `composition`; the land modules join `cli-never-imports-the-attempt-entry`'s sources (section 3) |
 | 5 | Ctrl-C does stop the check tree (`_supervise` stops it on `BaseException`) | Sections 3, 12, 21, 23 corrected; the smoke uses `kill -9` of the verified `tl` pid for `checks:running` |
 | 6 | The land process was not registered, so a release could run under a live land | `entry_pid`/`entry_start`/`entry_boot` on the candidate, written under custody (`hold`); every stop proof uses `entry_stopped` with it; the `kill -9` with a surviving check row in section 12 |
@@ -926,7 +917,7 @@ policy counter: `land` 222 (new), `land_check` 138 (new), `land_push` 138 (new),
 - **`land.land(ports, request) -> Landed | Withdrawn | Failed`** (`LandRequest(backlog, task_id, checkout, minutes,
   mode, no_change)`): section 4's reads in order (`choices`, `push_barred`, then `not_done`, `not_checked` on factory.db
   read through `admit.open_store`: another schema version is `unavailable store`; the latest candidate; the checkout,
-  `no_remote`, `push_url`, one `ls_remote` of `main` and `task/<id>` (`target`, `branch_moved`, `commit_missing`); one
+  `no_remote`, `push_url` (removed, section 29.3), one `ls_remote` of `main` and `task/<id>` (`target`, `branch_moved`, `commit_missing`); one
   tracker read, `claim_lost`, `closed`), then section 5 (`fetched`; `named` at O: `target_profile`, `target`,
   `no_required`; `Repo.squash`: `conflict` with the first 20 paths and the count; tree listings: `no_change`, `changes`;
   the required names against the checks attempt's) and the resume: a pending candidate renews its deadline and validates,
@@ -940,7 +931,7 @@ policy counter: `land` 222 (new), `land_check` 138 (new), `land_push` 138 (new),
   `slot_lock.landing`, the identity `LandStore.hold`, one renewal, the keep-alive around `validate.validate`,
   `validate.concluded`, `LandStore.conclude`, the settled release through `check_release.CandidateTarget` with `me`);
   `released` (section 4 step 5: a non-pending candidate still holding its slot released first under the custody).
-- **`land_push`**: `same_url`, `remote_tips` (the one `ls_remote`), `fetched` (`+refs/heads/main:refs/remotes/origin/main`,
+- **`land_push`**: `same_url` (removed, section 29.3), `remote_tips` (the one `ls_remote`), `fetched` (`+refs/heads/main:refs/remotes/origin/main`,
   `timeout=PUSH_TIMEOUT`), `deliver` (the rule; `Again` makes N+1 at most once per invocation), `observed` (the rule
   without a push: the closed-task read), `withdraw`. `Delivered(row, remote_head, how)`, `Withdrawn(row)`. A delivery
   record refused because a concurrent land recorded it first answers that delivery (`already_pushed`).
@@ -983,7 +974,7 @@ policy counter: `land` 222 (new), `land_check` 138 (new), `land_push` 138 (new),
 untouched; a moved `main` validated in s1, released and parked at D, pushed; changed required names validated with the
 same tree; a failed validation; a conflict; `no_change` then `--no-change` on a moved branch; `changes`; seventeen
 refusals each with nothing written, no push and no check; `push_url` before any remote read, and set by a check during
-the validation refused right before the push; another repository; failed checks refused before any remote read).
+the validation refused right before the push (both removed, section 29.3); another repository; failed checks refused before any remote read).
 `test_land_resume` (a crash after the validation pushes on the rerun without checking again; Ctrl-C during the block
 repeated whole with a renewed deadline; a killed land's check still running holds the rerun, then a new land process
 replaces the identity; a live stored land process is never replaced; `slot_busy` under another custody; a concurrent
@@ -1026,7 +1017,8 @@ test that fails without it (nine hand mutations, each failing a test). One is op
    pushable), `moved` supersedes it and makes the no-change candidate (section 13). Tests: each case.
 3. **(medium) `--withdraw` ran the branch rule**, so a moved task branch left no way out (the abandon refuses
    `landing`). `--withdraw` skips it (section 13). Test: the review's repro (origin's `task/<id>` moved).
-4. **(medium, security, closed 2026-11-12) only the first URL was compared.** git-porcelain 0.17.0 adds `Repo.remote_urls(remote, *,
+4. **(medium, security, closed 2026-11-12; superseded the same day by section 29.3: the URL comparison is removed)
+   only the first URL was compared.** git-porcelain 0.17.0 adds `Repo.remote_urls(remote, *,
    push=False)` (`remote get-url --all [--push]`; `FakeRepo.add_config` for a second value), committed locally in a
    new shelf worktree (`/home/iorlas/Workspaces/shelf-wt-l3`, branch `git-porcelain-remote-urls`, f6f7901; shelf
    `just check` and `check-all` green). Pushing the branch and opening the PR were refused by this session's
@@ -1042,7 +1034,8 @@ test that fails without it (nine hand mutations, each failing a test). One is op
    although S is gone here); `_seen` treats a missing S as not contained (`MissingRevision`), so `--withdraw` of a
    pruned S supersedes it. Tests: a pruned S already on origin is delivered; `--withdraw` of a pruned S onto a moved main.
 6. **(low) `same_url` let `GitReadFailure` escape** at the push's recheck (outside the reads' handler). It answers
-   `unavailable git`. Tests: at the reads, and set by a check before the recheck.
+   `unavailable git`. Tests: at the reads, and set by a check before the recheck. (Removed with `same_url`, section
+   29.3: an unreadable `origin` at step 6 is `unavailable git` from the presence check.)
 7. **(low, wording)** A concurrent land that took the one free slot first now reads as `landing` (`land_check._raced`:
    a candidate numbered this one or later, or `LANDING`), not `no_free_slot`. A pushable candidate whose release was
    held, met by a moved `main`, refuses the new candidate `landing` saying the old one still holds its slot (rerun, which
@@ -1085,7 +1078,7 @@ counter: `land` 280 (+42), `land_close` 44 (new), `land_summary` 158 (new), `lan
   72: a title or subject can add no line, paragraph or trailer (the trailers are always the last paragraph). Author and
   committer are the person (real Git: verified by `%an`/`%cn` and Git's own trailer parser in `test_land_real`).
 - **The summary** (`land.land` with `mode="summary"`): section 4 steps 1-4 (any concluded checks attempt: the summary
-  reports the conclusion), step 6-7 (the checkout, `push_url`, `ls_remote`, the branch rule), one tracker read for the
+  reports the conclusion), step 6-7 (the checkout, `no_remote`, `ls_remote`, the branch rule), one tracker read for the
   title (no status refusal), the fetch, the profile at O (`target_profile`, `target`, `no_required` as the land), S in
   Git objects; no step 5 release, no candidate, reservation, push or close. `LandSummary` (typed facts, section 10's
   seven items: `results`, `added`/`removed`, `argv`, `checks`, `setup`, `files`, `state` `same_tree`/`moved`/`conflict`/
@@ -1131,7 +1124,7 @@ summary recomputes the message; that S object is never shown or recorded).
 **Not verified**: no command calls the operation (L5); `bd close` against a real tracker (the port's argv and answers are
 pinned over `Script` with bd 1.3.1's measured texts); the close of a claim whose lease lapsed between commands (`claim_lost`
 from bd's fence, by the double only); the summary on a real repository (fake Git only; the message on real Git is
-covered); the open push URL residual of section 27.1 item 4 is unchanged.
+covered).
 
 ### 28.1 Review repairs to L4 (2026-11-12)
 
@@ -1221,7 +1214,7 @@ smoke](live-smoke.md) has not run. Code lines by the policy counter: `cli_step` 
   land=)` uses it once the view has a candidate) and `LAND_GUIDE`, one entry for every word the land's modules write
   (a test scans their `Failed(...)` calls) plus the release's `entry_running`, `not_terminal`, `unsettled`: `push_barred`,
   `not_done`, `not_checked`, `landing`, `not_landing`, `land_running`, `observe`, `no_change`, `changes`, `conflict`,
-  `checks_failed`, `target_moved`, `push_url`, `no_remote`, `branch_moved`, `commit_missing`, `target`, `target_profile`,
+  `checks_failed`, `target_moved`, `no_remote`, `branch_moved`, `commit_missing`, `target`, `target_profile`,
   `no_required`, `remote_rejected`, `remote`, `git`, `tracker`, `store`, `claim_lost`, `closed`, `blocked`, `task`,
   `checkout`, `choices`, `slot_busy`, `no_free_slot`, `checks`, `changed`, `abandoned`, `profile`, and `unavailable`
   (the rerun line). Words shared with the step commands keep the land's meaning first. `GUIDE` gains `land`, `landed`
@@ -1361,3 +1354,19 @@ policy counter: `cli_step` 195, `exit_codes` 33, `land_guide` 125, `land_push` 1
 471, `test_land_status` 230. **Not verified**: a real terminal's Ctrl-C after this change (the smoke saw the old
 traceback; the test raises `KeyboardInterrupt` from the replaced operation); a Ctrl-C landing between a push and its
 record still answers `interrupted` and the rerun's `already_pushed` (section 12's row, tested before).
+
+### 29.3 Decision: origin trusted as configured (2026-11-12)
+
+**Decided by the owner, 2026-11-12:** "let others decide how to configure origins". `tl step land` adds no guard on how
+`origin`'s URLs are set: the `push_url` refusal and `land_push.same_url` (every `url` and `pushurl` compared through
+git-porcelain's `remote_urls`, before the reads and again right before the push) are removed, with their tests (the
+fake table's `push_url`, `second_url` and `push_insteadof` rows, the two `push_url` tests of `test_land`, the
+`remote_urls` fault and its two `test_land_push` tests, the three real-Git URL tests of `test_land_real`) and the guide
+entry. Section 27.1 items 4 and 6 and section 24 finding 3 are superseded.
+
+What stays: `origin` must exist (`no_remote`, a presence check through `remote_url`, the URL never kept or printed, as
+`publish` does); the delivery rule of section 7 is unchanged otherwise: R from `ls_remote`, then the bounded fetch and
+ancestry, each reading `origin` as the person's Git configuration resolves it, and the push to `origin` the same way.
+A person who points origin's fetch and push at different repositories owns what land then reads and records. The
+D10 residual (a block editing `.git/config`) is accepted without this mitigation (section 15). git-porcelain stays
+pinned at 0.17.0 (released; no revert).
