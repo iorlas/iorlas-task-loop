@@ -10,15 +10,13 @@ whole old packages, test bootstraps or unused abstractions. No baseline runtime 
 
 | what | who may write it | never |
 |---|---|---|
-| main checkout | the person | agent hand edits or release tooling |
+| main checkout | the person | agent hand edits |
 | managed task worktree | its assigned implementing agent and coordinator | unrelated or competing source writers |
-| installed plugin/cache | the normal installation/release operation | hand edits |
-| owner pin | explicit owner operation | automatic version switching |
 | task state | typed task-tracker operations through the actor | treating a comment as a state mutation |
 | existing worktrees, evidence and user data | explicitly authorized owning operation | deletion based only on age or presumed staleness |
 
 Work in a worktree. Preserve unrelated edits and task claims. Git operations follow active user/session authority;
-local Git authorization does not authorize remote publication, merge, installation or release.
+local Git authorization does not authorize remote publication or merge.
 Never kill processes by name; act only on a confirmed owned process identity.
 
 ## Build and verification
@@ -26,8 +24,7 @@ Never kill processes by name; act only on a confirmed owned process identity.
 Python 3.15+. `just check` and `just test` are the required focused gates. Read the justfile before running them.
 The successor has its own declared environment and installed package; baseline editable installs or PYTHONPATH
 must not supply missing code. Do not copy the old conftest/runners: they load the old application and kernel.
-`tl` runs the owner's pinned factory install, never this checkout (it resolves the pin at every start, in a slot too):
-run the code under test as `uv run --frozen --no-sync python -I -m taskloop ...` after `just install`, or through the tests.
+Run the code under test with `uv run --frozen --no-sync python -I -m taskloop ...` after `just install`, or through the tests.
 Do not run whole-suite/live tests as an agent. Use focused behavior/contract tests; new tests are pytest functions
 or classes, never unittest. No test for every private helper or a test that merely repeats its implementation.
 Retain caps: 400 source lines per file, 80 per function and 800 per test file. No new Any, cast or ignore escape.

@@ -737,9 +737,8 @@ and manual restart-session/attempt/from-scratch modes. Keep automatic intact-DB 
 factory-shutdown cancellation. See [owner interaction contract](tl-8bh9.7/interaction-contract.md).
 
 
-Owner selected fixed executable version per running factory on 2026-11-09. Installed updates/pin changes apply on next
-start; no live switching or automatic bad-version fallback. Explicit owner pin is local configuration, not disposable
-execution state. See [operations review](tl-8bh9.8/operations.md); its reduced release scope remains a recommendation.
+A running factory keeps the code it started with. Superseded 2026-11-12: the factory no longer manages its own versions,
+installs, pins or releases; uv does (see the [roadmap](self-hosting-roadmap.md) decision).
 
 
 Owner clarified lightweight skill purpose 2026-11-09: explicit help with setup, maintenance, compliant task authoring,
