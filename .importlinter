@@ -8,10 +8,10 @@ root_packages =
 include_external_packages = True
 
 [importlinter:contract:main-depends-on-cli]
-name = The `tl` module entry (`__main__`) delegates to the CLI; the CLI delegates to the step surface; neither imports upward
+name = The `tl` console script (`start`) and the module entry (`__main__`) are independent tops (neither imports the other: the exec lands in `__main__`, which never resolves); `__main__` delegates to the CLI, the CLI to the step surface; nothing imports upward
 type = layers
 layers =
-    taskloop.__main__
+    taskloop.start | taskloop.__main__
     taskloop.cli
     taskloop.cli_step
     taskloop.cli_composition
@@ -119,6 +119,27 @@ forbidden_modules =
     taskloop.interrupts
     taskloop.land_render
     taskloop.land_data
+    taskloop.start
+    taskloop.installs
+    taskloop.pin_file
+    taskloop.cli_install
+
+[importlinter:contract:start-decides-before-the-cli]
+name = The console script resolves the pin before any CLI, composition or shelf library is imported (directly or indirectly)
+type = forbidden
+source_modules =
+    taskloop.start
+forbidden_modules =
+    taskloop.cli
+    taskloop.cli_step
+    taskloop.cli_composition
+    taskloop.composition
+    git_porcelain
+    sqlite_store
+    stream_proc
+    beads_client
+    any_agent
+    process_lock
 
 [importlinter:contract:no-runtime-mechanisms]
 name = The foundation has no direct network or process mechanisms

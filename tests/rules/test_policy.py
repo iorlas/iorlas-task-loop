@@ -3,8 +3,10 @@
 import ast
 import io
 import re
+import sys
 import tokenize
 import tomllib
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -254,3 +256,121 @@ def test_the_one_signal_owner_installs_only_a_sigint_handler_and_nothing_sends_a
             and node.value.id == "signal"}
     assert used == SIGNAL_USES
     assert not any(isinstance(node, ast.Import) and any(alias.name == "os" for alias in node.names) for node in ast.walk(tree))
+
+
+# Replacing or forking this process, or another way to start one: only `start.py`'s one `os.execv` of the pinned (or the
+# started) interpreter, before the CLI is imported (tl-8bh9.8.3 section 5.3).
+REPLACING = frozenset({
+    "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe", "posix_spawn", "posix_spawnp", "fork",
+    "forkpty", "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe", "system", "popen",
+    "create_subprocess_exec", "create_subprocess_shell", "ProcessPoolExecutor", "fork_exec",
+})
+PROCESS_MODULES = frozenset({"pty", "multiprocessing", "_posixsubprocess", "concurrent.futures.process"})
+DYNAMIC_IMPORTS = frozenset({"import_module", "__import__"})
+
+
+def _called(node: ast.Call) -> str | None:
+    return node.func.id if isinstance(node.func, ast.Name) else node.func.attr if isinstance(node.func, ast.Attribute) else None
+
+
+def _process_module(name: str) -> list[str]:
+    return [module for module in PROCESS_MODULES if name == module or name.startswith(module + ".")]
+
+
+def _strings_of(nodes: list[ast.expr]) -> list[str]:
+    return [node.value for node in nodes if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+
+
+def _by_string(node: ast.AST) -> list[str]:
+    """A `REPLACING` name reached by a string: `getattr(os, "fork")`, `vars(os)["fork"]`, `os.__dict__["fork"]`."""
+    if isinstance(node, ast.Call) and _called(node) == "getattr":
+        return [name for name in _strings_of(node.args[1:2]) if name in REPLACING]
+    if isinstance(node, ast.Subscript) and ((isinstance(node.value, ast.Call) and _called(node.value) == "vars")
+                                            or (isinstance(node.value, ast.Attribute) and node.value.attr == "__dict__")):
+        return [name for name in _strings_of([node.slice]) if name in REPLACING]
+    return []
+
+
+def process_replacements(tree: ast.AST) -> list[str]:
+    """Each use of a `REPLACING` name (an attribute, a bare name, a `from` import, or by string through `getattr`, `vars`
+    or `__dict__`) and each import of a `PROCESS_MODULES` module (plain, `from`, or a string given to
+    `import_module`/`__import__`); one entry per use, so a count is checked."""
+    found: list[str] = []
+    for node in ast.walk(tree):
+        name = node.attr if isinstance(node, ast.Attribute) else node.id if isinstance(node, ast.Name) else None
+        found += [name] if name in REPLACING else []
+        found += _by_string(node)
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            found += [alias.name for alias in node.names if alias.name in REPLACING]
+            found += _process_module(module) or [hit for alias in node.names for hit in _process_module(f"{module}.{alias.name}")]
+        if isinstance(node, ast.Import):
+            found += [hit for alias in node.names for hit in _process_module(alias.name)]
+        if isinstance(node, ast.Call) and _called(node) in DYNAMIC_IMPORTS:
+            found += [hit for text in _strings_of(node.args[:1]) for hit in _process_module(text)]
+    return found
+
+
+@pytest.mark.parametrize(("source", "names"), [
+    ("os.execv(p, a)", ["execv"]), ("os.execvpe(p, a, e)", ["execvpe"]), ("from os import execl", ["execl"]),
+    ("os.posix_spawnp(p, a, e)", ["posix_spawnp"]), ("pid = os.fork()", ["fork"]), ("os.forkpty()", ["forkpty"]),
+    ("os.spawnv(m, p, a)", ["spawnv"]), ("hook = os.spawnlp", ["spawnlp"]), ("os.system(c)", ["system"]),
+    ("os.popen(c)", ["popen"]), ("asyncio.create_subprocess_exec(p)", ["create_subprocess_exec"]),
+    ("from asyncio import create_subprocess_shell", ["create_subprocess_shell"]),
+    ("from concurrent.futures import ProcessPoolExecutor", ["ProcessPoolExecutor"]),
+    ("_posixsubprocess.fork_exec(a)", ["fork_exec"]), ("import _posixsubprocess", ["_posixsubprocess"]),
+    ("import concurrent.futures.process", ["concurrent.futures.process"]),
+    ("from concurrent.futures import process", ["concurrent.futures.process"]),
+    ("from concurrent.futures.process import _ExceptionWithTraceback", ["concurrent.futures.process"]),
+    ('getattr(os, "fork")()', ["fork"]), ('vars(os)["execv"]', ["execv"]), ('os.__dict__["system"]', ["system"]),
+    ("import pty", ["pty"]), ("import multiprocessing.pool", ["multiprocessing"]),
+    ("from multiprocessing import Process", ["multiprocessing"]), ('importlib.import_module("pty")', ["pty"]),
+    ('__import__("multiprocessing")', ["multiprocessing"]), ('import_module("concurrent.futures.process")', ["concurrent.futures.process"]),
+    ("os.execv(p, a)\nos.execv(p, a)", ["execv", "execv"]),
+    ('WORDS = ("execv", "fork")', []), ("executable = sys.executable", []), ("keep_awake_spawn(argv)", []),
+    ('getattr(os, "getcwd")', []), ('vars(o)["name"]', []), ("from concurrent.futures import ThreadPoolExecutor", []),
+], ids=["execv", "execvpe", "from_os", "posix_spawnp", "fork", "forkpty", "spawnv", "spawn_reference", "system", "popen",
+        "asyncio_exec", "asyncio_shell", "process_pool", "fork_exec", "posixsubprocess", "futures_process", "futures_process_from",
+        "futures_process_member", "getattr", "vars", "dunder_dict", "pty", "mp_submodule", "mp_from", "import_module",
+        "dunder_import", "import_module_futures", "twice", "words", "executable", "shelf_spawn", "getattr_other", "vars_other",
+        "threads"])
+def test_the_process_replacement_matcher_sees_uses_and_not_words(source: str, names: list[str]) -> None:
+    assert sorted(process_replacements(ast.parse(source))) == sorted(names)
+
+
+def test_only_start_replaces_the_process() -> None:
+    """CLAUDE.md: no spawn, fork or exec escape hatch in factory source or tests; the one exec is `start.py`'s, once."""
+    uses = Counter((name, str(path.relative_to(ROOT))) for path in FILES for name in process_replacements(ast.parse(path.read_text())))
+    assert uses == Counter({("execv", "src/taskloop/start.py"): 1})
+
+
+DECIDING = ("start.py", "installs.py", "pin_file.py")
+DECIDING_IMPORTS = frozenset({"taskloop.installs", "taskloop.pin_file", "taskloop.machine_config"})  # and the standard library
+
+
+def factory_imports(path: Path) -> set[str]:
+    """The modules one file imports (a `from taskloop import x` as `taskloop.x`), a dynamic import as `<dynamic>`."""
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Import):
+            found.update(alias.name for alias in node.names)
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            found.update(f"taskloop.{alias.name}" for alias in node.names) if module == "taskloop" else found.add(module)
+        if isinstance(node, ast.Call) and _called(node) in DYNAMIC_IMPORTS:
+            found.add("<dynamic>")
+    return found
+
+
+def test_nothing_but_the_standard_library_is_imported_before_the_decision() -> None:
+    """`start` decides before the CLI: it, `installs` and `pin_file` import the standard library and each other, plus the
+    machine config's fixed location (itself standard library only); no dynamic import."""
+    folder = ROOT / "src" / "taskloop"
+    for name in (*DECIDING, "machine_config.py"):
+        imported = factory_imports(folder / name)
+        outside = {module for module in imported if module.split(".")[0] not in sys.stdlib_module_names}
+        assert outside <= (DECIDING_IMPORTS if name in DECIDING else set()), (name, outside)
+
+
+def test_the_console_script_is_the_resolving_start() -> None:
+    assert tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"] == {"tl": "taskloop.start:main"}

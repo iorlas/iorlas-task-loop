@@ -175,20 +175,25 @@ start resolves exactly once and an exec loop is impossible by construction (no m
 Development from a source checkout is explicit: `uv run python -I -m taskloop ...` (or the runner's
 `.venv/bin/python -I -m taskloop`), never a fallback for a failed pin.
 
-### 5.2 The algorithm (`installs.resolve`, pure; `start.main` applies it)
+### 5.2 The algorithm (`start.resolve`, pure; `start.run` applies it)
 
-Inputs: the argv, `Path.home()`, this process's `sys.executable` and `sys.prefix`, and file reads through a narrow port.
+Inputs: the argv, `Path.home()`, this process's `sys.executable`, and file reads through a narrow port (`installs.Reads`).
+As built (I1): the resolver lives in `start.py`, not `installs.py`, because `pin_file` imports `installs` (the shared
+atomic writer, escaping and commit check) and `installs.resolve` would have needed `pin_file` back, an import cycle; it
+takes no `sys.prefix`, which only `tl version` reads.
 
 1. **The pre-scan.** The top-level options are `--config FILE`, `--config=FILE`, `-h`, `--help`. Tokens are read left
    to right: `--config` consumes the next token as its value whatever it is (so `tl --config install step list` has
    the config `install` and the command `step`); the first token that is not a top-level option or its value is the
-   command word. Nothing else of argv is interpreted.
+   command word. Nothing else of argv is interpreted. As built: a `--config` value without a name (`--config /`,
+   `--config=`, an empty value) has no pin file and refuses `pin:invalid` for a resolved command (`tl version` reports it
+   `invalid`).
 2. **Exempt commands run their own install, unresolved**: the command word `install`, `pin` or `version`, no command
    word, or `-h`/`--help`. They manage installs and must work while the pin names a missing or broken install.
 3. **The pin file**: `<config folder>/<config stem>.pin.toml` (section 4.4). **Absent**: run the own install (the
    installation manager's selection: whichever `tl` the person started).
-4. **Pin invalid** (unreadable, not TOML, an unknown key, `format` not 1, `commit` not 40/64 lowercase hex): `refused
-   pin:invalid`.
+4. **Pin invalid** (unreadable, not TOML, an unknown key, `format` not the integer 1, `commit` not 40/64 lowercase hex,
+   a `tag` that is not a tag name): `refused pin:invalid`.
 5. **The pinned install's state** (`installs.state`, section 4.3): absent `refused pin:missing`, incomplete `refused
    pin:incomplete`, broken `refused pin:broken`.
 6. **Exec.** Complete: `os.execv(<install>/venv/bin/python, [<that path>, "-I", "-m", "taskloop", *argv[1:]])`. "Run the
@@ -220,7 +225,14 @@ child exists to own. It is used once, in `start.py`, before any lock, database, 
   siblings (neither imports the other); a new forbidden contract `start-decides-before-the-cli` keeps `taskloop.start`
   from importing `taskloop.cli`, `cli_step`, `cli_composition`, `composition`, and the shelf libraries `git_porcelain`,
   `sqlite_store`, `stream_proc`, `beads_client`, `any_agent`, `process_lock` (directly or indirectly): `start` imports
-  only the standard library, `installs` and `pin_file`, which import nothing of the factory but each other.
+  only the standard library, `installs` and `pin_file`, which import nothing of the factory but each other and
+  `machine_config` (as built: `pin_file` takes the default config location from `machine_config.config_file`, its one
+  owner, rather than a second copy; the policy test `test_nothing_but_the_standard_library_is_imported_before_the_decision`
+  holds `machine_config` to the standard library only).
+- As built, the policy also refuses `os.system`, `os.popen`, `asyncio.create_subprocess_exec`/`_shell`,
+  `ProcessPoolExecutor`, `_posixsubprocess.fork_exec`, imports of `_posixsubprocess` and `concurrent.futures.process`, and
+  any of these names reached by string (`getattr`, `vars(...)[...]`, `.__dict__[...]`); it counts uses, so `start.py` has
+  exactly one `os.execv`.
 - Not chosen for "run here": `importlib.import_module("taskloop.cli").main()` (typed `Any`: CLAUDE.md forbids new Any)
   or a function-level `import` (ruff `PLC0415`, and a `noqa` is an ignore escape). The cost of exec'ing the own
   interpreter is one more interpreter start (tens of milliseconds).
@@ -450,9 +462,12 @@ leaves its own incomplete directory (section 6.4).
 
 ## 12. Installed as a pip/uv package, and macOS
 
-- **The launcher is whatever `tl` the person runs.** Any B8-or-later install is a launcher: a pip or `uv tool install`
-  of `iorlas-task-loop` (its `tl` console script is `taskloop.start:main`), an install directory's `venv/bin/tl`, or a
-  runner `.venv/bin/tl`. Unpinned, it runs itself; pinned, it execs the pin. B8 needs no package index: section 6.1
+- **The launcher is whatever `tl` the person runs.** Any B8-or-later venv-based install is a launcher: a `uv tool
+  install` or `pipx install` of `iorlas-task-loop` (its `tl` console script is `taskloop.start:main`), a `pip install`
+  into a virtual environment, an install directory's `venv/bin/tl`, or a runner `.venv/bin/tl`. **Only venv-based
+  installs are supported launchers**: a `pip install --user` (or into the system interpreter) puts the package in the
+  user or system site, which the exec's `-I` (no user site) hides, so `python -I -m taskloop` would not find it; no code
+  works around this. Unpinned, it runs itself; pinned, it execs the pin. B8 needs no package index: section 6.1
   installs from Git objects. A later `tl install --index VERSION` (not built) would write the same layout with an index
   version as the directory name and manifest key; resolution would not change.
 - **PATH is the person's.** B8 writes no PATH entry. On the owner's machine `~/.local/bin/tl` is the baseline's
@@ -607,7 +622,7 @@ steps 1-3 again on macOS.
 
 | Order | Slice | What | Source | Tests |
 |---|---|---|---|---|
-| 1 | **I1 resolver, pin file, manifest validity, the one exec, `tl version`** | `installs.py` (layout, manifest read/validate, `state`, `resolve`), `pin_file.py` (read, write, clear), `start.py` (console entry, pre-scan, refusal rendering, `os.execv` of the pinned or own interpreter), `cli_install.py` with `tl version [--json]`, the `pyproject` script entry, the exec policy test, the import contracts (`start` in the layers, `start-decides-before-the-cli`) | `installs` ~130, `pin_file` ~70, `start` ~60, `cli_install` ~60, `cli` +5, `pyproject` 1, `.importlinter` ~20 | `test_installs.py` ~330, `test_pin_file.py` ~120, `test_start.py` ~260 (pre-scan, two configs, exec loop), `test_version_cli.py` ~120, `test_policy` +70 |
+| 1 | **I1 resolver, pin file, manifest validity, the one exec, `tl version`** | `installs.py` (layout, manifest read/validate, `state`), `pin_file.py` (read, write, clear), `start.py` (console entry, pre-scan, `resolve` (section 5.2), refusal rendering, `os.execv` of the pinned or own interpreter), `cli_install.py` with `tl version [--json]`, the `pyproject` script entry, the exec policy test, the import contracts (`start` in the layers, `start-decides-before-the-cli`) | `installs` ~130, `pin_file` ~70, `start` ~60, `cli_install` ~60, `cli` +5, `pyproject` 1, `.importlinter` ~20 | `test_installs.py` ~330, `test_pin_file.py` ~120, `test_start.py` ~260 (pre-scan, two configs, exec loop), `test_version_cli.py` ~120, `test_policy` +70 |
 | 2 | **I2 `tl install`** | `install_op.py` (REV checks, lock, state under the lock, native export from `Tree`, uv build with cwd/argv/env of 6.1, verify through `tl version --json`, manifest), the `install` subcommand in `cli_install`, real ports in `cli_composition` (`stream_proc.run`/`capture`, `process_lock`) | `install_op` ~230, `cli_install` +50, `cli_composition` +35 | `test_install_op.py` ~600 (split in two files if it passes 800), `tests/cli/test_install_cli.py` ~150, real export ~80 |
 | 3 | **I3 `tl pin`, rounds line, words and docs** | `pin` and `--clear` in `cli_install`, the `rounds install` line, the implement input's `tl` sentence and the AGENTS.md/CLAUDE.md mirror (Q14), schema-word tests, glossary (section 15), roadmap B8 and section 1 rows, INDEX status, the M5 runbook `live-smoke.md` | `cli_install` +90, `rounds` +8, `implement_step` +2 | `tests/cli/test_pin_cli.py` ~220, schema words ~120, rounds +30, implement input +10 |
 | 4 | **M5 B8 smoke** | Section 17, owner-run or by an authorized agent; findings file | none | none |
@@ -700,3 +715,14 @@ An independent review of the first version of this plan found the points below; 
 | 11 | Missing tests | Added: manifest-vs-lock race, orphaned uv, uv cwd/argv/env, broken manifest install, tree-id REV, tag prefix, `--config install` pre-scan, two configs in one folder, exec loop end to end, nothing imported before the decision (section 16) |
 
 Also recorded: the `current`-symlink alternative and why exec stays (section 5.4).
+
+**I1 as built (2026-11-12).** Deviations, each stated in its section: `resolve` lives in `start.py` and takes no
+`sys.prefix` (5.2); `pin_file` imports `machine_config.config_file`, held to the standard library by the policy test
+(5.3); a nameless `--config` is `pin:invalid` (5.2); only venv-based launchers (12). Also: `installs.state` examines
+`installs/<commit>` and its manifest through the port's `kind` (a file, a link to nothing or an unexaminable path is
+`broken` with a detail, never `absent` or `incomplete`); a `tag` is checked as a tag name on read; `format` must be the
+integer 1; the atomic writer uses a unique temporary file beside its target and removes it on any failure; `tl version`
+counts a prefix as managed only under this home's installs root, and reports an invalid pin as
+`{"invalid": <why>, "file": <path or null>}` in JSON. Unrelated stale-test repair in the same change:
+`tests/rules/test_isolation.py` expected the shelf tag `git-porcelain-v0.16.0` after `pyproject.toml` moved to v0.17.0
+(dfba4675c); it now expects v0.17.0.

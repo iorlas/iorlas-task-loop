@@ -11,7 +11,7 @@ from urllib.parse import unquote, urlparse
 import pytest
 
 import taskloop
-from taskloop.cli import main
+from taskloop import start
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,14 +33,14 @@ def test_noneditable_install_matches_current_source() -> None:
     for path in source.glob("*.py"):
         assert (installed / path.name).read_bytes() == path.read_bytes(), path.name
     entries = [entry for entry in distribution.entry_points if entry.group == "console_scripts"]
-    assert [(entry.name, entry.value) for entry in entries] == [("tl", "taskloop.cli:main")]
-    assert entries[0].load() is main
+    assert [(entry.name, entry.value) for entry in entries] == [("tl", "taskloop.start:main")]
+    assert entries[0].load() is start.main
 
 
 # Every shared dependency and the shelf tag it is pinned at. stream-proc is pinned at any-agent's tag (its own
 # stream-proc-v0.6.0 tags the same commit): both must resolve to one shelf commit.
 SHARED = {
-    "git-porcelain": "git-porcelain-v0.16.0",
+    "git-porcelain": "git-porcelain-v0.17.0",
     "beads-client": "beads-client-v0.2.0",
     "any-agent": "any-agent-v0.5.0",
     "sqlite-store": "sqlite-store-v0.1.0",
