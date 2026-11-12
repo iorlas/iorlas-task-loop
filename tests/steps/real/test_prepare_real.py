@@ -67,7 +67,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     admission = AttemptAdmission(
         lambda: factory, begin_immediate, EvidenceFiles(art), tasks, checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
     )
-    admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), main, "m", "high", "workspace-write", 100))
+    admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), main, "m", "high", "workspace-write", 100, None))
     assert isinstance(admitted, Admitted) and admitted.slot == "s1"
     store, files = AttemptStore(lambda: factory), RealSlotFiles()
     assert store.register_entry(admitted.key, ENTRY, 10) == "accepted"

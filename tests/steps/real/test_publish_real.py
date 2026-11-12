@@ -89,7 +89,7 @@ class Published:
         admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
         )
-        admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), self.main, "m", "high", "workspace-write", 100))
+        admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), self.main, "m", "high", "workspace-write", 100, None))
         assert isinstance(admitted, Admitted) and self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
         self.key: AttemptKey = admitted.key
         attempts = Attempts(self.store, EvidenceFiles(root / "art"), lambda: ("/bin/codex", {}), write_plan(self.slot), lambda: 10,

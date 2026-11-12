@@ -64,6 +64,7 @@ class AdmitRequest:
     effort: str
     sandbox: str
     deadline: float
+    label: str | None  # the approval label a round ingests the task under, stored on the attempt; None: started by hand
 
 
 @dataclass(frozen=True)
@@ -253,7 +254,7 @@ class AttemptAdmission:
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None, "seq": _next_seq(con, request), "slot_head": head,
-                "after_commit": None,
+                "after_commit": None, "label": request.label,
             })
         return Admitted(key, name)
 

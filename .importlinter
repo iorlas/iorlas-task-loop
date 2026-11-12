@@ -64,6 +64,8 @@ source_modules =
     taskloop.validate
     taskloop.check_release
     taskloop.land_store
+    taskloop.hold_store
+    taskloop.hold_text
 forbidden_modules =
     taskloop.land
     taskloop.land_check

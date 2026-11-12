@@ -260,17 +260,40 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
     assert row == ("implement", 2, None, key.attempt_id)
 
 
+@pytest.mark.parametrize("label", ["auto", None])
+def test_the_advance_and_the_repeat_copy_the_label_the_task_was_taken_under(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    label: str | None,
+) -> None:
+    registered.execute("UPDATE attempt SET label=? WHERE attempt_id='attempt'", (label,))  # as its admission stored it
+    key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
+    answer = {"disposition": "implemented", "paths": ["src/a.py"], "message": "A", "explanation": "x"}
+
+    def change() -> None:
+        slot.write_file("src/a.py", "A = 1\n")
+        slot.write_file("scratch.log", "left over\n")
+
+    execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files)
+    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10).admit_repeat(
+        RepeatRequest(key, "feedback", 100, "uncommitted"))
+    assert isinstance(repeated, Admitted)
+    found = registered.execute("SELECT attempt_id,label FROM attempt ORDER BY seq").fetchall()
+    assert found == [("attempt", label), (key.attempt_id, label), (repeated.key.attempt_id, label)]
+
+
 def test_an_abandoned_implement_restarts_the_task_at_plan(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
+    registered.execute("UPDATE attempt SET label='auto' WHERE attempt_id='attempt'")  # the round took it
     key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
     abandon(registered, checkouts, slot_files, key)
     fresh = AttemptAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), tasks(CLAIMED), checkouts,
                              lambda _r, _t: True, lambda _r, _t: True, lambda: 10, lambda _p: True, slot_files)
-    admitted = fresh.admit(AdmitRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", "workspace-write", 100))
+    admitted = fresh.admit(AdmitRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", "workspace-write", 100, None))
     assert isinstance(admitted, Admitted)
-    row = registered.execute("SELECT step,number,seq,after_commit FROM attempt WHERE attempt_id=?", (admitted.key.attempt_id,)).fetchone()
-    assert row == ("plan", 1, 3, None)
+    row = registered.execute("SELECT step,number,seq,after_commit,label FROM attempt WHERE attempt_id=?",
+                             (admitted.key.attempt_id,)).fetchone()
+    assert row == ("plan", 1, 3, None, None)  # started again by hand (`tl step start`): no label
 
 
 def test_abandoning_the_done_plan_while_implement_holds_the_claim_is_refused(

@@ -1,6 +1,7 @@
 """Construct the real tracker client (beads_client `Bd`): the task read at an explicit tracker root, the round's reads,
-the claim, fenced unclaim, heartbeat and the land's close, and the process-wide drop of bd's location overrides. The one
-module that constructs a `Bd`. Wired by `composition` and `cli_composition`."""
+the claim, fenced unclaim, heartbeat and the land's close, a hold's tracker writes (`TrackerHolds`), and the
+process-wide drop of bd's location overrides. The one module that constructs a `Bd`. Wired by `composition` and
+`cli_composition`."""
 
 import os
 from collections.abc import Callable, MutableMapping
@@ -78,6 +79,9 @@ class TrackerClaims:
 
 LOST = frozenset({"not_claimable", "precondition"})  # bd's words for a claim taken, reverted or closed
 GONE = "no issue found matching"  # bd 1.3.1 on a deleted bead (`resolving X: no issue found matching "X"`), classified `other`
+# bd 1.3.1 on an unclaim of a closed task, even one still assigned to the actor (measured 2026-11-12): exit 1, nothing
+# written, the task not reopened; classified `other`. The unclaim maps it, and `GONE`, to "not held" (tl-8bh9.14.9 5.3).
+UNCLAIM_CLOSED = "cannot unclaim closed issue"
 # bd's tracker-location overrides (bd 1.3.1 binary strings). BEADS_DIR measured: it beats cwd, so bd would talk to another
 # tracker than the stored root. BEADS_DB and BD_DB changed nothing in an embedded tracker (measured) and are dropped too.
 BD_DISCOVERY = ("BEADS_DIR", "BEADS_DB", "BD_DB")
@@ -126,7 +130,8 @@ def _close_failed(error: BdError) -> CloseAnswer:
 
 
 def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerClaims:
-    """`Bd.claim`, the compensating `Bd.unclaim` fenced to this actor (never forced), `Bd.heartbeat` mapped to a `Beat`
+    """`Bd.claim`, the compensating `Bd.unclaim` fenced to this actor (never forced; a closed or deleted task is not
+    held: False), `Bd.heartbeat` mapped to a `Beat`
     (one bd call capped at BD_TIMEOUT_S, no lock retry: a refused beat is retried by the next interval), and the land's
     close (`_closed`, each of its bd calls capped at BD_TIMEOUT_S: a hung bd is `unavailable`). The one place a `Bd` is
     constructed for a write; `client` is the seam a test checks the construction through."""
@@ -141,7 +146,12 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
         return bd(tracker_root).claim(task_id)
 
     def unclaim(tracker_root: str, task_id: str) -> bool:
-        return bd(tracker_root).unclaim(task_id, if_assignee=ACTOR)
+        try:
+            return bd(tracker_root).unclaim(task_id, if_assignee=ACTOR)
+        except BdError as error:
+            if error.kind == "other" and (GONE in error.text or UNCLAIM_CLOSED in error.text.lower()):
+                return False  # nothing to return: the release records `not_held`
+            raise
 
     def heartbeat_for(tracker_root: str, task_id: str) -> Heartbeat:
         renewing = client(ACTOR, cwd=located(tracker_root), run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
@@ -159,3 +169,86 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
         return _closed(client(ACTOR, cwd=located(tracker_root), run=run, timeout=BD_TIMEOUT_S), task_id, reason)
 
     return TrackerClaims(claim, unclaim, heartbeat_for, close)
+
+
+HELD = "held"  # the tracker label a hold adds: a task waiting for a person (never read for control)
+# A hold's label step (tl-8bh9.14.9 5.2): `moved` (the approval label removed, `held` added), `absent` (`held` added, the
+# label was not on the task), `not_ours` (another actor holds the task: nothing written), `closed`, `missing` (nothing
+# written); `precondition` (the fence went stale: nothing written, retried) or `unavailable` (bd could not be asked).
+type LabelStep = Literal["moved", "absent", "not_ours", "closed", "missing", "precondition", "unavailable"]
+type HoldWrite = Literal["done", "missing", "unavailable"]  # a comment or the `held` label's removal
+
+
+@dataclass(frozen=True)
+class HoldAnswer[W: str]:
+    """A hold write's word; `detail` the failure's kind for `unavailable`."""
+
+    word: W
+    detail: str = ""
+
+
+type Labels = Callable[[str, str, str], HoldAnswer[LabelStep]]  # (tracker root, task id, the stored approval label)
+type Comment = Callable[[str, str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id, text)
+type Clear = Callable[[str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id)
+
+
+@dataclass(frozen=True)
+class TrackerHolds:
+    """A hold's tracker writes, each bound per tracker root and each bd call capped at BD_TIMEOUT_S: the label step,
+    the one comment, and the removal of `held` once the task is taken again."""
+
+    labels: Labels
+    comment: Comment
+    clear: Clear
+
+
+def _hold_failed[W: str](error: BdError, stale: W) -> HoldAnswer[W | Literal["missing", "unavailable"]]:
+    if error.kind == "precondition":
+        return HoldAnswer(stale)
+    if error.kind == "other" and GONE in error.text:
+        return HoldAnswer("missing")
+    return HoldAnswer("unavailable", error.kind)
+
+
+def _labelled(bd: Bd, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+    """One read (`Bd.show`): missing, closed or another actor's task is written nothing; else, fenced on the assignee
+    just read (the factory's own, or none), `held` added and then the approval label removed (both idempotent)."""
+    try:
+        found = bd.show(task_id)
+        if found is None:
+            return HoldAnswer("missing")
+        if found.status == "closed":
+            return HoldAnswer("closed")
+        if found.assignee not in (ACTOR, ""):
+            return HoldAnswer("not_ours")
+        bd.add_label(task_id, HELD, if_assignee=found.assignee)
+        bd.remove_label(task_id, label)
+    except BdError as error:
+        return _hold_failed(error, "precondition")
+    return HoldAnswer("moved" if label in found.labels else "absent")
+
+
+def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHolds:
+    """`TrackerHolds` over `Bd` as this actor at the resolved tracker root, each call capped at BD_TIMEOUT_S (a hung bd is
+    `unavailable`); `client` is the seam a test checks the construction through."""
+
+    def bd(tracker_root: str) -> Bd:
+        return client(ACTOR, cwd=str(Path(tracker_root).expanduser().resolve()), run=run, timeout=BD_TIMEOUT_S)
+
+    def labels(tracker_root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+        return _labelled(bd(tracker_root), task_id, label)
+
+    def written(call: Callable[[], None]) -> HoldAnswer[HoldWrite]:
+        try:
+            call()
+        except BdError as error:
+            return _hold_failed(error, "unavailable")
+        return HoldAnswer("done")
+
+    def comment(tracker_root: str, task_id: str, text: str) -> HoldAnswer[HoldWrite]:
+        return written(lambda: bd(tracker_root).comment(task_id, text))
+
+    def clear(tracker_root: str, task_id: str) -> HoldAnswer[HoldWrite]:
+        return written(lambda: bd(tracker_root).remove_label(task_id, HELD))
+
+    return TrackerHolds(labels, comment, clear)

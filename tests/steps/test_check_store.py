@@ -125,9 +125,9 @@ def test_a_result_names_a_checks_attempt_or_a_land_candidate_so_it_has_no_foreig
     put(checking, "check_result", RESULT | {"attempt_id": "candidate"})
 
 
-def test_v13_is_this_codes_schema_and_v12_is_not_current(checking: sqlite3.Connection) -> None:
-    assert SCHEMA.version == 13 and current(checking)
-    checking.execute("PRAGMA user_version=12")
+def test_v14_is_this_codes_schema_and_v13_is_not_current(checking: sqlite3.Connection) -> None:
+    assert SCHEMA.version == 14 and current(checking)
+    checking.execute("PRAGMA user_version=13")
     assert not current(checking)
     with pytest.raises(StoreUnavailable):
         store(checking).row(CHECKS)

@@ -435,8 +435,8 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
     deadline = deadline_after(request.minutes, ports.clock)
     choices = (request.checkout, request.model, request.effort, SANDBOX, deadline)
     checks = advance is not None and advance.step == CHECK
-    if advance is None:
-        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices))
+    if advance is None:  # no label yet: H3 of tl-8bh9.14.9 passes the round's (`tl step start` stays None)
+        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices, None))
     elif checks:
         admitted = ports.checks.admission.admit_checks(ChecksRequest(advance.previous, request.checkout, deadline, advance.number))
     else:

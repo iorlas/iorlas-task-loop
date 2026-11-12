@@ -8,13 +8,14 @@ from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError
+from beads_client.testing import Script
 from doubles import FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeWorktree
@@ -32,6 +33,7 @@ from taskloop.setup_store import ProcessSeen
 from taskloop.slot_lock import custody, lock_path, probe
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease, release_word
 from taskloop.slots import SlotGit, adopt, observe
+from taskloop.tracker_client import tracker_claims
 from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -325,6 +327,27 @@ def test_abandoning_a_settled_release_flips_it_and_returns_the_claim_with_no_git
     assert ports.releaser().release(KEY, True) == Released("s1", None, False, "unclaimed", True)
     assert (ports.opens, ports.holds, ports.unclaimed) == (0, 0, [("/tracker", "tl-1")])
     assert stored(registered) == ([], [(d, 30.0, "unclaimed")])
+
+
+@pytest.mark.parametrize(("reply", "claim"), [
+    (("", "", 0), "unclaimed"),  # an open task the factory holds: unchanged
+    (('{"error": "cannot unclaim closed issue tl-1", "schema_version": 1}', "", 1), "not_held"),
+    (('{"error": "resolving tl-1: no issue found matching \\"tl-1\\"", "schema_version": 1}', "", 1), "not_held"),
+], ids=["open", "closed", "deleted"])
+def test_the_abandon_through_the_real_unclaim_ends_for_a_closed_or_deleted_task(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    reply: tuple[str, str, int], claim: Literal["unclaimed", "not_held"],
+) -> None:
+    """bd refuses the unclaim of a closed task and writes nothing; the abandon records `not_held` instead of staying
+    `unclaiming` forever (tl-8bh9.14.9 5.3)."""
+    d = head(slot)
+    verified(registered, tmp_path, slot, checkouts, slot_files)
+    assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
+    ports, script = Ports(registered, checkouts, slot_files), Script().say(*reply)
+    releaser = SlotRelease(AttemptStore(lambda: registered), ports.checkouts, slot_files, ports.observe, ports.gone, ports.hold,
+                           tracker_claims(script).unclaim, lambda: 30, ports.setup_seen, ports.scratch)
+    assert releaser.release(KEY, True) == Released("s1", None, False, claim, True)
+    assert stored(registered) == ([], [(d, 30.0, claim)]) and len(script.calls) == 1
 
 
 def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free_again(

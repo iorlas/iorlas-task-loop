@@ -348,7 +348,7 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
     claims = Claims(tmp_path / "artifacts")
     admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, PinnedViews(repo),
                               claims.claim, claims.unclaim, lambda: 10, lambda _slot_path: True, FakeSlotFiles(repo))
-    return admission.admit(AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, "m", "high", "workspace-write", 100)), claims
+    return admission.admit(AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, "m", "high", "workspace-write", 100, None)), claims
 
 
 def slots(factory: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> list[FakeWorktree]:

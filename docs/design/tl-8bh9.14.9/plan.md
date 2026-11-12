@@ -625,3 +625,66 @@ G1, `read_timeout`). Until then G2 and smoke step 7 wait; H1-H3 and K1 do not.
 | 8 | Unclaim of a closed task | measured (5.4): bd refuses and writes nothing, so the task is not reopened; the abandon would stay `unclaiming`: taken as 5.3's mapping, and the hold writes nothing for a closed or missing task (5.2) |
 | 9 | Hand-started tasks held; a concurrent `tl step next` comments twice | taken: section 3 (round-taken only, by `attempt.label`) and the comment lease (5.1 step 5); section 18 lists both |
 | 10 | Smoke: E's words, breaker steps, missing cases | taken: section 17 (E accepts all three words; dirty-slot, label-rule and closed-task steps; breaker steps gone) |
+
+## 24. As built: H1 (tl-8bh9.14.9.1)
+
+Schema v14, the label on the attempt, `hold_store.py`, `tracker_client.TrackerHolds` with the unclaim mapping of 5.3,
+`hold_text.py` and the policy entries; nothing of H2 or H3 (no `hold.py`, no round behavior, no `Next` words: nothing
+holds a task yet). Code lines by the policy counter: `hold_store` 104 (new), `hold_text` 118 (new), `tracker_client`
+147 (+57), `factory_schema` 226 (+17), `admit` 284 (+1), `admit_chain` 261 (+0), `operations` 366 (+0);
+`test_hold_store` 217 (new), `test_tracker_holds` 109 (new), `test_hold_text` 87 (new), `test_slot_release` 404 (+19),
+`test_admit` 468 (+10), `test_admit_chain` 312 (+19), `test_policy` 189 (+3).
+
+- **DDL** as section 8 (its inline SQL comments left out), with one repair (deviation 1). v13 and every other version
+  are refused `schema` (`test_operations`' foreign list now holds 13 and 15; `test_land_store`, `test_check_store` and
+  `test_hold_store` assert v14 and refuse v13). `ATTEMPT_ADMITTED` gains `label`; `HOLD` is the hold's column list.
+- **The label**: `AdmitRequest.label` (no default); the admission stores it; `admit_chain` copies it on a repeat (the
+  previous attempt's) and an advance (the task's current attempt's). `operations.start` passes None for every fresh
+  admission, `tl step start` and the round's alike: H3 passes the round's (section 9.3).
+- **`hold_store`**: `HoldInsert`, `HoldRow` (joined with A: backlog, task, tracker root, `label`), `Uncleared` (`row`,
+  `held_again`: the task's current attempt has its own hold); `HoldStore` with `insert` (fenced as 5.1 step 1:
+  `unlabelled` for a NULL label, else `changed` when A is not current with its cause or already held; cause A is
+  current while `factory_schema.SUCCESSOR` is false, a checks cause while it is A's latest, not abandoned, and no later
+  attempt of the task exists), `labelled(attempt, rev, word, now)` (once), `commenting(attempt, rev, now)` (the lease:
+  `labels` `moved`/`absent`/`not_ours`, no `commented_at`, no lease or one older than `COMMENT_LEASE` = 120 s; None when
+  not taken), `commented(attempt, rev, now)` (under a lease), `cleared(attempt, rev, now)` (A not current, labels NULL,
+  `moved` or `absent`; NULL becomes `superseded` with `labelled_at` in the same write); reads `of_attempts(ids)` and
+  `uncleared()` (oldest hold first). Every write after the insert is fenced on `rev` and its phase, bumps `rev`, returns
+  the row as written, and is `StoreRefused("changed")` off its fence (the lease: None).
+- **`tracker_client`**: `TrackerHolds(labels, comment, clear)` built by `tracker_holds(run, client)`, each bd call
+  capped at `BD_TIMEOUT_S`. `labels(root, task, stored_label) -> HoldAnswer[LabelStep]`: one `Bd.show`; `missing`,
+  `closed` (whoever is assigned) and `not_ours` (an assignee other than `taskloop` and none) write nothing; else
+  `Bd.add_label(task, "held", if_assignee=<the assignee read>)` (the same-value fenced update, then the add) and
+  `Bd.remove_label(task, stored_label)`, word `moved` when the label was on the task, `absent` otherwise. A stale fence
+  is `precondition`, bd's "no issue found matching" `missing`, any other failure `unavailable` with bd's error kind.
+  `comment` and `clear` (`Bd.remove_label(task, "held")`, no read) answer `done`, `missing` or `unavailable`. The
+  claims' `unclaim` returns False (recorded `not_held` by the release) for bd's "cannot unclaim closed issue" and
+  "no issue found matching"; every other failure still raises (the abandon stays `unclaiming` and is retried).
+- **`hold_text.comment(facts, outcome)`** as section 6, with `HoldFacts` (the hold, the cause's facts and the label word),
+  outcome `Returned(claim)` or `Kept(word, slot, pid, pgid)`. Every quoted part one printable line of at most 300
+  characters (check names 100, conclusions and repeat reasons 40, the label 200); the explanation keeps its newlines,
+  at most 2000 characters; 10 checks and 20 paths, then `and <n> more`; at most 6000 in all, the details shortened
+  (`[shortened]`) before the claim line and the answer.
+- **Policy**: `WRITERS` gains `CREATE TABLE task_hold` (`factory_schema.py`) and `INSERT`/`UPDATE task_hold`
+  (`hold_store.py`); `.importlinter`'s `rounds-never-land` also covers `hold_store` and `hold_text`.
+
+**Deviations (decided here, open to veto).**
+
+1. `CHECK(commented_at IS NULL OR labels IN ('moved','absent','not_ours'))` accepted a comment with `labels` NULL (a
+   NULL `IN` is not false); built as `commented_at IS NULL OR (labels IS NOT NULL AND labels IN (...))`, the
+   `land_candidate` spelling. Its test covers the NULL case.
+2. `ATTEMPT_LOADED` does not gain `label`: it is the entry's fenced `Admission` read, which never uses the label. H2
+   reads the label through the hold row (joined) and adds it to the status read where `attempt_status` needs it.
+3. The comment's claim line (section 6) is composed from the label word and the abandon's outcome, so it never states
+   a label write or a claim return that did not happen: `moved` "removed `<label>` and added `held`", `absent` "added
+   `held` (`<label>` was not on the task)", `not_ours` "changed no label"; `Returned("unclaimed")` "and returned its
+   claim", `Returned("not_held")` "the claim was no longer the factory's". A `not_ours` hold is answered by `tl step
+   start` (7.2 keeps its `abandoned` skip), not by re-adding the label. `refused:landing`/`landed` (section 12, "comment
+   yes", no text in section 6) say a land holds the slot or may be on origin and name `tl step land <id>`.
+   `claim_lost`'s line is "Someone else changed this task's claim while the factory worked on it." (true whether the
+   abandon finished or not).
+4. `HoldStore.insert` refuses a NULL label as `unlabelled`, not `changed`: it is no race, and H2's `cause` never asks.
+5. The round's admissions still store NULL until H3 (above); this keeps H1 free of round behavior.
+
+**Unverified.** The bd texts are as measured in section 5.4 (not re-measured): the unclaim mapping matches both on
+bd's JSON `error` and on stderr. No live bd run in H1.

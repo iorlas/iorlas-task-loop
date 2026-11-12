@@ -92,7 +92,7 @@ class Repository:
 
     def run(self, agent: Agent) -> AttemptKey:
         """Admit the task, register its entry, run the attempt once."""
-        admitted = self.admission.admit(AdmitRequest("tl-1", "tasks", str(self.root), self.main, "m", "high", "workspace-write", 100))
+        admitted = self.admission.admit(AdmitRequest("tl-1", "tasks", str(self.root), self.main, "m", "high", "workspace-write", 100, None))
         assert isinstance(admitted, Admitted) and admitted.slot == "s1"
         assert self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
         attempts = Attempts(self.store, EvidenceFiles(self.art), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, self.files)

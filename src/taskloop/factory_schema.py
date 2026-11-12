@@ -6,15 +6,17 @@ attempt, never a wall-clock order. v12 (tl-8bh9.14.6): the checks step's own tab
 profile's checks on a done implement attempt's X, numbered per implement attempt) and `check_result` (one check's result
 in one block); `setup_run.attempt_id` names an `attempt` or a `checks_attempt`, so it has no foreign key. v13
 (tl-8bh9.14.8): `land_candidate`, one squash S of a checked X onto origin's `main` at O with its validation, delivery and
-close; `check_result.attempt_id` names a checks attempt or a land candidate, so it loses its foreign key. No migration: an
-older factory.db is refused (`schema`)."""
+close; `check_result.attempt_id` names a checks attempt or a land candidate, so it loses its foreign key. v14
+(tl-8bh9.14.9): `attempt.label`, the approval label a round ingested the task under (NULL: started by hand), and
+`task_hold`, a hold of a round-taken task's agent attempt with its tracker writes' phases (written only by `hold_store`).
+No migration: an older factory.db is refused (`schema`)."""
 
 import sqlite3
 
 from sqlite_store import Schema
 
 SCHEMA = Schema(
-    version=13,
+    version=14,
     name="factory",
     steps={},
     ddl="""
@@ -45,6 +47,7 @@ CREATE TABLE attempt (
  previous_attempt_id TEXT UNIQUE REFERENCES attempt(attempt_id),
  repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored')),
  after_commit TEXT CHECK(after_commit IS NULL OR length(after_commit) IN (40,64)),
+ label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 200),
  CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
  CHECK((number = 1 AND step <> 'plan') = (after_commit IS NOT NULL)),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
@@ -161,6 +164,21 @@ CREATE TABLE land_candidate (
  UNIQUE (checks_attempt_id, number)
 );
 CREATE UNIQUE INDEX land_delivered ON land_candidate(checks_attempt_id) WHERE delivery IS NOT NULL;
+CREATE TABLE task_hold (
+ attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id),
+ cause_id TEXT NOT NULL,
+ reason TEXT NOT NULL CHECK(length(reason) BETWEEN 1 AND 200),
+ held_at REAL NOT NULL,
+ labels TEXT CHECK(labels IS NULL OR labels IN ('moved','absent','not_ours','closed','missing','superseded')),
+ labelled_at REAL,
+ commenting_at REAL, commented_at REAL,
+ cleared_at REAL,
+ rev INTEGER NOT NULL DEFAULT 0,
+ CHECK((labels IS NULL) = (labelled_at IS NULL)),
+ CHECK(commented_at IS NULL OR commenting_at IS NOT NULL),
+ CHECK(commented_at IS NULL OR (labels IS NOT NULL AND labels IN ('moved','absent','not_ours'))),
+ CHECK(cleared_at IS NULL OR labels IS NOT NULL)
+);
 """,
 )
 
@@ -168,7 +186,7 @@ SLOT = "repo_id,name,path"
 RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head,after_commit"
+    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head,after_commit,label"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
@@ -199,6 +217,7 @@ LAND_LOADED = (
     "deadline,profile_digest,entry_pid,entry_start,entry_boot,validation,reason,validated_at,released_at,parked,superseded,"
     "superseded_at,delivery,delivered_at,remote_head,close,closed_at,rev"
 )
+HOLD = "attempt_id,cause_id,reason,held_at,labels,labelled_at,commenting_at,commented_at,cleared_at,rev"
 CHECK_RESULT = "block,position,name,argv_digest,timeout,pid,pgid,proc_start,boot,started_at,ended_at,rc,conclusion"
 
 
