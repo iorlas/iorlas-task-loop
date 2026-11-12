@@ -17,7 +17,7 @@ from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
 
-from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo
+from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
@@ -30,7 +30,7 @@ from taskloop.git_views import GitViews
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt
-from taskloop.task import TaskBinding, TaskInspection, TaskScope
+from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import BD_DISCOVERY, tracker_claims, tracker_located
 
@@ -216,6 +216,8 @@ def test_no_free_slot_refuses_before_any_effect(factory: sqlite3.Connection, rep
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, AdmitRefused) and result.reason == "no_free_slot"
     assert len(result.slots) == (0 if case == "none_adopted" else 1)
+    named = {"dirty": "s1 dirty", "attached": "s1 attached", "main_only": "s1 not_listed"}  # a slot nothing holds, named with why
+    assert (named[case] in result.detail and str(path) in result.detail) if case in named else result.detail == ""
     assert tracker.calls == [] and not (tmp_path / "artifacts").exists()
     assert rows(factory) == ((1 if case == "held" else 0), 0)
 
@@ -357,7 +359,7 @@ def test_an_unexpected_failure_compensates_then_propagates(factory: sqlite3.Conn
         ("nan", "deadline"),
         ("inf", "deadline"),
         ("deadline", "expired"),
-        ("task", "task"),
+        ("task", "task_missing"),
         ("checkout", "checkout"),
         ("input", "input"),
         ("store", "store"),
@@ -575,6 +577,15 @@ def test_an_abandon_still_returning_its_claim_keeps_the_task_attempted(
     assert isinstance(admit(factory, tmp_path, repo, contender), Admitted) and contender.calls == ["claim:tl-1"]
 
 
+def test_a_task_deleted_from_the_tracker_is_refused_by_name_with_the_command_that_clears_it() -> None:
+    def deleted(_task: str, _backlog: str, _root: str) -> TaskInspection:
+        raise TaskInspectionError("not_found", "no issue found")
+
+    found = read_task(deleted, "t-1", "tasks", "/tracker")
+    assert isinstance(found, AdmitRefused) and found.reason == "task_missing"
+    assert "t-1 is gone from the tracker" in found.detail and "tl step release --abandon t-1" in found.detail
+
+
 def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_other_git_faults_stay_unavailable(tmp_path: Path) -> None:
     """tl-8bh9.14.60: a missing path or a directory outside any repository is the person's input (exit 1), not `unavailable git`."""
     def missing(_path: Path, *, git_dir: Path | None = None) -> Repo:
@@ -586,3 +597,4 @@ def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_ot
     refused = checkout_repo(missing, tmp_path / "nowhere")
     assert isinstance(refused, AdmitRefused) and refused.reason == "checkout" and str(tmp_path / "nowhere") in refused.detail
     assert isinstance(checkout_repo(broken, tmp_path), AdmitUnavailable)
+

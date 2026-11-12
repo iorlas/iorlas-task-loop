@@ -138,7 +138,7 @@ ignore_imports =
     taskloop.rounds_lock -> process_lock
 
 [importlinter:contract:one-signal-owner]
-name = Only the rounds process's SIGINT and SIGTERM handlers import signal
+name = Only the rounds process's SIGINT, SIGTERM and SIGHUP handlers import signal
 type = forbidden
 source_modules = taskloop
 forbidden_modules = signal

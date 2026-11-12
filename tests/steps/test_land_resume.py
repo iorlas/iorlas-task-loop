@@ -148,6 +148,13 @@ def test_no_free_slot_is_unavailable_and_writes_nothing(b: LandBench) -> None:
     assert word(b.land()) == ("unavailable", "no_free_slot") and b.rows() == ()
 
 
+def test_a_dirty_idle_slot_is_named_in_the_land_refusal_not_called_in_use(b: LandBench) -> None:
+    b.slot.write_file("scratch", "x")
+    found = b.land()
+    assert word(found) == ("unavailable", "no_free_slot") and isinstance(found, Failed)
+    assert "s1 dirty" in found.detail and str(b.slot.path) in found.detail and "in use" not in found.detail
+
+
 def test_no_change_while_a_candidate_validates_is_landing(b: LandBench) -> None:
     interrupted(b)
     b.advance({"src/x.py": "X = 1\n"}, "a hand land")

@@ -44,6 +44,7 @@ from taskloop.slots import Probe, SlotGit
 from taskloop.tracker_client import Close
 from taskloop.validate import Ended, Target, Verdict, concluded, reconcile, validate
 
+NO_SLOT = "No slot is free: rerun when one is, or stop rounds."
 RACED = "Another land of the task, or a change of its attempts, came first: `tl step show TASK`."
 type Squash = tuple[int, str, str, bool, Required]  # number, O, S, S's tree is X's, the required names at O
 
@@ -110,7 +111,7 @@ def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, d
     if isinstance(free, AdmitRefused) and (found := _held(ports, checks)) is not None:
         return found
     if not isinstance(free, tuple):
-        detail = "Every slot is in use: rerun when one is free, or stop rounds." if isinstance(free, AdmitRefused) else free.detail
+        detail = f"{NO_SLOT} {free.detail}".strip() if isinstance(free, AdmitRefused) else free.detail
         return Failed("unavailable", free.reason if isinstance(free, AdmitRefused) else free.what, detail)
     key = AttemptKey(uuid4().hex, secrets.token_hex(16), issued(con, repo_id, tuple(each.name for each in free)) + 1)
     with ports.lands.begin(con):
@@ -130,7 +131,7 @@ def _raced(con: sqlite3.Connection, checks: ChecksRow, number: int) -> Failed:
                         "FROM checks_attempt c WHERE c.attempt_id=?", (checks.key.attempt_id,)).fetchone()
     if found is not None and (int(found[0]) >= number or found[1]):
         return Failed("refused", "landing", f"{RACED} Nothing was recorded.")
-    return Failed("unavailable", "no_free_slot", "Every slot is in use: rerun when one is free, or stop rounds.")
+    return Failed("unavailable", "no_free_slot", NO_SLOT)
 
 
 def inserted(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, settled: Settled | None, deadline: float) -> LandRow | Failed:

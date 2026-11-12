@@ -113,6 +113,9 @@ class Tracker:
         self.ready_reads += 1
         return [bead for bead in self.beads.values() if bead.status == "open" and (not label or label in bead.labels)]
 
+    def find(self, status: str = "", label: str = "", *, include_closed: bool = False) -> list[Bead]:
+        return [bead for bead in self.beads.values() if bead.status == status and (not label or label in bead.labels)]
+
     def claim(self, _root: str, task_id: str) -> bool:
         self.claims.append(task_id)
         self.beads[task_id] = replace(self.beads[task_id], status="in_progress", assignee="taskloop")

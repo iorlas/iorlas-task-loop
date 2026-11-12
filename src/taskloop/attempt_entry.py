@@ -26,6 +26,7 @@ from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import Final
 
 from git_porcelain import GitUnavailable
 from sqlite_store import open_ro
@@ -69,8 +70,9 @@ from taskloop.slot_release import SlotRelease, release_word
 from taskloop.tracker_client import tracker_claims, tracker_located
 from taskloop.verifier import Verifier
 
-CAPTURE_RETRIES = 3
 RETRY_WAIT = 2.0
+UNFINISHED: Final = frozenset({"validation_pending", "session_pending", "session_fault"})  # a captured result still to finish
+RESUMES = 5  # re-runs of an unfinished one (`Attempts.execute` resumes without the agent), never past the deadline
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,7 @@ class _Registered:
     me: EntryIdentity
     tracker_root: str
     slot_path: str  # the slot, from its stored `slot` row: its custody lock is beside it
+    deadline: float
 
 
 @dataclass(frozen=True)
@@ -119,18 +122,17 @@ def database_exists(database: Path) -> bool:
 def _capture(
     app: Attempts, result: AttemptResult, clock: Callable[[], float], wait: Callable[[float], None]
 ) -> CaptureResult | None:
-    """Retry an unfinished capture only while it is unavailable: at most CAPTURE_RETRIES, never past the deadline."""
+    """Retry an unfinished capture while it is unavailable (a busy factory.db) until the attempt's deadline."""
     pending, captured = result.pending, None
     if pending is None or result.status != "unavailable":  # a conflict is never retried
         return None
-    for _ in range(CAPTURE_RETRIES):
+    while True:
         wait(RETRY_WAIT)
         if clock() >= pending.admission.deadline:
-            break
+            return captured
         captured = app.capture(pending)
         if captured.status != "unavailable":
-            break
-    return captured
+            return captured
 
 
 def shown(result: VerifyResult) -> str:
@@ -168,7 +170,7 @@ def _registered(
     if me is None or me != entry:
         return "refused identity"
     record = _record(app, key)
-    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path)
+    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path, record.admission.deadline)
 
 
 def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
@@ -202,6 +204,8 @@ def _step(
     result = app.execute(key, found.me, renew)
     captured = _capture(app, result, clock, wait)
     accepted = captured is not None and captured.status in ACCEPTED
+    if accepted:  # captured but maybe not finished (the store was busy again): finish it before verify commits anything
+        resumed(lambda: app.collect(key), lambda: app.execute(key, found.me), clock, wait, found.deadline)
     verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
     # newly stored facts or a stored verdict: read the terminal result back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
@@ -210,6 +214,21 @@ def _step(
         then = f" then={latest.status}:{latest.reason}" if accepted else ""
         line = f"{result.status} {result.reason} publish={captured.status}{then}"
     return f"{line} verify={shown(verified)}", succeeded(latest), latest.status == "collected"
+
+
+def resumed(
+    read: Callable[[], AttemptResult], resume: Callable[[], AttemptResult], clock: Callable[[], float], wait: Callable[[float], None],
+    deadline: float,
+) -> AttemptResult:
+    """The stored result while it is unfinished (`unavailable`, or an `UNFINISHED` reason: `verification` is the normal
+    wait): `resume` (never the agent) after each wait, at most RESUMES times and never past the deadline."""
+    latest = read()
+    for _ in range(RESUMES):
+        if (latest.status != "unavailable" and latest.reason not in UNFINISHED) or clock() >= deadline:
+            break
+        wait(RETRY_WAIT)
+        latest = resume()
+    return latest
 
 
 def enter(

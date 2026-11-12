@@ -18,8 +18,8 @@ from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import Store
 from stream_proc import ProcessObservation, inspect_process
 
-from taskloop.attempt import Attempts
-from taskloop.attempt_entry import EntryArgs, arguments, enter, main, renewal
+from taskloop.attempt import AttemptResult, Attempts
+from taskloop.attempt_entry import RESUMES, EntryArgs, arguments, enter, main, renewal, resumed
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Evidence, SlotFiles
 from taskloop.claim_lease import Beat, Heartbeat, KeepAlive
@@ -254,10 +254,11 @@ def test_an_absent_task_or_a_missing_database_runs_nothing(
     [
         (1, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
          "branch=published", 1, 2),
-        (9, 10, "unavailable evidence publish=unavailable verify=refused:not_captured claim=held", 3, 4),
+        (4, 10, "unavailable evidence publish=accepted then=collected:verified verify=verified claim=held release=released "
+         "branch=published", 4, 5),
         (9, 100, "unavailable evidence verify=refused:not_captured claim=held", 1, 1),
     ],
-    ids=["second_try_captures", "three_retries_at_most", "never_past_the_deadline"],
+    ids=["second_try_captures", "retries_until_it_captures", "never_past_the_deadline"],
 )
 def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
     admitted: Path,
@@ -271,7 +272,7 @@ def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
     captures: int,
 ) -> None:
     entry = Entry(admitted, checkouts, slot_files, me(), failures, wait_to, written=(slot, {P: "# Plan\n"}, [P]))
-    assert entry() == (0 if failures == 1 else 1)
+    assert entry() == (0 if failures < 9 and wait_to < 100 else 1)
     assert entry.lines == [line] and len(entry.waits) == waits and entry.files.captures == captures
     assert len(entry.run.calls) == 1
     assert all("credential" not in text and "SECRET" not in text for text in entry.lines)
@@ -478,3 +479,38 @@ def test_the_renewal_after_setup_renews_once_more_and_answers_the_keep_alives_wo
     renew = renewal(alive)
     found = [renew() for _ in beats][-1]
     assert found == expected and script == []
+
+
+class Resuming:
+    """A captured result whose store write is busy: `resume` answers each queued result in turn; nothing else changes."""
+
+    def __init__(self, *answers: AttemptResult) -> None:
+        self.answers, self.waits = list(answers), 0
+
+    def resume(self) -> AttemptResult:
+        return self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+
+    def wait(self, _seconds: float) -> None:
+        self.waits += 1
+
+
+PENDING = AttemptResult("pending", "session_pending")
+COLLECTED = AttemptResult("collected", "verified")
+
+
+def test_a_captured_step_whose_store_write_is_busy_is_finished_not_left_pending() -> None:
+    busy = Resuming(AttemptResult("unavailable", "store"), COLLECTED)
+    found = resumed(lambda: PENDING, busy.resume, lambda: 10.0, busy.wait, 100.0)
+    assert found == COLLECTED and busy.waits == 2
+
+
+@pytest.mark.parametrize(("now", "waits"), [(10.0, RESUMES), (100.0, 0)], ids=["capped", "past_the_deadline"])
+def test_resuming_a_pending_result_is_bounded_by_a_cap_and_the_deadline(now: float, waits: int) -> None:
+    stuck = Resuming(PENDING)
+    assert resumed(lambda: PENDING, stuck.resume, lambda: now, stuck.wait, 100.0) == PENDING and stuck.waits == waits
+
+
+def test_the_normal_wait_for_verification_is_not_resumed() -> None:
+    waiting = Resuming(AttemptResult("pending", "verification"))
+    assert resumed(waiting.resume, waiting.resume, lambda: 10.0, waiting.wait, 100.0).reason == "verification"
+    assert waiting.waits == 0
