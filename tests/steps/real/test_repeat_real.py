@@ -13,6 +13,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
+from doubles import RegisteringLauncher
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from sqlite_store import begin_immediate
@@ -23,7 +24,6 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Unsettled, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import checkouts
-from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import Started
 from taskloop.repeat import StepRepeat
 from taskloop.slot_files import RealSlotFiles
@@ -51,16 +51,6 @@ def agent(slot: Path, written: Mapping[str, str], removed: Sequence[str], paths:
         return FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     return call
-
-
-class FakeLauncher:
-    def __init__(self, store: AttemptStore) -> None:
-        self.store = store
-
-    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
-        found = self.store.attempt_of(backlog, task_id)
-        assert found is not None and self.store.register_entry(found[0], SECOND, 10) == "accepted"
-        return Launched(found[0], SECOND)
 
 
 def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifies(
@@ -98,7 +88,8 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
     admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10)
-    repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, FakeLauncher(store), lambda _w: True, lambda _e: "gone", lambda: 10,
+    repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),
+                        lambda _w: True, lambda _e: "gone", lambda: 10,
                         repeating)
     started = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(started, Started) and started.status == "repeated"

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.attempt import end_word, report, succeeded
+from taskloop.attempt_result import end_word, report, succeeded
 from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,

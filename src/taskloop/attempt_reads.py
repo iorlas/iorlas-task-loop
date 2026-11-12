@@ -11,7 +11,7 @@ from dataclasses import astuple, dataclass
 from sqlite_store import begin_immediate
 
 from taskloop.attempt_types import ATTEMPTS, EFFECTS, AttemptKey, ChainLink, Effect, EntryIdentity, FileRef
-from taskloop.factory_schema import current
+from taskloop.factory_schema import REPEATED, current
 
 
 @dataclass(frozen=True)
@@ -239,9 +239,9 @@ class AttemptReads(StoreConnection):
         first, with whether it still holds its reservation and its release: SELECT only, no deadline check."""
         with self._connection() as con:
             rows: list[tuple[object, ...]] = con.execute(
-                """SELECT p.attempt_id,p.dispatch_token,p.generation,p.backlog,p.task_id,p.slot,p.phase,p.entry_pid,p.entry_start,
+                f"""SELECT p.attempt_id,p.dispatch_token,p.generation,p.backlog,p.task_id,p.slot,p.phase,p.entry_pid,p.entry_start,
                 p.entry_boot,p.deadline,p.worker_pid,p.worker_pgid,p.number,p.previous_attempt_id,p.repeat_reason,
-                EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),p.seq,
+                {REPEATED},p.seq,
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
                  AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step,
                 p.label,p.end_commit FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id

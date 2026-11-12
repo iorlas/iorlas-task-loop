@@ -32,8 +32,8 @@ from git_porcelain import GitUnavailable
 from stream_proc import OwnedProcess
 
 from taskloop.admit import Unclaim
-from taskloop.attempt import collect
 from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
+from taskloop.attempt_result import collect
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe, SlotFiles, WorkerGone
 from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks

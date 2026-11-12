@@ -25,9 +25,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, get_args
 
-from taskloop.attempt import succeeded
+from taskloop.attempt_reads import StoreUnavailable
+from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
-from taskloop.attempt_store import AttemptStore, StoreUnavailable
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
 from taskloop.evidence_files import EvidenceError
 from taskloop.hold import HoldPorts, clear_holds, hold_task
@@ -404,7 +405,7 @@ def _publish(ports: RoundPorts, backlog: str, verified: Iterable[AttemptView], t
         found = publish_task(ports.reads.store, ports.publisher, backlog, each.task_id)
         if isinstance(found, PublishedTask):
             trail.add(Move(each.task_id, "publish", publish_word(found.result), found.attempt_id, step=each.step))
-        elif found.word == "refused:branch_moved" and each.label is not None:
+        elif found.kind == "refused" and found.reason == "branch_moved" and each.label is not None:
             trail.add(_held(ports.holding, each, "branch_moved"))
         else:
             trail.add(Move(each.task_id, "publish", found.word, each.attempt_id, found.detail, each.step))

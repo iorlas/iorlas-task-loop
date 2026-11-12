@@ -12,8 +12,8 @@ from git_porcelain.testing import FakeRepo
 from stream_proc import OwnedProcess
 
 from taskloop.admit import Admitted
-from taskloop.attempt import succeeded
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
+from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, list_attempts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity, Seen

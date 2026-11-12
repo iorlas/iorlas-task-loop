@@ -18,7 +18,8 @@ from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission
 from taskloop.attempt import Attempts
-from taskloop.attempt_store import AttemptStore, StoreRefused
+from taskloop.attempt_reads import StoreRefused
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.claim_lease import BD_TIMEOUT_S
 from taskloop.composition import adopt_slots, open_admission

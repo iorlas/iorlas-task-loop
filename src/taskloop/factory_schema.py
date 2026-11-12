@@ -222,6 +222,8 @@ HOLD = "attempt_id,cause_id,reason,held_at,labels,labelled_at,commenting_at,comm
 CHECK_RESULT = "block,position,name,argv_digest,timeout,pid,pgid,proc_start,boot,started_at,ended_at,rc,conclusion"
 
 
+# A repeat of attempt `p` exists (`previous_attempt_id` links only a step's repeats): its chain is frozen.
+REPEATED = "EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id)"
 # A later attempt of the same task exists (a repeat, the next step or a fresh start): attempt `p` is no longer the current
 # one. The one "not current" rule of every read and fence; `previous_attempt_id` links only a step's repeats.
 LATER = """EXISTS (SELECT 1 FROM attempt later WHERE later.adapter=p.adapter AND later.backlog=p.backlog

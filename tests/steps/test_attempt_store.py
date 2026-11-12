@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 from sqlite_store import Store
 
-from taskloop.attempt_store import AttemptStore, StoreUnavailable
+from taskloop.attempt_reads import StoreUnavailable
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
 from taskloop.factory_schema import SCHEMA
 

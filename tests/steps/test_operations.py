@@ -19,9 +19,9 @@ from sqlite_store import Store
 from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.attempt import Attempts
-from taskloop.attempt_reads import PublishedRow
+from taskloop.attempt_reads import PublishedRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown, StatusPorts, list_attempts, next_action, show_attempt
-from taskloop.attempt_store import AttemptStore, StoreUnavailable
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
     AttemptResult,

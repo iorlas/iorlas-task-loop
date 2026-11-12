@@ -15,7 +15,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance, main_at
+from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance, RegisteringLauncher, main_at
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store, begin_immediate
@@ -23,8 +23,9 @@ from sqlite_store import Store, begin_immediate
 from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
 from taskloop.attempt import Attempts, Execution
+from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_status import StatusPorts, list_attempts, show_attempt
-from taskloop.attempt_store import AttemptStore, StoreRefused
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
     Checkouts,
@@ -104,21 +105,6 @@ def gone(_worker: Worker) -> bool:
     return True
 
 
-class FakeLauncher:
-    """The launcher: registers the task's current attempt's entry as the real one does, then reports it launched."""
-
-    def __init__(self, con: sqlite3.Connection) -> None:
-        self.store, self.calls, self.minutes = AttemptStore(lambda: con), list[AttemptKey](), list[int]()
-
-    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
-        found = self.store.attempt_of(backlog, task_id)
-        assert found is not None
-        self.calls.append(found[0])
-        self.minutes.append(minutes)
-        assert self.store.register_entry(found[0], SECOND, 10) == "accepted"
-        return Launched(found[0], SECOND)
-
-
 class Verifies:
     """A verifier fake: records each key and returns the configured result."""
 
@@ -139,11 +125,12 @@ def seen(word: Seen) -> Callable[[EntryIdentity], Seen]:
 
 def repeater(
     con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, *,
-    verifier: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: FakeLauncher | None = None,
+    verifier: Settle | None = None, observe: Seen = "gone", alive: bool = False, launcher: RegisteringLauncher | None = None,
 ) -> StepRepeat:
     store = AttemptStore(lambda: con)
     check = verifier or Verifier(store, checkouts, files, gone, lambda: 20, hold)
-    return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path), launcher or FakeLauncher(con),
+    launcher = launcher or RegisteringLauncher(store, SECOND)
+    return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path), launcher,
                       lambda _worker: not alive, seen(observe), lambda: 10, repeating)
 
 
@@ -216,7 +203,7 @@ def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
     store = AttemptStore(lambda: registered)
     previous = store.load(KEY)
     assert previous is not None
-    launcher = FakeLauncher(registered)
+    launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     result = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30)
     (new,) = launcher.calls
     assert result == Started("repeated", "tasks", "tl-1", new.attempt_id, False, SECOND, number=2)
@@ -243,7 +230,7 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    launcher = FakeLauncher(registered)
+    launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     assert isinstance(repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30),
                       Started)
     probed: list[AttemptKey] = []
@@ -302,7 +289,7 @@ def test_both_repeat_launches_pass_the_request_minutes(
 ) -> None:
     """The repeat's own launch, then a later repeat of the same read that finds the step taken over (`_existing`)."""
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    launcher = FakeLauncher(registered)
+    launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     first = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 45)
     assert isinstance(first, Started) and first.status == "repeated"
     registered.execute("UPDATE attempt SET entry_pid=NULL,entry_start=NULL,entry_boot=NULL WHERE attempt_id=?", (first.attempt_id,))
@@ -399,7 +386,7 @@ def test_only_git_leftovers_repeat(
     verified: VerifyResult, expected: Started | Failed,
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    verifier, launcher = Verifies(verified), FakeLauncher(registered)
+    verifier, launcher = Verifies(verified), RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     found = repeater(registered, tmp_path, checkouts, slot_files, verifier=verifier, launcher=launcher)
     assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == expected
     assert verifier.keys == [KEY] and launcher.calls == [] and len(rows(registered)) == 1
@@ -410,7 +397,7 @@ def test_the_third_attempt_is_not_repeated(
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     renumber(registered, 3)
-    before, launcher = rows(registered), FakeLauncher(registered)
+    before, launcher = rows(registered), RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     found = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert found == Failed("refused", "repeats_exhausted") and rows(registered) == before and launcher.calls == []
 
@@ -432,7 +419,7 @@ def test_a_verdict_stored_between_the_verify_and_the_takeover_refuses_the_repeat
         def staged(self, key: AttemptKey) -> tuple[str, ...] | None:
             return real.staged(key)
 
-    launcher = FakeLauncher(registered)
+    launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     late = repeater(registered, tmp_path, checkouts, slot_files, verifier=Late(), launcher=launcher)
     found = late.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert found == Failed("refused", "not_repeatable") and len(rows(registered)) == 1 and launcher.calls == []
@@ -540,7 +527,7 @@ def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
 ) -> None:
     """`admit_repeat` runs under the slot's lock, so an abandon parking the slot (or anyone else holding it) refuses it."""
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    launcher = FakeLauncher(registered)
+    launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
     found = repeater(registered, tmp_path, checkouts, slot_files, verifier=Verifies(Unsettled("unsafe", (P,))), launcher=launcher)
     with occupy(lock_path(str(slot.path))):
         assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Failed("unavailable", "slot_busy")

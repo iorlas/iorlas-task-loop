@@ -17,13 +17,14 @@ from stream_proc import OwnedProcess
 from taskloop.access import TMP_BYTES, Folders
 from taskloop.admit import AdmitResult
 from taskloop.admit_chain import NextStepRequest
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat
 from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
-from taskloop.launch import LaunchResult
+from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import ChecksPorts
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
 from taskloop.setup_store import ProcessSeen, SetupStore
@@ -55,6 +56,23 @@ def main_at(slot: FakeWorktree) -> str:
     assert found is not None
     slot.repo.worktree(slot.repo.identity().root).merge_ff(found)
     return found
+
+
+class RegisteringLauncher:
+    """The launcher: registers the task's current attempt's entry in factory.db as the real one does, then reports it
+    launched; `entry` fixed, else a new identity per attempt."""
+
+    def __init__(self, store: AttemptStore, entry: EntryIdentity | None = None) -> None:
+        self.store, self.entry, self.calls, self.minutes = store, entry, list[AttemptKey](), list[int]()
+
+    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
+        found = self.store.attempt_of(backlog, task_id)
+        assert found is not None
+        entry = self.entry or (8 + len(self.calls), "start", "boot")
+        self.calls.append(found[0])
+        self.minutes.append(minutes)
+        assert self.store.register_entry(found[0], entry, 10) == "accepted"
+        return Launched(found[0], entry)
 
 
 @dataclass(frozen=True)

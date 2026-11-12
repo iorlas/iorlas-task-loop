@@ -35,7 +35,7 @@ from stream_proc import ProcessObservation, inspect_process
 from taskloop import slot_lock
 from taskloop.attempt_entry import EntryArgs, arguments, database_exists
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
-from taskloop.attempt_types import AttemptResult, EntryIdentity
+from taskloop.attempt_types import AttemptResult, EntryIdentity, entry_identity
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import ChecksRow
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
@@ -70,7 +70,7 @@ def _registered(
     if found is None or row is None:
         return "refused absent"
     _key, state, entry = found
-    me = None if seen.kind != "matching" or seen.identity is None else (seen.identity.pid, seen.identity.start, seen.identity.boot)
+    me = None if seen.kind != "matching" or seen.identity is None else entry_identity(seen.identity)
     if me is None or me != entry:
         return "refused identity"
     if state != "admitted" or slot is None:

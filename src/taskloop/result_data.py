@@ -1,8 +1,8 @@
 """The one JSON shape of every step command result (`as_data`): what the CLI prints with `--json` and a dashboard renders.
 It never holds a dispatch token, a remote URL or Git output."""
 
-from taskloop.attempt import succeeded
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
+from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
 from taskloop.check_status import ChecksView

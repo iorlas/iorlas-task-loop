@@ -8,8 +8,8 @@ cause and no row yet is `hold` too (due): the next round records it."""
 
 from typing import Final, Literal, Protocol
 
-from taskloop.attempt import succeeded
 from taskloop.attempt_reads import ReleaseRow
+from taskloop.attempt_result import succeeded
 from taskloop.attempt_types import AttemptResult
 from taskloop.hold_store import HoldRow
 

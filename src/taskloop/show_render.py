@@ -8,7 +8,7 @@ only: its stored start is a clock-tick token that proves identity (JSON keeps it
 from datetime import UTC, datetime
 from pathlib import Path
 
-from taskloop.attempt import succeeded
+from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, SetupShown, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.check_status import ChecksView
