@@ -311,7 +311,7 @@ function line(e, a) {
       right.className += " text-sky-600 dark:text-sky-400";
       tick(right);
     } else {
-      right.textContent = `${e.duration_ms == null ? "" : fmtDur(e.duration_ms)}${failed ? `  exit ${e.exit_code}` : ""}`;
+      right.textContent = e.state === "unfinished" ? "unfinished" : `${e.duration_ms == null ? "" : fmtDur(e.duration_ms)}${failed ? `  exit ${e.exit_code}` : ""}`;
       if (failed) right.className += " font-medium text-rose-600 dark:text-rose-400";
     }
   } else if (e.type === "message") {

@@ -116,3 +116,24 @@ def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_liv
     page = build_feed(ports, "tasks", "tl-1", "plan", 1, attempt.feed_cursor)
     assert isinstance(page, FeedPage) and [line.text for line in page.events] == ["done"] and not page.replaced
     assert build_feed(ports, "tasks", "tl-1", "plan", 7, None) is None
+
+
+def test_a_poisoned_events_file_does_not_break_the_task_detail(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Plan the actual task")
+    sink = CommandSink(files, KEY, iter(range(100, 200, 2)).__next__)
+    sink.feed(events.Msg(text="good"))
+    with files.events_path(KEY).open("ab") as stream:
+        stream.write(b'{"k":"message","s":"finished","at":Infinity,"t":"inf"}\n{"k":"message","s":"finished","at":1e999,"t":"big"}\n')
+    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    assert [line.text for line in found.attempts[0].feed[1:]] == ["good"]
+
+
+def test_a_command_still_running_in_an_ended_attempt_is_shown_unfinished(checking: sqlite3.Connection, tmp_path: Path) -> None:
+    files, key = EvidenceFiles(tmp_path), AttemptKey("implement", "implement-token", 1)
+    CommandSink(files, key, iter(range(100, 200, 2)).__next__).feed(events.Cmd(id="c1", text="make"))
+    found = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    agent = next(each for each in found.attempts if each.step == "implement")
+    assert agent.state != "running" and [line.state for line in agent.feed if line.type == "command"] == ["unfinished"]

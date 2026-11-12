@@ -232,7 +232,8 @@ class EvidenceFiles:
         """`events_path`, its directory made, opened for append; OSError propagates (display only: the caller drops it)."""
         path = self.events_path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        return CappedLog(path, EVENTS_CAP)
+        size = path.stat().st_size if path.exists() else 0
+        return CappedLog(path, max(0, EVENTS_CAP - size))  # a resumed run adds to the file's cap, it does not start a new one
 
     def activity_tail(self, key: AttemptKey, limit: int) -> ActivityPage:
         """Read-only: the latest `limit` actions of the attempt's agent, with the cursor to follow from; creates nothing.

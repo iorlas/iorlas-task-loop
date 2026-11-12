@@ -3,7 +3,7 @@
 was given and the outputs of its failed checks. Display only. The lines of an agent attempt are its `events.jsonl`, read
 behind the evidence files; a checks attempt's are its results."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from any_agent.activity import Activity
 
@@ -45,9 +45,13 @@ FEED_LINES = 20  # the agent's latest actions an attempt's detail carries
 FOLLOW_LINES = 20  # the tail a replaced follow answers with
 
 
-def feed_event(a: Activity) -> FeedEvent:
-    """An agent action as the page's live line: a command, a tool, a message, an error or a wait."""
-    at = iso(a.at) or ""
+def feed_event(a: Activity) -> FeedEvent | None:
+    """An agent action as the page's live line: a command, a tool, a message, an error or a wait; None when its time is not one
+    (the file is display-only data and may hold anything)."""
+    try:
+        at = iso(a.at) or ""
+    except (ValueError, OverflowError, OSError):
+        return None
     finished = a.state == "finished"
     if a.kind in ("command", "tool"):
         took = a.duration_ms if finished else None
@@ -57,8 +61,11 @@ def feed_event(a: Activity) -> FeedEvent:
     return FeedEvent(a.kind, at, text=a.text, waited_ms=a.waited_ms)
 
 
-def _page(page: ActivityPage) -> FeedPage:
-    return FeedPage(tuple(feed_event(each) for each in page.events), page.cursor, page.replaced, page.available)
+def _page(page: ActivityPage, ended: bool = False) -> FeedPage:
+    """`ended`: the attempt is over, so a command or tool still running in its file never finished (its worker went away)."""
+    lines = (feed_event(each) for each in page.events)
+    shown = tuple(replace(line, state="unfinished") if ended and line.state == "running" else line for line in lines if line is not None)
+    return FeedPage(shown, page.cursor, page.replaced, page.available)
 
 
 def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
@@ -85,7 +92,7 @@ def _agent(ports: TaskPorts, row: AttemptRow, step_number: int) -> AttemptDetail
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     summary = result.reason or result.status
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=row.number),)
-    page = _page(ports.files.activity_tail(row.key, FEED_LINES))
+    page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
     return AttemptDetail(row.step, step_number, state, iso(started), iso(ended), summary, after, reason,
                          ports.files.text(row.key, "input.txt"), Outcome(summary, answer, (), None), begun + page.events, page.cursor)
 
