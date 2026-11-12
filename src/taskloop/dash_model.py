@@ -97,7 +97,7 @@ class FeedEvent:
     passed: bool | None = None
     duration_ms: int | None = None
     id: str | None = None
-    state: Literal["running", "finished"] | None = None
+    state: Literal["running", "finished", "unfinished"] | None = None  # unfinished: its attempt ended without a finish line
     cmd: str | None = None  # a command's text, or a tool's main argument
     text: str | None = None  # a message, an error or a wait
     waited_ms: int | None = None

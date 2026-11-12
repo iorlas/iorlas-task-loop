@@ -170,7 +170,7 @@ One line. `id` identifies a command or tool so its `finished` event replaces its
 | `type` | fields | shows |
 |---|---|---|
 | `step` | `step`, `attempt` | 🚦 attempt started |
-| `command` | `id`, `cmd`, `state` (`running` or `finished`), `waited_ms`, and when finished `duration_ms`, `exit_code` | 💻 the command and how long it ran (a running one counts up); the exit code in red when not 0; `waited_ms` as the "agent thought" line before it |
+| `command` | `id`, `cmd`, `state` (`running`, `finished`, or `unfinished`: its attempt ended with no finish line), `waited_ms`, and when finished `duration_ms`, `exit_code` | 💻 the command and how long it ran (a running one counts up); the exit code in red when not 0; `waited_ms` as the "agent thought" line before it |
 | `tool` | `id`, `name`, `cmd` (its main argument), `state`, `waited_ms`, `duration_ms` | 🧰 a non-shell tool call (file edit, search, MCP call) |
 | `message` | `text`, `waited_ms` | 💬 an agent message |
 | `error` | `text` | ❌ the harness's failure text |
@@ -190,7 +190,7 @@ Code and OpenCode); the factory never parses a vendor line.
 Without `after`: the attempt's latest 20 actions, oldest first. With `after`: what came after that cursor. The cursor is
 opaque (the page hands back what it was given). `replaced` is true when the cursor was not this attempt's file (replaced
 or shorter): `events` are then the fresh tail and the page drops its lines first. `available` is false when the attempt
-has no events file (an attempt from before the file existed, or one that never ran an agent); that is evidence
+has no events file yet (an attempt from before the file existed, one that never ran an agent, or one whose agent has not acted yet; its `cursor` is `0:0`, which follows the file from its first byte once it appears); that is evidence
 availability, not the attempt's state. A bad cursor is a 400; an unknown attempt or a checks attempt is a 404. The same
 last-20 and cursor are in the task detail (`feed`, `feed_cursor` of each agent attempt).
 
