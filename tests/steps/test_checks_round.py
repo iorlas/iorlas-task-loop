@@ -20,7 +20,7 @@ from stream_proc import OwnedProcess, ProcessObservation
 
 from taskloop import land_store
 from taskloop.admit import issued, reserve
-from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
@@ -77,7 +77,7 @@ class Checking(Factory):
         admission = ChecksAdmission(lambda: self.con, begin_immediate, self.tracker.inspect, self.checkouts, lambda: self.now,
                                     lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts))
         launcher = Launcher(self.path, EvidenceFiles(self.tmp), lambda: self.now, self.entry, self.process, "python",
-                            targets=CheckStore, module=CHECK_ENTRY_MODULE)
+                            targets=CheckStore, module=CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS)
         return replace(super().starting(), checks=ChecksPorts(admission, launcher, self.releasing()))
 
     def observe(self, _entry: EntryIdentity) -> Seen:

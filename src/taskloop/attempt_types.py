@@ -31,6 +31,9 @@ TRAILER: Final = "Task-Loop-Attempt"  # the factory's commit trailer; an agent's
 MiB: Final = 1 << 20
 MODE: Final = "100644"
 ATTEMPTS: Final = 3  # attempts of one step at most (2 repeats); always compared as `number >= ATTEMPTS`
+MIN_GIT_READ_SECONDS: Final = 30
+MAX_GIT_READ_SECONDS: Final = 86400  # a day; a larger value overflows the process timeout
+DEFAULT_GIT_READ_SECONDS: Final = 600  # seconds a Git read may take before it is `unavailable:git` (the machine config's default)
 type RepeatReason = Literal["uncommitted", "unsafe", "ignored"]
 REPEATABLE: Final[tuple[RepeatReason, ...]] = ("uncommitted", "unsafe", "ignored")  # the only leftovers a repeat hands back
 # What a valid answer does to the slot: `commit` ends at a new commit X != B, `keep` ends at B itself, `none` ends nothing.

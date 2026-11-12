@@ -12,7 +12,8 @@ from pathlib import Path
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
 from taskloop import cli_step
-from taskloop.git_views import GitProfileFiles, inspect_checkout
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
+from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
 from taskloop.step_guide import STEP_ONLY
@@ -84,7 +85,7 @@ def _profile_lines(found: Resolved, at: str, target_ref: str) -> list[str]:
 def show_profile(arguments: argparse.Namespace) -> int:
     """The resolved profile; exit 1 for a refusal (its fixed reason word), 3 when Git could not be read."""
     checkout = Path(arguments.checkout).expanduser().absolute()
-    found = resolve(GitProfileFiles(checkout), arguments.at, arguments.target)
+    found = resolve(GitProfileFiles(checkout, GitViews(DEFAULT_GIT_READ_SECONDS).checkouts), arguments.at, arguments.target)
     match found:
         case Resolved():
             data, lines = _profile_data(found, arguments.at, arguments.target), _profile_lines(found, arguments.at, arguments.target)
@@ -154,7 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 def inspect_repo(arguments: argparse.Namespace) -> int:
     """`tl repo inspect PATH`: the checkout's repository identity (read-only)."""
     try:
-        result = inspect_checkout(arguments.path)
+        result = GitViews(DEFAULT_GIT_READ_SECONDS).inspect_checkout(arguments.path)
     except (GitUnavailable, UnsupportedCheckout, OSError) as error:
         if arguments.json_output:
             print(json.dumps({"error": {"kind": inspection_error_kind(error), "message": str(error)}}), file=sys.stderr)

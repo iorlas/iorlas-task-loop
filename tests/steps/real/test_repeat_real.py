@@ -20,15 +20,17 @@ from sqlite_store import begin_immediate
 from taskloop.admit_chain import ChainAdmission
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Unsettled, Verified
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Unsettled, Verified
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.git_views import checkouts
+from taskloop.git_views import GitViews
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import Started
 from taskloop.repeat import StepRepeat
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, repeating
 from taskloop.verifier import Verifier
+
+VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -77,23 +79,23 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     base = git(slot, "rev-parse", "HEAD").strip()
     with begin_immediate(factory):
-        factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (checkouts(main).identity().key, str(slot)))
-        factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (checkouts(main).identity().key,))
+        factory.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (VIEWS.checkouts(main).identity().key, str(slot)))
+        factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (VIEWS.checkouts(main).identity().key,))
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
             input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
             'workspace-write',100,7,'entry-start','boot',1,1,?)""",
-            (checkouts(main).identity().key, hashlib.sha256(TASK.encode()).hexdigest(), base),
+            (VIEWS.checkouts(main).identity().key, hashlib.sha256(TASK.encode()).hexdigest(), base),
         )
     art.mkdir()
     (art / "input.txt").write_text(TASK)
     store, files = AttemptStore(lambda: factory), RealSlotFiles()
 
     def attempts(run: Execution) -> Attempts:
-        return Attempts(store, EvidenceFiles(art), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
+        return Attempts(store, EvidenceFiles(art), lambda: ("/bin/codex", {}), run, lambda: 10, VIEWS.checkouts, files)
 
-    verifier = Verifier(store, checkouts, files, lambda _worker: True, lambda: 20, hold)
+    verifier = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold)
     assert attempts(agent(slot, {P: "# Plan\n", "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
