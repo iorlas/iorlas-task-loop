@@ -1,9 +1,7 @@
-"""The live sink of one agent run, display only. It notes the wall-clock time of the agent's latest command in the attempt's
-evidence (`EvidenceFiles.note_command`, at most once a second) for `tl step list` and `show`, and appends every action of the
-agent as one `any_agent.activity` line to the attempt's `events.jsonl` (`EvidenceFiles.open_events`) for the dashboard's lines.
-A failed write is skipped, and nothing reads either for control."""
+"""The live sink of one agent run, display only. It appends every action as one `any_agent.activity` line to the attempt's
+`events.jsonl` (`EvidenceFiles.open_events`), shared by the CLI's last-command age and the dashboard's activity lines.
+A failed write is skipped, and nothing reads the stream for control."""
 
-import time
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -14,8 +12,6 @@ from any_agent.activity import Timeline, encode
 from taskloop.attempt_types import AttemptKey
 from taskloop.evidence_files import CappedLog, EvidenceFiles
 
-EVERY_S = 1.0
-
 
 @dataclass(kw_only=True)
 class WatchedHooks(RunHooks):
@@ -25,10 +21,9 @@ class WatchedHooks(RunHooks):
 
 
 class CommandSink:
-    def __init__(self, files: EvidenceFiles, key: AttemptKey, clock: Callable[[], float],
-                 tick: Callable[[], float] = time.monotonic) -> None:
-        """`clock`: the wall time written; `tick`: the monotonic time the once-a-second throttle runs on."""
-        self._files, self._key, self._clock, self._tick, self._last = files, key, clock, tick, float("-inf")
+    def __init__(self, files: EvidenceFiles, key: AttemptKey, clock: Callable[[], float]) -> None:
+        """`clock`: the wall time written for each observed action."""
+        self._files, self._key, self._clock = files, key, clock
         # a vendor restarts its ids with each process: a resumed run's scope keeps it from reusing the last run's
         self._timeline, self._lost = Timeline(f"{int(clock() * 1000)}:"), False
         self._events: CappedLog | None = None  # opened at the first action
@@ -49,16 +44,8 @@ class CommandSink:
             self._lost = True  # display only: no events file, no retry, never a failed attempt
 
     def feed(self, e: events.HarnessEvent) -> None:
-        with suppress(Exception):
+        with suppress(Exception):  # display only: a lost write never fails the attempt
             self._record(e)
-        if not isinstance(e, events.Cmd):
-            return
-        ticked = self._tick()
-        if ticked - self._last < EVERY_S:
-            return
-        self._last = ticked
-        with suppress(Exception):  # display only, and a live sink may not raise: a lost write never fails the attempt
-            self._files.note_command(self._key, self._clock())
 
     def poll(self, idle_s: float) -> None:
         pass

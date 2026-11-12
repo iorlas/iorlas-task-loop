@@ -1,12 +1,13 @@
 """The reader of one attempt's `events.jsonl`: the agent's activity, one `any_agent.activity` record per line, written while the
-attempt runs by `command_sink`. Display only, never control state. Bounded: a read takes at most READ_CAP bytes. A page carries an
+attempt runs by `command_sink`. Display only, never control state. Each file read takes at most READ_CAP bytes; timestamp searches
+also obey the owning stream cap. A page carries an
 opaque cursor (the file's identity and the byte after the last whole line read) to follow with; a cursor that does not belong to
 the file, or is past its end, answers `replaced` with the fresh tail instead of repeating or skipping lines."""
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Literal
 
 from any_agent.activity import Activity, decode
 
@@ -53,6 +54,60 @@ def _cursor(inode: int, offset: int) -> str:
 def _read(stream: BinaryIO, start: int, end: int) -> bytes:
     stream.seek(start)
     return stream.read(end - start)
+
+
+def _command_start(line: bytes) -> float | Literal["unreadable"] | None:
+    try:
+        record = decode(line.decode("utf-8"))
+    except (UnicodeError, ValueError, OverflowError, RecursionError):
+        return "unreadable"
+    if record is None:
+        return "unreadable"
+    return record.at if record.kind == "command" and record.state == "running" else None
+
+
+def _command_time(stream: BinaryIO, size: int, truncated: bytes) -> float | Literal["none", "unreadable"]:
+    """Search complete records newest first, retaining at most READ_CAP bytes of a split line."""
+    end, pending, final = size, b"", True
+    marker = truncated.removesuffix(b"\n")
+    while end:
+        room = READ_CAP - len(pending)
+        if room <= 0:
+            return "unreadable"
+        start = max(0, end - room)
+        chunk = _read(stream, start, end)
+        if len(chunk) != end - start:
+            return "unreadable"
+        lines = (chunk + pending).split(b"\n")
+        pending = lines[0]
+        for line in reversed(lines[1:]):
+            if final:  # an unterminated append is not yet a record, even when it happens to decode
+                final = False
+                if line.endswith(marker):
+                    return "unreadable"
+                continue
+            found = _command_start(line)
+            if found is not None:
+                return found
+        if final and pending.endswith(marker):
+            return "unreadable"
+        end = start
+    found = None if final else _command_start(pending)  # no complete record in an empty or wholly unfinished file
+    return "none" if found is None else found
+
+
+def command_time(path: Path, cap: int, truncated: bytes) -> float | Literal["none", "unreadable"]:
+    """The last appended command start, from a bounded snapshot; neither completions nor dashboard folding apply."""
+    try:
+        with path.open("rb") as stream:
+            size = os.fstat(stream.fileno()).st_size
+            if size > cap + len(truncated):
+                return "unreadable"
+            return _command_time(stream, size, truncated)
+    except FileNotFoundError:
+        return "none"
+    except OSError:
+        return "unreadable"
 
 
 def _tail(stream: BinaryIO, inode: int, size: int, limit: int, replaced: bool) -> ActivityPage:
