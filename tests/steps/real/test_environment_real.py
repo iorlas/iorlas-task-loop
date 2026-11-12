@@ -21,11 +21,13 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
 from taskloop.environment import EnvironmentPorts, Preparation, Renewal
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.git_views import checkouts, slot_profiles
+from taskloop.git_views import GitViews
 from taskloop.owned_processes import setup_seen
 from taskloop.prepare import Prepared
 from taskloop.setup_store import SetupStore
 from taskloop.slot_env import RealEnvFiles, setup_process
+
+VIEWS = GitViews()
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 # fails unless the reset emptied `.venv` first; prints the slot's folders
@@ -48,7 +50,7 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     (main / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/sh", "-c", SETUP]]}))
     git(main, "add", ".gitignore", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
-    slot = root / "slots" / checkouts(main).identity().key / "s1"
+    slot = root / "slots" / VIEWS.checkouts(main).identity().key / "s1"
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     (slot / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/false"]]}))  # the working tree is never read
@@ -65,7 +67,7 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
         'workspace-write',?,7,'s','b',1,2,?,?)""", (slot.parent.name, time.time() + 600, d, d))
     record = AttemptStore(lambda: factory).load(KEY)
     assert record is not None
-    ports = EnvironmentPorts(SetupStore(lambda: factory), checkouts, slot_profiles, RealEnvFiles(), setup_process, setup_seen,
+    ports = EnvironmentPorts(SetupStore(lambda: factory), VIEWS.checkouts, VIEWS.slot_profiles, RealEnvFiles(), setup_process, setup_seen,
                              group_alive, EvidenceFiles(root / "art"), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks,
                              lambda *_probe: True, (root / "art",), 4096)  # tmp_path is longer than the TMPDIR budget
     gitdir = Path(git(slot, "rev-parse", "--absolute-git-dir").strip())

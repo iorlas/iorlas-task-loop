@@ -21,7 +21,7 @@ from sqlite_store import Store
 from stream_proc import IdentityUnavailableError, OwnedProcess, ProcessObservation, RegisteredStartUncertainError
 
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, StoreUnavailable
-from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryIdentity, Replaced
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 
@@ -134,12 +134,13 @@ class Launcher:
     def __init__(
         self, database: Path, files: EvidenceFiles, clock: Callable[[], float], start: Start, observe: ObserveProcess, executable: str,
         targets: Targets = AttemptStore, module: str = ENTRY_MODULE,
+        read_seconds: int = DEFAULT_GIT_READ_SECONDS,
     ) -> None:
         """`targets` and `module`: the agent attempts' store and entry by default, `CheckStore` and `CHECK_ENTRY_MODULE`
-        for checks attempts."""
+        for checks attempts. `read_seconds`: the Git read bound the entry's views carry (argv)."""
         self.database, self.files, self.clock = database, files, clock
         self.start, self.observe, self.executable = start, observe, executable
-        self.targets, self.module = targets, module
+        self.targets, self.module, self.read_seconds = targets, module, read_seconds
 
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         """Start the task's admitted attempt unless its registered entry still runs; never creates factory.db.
@@ -205,7 +206,7 @@ class Launcher:
                 raise _CallbackRefused("registration_conflict" if answer == "conflict" else "registration_refused")
             committed = True
 
-        argv = [self.executable, "-I", "-m", self.module, str(self.database), str(self.files.root), *task]
+        argv = [self.executable, "-I", "-m", self.module, str(self.database), str(self.files.root), str(self.read_seconds), *task]
         try:
             log = os.open(self.files.entry_log(key), os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o600)
         except (EvidenceError, OSError):

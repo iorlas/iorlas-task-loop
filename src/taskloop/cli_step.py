@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Literal
 
 from taskloop import attempt_status, cli_composition, land, operations, result_data
+from taskloop.composition import real_slots
 from taskloop.exit_codes import exit_code
-from taskloop.git_views import use_read_seconds
+from taskloop.git_views import GitViews
 from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.operations import Ended, Failed, Round, StartRequest
@@ -124,10 +125,15 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
     _common(parser, "--db", "--artifacts")
 
 
+def views_for(loaded: Loaded) -> GitViews:
+    """The real Git views, bounded by the machine config's `git_read_seconds`."""
+    return GitViews(loaded.settings.git_read_seconds.value)
+
+
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.model,
                            arguments.effort, arguments.minutes)
-    with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value) as ports:
+    with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
         return ports if isinstance(ports, Failed) else operations.start(ports, request)
 
 
@@ -137,7 +143,8 @@ def _next_request(arguments: argparse.Namespace) -> NextRequest:
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_next(loaded.settings.db.value, loaded.settings.artifacts.value, arguments.tracker_root) as ports:
+    settings = loaded.settings
+    with cli_composition.open_next(settings.db.value, settings.artifacts.value, views_for(loaded), arguments.tracker_root) as ports:
         return ports if isinstance(ports, Failed) else run_round(ports, _next_request(arguments))
 
 
@@ -147,7 +154,7 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings, request = loaded.settings, RoundsRequest(arguments.backlog, loaded.settings.round_seconds.value)
     log = settings.artifacts.value / "rounds.log"
     try:
-        with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, _next_request(arguments)) as ports:
+        with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments)) as ports:
             if isinstance(ports, Failed):
                 return ports
             started = (json.dumps(result_data.rounds_data(request.backlog, request.every, str(log))) if arguments.json_output else
@@ -159,31 +166,31 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value) as reads:
+    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
         if isinstance(reads, Failed):
             return reads
         return attempt_status.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
 
 
 def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value) as reads:
+    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
         return reads if isinstance(reads, Failed) else attempt_status.list_attempts(reads, stuck=arguments.stuck)
 
 
 def _verify(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_verify(loaded.settings.db.value) as opened:
+    with cli_composition.open_verify(loaded.settings.db.value, views_for(loaded)) as opened:
         return opened if isinstance(opened, Failed) else operations.verify_task(*opened, arguments.backlog, arguments.task_id)
 
 
 def _release(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_release(loaded.settings.db.value) as opened:
+    with cli_composition.open_release(loaded.settings.db.value, views_for(loaded)) as opened:
         if isinstance(opened, Failed):
             return opened
         return operations.release_task(*opened, arguments.backlog, arguments.task_id, abandon=arguments.abandon)
 
 
 def _publish(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_publish(loaded.settings.db.value) as opened:
+    with cli_composition.open_publish(loaded.settings.db.value, views_for(loaded)) as opened:
         return opened if isinstance(opened, Failed) else operations.publish_task(*opened, arguments.backlog, arguments.task_id)
 
 
@@ -194,7 +201,7 @@ def _land(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     request = land.LandRequest(arguments.backlog, arguments.task_id, Path(arguments.checkout), arguments.minutes, mode,
                                arguments.no_change)
     try:
-        with cli_composition.open_land(loaded.settings.db.value, loaded.settings.artifacts.value) as ports:
+        with cli_composition.open_land(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
             return ports if isinstance(ports, Failed) else land.land(ports, request)
     except KeyboardInterrupt:
         return Failed("unavailable", INTERRUPTED)
@@ -202,7 +209,8 @@ def _land(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings = loaded.settings
-    return cli_composition.adopt(settings.db.value, Path(arguments.checkout), settings.slots_root.value, settings.slot_count.value)
+    return cli_composition.adopt(settings.db.value, Path(arguments.checkout), settings.slots_root.value, settings.slot_count.value,
+                                 real_slots(views_for(loaded)))
 
 
 OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]] = {
@@ -228,7 +236,6 @@ def run(arguments: argparse.Namespace) -> int:
     if isinstance(loaded, ConfigRefused):
         result: Result = operations.refused_config(loaded)
     else:
-        use_read_seconds(loaded.settings.git_read_seconds.value)
         result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
     failed = isinstance(result, Failed) or (isinstance(result, Ended) and result.reason != "interrupted")
     stream = sys.stderr if failed else sys.stdout

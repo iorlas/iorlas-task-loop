@@ -23,6 +23,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity
 from taskloop.cli import main
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitViews
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import (
     Adoption,
@@ -42,7 +43,7 @@ from taskloop.result_data import Result
 from taskloop.round import NextRequest, run_round
 from taskloop.setup_store import SetupRow
 from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
-from taskloop.slots import Adopted, NotAdopted, SlotView
+from taskloop.slots import Adopted, NotAdopted, SlotGit, SlotView
 from taskloop.tracker import leaked_claim
 
 KEY = AttemptKey("attempt", "dispatch-token-never-shown", 1)
@@ -130,7 +131,7 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     admission, opened = Admission(), list[tuple[Path, Path]]()
 
     @contextmanager
-    def opener(database: Path, artifacts: Path) -> Generator[StartPorts | Failed]:
+    def opener(database: Path, artifacts: Path, _views: GitViews) -> Generator[StartPorts | Failed]:
         opened.append((database, artifacts))
         yield StartPorts(AttemptStore(lambda: con), admission, FakeLauncher(), lambda: 1000, NoRepeat(), NoAdvance(), NO_CHECKS)
 
@@ -360,7 +361,7 @@ def test_release_flags_reach_the_operation_through_the_opener(
     assert con is not None
 
     @contextmanager
-    def opener(database: Path) -> Generator[tuple[AttemptStore, Releases, Releases]]:
+    def opener(database: Path, _views: GitViews) -> Generator[tuple[AttemptStore, Releases, Releases]]:
         opened.append(database)
         yield AttemptStore(lambda: con), releases, checks
 
@@ -389,7 +390,7 @@ def test_publish_reaches_the_operation_through_the_opener_and_its_json_is_exact(
     assert con is not None
 
     @contextmanager
-    def opener(database: Path) -> Generator[tuple[AttemptStore, Publishes]]:
+    def opener(database: Path, _views: GitViews) -> Generator[tuple[AttemptStore, Publishes]]:
         opened.append(database)
         yield AttemptStore(lambda: con), publishes
 
@@ -494,7 +495,7 @@ def test_adopt_takes_its_paths_and_count_from_flags_config_and_defaults(
 ) -> None:
     calls: list[tuple[Path, Path, Path, int]] = []
 
-    def adopt(database: Path, checkout: Path, root: Path, count: int) -> Adoption:
+    def adopt(database: Path, checkout: Path, root: Path, count: int, _git: SlotGit) -> Adoption:
         calls.append((database, checkout, root, count))
         return Adoption((Adopted("s1", root / "id" / "s1"), NotAdopted("s2", "not_listed", root / "id" / "s2")))
 
@@ -521,7 +522,7 @@ def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
     ports = Rounds()
 
     @contextmanager
-    def opener(database: Path, artifacts: Path, tracker_root: str) -> Generator[Rounds]:
+    def opener(database: Path, artifacts: Path, _views: GitViews, tracker_root: str) -> Generator[Rounds]:
         opened.append((database, artifacts, tracker_root))
         yield ports
 
@@ -574,7 +575,7 @@ def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_pa
     con = Store(SCHEMA).open_rw(db)
     assert con is not None
     con.close()
-    with cli_composition.open_next(db, tmp_path / "artifacts", str(tmp_path)) as ports:
+    with cli_composition.open_next(db, tmp_path / "artifacts", GitViews(), str(tmp_path)) as ports:
         assert not isinstance(ports, Failed) and ports.holding.status("tasks", "tl-1") is None
         found = run_round(ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", "m", "high", 30))
     assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
@@ -590,7 +591,7 @@ class Run:
         self.ended, self.opened, self.requests = ended, list[tuple[Path, Path, object]](), list[object]()
 
     @contextmanager
-    def opener(self, database: Path, artifacts: Path, request: object) -> Generator[object]:
+    def opener(self, database: Path, artifacts: Path, _views: GitViews, request: object) -> Generator[object]:
         self.opened.append((database, artifacts, request))
         yield self
 
@@ -651,7 +652,7 @@ def test_a_second_ctrl_c_exits_130(structured: bool, monkeypatch: pytest.MonkeyP
 def test_a_factory_db_that_exists_but_cannot_be_opened_backs_off_while_an_absent_one_ends(tmp_path: Path) -> None:
     db = tmp_path / "factory.db"
     request = cli_step.NextRequest("tasks", str(tmp_path), Path("/checkout"), "auto", "m", "high", 30)
-    once = cli_composition.one_round(db, tmp_path / "art", request, lambda: False)
+    once = cli_composition.one_round(db, tmp_path / "art", GitViews(), request, lambda: False)
     absent = once(frozenset())
     assert isinstance(absent, Failed) and (absent.kind, absent.reason) == ("refused", "database")
     db.write_bytes(b"not a database, or one locked past the busy timeout")

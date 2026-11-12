@@ -121,7 +121,8 @@ class Bench:
 
     def __call__(self, inspect: object = inspect_process) -> int:
         observe = inspect_process if inspect is inspect_process else self.other
-        return enter(EntryArgs(self.db, self.db.parent, "tasks", "tl-1"), self.checking, observe, self.lines.append, self.heartbeat_for,
+        args = EntryArgs(self.db, self.db.parent, 600, "tasks", "tl-1")
+        return enter(args, self.checking, observe, self.lines.append, self.heartbeat_for,
                      Stop(self.go))
 
     @staticmethod

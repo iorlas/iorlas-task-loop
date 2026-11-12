@@ -20,11 +20,13 @@ from taskloop.agent_credentials import scrubbed
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, BlockTarget, CheckSink, check_env
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.git_views import checkouts
+from taskloop.git_views import GitViews
 from taskloop.prepare import Prepared, detach_at
 from taskloop.profile import Check
 from taskloop.slot_env import setup_process
 from taskloop.slot_files import RealSlotFiles
+
+VIEWS = GitViews()
 
 PASS = Check("pass", ("/bin/sh", "-c", "echo ok"), 30)
 UNTRACKED = Check("untracked", ("/bin/sh", "-c", "touch untracked-file"), 30)
@@ -46,16 +48,16 @@ def test_checks_run_on_the_host_in_a_slot_detached_at_x(
     (main / "README").write_text("one\n")
     git(main, "add", "README")
     git(main, "commit", "-q", "-m", "D")
-    slot = root / "slots" / checkouts(main).identity().key / "s1"
+    slot = root / "slots" / VIEWS.checkouts(main).identity().key / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     (main / "README").write_text("two\n")
     git(main, "commit", "-q", "-am", "X")
     x = git(main, "rev-parse", "HEAD").strip()
 
-    taken = detach_at(checkouts, RealSlotFiles(), str(slot), slot.parent.name, x)
+    taken = detach_at(VIEWS.checkouts, RealSlotFiles(), str(slot), slot.parent.name, x)
     assert isinstance(taken, Prepared) and taken.head == x
     assert git(slot, "rev-parse", "HEAD").strip() == x and (slot / "README").read_text() == "two\n"
-    view = checkouts(slot, git_dir=taken.gitdir)
+    view = VIEWS.checkouts(slot, git_dir=taken.gitdir)
     environ = {"PATH": os.environ["PATH"], "HOME": str(root)}
     target = BlockTarget(slot, view, x, REQUIRED, time.time() + 600, check_env(scrubbed(environ), slot))
     store, evidence = CheckStore(lambda: checking), EvidenceFiles(root / "art")

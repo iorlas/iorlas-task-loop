@@ -43,6 +43,7 @@ from taskloop.attempt_types import (
 from taskloop.composition import open_verifier
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitViews
 from taskloop.slot_lock import hold
 from taskloop.slot_state import pointer
 from taskloop.steps import kind
@@ -561,7 +562,7 @@ def test_another_verifier_storing_first_is_inconsistent(
 
 def test_the_real_composition_opens_the_factory_database(tmp_path: Path) -> None:
     store = Store(SCHEMA)
-    assert open_verifier(tmp_path / "factory.db", store).verify(KEY) == VerifyRefused("not_captured")
+    assert open_verifier(tmp_path / "factory.db", store, GitViews()).verify(KEY) == VerifyRefused("not_captured")
     store.close_shared()
 
 

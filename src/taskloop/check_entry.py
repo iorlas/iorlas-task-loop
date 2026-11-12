@@ -28,6 +28,7 @@ import threading
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from stream_proc import ProcessObservation, inspect_process
@@ -40,6 +41,7 @@ from taskloop.check_release import ChecksRelease
 from taskloop.check_store import ChecksRow
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import Checking, open_checking
+from taskloop.git_views import GitViews
 from taskloop.slot_release import release_word
 from taskloop.tracker_client import tracker_claims, tracker_located
 from taskloop.validate import Ended, Target, Verdict, concluded, reconcile, validate
@@ -174,7 +176,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args is None:
             log("refused usage")
             return 2
-        return enter(args, open_checking, inspect_process, log, tracker_claims().heartbeat_for, threading.Event())
+        opened = partial(open_checking, views=GitViews(args.read_seconds))
+        return enter(args, opened, inspect_process, log, tracker_claims().heartbeat_for, threading.Event())
     except BaseException as error:  # the type name only, never its text
         log("failed " + type(error).__name__)
         return 1

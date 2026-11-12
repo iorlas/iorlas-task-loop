@@ -18,6 +18,7 @@ from land_bench import LandBench, bench
 from taskloop import cli_composition, cli_step
 from taskloop import land as land_module
 from taskloop.cli import main
+from taskloop.git_views import GitViews
 from taskloop.land import Landed, LandRequest
 from taskloop.land_check import LandPorts
 from taskloop.land_close import NOT_SYNCED
@@ -72,7 +73,7 @@ def test_the_flags_become_one_land_request_for_the_one_operation(
     ports = object()
 
     @contextmanager
-    def open_land(database: Path, artifacts: Path) -> Generator[object]:
+    def open_land(database: Path, artifacts: Path, _views: GitViews) -> Generator[object]:
         opened.append((database, artifacts))
         yield ports
 
@@ -193,7 +194,7 @@ def test_a_ctrl_c_during_a_land_is_one_interrupted_answer_exit_130_not_a_traceba
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     @contextmanager
-    def open_land(_database: Path, _artifacts: Path) -> Generator[object]:
+    def open_land(_database: Path, _artifacts: Path, _views: GitViews) -> Generator[object]:
         yield object()
 
     def interrupted(_ports: LandPorts, _request: LandRequest) -> Failed:

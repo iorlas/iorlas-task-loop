@@ -11,16 +11,18 @@ import pytest
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 
-from taskloop import cli_composition, git_views
-from taskloop.git_views import checkouts
+from taskloop import cli_composition
+from taskloop.composition import real_slots
+from taskloop.git_views import GitViews
 from taskloop.operations import Adoption
 from taskloop.slots import Adopted, NotAdopted
+
+VIEWS = GitViews()
 
 
 def test_a_blocked_status_is_git_unavailable_and_the_slot_adopts_once_it_clears(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = tmp_path.resolve()
     apply_hermetic_env(monkeypatch, identity=Identity("Person", "person@example.invalid"), config={})
-    monkeypatch.setattr(git_views, "READS", git_views.ReadBound())
     main = root / "repo"
     main.mkdir()
     git(main, "init", "-q", "-b", "main")
@@ -28,18 +30,18 @@ def test_a_blocked_status_is_git_unavailable_and_the_slot_adopts_once_it_clears(
     git(main, "add", "a.txt")
     git(main, "commit", "-q", "-m", "base")
     slots = root / "slots"
-    slot = slots / checkouts(main).identity().key / "s1"
+    slot = slots / VIEWS.checkouts(main).identity().key / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     exclude = main / ".git" / "info" / "exclude"
     exclude.parent.mkdir(exist_ok=True)
     exclude.unlink(missing_ok=True)
     os.mkfifo(exclude)
-    git_views.use_read_seconds(2)
+    views = GitViews(2)
 
     started = time.monotonic()
     faulthandler.dump_traceback_later(60, exit=True)  # wall-clock guard: a hang ends the run with a traceback, not never
     try:
-        blocked = cli_composition.adopt(root / "state" / "factory.db", main, slots, 1)
+        blocked = cli_composition.adopt(root / "state" / "factory.db", main, slots, 1, real_slots(views))
     finally:
         faulthandler.cancel_dump_traceback_later()
     assert time.monotonic() - started < 30  # the bound is 2 s
@@ -47,6 +49,6 @@ def test_a_blocked_status_is_git_unavailable_and_the_slot_adopts_once_it_clears(
     assert blocked.slots == (NotAdopted("s1", "git_unavailable", slot),)
 
     exclude.unlink()
-    cleared = cli_composition.adopt(root / "state" / "factory.db", main, slots, 1)
+    cleared = cli_composition.adopt(root / "state" / "factory.db", main, slots, 1, real_slots(views))
     assert isinstance(cleared, Adoption)
     assert isinstance(cleared.slots[0], Adopted)

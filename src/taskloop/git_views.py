@@ -8,7 +8,7 @@ from pathlib import Path
 
 from git_porcelain import GitUnavailable, RealRepo, Repo
 
-from taskloop.attempt_types import Checkouts
+from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Checkouts
 from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 
@@ -16,31 +16,47 @@ HARDENED = (("core.hooksPath", "/dev/null"), ("core.fsmonitor", "false"), ("comm
 PUSH_TIMEOUT = 120.0  # seconds a publication's push or ls-remote may take (the library's default is 600)
 
 
-@dataclass
-class ReadBound:
-    """Seconds a read-only Git command may take before git_porcelain kills it and raises `GitTimeout` (a `GitUnavailable`, so
-    `unavailable:git` with the command and the seconds as detail). The machine config's `git_read_seconds`, set once by the
-    command line right after it loads the config (`use_read_seconds`); a process that never sets it (an attempt's entry)
-    keeps the default."""
+@dataclass(frozen=True)
+class GitViews:
+    """The real Git views, each bounded by `read_seconds`: how long a read-only Git command may take before git_porcelain
+    kills it and raises `GitTimeout` (a `GitUnavailable`, so `unavailable:git` with the command and the seconds as detail).
+    The machine config's `git_read_seconds`, passed down by the composition and to each entry process in its argv."""
 
-    seconds: float = 600.0
+    read_seconds: int = DEFAULT_GIT_READ_SECONDS
 
+    def inspect_checkout(self, path: str) -> RepoInspection:
+        """Resolve the native path once and request fresh shared-library observations."""
+        try:
+            expanded = Path(path).expanduser()
+        except RuntimeError as error:
+            raise UnsupportedCheckout(f"Cannot expand checkout path: {path}") from error
+        checkout = expanded.resolve()
+        return inspect_repo(RealRepo(checkout, memoize=False, read_timeout=self.read_seconds), checkout)
 
-READS = ReadBound()
+    def checkouts(self, path: Path, *, git_dir: Path | None = None) -> Repo:
+        """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment, its discovery ceiling
+        at that path: calls that run on a slot open their view from the slot itself, pinned to the verified `git_dir`
+        (git_porcelain's `pins`: `<slot>/.git` is never read again, any other path is `NotARepo`)."""
+        pins = None if git_dir is None else {path: git_dir}
+        env = hardened(os.environ) | ceiling(path, os.environ)
+        return RealRepo(path, memoize=False, env=env, read_timeout=self.read_seconds, pins=pins)
 
+    def remotes(self, path: Path, *, git_dir: Path | None = None) -> Repo:
+        """`checkouts` with a bounded transport (PUSH_TIMEOUT): the publication's view of the person's checkout. Hooks stay
+        off (no `pre-push`), no push bar is added, and the person's own Git config and credentials apply; git_porcelain's
+        base environment never prompts, so a locked key fails instead of hanging."""
+        pins = None if git_dir is None else {path: git_dir}
+        env = hardened(os.environ) | ceiling(path, os.environ)
+        return RealRepo(path, memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, read_timeout=self.read_seconds, pins=pins)
 
-def use_read_seconds(seconds: float) -> None:
-    READS.seconds = float(seconds)
+    def slot_profiles(self, slot: Path, gitdir: Path) -> GitProfileFiles:
+        """The profile port on the slot's own view, pinned to its verified Git directory."""
 
+        def pinned(path: Path, /, *, git_dir: Path | None = None) -> Repo:
+            del git_dir
+            return self.checkouts(path, git_dir=gitdir)
 
-def inspect_checkout(path: str) -> RepoInspection:
-    """Resolve the native path once and request fresh shared-library observations."""
-    try:
-        expanded = Path(path).expanduser()
-    except RuntimeError as error:
-        raise UnsupportedCheckout(f"Cannot expand checkout path: {path}") from error
-    checkout = expanded.resolve()
-    return inspect_repo(RealRepo(checkout, memoize=False, read_timeout=READS.seconds), checkout)
+        return GitProfileFiles(slot, pinned)
 
 
 def appended(env: Mapping[str, str], entries: Sequence[tuple[str, str]]) -> dict[str, str] | None:
@@ -75,24 +91,6 @@ def ceiling(path: Path, environ: Mapping[str, str]) -> dict[str, str]:
     return {"GIT_CEILING_DIRECTORIES": os.pathsep.join([str(path.parent), *([ambient] if ambient else [])])}
 
 
-def checkouts(path: Path, *, git_dir: Path | None = None) -> Repo:
-    """A fresh (unmemoized) real Git view from one checkout path, in the hardened Git environment, its discovery ceiling
-    at that path: calls that run on a slot open their view from the slot itself, pinned to the verified `git_dir`
-    (git_porcelain's `pins`: `<slot>/.git` is never read again, any other path is `NotARepo`)."""
-    pins = None if git_dir is None else {path: git_dir}
-    env = hardened(os.environ) | ceiling(path, os.environ)
-    return RealRepo(path, memoize=False, env=env, read_timeout=READS.seconds, pins=pins)
-
-
-def remotes(path: Path, *, git_dir: Path | None = None) -> Repo:
-    """`checkouts` with a bounded transport (PUSH_TIMEOUT): the publication's view of the person's checkout. Hooks stay
-    off (no `pre-push`), no push bar is added, and the person's own Git config and credentials apply; git_porcelain's base
-    environment never prompts, so a locked key fails instead of hanging."""
-    pins = None if git_dir is None else {path: git_dir}
-    env = hardened(os.environ) | ceiling(path, os.environ)
-    return RealRepo(path, memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, read_timeout=READS.seconds, pins=pins)
-
-
 FILE_MODES = ("100644", "100755")  # a tree entry that is a regular file; 120000 is a symlink, 160000 a submodule
 
 
@@ -105,7 +103,7 @@ class GitProfileFiles:
     repository itself is readable (a path that is no repository is unavailable)."""
 
     checkout: Path
-    repos: Checkouts = checkouts
+    repos: Checkouts
 
     def blob(self, commit: str, path: str) -> bytes | NoCommit | NotAFile | Unavailable | None:
         try:
@@ -126,12 +124,3 @@ class GitProfileFiles:
             return Unavailable(str(error))
         return Unavailable(f"{path} at {commit} is listed but unreadable") if data is None else data
 
-
-def slot_profiles(slot: Path, gitdir: Path) -> GitProfileFiles:
-    """The profile port on the slot's own view, pinned to its verified Git directory."""
-
-    def pinned(path: Path, /, *, git_dir: Path | None = None) -> Repo:
-        del git_dir
-        return checkouts(path, git_dir=gitdir)
-
-    return GitProfileFiles(slot, pinned)

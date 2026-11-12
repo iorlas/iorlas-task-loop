@@ -26,7 +26,7 @@ from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Verified
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.git_views import checkouts, remotes
+from taskloop.git_views import GitViews
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
@@ -36,6 +36,8 @@ from taskloop.slots import SlotGit, adopt
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
+
+VIEWS = GitViews()
 
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -80,24 +82,25 @@ class Published:
         git(self.main, "commit", "-q", "-m", "base")
         git(self.main, "remote", "add", "origin", self.remote.as_uri())
         git(self.main, "push", "-q", "origin", "main")
-        repo_id = RepoId(checkouts(self.main).identity().key)
+        repo_id = RepoId(VIEWS.checkouts(self.main).identity().key)
         self.slot = root / "slots" / repo_id / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev(self.slot, "HEAD")
-        adopt(lambda: factory, begin_immediate, checkouts(self.main), SlotGit(checkouts, RealSlotFiles()), root / "slots", 1)
+        adopt(lambda: factory, begin_immediate, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), root / "slots", 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         admission = AttemptAdmission(
-            lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
+            lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe,
+            RealSlotFiles()
         )
         admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), self.main, "m", "high", "workspace-write", 100, None))
         assert isinstance(admitted, Admitted) and self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
         self.key: AttemptKey = admitted.key
         attempts = Attempts(self.store, EvidenceFiles(root / "art"), lambda: ("/bin/codex", {}), write_plan(self.slot), lambda: 10,
-                                checkouts, self.files)
+                                VIEWS.checkouts, self.files)
         attempts.execute(self.key, ENTRY)
-        assert isinstance(Verifier(self.store, checkouts, self.files, gone, lambda: 20, hold).verify(self.key), Verified)
+        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold).verify(self.key), Verified)
         self.x = self.rev(self.main, BRANCH)
-        releaser = SlotRelease(self.store, checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
+        releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
                                lambda _setup: "gone", lambda _scratch: True)
         assert isinstance(releaser.release(self.key, False), Released)
         self.opened: list[Path] = []
@@ -112,7 +115,7 @@ class Published:
 
     def counted(self, path: Path, /, *, git_dir: Path | None = None) -> Repo:
         self.opened.append(path)
-        return remotes(path, git_dir=git_dir)
+        return VIEWS.remotes(path, git_dir=git_dir)
 
     def publish(self) -> PublishResult:
         return BranchPublish(self.store, self.counted, self.files, lambda: 40).publish(self.key)

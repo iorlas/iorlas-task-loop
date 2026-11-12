@@ -41,6 +41,7 @@ from taskloop.cli_composition import adopt, open_land, open_reads, open_start, o
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
+from taskloop.git_views import GitViews
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     MAX_MINUTES,
@@ -507,13 +508,13 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
     missing = tmp_path / "factory.db"  # in an existing directory: a writable open would create it
     refused = Failed("refused", "database", "No readable factory.db at this path; `tl slot adopt` creates it")
-    with open_reads(missing, missing.parent) as reads:
+    with open_reads(missing, missing.parent, GitViews()) as reads:
         assert reads == refused
-    with open_start(missing, tmp_path / "art") as ports:
+    with open_start(missing, tmp_path / "art", GitViews()) as ports:
         assert ports == refused
-    with open_verify(missing) as opened:
+    with open_verify(missing, GitViews()) as opened:
         assert opened == refused
-    with open_land(missing, tmp_path / "art") as land_ports:
+    with open_land(missing, tmp_path / "art", GitViews()) as land_ports:
         assert land_ports == refused
     assert list(tmp_path.iterdir()) == []
 

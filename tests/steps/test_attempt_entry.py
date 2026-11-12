@@ -164,7 +164,7 @@ class Entry:
         return True
 
     def __call__(self, inspect: Callable[[int], ProcessObservation] = inspect_process, task_id: str = "tl-1") -> int:
-        args = EntryArgs(self.db, self.db.parent, "tasks", task_id)
+        args = EntryArgs(self.db, self.db.parent, 600, "tasks", task_id)
         return enter(args, self.attempts, inspect, self.clock, self.wait, self.lines.append, self.gone, self.heartbeat_for, self.stop,
                      self.unclaim, self.remotes)
 
@@ -409,15 +409,16 @@ def test_a_failed_run_that_left_files_keeps_its_slot_held_and_the_claim(
 
 @pytest.mark.parametrize(
     "argv",
-    [[], ["db", "/a", "tasks", "tl-1"], ["/db", "a", "tasks", "tl-1"], ["/db", "/a", "", "tl-1"], ["/db", "/a", "tasks", "tl-1", "x"]],
+    [[], ["db", "/a", "600", "tasks", "tl-1"], ["/db", "a", "600", "tasks", "tl-1"], ["/db", "/a", "", "tasks", "tl-1"],
+     ["/db", "/a", "6x", "tasks", "tl-1"], ["/db", "/a", "600", "", "tl-1"], ["/db", "/a", "600", "tasks", "tl-1", "x"]],
 )
-def test_arguments_are_two_absolute_paths_a_backlog_and_a_task(argv: list[str]) -> None:
+def test_arguments_are_two_absolute_paths_the_git_bound_a_backlog_and_a_task(argv: list[str]) -> None:
     assert arguments(argv) is None
 
 
 def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BEADS_DIR", "/elsewhere/.beads")
-    assert main(["relative", "/a", "tasks", "tl-1"]) == 2
+    assert main(["relative", "/a", "600", "tasks", "tl-1"]) == 2
     assert "BEADS_DIR" not in os.environ  # dropped first: no bd child of this entry can be pointed at another tracker
     out, err = capfd.readouterr()
     assert (out + err).strip() == "refused usage"

@@ -9,6 +9,7 @@ from git_porcelain.testing import FakeRepo
 
 from taskloop import git_views
 from taskloop.cli import main
+from taskloop.git_views import GitViews
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 
 
@@ -20,7 +21,7 @@ def test_inspection_output(structured: bool, tmp_path: Path, monkeypatch: pytest
         assert path == str(repo.path)
         return inspect_repo(repo, repo.path)
 
-    monkeypatch.setattr("taskloop.cli.inspect_checkout", inspect)
+    monkeypatch.setattr(GitViews, "inspect_checkout", lambda _views, path: inspect(path))
     assert main(["repo", "inspect", str(repo.path), *(["--json"] if structured else [])]) == 0
     output = capsys.readouterr()
     assert output.err == ""
@@ -52,7 +53,7 @@ def test_inspection_failures_are_nonzero(
     def fail(path: str) -> RepoInspection:
         raise error
 
-    monkeypatch.setattr("taskloop.cli.inspect_checkout", fail)
+    monkeypatch.setattr(GitViews, "inspect_checkout", lambda _views, path: fail(path))
     assert main(["repo", "inspect", "missing", *(["--json"] if structured else [])]) == 1
     output = capsys.readouterr()
     assert output.out == ""
@@ -94,6 +95,6 @@ def test_composition_resolves_input_and_disables_memoization(tmp_path: Path, mon
         return repo
 
     monkeypatch.setattr(git_views, "RealRepo", make_repo)
-    result = git_views.inspect_checkout("repo/../repo")
+    result = GitViews().inspect_checkout("repo/../repo")
     assert result.checkout_path == repo.path
     assert observed == [repo.path]
