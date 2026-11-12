@@ -122,7 +122,7 @@ def test_a_failed_released_checks_attempt_is_re_run_by_start_but_never_by_the_ro
     rig.bench.concluded("failed")
     by_round = rig.start(advancing="implement")
     assert isinstance(by_round, Failed) and by_round.word == "refused:changed" and rig.numbers() == [(1, "concluded")]
-    rerun = rig.start()
+    rerun = rig.start()  # (the round's own re-run, after `main_moved`, is `start(advancing=, rerun=True)`: `test_checks_round`)
     assert isinstance(rerun, Started) and (rerun.status, rerun.step) == ("started", "check") and rerun.attempt_id != first.attempt_id
     assert rig.numbers() == [(1, "concluded"), (2, "admitted")] and rig.launcher.calls[-1].attempt_id == rerun.attempt_id
 

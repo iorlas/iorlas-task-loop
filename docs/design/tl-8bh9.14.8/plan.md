@@ -1458,3 +1458,38 @@ space and says nothing about the task branch or main; a rerun is safe (the candi
 `checkout_repo` answers `refused:checkout` naming the path when Git says `NotARepo` (a missing directory, a directory
 outside any repository), exit 1; `unavailable:git` stays for transient Git faults. Shared by `tl step next`, `start`
 and the land.
+
+## 31. Trial 6 defects repaired (tl-8bh9.14.64, .65, .66; 2026-11-12)
+
+### 31.1 Decision: a checks attempt that failed `main_moved` is re-run by the round, never held (.64)
+
+A plain land of task A moves origin `main` while task B's checks run; B's checks attempt concludes `failed:main_moved`
+(`validate._moved`). Holding B was wrong twice: the cause is nobody's fault, and the hold's recovery (re-add the label)
+abandons the attempt and replans and re-implements from scratch, though only the checks need to run again on the new `main`.
+Decision, the smallest correct behaviour: `main_moved` is not a hold cause (`hold_status.cause` returns none for it), and a
+round re-runs the checks of a done task whose latest checks attempt failed so (`round._rerun` puts such a view in the advance phase, oldest release first, so
+`_advance` handles it as any advance: `start` routes to `check_status.route` `rerun`, attempt number + 1, the same commit,
+the required names read again from `main`; no plan, no implement, claim kept; the move is `<task> check advance started
+<id>`; a refusal is classified as the advance's: `claim_lost`/`branch_moved` hold the round-taken task, a stop word
+(`ADVANCE_STOPS`, `no_free_slot` included) ends the phase, another is a per-task skip tried again next round).
+**Cap (decided):** the third checks attempt of a task failing `main_moved` in a row (`hold_status.MAIN_MOVED_RUNS` = 3) is
+held, as every other failure, with `hold_cause` text naming it (main moved while each of the last checks runs ran); a pusher
+faster than the checks cannot loop the task. Every other check failure stays a hold. **A hand-started task is not re-run
+by rounds** (`_rerun` needs the round's label): it is reported `failed:main_moved` and `tl step start` re-runs the checks
+by hand, as the `main_moved` guide says.
+
+### 31.2 A deleted task is `task_missing` whichever bd command says so (.65)
+
+bd 1.3.1 words a deleted task two ways: `no issue found matching "X"` (update, close) and, for `bd show`, `no issues found
+matching the provided IDs`. Only the first was recognised, so the advance's one tracker read classed the second
+`tracker_unavailable`, stopped the round and backed off. `tracker.gone` matches both; the advance, admission and every
+other caller then answer the per-task `skip task_missing`, whose detail names `tl step release --abandon <task>`. Not
+verified: a deleted task with a running entry (its verify and release do not read the task through `show`).
+
+### 31.3 `tl step show` carries a `needs_owner` explanation (.66)
+
+A hand-started step is never held, so nothing wrote the agent's question anywhere but `answer.txt`. `show_attempt` reads the
+stored valid answer's explanation (`hold_facts.explanation`, the decoder the hold uses) when the result is `needs_owner`;
+`show` prints it (`hold_text.explained`: bounded, printable, quoted) under `The agent explained:` and the `Next` guide says
+to answer by editing the description, then `tl step release --abandon` and `tl step start` (after `release` for a slot still
+held); no check-step text.

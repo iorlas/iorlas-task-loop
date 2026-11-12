@@ -167,7 +167,8 @@ GUIDE = {
     "commit_missing": "The implement step's commit is not in the repository any more: fetch `task/<id>` back, or `tl step "
     "release --abandon` to start the task afresh at plan.",
     "main_moved": "`main` moved while the checks ran (`Main:` shows both commits), so the required names it gave may be stale: "
-    "`tl step start` re-runs the checks against `main` as it is now.",
+    "a round re-runs the checks of a round-taken task against `main` as it is now (held after 3 in a row); `tl step start` does for a "
+    "hand-started one.",
     "branch_moved": "Restore the local task/<id> so it contains the verified commit, then rerun; or `tl step release --abandon`.",
     "remote_moved": "`git fetch origin task/<id>`, compare it with the verified commit, then rerun `tl step publish`.",
     "diverged": "The remote task/<id> does not contain the verified commit: compare them, then merge or move the remote branch "
@@ -206,6 +207,13 @@ CHECKS_GUIDE = {
     "waits for a check's process group, `held:slot_dirty` for files a person removes). Once the entry is gone each round "
     "retries the settled release (`check release ...`); `tl step release` does it by hand; `--abandon` also gives the task back.",
 }
+
+
+NEEDS_OWNER = (
+    "The agent answered `needs_owner`: its explanation above (the whole answer is `answer.txt` in the Directory) needs your decision "
+    "before this step can succeed. A hand-started step is never held, so nothing is written to the task and its claim lapses unrenewed. "
+    "Answer by editing the task's description, then `tl step release --abandon` and `tl step start` to run the step again."
+)
 
 
 def guide(word: str, *, checks: bool, land: bool = False) -> str:

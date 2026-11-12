@@ -144,10 +144,11 @@ def test_ancestry_reads_each_unique_missing_parent_once_failures_included() -> N
     assert client.reads == ["p-1", "absent", "p-9"]
 
 
-def test_a_task_deleted_from_the_tracker_is_not_found_not_unavailable(tmp_path: Path) -> None:
-    """bd answers a deleted bead with an error, not an empty read: it must not read as an unreachable tracker (which stops
-    every round)."""
-    gone = BdError("other", 'resolving t-1: no issue found matching "t-1"')
+@pytest.mark.parametrize("text", ['resolving t-1: no issue found matching "t-1"', "no issues found matching the provided IDs"])
+def test_a_task_deleted_from_the_tracker_is_not_found_not_unavailable(tmp_path: Path, text: str) -> None:
+    """bd answers a deleted bead with an error, not an empty read (`show` words it in the plural, `update` and `close` in
+    the singular): it must not read as an unreachable tracker (which stops every round; tl-8bh9.14.65)."""
+    gone = BdError("other", text)
     with pytest.raises(TaskInspectionError) as failure:
         inspect_task(TaskBinding(TaskScope("configured"), tmp_path), FakeTaskReadClient(faults={"t-1": gone}), "t-1")
     assert failure.value.kind == "not_found"

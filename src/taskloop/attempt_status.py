@@ -22,6 +22,7 @@ from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResu
 from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result, commands_seen
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.hold_facts import explanation
 from taskloop.hold_status import cause, hold_next
 from taskloop.hold_store import HoldRow, HoldStore
 from taskloop.land_status import LandView, land_next, land_view, with_logs
@@ -85,6 +86,8 @@ class AttemptView:
     # `none`: no command noted yet, `unreadable`: the evidence is; None unless the agent can be running (entry `running`)
     hold_due: str | None = None  # `Next: hold` with no hold recorded yet: the reason the next round holds it for
 
+NEEDS_OWNER = "needs_owner"  # the answer's disposition (and the collected result's reason) of a step that needs a decision
+
 
 @dataclass(frozen=True)
 class SetupShown:
@@ -104,6 +107,7 @@ class Shown:
     entry_log: Path
     setup: SetupShown | None = None  # None: no setup ran for the step (a plan attempt, or implement before its preparation)
     failed: ChecksView | None = None  # the unpassed results (with their logs) of the checks attempt that caused the view's hold
+    explanation: str | None = None  # the agent's own words of a `needs_owner` answer (a hand-started step is never held)
 
 
 @dataclass(frozen=True)
@@ -266,7 +270,8 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
         failed = _failed_checks(reads, files, view.hold)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
-    return Shown(shown, directory, directory / "entry.log", setup, failed)
+    told = explanation(files, view.result.execution, view.step, view.task_id) if view.result.reason == NEEDS_OWNER else None
+    return Shown(shown, directory, directory / "entry.log", setup, failed, told)
 
 
 def _failed_checks(reads: StatusPorts, files: EvidenceFiles, hold: HoldRow | None) -> ChecksView | None:

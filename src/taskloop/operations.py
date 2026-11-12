@@ -322,7 +322,7 @@ class _Relaunch:
     key: AttemptKey
 
 
-def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = None) -> Started | Failed:
+def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = None, rerun: bool = False) -> Started | Failed:
     """An existing attempt is launched as admitted (no tracker read), a captured one repeated, a done one advanced to the
     next step (one tracker read, no claim), another released one answered with its result; otherwise (none, or the
     current one abandoned) admit first. A refusal or unknown stops before the launch; a concurrent start that won
@@ -332,8 +332,9 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
 
     `advancing` (the round's advance): only the advance of that done attempt, never a fresh admission, relaunch or
     repeat: refused `abandoned` when the task's attempt was abandoned since, `changed` when it is no longer that done
-    attempt (another current attempt, or not advanceable)."""
-    found = _start(ports, request, advancing)
+    attempt (another current attempt, or not advanceable). `rerun`: the round's one re-run of a failed checks attempt
+    (`main_moved`, tl-8bh9.14.64) is that advance too; otherwise an advance is never a re-run."""
+    found = _start(ports, request, advancing, rerun)
     if isinstance(found, Failed) or found.step is not None:
         return found
     try:
@@ -342,13 +343,14 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
         return found
 
 
-def _start(ports: StartPorts, request: StartRequest, advancing: str | None) -> Started | Failed:
+def _start(ports: StartPorts, request: StartRequest, advancing: str | None, rerun: bool) -> Started | Failed:
     refused = choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
     if refused is not None:
         return refused
     try:
         found = _current(ports, request)
-        if advancing is not None and not (isinstance(found, _Advance) and found.previous.attempt_id == advancing and found.number == 1):
+        wanted = isinstance(found, _Advance) and found.previous.attempt_id == advancing and (found.number == 1 or rerun)
+        if advancing is not None and not wanted:
             found = _not_advanced(found)
         if isinstance(found, (Started, Failed)):
             return found

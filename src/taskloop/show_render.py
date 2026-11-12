@@ -15,6 +15,7 @@ from taskloop.check_status import ChecksView
 from taskloop.check_store import Required, ResultRow
 from taskloop.checks import differs
 from taskloop.hold_guide import hold_lines
+from taskloop.hold_text import explained
 from taskloop.land_close import NOT_SYNCED
 from taskloop.land_status import LandView
 from taskloop.land_summary import one_line
@@ -146,6 +147,7 @@ def show_lines(result: Shown) -> list[str]:
         failed = result.failed
         held = [] if failed is None else [check_line(row, log, failed.row.required, "Failed check")
                                           for row, log in zip(failed.results, failed.logs, strict=True)]
-        return [*_agent_lines(each), setup_line(result.setup), *held, *hold_lines(each)]
+        told = [] if not result.explanation or not (text := explained(result.explanation)) else ["The agent explained:", text]
+        return [*_agent_lines(each), setup_line(result.setup), *held, *hold_lines(each), *told]
     land = [] if each.land is None else land_lines(each.land, each.checks.row.required)
     return [*_checks_lines(each, each.checks, setup_line(result.setup)), *land, *hold_lines(each)]

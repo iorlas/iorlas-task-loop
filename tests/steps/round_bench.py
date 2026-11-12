@@ -13,7 +13,7 @@ from pathlib import Path
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from beads_client import Bead
+from beads_client import BdError, Bead
 from doubles import Environment, NoChecks, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
@@ -68,6 +68,7 @@ class Tracker:
         self.shows: list[str] = []
         self.ready_reads = 0
         self.down: set[str] = set()
+        self.deleted_as = ""  # bd's words for a task not in `beads` (empty: `show` answers nothing)
         self.comments: list[tuple[str, str]] = []
         self.holds: list[str] = []
 
@@ -107,6 +108,8 @@ class Tracker:
 
     def show(self, task_id: str) -> Bead | None:
         self.shows.append(task_id)
+        if task_id not in self.beads and self.deleted_as:
+            raise BdError("other", self.deleted_as)
         return self.beads.get(task_id)
 
     def ready(self, label: str = "") -> list[Bead]:
