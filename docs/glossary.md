@@ -1,6 +1,6 @@
 # Glossary
 
-Canonical language for the redesign, new documentation and conversation. Updated 2026-11-11.
+Canonical language for the redesign, new documentation and conversation. Updated 2026-11-12.
 Use short, familiar GitHub and Git terms where their meanings fit. Keep a factory term when its meaning differs;
 do not invent an extra entity to match GitHub's hierarchy. `task` is the owner's choice instead of `issue`.
 
@@ -50,7 +50,7 @@ redesign demonstrates a distinct factory concept that needs it. Do not introduce
 | profile | The repo's factory settings in `.task-loop.json`, read by `profile.py` from Git at a commit, never the working tree ([tl-8bh9.14.1](design/tl-8bh9.14.1/plan.md)); `tl profile show` prints it. | Strict keys `setup`, `checks` (name, argv, timeout), `required`, `target`. `setup` and the checks are read at the commit under test (the task branch), like a GitHub `push`/`pull_request` workflow; `required` and `target` from the target (`main`), like branch protection (O1, [self-hosting roadmap](design/self-hosting-roadmap.md) section 7). `setup` runs before an implement agent and before each checks block; the implement agent is told to run every command under `checks` itself, offline; the check step then runs them on X (`required` read from the local `main` at the checks admission). |
 | setup | The repo's own command(s), named in the profile, that prepare a slot's environment before the agent starts. | Decided 2026-11-11: run by the factory outside the agent's sandbox, with network, from the same ref as the checks. `just install` when the profile names none (this repository: `just bootstrap`). Not a step. Built (S5e-1): the implement attempt's entry runs it after resetting the slot's ignored files and uv folders (`environment.py`); `tl step show` prints its `Setup:` line. |
 | agent folders | The three folders an implement agent may write outside its slot (`access.Folders`), beside the slots under `<slots_root>/<repo_id>/`: the scratch `.t/<slot>` (its `TMPDIR`, at most 64 bytes), `.env/<slot>/uv-cache` (`UV_CACHE_DIR`) and `.env/<slot>/uv-tools` (`UV_TOOL_DIR`). Made (or made 0700 again) by the factory before launch, Codex `writable_roots`; the variables and `UV_OFFLINE=1` go to the agent's shell only (`shell_environment_policy.set`), Codex's own process keeps the person's `TMPDIR`. | Built (S5e-2). Not evidence and not the slot. Each must resolve exactly to its place beside the slot (no link). The scratch is emptied before and after setup and after a slot release (only where it belongs); the uv folders by every reset. A plan agent gets none (`writable_roots=[]`). The preflight's `codex sandbox` probe, run in the emptied scratch, checks the shell gets its variables, the folders are writable and `/tmp` is not. |
-| config | Machine-level settings. | Local paths and account settings. Use `profile` for repo settings. |
+| config | Machine-level settings: `~/.config/task-loop/config.toml` or `--config FILE` (`machine_config`). | Local paths and account settings. Use `profile` for repo settings. |
 
 A GitHub **runner** executes jobs; a slot is not a runner. A separate clone is not a linked worktree.
 One primary checkout per repo per machine remains the recorded direction; cross-machine behavior is

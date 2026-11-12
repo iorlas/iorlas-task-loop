@@ -5,15 +5,18 @@ process started here (the real spawn: `real/test_keep_awake_real.py`)."""
 
 import ast
 import os
+import sys
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+from install_doubles import A, make_install
 from sqlite_store import Store
 
 from taskloop import cli_composition
 from taskloop.factory_schema import SCHEMA
+from taskloop.installs import Manifest
 from taskloop.interrupts import Interrupts
 from taskloop.keep_awake import Helper, Host, Unavailable, command
 from taskloop.round import NextRequest
@@ -151,6 +154,21 @@ def test_without_a_helper_the_rounds_run_anyway_after_one_line_each(
     assert machine.events == ["install", "rounds", "restore"]
     assert logged(tmp_path) == [f"rounds keep_awake {word}"]
     assert capfd.readouterr().err == f"Keep-awake unavailable ({said}); the rounds run anyway\n"
+
+
+@pytest.mark.parametrize("managed", [True, False])
+def test_the_rounds_ports_carry_the_install_this_process_runs_from(
+    database: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, managed: bool
+) -> None:
+    """`open_rounds` reads `installs.running` of `sys.prefix` under this home once: the `rounds install` line's install."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    install = make_install(home, A, "factory-v0.2.0")
+    monkeypatch.setattr(sys, "prefix", str(install / "venv" if managed else tmp_path / "runner" / ".venv"))
+    machine = Machine()
+    with cli_composition.open_rounds(database, tmp_path / "art", request(tmp_path), machine.host, machine.install) as ports:
+        assert not isinstance(ports, cli_composition.Failed)
+        assert ports.install == (Manifest(A, "factory-v0.2.0", "2026-11-20T10:00:00Z", "/home/u/src/task-loop") if managed else None)
 
 
 def test_refused_rounds_start_no_helper(tmp_path: Path) -> None:

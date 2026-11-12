@@ -1,5 +1,6 @@
 """One rounds process per (factory.db, backlog): a kernel `flock` on `<factory.db>.rounds-<backlog>.lock` beside
-factory.db, taken without waiting and held for the process's life; with slot custody the only importer of `process_lock`.
+factory.db, taken without waiting and held for the process's life; with slot custody and the install lock (`install_op`) the
+only importers of `process_lock`.
 
 A second `tl step rounds` for the same factory.db and backlog is refused at once (`RoundsRunning`, naming the holder
 record's pid: informational, nothing decides on it); another backlog has its own lock. One-shot rounds (`tl step next`,

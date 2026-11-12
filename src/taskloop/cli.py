@@ -10,7 +10,7 @@ from pathlib import Path
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
-from taskloop import cli_step
+from taskloop import cli_install, cli_step
 from taskloop.git_views import GitProfileFiles, inspect_checkout
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
@@ -131,16 +131,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                               "(default: main)")
     profile_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     cli_step.register(commands)
+    cli_install.register(commands)
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
         return 0
     if arguments.command in cli_step.COMMANDS:
         return cli_step.run(arguments)
-    if arguments.command == "task":
-        return show_task(arguments)
-    if arguments.command == "profile":
-        return show_profile(arguments)
+    handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": cli_install.run,
+                "install": cli_install.run_install,
+                "pin": cli_install.run_pin}
+    return handlers[arguments.command](arguments)
+
+
+def inspect_repo(arguments: argparse.Namespace) -> int:
+    """`tl repo inspect PATH`: the checkout's repository identity (read-only)."""
     try:
         result = inspect_checkout(arguments.path)
     except (GitUnavailable, UnsupportedCheckout, OSError) as error:
