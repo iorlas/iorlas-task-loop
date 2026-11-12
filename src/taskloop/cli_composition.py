@@ -2,18 +2,21 @@
 slot openers over `composition`'s real wiring. The attempt entry process never imports this module (.importlinter)."""
 
 import os
+import shutil
 import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 
+import stream_proc
 from git_porcelain import GitUnavailable, NotARepo
-from sqlite_store import Store
+from sqlite_store import SchemaError, Store
 
 from taskloop.attempt_reads import SlotUse
 from taskloop.attempt_status import StatusPorts, current_view
@@ -36,10 +39,12 @@ from taskloop.composition import (
     real_slots,
 )
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.factory_schema import SCHEMA
-from taskloop.git_views import GitProfileFiles, checkouts, remotes
+from taskloop.factory_schema import SCHEMA, refusal
+from taskloop.git_views import GitProfileFiles, checkouts, inspect_checkout, remotes
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
+from taskloop.install_op import Answer, Opened, Ports, Ran
+from taskloop.installs import LocalFiles, running
 from taskloop.interrupts import Interrupts, installed
 from taskloop.keep_awake import Host, awake
 from taskloop.land_check import LandPorts
@@ -80,9 +85,16 @@ def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Pat
     return settings if isinstance(settings, ConfigRefused) else Loaded(path, text is not None, settings)
 
 
+def _open_ro(database: Path) -> sqlite3.Connection | None:
+    try:
+        return Store(SCHEMA).open_ro(database)
+    except SchemaError as error:
+        raise SchemaError(refusal(error, database)) from error
+
+
 @contextmanager
 def _read_only(database: Path) -> Generator[sqlite3.Connection | Failed]:
-    found = require_database(lambda: Store(SCHEMA).open_ro(database))
+    found = require_database(lambda: _open_ro(database))
     try:
         yield found
     finally:
@@ -237,9 +249,10 @@ def open_rounds(database: Path, artifacts: Path, request: NextRequest, host: Hos
         return
     log, pid = EvidenceFiles(artifacts).log_round, os.getpid()
     try:
+        runs_from = running(LocalFiles(), Path(sys.prefix), Path.home())  # display only: the `rounds install` line
         with awake(host or keep_awake_host(), pid, request.backlog, log, time.time, _say), install(_say) as interrupts:
             yield RoundsPorts(one_round(database, artifacts, request, interrupts.stopping), _slot_use(database), time.time, time.monotonic,
-                         time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid)
+                         time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid, runs_from)
     finally:
         release()
 
@@ -324,3 +337,35 @@ def open_land(database: Path, artifacts: Path) -> Generator[LandPorts | Failed]:
         claims = tracker_claims()
         yield LandPorts(work, LandStore(work.store.connect, work.store.begin), remotes, _land_profiles, inspect_tracker_task,
                         claims.heartbeat_for, threading.Event, this_process, probe, landing, os.environ, claims.close)
+
+
+class UvTools:
+    """`tl install`'s one external tool (tl-8bh9.8.3 section 6.1): uv found on PATH, its build streamed through
+    `stream_proc.run` (a session of its own; a Ctrl-C or the timeout stops its whole tree) and the new install's
+    `version --json` through `stream_proc.capture`."""
+
+    def which(self, name: str) -> str | None:
+        return shutil.which(name)
+
+    def run(self, argv: Sequence[str], *, cwd: Path, env: Mapping[str, str], line: Callable[[str], None],
+            timeout: float) -> Ran:
+        def each(text: str) -> None:
+            line(text.removesuffix("\n"))
+
+        done = stream_proc.run(argv, cwd=cwd, env=env, on_stdout=each, on_stderr=each, timeout=timeout)
+        return Ran(done.returncode, done.timed_out is not None, done.signal, done.survivors)
+
+    def capture(self, argv: Sequence[str], *, cwd: Path, env: Mapping[str, str], timeout: float) -> Answer:
+        done = stream_proc.capture(argv, cwd=cwd, env=env, timeout=timeout)
+        return Answer(done.exit, done.out, done.timed_out)
+
+
+def _install_checkout(path: str) -> Opened:
+    """The person's checkout as `inspect_checkout` accepts it, read through the hardened view (hooks off, no fetch)."""
+    found = inspect_checkout(path)
+    return Opened(found.checkout_path, checkouts(found.checkout_path))
+
+
+def install_ports(say: Callable[[str], None]) -> Ports:
+    """`tl install`'s real ports: the checkout, uv, the local files, this process's environment, home and UTC clock."""
+    return Ports(_install_checkout, UvTools(), LocalFiles(), os.environ, Path.home(), lambda: datetime.now(UTC), say)

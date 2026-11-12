@@ -11,6 +11,7 @@ import pytest
 
 from taskloop.attempt_reads import SlotUse
 from taskloop.exit_codes import exit_code
+from taskloop.installs import Manifest
 from taskloop.operations import Ended, Failed, Move, Quiet, Round
 from taskloop.round import NextRequest
 from taskloop.rounds import CHECK, RoundsPorts, RoundsRequest, abrupt, inputs, run_rounds
@@ -36,6 +37,7 @@ class Bench:
         self.lines: list[str] = []
         self.log: Callable[[str], None] = self.lines.append
         self.during: Callable[[], object] = lambda: None
+        self.install: Manifest | None = None
 
     def round(self, quiet: Quiet) -> Round | Failed:
         self.rounds.append((self.now, quiet))
@@ -61,7 +63,7 @@ class Bench:
 
     def run(self, every: int = 60) -> Ended:
         ports = RoundsPorts(self.round, self.slot_use, lambda: 1000 + self.now, lambda: self.now, self.wait, self.log,
-                       self.warn, lambda: self.stopped, 7)
+                       self.warn, lambda: self.stopped, 7, self.install)
         return run_rounds(ports, RoundsRequest("tasks", every))
 
     def times(self) -> list[float]:
@@ -77,7 +79,7 @@ def test_rounds_run_at_once_then_every_interval_in_check_slices_and_end_graceful
     ended = bench.run()
     assert bench.times() == [0, 61, 122] and bench.waits == [CHECK] * 60
     assert ended == Ended("tasks", "interrupted") and exit_code(ended) == 0
-    assert bench.words() == ["rounds started every=60 pid=7", "rounds stopped interrupted"]
+    assert bench.words() == ["rounds started every=60 pid=7", "rounds install unmanaged", "rounds stopped interrupted"]
     assert all(line.startswith("1970-01-01T00:") and line.split(" ")[1] == "tasks" for line in bench.lines)
 
 
@@ -214,7 +216,8 @@ def test_an_abrupt_stop_writes_its_line_and_passes_through(where: str) -> None:
         bench.during = interrupted
     with pytest.raises(KeyboardInterrupt):
         bench.run()
-    assert bench.words()[0] == "rounds started every=60 pid=7" and bench.words()[-1] == "rounds stopped abrupt"
+    assert bench.words()[:2] == ["rounds started every=60 pid=7", "rounds install unmanaged"]
+    assert bench.words()[-1] == "rounds stopped abrupt"
     assert sum("stopped" in line for line in bench.lines) == 1
 
 
@@ -273,3 +276,16 @@ def test_the_abrupt_line_is_best_effort() -> None:
 
     abrupt(failing, lambda: 0, "tasks")
     abrupt(pressed, lambda: 0, "tasks")
+
+
+@pytest.mark.parametrize(("tag", "words"), [
+    ("factory-v0.2.0", "rounds install 3f2a9c4e1b07 factory-v0.2.0"),
+    (None, "rounds install 3f2a9c4e1b07"),
+    ("release/v1", "rounds install 3f2a9c4e1b07 release/v1"),
+])
+def test_the_running_install_is_written_once_after_the_start_line(tag: str | None, words: str) -> None:
+    bench = Bench([CLEAN, CLEAN])
+    bench.install = Manifest("3f2a9c4e1b07" + "a" * 28, tag, "2026-11-20T10:00:00Z", "/home/u/src/task-loop")
+    bench.run()
+    assert bench.words()[:2] == ["rounds started every=60 pid=7", words]
+    assert [line for line in bench.words() if line.startswith("rounds install")] == [words]

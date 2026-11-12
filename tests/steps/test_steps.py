@@ -80,7 +80,8 @@ def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
 
 def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environment() -> None:
     """The task's own prose first, then the plan by reference and the rules' scope, then the environment the entry
-    prepared (S5e-2): the profile's `checks` to run offline, `$TMPDIR`, and that only the checks run afterwards count. Generic:
+    prepared (S5e-2): the profile's `checks` to run offline, `$TMPDIR`, and that only the checks run afterwards count; then
+    that `tl` is the owner's pinned factory, not the code under test. Generic:
     no repository command is named."""
     text = task_text(TASK, "implement")
     assert text.startswith("Add a widget\n\nIt must do X.\nAnd Y.\n\n- X works\n- Y works\n\nThe plan for this task is "
@@ -94,6 +95,10 @@ def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environm
         "control, and only those results count."
     )
     assert environment in text and text.endswith("say why in `explanation`.\n")
+    pinned = ("`tl` on this machine runs the owner's pinned factory install, never this checkout's code; exercise the code under "
+              "test through its checks or tests.")
+    assert f"{environment} {pinned} With `implemented`" in text  # tl-8bh9.8.3 Q14: an agent's `tl` resolves the owner pin
+    assert "taskloop" not in text  # generic: every repository's agent gets it
     assert "In `explanation`, name each command you ran and how it ended" in text
     assert not any(word in text for word in ("just ", "pytest", "/tmp"))
 
