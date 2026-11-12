@@ -25,8 +25,8 @@ the host; the factory manages agents. The tracker and Git are not layers in that
 that the factory and agents consume (CLAUDE.md "one owner per fact").
 
 What the owner decision removes from L3: installing a build of the factory (`tl install`), choosing which build runs
-(`tl pin`, the `start` exec shim), reporting which is running (`tl version`), and the per-user install folder and pin
-file. All of those are L1 work: uv, mise or a script does it before `tl` runs, and the person (L0) picks the version.
+(`tl pin`, the `start` exec shim), and the per-user install folder and pin file. A bare `tl version` stays: the factory
+reporting its own package version is not managing versions. All of those are L1 work: uv, mise or a script does it before `tl` runs, and the person (L0) picks the version.
 
 ## 2. Dependency direction (proposed)
 
@@ -73,7 +73,7 @@ Source: `cli.py`, `cli_step.py`, `cli_install.py` (6 install modules and 3 comma
 |---|---|---|
 | `tl install REV --checkout PATH` | removed: package-manager layer | `cli_install`, `install_op`, `installs` |
 | `tl pin REV` / `tl pin --clear` | removed: package-manager layer | `pin_op`, `pin_file` |
-| `tl version [--json]` | removed: package-manager layer | reports install and pin; the factory has nothing to say about its own build |
+| `tl version [--json]` | kept, bare | prints the running package version only (no install or pin report); `tl doctor` is wanted later |
 | `tl` console script (`start`, the exec shim) | removed: package-manager layer | resolves the pin, then `os.execv` |
 | `tl repo inspect` | factory | read-only Git view of a checkout |
 | `tl task show` | factory | tracker read through the tracker client |
@@ -172,7 +172,7 @@ the task that adopts it, so a new module has to be placed.
 
 ## 6. Follow-ups this document implies (not started)
 
-- tl-isfa.1 removes the six modules and their tests, the `tl install/pin/version` commands, the `start` console script
+- tl-isfa.1 removes the six modules and their tests, the `tl install` and `tl pin` commands (a bare `tl version` stays), the `start` console script
   and the install checks in `.importlinter`.
 - tl-isfa.2 removes install, pin and release prose from the docs and glossary.
 - Not yet filed (owner decision needed): items 1, 2, 3 and 4 above, and the proposed import-linter contracts.
