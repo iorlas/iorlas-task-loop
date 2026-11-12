@@ -440,10 +440,15 @@ record follows the observation.
 - **`tl step release TASK`** (settled) with a concluded candidate still holding its slot releases it, so a person can
   free a slot a land left held without landing (a candidate whose land process still runs is `held` by its identity).
 - **A failed land validation** leaves the task `Next: land`: rerun (flaky: a new candidate runs the block again), or
-  abandon (D4: plan, implement on the current branch, checks, land). A conflict likewise: the person merges `main` into
-  `task/<id>` by hand and pushes it, then abandons; the restarted plan and implement agents find the merge on the branch
-  (each answers `unchanged` or commits), and the checks run on the new X. That costs two agent runs; a merge step is
-  deliberately not built.
+  abandon (D4: plan, implement on the current branch, checks, land). **A conflict (decision tl-8bh9.14.30, trial 2 F1):
+  one path, a new chain on the current `main`.** The task branch is the chain's memory (an existing local, else
+  remote-tracking, `task/<id>` is resumed as it is) and a new branch starts at the person's local `main`, so a hand
+  merge or an abandon alone reuses X's stale base and conflicts again. The person, in their checkout: `git switch main &&
+  git pull --ff-only`; `git branch -m task/<id> old/task/<id>`; `git push origin --delete task/<id>` (drops the
+  remote-tracking ref too); `tl step release --abandon`; `tl step start`. Plan and implement run again on the new `main`
+  (two agent runs; the old commits stay on `old/task/<id>`), the checks run on the new X, and the land squashes it
+  clean unless `main` moved again. No typed re-base step is built. `test_conflict_recovery` runs this path and fails
+  without any one of its hand steps.
 - **A hand land** (the M2 way) is reported by the next `tl step land` as `no_change`; `--no-change` records it and
   closes the task, whatever the task branch holds. `--no-change` never validates or pushes (L3 review): a pending
   candidate refuses it `landing`; a pushable one is read by section 7's rule without a push (on origin: delivered is
@@ -512,8 +517,8 @@ word only. GUIDE gains `land` ("read the diff and `tl step land TASK --summary`,
 |---|---|
 | `not_done`, `not_checked` | Finish the steps (`tl step show`), re-run failed checks with `tl step start`, or abandon |
 | `branch_moved` | Reset `task/<id>` (local and origin) to X, or abandon and restart (D4) to check the new commits |
-| `conflict` | Merge `main` into `task/<id>` by hand, push it, abandon; the restart checks the merge (section 13) |
-| `checks_failed` | Read the `Land check:` logs; rerun `tl step land` (flaky), or fix as for a conflict |
+| `conflict` | A new chain on the current `main`: pull `main`, set `task/<id>` aside locally and on origin, abandon, start (section 13) |
+| `checks_failed` | Read the `Land check:` logs; rerun `tl step land` (flaky), or restart as for a conflict |
 | `target_moved` | Rerun: a new candidate onto the new `main` (validated if its tree differs) |
 | `no_change` | Confirm `main` holds the work, then `tl step land --no-change` |
 | `changes` (from `--no-change`) | There is something to land: drop `--no-change` |

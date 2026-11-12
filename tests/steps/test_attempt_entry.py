@@ -450,6 +450,21 @@ def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixtu
     assert (out + err).strip() == "refused usage"
 
 
+def test_main_logs_a_signal_ended_entry_as_terminated_never_as_the_bare_exception(capfd: pytest.CaptureFixture[str],
+                                                                               monkeypatch: pytest.MonkeyPatch) -> None:
+    """The agent library's SIGTERM handler raises SystemExit in the entry; the log names the cause in fixed words."""
+    monkeypatch.setattr("taskloop.attempt_entry.tracker_located", lambda: None)
+    monkeypatch.setattr("taskloop.attempt_entry.tracker_claims", Claims)
+
+    def terminated(*_args: object) -> int:
+        raise SystemExit(143)
+
+    monkeypatch.setattr("taskloop.attempt_entry.enter", terminated)
+    assert main(["/db", "/a", "45", "tasks", "tl-1"]) == 1
+    out, err = capfd.readouterr()
+    assert (out + err).strip() == "failed terminated_by_signal"
+
+
 @pytest.mark.parametrize(
     ("beats", "expected"), [(("held",), "held"), (("lost",), "lost"), (("unrenewed",), "unrenewed"), (("held", "lost"), "lost")]
 )

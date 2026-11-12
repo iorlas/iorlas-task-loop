@@ -59,6 +59,7 @@ from taskloop.attempt_types import (
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import open_attempts
 from taskloop.environment import Renew
+from taskloop.evidence_files import TERMINATED
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
@@ -307,6 +308,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         claims, views = tracker_claims(), GitViews(args.read_seconds)
         return enter(args, partial(open_attempts, views=views), inspect_process, time.time, time.sleep, log, worker_gone,
                      claims.heartbeat_for, threading.Event(), claims.unclaim, views.remotes)
+    except SystemExit:  # the agent library's SIGTERM/SIGHUP handler (`any_agent.supervisor`): no signal handling here
+        log("failed " + TERMINATED)
+        return 1
     except BaseException as error:  # the type name only, never its text
         log("failed " + type(error).__name__)
         return 1

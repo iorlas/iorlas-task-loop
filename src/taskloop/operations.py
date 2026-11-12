@@ -42,6 +42,7 @@ from taskloop.attempt_types import (
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_status import HALF_DONE, checks_result, latest, route
 from taskloop.check_store import ChecksRow, CheckStore
+from taskloop.hold_status import ANSWERED
 from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandRow, LandStore
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
@@ -374,13 +375,25 @@ def _current(ports: StartPorts, request: StartRequest) -> _Found:
     if found is None or released is None:
         return found
     if released.abandoned:
-        return Failed("refused", "release", UNCLAIMING) if released.claim == "unclaiming" else None
+        if released.claim == "unclaiming":
+            return Failed("refused", "release", UNCLAIMING)
+        return _answered_hold(ports, request, found[0])
     result = collect(ports.reader, found[0])
     rows = ports.reader.attempts(request.backlog, request.task_id) if succeeded(result) else ()
     step = following(rows[0].step) if rows and rows[0].key == found[0] and rows[0].published is not None else None
     if step is not None:
         return _Advance(found[0], step) if step != CHECK else _checked(ports, request, found[0])
     return Started("already_dispatched", request.backlog, request.task_id, found[0].attempt_id, True, result=result.reason)
+
+
+def _answered_hold(ports: StartPorts, request: StartRequest, key: AttemptKey) -> Failed | None:
+    """A start by hand (no label) of a task whose settled hold still has `held` on it would clear that hold unanswered:
+    refused `on_hold`, whose guide says how to answer. A hold the person's own tracker holds (`not_ours`) is answered by
+    this very start, as its comment says; a round's start is the answer (the label is back)."""
+    hold = HoldStore(ports.reader.connect, ports.reader.begin).of_attempts((key.attempt_id,)).get(key.attempt_id)
+    if request.label is None and hold is not None and hold.cleared_at is None and hold.labels in ANSWERED:
+        return Failed("refused", "on_hold", f"The task is held ({hold.reason}): its abandon is recorded and `held` is on it")
+    return None
 
 
 def _checked(ports: StartPorts, request: StartRequest, implement: AttemptKey) -> _Found:

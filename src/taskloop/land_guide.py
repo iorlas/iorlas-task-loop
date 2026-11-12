@@ -5,6 +5,14 @@
 
 from typing import Final
 
+# The one recovery from a conflict (or a failed validation that needs new code): a new chain on the current main. The task
+# branch is the chain's memory, so the stale one is set aside (locally and on origin) and local `main`, where a new branch
+# starts, is brought up to date first; the old commits stay on `old/task/<id>`.
+RESTART: Final = (
+    "start the task again on the current main, in your checkout: `git switch main && git pull --ff-only`; `git branch -m "
+    "task/<id> old/task/<id>`; `git push origin --delete task/<id>`; then `tl step release --abandon` and `tl step start` "
+    "(plan and implement run again on the new main; the old commits stay on `old/task/<id>`)."
+)
 RERUN: Final = "Nothing was lost: rerun `tl step land` (a rerun does only what is missing)."
 INTERRUPTED: Final = "interrupted"  # `tl step land` stopped by Ctrl-C (`cli_step._land`): exit 130, the rerun reconciles
 
@@ -42,10 +50,9 @@ LAND_GUIDE: Final = {
     "no_change": "origin's main already holds X's changes (a hand land, say): confirm with `git log origin/main`, then `tl step "
     "land TASK --no-change` records it and closes the task.",
     "changes": "There is something to land: drop `--no-change`.",
-    "conflict": "X does not merge onto origin's main: merge `main` into `task/<id>` by hand and push it, then `tl step release "
-    "--abandon` and `tl step start` (the restarted steps check the merge).",
+    "conflict": f"X does not merge onto origin's main: {RESTART}",
     "checks_failed": "A check failed on S (the `Land check:` lines and logs say which): rerun `tl step land` if it is flaky; "
-    "otherwise fix it as for a conflict (merge `main` into `task/<id>`, abandon, restart). Nothing was pushed.",
+    f"otherwise {RESTART} Nothing was pushed.",
     "target_moved": "Rerun `tl step land`: it squashes X onto the new main as a new candidate and runs the checks again on it "
     "when its tree differs from X's (a slot and the checks' time).",
     "no_remote": "The checkout has no `origin`: add it (`git remote add origin <url>`), then rerun.",

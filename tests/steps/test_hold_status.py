@@ -17,6 +17,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptResult, Unsettled
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore
+from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_guide import HOLD, KEPT_ACTIONS
 from taskloop.hold_status import cause, finished, reingests
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
@@ -245,3 +246,24 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
     probed.clear()
     found = list_attempts(ports, stuck=True)
     assert isinstance(found, Listed) and found.attempts == () and probed == []
+
+
+def test_show_of_a_task_held_for_failed_checks_names_each_failed_check_with_its_exit_and_log(checking: sqlite3.Connection,
+                                                                                            tmp_path: Path) -> None:
+    """After the hold's abandon the current attempt is the implement attempt, but the cause is the checks attempt: `show`
+    prints that attempt's unpassed results from factory.db with their log paths (not the tracker comment, not a log)."""
+    with begin_immediate(checking):
+        checking.executemany(
+            "INSERT INTO check_result VALUES ('checks',1,?,?,'checks-token',1,?,60,NULL,NULL,NULL,NULL,1,?,?,?)",
+            [(0, "check", "1" * 64, 3, 1, "failed"), (1, "test", "2" * 64, 9, 0, "passed")])
+        checking.execute("UPDATE slot_release SET claim='unclaimed' WHERE attempt_id='implement'")
+        checking.execute("UPDATE attempt SET label='auto'")
+    recorded(checking, "implement", "checks", "failed:check:failed")
+    shown = show_attempt(reads(checking), tmp_path, "tasks", "tl-1")
+    assert isinstance(shown, Shown) and shown.view.step == "implement" and shown.view.next == "on_hold"
+    log = EvidenceFiles(tmp_path).check_path(CheckStore(lambda: checking).of_attempt("implement")[0].key, 1, "check")
+    lines = human("show", shown, tmp_path / "factory.db")
+    assert f"Failed check: check failed, exit 1, 2 s; log {log}" in lines
+    assert not any(line.startswith("Failed check: test") for line in lines)
+    failed = as_data(shown)["failed_checks"]
+    assert isinstance(failed, dict) and [each["name"] for each in failed["results"]] == ["check"]
