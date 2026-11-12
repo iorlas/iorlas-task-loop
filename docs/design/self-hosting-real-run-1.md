@@ -24,7 +24,8 @@ effort `ultra`. Vocabulary: [glossary](../glossary.md). Follows [trial 6](self-h
 | 21:38:21 | implement started (plan took about 4 min) |
 | 21:48:16 | checks started (implement about 10 min) |
 | 21:49:37 | checks passed, `report land` (about 1.5 min) |
-| after | `tl step land --summary`: no gate change, no test weakening, 8 files +552 -60; not landed, owner decides |
+| after | `tl step land --summary`: no gate change, no test weakening, 8 files +552 -60; held for the owner |
+| later | owner said land; `tl step land` pushed `7df44b24a` to origin `main` (same tree as the checked commit, no re-check) and closed the bead in the local tracker (not synced with `bd dolt push`) |
 
 ## 3. Findings (beads under `tl-8bh9.14`)
 
@@ -44,4 +45,4 @@ repeats by design. Transcripts should later be mined for repeated waste (long pa
 
 ## 4. Not covered
 
-The land itself, hold and conflict paths, a second task, the dashboard on a second device.
+Hold and conflict paths, a second task, the dashboard on a second device.
