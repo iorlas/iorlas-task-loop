@@ -43,7 +43,7 @@ def reads_of(con: sqlite3.Connection, now: float = 1000.0) -> StatusPorts:
 
 
 def board_of(con: sqlite3.Connection, files: EvidenceFiles, tracker: Tracker) -> Board:
-    found = build_board(BoardPorts(reads_of(con), files, tracker, ("s1", "s2")))
+    found = build_board(BoardPorts(reads_of(con), files, tracker))
     assert isinstance(found, Board)
     return found
 
@@ -56,7 +56,7 @@ def test_the_board_has_a_card_for_each_attempted_task_and_each_ready_task_withou
     ready = (Ready("tl-1", "taken already", "2026-11-12T09:00:00Z"), Ready("tl-2", "Second", "2026-11-12T09:30:00Z"))
     board = board_of(registered, files, Tracker(ready))
     cards = {card.id: card for card in board.tasks}
-    assert sorted(cards) == ["tl-1", "tl-2"] and board.slots == ("s1", "s2")
+    assert sorted(cards) == ["tl-1", "tl-2"] and board.slots == ("s1",)
     assert (cards["tl-1"].column, cards["tl-1"].title, cards["tl-1"].slot, cards["tl-1"].attempt) == ("plan", "Title of tl-1", "s1", 1)
     assert cards["tl-1"].step_started_at is not None and cards["tl-1"].repeat is None and cards["tl-1"].hold_cause is None
     assert (cards["tl-2"].column, cards["tl-2"].title, cards["tl-2"].attempt, cards["tl-2"].slot) == ("waiting", "Second", 0, None)

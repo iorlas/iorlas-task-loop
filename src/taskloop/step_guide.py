@@ -96,9 +96,10 @@ GUIDE = {
     "unsettled": "The slot has files the step did not commit (listed), or the slot pointer or HEAD changed. Remove the "
     "listed files and `tl step verify`, or run `tl step start` again to repeat the step; for `redirected` "
     "inspect first; for `head_moved` (a commit the sandbox should have refused; inspect any listed tag or branch, delete "
-    "only what the agent made) "
+    "only what the agent made; `tl step show` and `verify` list them) "
     "`tl step start` refuses too, so run `tl step release --abandon`, then `tl step start`; for `worker_alive` stop the worker "
-    "first; for `staged` unstage the listed paths first.",
+    "first; for `staged` unstage the listed paths first; for `branch` (the agent left the slot on another HEAD or branch) "
+    "`git switch task/<id>` in the slot when its work is on that branch, then `tl step verify`; else release --abandon and start again.",
     "registration_conflict": "Another start registered its entry first; `tl step show` follows that attempt.",
     "slot_busy": "Another entry or verify holds the slot: wait and run it again; if nothing ends, see the `stuck:hung` guide.",
     "lock": "The slot's lock file under `<slots root>/<repo id>/.locks` cannot be created: fix that folder's permissions.",

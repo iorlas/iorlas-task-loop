@@ -24,6 +24,7 @@ from git_porcelain import BranchHeld, GitUnavailable, MissingRevision, Repo
 
 from taskloop.attempt_types import TRAILER, AttemptRecord, AttemptResult, Checkouts, SlotFiles
 from taskloop.slot_state import SlotState, observe_slot, pointer, staged
+from taskloop.slots import SlotView, unusable_text
 
 type BranchRefusal = Literal["branch_name", "branch_held", "branch_diverged", "branch_unpublished", "target"]
 MAIN: Final = "refs/heads/main"  # the target (O1: the person's local `main`): a new task branch starts at its tip, checks read it
@@ -77,6 +78,33 @@ def _foreign_unpublished(repo: Repo, local: str, seen: Sequence[str]) -> bool:
     return any(not any(line.startswith(f"{TRAILER}:") for line in each.body.splitlines()) for each in repo.history([local], not_on=seen))
 
 
+HELD_SLOT = (
+    "task/{task} is checked out in a slot ({slots}; the round log reports it `unusable`): run `git switch --detach` there "
+    "(commit or stash what it holds first, nothing is deleted for you), then `tl slot adopt` if it is not adopted."
+)
+HELD_MAIN = "task/{task} is checked out in your main checkout ({path}): switch it off the branch yourself, then start again."
+HELD_OTHER = "task/{task} is checked out in {path}, which is not a slot: switch it off the branch yourself, then start again."
+def refusal_detail(found: BranchRefusal, task_id: str) -> str:
+    return DETAILS.get(found, "").format(task=task_id)
+
+
+def held_refusal(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[tuple[SlotView, ...], str]:
+    """`branch_held`: the worktrees on the task branch, each told apart. A sibling of a free slot (same `<root>/<repo id>`
+    folder) is a slot, adopted or not (after a factory.db discard `tl slot adopt` refuses it `attached`, so no slot row
+    names it): an `attached` view named by its folder, which the round log reports `unusable`. The person's main checkout
+    and any other worktree are named in the detail only: no slot, so `tl slot adopt` does not apply."""
+    branch, roots = task_branch(task_id), {view.path.parent for view in free}
+    slots: list[SlotView] = []
+    other: list[str] = []
+    for info in (each for each in repo.worktrees() if each.branch == branch):
+        if not info.is_main and info.path.parent in roots:
+            slots.append(SlotView(info.path.name, info.path, "unknown", "attached"))
+        else:
+            other.append((HELD_MAIN if info.is_main else HELD_OTHER).format(task=task_id, path=info.path))
+    named = [HELD_SLOT.format(task=task_id, slots=unusable_text(tuple(slots)))] if slots else []
+    return tuple(slots), " ".join([*named, *other])
+
+
 def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefusal | Branch:
     """The one branch rule, in order: the name (no Git), one refs read (`branch_name` on a conflict), the worktree
     listing (`branch_held` when any worktree is on the branch), then history: each given head D passes when the local
@@ -117,6 +145,12 @@ UNPUBLISHED: Final = (
     "--oneline origin/task/{task}..task/{task}` lists them) and a publish would push them: rename the branch (`git branch -m "
     "task/{task} old/task/{task}`) or delete it, or push it by hand, then start again."
 )
+
+
+DETAILS: Final = {
+    "branch_diverged": DIVERGED,
+    "branch_unpublished": UNPUBLISHED,
+    "target": f"The checkout has no local branch `{MAIN}` to start task/{{task}} from"}
 
 
 def _refused(reason: str) -> AttemptResult:

@@ -301,8 +301,8 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
         if isinstance(result, Started):
             trail.add(Move(each.task_id, "advance", result.status, result.attempt_id, step=result.step or ""))
             continue
+        trail.unusable(each.task_id, result)  # the slots the refusal names: no_free_slot's, the one holding a held branch
         if result.reason == "no_free_slot":
-            trail.unusable(each.task_id, result)
             return result.reason
         stop = _stops(result, ADVANCE_STOPS)
         if not stop and not result.admitted and result.kind == "refused" and result.reason in HOLDS and each.label is not None:
@@ -353,8 +353,7 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
         stop = _stops(result)
         if result.reason != "no_free_slot":
             trail.add(Move(row.task_id, "start", _word(result), detail=result.detail))
-        else:
-            trail.unusable(row.task_id, result)
+        trail.unusable(row.task_id, result)  # the slots a refusal names (no_free_slot's, the one holding a held branch)
         if result.claim_leaked:
             trail.add(Move(row.task_id, "report", "claim_leaked", detail=leaked_claim(row.task_id)))
         if stop:

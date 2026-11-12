@@ -3,7 +3,10 @@
 
 const json = async (path) => {
   const response = await fetch(path, { headers: { accept: "application/json" } });
-  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error ?? `${path}: ${response.status}`);
+  }
   return response.json();
 };
 
@@ -15,7 +18,8 @@ export function apiSource() {
     logs: () => json("/api/log"),
     // One attempt's agent lines: its latest, or those after `after` (the cursor of the last answer, opaque to the page).
     feed: (id, step, n, after) => json(`/api/tasks/${encodeURIComponent(id)}/attempts/${step}/${n}/feed${after ? `?after=${after}` : ""}`),
-    // Messages are {kind: "task" | "log", ...}; a reconnect says {kind: "resync"} so the page reloads the board.
+    // Messages are {kind: "task" | "gone" | "feed" | "log" | "error" | "resync", ...}: `error` says the board cannot be read, `resync`
+    // (after an error, and on a reconnect) says to load it again.
     subscribe(on) {
       const stream = new EventSource("/api/events");
       let seen = false;

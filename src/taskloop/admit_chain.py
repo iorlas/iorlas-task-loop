@@ -29,21 +29,18 @@ from taskloop.admit import (
     AdmitUnavailable,
     Free,
     Tasks,
-    as_count,
     branched,
     checkout_repo,
     deadline_refusal,
     free_slots,
-    insert_attempt,
-    issue,
     issued,
     open_store,
     read_task,
-    reserve,
     task_text,
     unheld,
     why,
 )
+from taskloop.admit_rows import as_count, insert_attempt, issue, reserve
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER, REPEATED

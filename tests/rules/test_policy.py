@@ -88,10 +88,10 @@ WRITERS = {
     ("INSERT", "setup_run"): "setup_store.py",
     ("UPDATE", "setup_run"): "setup_store.py",
     ("INSERT", "slot"): "slots.py",
-    ("INSERT", "reservation"): "admit.py",
-    ("INSERT", "attempt"): "admit.py",
+    ("INSERT", "reservation"): "admit_rows.py",
+    ("INSERT", "attempt"): "admit_rows.py",
     ("UPDATE", "reservation"): "admit_chain.py",  # a repeat's takeover
-    ("UPDATE", "slot"): "admit.py",
+    ("UPDATE", "slot"): "admit_rows.py",
     ("INSERT", "slot_release"): "slot_release.py",
     ("UPDATE", "slot_release"): "slot_release.py",
     ("DELETE FROM", "reservation"): "slot_release.py",
@@ -357,4 +357,5 @@ def test_only_the_dashboard_server_imports_the_http_server() -> None:
     and the tests that use a client or a URL parser, are pinned here."""
     importers = {str(path.relative_to(ROOT)) for path in FILES
                  if any(name.split(".")[0] in {"http", "urllib", "socketserver"} for name in _imported(ast.parse(path.read_text())))}
-    assert importers == {"src/taskloop/dash_server.py", "tests/cli/test_dash_server.py", "tests/rules/test_isolation.py"}
+    assert importers == {"src/taskloop/dash_server.py", "tests/cli/test_dash_server.py", "tests/cli/test_dash_composition.py",
+                         "tests/rules/test_isolation.py"}
