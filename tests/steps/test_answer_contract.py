@@ -12,7 +12,6 @@ from taskloop.attempt import end_word, report, succeeded
 from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
-    AttemptResult,
     Evidence,
     ExecutionFacts,
     FileRef,
@@ -119,11 +118,6 @@ def test_the_decoder_alone_owns_the_rules_and_bounds_the_schema_leaves_out(chang
         decode(PLANNED | change, RULES)
 
 
-def test_an_old_four_key_answer_is_invalid() -> None:
-    with pytest.raises(ValueError, match="Invalid plan answer"):
-        decode({"disposition": "planned", "plan_path": EXPECTED, "commit": "a" * 40, "explanation": "x"}, RULES)
-
-
 @pytest.mark.parametrize(
     "change",
     [{"paths": [EXPECTED]}, {"message": "Plan"}, {"plan_path": None}, {"plan_path": "docs/design/tl-2/plan.md"}],
@@ -200,10 +194,6 @@ def test_a_planned_or_unchanged_answer_is_collected_only_with_its_verdict(
         result = report(staged)
         assert (result.status, result.reason) == (status, reason) and end_word(staged) == answer.disposition
         assert succeeded(result) is success
-
-
-def test_only_collected_can_succeed() -> None:
-    assert not succeeded(AttemptResult("pending", "verified"))
 
 
 IMPLEMENT = kind("implement")

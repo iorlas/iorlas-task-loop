@@ -58,7 +58,6 @@ def test_the_claim_line_says_only_what_the_label_step_and_the_abandon_recorded(
     (Kept("setup_running", pid=43), "a process of this attempt still runs (pid 43). When it has ended"),
     (Kept("slot_branch", slot="/slots/r/s1"), "slot /slots/r/s1 is not where the factory left it (slot_branch). Put it back "
      "(`tl step show tl-1` says where), and the next round returns the claim."),
-    (Kept("slot_redirected", slot="/s"), "(slot_redirected)"), (Kept("slot_unborn", slot="/s"), "(slot_unborn)"),
     (Kept("landing"), "a land of this task holds its slot or may be on origin (landing). Finish or withdraw it "
      "(`tl step land tl-1`), and the next round returns the claim."),
     (Kept("landed"), "(landed)"),

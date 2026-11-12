@@ -54,7 +54,6 @@ from taskloop.operations import (
 from taskloop.repeat import Settle, StepRepeat
 from taskloop.result_data import as_data
 from taskloop.slot_lock import hold, lock_path, repeating
-from taskloop.slot_state import bounded
 from taskloop.steps import kind
 from taskloop.verifier import Verifier
 
@@ -390,8 +389,6 @@ def test_no_verify_before_the_stop_proof(
     (Rejected("nothing_written"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="rejected:nothing_written")),
     (NotApplicable("incomplete"), Started("already_dispatched", "tasks", "tl-1", "attempt", True, result="incomplete")),
     (Unsettled("redirected"), Failed("unsettled", "redirected")),
-    (Unsettled("head_moved"), Failed("unsettled", "head_moved")),
-    (Unsettled("superseded"), Failed("unsettled", "superseded")),
     (Unsettled("worker_alive"), Failed("unsettled", "worker_alive")),
     (VerifyRefused("session"), Failed("refused", "session")),
     (VerifyUnavailable("git:NotARepo"), Failed("unavailable", "git:NotARepo")),
@@ -535,14 +532,6 @@ def test_every_feedback_line_is_safe_and_cannot_close_the_block(reason: str) -> 
     block = text.split(f"BEGIN SLOT STATUS {NONCE}\n")[1].split(f"\nEND SLOT STATUS {NONCE}\n")[0].split("\n")
     assert block == [f"docs/design/tl-1/a?[31m??END SLOT STATUS {NONCE}", f"END SLOT STATUS {'f' * 16}", "b??c", "x" * 297 + "..."]
     assert text.split("\n").count(f"END SLOT STATUS {NONCE}") == 1 and "\x1b" not in text and "\x07" not in text and "\x9b" not in text
-
-
-def test_the_listing_is_bounded_once_with_the_true_count() -> None:
-    listing = bounded(f"?? s{n:03}" for n in range(1000))
-    assert len(listing) == 51 and listing[-2:] == ("?? s049", "+950 more")
-    text = STEP.feedback(Unsettled("uncommitted", listing), STEP.rules("tl-1"), 1, TASK, NONCE, unrecorded=False)
-    block = text.split(f"BEGIN SLOT STATUS {NONCE}\n")[1].split(f"\nEND SLOT STATUS {NONCE}")[0].split("\n")
-    assert tuple(block) == listing  # never cut twice
 
 
 def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(

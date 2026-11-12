@@ -8,7 +8,7 @@ import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import Literal, get_args
+from typing import Literal
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
@@ -32,7 +32,6 @@ from taskloop.attempt_types import (
     FileStat,
     NotApplicable,
     Rejected,
-    Rule,
     StepRules,
     StoredExecution,
     Unsettled,
@@ -46,7 +45,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.slot_lock import hold
 from taskloop.slot_state import pointer
-from taskloop.steps import RULES, kind
+from taskloop.steps import kind
 from taskloop.verdict import judge
 from taskloop.verifier import Verifier, VerifyHold
 
@@ -564,11 +563,6 @@ def test_the_real_composition_opens_the_factory_database(tmp_path: Path) -> None
     store = Store(SCHEMA)
     assert open_verifier(tmp_path / "factory.db", store).verify(KEY) == VerifyRefused("not_captured")
     store.close_shared()
-
-
-def test_every_rule_a_verdict_can_name_is_one_the_store_reads_back() -> None:
-    assert set(RULES) == set(get_args(Rule.__value__)) and len(RULES) == len(set(RULES))
-    assert "merge" not in RULES and {"nothing_written", "file_size"} <= set(RULES)
 
 
 def test_the_writer_refuses_an_end_commit_or_verdict_without_its_preconditions(

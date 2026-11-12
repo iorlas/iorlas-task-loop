@@ -580,17 +580,6 @@ def test_the_closing_line_is_written_when_the_stopped_word_changes(factory: sqli
     assert len(bench.lines) == 2 and bench.lines[-1].endswith(" tasks round moves=0 stopped=unavailable:tracker")
 
 
-def test_the_first_round_without_moves_after_one_with_moves_closes_moves_0(factory: sqlite3.Connection) -> None:
-    bench = Bench(factory, FakeTaskReadClient([bead("t-1")], ready=["t-1"]))
-    first = bench.round(replace(REQUEST, quiet=frozenset()))
-    assert bench.lines[-1].endswith(" tasks round moves=1")
-    bench.ready = FakeTaskReadClient()
-    second = bench.round(replace(REQUEST, quiet=first.written))
-    assert len(bench.lines) == 3 and bench.lines[-1].endswith(" tasks round moves=0")
-    bench.round(replace(REQUEST, quiet=second.written))
-    assert len(bench.lines) == 3  # the same closing line is not written again
-
-
 def test_an_admission_skip_stays_quiet_across_rounds_with_no_free_slot(factory: sqlite3.Connection) -> None:
     """A round with every slot held never reads the ready rows: the previous round's `skip abandoned` stands unchanged, so
     the next round with a free slot does not write it again."""

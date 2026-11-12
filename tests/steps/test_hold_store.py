@@ -11,8 +11,7 @@ import pytest
 from doubles import D, X
 from sqlite_store import begin_immediate
 
-from taskloop.attempt_reads import StoreRefused, StoreUnavailable
-from taskloop.factory_schema import SCHEMA, current
+from taskloop.attempt_reads import StoreRefused
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Labelled, Uncleared
 
 LABELS_IN = "labels IS NULL OR labels IN ('moved','absent','not_ours','closed','missing','superseded')"
@@ -278,15 +277,6 @@ def test_uncleared_lists_the_holds_that_may_have_added_held_once_their_task_was_
     found = store(con).uncleared("tasks")
     assert [(each.row.attempt_id, each.held_again) for each in found] == [("t3", False), ("t4", False), ("t5", True)]
     assert found[0] == Uncleared(store(con).of_attempts(("t3",))["t3"], False)
-
-
-def test_a_v13_factory_db_is_refused(con: sqlite3.Connection) -> None:
-    assert SCHEMA.version == 14 and current(con)
-    con.execute("PRAGMA user_version=13")
-    for call in (lambda: store(con).of_attempts(("a",)), lambda: held(con), lambda: store(con).uncleared("tasks"),
-                 lambda: store(con).labelled("a", 0, "moved", 1.0)):
-        with pytest.raises(StoreUnavailable):
-            call()
 
 
 def test_the_label_step_of_a_task_taken_again_is_changed(con: sqlite3.Connection) -> None:

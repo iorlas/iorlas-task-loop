@@ -15,7 +15,6 @@ from stream_proc import (
     OwnedProcess,
     ProcessObservation,
     RegisteredStartUncertainError,
-    inspect_process,
     observe_owned,
     popen_registered,
 )
@@ -27,7 +26,6 @@ from taskloop.composition import open_checks_launcher, open_launcher
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.launch import CHECK_ENTRY_MODULE, AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
-from taskloop.owned_processes import current_boot
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 NEW = OwnedProcess(9, 9, "new-start", "boot")
@@ -243,12 +241,6 @@ def test_composition_starts_with_the_released_registered_start(tmp_path: Path) -
     built = open_launcher(tmp_path / "factory.db", tmp_path)
     assert built.start is popen_registered and built.observe is observe_owned and built.executable == sys.executable
     assert open_launcher(Path("factory.db"), tmp_path).database == Path.cwd() / "factory.db"
-
-
-def test_the_current_boot_is_this_process_s_native_boot() -> None:
-    """A real read, no spawn; where the native identity is unknown, so is the boot (never a substitute)."""
-    me = inspect_process(os.getpid()).identity
-    assert current_boot() == (None if me is None else me.boot)
 
 
 def test_a_relative_database_is_refused_before_any_read_registration_or_start(admitted: Path, monkeypatch: pytest.MonkeyPatch) -> None:

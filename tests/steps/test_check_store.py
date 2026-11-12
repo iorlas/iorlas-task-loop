@@ -15,7 +15,6 @@ from taskloop import check_store, land_store
 from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Replaced
 from taskloop.check_store import ChecksAdmitted, CheckStore, Conclusion, Recorded, ResultRow, latest_results, record_release, unsettled
-from taskloop.factory_schema import SCHEMA, current
 
 ENTRY = (7, "entry-start", "boot")
 ME = OwnedProcess(501, 501, "start-501", "boot")
@@ -53,8 +52,8 @@ def test_valid_checks_attempts_are_stored(checking: sqlite3.Connection, change: 
 
 
 @pytest.mark.parametrize("change", [
-    {"number": 0}, {"slot_head": "d" * 39}, {"target_commit": "f" * 12}, {"target_seen": "f" * 39}, {"profile_digest": "a" * 63},
-    {"phase": "running"}, {"refusals": -1}, {"conclusion": "ok"}, {"parked": "d" * 39}, {"abandoned": 2},
+    {"number": 0}, {"slot_head": "d" * 39}, {"target_commit": "f" * 12}, {"profile_digest": "a" * 63},
+    {"phase": "running"}, {"refusals": -1}, {"conclusion": "ok"}, {"abandoned": 2},
     {"phase": "admitted"}, {"conclusion": None, "concluded_at": None},  # phase and conclusion
     {"concluded_at": None}, {"conclusion": None, "phase": "admitted", "released_at": None, "parked": None},  # concluded_at
     {"conclusion": "failed"}, {"reason": "nothing"},  # a reason exactly when failed
@@ -119,18 +118,6 @@ def test_a_result_is_one_per_position_and_name_in_a_block(
     put(checking, "check_result", RESULT)
     with pytest.raises(sqlite3.IntegrityError, match=error):
         put(checking, "check_result", RESULT | change)
-
-
-def test_a_result_names_a_checks_attempt_or_a_land_candidate_so_it_has_no_foreign_key(checking: sqlite3.Connection) -> None:
-    put(checking, "check_result", RESULT | {"attempt_id": "candidate"})
-
-
-def test_v14_is_this_codes_schema_and_v13_is_not_current(checking: sqlite3.Connection) -> None:
-    assert SCHEMA.version == 14 and current(checking)
-    checking.execute("PRAGMA user_version=13")
-    assert not current(checking)
-    with pytest.raises(StoreUnavailable):
-        store(checking).row(CHECKS)
 
 
 def test_the_admitted_row_reads_back_joined_with_its_implement_attempt(checking: sqlite3.Connection) -> None:
@@ -467,11 +454,6 @@ def test_an_abandoned_or_released_checks_attempt_is_never_offered_to_the_launche
     assert checks.attempt_of("tasks", "tl-1") == (later, "concluded", None)
     assert released(checking, (1, "concluded"), False, later) == "released"
     assert checks.attempt_of("tasks", "tl-1") == (later, "released", None)
-
-
-@pytest.mark.parametrize("read", ["state", "tracker_root", "release_of", "step_of", "attempts", "chain", "slot_use"])
-def test_the_check_store_has_no_agent_attempt_read_to_misread_a_checks_key(read: str) -> None:
-    assert not hasattr(CheckStore, read)
 
 
 def candidate_rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:

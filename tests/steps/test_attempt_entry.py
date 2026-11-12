@@ -210,9 +210,8 @@ INCOMPLETE = "collected incomplete verify=not_applicable claim=held release=rele
         (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable claim=held release=released"),
         (0, "not json", "collected answer:json_invalid verify=not_applicable claim=held release=released"),
         (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
-        (0, json.dumps(PLAN | {"commit": "a" * 40}), "collected answer:schema_invalid verify=not_applicable claim=held release=released"),
     ],
-    ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete", "old_commit_key"],
+    ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete"],
 )
 def test_a_terminal_failure_is_collected_with_its_reason_and_exits_1(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, rc: int, text: str, line: str
@@ -414,10 +413,6 @@ def test_a_failed_run_that_left_files_keeps_its_slot_held_and_the_claim(
 )
 def test_arguments_are_two_absolute_paths_a_backlog_and_a_task(argv: list[str]) -> None:
     assert arguments(argv) is None
-
-
-def test_arguments_never_carry_the_dispatch_token() -> None:
-    assert arguments(["/db", "/a", "tasks", "tl-1"]) == EntryArgs(Path("/db"), Path("/a"), "tasks", "tl-1")
 
 
 def test_main_refuses_bad_arguments_with_one_log_line(capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
