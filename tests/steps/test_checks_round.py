@@ -21,14 +21,14 @@ from stream_proc import OwnedProcess, ProcessObservation
 from taskloop import land_store
 from taskloop.admit import issued, reserve
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
-from taskloop.check_admit import ChecksAdmission
+from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher, LaunchResult
-from taskloop.operations import LATE, ChecksPorts, Started, StartPorts, StartRequest, start
+from taskloop.operations import LATE, ChecksPorts, Failed, Started, StartPorts, StartRequest, start
 from taskloop.round import RoundPorts
 from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody
@@ -66,7 +66,8 @@ class Checking(Factory):
 
     def ports(self) -> RoundPorts:
         ports = super().ports()
-        return replace(ports, reads=replace(ports.reads, commands=self.command))
+        reads = replace(ports.reads, commands=self.command)
+        return replace(ports, reads=reads, holding=self.holding(reads))
 
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         self.launched.append(task_id)  # the agent launcher: plan and implement attempts only
@@ -426,3 +427,27 @@ def test_a_landed_task_is_silent_in_every_round(rig: Checking) -> None:
     lands.record_close(key, "closed", rig.now)
     assert rig.next_words() == {"tl-1": ("check", "landed")} and rig.round() == [] and rig.round() == []
     assert rig.starts == 1 and rig.launched == ["tl-1", "tl-1"] and rig.tracker.claims == ["tl-1"]
+
+
+def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_run_that_raced_it(rig: Checking) -> None:
+    """The reviewed case: checks fail, bd is down at the label step (`hold pending`); the person's `tl step start` is
+    refused `held` (nothing admitted). A re-run admitted beside the hold anyway (as a start that raced the record) passes:
+    the hold's cause is gone, so the next round retires it instead of abandoning the passed checks."""
+    implemented(rig)
+    rig.bodies = ["failed", "passed"]
+    assert rig.round() == [("tl-1", "check", "advance", "started")]
+    rig.tracker.down = {"labels"}
+    assert rig.round() == [("tl-1", "check", "hold", "pending labels unavailable:tracker")]
+    by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
+    assert isinstance(by_hand, Failed) and by_hand.word == "refused:held" and rig.starts == 1
+    implement = rig.store.attempt_of("tasks", "tl-1")
+    assert implement is not None
+    starting = rig.starting()
+    rig.during = lambda: (starting.checks.admission.admit_checks(ChecksRequest(implement[0], rig.slot.repo.path, rig.now + 1800, 2)),
+                          starting.checks.launcher.launch("tasks", "tl-1", 30))
+    rig.tracker.down = set()
+    assert rig.round() == [("tl-1", "check", "hold", "refused refused:retired")]
+    assert rig.rows() == [("tl-1", 1, "concluded", "failed"), ("tl-1", 2, "concluded", "passed")]
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == []
+    bead = rig.tracker.beads["tl-1"]
+    assert (bead.assignee, bead.labels) == ("taskloop", ("auto",)) and rig.tracker.holds == ["labels tl-1 auto"]  # no label written

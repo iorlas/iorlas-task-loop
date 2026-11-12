@@ -10,7 +10,8 @@ fenced on the `rev` its caller read and on its own phase, and bumps `rev`; a wri
 Phases, in order: `labels` with `labelled_at` (the tracker's label step, 5.2's word), `commenting_at` (the comment lease:
 taken only while no comment is recorded and no live lease exists, one live lease at a time for `COMMENT_LEASE` seconds),
 `commented_at` (the comment is posted), `cleared_at` (the task was taken again: `held` is the factory's to remove; a row
-whose label step never finished is `superseded` in the same write).
+whose label step never finished is `superseded` in the same write). A hold whose cause is gone before it finished is
+deleted (`retire`); a failed comment call gives its lease back (`uncommenting`).
 """
 
 import sqlite3
@@ -46,7 +47,7 @@ SUPERSEDED: Final = f"EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=task_ho
 UNCLEARED: Final = COLUMNS + """,(SELECT EXISTS (SELECT 1 FROM task_hold g WHERE g.attempt_id=q.attempt_id
  AND (g.labels IS NULL OR g.labels IN ('moved','absent'))) FROM attempt q
  WHERE q.adapter=p.adapter AND q.backlog=p.backlog AND q.task_id=p.task_id ORDER BY q.seq DESC LIMIT 1)""" + JOINED + f"""
- WHERE h.cleared_at IS NULL AND (h.labels IS NULL OR h.labels IN ('moved','absent')) AND {LATER}
+ WHERE p.backlog=? AND h.cleared_at IS NULL AND (h.labels IS NULL OR h.labels IN ('moved','absent')) AND {LATER}
  ORDER BY h.held_at,h.attempt_id"""
 
 
@@ -107,11 +108,12 @@ class HoldStore(StoreConnection):
             found = con.execute(LOADED + f" WHERE h.attempt_id IN ({','.join('?' * len(ids))})", ids).fetchall()
         return {each.attempt_id: each for each in map(_row, found)}
 
-    def uncleared(self) -> tuple[Uncleared, ...]:
-        """Holds whose task was taken again (A not current) and whose `held` may still be on the task: labels NULL,
-        `moved` or `absent`, not cleared. `not_ours`, `closed` and `missing` added nothing and are never listed."""
+    def uncleared(self, backlog: str) -> tuple[Uncleared, ...]:
+        """Holds of `backlog` whose task was taken again (A not current) and whose `held` may still be on the task:
+        labels NULL, `moved` or `absent`, not cleared. `not_ours`, `closed` and `missing` added nothing and are never
+        listed."""
         with self._connection() as con:
-            found = con.execute(UNCLEARED).fetchall()
+            found = con.execute(UNCLEARED, (backlog,)).fetchall()
         return tuple(Uncleared(_row(each[:14]), bool(as_int(each[14]))) for each in found)
 
     def current_hold(self, attempt_id: str) -> HoldRow | None:
@@ -160,6 +162,21 @@ class HoldStore(StoreConnection):
         whose label step never finished becomes `superseded` in the same write, so `cleared_at` always has a word."""
         return self._update(attempt_id, rev, "labels=coalesce(labels,'superseded'),labelled_at=coalesce(labelled_at,?),cleared_at=?",
                             (now, now), f"cleared_at IS NULL AND (labels IS NULL OR labels IN ('moved','absent')) AND {SUPERSEDED}")
+
+    def uncommenting(self, attempt_id: str, rev: int) -> None:
+        """The lease given back after a failed comment call (no comment recorded), so the next round retries at once;
+        best effort: off its fence (`rev` moved, another caller's lease) nothing changes."""
+        try:
+            self._update(attempt_id, rev, "commenting_at=NULL", (), "commenting_at IS NOT NULL AND commented_at IS NULL")
+        except StoreRefused:
+            return
+
+    def retire(self, attempt_id: str, rev: int) -> None:
+        """An unfinished hold whose cause is gone (the work was restarted after it was recorded) is deleted, so it never
+        abandons that work and a later stop of A can be held afresh; `changed` off its `rev` or once cleared."""
+        with self._connection(write=True) as con:
+            if con.execute("DELETE FROM task_hold WHERE attempt_id=? AND rev=? AND cleared_at IS NULL", (attempt_id, rev)).rowcount != 1:
+                raise StoreRefused("changed")
 
     def _update(self, attempt_id: str, rev: int, sets: str, values: tuple[object, ...], phase: str,
                 bound: tuple[object, ...] = ()) -> HoldRow:

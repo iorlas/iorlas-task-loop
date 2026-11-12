@@ -9,13 +9,14 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import Store
 
 from taskloop.attempt_reads import SlotUse
-from taskloop.attempt_status import StatusPorts
+from taskloop.attempt_status import StatusPorts, current_view
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.check_release import ChecksRelease
 from taskloop.composition import (
@@ -152,7 +153,7 @@ def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[R
             reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen)
             releaser = open_releaser(database, store)
             holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
-                                open_checks_releaser(database, store), time.time, EvidenceFiles(artifacts))
+                                open_checks_releaser(database, store), time.time, EvidenceFiles(artifacts), partial(current_view, reads))
             yield RoundPorts(reads, _starting(reader, database, artifacts, store), open_verifier(database, store), releaser,
                              open_publisher(database, store), holding, ready, EvidenceFiles(artifacts).log_round)
         finally:

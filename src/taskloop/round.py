@@ -276,7 +276,7 @@ def _cleared(ports: HoldPorts, trail: _Trail) -> None:
     """Section 7.3 after publication: `hold cleared` once `held` is off a task taken again (or owned by its new hold);
     `hold clearing <word>` while a tracker or store failure or an unfinished new hold leaves it to a later round (quiet
     while unchanged). A failed read of the holds names no task: no line, the next round reads them again."""
-    for each in clear_holds(ports.store, ports.tracker, ports.clock):
+    for each in clear_holds(ports.store, ports.tracker, ports.clock, trail.backlog):
         if each.task_id:
             word = each.word if each.word == "cleared" else f"clearing {each.word}"
             trail.add(Move(each.task_id, "hold", word, each.attempt_id, each.detail))

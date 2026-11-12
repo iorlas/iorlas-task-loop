@@ -250,7 +250,7 @@ def test_a_hold_that_added_no_label_is_never_cleared(con: sqlite3.Connection, la
     later(con)
     with pytest.raises(StoreRefused, match="changed"):
         store(con).cleared("a", found.rev, 20.0)
-    assert store(con).uncleared() == ()
+    assert store(con).uncleared("tasks") == ()
 
 
 # tl-3 .. tl-9: each one's hold `t<n>`, the label step's word (None: unfinished), and whether it is cleared already.
@@ -269,13 +269,13 @@ def test_uncleared_lists_the_holds_that_may_have_added_held_once_their_task_was_
         if labels is not None:
             store(con).labelled(f"t{number}", first.rev, labels, 11.0)
     store(con).labelled("a", held(con).rev, "moved", 11.0)  # tl-1: still its task's current attempt
-    assert store(con).uncleared() == ()
+    assert store(con).uncleared("tasks") == ()
     for number, _, cleared in UNCLEARED:
         later(con, f"n{number}", task=f"tl-{number}", seq=2)
         if cleared:
             store(con).cleared(f"t{number}", 1, 20.0)
     held(con, "n5", "n5", now=30.0)  # tl-5 taken again and held again: its new hold owns `held`
-    found = store(con).uncleared()
+    found = store(con).uncleared("tasks")
     assert [(each.row.attempt_id, each.held_again) for each in found] == [("t3", False), ("t4", False), ("t5", True)]
     assert found[0] == Uncleared(store(con).of_attempts(("t3",))["t3"], False)
 
@@ -283,7 +283,7 @@ def test_uncleared_lists_the_holds_that_may_have_added_held_once_their_task_was_
 def test_a_v13_factory_db_is_refused(con: sqlite3.Connection) -> None:
     assert SCHEMA.version == 14 and current(con)
     con.execute("PRAGMA user_version=13")
-    for call in (lambda: store(con).of_attempts(("a",)), lambda: held(con), lambda: store(con).uncleared(),
+    for call in (lambda: store(con).of_attempts(("a",)), lambda: held(con), lambda: store(con).uncleared("tasks"),
                  lambda: store(con).labelled("a", 0, "moved", 1.0)):
         with pytest.raises(StoreUnavailable):
             call()
@@ -316,4 +316,4 @@ def test_only_a_newer_hold_that_may_own_held_counts_as_held_again(
     renewed = held(con, "b", "b", now=30.0)
     if newer is not None:
         store(con).labelled("b", renewed.rev, newer, 31.0)
-    assert [(each.row.attempt_id, each.held_again) for each in store(con).uncleared()] == [("a", again)]
+    assert [(each.row.attempt_id, each.held_again) for each in store(con).uncleared("tasks")] == [("a", again)]

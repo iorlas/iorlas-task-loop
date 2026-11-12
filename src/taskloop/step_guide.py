@@ -164,6 +164,9 @@ GUIDE = {
     "landing": LAND_GUIDE["landing"],
     "hold": HOLD,
     "on_hold": ON_HOLD,
+    "held": "A round is holding this task and has not finished (`tl step show` says what keeps it): let the next round "
+    "finish the hold (`tl step next` does it now), or `tl step release --abandon` first; then `tl step start` admits it "
+    "afresh at plan.",
 }
 
 # A checks attempt's own words for the `Next` words whose agent text would mislead (S6d): its entry is

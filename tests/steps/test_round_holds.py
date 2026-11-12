@@ -17,6 +17,8 @@ from round_bench import Factory, Tracker, scripted, scripts, task
 
 from taskloop.attempt_types import SlotFiles
 from taskloop.launch import LaunchUnavailable
+from taskloop.operations import Failed, Round, Started, StartRequest, start
+from taskloop.round import NextRequest, run_round
 
 AFTER_DEADLINE = 31 * 60  # past an attempt's deadline: the rounds' --minutes is 30
 ASKED = "Which widget shape do you want?"
@@ -264,3 +266,41 @@ def test_a_publication_refused_branch_moved_is_held_once_instead_of_pushed_every
     moved(factory)
     assert factory.round() == [("tl-1", "plan", "hold", "held branch_moved")] and factory.round() == []
     assert factory.next_words() == {"tl-1": ("plan", "on_hold")} and factory.tracker.beads["tl-1"].labels == ("held",)
+
+
+def test_a_pending_hold_refuses_the_person_s_relaunch_of_the_attempt_it_will_abandon(factory: Factory) -> None:
+    """`stuck:expired_admitted` held while bd is down: `tl step start` would relaunch A, which the hold then abandons;
+    it is refused `held` (nothing launched) until the round finishes the hold or the person abandons."""
+    factory.failing = LaunchUnavailable("start")
+    factory.round()
+    factory.now += AFTER_DEADLINE
+    factory.tracker.down = {"labels"}
+    assert factory.round() == [("tl-1", "plan", "hold", "pending labels unavailable:tracker")]
+    ran = list(factory.ran)
+    found = start(factory.starting(), StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, "m", "high", 30))
+    assert isinstance(found, Failed) and found.word == "refused:held" and factory.ran == ran
+    factory.tracker.down = set()
+    assert factory.round() == [("tl-1", "plan", "hold", "held stuck:expired_admitted")]
+    found = start(factory.starting(), StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, "m", "high", 30))
+    assert isinstance(found, Started) and found.status == "started"  # finished: the person may start it afresh
+
+
+def test_a_hand_started_publication_refused_branch_moved_is_reported_never_held(factory: Factory) -> None:
+    factory.slot.repo.set_remote_url("origin", "/nowhere")
+    factory.by_hand("tl-1")
+    moved(factory)
+    assert factory.round(frozenset()) == [("tl-1", "plan", "publish", "refused:branch_moved")]
+    assert factory.tracker.holds == [] and any(line.endswith(" publish refused:branch_moved " + factory.current("tl-1"))
+                                               for line in factory.lines)
+
+
+def test_a_graceful_stop_skips_the_clear_and_the_next_round_does_it(factory: Factory) -> None:
+    held_plan(factory)
+    factory.tracker.answer("tl-1")
+    scripts(factory, factory.slot, "tl-1")
+    factory.now += 1
+    request = NextRequest("tasks", "/tracker", factory.slot.repo.path, "auto", "m", "high", 30)
+    found = run_round(replace(factory.ports(), stopping=lambda: len(factory.tracker.claims) > 1), request)
+    assert isinstance(found, Round) and [each.action for each in found.moves] == ["start"] and found.stopped == "interrupted"
+    assert factory.tracker.beads["tl-1"].labels == ("held", "auto")  # `held` still there
+    assert ("tl-1", "", "hold", "cleared") in factory.round()

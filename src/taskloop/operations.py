@@ -42,6 +42,7 @@ from taskloop.attempt_types import (
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_status import HALF_DONE, checks_result, latest, route
 from taskloop.check_store import ChecksRow, CheckStore
+from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandRow, LandStore
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.machine_config import ConfigRefused
@@ -362,9 +363,14 @@ def _current(ports: StartPorts, request: StartRequest) -> _Found:
     """The task's current attempt; None when there is none or its abandon finished (a fresh attempt is admitted). An
     abandon whose claim is still `unclaiming` refuses `release` (its own unclaim could undo a fresh claim). A settled
     release whose step is done and has a following step advances; any other is the task's answer: `already_dispatched`
-    with its result, never relaunched or repeated."""
+    with its result, never relaunched or repeated. A current attempt with a hold whose abandon is not recorded refuses
+    `held`: a relaunch, repeat, advance or checks re-run would be abandoned by that hold (tl-8bh9.14.9 H3 repair)."""
     found = ports.reader.attempt_of(request.backlog, request.task_id)
     released = None if found is None else ports.reader.release_of(found[0])
+    if found is not None and (released is None or not released.abandoned):  # a hold may still abandon it: never restart it
+        hold = HoldStore(ports.reader.connect, ports.reader.begin).of_attempts((found[0].attempt_id,)).get(found[0].attempt_id)
+        if hold is not None:
+            return Failed("refused", "held", f"Attempt {found[0].attempt_id} has a hold not finished ({hold.reason})")
     if found is None or released is None:
         return found
     if released.abandoned:

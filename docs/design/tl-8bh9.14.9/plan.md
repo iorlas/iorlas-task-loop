@@ -959,3 +959,40 @@ it, one `started` line.
 `taskloop` row in `systemd-inhibit --list` was ever seen); a real Ctrl-C during the spawn (only the fake replay); a
 third Ctrl-C during `stop_tree`'s grace (up to 5 s, then 2 s of proof) interrupts the stop, and the helper then ends by
 itself within about a second (`-w`, `tail --pid`), not observed. Smoke step 6 (M4) is not run.
+
+**Review repairs of ebaa8ae33 (2026-11-12).** Code lines by the policy counter after them: `hold` 175 (+23),
+`hold_store` 120 (+9), `operations` 372 (+5), `attempt_status` 233 (+3), `step_guide` 198 (+3), `step_render` 133 (+1),
+`cli_composition` 241 (+1); `test_hold` 416 (+53), `test_round_holds` 236 (+32), `test_checks_round` 357 (+20),
+`test_step_cli` 604 (+10), `round_bench` 195 (+2), `test_policy` 190 (+1).
+
+1. **An unfinished hold could abandon work restarted after it was recorded** (reproduced: checks fail, bd down at the
+   label step, `tl step start` re-runs the checks, which pass, then the hold abandoned them). Both parts:
+   (a) `operations.start` refuses `refused:held` while the task's current agent attempt has a hold row and its abandon is
+   not recorded (a relaunch, repeat, advance or checks re-run would be abandoned by it); the guide says to let the round
+   finish it (`tl step next`) or `tl step release --abandon` first. Once the abandon is recorded the hold can no longer
+   touch a new attempt (its fences require A current), so a start is allowed again, also before the comment is written.
+   (b) Before the label step and the abandon, `hold_task` fences the cause again on the task's status read now
+   (`HoldPorts.status` = `attempt_status.current_view`, the view before any hold word): while an abandon of A is under
+   way it finishes; else the current view must still be the stored cause (A, or A's latest checks attempt) and still a
+   hold cause (`hold_status.cause`; `claim_lost`/`branch_moved`: the view still `advance` or `publish`). Otherwise the
+   hold is **retired**: `held` removed first when its label step added it (`moved`/`absent`; a tracker failure is
+   `pending retire unavailable:tracker`), then the row deleted (`HoldStore.retire`, fenced on `rev`, never a cleared
+   row; policy `WRITERS` gains `DELETE FROM task_hold`), move `hold refused refused:retired`. Deleting, not a new
+   label word, keeps one hold per agent attempt possible later (the primary key) and needs no schema change. The
+   approval label is not added back: a claimed task advances without it (D3).
+2. **A failed comment kept its own lease**, so later rounds alternated `refused:leased` and `unavailable:tracker`. A
+   comment call answering `unavailable` (one capped try) now gives the lease back (`HoldStore.uncommenting`); the next
+   round retries at once.
+3. **`clear_holds` crossed backlogs**: `HoldStore.uncleared(backlog)` filters on A's backlog; the round passes its own.
+4. **`tl step next` printed no guide for a hold**: a `hold pending ...` move prints `hold: <the hold guide>`.
+5. **Tests**: the reproduced case over the checks rig (start refused `held`; a re-run raced in beside the hold passes and
+   the hold retires, nothing abandoned, no label written); the relaunch variant refused `held` while pending and allowed
+   once finished; unit tests of the fence (a still-standing cause, `stuck:hung`, an abandon under way, a round-passed
+   cause) and of the retire (with and without a label step, a tracker failure); the lease given back and retried at once
+   within the old lease window; `clear_holds` of another backlog lists nothing; the `tl step next` guide; a hand-started
+   publication refused `branch_moved` logged, never held; a graceful stop skipping the clear; one round over an empty
+   factory.db through the real `open_next` wiring. Each repair, reverted alone, fails a test.
+
+**Unverified after the repairs.** As before: no live bd, Git or agent run. The retire leaves the approval label removed
+when the label step had run (by design); a race between the fresh status read and the label step within one call
+remains (milliseconds; the start refusal (a) closes the person's path once the row exists).

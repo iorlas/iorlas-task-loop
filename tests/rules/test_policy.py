@@ -77,6 +77,7 @@ WRITERS = {
     ("CREATE TABLE", "task_hold"): "factory_schema.py",
     ("INSERT", "task_hold"): "hold_store.py",  # a hold's record, fenced on its attempt and cause being current
     ("UPDATE", "task_hold"): "hold_store.py",  # its tracker writes' phases and its clearing, each fenced on `rev`
+    ("DELETE FROM", "task_hold"): "hold_store.py",  # a hold whose cause is gone before it finished (`retire`)
     ("INSERT", "land_candidate"): "land_store.py",  # the candidate's row, inside the reserving transaction (`land_store.insert`)
     ("UPDATE", "land_candidate"): "land_store.py",  # also the release's record (`land_store.record_release`)
     ("INSERT", "checks_attempt"): "check_store.py",  # the admission's row, inside its transaction (`check_store.insert`)

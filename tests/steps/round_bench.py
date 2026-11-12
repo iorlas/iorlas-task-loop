@@ -7,6 +7,7 @@ import json
 import sqlite3
 from collections.abc import Callable, Mapping
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
@@ -20,7 +21,7 @@ from sqlite_store import begin_immediate
 from taskloop.admit import AdmitRefused, AdmitResult, AttemptAdmission
 from taskloop.admit_chain import NextAdmission
 from taskloop.attempt import Attempts
-from taskloop.attempt_status import Listed, StatusPorts, list_attempts
+from taskloop.attempt_status import Listed, StatusPorts, current_view, list_attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksRequest
@@ -189,17 +190,18 @@ class Factory:
         """The hold's abandon of a checks attempt (none on this bench: no check step)."""
         return NoChecks()
 
-    def holding(self) -> HoldPorts:
+    def holding(self, reads: StatusPorts) -> HoldPorts:
         tracker = TrackerHolds(self.tracker.labels, self.tracker.comment, self.tracker.clear)
         return HoldPorts(HoldStore(lambda: self.con), self.store, tracker, self.releaser(), self.checks_release(), lambda: self.now,
-                         EvidenceFiles(self.tmp))
+                         EvidenceFiles(self.tmp), partial(current_view, reads))
 
     def ports(self) -> RoundPorts:
         """Fresh ports over the same factory.db each round, as each `tl step rounds` round opens them (a restart too)."""
         verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold)
         reads = StatusPorts(self.store, self.observe, lambda: self.now, verifier.leftovers, lambda: "boot")
         publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now)
-        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, self.holding(), self.tracker, self.lines.append)
+        holding = self.holding(reads)
+        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker, self.lines.append)
 
     def round(self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto") -> list[tuple[str, str, str, str]]:
         self.now += 1

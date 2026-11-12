@@ -171,7 +171,7 @@ class Bench:
         reads = StatusPorts(self.store, self.observe, lambda: self.now, self.leftovers, lambda: "boot")
         starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance, NO_CHECKS)
         holding = HoldPorts(HoldStore(self.store.connect), self.store, no_holds(), self.releaser, NoChecks(), lambda: self.now,
-                            EvidenceFiles(Path("/artifacts")))  # no attempt here carries a label: nothing is held
+                            EvidenceFiles(Path("/artifacts")), lambda _backlog, _task: None)  # no label here: nothing is held
         return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, holding, self.ready, self.log, self.stopping)
 
     def round(self, request: NextRequest = REQUEST) -> Round:

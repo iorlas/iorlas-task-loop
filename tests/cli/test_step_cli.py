@@ -39,6 +39,7 @@ from taskloop.operations import (
 )
 from taskloop.publish import BranchPublished, PublishResult
 from taskloop.result_data import Result
+from taskloop.round import NextRequest, run_round
 from taskloop.setup_store import SetupRow
 from taskloop.slot_release import AlreadyReleased, Released, ReleaseResult
 from taskloop.slots import Adopted, NotAdopted, SlotView
@@ -575,6 +576,18 @@ def test_next_refuses_an_unusable_tracker_root_and_a_missing_database(tmp_path: 
     admitted(db)
     assert main([*NEXT[:5], str(tmp_path / "absent"), *NEXT[6:], "--db", str(db), "--json"]) == 1
     assert json.loads(capsys.readouterr().err)["error"]["reason"] == "tracker_root"
+
+
+def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_path: Path) -> None:
+    """`open_next`'s real ports, the hold's included: no attempt and no slot, so no tracker call and no process."""
+    db = tmp_path / "factory.db"
+    con = Store(SCHEMA).open_rw(db)
+    assert con is not None
+    con.close()
+    with cli_composition.open_next(db, tmp_path / "artifacts", str(tmp_path)) as ports:
+        assert not isinstance(ports, Failed) and ports.holding.status("tasks", "tl-1") is None
+        found = run_round(ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", "m", "high", 30))
+    assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
 
 
 ROUNDS = ["step", "rounds", *NEXT[2:]]

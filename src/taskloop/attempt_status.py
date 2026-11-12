@@ -293,6 +293,13 @@ def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed
     return Listed(tuple(each for each in found if not stuck or each.next in ("unknown", "hold") or each.next.startswith("stuck:")))
 
 
+def current_view(reads: StatusPorts, backlog: str, task_id: str) -> AttemptView | None:
+    """The task's current view read now, before any hold word (`with_hold`): what a hold's cause is fenced on again
+    (`hold._caused`); None when the task has no attempt. StoreUnavailable propagates."""
+    rows = reads.store.attempts(backlog, task_id)
+    return _show(reads, rows[0]) if rows else None
+
+
 def agent_attempt(view: AttemptView) -> str:
     """The agent attempt a view's hold belongs to: its own, or (a checks view) the implement attempt it follows."""
     return view.attempt_id if view.checks is None else view.checks.row.after
