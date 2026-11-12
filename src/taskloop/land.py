@@ -56,15 +56,19 @@ SHOW: Final = "`tl step show TASK` names the next step."
 type Files = dict[str, tuple[str, Sha]]
 
 
+NEEDS_MINUTES = Failed("refused", "minutes", "--minutes is required here: S must be validated (main moved, its required names changed, or "
+                       "a pending candidate resumes). Rerun with --minutes N; a candidate that origin's move superseded stays recorded so.")
+
+
 @dataclass(frozen=True)
 class LandRequest:
-    """`minutes` is the deadline of a validation block if one runs (from now); `withdraw` gives up a validated,
+    """`minutes`: the validation's deadline from now, needed only when a block runs (`NEEDS_MINUTES`); `withdraw` gives up a validated,
     undelivered candidate; `no_change` accepts main already holding X's changes."""
 
     backlog: str
     task_id: str
     checkout: Path
-    minutes: int
+    minutes: int | None
     mode: Literal["land", "summary", "withdraw"] = "land"
     no_change: bool = False
 
@@ -279,9 +283,18 @@ def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, n
                       "--no-change`.") if no_change else Failed("refused", "changes", "There is something to land: drop --no-change.")
     same, names = tree_s == tree_x, {name for name, _ in required} != {name for name, _ in task.checks.required}
     settled = "no_change" if no_change else "same_tree" if same and not names else None
-    deadline = deadline_after(request.minutes, ports.work.clock)
+    deadline = _deadline(ports, request.minutes, settled is None)
+    if isinstance(deadline, Failed):
+        return deadline
     row = inserted(ports, origin.repo, task.checks, (number, o, s, same, required), settled, deadline)
     return row if isinstance(row, Failed) or row.validation is not None else _checked(ports, row)
+
+
+def _deadline(ports: LandPorts, minutes: int | None, validates: bool) -> float | Failed:
+    """The validation's deadline from `minutes`; refused when a block runs and there are none (0.0 when none can run)."""
+    if minutes is None:
+        return NEEDS_MINUTES if validates else 0.0
+    return deadline_after(minutes, ports.work.clock)
 
 
 def _checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
@@ -317,6 +330,20 @@ def _landed(found: Delivered | Failed, release: str | None) -> Landed | Failed:
     return found if isinstance(found, Failed) else Landed(found.row, found.how, release)
 
 
+def _pending(ports: LandPorts, minutes: int | None, current: LandRow, origin: Origin, release: str | None,
+             again: Callable[[], LandRow | Failed]) -> LandResult:
+    """A pending candidate: its deadline renewed (`--minutes` needed), its validation resumed, then its delivery."""
+    deadline = _deadline(ports, minutes, True)
+    if isinstance(deadline, Failed):
+        return deadline
+    try:
+        ports.lands.renew(current.key, deadline)
+    except StoreRefused as refused:
+        return Failed("unavailable", refused.reason, "The land candidate changed: rerun.")
+    resumed = _checked(ports, ports.lands.row(current.key) or current)
+    return resumed if isinstance(resumed, Failed) else _landed(deliver(ports.lands, ports.work.clock, origin, resumed, again), release)
+
+
 def _delivered(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, release: str | None) -> LandResult:
     """Where the latest candidate leaves the land: validation resumed, delivery resumed, or a new candidate."""
     current, clock = task.candidate, ports.work.clock
@@ -327,12 +354,7 @@ def _delivered(ports: LandPorts, request: LandRequest, task: _Task, origin: Orig
     if request.no_change:
         return _no_change(ports, origin, current, again, release)
     if current is not None and current.pending:
-        try:
-            ports.lands.renew(current.key, deadline_after(request.minutes, clock))
-        except StoreRefused as refused:
-            return Failed("unavailable", refused.reason, "The land candidate changed: rerun.")
-        resumed = _checked(ports, ports.lands.row(current.key) or current)
-        return resumed if isinstance(resumed, Failed) else _landed(deliver(ports.lands, clock, origin, resumed, again), release)
+        return _pending(ports, request.minutes, current, origin, release, again)
     if current is not None and current.pushable:
         return _landed(deliver(ports.lands, clock, origin, current, again), release)
     made = again()
@@ -396,7 +418,7 @@ def _summary(ports: LandPorts, request: LandRequest, task: _Task) -> LandSummary
 
 def _landing(ports: LandPorts, request: LandRequest) -> LandResult:
     """Steps 1-4, then the rest."""
-    refused = minutes_refused(request.minutes) or _barred(ports.environ)
+    refused = (None if request.minutes is None else minutes_refused(request.minutes)) or _barred(ports.environ)
     if refused is None and request.mode != "land" and request.no_change:
         refused = Failed("refused", "choices", f"--{request.mode} and --no-change exclude each other.")
     task = refused or _task(ports, request)

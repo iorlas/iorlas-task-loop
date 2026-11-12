@@ -90,9 +90,22 @@ def test_the_flags_become_one_land_request_for_the_one_operation(
     assert capsys.readouterr().err.startswith("tl step land: refused:choices\nstubbed\n")
 
 
+def test_minutes_is_optional_and_reaches_the_request_as_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    requests: list[LandRequest] = []
+
+    @contextmanager
+    def open_land(*_: object) -> Generator[object]:
+        yield object()
+
+    monkeypatch.setattr(cli_composition, "open_land", open_land)
+    monkeypatch.setattr(land_module, "land", lambda _ports, request: requests.append(request) or Failed("refused", "choices", "x"))
+    main([*LAND[:-2], "--summary", "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art")])
+    assert [each.minutes for each in requests] == [None]
+
+
 @pytest.mark.parametrize("argv", [
-    [*LAND, "--summary", "--withdraw"], LAND[:-2], [part for part in LAND if part not in ("--checkout", "/checkout")],
-], ids=["summary_and_withdraw", "no_minutes", "no_checkout"])
+    [*LAND, "--summary", "--withdraw"], [part for part in LAND if part not in ("--checkout", "/checkout")],
+], ids=["summary_and_withdraw", "no_checkout"])
 def test_usage_errors_exit_2_before_any_operation(argv: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli_composition, "open_land", lambda *_: pytest.fail("opened"))
     with pytest.raises(SystemExit) as ended:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from doubles import Command
+from git_porcelain import Transient
 from land_bench import BAR, ME, RUN, LandBench, bench
 
 from taskloop.land import Landed, LandResult
@@ -27,6 +28,27 @@ def failed(found: LandResult) -> tuple[str, str]:
 def nothing_changed(b: LandBench, main: str) -> None:
     """No candidate, no reservation, no push, origin's `main` where it was."""
     assert b.rows() == () and b.reservations() == [] and b.repo.pushes == 0 and b.origin_main() == main
+
+
+def test_minutes_is_needed_only_when_a_validation_block_runs(b: LandBench) -> None:
+    assert not isinstance(b.land("summary", minutes=None), Failed)
+    assert isinstance(b.land(minutes=None), Landed) and b.execs() == []  # the same tree: no block, no deadline
+
+
+def test_a_moved_main_without_minutes_is_refused_before_anything_is_written(b: LandBench) -> None:
+    b.advance({"OTHER": "another task\n"})
+    main = b.origin_main()
+    assert failed(b.land(minutes=None)) == ("refused", "minutes")
+    nothing_changed(b, main)
+
+
+def test_a_candidate_superseded_by_a_moved_main_then_needs_minutes_and_says_so(b: LandBench) -> None:
+    b.repo.answer = Transient("connection reset")
+    assert failed(b.land()) == ("unavailable", "remote") and b.rows()[0].pushable
+    b.advance({"OTHER": "another task\n"})
+    found = b.land(minutes=None)
+    assert failed(found) == ("refused", "minutes") and isinstance(found, Failed) and "Nothing was recorded" not in found.detail
+    assert [row.superseded for row in b.rows()] == ["moved"]
 
 
 def test_the_same_tree_lands_s_onto_o_with_no_slot_and_no_check(b: LandBench) -> None:

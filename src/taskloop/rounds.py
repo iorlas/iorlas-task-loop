@@ -48,6 +48,7 @@ class RoundsPorts:
     warn: Callable[[], None]
     stopping: Callable[[], bool]
     pid: int
+    ctrl_c: bool = True  # False when this process started with Ctrl-C ignored: only SIGTERM stops it
 
 
 def inputs(request: NextRequest) -> Failed | None:

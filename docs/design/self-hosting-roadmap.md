@@ -18,7 +18,7 @@ tracker's; a block without one has no tracker entry yet (block B14).
 | D6 | The factory never starts at boot: a foreground `tl step rounds` loop, Ctrl-C to stop. |
 | D7 | No hung-agent detection until a real case shows the need. |
 | D8 | The dashboard later shows the time since the agent's last command. |
-| D9 | Already accepted earlier: normal host networking for checks ([coverage](tl-8bh9/coverage.md)); lifetime-scoped keep-awake ([.4.6](tl-8bh9.4.6/plan.md)); merge plus final squash, one resumable land ([delivery](tl-8bh9.9/delivery-publication.md)); one mandatory check set, no pass cache ([candidate checks](tl-8bh9.5.1/candidate-checks.md)). |
+| D9 | Already accepted earlier: normal host networking for checks ([coverage](tl-8bh9/coverage.md)); merge plus final squash, one resumable land ([delivery](tl-8bh9.9/delivery-publication.md)); one mandatory check set, no pass cache ([candidate checks](tl-8bh9.5.1/candidate-checks.md)). |
 | D10 | The factory's checks run on the host, before any review, with the agent's scrubbed environment and push bar. The owner knowingly accepts that agent-written code runs before anyone reads it: "it is the cheapest review: automatic checks". (Section 7.) |
 | D11 | Required checks and setup commands follow GitHub's model: "copy GitHub security and configuration model; best developer experience for AI and humans". Its reading for the factory is in section 7; one part of that reading is an inference awaiting confirmation (O1). |
 | D12 | The factory prepares the slot before the agent starts by running the repository's own setup command(s), named in `.task-loop.json`: "that is the crucial part of slot setup, the reason we need slots" (example: Unity with assets pre-downloaded, Unity and its license pre-installed). Outside the sandbox, with network, from the same ref as the checks. |
@@ -50,7 +50,7 @@ section 2.9 and its decision 8.7 now run `setup` from the task branch.
 | Review step | not built; contract agreed in candidate-checks | none |
 | Questions and holds; a failed result today leaves the task claimed with no signal | not built | none |
 | Session resume; dashboard; account routing | not built | none |
-| Keep-awake while rounds run (B11) | K1 built, gated; live smoke not run (M4 step 6) | tl-8bh9.14.9 section 27 |
+| Keep-awake while rounds run (B11) | Deleted (trial finding; the person wraps rounds) | tl-8bh9.14.9 section 27 |
 | Tracker entries for the roadmap (B14) | filed (D13): epic tl-8bh9.14 with 25 children (blocks B3 to B15 and audits; tl-8bh9.14.1 and .14.2 closed), S5 slices under tl-8bh9.4.3.1.16; stale-entry hygiene remains open (tl-8bh9.14.15) | none |
 
 Today a `tl step rounds` loop takes an `auto` task, plans it, verifies and publishes the plan, then advances it in a
@@ -251,14 +251,13 @@ reading every diff. Depends on B4. Size about 2 slices. Design: yes (later). Not
 | Design / smoke | short plan / yes |
 | Built | H1-H3 of [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) (each reviewed): schema v14 and the hold record, the hold operation and its words, the round applying it; the M4 smoke waits for B11 and B13 |
 
-### B11. Keep-awake
+### B11. Keep-awake (deleted)
 
-Lifetime-scoped while `tl step rounds` runs (accepted, .4.6): macOS `caffeinate -i -w <pid>`, Linux `systemd-inhibit`,
-through the shelf process API. Needed for M4 on a laptop. 1 slice, no design, small smoke.
-
-| | |
-|---|---|
-| Built | K1 of [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) (section 27): `keep_awake.py`, spawned before the rounds' SIGINT handler with the shelf's hold replayed first, stopped with `stop_tree` on every way out; best effort (`rounds keep_awake unavailable:<why>`). Gated; not observed on macOS, ineffective on a Linux host whose logind refuses the inhibitor (seen on OrbStack); M4 not reached (smoke step 6) |
+Built as K1 of [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) (section 27), then deleted by owner direction
+([layers](layers.md) section 5 item 1): the self-hosting trial ([trial](self-hosting-trial.md)) logged a false
+`keep_awake started` line and left a `<defunct>` child on OrbStack, where logind refuses the inhibitor. The person keeps a
+machine awake themselves (`caffeinate -i tl step rounds ...`, the OS power setting or a launcher script); nothing in the
+factory asks the OS.
 
 ### B10. Time since the last command (dashboard later)
 
