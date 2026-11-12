@@ -18,7 +18,7 @@ tracker's; a block without one has no tracker entry yet (block B14).
 | D6 | The factory never starts at boot: a foreground `tl step rounds` loop, Ctrl-C to stop. |
 | D7 | No hung-agent detection until a real case shows the need. |
 | D8 | The dashboard later shows the time since the agent's last command. |
-| D9 | Already accepted earlier: runtime version fixed until restart ([operations](tl-8bh9.8/operations.md)); normal host networking for checks ([coverage](tl-8bh9/coverage.md)); lifetime-scoped keep-awake ([.4.6](tl-8bh9.4.6/plan.md)); merge plus final squash, one resumable land ([delivery](tl-8bh9.9/delivery-publication.md)); one mandatory check set, no pass cache ([candidate checks](tl-8bh9.5.1/candidate-checks.md)). |
+| D9 | Already accepted earlier: normal host networking for checks ([coverage](tl-8bh9/coverage.md)); lifetime-scoped keep-awake ([.4.6](tl-8bh9.4.6/plan.md)); merge plus final squash, one resumable land ([delivery](tl-8bh9.9/delivery-publication.md)); one mandatory check set, no pass cache ([candidate checks](tl-8bh9.5.1/candidate-checks.md)). |
 | D10 | The factory's checks run on the host, before any review, with the agent's scrubbed environment and push bar. The owner knowingly accepts that agent-written code runs before anyone reads it: "it is the cheapest review: automatic checks". (Section 7.) |
 | D11 | Required checks and setup commands follow GitHub's model: "copy GitHub security and configuration model; best developer experience for AI and humans". Its reading for the factory is in section 7; one part of that reading is an inference awaiting confirmation (O1). |
 | D12 | The factory prepares the slot before the agent starts by running the repository's own setup command(s), named in `.task-loop.json`: "that is the crucial part of slot setup, the reason we need slots" (example: Unity with assets pre-downloaded, Unity and its license pre-installed). Outside the sandbox, with network, from the same ref as the checks. |
@@ -49,7 +49,7 @@ section 2.9 and its decision 8.7 now run `setup` from the task branch.
 | Land and close (B6, [tl-8bh9.14.8](tl-8bh9.14.8/plan.md)): factory.db v13, `tl step land TASK` (squash onto origin `main`, validated when its tree changed, pushed never forced, task closed locally), `Next: land`/`landed`, the abandon going candidate first | L0-L5 built, gated; M3 live smoke not run ([M3 runbook](tl-8bh9.14.8/live-smoke.md)); `origin` trusted as configured, no push-URL guard (owner decision 2026-11-12, plan section 29.3) | L0-L5 commits with their review repairs (plan sections 25-29) |
 | Review step | not built; contract agreed in candidate-checks | none |
 | Questions and holds; a failed result today leaves the task claimed with no signal | not built | none |
-| Install, pin, release; session resume; dashboard; account routing | not built | none |
+| Session resume; dashboard; account routing | not built | none |
 | Keep-awake while rounds run (B11) | K1 built, gated; live smoke not run (M4 step 6) | tl-8bh9.14.9 section 27 |
 | Tracker entries for the roadmap (B14) | filed (D13): epic tl-8bh9.14 with 25 children (blocks B3 to B15 and audits; tl-8bh9.14.1 and .14.2 closed), S5 slices under tl-8bh9.4.3.1.16; stale-entry hygiene remains open (tl-8bh9.14.15) | none |
 
@@ -70,7 +70,7 @@ passes.**
 
 ## 2. "Self-hosting ready": observable checklist
 
-1. The person starts `tl step rounds ... --label auto` from a pinned factory version and leaves it running for hours;
+1. The person starts `tl step rounds ... --label auto` and leaves it running for hours;
    Ctrl-C stops it; a restart continues unfinished work.
 2. A ready `auto` task of this repository is claimed, planned (`docs/design/<id>/plan.md`) and implemented (code and
    new tests) as commits on `task/<id>`, published to origin.
@@ -83,7 +83,7 @@ passes.**
 6. The person reads the diff and check results and lands with one command: a squash commit on origin `main` and the
    task closed in the tracker. The person's main checkout is never written by the factory.
 7. Changes landed on `main`, including changes to the factory, never affect the running factory; they take effect when
-   the person changes the pin and restarts.
+   the person updates the installed package with uv and restarts.
 8. `tl step list` (later the dashboard) shows each running attempt's time since the agent's last command.
 
 ## 3. Blocks, in dependency order
@@ -260,17 +260,6 @@ through the shelf process API. Needed for M4 on a laptop. 1 slice, no design, sm
 |---|---|
 | Built | K1 of [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) (section 27): `keep_awake.py`, spawned before the rounds' SIGINT handler with the shelf's hold replayed first, stopped with `stop_tree` on every way out; best effort (`rounds keep_awake unavailable:<why>`). Gated; not observed on macOS, ineffective on a Linux host whose logind refuses the inhibitor (seen on OrbStack); M4 not reached (smoke step 6) |
 
-### B8. Install, pin, release
-
-| | |
-|---|---|
-| What (proposed, O6) | Until M5: a dedicated runner worktree at a known commit with its own `.venv`, never synced while rounds run. At M5: one install directory per version (a venv per commit or tag), a durable owner pin in `config.toml`, `tl` resolving the version once at start; the entry process already uses the same interpreter (`sys.executable`). Release: an annotated tag on `main` by the person. No marketplace, plugin cache or canary. Task tl-8bh9.8.3 INSTALL-OWNER. |
-| Why | D9: version fixed until restart. Self-hosting lands changes to the factory's own code while it runs; a reinstall under a running loop would give new entry processes new code against an old round and factory.db. |
-| Depends on | nothing (the runner worktree is the interim); built after M4 |
-| Size | 2 slices (install directory and pin; resolve once) |
-| Open decisions | O6; the reduced release scope in [operations](tl-8bh9.8/operations.md) stays proposed |
-| Design / smoke | yes / yes |
-
 ### B10. Time since the last command (dashboard later)
 
 `tl step list` and `show` gain the time since the agent's last command, read from the attempt's evidence (the agent
@@ -308,33 +297,16 @@ B14 tracker ─┐
 S5a ─────────┼─> B3 profile ─> B13 pinned git_dir ─> Run S ─> B2 env ─> S5b ─> S5c   = M1
              │                                                              └─> B4 checks = M2 ─> B6 land = M3
              └─> (parallel) B10 CLI column, B15 small items                     B7 holds + B11 + git timeout = M4
-                                                                                B8 install/pin (+ dashboard) = M5
+                                                                                B10 (+ dashboard) = M5
 ```
 
 | Milestone | Blocks | The owner can | Still by hand |
 |---|---|---|---|
-| **M1 semi-assisted** | B14, S5 (a-c), B3, B13 pinned `git_dir`, B2 | Label an own task `auto`, run `tl step rounds` from a runner worktree, get plan and implementation (with new tests the agent ran) on `task/<id>` | Run `just check`/`just test` on `task/<id>`; read the diff; squash-merge, push, `bd close`; spot failed tasks in `tl step list` and abandon them; stop rounds before any factory upgrade |
+| **M1 semi-assisted** | B14, S5 (a-c), B3, B13 pinned `git_dir`, B2 | Label an own task `auto`, run `tl step rounds`, get plan and implementation (with new tests the agent ran) on `task/<id>` | Run `just check`/`just test` on `task/<id>`; read the diff; squash-merge, push, `bd close`; spot failed tasks in `tl step list` and abandon them; stop rounds before any factory upgrade |
 | **M2 checks in the factory** | B4 (built S6a-S6e; reached once the [M2 live smoke](tl-8bh9.14.6/live-smoke.md) passes) | See per-check passed/failed on X in `tl step show`; rounds run the checks after implement | Read the diff; land and close; handle failures (re-run with `tl step start`, or abandon) |
 | **M3 land and close** | B6 (built L0-L5; reached once the [M3 live smoke](tl-8bh9.14.8/live-smoke.md) passes) | Run `tl step land TASK` after reading diff and checks: squash on origin `main`, task closed | Decide each land; tracker sync if O4 says so; failures |
 | **M4 unattended loop** | B7 (built H1-H3), B11 (built K1), B13 Git read timeout; not reached until the M4 live smoke passes | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
-| **M5 daily self-hosting** | B8, B10 (then the dashboard) | Run a pinned version; land factory changes and adopt them by changing the pin and restarting; see time since last command | Land decisions; pin changes; anything deferred (section 6) |
-
-## 5. The simplest path to the first self-implemented task
-
-Prerequisites: S5 (a-c), B3 (`setup` only), B13 pinned `git_dir`, B2. Checks and land stay with the person.
-
-| # | Who | Step |
-|---|---|---|
-| 1 | person | Pick a small, self-contained task of this repository with acceptance that names a test (for example `rounds_lock.holder`); label it `auto`; dependencies closed. |
-| 2 | person | Runner: `git worktree add <runner> <S5 commit>`, `uv sync --frozen --no-editable` there; machine config with slots root and count 1. |
-| 3 | person | If factory.db is older than v11: finish or abandon attempts, discard it. `tl slot adopt <checkout>` from the runner. |
-| 4 | person | `tl step rounds --backlog <key> --tracker-root <checkout> --checkout <checkout> --label auto --model <m> --effort <e> --minutes 60` |
-| 5 | factory | Round: claim, prepare slot environment, plan, verify, publish. Next round: advance, implement (agent runs tests in its sandbox), verify, publish. `Next: done`. |
-| 6 | person | Ctrl-C. Fetch `task/<id>`, check it out in a separate worktree, run `just check` and `just test`, read the diff. |
-| 7 | person | Land: `git merge --squash` into `main` in their checkout, commit, push; `bd close <id>`; optional `bd dolt push`. |
-| 8 | person | On failure: read `tl step show`, `tl step release --abandon`, edit the task, label again. |
-
-The runner is not updated by step 7; the landed change takes effect only after the person re-creates the runner (D9).
+| **M5 daily self-hosting** | B10 (then the dashboard). Version management belongs to the package manager (uv), not the factory (decision 2026-11-12) | Land factory changes and adopt them through the package manager; see time since last command | Land decisions; anything deferred (section 6) |
 
 ## 6. Risks and what is deliberately deferred
 
@@ -344,7 +316,6 @@ The runner is not updated by step 7; the landed change takes effect only after t
 | The agent weakens its own checks (D1: it may edit `justfile`, profile, `pyproject.toml`, import-linter contracts, `tests/rules/`) | Required check names from `main` (O1), so a task cannot drop one; it can still change a required check's command (as a GitHub PR can edit its workflow), so the land summary lists every changed check configuration; no automatic land. |
 | Running tests in the sandbox widens it: a writable scratch root outside the slot, more background processes | Pinned `git_dir` first; pointer checks unchanged; scratch never in a Git directory; worker-gone gate before every Git write. |
 | Runaway agents and cost | Deadline per attempt (`--minutes`); at most 3 repeats; no automatic retry or repair; failures hold (B7); D3 means removing `auto` does not stop a task in progress: `tl step release --abandon` does. |
-| The factory edits itself while running | Runner worktree (later pinned install) separate from slots; the entry uses the runner's interpreter; never sync or reinstall the runner while rounds run; upgrade = stop, finish or abandon, discard factory.db if the schema changed, switch, start (D9). |
 | Schema discards (v11 S5, then checks, land, holds) | Finish or abandon in-flight attempts before each; planned tasks restart at plan and reuse their plan (D4). Batch schema changes where slices allow. |
 | Claim lease lapses between steps | Hold on `claim_lost` (B7). |
 | Unobserved platforms | macOS Seatbelt, codex versions other than 0.167.0: Run S on each machine used. |
@@ -353,7 +324,7 @@ The runner is not updated by step 7; the landed change takes effect only after t
 it (owner, 2026-11-11: a separate idea, not now); automatic land; PR mode and the merge queue (held); structured questions
 with choices and dashboard answering (tl-8bh9.6.1); session resume (B9); hung-agent detection (D7); account routing
 (B12); per-step model, effort or minutes; automatic retry and repair (tl-7i9k.56.1); start at boot or a service (D6);
-multi-machine tracker sync; release publication beyond a tag; pass reuse or a check cache; Windows.
+multi-machine tracker sync; pass reuse or a check cache; Windows.
 
 ## 7. Decisions and open questions
 
@@ -393,6 +364,14 @@ re-checked against current GitHub documentation for this file):
 - **Accepted risk, flagged, not a blocker:** setup from the task branch runs with network outside the sandbox before
   anyone reads it.
 
+### 7.1a Decided (owner, 2026-11-12): no factory-managed versions
+
+The factory does not manage its own versions or installs: no install directories, no owner pin, no release tooling, no
+launcher. The package manager (uv) owns versions and installation; helper scripts go in `scripts/`. A running factory
+process keeps the code it started with until it restarts. Welcome later, if wanted: a worker handshake that compares
+versions, `tl version`, and a `tl doctor`; `tl migrate` only if a schema change needs it. The earlier install, pin and
+release design (block B8, open question O6, task tl-8bh9.8.3) is removed.
+
 ### 7.2 Still open (recommendations; none blocks M1)
 
 1. **O1. Required check names from `main`.** The "required names from `main`" part of the reading above is this
@@ -407,5 +386,3 @@ re-checked against current GitHub documentation for this file):
    until a second machine is used.**
 5. **O5. How is a task held?** **Recommendation: comment the reason on the task, remove `auto`, return the claim; the
    person answers by editing the task and adding `auto` again, and the task restarts at plan.**
-6. **O6. How is the factory installed before M5?** **Recommendation: a runner worktree at a chosen commit, never
-   synced while running; per-version install directories with a pin in `config.toml` at M5.**

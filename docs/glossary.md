@@ -45,7 +45,7 @@ redesign demonstrates a distinct factory concept that needs it. Do not introduce
 | worktree | A Git checkout linked to a repository, sharing its commits and branches. | Committing in one linked worktree makes the commit available to the others locally; no push is needed for that sharing. |
 | workspace | An external or generic name for an execution's working directory; no separate factory entity. | Use worktree for a Git checkout and slot for a reusable managed worktree. Preserve literal names used by external APIs such as GitHub workspace. |
 | slot | A managed, reusable worktree reserved for one independently scheduled step attempt at a time. | `s1`. Internal checks may run concurrently. Reservations are local factory state in factory.db; slots are not tracker tasks. Current internal slot tasks are to be retired. |
-| factory | The installation that schedules tasks and executes their steps. | It has a dashboard and local execution state; it can serve several repos. |
+| factory | The program that schedules tasks and executes their steps. | It has a dashboard and local execution state; it can serve several repos. |
 | host | The machine on which an execution happens. | Do not use this product word for a bundle of collaborators. The successor tree has no `*Host` Protocols; the ports are named for what they do (`StatusPorts`, `EvidenceFiles`, ...). |
 | profile | The repo's factory settings in `.task-loop.json`, read by `profile.py` from Git at a commit, never the working tree ([tl-8bh9.14.1](design/tl-8bh9.14.1/plan.md)); `tl profile show` prints it. | Strict keys `setup`, `checks` (name, argv, timeout), `required`, `target`. `setup` and the checks are read at the commit under test (the task branch), like a GitHub `push`/`pull_request` workflow; `required` and `target` from the target (`main`), like branch protection (O1, [self-hosting roadmap](design/self-hosting-roadmap.md) section 7). `setup` runs before an implement agent and before each checks block; the implement agent is told to run every command under `checks` itself, offline; the check step then runs them on X (`required` read from the local `main` at the checks admission). |
 | setup | The repo's own command(s), named in the profile, that prepare a slot's environment before the agent starts. | Decided 2026-11-11: run by the factory outside the agent's sandbox, with network, from the same ref as the checks. `just install` when the profile names none (this repository: `just bootstrap`). Not a step. Built (S5e-1): the implement attempt's entry runs it after resetting the slot's ignored files and uv folders (`environment.py`); `tl step show` prints its `Setup:` line. |
@@ -53,7 +53,7 @@ redesign demonstrates a distinct factory concept that needs it. Do not introduce
 | config | Machine-level settings. | Local paths and account settings. Use `profile` for repo settings. |
 
 A GitHub **runner** executes jobs; a slot is not a runner. A separate clone is not a linked worktree.
-One primary checkout per repo per machine remains the recorded direction; release and cross-machine behavior are
+One primary checkout per repo per machine remains the recorded direction; cross-machine behavior is
 assessed in the repo/store review. A glossary definition does not introduce a new executor service or process model.
 
 ## Checks and delivery
@@ -70,7 +70,6 @@ assessed in the repo/store review. A glossary definition does not introduce a ne
 | land | Finish the task's delivery operation: accepted integration, confirmed task completion and any required task synchronization. | Retry unfinished required actions only. Code can be delivered while task completion remains pending. Merge is integration; push is transport. Publishing an unfinished task branch does not land it. As built (tl-8bh9.14.8): `tl step land TASK`, the person's command that squashes the checked X onto origin's `main` as one commit S, validates S when its tree is not X's or `main`'s required names changed, pushes it never forced, and closes the task; a rerun does only what is missing. Never run by rounds. A Ctrl-C stops it as `unavailable:interrupted`, exit 130 (no traceback); the rerun reconciles. |
 | PR | A pull request proposing changes to a base branch. | Use the short form after "pull request" on first use when the audience needs it. |
 | merge queue | PRs waiting to merge after their required checks pass. | Detailed queue policy belongs in [its design](design/merge-queue.md), not in vocabulary definitions. The speculative queue remains held. |
-| release | A versioned distribution of the software. For freeing a slot see `slot release` (Factory vocabulary as built). | Merging source and publishing a release are different actions. A release candidate is the version being evaluated before release. |
 
 A step may own several actions: land owns merge and push. Naming those actions does not make them separate steps
 or independent scheduling units. Define a step by its purpose and completion condition, not by every command it runs.

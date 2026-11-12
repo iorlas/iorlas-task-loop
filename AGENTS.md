@@ -10,15 +10,13 @@ whole old packages, test bootstraps or unused abstractions. No baseline runtime 
 
 | what | who may write it | never |
 |---|---|---|
-| main checkout | the person | agent hand edits or release tooling |
+| main checkout | the person | agent hand edits |
 | managed task worktree | its assigned implementing agent and coordinator | unrelated or competing source writers |
-| installed plugin/cache | the normal installation/release operation | hand edits |
-| owner pin | explicit owner operation | automatic version switching |
 | task state | typed task-tracker operations through the actor | treating a comment as a state mutation |
 | existing worktrees, evidence and user data | explicitly authorized owning operation | deletion based only on age or presumed staleness |
 
 Work in a worktree. Preserve unrelated edits and task claims. Git operations follow active user/session authority;
-local Git authorization does not authorize remote publication, merge, installation or release.
+local Git authorization does not authorize remote publication or merge.
 Never kill processes by name; act only on a confirmed owned process identity.
 
 ## Build and verification
