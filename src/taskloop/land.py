@@ -123,8 +123,7 @@ def _task(ports: LandPorts, request: LandRequest) -> _Task | Failed:
     key = None if row is None else AttemptKey(str(row[0]), str(row[1]), int(row[2]))
     found = None if key is None else task_of(con, key)
     if row is None or key is None or found is None or not row[3] or following(str(row[4])) != CHECK:
-        return Failed("refused", "not_done", f"The task's current attempt is not a done implement attempt (verified, released "
-                      f"with its claim kept, published): {SHOW}")
+        return Failed("refused", "not_done", "The task's current attempt is not a done implement attempt.")
     checks = latest(ports.work.store, key.attempt_id)
     refused = _not_checked(checks, request.no_change or request.mode == "summary")  # the summary reports any conclusion
     if refused is not None or checks is None:

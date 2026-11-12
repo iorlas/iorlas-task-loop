@@ -10,8 +10,9 @@ from taskloop.land_close import NOT_SYNCED
 from taskloop.land_guide import LAND_GUIDE
 from taskloop.land_push import Withdrawn
 from taskloop.land_store import LandRow
-from taskloop.land_summary import LandSummary, gate_lines, lines, one_line
+from taskloop.land_summary import LandSummary, gate_lines, lines
 from taskloop.operations import Failed
+from taskloop.printable import one_line
 from taskloop.step_guide import GUIDE
 
 COMMAND: Final = "tl step land"

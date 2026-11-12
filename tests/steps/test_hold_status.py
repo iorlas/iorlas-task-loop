@@ -179,6 +179,17 @@ def test_show_prints_the_hold_lines_and_the_answer_with_the_stored_label(factory
                             "labelled_at": 11.0, "commented_at": 13.0, "cleared_at": None}
 
 
+def test_the_on_hold_guide_gives_the_one_fix_of_the_cause(factory: sqlite3.Connection, tmp_path: Path) -> None:
+    plan(factory, released="unclaimed")
+    recorded(factory, reason="failed:run:timeout")
+    shown = show_attempt(reads(factory), tmp_path, "tasks", "tl-1")
+    assert isinstance(shown, Shown)
+    text = "\n".join(human("show", shown, tmp_path / "factory.db"))
+    assert "did not finish before its deadline" in text and "To fix it, raise `--minutes` for the next run, then add back" in text
+    assert "`bd label add tl-1 auto`" in text
+    assert "edit the task's description" not in text
+
+
 def test_show_of_a_pending_hold_names_each_action_and_the_claim_kept(factory: sqlite3.Connection, tmp_path: Path) -> None:
     plan(factory)
     recorded(factory, comment=False)
@@ -187,8 +198,7 @@ def test_show_of_a_pending_hold_names_each_action_and_the_claim_kept(factory: sq
     lines = human("show", shown, tmp_path / "factory.db")
     assert "Hold tracker: `auto` removed, `held` added, not commented yet" in lines
     assert "Hold claim: kept: the abandon has not finished" in lines
-    assert lines[-1] == HOLD and all(f"`{word}`: {action}" in HOLD for word, action in KEPT_ACTIONS.items())
-    assert "`unavailable:slot_busy`" in HOLD and "held:slot_busy" not in HOLD  # the word a round's line prints
+    assert lines[-1] == HOLD and "hold pending <step> <word>" in HOLD and not any(word in HOLD for word in KEPT_ACTIONS)
 
 
 def test_list_prints_the_hold_word_and_its_guide_once_and_json_says_due(factory: sqlite3.Connection) -> None:
@@ -246,6 +256,25 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
     probed.clear()
     found = list_attempts(ports, stuck=True)
     assert isinstance(found, Listed) and found.attempts == () and probed == []
+
+
+def test_deadline_passed_of_a_captured_agent_attempt_is_whether_its_run_timed_out_not_whether_the_clock_passed(
+    factory: sqlite3.Connection,
+) -> None:
+    plan(factory)
+    factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
+    factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state)
+        VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','json_invalid','complete')""")
+
+    def seen(now: float) -> list[bool]:
+        found = list_attempts(reads(factory, now))
+        assert isinstance(found, Listed)
+        return [each.deadline_passed for each in found.attempts]
+
+    assert (seen(50), seen(500)) == ([False], [False])  # the run ended in time; the deadline (100) passing later changes nothing
+    factory.execute("UPDATE execution SET timed_out=1,rc=124")
+    assert (seen(50), seen(500)) == ([True], [True])
 
 
 def test_show_of_a_task_held_for_failed_checks_names_each_failed_check_with_its_exit_and_log(checking: sqlite3.Connection,

@@ -292,6 +292,19 @@ def minutes_refused(minutes: int) -> Failed | None:
     return None if ok else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
 
 
+def _word(value: str) -> bool:
+    return bool(value) and value.isprintable() and not any(char.isspace() for char in value) and not value.startswith("-")
+
+
+def choices_refused(model: str, effort: str) -> Failed | None:
+    """`--model` and `--effort` of every agent launch, checked before a slot or claim is taken, by shape only: one printable
+    word that cannot read as a flag. Which models and efforts exist is the vendor's to say (its catalog changes); a value it
+    refuses fails in the agent."""
+    if not _word(model) or not _word(effort):
+        return Failed("refused", "choices", "--model and --effort must each be one printable word that does not start with `-`")
+    return None
+
+
 @dataclass(frozen=True)
 class _Advance:
     """The task's current attempt is done (verified, released settled, published) and its step has a following one:
@@ -330,7 +343,7 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
 
 
 def _start(ports: StartPorts, request: StartRequest, advancing: str | None) -> Started | Failed:
-    refused = minutes_refused(request.minutes)
+    refused = choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
     if refused is not None:
         return refused
     try:

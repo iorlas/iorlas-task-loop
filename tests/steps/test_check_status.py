@@ -121,6 +121,14 @@ def test_a_passed_or_failed_result_and_the_release_are_the_checks_attempt_s(stat
     assert view.release is not None and view.release.abandoned and view.release.claim == "kept"
 
 
+def test_deadline_passed_of_a_concluded_attempt_is_fixed_when_it_ended_not_when_it_is_read(status: Status) -> None:
+    status.bench.concluded("passed")  # concluded at 20
+    status.bench.con.execute("UPDATE checks_attempt SET deadline=100")
+    assert [(setattr(status, "now", now), status.view().deadline_passed)[1] for now in (50, 500)] == [False, False]
+    status.bench.con.execute("UPDATE checks_attempt SET deadline=15")  # the same attempt, ended after its deadline
+    assert [(setattr(status, "now", now), status.view().deadline_passed)[1] for now in (50, 500)] == [True, True]
+
+
 def test_list_stuck_keeps_a_checks_attempt_stuck_on_refusals(status: Status) -> None:
     listed = list_attempts(status.reads(), stuck=True)
     assert isinstance(listed, Listed) and listed.attempts == ()

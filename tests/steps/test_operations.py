@@ -70,7 +70,7 @@ from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
-REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "model-m", "effort-e", 30)
+REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "model-m", "high", 30)
 
 
 class Admission:
@@ -181,7 +181,7 @@ def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: Attempt
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
-    assert (request.model, request.effort, request.sandbox, request.deadline) == ("model-m", "effort-e", SANDBOX, 1000 + 30 * 60)
+    assert (request.model, request.effort, request.sandbox, request.deadline) == ("model-m", "high", SANDBOX, 1000 + 30 * 60)
     assert (launcher.calls, launcher.minutes) == ([("tasks", "tl-1")], [30])
 
 
@@ -211,6 +211,18 @@ def test_minutes_out_of_range_are_refused_before_any_read_or_launch(minutes: int
     found = start(StartPorts(unread, admission, launcher,
                              lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS), replace(REQUEST, minutes=minutes))
     assert found == Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
+    assert admission.requests == [] and launcher.calls == []
+
+
+@pytest.mark.parametrize(("model", "effort"), [
+    ("", "high"), ("-x", "high"), ("a b", "high"), ("a\nb", "high"), ("m", "-high"), ("m", "a b"), ("m", ""),
+])
+def test_an_impossible_model_or_effort_is_refused_before_any_read_or_launch(model: str, effort: str) -> None:
+    admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
+    unread = AttemptStore(lambda: None)
+    ports = StartPorts(unread, admission, launcher, lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS)
+    found = start(ports, replace(REQUEST, model=model, effort=effort))
+    assert isinstance(found, Failed) and found.word == "refused:choices" and found.detail.startswith("--")
     assert admission.requests == [] and launcher.calls == []
 
 

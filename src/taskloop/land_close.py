@@ -16,8 +16,8 @@ from typing import Final
 
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.land_store import Close, LandRow, LandStore
-from taskloop.land_summary import one_line
 from taskloop.operations import Failed
+from taskloop.printable import one_line
 from taskloop.tracker_client import CloseAnswer
 
 NOT_SYNCED: Final = "Tracker: closed locally, not synced (bd dolt push shares it)"

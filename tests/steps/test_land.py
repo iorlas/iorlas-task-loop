@@ -189,6 +189,12 @@ def test_each_refusal_comes_before_anything_is_written(b: LandBench, arrange: Ca
     assert b.execs() == []
 
 
+def test_the_not_done_refusal_says_its_sentence_once_and_leaves_the_rest_to_the_guide(b: LandBench) -> None:
+    b.con.execute("DELETE FROM published_branch")
+    found = b.land()
+    assert isinstance(found, Failed) and found.detail == "The task's current attempt is not a done implement attempt."
+
+
 def test_a_checkout_of_another_repository_is_refused(b: LandBench) -> None:
     b.con.execute("UPDATE attempt SET repo_id='another' WHERE attempt_id='implement'")
     assert failed(b.land()) == ("refused", "checkout") and b.rows() == ()

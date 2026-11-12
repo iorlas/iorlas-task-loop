@@ -20,10 +20,10 @@ from taskloop.land_summary import (
     lines,
     message,
     message_at,
-    one_line,
     summary,
 )
 from taskloop.operations import Failed
+from taskloop.printable import one_line
 from taskloop.profile import Check, Profile
 
 SHA = "a" * 40

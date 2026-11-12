@@ -175,7 +175,9 @@ def _swapped(
     earlier = (*((each.key.attempt_id, "re-run") for each in reversed(rows[:-1])), (view.attempt_id, "advanced"))
     return replace(
         view, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
-        result=checks_result(latest), deadline_passed=expired, next=land_next(checks_next(latest, entry, expired, commands), latest, land),
+        result=checks_result(latest),
+        deadline_passed=expired if latest.concluded_at is None else latest.concluded_at >= latest.deadline,
+        next=land_next(checks_next(latest, entry, expired, commands), latest, land),
         entry_process=latest.entry,
         worker=None, last_command=None, leftovers=(), number=latest.number, previous_attempt_id=None, repeat_reason=None, earlier=earlier,
         release=checks_release(latest, claim), checks=ChecksView(latest, results), land=land,
@@ -194,11 +196,12 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
     ended = {"seq": row.seq, "release": row.release, "published": row.published, "label": row.label,
              "last_command": _idle(reads, row.key) if entry == "running" else None}
+    late = expired if row.phase != "captured" or result.execution is None else result.execution.facts.timed_out
     if left is None or left.reason not in REPEATABLE:
-        return AttemptView(*found, entry, result, expired, next_word, row.entry, row.worker, (), *chain, **ended)
+        return AttemptView(*found, entry, result, late, next_word, row.entry, row.worker, (), *chain, **ended)
     next_word = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
     held = AttemptResult("pending", next_word, result.execution)
-    return AttemptView(*found, entry, held, expired, next_word, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
+    return AttemptView(*found, entry, held, late, next_word, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
 
 
 def _idle(reads: StatusPorts, key: AttemptKey) -> int | Literal["none", "unreadable"]:

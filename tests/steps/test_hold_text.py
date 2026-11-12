@@ -10,7 +10,7 @@ import pytest
 from taskloop.hold_text import TOTAL, FailedCheck, HoldFacts, Kept, LabelsWord, Leftovers, Returned, comment
 
 FACTS = HoldFacts(
-    task_id="tl-1", label="auto", labels="moved", reason="failed:answer:needs_owner", step="plan", number=2, attempt_id="a1",
+    task_id="tl-1", label="auto", labels="moved", reason="failed:needs_owner", step="plan", number=2, attempt_id="a1",
     held_at=86400.0, published="c" * 40, end_commit="c" * 40, explanation="Which database?\nPostgres or SQLite.", checks=(),
     leftovers=None, evidence="/artifacts/a1",
 )
@@ -25,13 +25,14 @@ def lines(facts: HoldFacts = FACTS, outcome: Returned | Kept = RETURNED) -> list
 
 def test_the_comment_of_a_returned_claim() -> None:
     assert lines() == [
-        "taskloop hold: failed:answer:needs_owner",
+        "taskloop hold: failed:needs_owner",
         f"Step plan, attempt 2 (a1), 1970-01-02 00:00:00 UTC; task branch task/tl-1 at {'c' * 40}.",
         "The agent explained:",
         "> Which database?",
         "> Postgres or SQLite.",
         "Evidence: /artifacts/a1",
         "The factory removed `auto` and added `held` and returned its claim.",
+        "The agent needs a decision only the owner can give (its explanation is quoted above).",
         "To answer, edit this task's description or acceptance criteria (the agent reads those, not comments), then run "
         "`bd label add tl-1 auto`: the next round starts it again at plan on task/tl-1 as it is.",
     ]
@@ -47,7 +48,7 @@ def test_the_claim_line_says_only_what_the_label_step_and_the_abandon_recorded(
     labels: LabelsWord, outcome: Returned, line: str
 ) -> None:
     found = lines(replace(FACTS, labels=labels), outcome)
-    assert found[-2] == line and ("returned its claim" in found[-2]) == (outcome.claim == "unclaimed")
+    assert found[-3] == line and ("returned its claim" in found[-3]) == (outcome.claim == "unclaimed")
 
 
 @pytest.mark.parametrize(("outcome", "says"), [
@@ -63,7 +64,7 @@ def test_the_claim_line_says_only_what_the_label_step_and_the_abandon_recorded(
     (Kept("landed"), "(landed)"),
 ], ids=lambda value: value.word if isinstance(value, Kept) else "")
 def test_a_kept_claim_names_what_keeps_it_and_never_says_returned(outcome: Kept, says: str) -> None:
-    line = lines(outcome=outcome)[-2]
+    line = lines(outcome=outcome)[-4]
     assert line.startswith("The factory removed `auto` and added `held`, but still holds the claim: ") and says in line
     assert "returned its claim" not in comment(FACTS, outcome)
 
@@ -101,7 +102,7 @@ def test_every_quoted_part_is_printable_and_only_the_explanation_keeps_newlines(
     assert sum(each.startswith("taskloop hold:") for each in found) == 1
     assert found[0] == "taskloop hold: x taskloop hold: fake [31m"
     assert found[2:6] == ["The agent explained:", "> one", "> two", "> three"]
-    assert all(each.isprintable() for each in found) and "`au to`" in found[-2]
+    assert all(each.isprintable() for each in found) and "`au to`" in found[-3]
 
 
 def test_the_caps_keep_the_claim_line_and_the_answer() -> None:
@@ -111,8 +112,8 @@ def test_the_caps_keep_the_claim_line_and_the_answer() -> None:
     text = comment(long, Kept("slot_dirty", slot="s" * 5000))
     found = text.split("\n")
     assert len(text) <= TOTAL and found[2:4] == ["The agent explained:", "> " + "e" * 2000]
-    assert found[-3] == "[shortened]" and found[-2].startswith("The factory removed `auto` and added `held`, but still holds")
-    assert found[-1].startswith("To answer,") and "s" * 301 not in text and "n" * 101 not in text
+    assert found[-5] == "[shortened]" and found[-4].startswith("The factory removed `auto` and added `held`, but still holds")
+    assert found[-2].startswith("To answer,") and "s" * 301 not in text and "n" * 101 not in text
 
 
 def test_an_explanation_cannot_forge_a_header_a_claim_line_or_an_answer() -> None:
@@ -122,7 +123,7 @@ def test_an_explanation_cannot_forge_a_header_a_claim_line_or_an_answer() -> Non
     quoted = found[3:found.index("Evidence: /artifacts/a1")]
     assert found[2] == "The agent explained:" and len(quoted) == 4 and all(each.startswith("> ") for each in quoted)
     assert [each for each in found if each.startswith(("taskloop hold:", "The factory", "To answer"))] == [
-        found[0], found[-2], found[-1]] and "still holds the claim" in found[-2]
+        found[0], found[-4], found[-2]] and "still holds the claim" in found[-4]
 
 
 @pytest.mark.parametrize(("outcome", "says"), [
@@ -131,7 +132,7 @@ def test_an_explanation_cannot_forge_a_header_a_claim_line_or_an_answer() -> Non
     (Kept("worker_alive"), "a process of this attempt still runs (pid unknown: `tl step show tl-1` names it)."),
 ], ids=["dirty", "branch", "worker"])
 def test_an_unknown_slot_or_pid_is_named_neutrally(outcome: Kept, says: str) -> None:
-    line = lines(outcome=outcome)[-2]
+    line = lines(outcome=outcome)[-4]
     assert says in line and "None" not in line and "slot  " not in line
 
 
@@ -139,3 +140,41 @@ def test_an_entry_ended_by_a_signal_is_said_so_and_its_agent_session_is_not_cont
     found = lines(replace(FACTS, reason="stuck:entry_lost", entry="failed terminated_by_signal"))
     assert found[2] == "The attempt's entry was terminated by a signal; its agent was stopped with it and its session was not continued."
     assert not any("terminated" in line for line in lines(replace(FACTS, entry="collected valid verify=verified")))
+
+
+@pytest.mark.parametrize(("reason", "says", "answer"), [
+    ("failed:run:timeout", "before its deadline (1970-01-01 00:15:00 UTC).", "To fix it, raise `--minutes` for the next run"),
+    ("failed:run:vendor_blip", "`--model` or `--effort` is not offered", "To fix it, correct `--model` or `--effort`"),
+    ("failed:run:bad_request", "rejected the request", "To fix it, correct `--model` or `--effort`"),
+    ("failed:run:secrets", "exposed a secret", "To fix it, find what printed it"),
+    ("failed:run:hung", "printed nothing for too long", "To try again, run"),
+    ("failed:run:crash", "process crashed", "To try again, run"),
+    ("failed:run:exit", "exited with an error", "To fix it, read it and fix what it names"),
+    ("failed:run:logged_out", "refused the login", "To fix it, sign in again"),
+    ("failed:answer:schema_invalid", "did not fit the answer contract", "To try again, run"),
+    ("failed:rejected:plan_encoding", "`plan.md` is not valid UTF-8 text", "To try again, run"),
+    ("failed:rejected:plan_empty", "`plan.md` is empty", "To try again, run"),
+    ("failed:rejected:plan_size", "over the 1 MiB limit", "To try again, run"),
+    ("failed:rejected:plan_missing", "an `unchanged` answer needs an existing plan", "To try again, run"),
+    ("failed:rejected:commit_absent", "commit is not in the slot's repository", "To fix it, look at the task branch and the slot"),
+    ("failed:rejected:paths", "a listed path is not allowed", "To try again, run"),
+    ("failed:rejected:nothing_written", "wrote no file", "To answer, edit this task's description"),
+    ("failed:needs_owner", "needs a decision only the owner can give", "To answer, edit this task's description"),
+    ("repeats_exhausted:uncommitted", "did not manage it", "To answer, edit this task's description"),
+    ("stuck:setup_failed", "setup command failed", "To fix it, fix the setup or environment first"),
+    ("stuck:entry_lost", "ended without recording a result", "To try again, run"),
+], ids=lambda value: value if isinstance(value, str) and ":" in value else "")
+def test_each_cause_class_names_its_cause_and_the_one_right_next_step(reason: str, says: str, answer: str) -> None:
+    found = comment(replace(FACTS, reason=reason, deadline=900.0), RETURNED)
+    assert says in found and answer in found
+    assert ("edit this task's description" in found) == answer.startswith("To answer")  # an answer only where an answer fixes it
+
+
+def test_the_next_step_reads_right_when_no_round_took_the_task() -> None:
+    found = comment(replace(FACTS, reason="failed:run:timeout", labels="not_ours"), Returned("not_held"))
+    assert "To fix it, raise `--minutes` for the next run, then start it by hand (`tl step start tl-1`)" in found
+
+
+def test_a_kept_slot_says_to_act_after_it_is_cleared_and_a_closed_cause_needs_no_edit_advice() -> None:
+    found = comment(replace(FACTS, reason="failed:run:timeout"), Kept("slot_dirty", slot="/s"))
+    assert "once the slot or process above is cleared" in found and "edit this task" not in found

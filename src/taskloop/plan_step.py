@@ -69,7 +69,7 @@ def decode(value: object, rules: StepRules) -> Answer:
     if disposition == "planned":
         fits = path == expected and listed is not None and expected in listed and commit_message(message)
     else:
-        named = path == expected or (path is None and disposition != "unchanged")
+        named = path == expected or path is None  # `unchanged` without a plan decodes: verification names `plan_missing`
         fits = disposition in DISPOSITIONS and named and listed == () and message is None
     if not fits or listed is None or not isinstance(explanation, str) or len(explanation) > 2000:
         raise ValueError("Invalid plan answer")
@@ -91,7 +91,9 @@ def _closing_words(rules: StepRules) -> str:
         f"`planned`; other files only under `{root}`. {step_text.GIT_WRITES} With `planned`, list in `paths` every file "
         "you want committed and give a "
         "one-line commit `message`; the factory commits exactly those paths. Remove any other file you created. Anything "
-        "left uncommitted is reported back to you as a failed step."
+        "left uncommitted is reported back to you as a failed step. If the task cannot be planned as written (it contradicts "
+        "itself or the code, is empty or too vague to act on), write no plan: answer `needs_owner` and say in `explanation` "
+        "what the owner must decide."
     )
 
 

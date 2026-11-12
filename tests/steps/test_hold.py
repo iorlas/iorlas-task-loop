@@ -22,9 +22,9 @@ from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import ROUND_CAUSES, HoldMove, HoldPorts, clear_holds, hold_task
-from taskloop.hold_guide import HOLD
+from taskloop.hold_guide import KEPT_ACTIONS
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Uncleared
-from taskloop.operations import Move, Round
+from taskloop.operations import Failed, Move, Round
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
 from taskloop.step_render import human
 from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
@@ -545,6 +545,17 @@ def test_clear_lists_only_the_round_s_own_backlog(bench: Bench) -> None:
 
 def test_tl_step_next_prints_the_hold_guide_for_a_pending_hold_only() -> None:
     pending = Round("tasks", (Move("tl-1", "hold", "pending abandon held:slot_dirty", "a", step="plan"),))
-    assert f"hold: {HOLD}" in human("next", pending, None)
+    shown = human("next", pending, None)
+    assert [line for line in shown if line.startswith("hold: ")] == [f"hold: `held:slot_dirty`: {KEPT_ACTIONS['held:slot_dirty']}"]
+    transient = Round("tasks", (Move("tl-1", "hold", "pending abandon unavailable:slot_busy", "a", step="plan"),))
+    assert "hold: `unavailable:slot_busy`: needs nothing" in "\n".join(human("next", transient, None))
     held = Round("tasks", (Move("tl-1", "hold", "held failed:needs_owner", "a", step="plan"),))
     assert not any(line.startswith("hold: ") for line in human("next", held, None))
+
+
+def test_a_refusal_echoing_an_untrusted_id_prints_one_printable_line_per_detail_line() -> None:
+    hostile = "tl\x1b[31m\u202e-1\nForged: yes" + "x" * 3000
+    refused = Failed("refused", "absent", f"No attempt for {hostile} in backlog tasks")
+    lines = human("show", refused, None)
+    assert lines[0] == "show: refused:absent" and lines[2].startswith("Forged: yes") and len(lines) == 3  # the newline is a line break only
+    assert all(each.isprintable() and len(each) <= 2000 for each in lines) and "tl [31m -1" in lines[1]

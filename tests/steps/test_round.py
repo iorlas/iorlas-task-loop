@@ -54,7 +54,7 @@ KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
 BEFORE_REBOOT = (7, "entry-start", "old-boot")  # registered in another boot than the bench's "boot"
 HEAD, X = "d" * 40, "x" * 40
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "effort-e", 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "high", 30)
 STAMP = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks "
 STEPPED = r"\S+ plan (start|relaunch|repeat|verify|publish|report|skip)( \S+)+"  # every attempt-bearing move names its step
 LINE = re.compile(STAMP + rf"({STEPPED}|\S+ (start|report) (refused|unavailable|claim_leaked)\S*|round( \S+)+)")
@@ -343,7 +343,7 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
     assert (moves(found), found.stopped, exit_code(found)) == (expected + ([("t-9", "start", "started")] if not stopped else []), stopped,
                                                                code)
     sent = advances.requests[0]
-    assert (sent.previous, sent.checkout, sent.model, sent.effort, sent.deadline) == (KEY, Path("/checkout"), "model-m", "effort-e", 1810)
+    assert (sent.previous, sent.checkout, sent.model, sent.effort, sent.deadline) == (KEY, Path("/checkout"), "model-m", "high", 1810)
     assert ready.ready_reads == ([] if stopped else ["auto"]) and bench.launcher.calls == ([] if stopped else ["t-9"])
     lines = len(bench.lines)
     bench.round(replace(REQUEST, quiet=found.written))
@@ -419,14 +419,17 @@ def test_a_failed_ready_read_stops_admission_but_settling_still_ran(
     assert bench.lines[-1].endswith(f" tasks round moves=1 stopped={stopped}")
 
 
-@pytest.mark.parametrize("label, minutes, reason", [(" ", 30, "label"), ("auto", 0, "choices"), ("auto", 7 * 24 * 60 + 1, "choices")])
-def test_an_empty_label_or_minutes_out_of_range_are_refused_before_any_read(
-    factory: sqlite3.Connection, label: str, minutes: int, reason: str
+@pytest.mark.parametrize("label, minutes, model, effort, reason", [
+    (" ", 30, "m", "high", "label"), ("auto", 0, "m", "high", "choices"), ("auto", 7 * 24 * 60 + 1, "m", "high", "choices"),
+    ("auto", 30, "-m", "high", "choices"), ("auto", 30, "m", "a b", "choices"),
+])
+def test_an_empty_label_a_bad_choice_or_minutes_out_of_range_are_refused_before_any_read(
+    factory: sqlite3.Connection, label: str, minutes: int, model: str, effort: str, reason: str
 ) -> None:
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     ready = ReadyTracker([bead("t-1")], ready=["t-1"])
     bench = Bench(factory, ready)
-    found = run_round(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, "m", "e", minutes))
+    found = run_round(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, model, effort, minutes))
     assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", reason) and exit_code(found) == 1
     assert ready.ready_reads == [] and bench.lines == [] and bench.launcher.calls == []
 
