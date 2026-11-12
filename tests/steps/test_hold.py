@@ -16,16 +16,15 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_status import AttemptView
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AnswerState, AttemptKey, AttemptResult, Evidence, ExecutionFacts, FileRef, StoredExecution
+from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import HoldMove, HoldPorts, clear_holds, hold_task
-from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore
+from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Uncleared
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
 from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
 
-KEY = AttemptKey("a", "a-token", 1)
 NEEDS_OWNER = AttemptResult("collected", "needs_owner")
 RETURNED = Released("s1", D, True, "unclaimed", True)
 
@@ -46,6 +45,7 @@ class Tracker:
 
     calls: list[str]
     labelled: LabelStep = "moved"
+    assignee: str = "taskloop"  # the label step's read of a `moved` or `absent` task
     commented: HoldWrite = "done"
     cleared: HoldWrite = "done"
     texts: list[str] = field(default_factory=list)
@@ -53,7 +53,8 @@ class Tracker:
 
     def labels(self, root: str, task: str, label: str) -> HoldAnswer[LabelStep]:
         self.calls.append(f"labels {root} {task} {label}")
-        return HoldAnswer(self.labelled, "lock" if self.labelled == "unavailable" else "")
+        detail = "lock" if self.labelled == "unavailable" else self.assignee if self.labelled in ("moved", "absent") else ""
+        return HoldAnswer(self.labelled, detail)
 
     def comment(self, root: str, task: str, text: str) -> HoldAnswer[HoldWrite]:
         self.calls.append(f"comment {task}")
@@ -315,15 +316,16 @@ def test_a_kept_claim_whose_comment_failed_names_the_refusal_and_the_comment_s_f
 
 
 def test_the_comment_quotes_the_agent_s_explanation_from_its_stored_answer(bench: Bench) -> None:
+    """Read from A's stored execution, not from the view the caller has (a view without its result here)."""
     answer = {"disposition": "needs_owner", "plan_path": None, "paths": [], "message": None, "explanation": "Which database?\nPick one."}
-    files = EvidenceFiles(bench.root)
     path = bench.root / "answer.json"
     path.write_text(json.dumps(answer))
-    ref = FileRef("answer.json", hashlib.sha256(path.read_bytes()).hexdigest())
-    facts = ExecutionFacts(0, False, None, None, True, True, True, None, None, None, None, None, None)
-    stored = StoredExecution(KEY, facts, Evidence(ref, ref, ref, ref), AnswerState("valid", "needs_owner", "none"), "complete")
-    assert files.read(ref)
-    bench.hold(replace(VIEW, result=AttemptResult("collected", "needs_owner", stored)))
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    bench.con.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,disposition,
+        effect,session_state) VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','answer.json',?,'g','d','valid','needs_owner','none',
+        'complete')""", (digest,))
+    bench.hold(replace(VIEW, result=AttemptResult("pending", "")))
     assert "The agent explained:\n> Which database?\n> Pick one.\n" in bench.tracker.texts[0]
 
 
@@ -331,8 +333,10 @@ def test_a_checks_cause_holds_the_implement_attempt_and_names_its_failed_checks(
     """The swapped checks view: A is the implement attempt it follows; the abandon releases the checks attempt first; a
     check command still running keeps the claim, named with its checks slot."""
     checking.execute("UPDATE attempt SET label='auto'")
-    checking.execute("""INSERT INTO check_result VALUES ('checks',1,1,'test','checks-token',1,?,60,5,5,'st','boot',1,2,1,'lingering')""",
-                     ("e" * 64,))
+    checking.executemany("INSERT INTO check_result VALUES ('checks',1,?,?,'checks-token',1,?,?,?,?,?,?,1,?,?,?)", [
+        (0, "check", "e" * 64, 60, None, None, None, None, 2, 0, "passed"),
+        (1, "test", "e" * 64, 60, 5, 5, "st", "boot", 2, 1, "lingering"),
+        (2, "lint", None, None, None, None, None, None, 2, None, "undefined")])
     bench = Bench(checking, tmp_path)
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
     results = (ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, "passed"),
@@ -388,3 +392,86 @@ def test_clear_is_retried_after_a_tracker_failure_and_never_lists_holds_that_wro
     assert [each.word for each in clear_holds(store, bench.tracker.holds(), lambda: 21.0)] == ["cleared"]
     bench.con.execute("UPDATE task_hold SET cleared_at=NULL,labels='not_ours'")
     assert clear_holds(store, bench.tracker.holds(), lambda: 22.0) == ()
+
+
+def test_a_retried_comment_of_a_checks_cause_describes_the_checks_attempt_not_the_view_after_the_abandon(
+    checking: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """The first comment failed after the abandon finished; the next round's view is the implement attempt's (no checks
+    view any more): the comment still names the checks attempt, its failed check and its evidence, with no explanation."""
+    checking.execute("UPDATE attempt SET label='auto'")
+    checking.execute("INSERT INTO check_result VALUES ('checks',1,0,'test','checks-token',1,?,60,NULL,NULL,NULL,NULL,1,2,1,'failed')",
+                     ("e" * 64,))
+    bench = Bench(checking, tmp_path)
+    row = CheckStore(lambda: checking).of_attempt("implement")[0]
+    failed = AttemptResult("collected", "failed:test:failed")
+    view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
+                       hold_due="failed:test:failed", checks=ChecksView(row, ()))
+    bench.tracker.commented = "unavailable"
+    assert bench.hold(view).missing == "comment"
+    after = AttemptView("tasks", "tl-1", "implement", "implement", "s1", "captured", "gone", AttemptResult("collected", "verified"),
+                        False, "hold", label="auto")
+    bench.tracker.commented, bench.now = "done", 10.0 + COMMENT_LEASE + 1
+    bench.abandon.result = AlreadyReleased("s1", "unclaimed", True)
+    assert bench.hold(after).word == "held"
+    text = bench.tracker.texts[-1]
+    files = EvidenceFiles(tmp_path)
+    assert text.startswith("taskloop hold: failed:test:failed\nStep check, attempt 1 (checks)")
+    assert "Failed checks: test failed " in text and f"Evidence: {files.root / files.directory(CHECKS)}" in text
+    assert "The agent explained" not in text
+
+
+@pytest.mark.parametrize(("answer", "assignee", "said"), [
+    ("not_ours", "", "(the claim is not the factory's)"), ("moved", "", "(the claim is not the factory's)"),
+    ("absent", "", "(the claim is not the factory's)"), ("moved", "taskloop", "the next round returns the claim"),
+], ids=["not_ours", "moved_unassigned", "absent_unassigned", "moved_ours"])
+def test_a_kept_slot_promises_the_claim_only_when_the_label_step_read_it_as_the_factory_s(
+    bench: Bench, answer: LabelStep, assignee: str, said: str
+) -> None:
+    bench.tracker.labelled, bench.tracker.assignee = answer, assignee
+    bench.abandon.result = NotReleased("refused", "slot_dirty")
+    bench.hold()
+    text = bench.tracker.texts[0]
+    assert said in text
+    assert ("but still holds the claim" in text) == (assignee == "taskloop")
+    assert ("keeps the attempt's slot" in text) == (assignee != "taskloop")
+
+
+def test_a_kept_slot_after_a_label_step_of_an_earlier_round_does_not_assume_the_claim(bench: Bench) -> None:
+    bench.abandon.result = NotReleased("unavailable", "store")
+    bench.hold()  # labels done, the abandon transient: no comment
+    bench.abandon.result = NotReleased("refused", "slot_dirty")
+    bench.hold()
+    assert "the next round frees the slot and returns the claim if it is still the factory's" in bench.tracker.texts[0]
+
+
+def test_clear_waits_while_the_new_hold_s_label_step_is_unfinished_and_clears_once_it_wrote_no_label(bench: Bench) -> None:
+    bench.hold()
+    attempt(bench.con, "b", seq=2)
+    store = HoldStore(lambda: bench.con)
+    held = store.insert(HoldInsert("b", "b", "failed:needs_owner", 15.0))
+    calls = len(bench.calls)
+    found = clear_holds(store, bench.tracker.holds(), lambda: 20.0)
+    assert [(each.word, each.detail) for each in found] == [("pending:held_again", "b")] and len(bench.calls) == calls
+    assert bench.row().cleared_at is None
+    store.labelled("b", held.rev, "not_ours", 16.0)  # B wrote no label: A's `held` is still the factory's to remove
+    assert [each.word for each in clear_holds(store, bench.tracker.holds(), lambda: 21.0)] == ["cleared"]
+    assert bench.calls[-1] == "clear tl-1"
+
+
+class Racing(HoldStore):
+    """The task is held again (labels moved) by another caller right after this round listed the uncleared holds."""
+
+    def uncleared(self) -> tuple[Uncleared, ...]:
+        found = super().uncleared()
+        row = self.insert(HoldInsert("b", "b", "failed:needs_owner", 15.0))
+        self.labelled("b", row.rev, "moved", 16.0)
+        return found
+
+
+def test_clear_reads_the_new_hold_again_right_before_the_tracker_call(bench: Bench) -> None:
+    bench.hold()
+    attempt(bench.con, "b", seq=2)
+    calls = len(bench.calls)
+    found = clear_holds(Racing(lambda: bench.con), bench.tracker.holds(), lambda: 20.0)
+    assert [each.word for each in found] == ["cleared"] and len(bench.calls) == calls  # `held` is B's now

@@ -14,7 +14,7 @@ from sqlite_store import begin_immediate
 from taskloop.attempt_reads import ReleaseRow
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, agent_attempt, list_attempts, show_attempt, with_hold
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptResult
+from taskloop.attempt_types import AttemptResult, Unsettled
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore
 from taskloop.hold_guide import HOLD, KEPT_ACTIONS
@@ -188,6 +188,7 @@ def test_show_of_a_pending_hold_names_each_action_and_the_claim_kept(factory: sq
     assert "Hold tracker: `auto` removed, `held` added, not commented yet" in lines
     assert "Hold claim: kept: the abandon has not finished" in lines
     assert lines[-1] == HOLD and all(f"`{word}`: {action}" in HOLD for word, action in KEPT_ACTIONS.items())
+    assert "`unavailable:slot_busy`" in HOLD and "held:slot_busy" not in HOLD  # the word a round's line prints
 
 
 def test_list_prints_the_hold_word_and_its_guide_once_and_json_says_due(factory: sqlite3.Connection) -> None:
@@ -212,3 +213,36 @@ def test_end_commit_and_label_are_read_with_the_attempt(factory: sqlite3.Connect
     factory.execute("UPDATE attempt SET phase='captured',base_commit=?,end_commit=?", (D, X))
     row = AttemptStore(lambda: factory).attempts("tasks", "tl-1")[0]
     assert (row.label, row.end_commit) == ("auto", X)
+
+
+def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeats_exhausted_hold_shows(
+    factory: sqlite3.Connection,
+) -> None:
+    """Attempt 3 of a step awaiting its verify whose slot has leftovers a repeat would hand back: `repeats_exhausted`, so
+    a due hold; the leftovers are read for a labelled attempt only (a hand-started one never becomes a hold)."""
+    with begin_immediate(factory):
+        for number in (1, 2, 3):
+            previous, why = (None, None) if number == 1 else (f"a{number - 1}", "uncommitted")
+            factory.execute(
+                """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+                input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,number,seq,slot_head,
+                previous_attempt_id,repeat_reason,label) VALUES (?,?,1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,
+                'm','e','workspace-write',100,'captured',?,?,?,?,?,?,'auto')""",
+                (f"a{number}", f"a{number}-token", D, number, number, D, previous, why))
+        factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+            stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,
+            session_state) VALUES ('a3','a3-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""")
+    probed: list[str] = []
+
+    def leftovers(key: object) -> Unsettled:
+        probed.append(str(key))
+        return Unsettled("uncommitted", ("a.py",))
+
+    ports = replace(reads(factory), leftovers=leftovers)
+    found = list_attempts(ports, stuck=True)
+    assert isinstance(found, Listed) and [(each.next, each.hold_due) for each in found.attempts] == [
+        ("hold", "repeats_exhausted:uncommitted")]
+    factory.execute("UPDATE attempt SET label=NULL")
+    probed.clear()
+    found = list_attempts(ports, stuck=True)
+    assert isinstance(found, Listed) and found.attempts == () and probed == []

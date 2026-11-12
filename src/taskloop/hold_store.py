@@ -114,6 +114,14 @@ class HoldStore(StoreConnection):
             found = con.execute(UNCLEARED).fetchall()
         return tuple(Uncleared(_row(each[:14]), bool(as_int(each[14]))) for each in found)
 
+    def current_hold(self, attempt_id: str) -> HoldRow | None:
+        """The hold of the current attempt (highest `seq`) of `attempt_id`'s task, when that is another attempt."""
+        with self._connection() as con:
+            found = con.execute(LOADED + """ WHERE h.attempt_id=(SELECT q.attempt_id FROM attempt q JOIN attempt a
+             ON q.adapter=a.adapter AND q.backlog=a.backlog AND q.task_id=a.task_id WHERE a.attempt_id=?1 ORDER BY q.seq DESC
+             LIMIT 1) AND h.attempt_id<>?1""", (attempt_id,)).fetchone()
+        return None if found is None else _row(found)
+
     def insert(self, hold: HoldInsert) -> HoldRow:
         """The hold's record (5.1 step 1): `unlabelled` when A was started by hand (no label: never held), `changed`
         when A or its cause is no longer current or A already has a hold (a concurrent caller recorded it)."""

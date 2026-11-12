@@ -26,7 +26,7 @@ KEPT_ACTIONS: Final = {
 OPEN: Final = ("The factory holds this task for a person but has not finished the hold: the next round (or `tl step next` "
                "now) records it, moves the labels, abandons the attempt and writes one comment on the task. The round's "
                "`hold pending <step>` line in rounds.log names what keeps it open; ")
-TRANSIENT: Final = ("`held:slot_busy`, `unsettled:worker_unknown`, `unavailable:*` need nothing: the next round tries again.")
+TRANSIENT: Final = ("`unavailable:slot_busy`, `unsettled:worker_unknown`, `unavailable:*` need nothing: the next round tries again.")
 HOLD: Final = OPEN + "; ".join(f"`{word}`: {action}" for word, action in KEPT_ACTIONS.items()) + "; " + TRANSIENT + (
     " Once that is cleared, the next round returns the claim and finishes the hold.")
 ON_HOLD: Final = ("Held: the factory abandoned the attempt and waits for a person (the hold's comment on the task says why). "

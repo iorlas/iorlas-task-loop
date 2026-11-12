@@ -182,7 +182,8 @@ type HoldWrite = Literal["done", "missing", "unavailable"]  # a comment or the `
 
 @dataclass(frozen=True)
 class HoldAnswer[W: str]:
-    """A hold write's word; `detail` the failure's kind for `unavailable`."""
+    """A hold write's word; `detail` the failure's kind for `unavailable`, and for `moved` and `absent` the assignee the
+    label step read (`taskloop`, or empty: the claim had lapsed)."""
 
     word: W
     detail: str = ""
@@ -230,7 +231,7 @@ def _labelled(bd: Bd, task_id: str, label: str) -> HoldAnswer[LabelStep]:
         bd.remove_label(task_id, label)
     except BdError as error:
         return _hold_failed(error, "precondition")
-    return HoldAnswer("moved" if label in found.labels else "absent")
+    return HoldAnswer("moved" if label in found.labels else "absent", found.assignee)  # detail: the assignee read
 
 
 def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHolds:

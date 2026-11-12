@@ -47,7 +47,7 @@ def test_the_label_step_fences_on_the_assignee_read_then_adds_held_then_removes_
     tmp_path: Path, shown: str, word: str, assignee: str
 ) -> None:
     script = Script().say(shown)
-    assert tracker_holds(script).labels(str(tmp_path), "tl-1", "auto") == HoldAnswer(word)
+    assert tracker_holds(script).labels(str(tmp_path), "tl-1", "auto") == HoldAnswer(word, assignee)  # the assignee read
     assert calls(script) == [SHOW, fence(assignee), ADD, REMOVE]
 
 

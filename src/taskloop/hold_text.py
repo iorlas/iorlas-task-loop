@@ -50,12 +50,15 @@ class Returned:
 @dataclass(frozen=True)
 class Kept:
     """The abandon was refused by `word`; the factory still holds the claim. `slot` names the slot path, `pid` and
-    `pgid` the process that still runs."""
+    `pgid` the process that still runs. `claim`: whether the task's claim is the factory's as the label step read it
+    (`ours`), not (`not_ours`: another actor's, or none: the claim had lapsed), or not known (`unknown`: read in an earlier
+    call); only `ours` says the factory still holds the claim and returns it."""
 
     word: KeptWord
     slot: str = ""
     pid: int | None = None
     pgid: int | None = None
+    claim: Literal["ours", "not_ours", "unknown"] = "ours"
 
 
 @dataclass(frozen=True)
@@ -127,23 +130,26 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
     done = _labelled(facts)
     if isinstance(outcome, Returned):
         return done + (" and returned its claim." if outcome.claim == "unclaimed" else "; the claim was no longer the factory's.")
-    kept = f"{done}, but still holds the claim: "
+    claim = "not_ours" if facts.labels == "not_ours" else outcome.claim
+    kept = f"{done}, but still holds the claim: " if claim == "ours" else f"{done}, but keeps the attempt's slot: "
+    back = {"ours": "the next round returns the claim", "not_ours": "the next round frees the slot (the claim is not the factory's)",
+            "unknown": "the next round frees the slot and returns the claim if it is still the factory's"}[claim]
     slot = f"slot {part(outcome.slot)}" if part(outcome.slot) else "its slot"
     match outcome.word:
         case "slot_dirty":
-            return (kept + f"{slot} has files left by this attempt. Save what you need, remove them, and the next round "
-                    "returns the claim. The factory never removes work.")
+            return (kept + f"{slot} has files left by this attempt. Save what you need, remove them, and {back}. "
+                    "The factory never removes work.")
         case "worker_alive" | "setup_running" | "check_running":
             group = "" if outcome.pgid is None else f", group {outcome.pgid}"
             pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else f"pid unknown: `tl step show {part(facts.task_id)}` names it"
             return (kept + f"a process of this attempt still runs ({pid}). When it has ended (or after you "
-                    "stop it by that pid), the next round returns the claim.")
+                    f"stop it by that pid), {back}.")
         case "landing" | "landed":
             return (kept + f"a land of this task holds its slot or may be on origin ({outcome.word}). Finish or withdraw it "
-                    f"(`tl step land {part(facts.task_id)}`), and the next round returns the claim.")
+                    f"(`tl step land {part(facts.task_id)}`), and {back}.")
         case _:
             return (kept + f"{slot} is not where the factory left it ({outcome.word}). Put it back (`tl step show "
-                    f"{part(facts.task_id)}` says where), and the next round returns the claim.")
+                    f"{part(facts.task_id)}` says where), and {back}.")
 
 
 def _answer(facts: HoldFacts) -> list[str]:

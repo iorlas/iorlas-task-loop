@@ -9,8 +9,8 @@ from typing import get_args
 
 from any_agent import DecodedAnswer, decode_answer
 
-from taskloop.attempt_reads import AttemptRow
-from taskloop.attempt_status import AttemptView
+from taskloop.attempt import collect
+from taskloop.attempt_reads import AttemptRow, StoreRefused
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import StoredExecution
 from taskloop.check_status import latest
@@ -20,7 +20,7 @@ from taskloop.hold_store import HoldRow
 from taskloop.hold_text import FailedCheck, HoldFacts, Kept, KeptWord, LabelsWord, Leftovers, Returned
 from taskloop.operations import Failed, ReleasedTask
 from taskloop.setup_store import SetupStore
-from taskloop.steps import is_agent, kind
+from taskloop.steps import CHECK, is_agent, kind
 
 
 @dataclass(frozen=True)
@@ -76,17 +76,27 @@ def explanation(files: EvidenceFiles, execution: StoredExecution | None, step: s
     return answer.value.explanation if isinstance(answer, DecodedAnswer) else None
 
 
-def facts(files: EvidenceFiles, view: AttemptView, row: HoldRow, labels: LabelsWord, agent: AttemptRow) -> HoldFacts:
-    """The comment's facts: the cause as the view shows it (a checks view: the checks attempt, its failed checks and their
-    logs), A's X and publication, the leftovers of a `repeats_exhausted` hold and the cause's evidence directory."""
-    checks = view.checks
-    key = agent.key if checks is None else checks.row.key
-    failed = () if checks is None else tuple(
-        FailedCheck(each.name, each.conclusion or "unfinished",
-                    "" if each.conclusion == "undefined" else str(files.check_path(key, each.block, each.name)))
-        for each in checks.results if each.conclusion != "passed")
-    left = Leftovers(view.leftovers[0], view.leftovers[1:]) if view.leftovers and row.reason.startswith("repeats_exhausted") else None
-    told = None if checks is not None else explanation(files, view.result.execution, view.step, view.task_id)
-    published = None if view.published is None else view.published.commit
-    return HoldFacts(view.task_id, row.label, labels, row.reason, view.step, view.number, view.attempt_id, row.held_at, published,
-                     agent.end_commit, told, failed, left, str(files.root / files.directory(key)))
+def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: LabelsWord, agent: AttemptRow,
+          leftovers: tuple[str, ...]) -> HoldFacts:
+    """The comment's facts, from the stored hold, never from whichever view the caller has now (after the abandon a
+    checks cause's task shows its implement attempt): a checks cause (`cause_id` is not A) is that checks attempt, its
+    latest block's failed checks with their logs and its evidence directory, with no agent explanation; an agent cause
+    is A with its stored answer's explanation and (`repeats_exhausted`) the `leftovers` the caller read. A's X and
+    publication either way. StoreRefused `changed` when the checks cause is no longer stored."""
+    published = None if agent.published is None else agent.published.commit
+    head = (agent.task_id, row.label, labels, row.reason)
+    if row.cause_id != row.attempt_id:
+        store = CheckStore(reader.connect, reader.begin)
+        checks = next((each for each in store.of_attempt(row.attempt_id) if each.key.attempt_id == row.cause_id), None)
+        if checks is None:
+            raise StoreRefused("changed")
+        failed = tuple(
+            FailedCheck(each.name, each.conclusion or "unfinished",
+                        "" if each.conclusion == "undefined" else str(files.check_path(checks.key, each.block, each.name)))
+            for each in store.results(checks.key) if each.conclusion != "passed")
+        return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit, None, failed, None,
+                         str(files.root / files.directory(checks.key)))
+    left = Leftovers(leftovers[0], leftovers[1:]) if leftovers and row.reason.startswith("repeats_exhausted") else None
+    told = explanation(files, collect(reader, agent.key).execution, agent.step, agent.task_id)
+    return HoldFacts(*head, agent.step, agent.number, agent.key.attempt_id, row.held_at, published, agent.end_commit, told, (),
+                     left, str(files.root / files.directory(agent.key)))

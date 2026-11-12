@@ -11,7 +11,7 @@ written when the claim was returned, or when the abandon was refused for a reaso
 never after a transient refusal, which the next round retries. A closed or missing task is written nothing. Every bd
 call is `TrackerHolds`' (one try, capped); a tracker failure leaves the hold pending for the next round."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, Literal, Protocol
 
 from taskloop.attempt_reads import AttemptRow, StoreRefused, StoreUnavailable
@@ -22,9 +22,11 @@ from taskloop.hold_facts import Pending, facts, outcome, refusal
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
 from taskloop.hold_text import Kept, Returned, comment
 from taskloop.operations import ChecksReleasing, Clock, Failed, Release, release_task
+from taskloop.tracker import ACTOR
 from taskloop.tracker_client import TrackerHolds
 
 type Missing = Literal["", "labels", "abandon", "comment"]
+type Claim = Literal["ours", "not_ours", "unknown"]
 COMMENTING: Final = ("moved", "absent", "not_ours")  # the label words after which the hold writes its one comment
 
 
@@ -67,7 +69,8 @@ class Move(Protocol):
 @dataclass(frozen=True)
 class Cleared:
     """One `clear_holds` result: `cleared` (`held` removed, or owned by the task's new hold), or the refusal word that
-    leaves it for the next round (`unavailable:tracker`, `unavailable:store`, `refused:changed`)."""
+    leaves it for the next round (`unavailable:tracker`, `unavailable:store`, `refused:changed`, or `pending:held_again`:
+    the task's new hold has not finished its label step; `detail` names that hold's attempt)."""
 
     task_id: str
     attempt_id: str
@@ -93,28 +96,37 @@ def hold_task(ports: HoldPorts, view: AttemptView, reason: str | None = None) ->
                 return move("refused", refused="refused:no_cause")
             row = ports.store.insert(HoldInsert(agent, view.attempt_id, why, ports.clock()))
         why = row.reason
+        claim: Claim = "unknown"  # whose claim the label step read; not known when it ran in an earlier call
         if row.labels is None:
             labelled = _labels(ports, view, row)
             if isinstance(labelled, tuple):
                 return move("refused" if labelled[0] == "refused:changed" else "pending", "labels", *labelled)
-            row = labelled
-        return _abandoned(ports, view, row, move)
+            row, claim = labelled.row, labelled.claim
+        return _abandoned(ports, view, row, move, claim)
     except StoreRefused as error:
         return move("refused", refused=f"refused:{error.reason}")
     except StoreUnavailable as error:
         return move("pending", "labels" if row is None or row.labels is None else "abandon", "unavailable:store", str(error))
 
 
-def _labels(ports: HoldPorts, view: AttemptView, row: HoldRow) -> HoldRow | tuple[str, str]:
+@dataclass(frozen=True)
+class _Labelled:
+    row: HoldRow
+    claim: Claim
+
+
+def _labels(ports: HoldPorts, view: AttemptView, row: HoldRow) -> _Labelled | tuple[str, str]:
     """5.1 step 3: A still the task's current attempt, then the tracker's label step and its word recorded (fenced on A
-    still current); a stale fence or a tracker failure writes nothing and is retried: (word, detail)."""
+    still current), with whose claim it read (`ours` only for the factory's assignee); a stale fence or a tracker failure
+    writes nothing and is retried: (word, detail)."""
     current = ports.reader.attempt_of(view.backlog, view.task_id)
     if current is None or current[0].attempt_id != row.attempt_id:
         return "refused:changed", "Another attempt of the task is current"
     answer = ports.tracker.labels(row.tracker_root, row.task_id, row.label)
     match answer.word:
         case "moved" | "absent" | "not_ours" | "closed" | "missing":
-            return ports.store.labelled(row.attempt_id, row.rev, answer.word, ports.clock())
+            claim: Claim = "ours" if answer.word in ("moved", "absent") and answer.detail == ACTOR else "not_ours"
+            return _Labelled(ports.store.labelled(row.attempt_id, row.rev, answer.word, ports.clock()), claim)
         case "precondition":
             return "unavailable:tracker", "precondition: the task's assignee changed after it was read"
         case "bad_label":
@@ -123,7 +135,7 @@ def _labels(ports: HoldPorts, view: AttemptView, row: HoldRow) -> HoldRow | tupl
             return "unavailable:tracker", answer.detail
 
 
-def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move) -> HoldMove:
+def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move, claim: Claim) -> HoldMove:
     """5.1 steps 4 and 5: the abandon as `tl step release --abandon` runs it, then the comment (once) by its outcome: the
     claim returned, or kept by a refusal only the person clears; none after a transient refusal. The abandon acts on the
     task's current attempt, so A must still be it (a stale round snapshot, the task taken again meanwhile: `changed`)."""
@@ -134,10 +146,12 @@ def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move) ->
     word, detail = (refusal(released), released.detail) if isinstance(released, Failed) else ("", "")
     agent = _agent_row(ports.reader, view, row.attempt_id)
     found = outcome(ports.reader, agent, released)
+    found = replace(found, claim=claim) if isinstance(found, Kept) else found
     if isinstance(found, Pending):
         return move("pending", "abandon", found.word, detail)
     if row.labels in COMMENTING and row.commented_at is None:
-        written = _comment(ports, view, row, agent, found)
+        leftovers = view.leftovers if view.checks is None and view.attempt_id == row.attempt_id else ()
+        written = _comment(ports, row, agent, found, leftovers)
         if isinstance(written, str):
             return move("pending", "comment", written) if isinstance(found, Returned) else move("pending", "abandon", word, written)
         row = written
@@ -146,7 +160,7 @@ def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move) ->
     return move("held")
 
 
-def _comment(ports: HoldPorts, view: AttemptView, row: HoldRow, agent: AttemptRow, found: Returned | Kept) -> HoldRow | str:
+def _comment(ports: HoldPorts, row: HoldRow, agent: AttemptRow, found: Returned | Kept, leftovers: tuple[str, ...]) -> HoldRow | str:
     """The one comment under the lease: a lost lease (another caller's, live) writes nothing (`refused:leased`); a
     posted comment (or a task deleted meanwhile, which can take none) is recorded; a tracker failure keeps the lease,
     retaken once it is older than `COMMENT_LEASE`."""
@@ -154,7 +168,7 @@ def _comment(ports: HoldPorts, view: AttemptView, row: HoldRow, agent: AttemptRo
     labels = None if leased is None else leased.labels
     if leased is None or labels not in COMMENTING:
         return "refused:leased"
-    text = comment(facts(ports.files, view, leased, labels, agent), found)
+    text = comment(facts(ports.files, ports.reader, leased, labels, agent, leftovers), found)
     answer = ports.tracker.comment(leased.tracker_root, leased.task_id, text)
     if answer.word == "unavailable":
         return "unavailable:tracker"
@@ -171,9 +185,12 @@ def _agent_row(reader: AttemptStore, view: AttemptView, attempt_id: str) -> Atte
 
 def clear_holds(store: HoldStore, tracker: TrackerHolds, clock: Clock) -> tuple[Cleared, ...]:
     """Section 7.3, each round after publication: every hold whose task was taken again and whose `held` may still be
-    on the task. When the task's current attempt has its own hold, that hold owns `held`: only `cleared_at` is set (no
-    tracker call); else `held` is removed with no read first (an absent label is no failure), then `cleared_at` (a hold
-    whose label step never finished becomes `superseded` in the same write). A failure is retried next round."""
+    on the task. Right before each tracker call the task's current hold is read again (a round and `tl step next` may
+    hold the task again meanwhile): one that moved the labels (`moved`, `absent`) owns `held`, so only `cleared_at` is
+    set (no tracker call); one whose label step has not finished leaves the row for a later round (it may yet end
+    `not_ours`, which writes no label); with none, or one that wrote no label, `held` is removed with no read first (an
+    absent label is no failure), then `cleared_at` (a hold whose label step never finished becomes `superseded` in the
+    same write). A failure is retried next round."""
     try:
         found = store.uncleared()
     except StoreUnavailable as error:
@@ -181,7 +198,15 @@ def clear_holds(store: HoldStore, tracker: TrackerHolds, clock: Clock) -> tuple[
     done: list[Cleared] = []
     for each in found:
         row = each.row
-        if not each.held_again:
+        try:
+            newer = store.current_hold(row.attempt_id)
+        except StoreUnavailable as error:
+            done.append(Cleared(row.task_id, row.attempt_id, "unavailable:store", str(error)))
+            continue
+        if newer is not None and newer.labels is None:
+            done.append(Cleared(row.task_id, row.attempt_id, "pending:held_again", newer.attempt_id))
+            continue
+        if newer is None or newer.labels not in ("moved", "absent"):
             answer = tracker.clear(row.tracker_root, row.task_id)
             if answer.word == "unavailable":
                 done.append(Cleared(row.task_id, row.attempt_id, "unavailable:tracker", answer.detail))

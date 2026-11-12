@@ -371,7 +371,7 @@ work, and no side-ref feature is added now. So a hold whose abandon is refused s
 | `held:slot_dirty` | uncommitted agent work: `repeats_exhausted` leftovers, a failed implement whose settled release was held, `stuck:entry_lost` mid-write | yes, names the slot | saves what they need, then empties the slot's changes (`git -C <slot> status`; restore tracked files, remove untracked ones); the next round parks the slot and returns the claim |
 | `held:slot_branch` | the slot was switched to another branch | yes | `tl step show` names the expected branch or park point; put the slot back |
 | `held:slot_redirected`, `held:slot_unborn` | the slot's `.git` pointer or HEAD changed | yes | inspect; restore the pointer, or remove the slot and `tl slot adopt` again |
-| `held:slot_busy` | another factory process holds the slot's custody lock | no (transient) | nothing: retried next round |
+| `unavailable:slot_busy` | another factory process holds the slot's custody lock | no (transient) | nothing: retried next round |
 | `unsettled:worker_alive` | the agent (or its group) outlived its dead entry | yes, names pid and group | waits, or stops that process by its pid (never by name); retried next round |
 | `unsettled:worker_unknown`, `unavailable:setup_unknown` | a process could not be observed | no (transient) | nothing; if it persists, `tl step show` names the identity to check |
 | `unsettled:setup_running` | a setup command still runs | yes, names pid | waits, or stops it by pid |
@@ -752,7 +752,7 @@ counter: `hold` 134 (new), `hold_facts` 63 (new), `hold_guide` 67 (new), `hold_s
   missing, refusal, detail)`: `held` when this call finished it; `pending` with the first missing step (`labels`,
   `abandon`, `comment`) and the refusal word (`held:slot_dirty`, `unsettled:worker_alive`, `refused:landing`,
   `unavailable:tracker`, `unavailable:store`, ...); `refused`.
-- **`hold_facts.facts`**: the cause as the view shows it, A's X (`end_commit`) and publication, a checks view's failed
+- **`hold_facts.facts`** (as repaired: review repair 1 below): the cause as the view shows it, A's X (`end_commit`) and publication, a checks view's failed
   checks (every latest-block result not `passed`; `undefined` has no log), a `repeats_exhausted` hold's leftovers from
   the view, the cause's evidence directory, and the explanation: the stored valid answer's file read through
   `EvidenceFiles` (digest-checked) and decoded by the step kind's own `decode` via `any_agent.decode_answer` (no new
@@ -791,5 +791,29 @@ counter: `hold` 134 (new), `hold_facts` 63 (new), `hold_guide` 67 (new), `hold_s
 7. `tl step show` cannot know an abandon's refusal word without attempting it, so `Hold claim:` says `kept: the abandon
    has not finished` and the guide lists every section 12 word with its action (the round's `hold pending` line names
    the word).
+
+**Review repairs of 88a0ab5be (2026-11-12).**
+
+1. The comment's cause facts come from the stored hold, not from the caller's view: `hold_facts.facts(files, reader,
+   row, labels, A's row, leftovers)` loads a checks cause by `row.cause_id` (`CheckStore.of_attempt(A)`, its latest
+   block's results from the store) for the step `check`, its number and id, the failed checks and its evidence
+   directory, with no explanation; an agent cause is A with the explanation of A's stored execution (`attempt.collect`).
+   A comment retried after the abandon (the view is then A's agent view) therefore still describes the checks attempt.
+   Only the `repeats_exhausted` leftovers come from the caller's view, when that view is A's own.
+2. `hold_text.Kept` carries `claim`: `ours` (the label step read `taskloop` as assignee), `not_ours` (another actor,
+   or none: the claim had lapsed; also forced by the `not_ours` labels word) or `unknown` (the label step ran in an
+   earlier call; nothing stores the assignee). Only `ours` says "still holds the claim ... the next round returns the
+   claim"; the others say "keeps the attempt's slot ... the next round frees the slot" (`unknown`: "and returns the
+   claim if it is still the factory's"). `TrackerHolds.labels` returns the assignee it read as the `detail` of `moved`
+   and `absent`.
+3. `clear_holds` reads the task's current hold again right before each tracker call (`HoldStore.current_hold`, a new
+   read): `moved`/`absent` owns `held` (only `cleared_at`); a hold whose label step has not finished leaves the row for
+   a later round (`pending:held_again`, detail the new hold's attempt), since it may yet end `not_ours`; none, or one
+   that wrote no label (`not_ours`, `closed`, `missing`), removes `held`. `Uncleared.held_again` is no longer used by
+   it.
+4. The transient slot lock word is `unavailable:slot_busy` (as `release_task` reports it), in section 12's table and the
+   `hold` guide.
+5. `tl step list --stuck` probes the leftovers of every labelled attempt (`row.label` not NULL), so a due
+   `repeats_exhausted` hold is listed; a hand-started attempt is still never probed.
 
 **Unverified.** No round runs a hold until H3; no live bd or Git run in H2 (tracker and abandon are semantic fakes).

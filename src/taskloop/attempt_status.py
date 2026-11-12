@@ -140,7 +140,8 @@ def _observed(reads: StatusPorts, entry: EntryIdentity | None) -> EntryState:
 def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
     """A task's current attempt, or (a done implement attempt with checks attempts) its latest checks attempt; a failed
     read of those is `unknown`. `probe`: read the leftovers of a step still to settle (Git and slot reads); never for a
-    listing that keeps only stuck or unknown attempts, which a `verify`, `repeat` or `repeats_exhausted` step never is."""
+    listing that keeps only stuck or unknown attempts, which a `verify`, `repeat` or `repeats_exhausted` step never is,
+    unless a round took it (a labelled attempt may be a due `repeats_exhausted` hold, tl-8bh9.14.9 section 3)."""
     view = _agent(reads, row, probe=probe)
     if view.next != "advance" or following(row.step) != CHECK:
         return view
@@ -288,7 +289,7 @@ def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed
         return Failed("unavailable", "store", str(error))
     rows = [row for before, row in zip((None, *every), every, strict=False) if before is None or before.task_id != row.task_id
             or before.backlog != row.backlog]
-    found = _holding(reads, tuple(_show(reads, row, probe=not stuck) for row in rows))
+    found = _holding(reads, tuple(_show(reads, row, probe=not stuck or row.label is not None) for row in rows))
     return Listed(tuple(each for each in found if not stuck or each.next in ("unknown", "hold") or each.next.startswith("stuck:")))
 
 
