@@ -189,6 +189,9 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 |---|---|---|
 | transcript | The retained record of a conversation, including every message, tool input/result and reasoning output the harness exposes. | A compact dashboard view may collapse content; it must not be mistaken for the retained transcript. |
 | log | The chronological record of execution events and diagnostics. | Preparation, a command's output, a retry and the attempt's conclusion. Logs and transcripts remain files behind their readers. |
+| dashboard | The read-only local web page showing how the factory performs. | Proposed, see [dashboard UI](design/dashboard-ui.md); no server exists yet. It changes nothing and holds no state of its own. |
+| board | The dashboard's one screen: a card per task in a column per step, plus Waiting, Held and Landed. | Not the earlier `Board` screen name of the retired mockups. Columns derive from task state and are never dragged. |
+| live tail | The last few lines of the current attempt's agent activity (commands with how long they ran and waited, agent messages, check results), shown in a task's drawer. | A display view of the evidence stream, not a transcript and never control state. |
 | artifact | A retained output produced by the work. | A screenshot, PDF, video or report, associated with its producing attempt. A vendor's transcript file is not a screenshot. |
 | design artifact | Supporting material deliberately retained with a versioned design. | A selected diagram or screenshot under `docs/design/<task-id>/`; ordinary execution artifacts do not all belong in Git. |
 | account | A configured connection with credentials and applicable usage limits. | A subscription or API account. It is not a vendor or a model. |

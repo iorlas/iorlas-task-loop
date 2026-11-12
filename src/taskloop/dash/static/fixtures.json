@@ -1,0 +1,785 @@
+{
+ "tasks": [
+  {
+   "id": "tl-9a1",
+   "title": "Add --json output to tl step list",
+   "column": "waiting",
+   "attempt": 0,
+   "repeat": null,
+   "step_started_ago_s": 1260,
+   "slot": null,
+   "hold_cause": null,
+   "last_activity_ago_s": 1260,
+   "fields": {
+    "priority": "P2",
+    "labels": [
+     "auto",
+     "cli"
+    ],
+    "branch": null,
+    "claimed_by": null,
+    "created_ago_s": 86400,
+    "description": "`tl step list` prints a table only. Add `--json` with the same fields, one object per task, so scripts need no text parsing."
+   }
+  },
+  {
+   "id": "tl-9a2",
+   "title": "Reject empty task titles at admission",
+   "column": "waiting",
+   "attempt": 0,
+   "repeat": null,
+   "step_started_ago_s": 640,
+   "slot": null,
+   "hold_cause": null,
+   "last_activity_ago_s": 640,
+   "fields": {
+    "priority": "P3",
+    "labels": [
+     "auto"
+    ],
+    "branch": null,
+    "claimed_by": null,
+    "created_ago_s": 50000,
+    "description": "An empty title reaches the plan step and fails there. Refuse it at admission with a clear reason."
+   }
+  },
+  {
+   "id": "tl-8f3",
+   "title": "Plan: rounds log line for skipped tasks",
+   "column": "plan",
+   "attempt": 1,
+   "repeat": null,
+   "step_started_ago_s": 95,
+   "slot": "slot-3",
+   "hold_cause": null,
+   "last_activity_ago_s": 95,
+   "fields": {
+    "priority": "P2",
+    "labels": [
+     "auto"
+    ],
+    "branch": "task/tl-8f3",
+    "claimed_by": "factory@devbox",
+    "created_ago_s": 7200,
+    "description": "Every `skip` in a round should say why in one line, naming the task and the cause."
+   }
+  },
+  {
+   "id": "tl-7c4",
+   "title": "Show attempt deadline in tl step show",
+   "column": "implement",
+   "attempt": 1,
+   "repeat": null,
+   "step_started_ago_s": 1425,
+   "slot": "slot-1",
+   "hold_cause": null,
+   "last_activity_ago_s": 2,
+   "fields": {
+    "priority": "P1",
+    "labels": [
+     "auto",
+     "cli"
+    ],
+    "branch": "task/tl-7c4",
+    "claimed_by": "factory@devbox",
+    "created_ago_s": 18000,
+    "description": "The deadline of the running attempt is stored but not shown. Print it as an absolute time and the minutes left."
+   }
+  },
+  {
+   "id": "tl-7d5",
+   "title": "Carry the entry lease through relaunch",
+   "column": "implement",
+   "attempt": 3,
+   "repeat": {
+    "kind": "replan",
+    "reason": "plan rejected: the change touches protected check configuration"
+   },
+   "step_started_ago_s": 410,
+   "slot": "slot-2",
+   "hold_cause": null,
+   "last_activity_ago_s": 9,
+   "fields": {
+    "priority": "P1",
+    "labels": [
+     "auto",
+     "factory"
+    ],
+    "branch": "task/tl-7d5",
+    "claimed_by": "factory@devbox",
+    "created_ago_s": 172800,
+    "description": "A relaunched entry loses its lease renewal. Carry the lease through relaunch without a new claim."
+   }
+  },
+  {
+   "id": "tl-6e6",
+   "title": "Name the slot in hold reasons",
+   "column": "checks",
+   "attempt": 2,
+   "repeat": {
+    "kind": "repeat",
+    "reason": "checks failed: pyrefly reported 3 errors"
+   },
+   "step_started_ago_s": 188,
+   "slot": "slot-4",
+   "hold_cause": null,
+   "last_activity_ago_s": 14,
+   "fields": {
+    "priority": "P2",
+    "labels": [
+     "auto"
+    ],
+    "branch": "task/tl-6e6",
+    "claimed_by": "factory@devbox",
+    "created_ago_s": 40000,
+    "description": "A hold reason names the task but not the slot it ran in. Add the slot name."
+   }
+  },
+  {
+   "id": "tl-6f7",
+   "title": "Trim trailing space in step list columns",
+   "column": "land",
+   "attempt": 1,
+   "repeat": null,
+   "step_started_ago_s": 52,
+   "slot": "slot-5",
+   "hold_cause": null,
+   "last_activity_ago_s": 52,
+   "fields": {
+    "priority": "P3",
+    "labels": [
+     "auto",
+     "cli"
+    ],
+    "branch": "task/tl-6f7",
+    "claimed_by": "factory@devbox",
+    "created_ago_s": 9000,
+    "description": "Table columns carry trailing spaces that break copy and paste."
+   }
+  },
+  {
+   "id": "tl-5a8",
+   "title": "Reuse a pass across identical diffs",
+   "column": "held",
+   "attempt": 3,
+   "repeat": {
+    "kind": "repeat",
+    "reason": "implement attempt exceeded its deadline"
+   },
+   "step_started_ago_s": 5400,
+   "slot": null,
+   "hold_cause": "repeats_exhausted: three attempts failed at implement. Edit the task to narrow it, then add `auto` again.",
+   "last_activity_ago_s": 5400,
+   "fields": {
+    "priority": "P2",
+    "labels": [
+     "factory"
+    ],
+    "branch": "task/tl-5a8",
+    "claimed_by": null,
+    "created_ago_s": 260000,
+    "description": "A pass should be reusable when the checked diff is byte-identical."
+   }
+  },
+  {
+   "id": "tl-5b9",
+   "title": "Print land summary changed-config list",
+   "column": "landed",
+   "attempt": 1,
+   "repeat": null,
+   "step_started_ago_s": 2700,
+   "slot": null,
+   "hold_cause": null,
+   "last_activity_ago_s": 2700,
+   "fields": {
+    "priority": "P2",
+    "labels": [
+     "auto",
+     "land"
+    ],
+    "branch": "task/tl-5b9",
+    "claimed_by": null,
+    "created_ago_s": 30000,
+    "description": "List changed check configuration files in the land summary."
+   }
+  },
+  {
+   "id": "tl-4c0",
+   "title": "Fix claim lease clock skew message",
+   "column": "landed",
+   "attempt": 2,
+   "repeat": {
+    "kind": "repeat",
+    "reason": "checks failed: ruff found one unused import"
+   },
+   "step_started_ago_s": 9100,
+   "slot": null,
+   "hold_cause": null,
+   "last_activity_ago_s": 9100,
+   "fields": {
+    "priority": "P3",
+    "labels": [
+     "auto"
+    ],
+    "branch": "task/tl-4c0",
+    "claimed_by": null,
+    "created_ago_s": 120000,
+    "description": "The message blamed the network when the clock was ahead."
+   }
+  }
+ ],
+ "feeds": {
+  "tl-7c4": [
+   {
+    "ago_s": 1400,
+    "type": "step",
+    "step": "implement",
+    "attempt": 1
+   },
+   {
+    "ago_s": 1390,
+    "type": "message",
+    "text": "Reading the plan and the attempt status module before touching anything."
+   },
+   {
+    "ago_s": 1380,
+    "type": "command",
+    "id": "c1",
+    "cmd": "rg -n deadline src/taskloop",
+    "state": "finished",
+    "duration_ms": 420,
+    "waited_ms": 9800,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 1350,
+    "type": "command",
+    "id": "c2",
+    "cmd": "sed -n 1,120p src/taskloop/attempt_status.py",
+    "state": "finished",
+    "duration_ms": 90,
+    "waited_ms": 2100,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 1300,
+    "type": "message",
+    "text": "The deadline is in AttemptRow already. I will format it in the status renderer and add a focused test."
+   },
+   {
+    "ago_s": 1240,
+    "type": "command",
+    "id": "c3",
+    "cmd": "apply_patch src/taskloop/attempt_status.py",
+    "state": "finished",
+    "duration_ms": 310,
+    "waited_ms": 41000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 1180,
+    "type": "command",
+    "id": "c4",
+    "cmd": "uv run pytest -q tests/cli/test_step_show.py",
+    "state": "finished",
+    "duration_ms": 8400,
+    "waited_ms": 5200,
+    "exit_code": 1
+   },
+   {
+    "ago_s": 1150,
+    "type": "message",
+    "text": "One failure: the fixture has no deadline column. Adding it to the fixture."
+   },
+   {
+    "ago_s": 1090,
+    "type": "command",
+    "id": "c5",
+    "cmd": "apply_patch tests/cli/test_step_show.py",
+    "state": "finished",
+    "duration_ms": 260,
+    "waited_ms": 22000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 1040,
+    "type": "command",
+    "id": "c6",
+    "cmd": "uv run pytest -q tests/cli/test_step_show.py",
+    "state": "finished",
+    "duration_ms": 7900,
+    "waited_ms": 3100,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 980,
+    "type": "message",
+    "text": "Green. Running the formatter and the type check before declaring done."
+   },
+   {
+    "ago_s": 940,
+    "type": "command",
+    "id": "c7",
+    "cmd": "uv tool run ruff check src tests",
+    "state": "finished",
+    "duration_ms": 1900,
+    "waited_ms": 4600,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 900,
+    "type": "command",
+    "id": "c8",
+    "cmd": "uv tool run pyrefly check",
+    "state": "finished",
+    "duration_ms": 23800,
+    "waited_ms": 2200,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 820,
+    "type": "message",
+    "text": "Types pass. Looking at how the minutes-left value rounds near zero."
+   },
+   {
+    "ago_s": 790,
+    "type": "command",
+    "id": "c9",
+    "cmd": "rg -n 'minutes_left|remaining' src/taskloop",
+    "state": "finished",
+    "duration_ms": 380,
+    "waited_ms": 18000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 700,
+    "type": "command",
+    "id": "c10",
+    "cmd": "apply_patch src/taskloop/attempt_status.py",
+    "state": "finished",
+    "duration_ms": 280,
+    "waited_ms": 52000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 640,
+    "type": "command",
+    "id": "c11",
+    "cmd": "uv run pytest -q tests/cli",
+    "state": "finished",
+    "duration_ms": 31200,
+    "waited_ms": 2600,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 560,
+    "type": "message",
+    "text": "Edge case: a deadline already past must print `expired`, not a negative number."
+   },
+   {
+    "ago_s": 500,
+    "type": "command",
+    "id": "c12",
+    "cmd": "apply_patch src/taskloop/attempt_status.py",
+    "state": "finished",
+    "duration_ms": 300,
+    "waited_ms": 33000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 440,
+    "type": "command",
+    "id": "c13",
+    "cmd": "uv run pytest -q tests/cli/test_step_show.py",
+    "state": "finished",
+    "duration_ms": 8100,
+    "waited_ms": 4100,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 380,
+    "type": "command",
+    "id": "c14",
+    "cmd": "git diff --stat",
+    "state": "finished",
+    "duration_ms": 140,
+    "waited_ms": 21000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 300,
+    "type": "message",
+    "text": "Three files changed, one test added. Checking line caps."
+   },
+   {
+    "ago_s": 240,
+    "type": "command",
+    "id": "c15",
+    "cmd": "wc -l src/taskloop/attempt_status.py",
+    "state": "finished",
+    "duration_ms": 30,
+    "waited_ms": 9000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 120,
+    "type": "command",
+    "id": "c16",
+    "cmd": "uv tool run pyrefly check",
+    "state": "finished",
+    "duration_ms": 22100,
+    "waited_ms": 13000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 40,
+    "type": "message",
+    "text": "Everything passes locally. Writing the final answer."
+   },
+   {
+    "ago_s": 2,
+    "type": "command",
+    "id": "c17",
+    "cmd": "git status --short",
+    "state": "finished",
+    "duration_ms": 60,
+    "waited_ms": 36000,
+    "exit_code": 0
+   }
+  ],
+  "tl-7d5": [
+   {
+    "ago_s": 400,
+    "type": "step",
+    "step": "implement",
+    "attempt": 3
+   },
+   {
+    "ago_s": 380,
+    "type": "message",
+    "text": "Third attempt. The new plan keeps check configuration untouched and changes only entry.py."
+   },
+   {
+    "ago_s": 350,
+    "type": "command",
+    "id": "d1",
+    "cmd": "rg -n lease src/taskloop/attempt_entry.py",
+    "state": "finished",
+    "duration_ms": 350,
+    "waited_ms": 11000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 290,
+    "type": "command",
+    "id": "d2",
+    "cmd": "apply_patch src/taskloop/attempt_entry.py",
+    "state": "finished",
+    "duration_ms": 280,
+    "waited_ms": 48000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 200,
+    "type": "command",
+    "id": "d3",
+    "cmd": "uv run pytest -q tests/steps/test_relaunch.py",
+    "state": "finished",
+    "duration_ms": 12400,
+    "waited_ms": 4000,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 9,
+    "type": "message",
+    "text": "Relaunch keeps its lease. Running the wider step tests now."
+   }
+  ],
+  "tl-6e6": [
+   {
+    "ago_s": 180,
+    "type": "step",
+    "step": "checks",
+    "attempt": 2
+   },
+   {
+    "ago_s": 170,
+    "type": "check",
+    "name": "lint",
+    "passed": true,
+    "duration_ms": 1900
+   },
+   {
+    "ago_s": 140,
+    "type": "check",
+    "name": "types",
+    "passed": false,
+    "duration_ms": 24100
+   },
+   {
+    "ago_s": 14,
+    "type": "check",
+    "name": "rules",
+    "passed": true,
+    "duration_ms": 6400
+   }
+  ],
+  "tl-8f3": [
+   {
+    "ago_s": 90,
+    "type": "step",
+    "step": "plan",
+    "attempt": 1
+   },
+   {
+    "ago_s": 70,
+    "type": "message",
+    "text": "Reading the rounds module for every place a skip is emitted."
+   },
+   {
+    "ago_s": 40,
+    "type": "command",
+    "id": "p1",
+    "cmd": "rg -n \"skip\" src/taskloop/round*.py",
+    "state": "finished",
+    "duration_ms": 300,
+    "waited_ms": 8000,
+    "exit_code": 0
+   }
+  ],
+  "tl-6f7": [
+   {
+    "ago_s": 52,
+    "type": "step",
+    "step": "land",
+    "attempt": 1
+   },
+   {
+    "ago_s": 40,
+    "type": "command",
+    "id": "l1",
+    "cmd": "git fetch origin main",
+    "state": "finished",
+    "duration_ms": 1300,
+    "waited_ms": 500,
+    "exit_code": 0
+   }
+  ],
+  "tl-5b9": [
+   {
+    "ago_s": 2700,
+    "type": "step",
+    "step": "land",
+    "attempt": 1
+   },
+   {
+    "ago_s": 2650,
+    "type": "command",
+    "id": "g1",
+    "cmd": "git push origin HEAD:main",
+    "state": "finished",
+    "duration_ms": 2100,
+    "waited_ms": 900,
+    "exit_code": 0
+   },
+   {
+    "ago_s": 2640,
+    "type": "step",
+    "step": "landed",
+    "attempt": 1
+   }
+  ]
+ },
+ "attempts": {
+  "tl-7d5": [
+   {
+    "n": 1,
+    "step": "implement",
+    "ago_s": 14000,
+    "result": "failed: agent answered without a diff"
+   },
+   {
+    "n": 2,
+    "step": "plan",
+    "ago_s": 6000,
+    "result": "replan: plan rejected, touches protected check configuration"
+   },
+   {
+    "n": 3,
+    "step": "implement",
+    "ago_s": 410,
+    "result": "running"
+   }
+  ],
+  "tl-6e6": [
+   {
+    "n": 1,
+    "step": "checks",
+    "ago_s": 3000,
+    "result": "failed: pyrefly reported 3 errors"
+   },
+   {
+    "n": 2,
+    "step": "checks",
+    "ago_s": 188,
+    "result": "running"
+   }
+  ],
+  "tl-5a8": [
+   {
+    "n": 1,
+    "step": "implement",
+    "ago_s": 20000,
+    "result": "failed: deadline"
+   },
+   {
+    "n": 2,
+    "step": "implement",
+    "ago_s": 12000,
+    "result": "failed: deadline"
+   },
+   {
+    "n": 3,
+    "step": "implement",
+    "ago_s": 6000,
+    "result": "failed: deadline"
+   }
+  ]
+ },
+ "script": [
+  {
+   "after_s": 3,
+   "kind": "task",
+   "task": {
+    "id": "tl-9a1",
+    "column": "plan",
+    "attempt": 1,
+    "slot": "slot-3",
+    "repeat": null,
+    "step_started_ago_s": 0
+   }
+  },
+  {
+   "after_s": 5,
+   "kind": "feed",
+   "task_id": "tl-7c4",
+   "event": {
+    "type": "command",
+    "id": "c18",
+    "cmd": "uv run pytest -q tests/cli",
+    "state": "running",
+    "waited_ms": 7400
+   }
+  },
+  {
+   "after_s": 9,
+   "kind": "feed",
+   "task_id": "tl-7c4",
+   "event": {
+    "type": "command",
+    "id": "c18",
+    "cmd": "uv run pytest -q tests/cli",
+    "state": "finished",
+    "duration_ms": 31900,
+    "waited_ms": 7400,
+    "exit_code": 0
+   }
+  },
+  {
+   "after_s": 12,
+   "kind": "task",
+   "task": {
+    "id": "tl-6f7",
+    "column": "landed",
+    "step_started_ago_s": 0
+   }
+  },
+  {
+   "after_s": 14,
+   "kind": "feed",
+   "task_id": "tl-7d5",
+   "event": {
+    "type": "command",
+    "id": "d4",
+    "cmd": "uv run pytest -q tests/steps",
+    "state": "running",
+    "waited_ms": 5200
+   }
+  },
+  {
+   "after_s": 18,
+   "kind": "task",
+   "task": {
+    "id": "tl-6e6",
+    "column": "land",
+    "repeat": null,
+    "step_started_ago_s": 0
+   }
+  },
+  {
+   "after_s": 20,
+   "kind": "feed",
+   "task_id": "tl-7c4",
+   "event": {
+    "type": "message",
+    "text": "Pushing the last tweak, then handing over to checks."
+   }
+  },
+  {
+   "after_s": 24,
+   "kind": "feed",
+   "task_id": "tl-7d5",
+   "event": {
+    "type": "command",
+    "id": "d4",
+    "cmd": "uv run pytest -q tests/steps",
+    "state": "finished",
+    "duration_ms": 18700,
+    "waited_ms": 5200,
+    "exit_code": 1
+   }
+  },
+  {
+   "after_s": 27,
+   "kind": "task",
+   "task": {
+    "id": "tl-7c4",
+    "column": "checks",
+    "step_started_ago_s": 0
+   }
+  },
+  {
+   "after_s": 29,
+   "kind": "feed",
+   "task_id": "tl-7c4",
+   "event": {
+    "type": "check",
+    "name": "lint",
+    "passed": true,
+    "duration_ms": 1800
+   }
+  },
+  {
+   "after_s": 33,
+   "kind": "task",
+   "task": {
+    "id": "tl-7d5",
+    "column": "held",
+    "hold_cause": "implement failed again: tests/steps failed after three attempts",
+    "step_started_ago_s": 0,
+    "slot": null
+   }
+  },
+  {
+   "after_s": 36,
+   "kind": "task",
+   "task": {
+    "id": "tl-9a2",
+    "column": "plan",
+    "attempt": 1,
+    "slot": "slot-1",
+    "step_started_ago_s": 0
+   }
+  }
+ ]
+}
