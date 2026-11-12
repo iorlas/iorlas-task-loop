@@ -15,10 +15,12 @@ from git_porcelain import Sha
 from git_porcelain.testing import FakeWorktree
 from round_bench import Factory, Tracker, scripted, scripts, task
 
+from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_types import SlotFiles
 from taskloop.launch import LaunchUnavailable
 from taskloop.operations import Failed, Round, StartRequest, start
 from taskloop.round import NextRequest, run_round
+from taskloop.step_render import human
 
 AFTER_DEADLINE = 31 * 60  # past an attempt's deadline: the rounds' --minutes is 30
 ASKED = "Which widget shape do you want?"
@@ -107,6 +109,23 @@ def test_the_round_s_label_is_stored_on_its_admissions_and_advances_and_none_on_
                                             ("tl-2", "implement", "advance", "started")]
     assert factory.round(label="night")[1] == ("tl-1", "implement", "advance", "started")
     assert labels(factory, "tl-1") == ["night", "night"] and labels(factory, "tl-2") == [None, None]
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_show_of_a_hand_started_needs_owner_prints_the_agent_s_question_and_a_next_action_of_the_step(
+        factory: Factory, step: str, tmp_path: Path) -> None:
+    """tl-8bh9.14.66: nothing is held or commented for a hand-started step, so `tl step show` carries the explanation."""
+    if step == "implement":
+        factory.by_hand("tl-1")  # the plan; the next start advances to implement
+    asks(factory, "tl-1", step)
+    factory.by_hand("tl-1")
+    reads = StatusPorts(factory.store, lambda _entry: "gone", lambda: factory.now, lambda _key: None, lambda: "boot")
+    shown = show_attempt(reads, tmp_path, "tasks", "tl-1")
+    assert isinstance(shown, Shown) and shown.view.result.reason == "needs_owner" and shown.view.step == step
+    text = "\n".join(human("show", shown, tmp_path / "factory.db"))
+    assert f"The agent explained:\n> {ASKED}" in text and "answered `needs_owner`" in text
+    assert "`tl step release --abandon` and `tl step start`" in text and "check step" not in text
+    assert factory.tracker.holds == []
 
 
 def test_a_task_started_by_hand_that_fails_is_reported_never_held(factory: Factory) -> None:

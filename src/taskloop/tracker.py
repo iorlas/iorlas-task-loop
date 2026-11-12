@@ -10,7 +10,14 @@ from beads_client import BdError, Bead, ReadyReadClient, TaskReadClient
 from taskloop.task import TaskBinding, TaskDependency, TaskInspection, TaskInspectionError, TaskReference
 
 HELD: Final = "held"  # the tracker label a hold adds, read for control only to leave a hand-paused task alone
-GONE: Final = "no issue found matching"  # bd 1.3.1 on a deleted bead (`resolving X: no issue found matching "X"`), classified `other`
+# bd 1.3.1 on a deleted bead, classified `other`: `resolving X: no issue found matching "X"` (update, close) and
+# `no issues found matching the provided IDs` (show)
+GONES: Final = ("no issue found matching", "no issues found matching")
+
+
+def gone(text: str) -> bool:
+    """bd answered a deleted task with an error, not an empty read."""
+    return any(word in text for word in GONES)
 ACTOR: Final = "taskloop"  # the factory's tracker actor: its claims, and the assignee a round still treats as its own
 
 
@@ -52,8 +59,8 @@ def inspect_task(binding: TaskBinding, client: TaskReadClient, task_id: str) -> 
     try:
         record = client.show(task_id)
     except BdError as error:
-        gone = error.kind == "other" and GONE in error.text  # bd answers a deleted task with an error, not an empty read
-        kind = "malformed" if error.kind == "malformed" else "not_found" if gone else "tracker_unavailable"
+        deleted = error.kind == "other" and gone(error.text)  # bd answers a deleted task with an error, not an empty read
+        kind = "malformed" if error.kind == "malformed" else "not_found" if deleted else "tracker_unavailable"
         raise TaskInspectionError(kind, error.text or str(error), reference=reference, backend_kind=error.kind) from error
     if record is None:
         raise TaskInspectionError("not_found", f"Task {task_id!r} was not found in backlog {binding.scope.backlog!r}", reference=reference)

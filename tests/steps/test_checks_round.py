@@ -238,6 +238,19 @@ def test_a_failed_check_is_held_once_never_re_run_and_new_work_still_starts(rig:
     assert "taskloop hold: failed:test:failed" in rig.tracker.comments[0][1] and "\nStep check, attempt 1" in rig.tracker.comments[0][1]
 
 
+def test_a_land_that_moves_main_during_another_task_s_checks_re_runs_only_those_checks_never_holds_it(rig: Checking) -> None:
+    """tl-8bh9.14.64: `failed:main_moved` is no fault of the task: its claim stays, the round admits the checks again
+    (attempt 2, no replan, no re-implement, no hold) and the pass is then reported as any other."""
+    implemented(rig)
+    rig.bodies = ["main_moved", "passed"]
+    assert rig.round(frozenset()) == [("tl-1", "check", "advance", "started")]
+    assert rig.round(rig.last.written) == [("tl-1", "check", "advance", "started")]
+    assert rig.round(rig.last.written) == [LAND_LINE]
+    assert rig.rows() == [("tl-1", 1, "concluded", "failed"), ("tl-1", 2, "concluded", "passed")] and rig.starts == 2
+    assert rig.tracker.holds == [] and rig.tracker.claims == ["tl-1"] and rig.launched == ["tl-1", "tl-1"]
+    assert rig.tracker.beads["tl-1"].status == "in_progress"
+
+
 @pytest.mark.parametrize(("first", "advance"), [
     ("unstartable", ("tl-1", "implement", "advance", "unavailable:start")),
     ("crash", ("tl-1", "check", "advance", "started")),

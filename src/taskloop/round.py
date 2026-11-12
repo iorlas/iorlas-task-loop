@@ -31,7 +31,7 @@ from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attem
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
 from taskloop.hold import HoldPorts, clear_holds, hold_task
-from taskloop.hold_status import reingests
+from taskloop.hold_status import MAIN_MOVED, reingests
 from taskloop.operations import (
     UNKNOWN_KINDS,
     Failed,
@@ -184,11 +184,20 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: T
             return
         case "done" if succeeded(each.result):
             return
-        case "done":  # a checks attempt's reason is already `failed:<reason>` (`check report failed:test:failed`)
-            word = each.result.reason if each.checks is not None else f"failed:{each.result.reason}"
-            trail.add(Move(task, "report", word, attempt, step=step))
+        case "done":
+            trail.add(_failed(ports, request, each))
         case _:
             trail.add(Move(task, "report", each.next, attempt, step=step))
+
+
+def _failed(ports: RoundPorts, request: NextRequest, each: AttemptView) -> Move:
+    """A done attempt that did not succeed: reported (a checks attempt's reason is already `failed:<reason>`: `check report
+    failed:test:failed`); `main` moved while its checks ran (tl-8bh9.14.64): only the checks run again."""
+    if each.checks is not None and each.result.reason == MAIN_MOVED:
+        found = start(ports.starting, _request(request, each.task_id))
+        return Move(each.task_id, "advance", _word(found), each.attempt_id, _detail(found), each.step)
+    word = each.result.reason if each.checks is not None else f"failed:{each.result.reason}"
+    return Move(each.task_id, "report", word, each.attempt_id, step=each.step)
 
 
 def _resume(ports: StartPorts, backlog: str, minutes: int, each: AttemptView) -> Started | Failed:

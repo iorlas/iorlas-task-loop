@@ -14,7 +14,7 @@ from beads_client import Bd, BdError, Runner
 from taskloop.admit import Claim, Unclaim
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
-from taskloop.tracker import ACTOR, GONE, HELD, ReadyRows, inspect_task
+from taskloop.tracker import ACTOR, HELD, ReadyRows, gone, inspect_task
 
 
 def _tracker_root(tracker_root: str) -> Path:
@@ -49,7 +49,7 @@ def tracker_reads(tracker_root: str) -> ReadyRows:
 type Closed = Literal["closed", "already_closed", "claim_lost", "blocked", "missing", "unavailable"]
 # bd 1.3.1's words when it refuses a close (measured in a scratch tracker, 2026-11-12): "cannot close <id>: 1 open child
 # issue(s); close children first or use --force to override", "cannot close blocked issue: <id> is blocked by [<id>] (use
-# --force to override)". Classified like `GONE`: bd has no exit code for it.
+# --force to override)". Classified like `gone`: bd has no exit code for it.
 REFUSED_CLOSE = "cannot close"
 
 
@@ -79,7 +79,7 @@ class TrackerClaims:
 
 LOST = frozenset({"not_claimable", "precondition"})  # bd's words for a claim taken, reverted or closed
 # bd 1.3.1 on an unclaim of a closed task, even one still assigned to the actor (measured 2026-11-12): exit 1, nothing
-# written, the task not reopened; classified `other`. The unclaim maps it, and `GONE`, to "not held" (tl-8bh9.14.9 5.3).
+# written, the task not reopened; classified `other`. The unclaim maps it, and `gone`, to "not held" (tl-8bh9.14.9 5.3).
 UNCLAIM_CLOSED = "cannot unclaim closed issue"
 # bd's tracker-location overrides (bd 1.3.1 binary strings). BEADS_DIR measured: it beats cwd, so bd would talk to another
 # tracker than the stored root. BEADS_DB and BD_DB changed nothing in an embedded tracker (measured) and are dropped too.
@@ -96,7 +96,7 @@ def tracker_located(environ: MutableMapping[str, str] = os.environ) -> None:
 
 def beat_of(error: BdError) -> Beat:
     """A failed heartbeat: `lost` when bd says the claim is gone (taken, reverted, closed, or the bead deleted)."""
-    return "lost" if error.kind in LOST or (error.kind == "other" and GONE in error.text) else "unrenewed"
+    return "lost" if error.kind in LOST or (error.kind == "other" and gone(error.text)) else "unrenewed"
 
 
 def _closed(bd: Bd, task_id: str, reason: str) -> CloseAnswer:
@@ -121,7 +121,7 @@ def _close_failed(error: BdError) -> CloseAnswer:
     """A failed bd call of the close: the fence refused, the task deleted, bd's own refusal, or bd not answering."""
     if error.kind in LOST:
         return CloseAnswer("claim_lost")
-    if error.kind == "other" and GONE in error.text:
+    if error.kind == "other" and gone(error.text):
         return CloseAnswer("missing")
     if error.kind == "other" and REFUSED_CLOSE in error.text.lower():
         return CloseAnswer("blocked", detail=error.text)
@@ -148,7 +148,7 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
         try:
             return bd(tracker_root).unclaim(task_id, if_assignee=ACTOR)
         except BdError as error:
-            if error.kind == "other" and (GONE in error.text or UNCLAIM_CLOSED in error.text.lower()):
+            if error.kind == "other" and (gone(error.text) or UNCLAIM_CLOSED in error.text.lower()):
                 return False  # nothing to return: the release records `not_held`
             raise
 
@@ -206,7 +206,7 @@ class TrackerHolds:
 def _hold_failed[W: str](error: BdError, stale: W) -> HoldAnswer[W | Literal["missing", "unavailable"]]:
     if error.kind == "precondition":
         return HoldAnswer(stale)
-    if error.kind == "other" and GONE in error.text:
+    if error.kind == "other" and gone(error.text):
         return HoldAnswer("missing")
     return HoldAnswer("unavailable", error.kind)
 

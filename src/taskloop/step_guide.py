@@ -208,6 +208,13 @@ CHECKS_GUIDE = {
 }
 
 
+NEEDS_OWNER = (
+    "The agent answered `needs_owner`: its explanation above (the whole answer is `answer.txt` in the Directory) needs your decision "
+    "before this step can succeed. A hand-started step is never held, so nothing is written to the task and its claim lapses unrenewed. "
+    "Answer by editing the task's description, then `tl step release --abandon` and `tl step start` to run the step again."
+)
+
+
 def guide(word: str, *, checks: bool, land: bool = False) -> str:
     """The guide of a `Next` word: a land's own (`LAND_NEXT`: its `release` is the candidate's slot) once the task has a
     land candidate, else a checks attempt's own (`CHECKS_GUIDE`) where the agent text would mislead."""

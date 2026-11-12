@@ -16,6 +16,7 @@ from taskloop.hold_store import HoldRow
 type HoldNext = Literal["hold", "on_hold"]
 # The `Next` words a hold never comes from (section 3): transient or progressing, the person's land, `stuck:hung` (D7).
 STUCK_NOT_HELD: Final = "stuck:hung"
+MAIN_MOVED: Final = "failed:main_moved"  # a checks attempt's reason: `main` moved while it ran (a land, a hand push)
 FAILED: Final = frozenset({"done", "release"})  # a collected result, not succeeded: `failed:<reason>`
 # The label words after which no comment is written (nothing was written to the task, or it was taken again first).
 UNCOMMENTED: Final = frozenset({"closed", "missing", "superseded"})
@@ -47,6 +48,8 @@ def cause(view: Viewed) -> str | None:
     if view.label is None or (view.release is not None and view.release.abandoned):
         return None
     word = view.next
+    if view.result.reason == MAIN_MOVED:  # not the task's fault: the round runs the checks again (`round`)
+        return None
     if word in FAILED and view.result.status == "collected" and not succeeded(view.result):
         reason = view.result.reason
         return reason if reason.startswith("failed:") else f"failed:{reason}"
