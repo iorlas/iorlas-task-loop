@@ -83,6 +83,8 @@ def test_tilde_is_expanded_against_the_given_home_only(monkeypatch: pytest.Monke
     ("round_seconds = 60", Flags(round_seconds=0), "interval", "round_seconds"),
     ("round_seconds = true", Flags(), "type", "round_seconds"),
     ("round_seconds = 60.0", Flags(), "type", "round_seconds"),
+    ("git_read_seconds = 86401", Flags(), "interval", "git_read_seconds"),
+    ("git_read_seconds = 99999999999999999999", Flags(), "interval", "git_read_seconds"),
     ("git_read_seconds = 29", Flags(), "interval", "git_read_seconds"),
     ("git_read_seconds = 600", Flags(git_read_seconds=5), "interval", "git_read_seconds"),
 ])

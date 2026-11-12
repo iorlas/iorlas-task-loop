@@ -2,7 +2,9 @@
 Through `slot adopt` the bounded read is the typed `git_unavailable` (no hang, no silent skip), and the same slot adopts
 once the FIFO is gone."""
 
+import faulthandler
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -34,7 +36,13 @@ def test_a_blocked_status_is_git_unavailable_and_the_slot_adopts_once_it_clears(
     os.mkfifo(exclude)
     git_views.use_read_seconds(2)
 
-    blocked = cli_composition.adopt(root / "state" / "factory.db", main, slots, 1)
+    started = time.monotonic()
+    faulthandler.dump_traceback_later(60, exit=True)  # wall-clock guard: a hang ends the run with a traceback, not never
+    try:
+        blocked = cli_composition.adopt(root / "state" / "factory.db", main, slots, 1)
+    finally:
+        faulthandler.cancel_dump_traceback_later()
+    assert time.monotonic() - started < 30  # the bound is 2 s
     assert isinstance(blocked, Adoption)
     assert blocked.slots == (NotAdopted("s1", "git_unavailable", slot),)
 

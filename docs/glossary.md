@@ -171,7 +171,7 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 | `--root DIR` | `config show`, `slot adopt` | The slots root (config `slots_root`); slots live at `<root>/<repo_id>/sN`. |
 | `--count N` | `config show`, `slot adopt` | Slot count s1..sN (config `slot_count`). |
 | `--every SECONDS` | `step rounds` | Seconds between rounds, at least 5 (config `round_seconds`). |
-| config `git_read_seconds` | every command | Seconds a Git read may take, at least 30, default 600; a longer read is `unavailable:git`. No flag. |
+| config `git_read_seconds` | commands that read the machine config | Seconds a Git read may take, 30 to 86400, default 600; a longer read is `unavailable:git`. An attempt's entry process does not read the config and keeps 600. No flag. |
 | `--label LABEL` | `step next`, `step rounds` | Required on `next` and `rounds` (approves a task); not on `start`, whose task is named. |
 | `--minutes N` | `step start\|next\|rounds` | An attempt's deadline from now (and its renewal after a reboot). |
 | `--model`, `--effort` | `step start\|next\|rounds` | The agent model and effort for the attempt. |

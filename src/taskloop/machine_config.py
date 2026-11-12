@@ -14,6 +14,7 @@ from typing import Final, Literal
 type Source = Literal["flag", "file", "default"]
 MIN_SECONDS: Final = 5
 MIN_GIT_READ_SECONDS: Final = 30
+MAX_GIT_READ_SECONDS: Final = 86400  # a day; a larger value overflows the process timeout
 type Refusal = Literal["missing", "unreadable", "toml", "unknown_key", "type", "relative_path", "count", "interval"]
 
 
@@ -115,16 +116,18 @@ def _count(key: str, value: object) -> int:
     return _integer(key, value)
 
 
-def _at_least(minimum: int) -> Callable[[str, object], int]:
+def _between(minimum: int, maximum: int | None = None) -> Callable[[str, object], int]:
     def checked(key: str, value: object) -> int:
-        if _integer(key, value) < minimum:
-            raise _Refusal(ConfigRefused("interval", key, f"{key} must be at least {minimum} seconds"))
-        return _integer(key, value)
+        number = _integer(key, value)
+        if number < minimum or (maximum is not None and number > maximum):
+            bound = f"at least {minimum}" if maximum is None else f"between {minimum} and {maximum}"
+            raise _Refusal(ConfigRefused("interval", key, f"{key} must be {bound} seconds"))
+        return number
 
     return checked
 
 
-_seconds = _at_least(MIN_SECONDS)  # a rounds interval: whole seconds (the local check runs every 2 s between rounds)
+_seconds = _between(MIN_SECONDS)  # a rounds interval: whole seconds (the local check runs every 2 s between rounds)
 
 
 def _chosen[T](key: str, table: dict[str, object], flag: object, default: Setting[T], check: Callable[[str, object], T]) -> Setting[T]:
@@ -153,7 +156,8 @@ def resolve(text: str | None, flags: Flags, home: Path) -> Effective | ConfigRef
             _chosen("slots_root", table, flags.slots_root, built.slots_root, path),
             _chosen("slot_count", table, flags.slot_count, built.slot_count, _count),
             _chosen("round_seconds", table, flags.round_seconds, built.round_seconds, _seconds),
-            _chosen("git_read_seconds", table, flags.git_read_seconds, built.git_read_seconds, _at_least(MIN_GIT_READ_SECONDS)),
+            _chosen("git_read_seconds", table, flags.git_read_seconds, built.git_read_seconds,
+                    _between(MIN_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS)),
         )
     except _Refusal as refusal:
         return refusal.refused

@@ -447,7 +447,7 @@ A FIFO or a stuck file system can hang a local Git read; the goal is "not foreve
   limit to fire), then shows `GitTimeout` with `read_timeout=2`. If Git turns out to skip non-regular exclude files,
   G1 uses the next reader that opens a path it does not stat first (`core.excludesFile` or a FIFO `.gitattributes`
   read by `check-attr`) and says which in its commit; the test must hang without the bound before it counts.
-- **Factory (G2), as built:** machine config key `git_read_seconds` (default **600**, at least 30; no flag), pinned
+- **Factory (G2), as built:** machine config key `git_read_seconds` (default **600**, 30 to 86400; no flag), pinned
   git-porcelain 0.18.0. `git_views` builds every `RealRepo` (`checkouts`, `remotes`, `inspect_checkout`) with
   `read_timeout=READS.seconds`; `cli_step.run` sets it once from the loaded config (`use_read_seconds`). An attempt's
   entry process (`attempt_entry`, `check_entry`) loads no machine config and keeps the default 600: only the round and the
