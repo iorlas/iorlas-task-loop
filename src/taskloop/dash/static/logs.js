@@ -21,7 +21,13 @@ export function initLogs(openTaskFn) {
 }
 
 export async function loadLogs(source) {
-  rows = (await source.logs()).rows;
+  try {
+    rows = (await source.logs()).rows;
+  } catch (error) {
+    rows = [];
+    $("logs").replaceChildren(el("p", "text-sm text-rose-700 dark:text-rose-300", `The log cannot be read: ${error.message ?? error}`));
+    return;
+  }
   render();
 }
 

@@ -286,6 +286,12 @@ class AttemptReads(StoreConnection):
         held = frozenset((as_text(row[0]), as_text(row[1])) for row in rows)
         return SlotUse(as_int(free[0]), held)
 
+    def slot_names(self) -> tuple[str, ...]:
+        """Every adopted slot's name across repos (`s1`, `s2`, ... in number order); SELECT only."""
+        with self._connection() as con:
+            rows: list[tuple[object, ...]] = con.execute("SELECT DISTINCT name FROM slot").fetchall()
+        return tuple(sorted((as_text(row[0]) for row in rows), key=lambda name: (len(name), name)))
+
     def chain(self, key: AttemptKey) -> tuple[ChainLink, ...]:
         """Attempts 1..n of the key's dispatched step, oldest first, followed through `previous_attempt_id` (at most
         ATTEMPTS): the earlier ones are frozen once their successor exists. No reservation check; an absent key, an

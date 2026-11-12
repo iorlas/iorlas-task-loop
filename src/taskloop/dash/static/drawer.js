@@ -27,10 +27,27 @@ function select(step, n) {
 }
 
 export async function openDrawer(id) {
-  open = { id, detail: await source.detail(id), tab: null, view: null };
-  select();
+  try {
+    open = { id, detail: await source.detail(id), tab: null, view: null };
+    select();
+  } catch (error) {
+    open = null;
+    showError(id, error);
+  }
   $("drawer").classList.remove("translate-x-full");
   $("backdrop").classList.remove("pointer-events-none", "opacity-0");
+}
+
+// The task could not be read: say so in the drawer, with nothing from an earlier read.
+function showError(id, error) {
+  const head = el("header", "flex items-start gap-4 px-6 py-5");
+  const close = el("button", "rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 dark:border-slate-700", "Close");
+  close.type = "button";
+  close.addEventListener("click", closeDrawer);
+  const who = el("div", "min-w-0 flex-1");
+  who.append(el("p", "font-mono text-xs text-slate-500", id));
+  head.append(who, close);
+  $("drawer").replaceChildren(head, el("p", "px-6 text-sm text-rose-700 dark:text-rose-300", `This task cannot be read: ${error.message ?? error}`));
 }
 
 export function closeDrawer() {
@@ -357,7 +374,11 @@ export function onFeed(msg) {
 export async function onTaskMoved(task) {
   if (open?.id !== task.id) return;
   const follow = attemptOf()?.state === "running" && attemptOf() === open.detail.attempts.at(-1);
-  open.detail = await source.detail(open.id);
+  try {
+    open.detail = await source.detail(open.id);
+  } catch (error) {
+    return showError(open.id, error);
+  }
   if (follow || !attemptOf()) {
     open.tab = null;
     select();
