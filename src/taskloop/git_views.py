@@ -16,6 +16,23 @@ HARDENED = (("core.hooksPath", "/dev/null"), ("core.fsmonitor", "false"), ("comm
 PUSH_TIMEOUT = 120.0  # seconds a publication's push or ls-remote may take (the library's default is 600)
 
 
+@dataclass
+class ReadBound:
+    """Seconds a read-only Git command may take before git_porcelain kills it and raises `GitTimeout` (a `GitUnavailable`, so
+    `unavailable:git` with the command and the seconds as detail). The machine config's `git_read_seconds`, set once by the
+    command line right after it loads the config (`use_read_seconds`); a process that never sets it (an attempt's entry)
+    keeps the default."""
+
+    seconds: float = 600.0
+
+
+READS = ReadBound()
+
+
+def use_read_seconds(seconds: float) -> None:
+    READS.seconds = float(seconds)
+
+
 def inspect_checkout(path: str) -> RepoInspection:
     """Resolve the native path once and request fresh shared-library observations."""
     try:
@@ -23,7 +40,7 @@ def inspect_checkout(path: str) -> RepoInspection:
     except RuntimeError as error:
         raise UnsupportedCheckout(f"Cannot expand checkout path: {path}") from error
     checkout = expanded.resolve()
-    return inspect_repo(RealRepo(checkout, memoize=False), checkout)
+    return inspect_repo(RealRepo(checkout, memoize=False, read_timeout=READS.seconds), checkout)
 
 
 def appended(env: Mapping[str, str], entries: Sequence[tuple[str, str]]) -> dict[str, str] | None:
@@ -63,7 +80,8 @@ def checkouts(path: Path, *, git_dir: Path | None = None) -> Repo:
     at that path: calls that run on a slot open their view from the slot itself, pinned to the verified `git_dir`
     (git_porcelain's `pins`: `<slot>/.git` is never read again, any other path is `NotARepo`)."""
     pins = None if git_dir is None else {path: git_dir}
-    return RealRepo(path, memoize=False, env=hardened(os.environ) | ceiling(path, os.environ), pins=pins)
+    env = hardened(os.environ) | ceiling(path, os.environ)
+    return RealRepo(path, memoize=False, env=env, read_timeout=READS.seconds, pins=pins)
 
 
 def remotes(path: Path, *, git_dir: Path | None = None) -> Repo:
@@ -72,7 +90,7 @@ def remotes(path: Path, *, git_dir: Path | None = None) -> Repo:
     environment never prompts, so a locked key fails instead of hanging."""
     pins = None if git_dir is None else {path: git_dir}
     env = hardened(os.environ) | ceiling(path, os.environ)
-    return RealRepo(path, memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, pins=pins)
+    return RealRepo(path, memoize=False, env=env, remote_timeout=PUSH_TIMEOUT, read_timeout=READS.seconds, pins=pins)
 
 
 FILE_MODES = ("100644", "100755")  # a tree entry that is a regular file; 120000 is a symlink, 160000 a submodule

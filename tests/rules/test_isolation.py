@@ -40,7 +40,7 @@ def test_noneditable_install_matches_current_source() -> None:
 # Every shared dependency and the shelf tag it is pinned at. stream-proc is pinned at any-agent's tag (its own
 # stream-proc-v0.6.0 tags the same commit): both must resolve to one shelf commit.
 SHARED = {
-    "git-porcelain": "git-porcelain-v0.17.0",
+    "git-porcelain": "git-porcelain-v0.18.0",
     "beads-client": "beads-client-v0.2.0",
     "any-agent": "any-agent-v0.5.0",
     "sqlite-store": "sqlite-store-v0.1.0",

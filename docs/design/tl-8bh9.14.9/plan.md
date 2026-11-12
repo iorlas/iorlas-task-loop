@@ -431,30 +431,32 @@ Spawn and signals (review finding 2):
 
 A FIFO or a stuck file system can hang a local Git read; the goal is "not forever", not a tight bound.
 
-- **Shelf API (git-porcelain, decided here):** `RealRepo(..., read_timeout: float | None = None)`. Bounded per call,
-  not per module: each call site that only reads passes `timeout=self.read_timeout` and `GIT_OPTIONAL_LOCKS=0` in its
-  environment (one helper, `repo.read_run(...)`), so no bounded call may take the index lock, including the porcelain
-  `git diff` reads (`real_read.unmerged`, line 63; `real_observe`, line 134; the worktree diff reads) that do not pass
-  `--no-optional-locks` today. The temporary-index tree build (`real_read._write_tree`, lines 234 and 236: `read-tree`
-  and `add -A` into a `GIT_INDEX_FILE` in a temporary folder, then `write-tree`) is bounded too: killing it leaves only
-  that removed folder and unreferenced loose objects, never the worktree's `index.lock`. Remote calls keep
-  `remote_timeout`. Every call that writes the worktree's index, refs or files (commit, checkout, worktree add,
-  update-ref, the real `add`) stays unbounded: killed midway it leaves `index.lock`, a refusal worse than the hang.
-  The classification is listed call by call in G1's change, with a shelf test that every bounded call sets both.
-  A timeout is the existing `GitTimeout` (a `GitUnavailable`) naming the command and the seconds; `FakeRepo` gains a
-  way to make one read raise it.
+- **Shelf API (git-porcelain 0.18.0, as built, G1):** `RealRepo(..., read_timeout: float | None = None)`. One classifier,
+  `real_reads.is_read(args)`, names the read-only commands (`status`, `diff`, `ls-files`, `ls-tree`, `rev-parse`,
+  `rev-list`, `merge-base`, `cat-file`, `log`, `cherry`, `grep`, `for-each-ref`, `check-ignore`, `worktree list`); the one
+  runner gives such a call `timeout=read_timeout` and `GIT_OPTIONAL_LOCKS=0` (so no bounded call takes the index lock),
+  unless the call passes its own timeout. Chosen over a per-call-site flag: one list owns the fact, and a new write
+  command is unbounded until someone lists it. Not bounded: every call that writes the index, refs or files (commit,
+  checkout, worktree add, update-ref, add, reset), the temporary-index tree build (`read-tree`, `add -A`, `write-tree`),
+  `config` and `symbolic-ref` (both write when given a value), and remote calls (`remote_timeout`). A timeout is the
+  existing `GitTimeout` (a `GitUnavailable`) naming the command and the seconds. `FakeRepo` gained nothing: the factory
+  fakes a `GitTimeout` itself.
 - **The hang G1's test must reproduce:** a FIFO with no writer at `$GIT_DIR/info/exclude`, then `status` (Git opens the
   exclude file while listing untracked files, and `open` of a writerless FIFO blocks). The test first shows the hang
   without a bound (it runs the read in the shelf's own supervised runner with a short wall limit and expects that
   limit to fire), then shows `GitTimeout` with `read_timeout=2`. If Git turns out to skip non-regular exclude files,
   G1 uses the next reader that opens a path it does not stat first (`core.excludesFile` or a FIFO `.gitattributes`
   read by `check-attr`) and says which in its commit; the test must hang without the bound before it counts.
-- **Factory (G2):** a machine config key `git_read_seconds` (default **600**, at least 30), passed by `git_views` to its
-  three `RealRepo` constructions. No new word: a timeout is `unavailable:git` with the shelf's message as detail, an
-  unknown the round backs off from and retries. Justification: no factory read is expected to take minutes, and a slow
-  cold `status` of a large worktree must never be cut; G2 measures `status`, `ls-files` and `worktree list` on this
-  repository's slot cold (after dropping caches is not possible unprivileged: after a fresh clone) and records the
-  times beside the default, which must stay at least ten times the worst measured.
+- **Factory (G2), as built:** machine config key `git_read_seconds` (default **600**, at least 30; no flag), pinned
+  git-porcelain 0.18.0. `git_views` builds every `RealRepo` (`checkouts`, `remotes`, `inspect_checkout`) with
+  `read_timeout=READS.seconds`; `cli_step.run` sets it once from the loaded config (`use_read_seconds`). An attempt's
+  entry process (`attempt_entry`, `check_entry`) loads no machine config and keeps the default 600: only the round and the
+  commands the person runs read the key. No new word: a timeout is `unavailable:git` with the shelf's message as
+  detail (`admit`, `check_admit`, `land`, `slots` already map `GitUnavailable`; `slot adopt` reports `git_unavailable`),
+  an unknown the round backs off from and retries. The real-Git test
+  (`tests/steps/real/test_git_read_timeout_real.py`) puts a FIFO at the repository's `info/exclude`, bounds reads at 2 s
+  and shows `slot adopt` ends `git_unavailable` instead of hanging, then adopts once the FIFO is gone. The cold-read
+  measurement the plan asked for was not taken: 600 stays the default.
 - **Residual:** `subprocess.run`'s timeout kills Git and then waits for it; a Git process blocked in an uninterruptible
   file-system call (a dead NFS mount) cannot be killed until the call returns, so that case still hangs. A FIFO read
   (interruptible) is covered.
@@ -475,8 +477,8 @@ Caps: 400 source lines per file, 80 per function, 800 per test file. Estimates a
 | H2 | The hold operation and its words | `hold.py` (`cause` with the label rule, `hold_task` 5.1 (it checks right before the label step that A is still current; `HoldStore.labelled` fences it again, `changed`), `clear_holds` 7.3); `attempt_status` (`hold`, `on_hold`, `AttemptView.hold` looked up by the agent attempt, `--stuck` includes `hold`); `show_render`/`step_render` `Hold:` lines; `step_guide` guides naming section 12's action per refusal; `result_data`; `operations.Action` gains `hold`; the answer's `explanation` on the collected result if missing; glossary | about +310 (`hold` 210, status +30, render +25, guide +35, data +10) | about +560 (`test_hold`: section 3 incl. NULL label; every partial rerun; each 5.2 row; each section 12 refusal and whether it comments; two concurrent callers comment once; the swapped checks view's lookup; status words) | H1 |
 | H3 | The round applies it | `round` (9.1-9.5), the round's label into admission, `RoundPorts.holding` and its wiring in `cli_composition`; `round.py` split if over 400 | about +60 | about +330 (`test_round_holds`: each cause held once and quiet after; a pending hold's line again only when its refusal changes; re-ingestion of `moved` and `absent`, the `abandoned` skip kept for others and for hand abandons; a differing round label; hand-started tasks never held; clear incl. re-hold and `superseded`) | H2 |
 | K1 | Keep-awake (tl-8bh9.14.10) | `keep_awake.py` (argv by platform, `Awake` with `stop`); `open_rounds` order (spawn, replay, `installed`, `stop_tree` in `finally`); two log words; the mirrored CLAUDE.md/AGENTS.md note of section 13 | about +100 | about +170 (argv per platform, missing tool, replay before `installed`, stop on each exit path with a fake spawn port) | none |
-| G1 | git-porcelain `read_timeout` (shelf repository) | section 14's API per call with `GIT_OPTIONAL_LOCKS=0`, on the unreleased 0.17.0 branch; the hang test | shelf about +60 | shelf about +120 | none; **owner release** |
-| G2 | Pin and use the read timeout (tl-8bh9.14.3) | pin git-porcelain 0.17.0 (also unblocks M3's multi-URL guard, tl-8bh9.14.8 section 27.1 item 4, which may land in the same commit); `machine_config` key `git_read_seconds`; `git_views` passes it; the measurement in the commit message | about +25 (+15 with the guard) | about +60 (config bounds; a fake `GitTimeout` read is `unavailable:git` with its detail) | G1 released |
+| G1 (done: shelf PR 81, git-porcelain-v0.18.0) | git-porcelain `read_timeout` (shelf repository) | section 14's API per call with `GIT_OPTIONAL_LOCKS=0`, on the unreleased 0.17.0 branch; the hang test | shelf about +60 | shelf about +120 | none; **owner release** |
+| G2 (done, tl-isfa.5) | Pin and use the read timeout (tl-8bh9.14.3) | pin git-porcelain 0.17.0 (also unblocks M3's multi-URL guard, tl-8bh9.14.8 section 27.1 item 4, which may land in the same commit); `machine_config` key `git_read_seconds`; `git_views` passes it; the measurement in the commit message | about +25 (+15 with the guard) | about +60 (config bounds; a fake `GitTimeout` read is `unavailable:git` with its detail) | G1 released |
 | S | M4 live smoke | runbook `live-smoke.md` here, the run, `m4-smoke-findings.md` | none | none | H3, K1, G2 |
 
 H1 to H3 are B7. K1 and G1/G2 are independent of them and of each other; they can be built first.
@@ -600,8 +602,7 @@ Decided (review): no circuit breaker (section 11); holds neither preserve nor re
 `refs/taskloop/held/<attempt>`) and then park the slot, so it frees the slot and returns the claim unattended?
 Recommendation: not now (decided (review)); revisit if the M4 smoke or real nights show slots kept until morning.
 
-**Owner action (not a question):** push, merge and tag the shelf's git-porcelain 0.17.0 (with `remote_urls` and, after
-G1, `read_timeout`). Until then G2 and smoke step 7 wait; H1-H3 and K1 do not.
+**Owner action (done):** the shelf's git-porcelain 0.18.0 (with `remote_urls` in 0.17.0 and `read_timeout`) was merged and tagged.
 
 ## 22. Tracker entries
 

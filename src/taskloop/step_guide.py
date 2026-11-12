@@ -64,7 +64,8 @@ GUIDE = {
     "after a step ends.",
     "rounds_running": "Another `tl step rounds` runs for this backlog (the pid is its lock record's, informational): use its "
     "terminal, or stop it there with Ctrl-C first. `tl step next` runs beside it.",
-    "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5.",
+    "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5; "
+    "`git_read_seconds` at least 30.",
     "rounds_lock": "The rounds lock file beside factory.db cannot be created: fix that folder's permissions.",
     "stuck:entry_lost": "The agent may still run: if `Worker` names a pid, check its cwd is the slot (`lsof -a -p <pid> -d cwd`) "
     f"and stop only its group (`kill -TERM -<pgid>`); then {ABANDON} With no `Worker` recorded it cannot be shown stopped: "

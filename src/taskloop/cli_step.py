@@ -9,6 +9,7 @@ from typing import Literal
 
 from taskloop import attempt_status, cli_composition, land, operations, result_data
 from taskloop.exit_codes import exit_code
+from taskloop.git_views import use_read_seconds
 from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import ConfigRefused, Flags, Loaded
 from taskloop.operations import Ended, Failed, Round, StartRequest
@@ -227,6 +228,7 @@ def run(arguments: argparse.Namespace) -> int:
     if isinstance(loaded, ConfigRefused):
         result: Result = operations.refused_config(loaded)
     else:
+        use_read_seconds(loaded.settings.git_read_seconds.value)
         result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
     failed = isinstance(result, Failed) or (isinstance(result, Ended) and result.reason != "interrupted")
     stream = sys.stderr if failed else sys.stdout
