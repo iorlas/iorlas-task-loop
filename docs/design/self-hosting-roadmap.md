@@ -49,7 +49,8 @@ section 2.9 and its decision 8.7 now run `setup` from the task branch.
 | Land and close (B6, [tl-8bh9.14.8](tl-8bh9.14.8/plan.md)): factory.db v13, `tl step land TASK` (squash onto origin `main`, validated when its tree changed, pushed never forced, task closed locally), `Next: land`/`landed`, the abandon going candidate first | L0-L5 built, gated; M3 live smoke not run ([M3 runbook](tl-8bh9.14.8/live-smoke.md)); the multi-URL push guard waits on git-porcelain 0.17.0 | L0-L5 commits with their review repairs (plan sections 25-29) |
 | Review step | not built; contract agreed in candidate-checks | none |
 | Questions and holds; a failed result today leaves the task claimed with no signal | not built | none |
-| Install, pin, release; session resume; dashboard; keep-awake; account routing | not built | none |
+| Install, pin, release; session resume; dashboard; account routing | not built | none |
+| Keep-awake while rounds run (B11) | K1 built, gated; live smoke not run (M4 step 6) | tl-8bh9.14.9 section 27 |
 | Tracker entries for the roadmap (B14) | filed (D13): epic tl-8bh9.14 with 25 children (blocks B3 to B15 and audits; tl-8bh9.14.1 and .14.2 closed), S5 slices under tl-8bh9.4.3.1.16; stale-entry hygiene remains open (tl-8bh9.14.15) | none |
 
 Today a `tl step rounds` loop takes an `auto` task, plans it, verifies and publishes the plan, then advances it in a
@@ -255,6 +256,10 @@ reading every diff. Depends on B4. Size about 2 slices. Design: yes (later). Not
 Lifetime-scoped while `tl step rounds` runs (accepted, .4.6): macOS `caffeinate -i -w <pid>`, Linux `systemd-inhibit`,
 through the shelf process API. Needed for M4 on a laptop. 1 slice, no design, small smoke.
 
+| | |
+|---|---|
+| Built | K1 of [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) (section 27): `keep_awake.py`, spawned before the rounds' SIGINT handler with the shelf's hold replayed first, stopped with `stop_tree` on every way out; best effort (`rounds keep_awake unavailable:<why>`). Gated; not observed on macOS, ineffective on a Linux host whose logind refuses the inhibitor (seen on OrbStack); M4 not reached (smoke step 6) |
+
 ### B8. Install, pin, release
 
 | | |
@@ -311,7 +316,7 @@ S5a ─────────┼─> B3 profile ─> B13 pinned git_dir ─> R
 | **M1 semi-assisted** | B14, S5 (a-c), B3, B13 pinned `git_dir`, B2 | Label an own task `auto`, run `tl step rounds` from a runner worktree, get plan and implementation (with new tests the agent ran) on `task/<id>` | Run `just check`/`just test` on `task/<id>`; read the diff; squash-merge, push, `bd close`; spot failed tasks in `tl step list` and abandon them; stop rounds before any factory upgrade |
 | **M2 checks in the factory** | B4 (built S6a-S6e; reached once the [M2 live smoke](tl-8bh9.14.6/live-smoke.md) passes) | See per-check passed/failed on X in `tl step show`; rounds run the checks after implement | Read the diff; land and close; handle failures (re-run with `tl step start`, or abandon) |
 | **M3 land and close** | B6 (built L0-L5; reached once the [M3 live smoke](tl-8bh9.14.8/live-smoke.md) passes) | Run `tl step land TASK` after reading diff and checks: squash on origin `main`, task closed | Decide each land; tracker sync if O4 says so; failures |
-| **M4 unattended loop** | B7 (built H1-H3), B11, B13 Git read timeout; not reached until the M4 live smoke passes | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
+| **M4 unattended loop** | B7 (built H1-H3), B11 (built K1), B13 Git read timeout; not reached until the M4 live smoke passes | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
 | **M5 daily self-hosting** | B8, B10 (then the dashboard) | Run a pinned version; land factory changes and adopt them by changing the pin and restarting; see time since last command | Land decisions; pin changes; anything deferred (section 6) |
 
 ## 5. The simplest path to the first self-implemented task

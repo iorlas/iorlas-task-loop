@@ -37,6 +37,7 @@ source_modules =
     taskloop.rounds
     taskloop.rounds_lock
     taskloop.interrupts
+    taskloop.keep_awake
     taskloop.validate
     taskloop.land
     taskloop.land_check
@@ -61,6 +62,7 @@ type = forbidden
 source_modules =
     taskloop.round
     taskloop.rounds
+    taskloop.keep_awake
     taskloop.operations
     taskloop.attempt_entry
     taskloop.check_entry

@@ -7,13 +7,13 @@ import shutil
 import sqlite3
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from any_agent import run
 from sqlite_store import Store
-from stream_proc import group_alive, observe_owned, popen_registered
+from stream_proc import group_alive, observe_owned, popen_held, popen_registered, stop_tree
 
 from taskloop import slot_lock
 from taskloop.admit import AttemptAdmission
@@ -31,6 +31,7 @@ from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles, checkouts, remotes, slot_profiles
+from taskloop.keep_awake import Helper, Host
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
@@ -224,3 +225,17 @@ def open_checks_releaser(database: Path, store: Store) -> ChecksRelease:
     writer = CheckStore(lambda: store.shared_rw(database), store.begin_immediate)
     return ChecksRelease(writer, checkouts, RealSlotFiles(), entry_seen, slot_lock.custody, time.time, setup_seen,
                          RealEnvFiles().empty_scratch)
+
+
+def keep_awake_spawn(argv: Sequence[str]) -> Helper:
+    """The keep-awake helper (`keep_awake`): in a session of its own (the terminal's Ctrl-C reaches only rounds), every
+    stream on one `/dev/null` opened natively and closed after the spawn; the shelf's hold, replayed by the caller first
+    inside the `try` that stops it (`stop_tree`). OSError when it cannot start (the hold already replayed then)."""
+    with open(os.devnull, "r+b") as null:
+        child, hold = popen_held(list(argv), stdin=null, stdout=null, stderr=null, start_new_session=True)
+    return Helper(child.pid, hold.replay, lambda: stop_tree(child))
+
+
+def keep_awake_host() -> Host:
+    """This machine: `sys.platform`, PATH lookup, the real spawn."""
+    return Host(sys.platform, shutil.which, keep_awake_spawn)

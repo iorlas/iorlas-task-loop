@@ -884,3 +884,78 @@ filter, the label guard, the stored label, the clear, the publish and advance ho
 
 **Unverified.** No live bd, Git or agent run (the M4 smoke, S); the graceful-stop skip of the clear has no test of its
 own; the composition wiring of `holding` is exercised by the gates' import and type checks only.
+
+## 27. As built: K1 (tl-8bh9.14.10)
+
+Keep-awake for the life of `tl step rounds` (section 13); nothing of G1/G2 or the smoke. Code lines by the policy
+counter: `keep_awake` 63 (new), `composition` 153 (+7), `cli_composition` 240 (+5); `test_keep_awake` 125 (new),
+`real/test_keep_awake_real` 22 (new). `.importlinter`: `taskloop.keep_awake` joins the source lists of
+`cli-never-imports-the-attempt-entry` and `rounds-never-land`; `one-signal-owner` and the policy AST test are unchanged.
+
+- **`keep_awake.py`** (no process API, no `signal`): `command(host, pid, backlog)` is section 13's table by
+  `sys.platform` (`darwin`; any `linux*`), each tool resolved on `PATH` (`Host.which`, real `shutil.which`) and put in
+  the argv as its absolute path; `awake(host, pid, backlog, log, clock, say)` is the context manager: spawn
+  (`Host.spawn`), then `try:` `Helper.replay()` first, the `started` line, the block; `finally:` `Helper.stop()`.
+  Without a helper: one log line `rounds keep_awake unavailable:<why>`, one stderr line `Keep-awake unavailable
+  (<detail>); the rounds run anyway`, and the block runs. A log write failure is ignored (the rounds' own `Log: not
+  written` covers it).
+- **`composition.keep_awake_spawn`**: `open(os.devnull, "r+b")` for stdin, stdout and stderr, closed after the spawn;
+  `stream_proc.popen_held(argv, ..., start_new_session=True)`; `Helper(pid, hold.replay, lambda: stop_tree(child))`.
+  A failed `Popen` raises OSError after the shelf's hold already replayed (its `__exit__`). `keep_awake_host()` is
+  `Host(sys.platform, shutil.which, keep_awake_spawn)`.
+- **`cli_composition.open_rounds`**: after the inputs, the database guard and the rounds lock (a refused rounds starts
+  nothing), `with awake(...), install(_say) as interrupts:`: spawn, replay, the SIGINT handler, the rounds; on the way
+  out the handler is restored, then the helper stopped, then the lock released. `open_rounds` gained `host` (default
+  this machine) and `install` (default `interrupts.installed`) so the order is tested without a process or a handler.
+  `RoundsPorts.log` and `.pid` are the same values `awake` uses.
+- **One-signal-owner.** The factory still imports `signal` only in `interrupts.py` and sends no signal: the transient
+  `TermHold` swap is inside `stream_proc` (an external package, whose own `signal` import the contract does not
+  trace, as for every `popen_registered` launch), and the helper's SIGTERM/SIGKILL is `stop_tree`'s. The CLAUDE.md and
+  AGENTS.md note of section 13 is **not made** in K1 (the coordinator kept those files unedited); the exact proposed
+  edit, the same in both files (line 47 today), replaces
+
+  ```
+    signal use is `interrupts.py`'s SIGINT handler while `tl step rounds` runs (sets a flag, signals no process), enforced
+    by the import-linter contract `one-signal-owner` and the policy AST test.
+  ```
+
+  with
+
+  ```
+    signal use is `interrupts.py`'s SIGINT handler while `tl step rounds` runs (sets a flag, signals no process), enforced
+    by the import-linter contract `one-signal-owner` and the policy AST test. The shelf's own process API may hold SIGINT
+    and SIGTERM for the duration of one spawn (`stream_proc.TermHold`) and replays them; that is the shelf's, not a
+    factory signal use.
+  ```
+
+**Deviations (decided here, open to veto).**
+
+1. The unavailable reasons are three fixed words: `platform` (no table row), `missing` (a tool not on `PATH`; on Linux
+   `tail` is checked too, since `systemd-inhibit` without it would exit at once), `start` (the spawn's OSError). The
+   tool names and the error go to the stderr line only (log words are fixed).
+2. The argv carries each tool's absolute path from `PATH` instead of its bare name, so the checked tool is the one run.
+3. The CLAUDE.md/AGENTS.md note is proposed above, not edited (section 13 said "made with K1").
+
+**Observed on this machine (OrbStack Linux guest, uid 501).** `systemd-inhibit` and `tail` are on `PATH` and logind lists
+a `manager-early` session, but `systemd-inhibit --what=sleep:idle ... --mode=block` prints `Failed to inhibit: Access
+denied` and exits at once: the helper is a zombie half a second after the spawn, `stop_tree` returns `()` in 8 ms and
+reaps it. So rounds log `keep_awake started pid=<n>` and the effect is none (section 13's accepted limit: the factory
+does not check). OrbStack also puts a `caffeinate` on `PATH` (`/opt/orbstack-guest/bin/caffeinate`, a link to
+`macctl`, which forwards to the macOS host and takes `-i -w pid`); K1 does not use it on Linux (the table is by
+`sys.platform`), and whether its `-w` would watch a guest pid was not tried.
+
+**Tests.** `test_keep_awake` (a semantic `Host` whose spawn records argv, replay and stop, and a recorded `install` in
+place of the real handler, over a real factory.db and rounds lock): the argv per platform (macOS, Linux, FreeBSD and
+Windows unavailable) carrying the rounds pid; each missing tool; the order spawn, replay, install, rounds, restore, stop
+on a normal end, on an exception and on Ctrl-C twice (a graceful press then `KeyboardInterrupt`); a Ctrl-C held during
+the spawn (replay raising `KeyboardInterrupt`) stopping the helper with no handler installed and the lock released;
+each unavailable reason logged once with one stderr line and the rounds run; a refused rounds starting nothing; only
+`open_rounds` naming `awake` and only the two composition modules importing `keep_awake` (so `tl step next` and every
+other command start none). `real/test_keep_awake_real` (Linux with both tools, skipped elsewhere): the real
+`systemd-inhibit ... tail --pid=<pytest pid>` through `keep_awake_spawn`, alive or unreaped inside the block, gone after
+it, one `started` line.
+
+**Unverified.** macOS entirely (`caffeinate`, `pmset -g assertions`); a Linux host where the inhibitor is granted (no
+`taskloop` row in `systemd-inhibit --list` was ever seen); a real Ctrl-C during the spawn (only the fake replay); a
+third Ctrl-C during `stop_tree`'s grace (up to 5 s, then 2 s of proof) interrupts the stop, and the helper then ends by
+itself within about a second (`-w`, `tail --pid`), not observed. Smoke step 6 (M4) is not run.
