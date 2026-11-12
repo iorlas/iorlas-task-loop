@@ -126,12 +126,9 @@ the task that adopts it, so a new module has to be placed.
 
 ## 5. Flagged items (all recommendations are proposed)
 
-1. **`keep_awake.py` (done: deleted, tl-8bh9.14.26-.29, trial).** It spawns a platform tool and knows
-   `sys.platform`, `caffeinate` and `systemd-inhibit`: host machine state, the same family as the removed layer. It
-   is best effort and the factory never verifies it, so correctness does not depend on it. Recommendation: delete it
-   from the factory (and its `cli_composition` and `composition` wiring and the `rounds` log line) and let the person
-   wrap rounds (`caffeinate -i tl step rounds ...`), the OS power setting or a launcher script do it. Fallback if the
-   owner wants it kept: leave it, but as the single host adapter listed in contract 2 above.
+1. **`keep_awake.py` (done: deleted, tl-8bh9.14.26-.29, trial).** It spawned a platform tool and knew `sys.platform`,
+   `caffeinate` and `systemd-inhibit`; the trial logged a false `started` line and left a zombie on OrbStack. The person
+   wraps rounds (`caffeinate -i tl step rounds ...`) or sets the OS power setting instead.
 2. **Agent uv folders, `slot_env`, `access`, `environment` (proposed: keep in the factory as one agent-environment
    adapter, shrink later).** The factory legitimately decides what an agent may write (Codex `writable_roots`, scratch
    `TMPDIR`) and runs the repo's `setup`: that is its child's sandbox. What is doubtful is `UV_CACHE_DIR`, `UV_TOOL_DIR`

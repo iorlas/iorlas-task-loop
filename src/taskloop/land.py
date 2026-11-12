@@ -56,8 +56,8 @@ SHOW: Final = "`tl step show TASK` names the next step."
 type Files = dict[str, tuple[str, Sha]]
 
 
-NEEDS_MINUTES = Failed("refused", "minutes", "--minutes is required here: S is validated (main moved or its required names changed). "
-                       "Nothing was recorded.")
+NEEDS_MINUTES = Failed("refused", "minutes", "--minutes is required here: S must be validated (main moved, its required names changed, or "
+                       "a pending candidate resumes). Rerun with --minutes N; a candidate that origin's move superseded stays recorded so.")
 
 
 @dataclass(frozen=True)

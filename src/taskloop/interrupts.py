@@ -22,8 +22,8 @@ IGNORED: Final = "Ctrl-C is ignored in this process (started with SIGINT ignored
 class Interrupts:
     """The graceful stop's flag. `press` is the first Ctrl-C: the flag, the default handler back, the notice once."""
 
-    def __init__(self, say: Callable[[str], object], restore: Callable[[], object]) -> None:
-        self.say, self.restore = say, restore
+    def __init__(self, say: Callable[[str], object], restore: Callable[[], object], ignored: bool = False) -> None:
+        self.say, self.restore, self.ignored = say, restore, ignored
         self.pressed = False
 
     def stopping(self) -> bool:
@@ -53,7 +53,7 @@ def installed(say: Callable[[str], object]) -> Generator[Interrupts]:
     def restore() -> None:
         signal.signal(signal.SIGINT, previous)
 
-    interrupts = Interrupts(say, restore)
+    interrupts = Interrupts(say, restore, previous == signal.SIG_IGN)
 
     def pressed(_number: int, _frame: FrameType | None) -> None:
         interrupts.press()

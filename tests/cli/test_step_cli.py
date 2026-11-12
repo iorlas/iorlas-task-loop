@@ -588,6 +588,7 @@ class Run:
 
     def __init__(self, ended: Ended | BaseException) -> None:
         self.ended, self.opened, self.requests = ended, list[tuple[Path, Path, object]](), list[object]()
+        self.ctrl_c = True
 
     @contextmanager
     def opener(self, database: Path, artifacts: Path, _views: GitViews, request: object) -> Generator[object]:
@@ -629,6 +630,12 @@ def test_rounds_flags_reach_the_opener_and_print_a_start_and_an_end(
         {"status": "rounds", "backlog": "tasks", "every": 30, "log": str(art / "rounds.log")},
         {"status": "ended", "backlog": "tasks", "reason": "interrupted", "detail": None},
     ]
+
+
+def test_the_start_line_names_sigterm_when_ctrl_c_is_ignored(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    stubbed(monkeypatch, Ended("tasks", "interrupted")).ctrl_c = False
+    assert main(ROUNDS) == 0
+    assert "; Ctrl-C is ignored here: stop with SIGTERM\n" in capsys.readouterr().out
 
 
 def test_a_whole_round_refusal_ends_the_rounds_with_exit_1(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

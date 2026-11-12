@@ -236,7 +236,7 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
                 install: Callable[[Callable[[str], object]], AbstractContextManager[Interrupts]] = installed,
                 ) -> Generator[RoundsPorts | Failed]:
     """`tl step rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock,
-    then the SIGINT handler (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
+    then the SIGINT and SIGTERM handlers (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
     `time.sleep`, the round log and the `Log: not written` warning on stderr. `install` is the real handler unless a test passes its own."""
     release = _rounds_lock(database, request)
     if isinstance(release, Failed):
@@ -247,7 +247,7 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
         with install(_say) as interrupts:
             rounding = one_round(database, artifacts, views, request, interrupts.stopping)
             yield RoundsPorts(rounding, _slot_use(database), time.time, time.monotonic,
-                         time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid)
+                         time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid, not interrupts.ignored)
     finally:
         release()
 

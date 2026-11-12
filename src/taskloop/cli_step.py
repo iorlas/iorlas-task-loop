@@ -52,7 +52,7 @@ def register(commands: Parsers) -> None:
     _common(adopt, "--root", "--db")
     step = _add(commands, "step", f"Step attempts ({STEP_ONLY})").add_subparsers(dest="operation", required=True)
     start = _add(step, "start", "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
-                 "re-run failed checks on the same commit; the claim stays held (see the glossary's claim row)")
+                 "re-run failed checks on the same commit. The tracker claim stays held between steps; nothing renews it then")
     start.add_argument("task_id", metavar="TASK")
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         start.add_argument(flag, required=True)
@@ -105,8 +105,9 @@ def _land_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("task_id", metavar="TASK")
     parser.add_argument("--backlog", required=True)
     parser.add_argument("--checkout", required=True, help="Your checkout of the repository: its origin is fetched and pushed")
-    parser.add_argument("--minutes", type=int, help="Deadline of the validation of S, from now; needed only when it runs (main moved "
-                        "or its required names changed), never for --summary or --withdraw")
+    parser.add_argument("--minutes", type=int, help="Deadline of the validation of S, from now; needed when S must be validated (main "
+                        "moved or its required names changed) or a pending candidate resumes; not for --summary, --withdraw, "
+                        "--no-change or a same-tree land")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--summary", action="store_true", help="Print the land summary (the facts to read before landing); "
                       "records, reserves, pushes and closes nothing")
@@ -159,7 +160,8 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
             if isinstance(ports, Failed):
                 return ports
             started = (json.dumps(result_data.rounds_data(request.backlog, request.every, str(log))) if arguments.json_output else
-                       f"Rounds for backlog {request.backlog} every {request.every} s; log: {log}; stop with Ctrl-C")
+                       f"Rounds for backlog {request.backlog} every {request.every} s; log: {log}; "
+                       + ("stop with Ctrl-C" if ports.ctrl_c else "Ctrl-C is ignored here: stop with SIGTERM"))
             print(started, flush=True)
             return run_rounds(ports, request)
     except KeyboardInterrupt:

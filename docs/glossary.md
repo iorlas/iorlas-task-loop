@@ -177,7 +177,7 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 | `--db`, `--artifacts` | most `step`, `config show` | factory.db and the artifacts root, overriding the machine config. |
 | `--abandon` | `step release` | Also return the tracker claim and throw the attempt away (a land candidate holding its slot first, then the checks attempt, then the implement attempt; refused `landing` or `landed` while a candidate may be or is on origin's `main`). |
 | `--checkout PATH` | `step land` | The person's checkout whose `origin` is fetched and pushed (as its Git configuration resolves it). |
-| `--minutes N` | `step land` | The deadline of the validation of S, from now; needed only when it runs (main moved or its required names changed), never for `--summary`, `--withdraw` or a same-tree land. |
+| `--minutes N` | `step land` | The deadline of the validation of S, from now; needed when S must be validated (main moved or its required names changed) or a pending candidate resumes; not for `--summary`, `--withdraw`, `--no-change` or a same-tree land. |
 | `--summary` | `step land` | Print the land summary; records, reserves, pushes and closes nothing. |
 | `--withdraw` | `step land` | Give up a validated, undelivered candidate (origin read first, never a push) so the abandon is possible again. |
 | `--no-change` | `step land` | Accept that origin's `main` already holds X's changes: recorded and closed with no push. |
