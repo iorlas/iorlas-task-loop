@@ -14,8 +14,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
-from beads_client.testing import FakeTaskReadClient
-from doubles import NO_CHECKS, NoAdvance, NoChecks, no_holds
+from doubles import NO_CHECKS, NoAdvance, NoChecks, ReadyTracker, no_holds
 from git_porcelain.testing import FakeWorktree
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
@@ -46,6 +45,8 @@ from taskloop.publish import BranchPublish, BranchPublished, NotPublished, Publi
 from taskloop.round import NextRequest, RoundPorts, never, run_round
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import NotReleased, Released, ReleaseResult, SlotRelease
+from taskloop.slots import SlotView
+from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
 from taskloop.verifier import Verifier
 
@@ -141,11 +142,11 @@ class Bench:
     slot (another repo's) without a reservation row, so the free-slot read lets admission read the tracker."""
 
     def __init__(
-        self, con: sqlite3.Connection, ready: FakeTaskReadClient | None = None, admission: Admission | None = None, *, free: bool = True,
+        self, con: sqlite3.Connection, ready: ReadyTracker | None = None, admission: Admission | None = None, *, free: bool = True,
     ) -> None:
         if free:
             con.execute("INSERT OR IGNORE INTO slot (repo_id,name,path) VALUES ('other','s1','/other/s1')")
-        self.store, self.ready = AttemptStore(lambda: con), ready or FakeTaskReadClient()
+        self.store, self.ready = AttemptStore(lambda: con), ready or ReadyTracker()
         self.admission, self.launcher, self.repeats, self.recorded = admission or Admission(), FakeLauncher(), Repeats(), Recorded()
         self.now = 10.0
         self.during: Callable[[], object] = lambda: None
@@ -323,7 +324,7 @@ def test_a_verified_released_plan_is_published_once_then_advanced_never_before(
     (AdmitRefused("branch_diverged"), [("tl-1", "skip", "branch_diverged")], "", 0),
     (AdmitRefused("no_free_slot"), [], "no_free_slot", 0),
     (AdmitUnavailable("tracker"), [("tl-1", "advance", "unavailable:tracker")], "unavailable:tracker", 3),
-    *[(AdmitRefused(reason), [("tl-1", "skip", reason)], "", 0) for reason in ("task", "checkout", "input", "constraint")],
+    *[(AdmitRefused(reason), [("tl-1", "skip", reason)], "", 0) for reason in ("task", "task_missing", "checkout", "input", "constraint")],
     (AdmitRefused("deadline"), [("tl-1", "advance", "refused:deadline")], "refused:deadline", 1),
 ], ids=lambda value: getattr(value, "reason", getattr(value, "what", None)))
 def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admission_too(
@@ -335,7 +336,7 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
     word (`no_free_slot`, `deadline`, an unknown) ends the advance and admission (no ready read)."""
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
-    ready = FakeTaskReadClient([bead("t-9")], ready=["t-9"])
+    ready = ReadyTracker([bead("t-9")], ready=["t-9"])
     bench = Bench(registered, ready)
     bench.advance = advances = Advances(answer)
     found = bench.round(replace(REQUEST, quiet=frozenset()))
@@ -383,7 +384,7 @@ class Failing:
 
 
 def test_admission_follows_selection_and_stops_at_no_free_slot(factory: sqlite3.Connection) -> None:
-    ready = FakeTaskReadClient([bead("t-1"), bead("t-2", 0), bead("t-3", 1)], ready=["t-1", "t-2", "t-3"])
+    ready = ReadyTracker([bead("t-1"), bead("t-2", 0), bead("t-3", 1)], ready=["t-1", "t-2", "t-3"])
     admission = Admission({"t-3": AdmitRefused("no_free_slot"), "t-1": AdmitRefused("no_free_slot")})  # one free slot
     found = Bench(factory, ready, admission).round()
     assert moves(found) == [("t-2", "start", "started")] and found.stopped == "no_free_slot"
@@ -394,7 +395,7 @@ def test_admission_follows_selection_and_stops_at_no_free_slot(factory: sqlite3.
 @pytest.mark.parametrize("refusal", [AdmitRefused(reason, detail="bd said: secret detail") for reason in (
     "claimed_elsewhere", "branch_diverged", "branch_held")], ids=lambda refusal: refusal.reason)
 def test_a_refusal_about_one_task_moves_on_to_the_next(factory: sqlite3.Connection, refusal: AdmitRefused) -> None:
-    ready = FakeTaskReadClient([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
+    ready = ReadyTracker([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
     admission = Admission({"t-1": refusal})
     reason = refusal.reason
     bench = Bench(factory, ready, admission)
@@ -411,7 +412,7 @@ def test_a_failed_ready_read_stops_admission_but_settling_still_ran(
     factory: sqlite3.Connection, fault: BdError, stopped: str, code: int
 ) -> None:
     seed(factory, "tl-1", "attempt")
-    bench = Bench(factory, FakeTaskReadClient(ready_fault=fault))
+    bench = Bench(factory, ReadyTracker(ready_fault=fault))
     found = bench.round()
     assert moves(found) == [("tl-1", "relaunch", "relaunched")] and found.stopped == stopped
     assert exit_code(found) == code and bench.admission.requests == []
@@ -423,7 +424,7 @@ def test_an_empty_label_or_minutes_out_of_range_are_refused_before_any_read(
     factory: sqlite3.Connection, label: str, minutes: int, reason: str
 ) -> None:
     seed(factory, "tl-1", "attempt", entry=ENTRY)
-    ready = FakeTaskReadClient([bead("t-1")], ready=["t-1"])
+    ready = ReadyTracker([bead("t-1")], ready=["t-1"])
     bench = Bench(factory, ready)
     found = run_round(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, "m", "e", minutes))
     assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", reason) and exit_code(found) == 1
@@ -434,7 +435,7 @@ def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admi
     seed(factory, "t-1", "gone-1")
     released(factory, "gone-1", "unclaimed")
     seed(factory, "t-2", "lapsed", entry=ENTRY)
-    ready = FakeTaskReadClient(
+    ready = ReadyTracker(
         [bead("t-1", 0), bead("t-2", 0), bead("t-3", 0, assignee="person"), bead("t-4", 0, parent="missing"), bead("t-5", 4)],
         ready=["t-1", "t-2", "t-3", "t-4", "t-5"],
     )
@@ -453,7 +454,7 @@ def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admi
 
 
 def test_the_round_log_holds_fixed_words_one_line_per_move_and_a_closing_line(factory: sqlite3.Connection) -> None:
-    ready = FakeTaskReadClient([bead("t-1"), bead("t 2\nforged line")], ready=["t-1", "t 2\nforged line"])
+    ready = ReadyTracker([bead("t-1"), bead("t 2\nforged line")], ready=["t-1", "t 2\nforged line"])
     admission = Admission({"t-1": AdmitRefused("claimed_elsewhere", detail="/home/person/.secret")},
                           effect=lambda task: seed(factory, task, f"a-{task}"))
     bench = Bench(factory, ready, admission)
@@ -470,7 +471,7 @@ def test_a_log_that_cannot_be_written_changes_nothing_but_logged(factory: sqlite
         raise PermissionError("rounds.log")
 
     seed(factory, "tl-1", "attempt")
-    ready = FakeTaskReadClient([bead("t-1")], ready=["t-1"])
+    ready = ReadyTracker([bead("t-1")], ready=["t-1"])
     logging, failing = Bench(factory, ready), Bench(factory, ready)
     failing.log = broken
     found = failing.round()
@@ -480,7 +481,7 @@ def test_a_log_that_cannot_be_written_changes_nothing_but_logged(factory: sqlite
 
 def test_an_attempt_abandoned_after_the_snapshot_is_skipped_never_admitted_afresh(factory: sqlite3.Connection) -> None:
     seed(factory, "tl-1", "attempt", entry=ENTRY)
-    bench = Bench(factory, FakeTaskReadClient())
+    bench = Bench(factory, ReadyTracker())
     bench.during = lambda: released(factory, "attempt", "unclaimed")  # a person's `tl step release --abandon`, racing
     found = bench.round()
     assert found.moves == (Move("tl-1", "skip", "abandoned", "attempt", step="plan"),) and exit_code(found) == 0
@@ -497,7 +498,7 @@ def test_a_candidate_another_start_admitted_meanwhile_is_a_per_task_refusal(
     """Between the round's snapshot and its admission another start admits t-2: start launches that existing attempt, whose
     launcher refusal is about t-2 alone; the round goes on to t-3 and exits 0."""
     seed(factory, "tl-0", "running", entry=ENTRY)
-    ready = FakeTaskReadClient([bead("t-2", 0), bead("t-3", 1)], ready=["t-2", "t-3"])
+    ready = ReadyTracker([bead("t-2", 0), bead("t-3", 1)], ready=["t-2", "t-3"])
     bench = Bench(factory, ready)
     bench.seen, bench.during = "matching", lambda: seed(factory, "t-2", "other", entry=ENTRY)  # one snapshot read: once
     bench.launcher.results["t-2"] = refusal
@@ -527,7 +528,7 @@ def test_admission_stops_on_unknowns_and_its_own_inputs_and_reports_every_leaked
     factory: sqlite3.Connection, admit: AdmitResult | None, launch: LaunchResult | None,
     expected: list[tuple[str, str, str]], stopped: str, code: int,
 ) -> None:
-    ready = FakeTaskReadClient([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
+    ready = ReadyTracker([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
     bench = Bench(factory, ready, Admission({} if admit is None else {"t-1": admit}))
     if launch is not None:
         bench.launcher.results["t-1"] = launch  # a fresh admission whose launch failed: the attempt stays admitted
@@ -543,7 +544,7 @@ def test_with_every_adopted_slot_reserved_admission_reads_no_tracker(factory: sq
     factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('repo','s1','/slots/s1')")
     factory.execute("INSERT INTO reservation VALUES ('s1','repo',1,'attempt')")
     seed(factory, "tl-1", "attempt", entry=ENTRY)
-    ready = FakeTaskReadClient([bead("t-1")], ready=["t-1"], ready_fault=BdError("timeout", "never read"))
+    ready = ReadyTracker([bead("t-1")], ready=["t-1"], ready_fault=BdError("timeout", "never read"))
     bench = Bench(factory, ready, free=False)
     bench.seen = "matching"
     found = bench.round()
@@ -575,7 +576,7 @@ def test_the_closing_line_is_written_when_the_stopped_word_changes(factory: sqli
     assert idle.moves == () and bench.lines[-1].endswith(" tasks round moves=0")
     bench.round(replace(REQUEST, quiet=idle.written))
     assert len(bench.lines) == 1  # an idle round writes nothing
-    bench.ready = FakeTaskReadClient(ready_fault=BdError("timeout", "bd failed"))
+    bench.ready = ReadyTracker(ready_fault=BdError("timeout", "bd failed"))
     bench.round(replace(REQUEST, quiet=idle.written))
     assert len(bench.lines) == 2 and bench.lines[-1].endswith(" tasks round moves=0 stopped=unavailable:tracker")
 
@@ -585,7 +586,7 @@ def test_an_admission_skip_stays_quiet_across_rounds_with_no_free_slot(factory: 
     the next round with a free slot does not write it again."""
     seed(factory, "t-1", "gone-1")
     released(factory, "gone-1", "unclaimed")
-    bench = Bench(factory, FakeTaskReadClient([bead("t-1")], ready=["t-1"]))
+    bench = Bench(factory, ReadyTracker([bead("t-1")], ready=["t-1"]))
     found = bench.round(replace(REQUEST, quiet=frozenset()))
     factory.execute("DELETE FROM slot WHERE repo_id='other'")
     found = bench.round(replace(REQUEST, quiet=found.written))
@@ -627,7 +628,7 @@ def test_a_verified_plan_whose_entry_still_runs_is_left_to_that_entry(
 def test_a_stop_after_the_first_settle_move_performs_no_further_move(factory: sqlite3.Connection) -> None:
     seed(factory, "tl-1", "first")
     seed(factory, "tl-2", "second")
-    ready = FakeTaskReadClient([bead("t-1")], ready=["t-1"])
+    ready = ReadyTracker([bead("t-1")], ready=["t-1"])
     bench = Bench(factory, ready)
     bench.stopping = lambda: len(bench.launcher.calls) >= 1
     found = bench.round()
@@ -637,7 +638,7 @@ def test_a_stop_after_the_first_settle_move_performs_no_further_move(factory: sq
 
 
 def test_a_stop_asked_during_the_last_move_still_closes_the_round_interrupted(factory: sqlite3.Connection) -> None:
-    bench = Bench(factory, FakeTaskReadClient([bead("t-1")], ready=["t-1"]))
+    bench = Bench(factory, ReadyTracker([bead("t-1")], ready=["t-1"]))
     bench.stopping = lambda: len(bench.admission.requests) >= 1  # pressed while t-1 starts; no move is left after it
     found = bench.round()
     assert moves(found) == [("t-1", "start", "started")] and found.stopped == "interrupted"
@@ -645,7 +646,7 @@ def test_a_stop_asked_during_the_last_move_still_closes_the_round_interrupted(fa
 
 
 def test_a_stop_between_two_candidates_never_claims_the_second(factory: sqlite3.Connection) -> None:
-    ready = FakeTaskReadClient([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
+    ready = ReadyTracker([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
     bench = Bench(factory, ready)
     bench.stopping = lambda: len(bench.admission.requests) >= 1
     found = bench.round()
@@ -658,11 +659,56 @@ def test_a_skip_repeated_every_round_is_a_move_so_moves_0_closes_only_once_the_s
     line `round moves=1` is quiet too; the first round without the skip writes `round moves=0`."""
     seed(factory, "t-1", "gone-1")
     released(factory, "gone-1", "unclaimed")
-    bench = Bench(factory, FakeTaskReadClient([bead("t-1")], ready=["t-1"]))
+    bench = Bench(factory, ReadyTracker([bead("t-1")], ready=["t-1"]))
     found = bench.round(replace(REQUEST, quiet=frozenset()))
     assert [line.split(" ")[2:] for line in bench.lines] == [["t-1", "plan", "skip", "abandoned", "gone-1"], ["round", "moves=1"]]
     found = bench.round(replace(REQUEST, quiet=found.written))
     assert moves(found) == [("t-1", "skip", "abandoned")] and len(bench.lines) == 2
-    bench.ready = FakeTaskReadClient()
+    bench.ready = ReadyTracker()
     bench.round(replace(REQUEST, quiet=found.written))
     assert len(bench.lines) == 3 and bench.lines[-1].endswith(" tasks round moves=0")
+
+
+def test_a_slot_no_attempt_holds_but_nothing_can_use_is_named_in_the_log_not_called_held(factory: sqlite3.Connection) -> None:
+    """`no_free_slot` with a missing slot: one `unusable:<slot>:<why>` line for the task that could not start, quiet while
+    unchanged."""
+    ready = ReadyTracker([bead("t-1")], ready=["t-1"])
+    gone = SlotView("s4", Path("/slots/s4"), "unknown", "not_listed")
+    bench = Bench(factory, ready, Admission({"t-1": AdmitRefused("no_free_slot", (gone,))}))
+    first = bench.round()
+    assert moves(first) == [("t-1", "report", "unusable:s4:not_listed")] and first.stopped == "no_free_slot"
+    assert first.moves[0].detail == "/slots/s4" and any(line.endswith(" tasks t-1 report unusable:s4:not_listed") for line in bench.lines)
+    lines = len(bench.lines)
+    bench.round(replace(REQUEST, quiet=first.written))
+    assert len(bench.lines) == lines
+
+
+def test_an_advance_with_every_free_slot_unusable_names_it_and_the_next_renders_its_path(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    gone = SlotView("s4", Path("/slots/s4"), "unknown", "not_listed")
+    bench = Bench(registered, ReadyTracker())
+    bench.advance = Advances(AdmitRefused("no_free_slot", (gone,)))
+    found = bench.round()
+    assert ("tl-1", "report", "unusable:s4:not_listed") in moves(found) and found.stopped == "no_free_slot"
+    lines = human("next", found, None)
+    assert any(line.strip() == "/slots/s4" for line in lines) and any(line.startswith("unusable: ") for line in lines)
+
+
+def test_a_transient_slot_state_is_not_called_unusable(factory: sqlite3.Connection) -> None:
+    ready = ReadyTracker([bead("t-1")], ready=["t-1"])
+    busy = SlotView("s1", Path("/slots/s1"), "unknown", "locked")
+    found = Bench(factory, ready, Admission({"t-1": AdmitRefused("no_free_slot", (busy,))})).round()
+    assert moves(found) == [] and found.stopped == "no_free_slot"
+
+
+def test_after_a_discard_a_round_told_to_retake_admits_a_lapsed_claim_with_no_attempt_and_otherwise_never(
+    factory: sqlite3.Connection,
+) -> None:
+    lapsed = Bead("t-1", status="in_progress", assignee="taskloop", labels=("auto",), lease_expires_at="1970-01-01T00:00:05Z")
+    for retake, admitted in ((False, []), (True, ["t-1"])):
+        bench = Bench(factory, ReadyTracker([lapsed]))
+        found = bench.round(replace(REQUEST, retake=retake))
+        assert bench.admission.requests == admitted and found.stopped == ""

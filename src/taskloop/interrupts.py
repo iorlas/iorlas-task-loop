@@ -1,12 +1,12 @@
-"""The rounds process's own Ctrl-C and SIGTERM: the only signal use in factory source (CLAUDE.md, `.importlinter`
+"""The rounds process's own Ctrl-C, SIGTERM and SIGHUP: the only signal use in factory source (CLAUDE.md, `.importlinter`
 one-signal-owner).
 
 While `tl step rounds` runs, a SIGINT handler sets a flag (`stopping`), puts the previous disposition back (Python's
 `default_int_handler` in a terminal, so the next press is the ordinary `KeyboardInterrupt`: the abrupt stop) and says one
 line; on exit the previous disposition is restored. A process started with SIGINT ignored (`SIG_IGN`: `nohup`, `&`, an
-agent's background shell) keeps it ignored and says so once (`IGNORED`). SIGTERM is the abrupt stop in every case: it
-raises `KeyboardInterrupt`, so rounds write their `rounds stopped abrupt` line. This process only: it sends no signal and
-controls no other process. Tests never install it.
+agent's background shell) keeps it ignored and says so once (`IGNORED`). SIGTERM and SIGHUP (the terminal closing;
+left ignored under `nohup`) are the abrupt stop: each raises `KeyboardInterrupt`, so rounds write their
+`rounds stopped abrupt` line. This process only: it sends no signal and controls no other process. Tests never install it.
 """
 
 import signal
@@ -38,7 +38,7 @@ class Interrupts:
 
 
 def terminated(_number: int, _frame: FrameType | None) -> None:
-    """SIGTERM is the abrupt stop: the same exception as the second Ctrl-C."""
+    """SIGTERM and SIGHUP are the abrupt stop: the same exception as the second Ctrl-C."""
     raise KeyboardInterrupt
 
 
@@ -49,6 +49,9 @@ def installed(say: Callable[[str], object]) -> Generator[Interrupts]:
     found = signal.getsignal(signal.SIGINT)
     previous = signal.default_int_handler if found is None else found
     term = signal.signal(signal.SIGTERM, terminated)
+    hangup = signal.getsignal(signal.SIGHUP)  # `nohup` ignores it: that stays
+    if hangup != signal.SIG_IGN:
+        signal.signal(signal.SIGHUP, terminated)
 
     def restore() -> None:
         signal.signal(signal.SIGINT, previous)
@@ -68,3 +71,4 @@ def installed(say: Callable[[str], object]) -> Generator[Interrupts]:
     finally:
         restore()
         signal.signal(signal.SIGTERM, signal.SIG_DFL if term is None else term)
+        signal.signal(signal.SIGHUP, signal.SIG_DFL if hangup is None else hangup)

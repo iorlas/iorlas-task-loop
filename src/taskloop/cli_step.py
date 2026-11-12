@@ -48,7 +48,7 @@ def register(commands: Parsers) -> None:
     slot = _add(commands, "slot", "Managed slots (setup)").add_subparsers(dest="operation", required=True)
     adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo_id>/sN`; creates factory.db")
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
-    adopt.add_argument("--count", type=int, help="Slots s1..sN (overrides the machine config's slot_count)")
+    adopt.add_argument("--count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
     _common(adopt, "--root", "--db")
     step = _add(commands, "step", f"Step attempts ({STEP_ONLY})").add_subparsers(dest="operation", required=True)
     start = _add(step, "start", "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
@@ -127,6 +127,9 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
                         "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
+    parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
+                        "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
+                        "factory on the tracker); run it once, with `tl step next`")
     _common(parser, "--db", "--artifacts")
 
 
@@ -144,7 +147,7 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 def _next_request(arguments: argparse.Namespace) -> NextRequest:
     return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
-                       arguments.effort, arguments.minutes)
+                       arguments.effort, arguments.minutes, retake=arguments.retake_lapsed)
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:

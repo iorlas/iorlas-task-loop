@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from beads_client import BdError, Bead, Dep
 from beads_client.testing import FakeTaskReadClient
+from doubles import ReadyTracker
 
 from taskloop.task import TaskBinding, TaskInspectionError, TaskReference, TaskScope
 from taskloop.tracker import TaskRow, ancestry, inspect_task, ready_rows
@@ -92,14 +93,30 @@ def test_empty_backlog_is_refused(backlog: str) -> None:
     assert failure.value.kind == "invalid_binding"
 
 
+NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
+
+
+def test_a_discarded_factory_leaves_in_progress_rows_with_an_expired_lease_that_a_round_takes_again() -> None:
+    def claimed(task_id: str, lease: str = "", assignee: str = "taskloop") -> Bead:
+        return Bead(task_id, status="in_progress", assignee=assignee, labels=("auto",), lease_expires_at=lease)
+
+    records = [
+        claimed("t-old", "2027-01-15T07:00:00Z"), claimed("t-live", "2027-01-15T09:00:00Z"), claimed("t-nolease"),
+        claimed("t-other", "2027-01-15T07:00:00Z", "someone"), Bead("t-open", status="open", labels=("auto",)),
+    ]
+    rows = ready_rows(ReadyTracker(records, ready=["t-open"]), "auto", NOW, retake=True)
+    assert [row.task_id for row in rows] == ["t-open", "t-old"]
+    assert [row.task_id for row in ready_rows(ReadyTracker(records, ready=["t-open"]), "auto", NOW)] == ["t-open"]  # not by default
+
+
 def test_ready_rows_keep_the_trackers_order_label_and_scheduling_fields() -> None:
     records = [
         Bead("t-3", priority=None, parent="p-1", assignee="taskloop", labels=("auto",)),
         Bead("t-1", priority=0, labels=("auto",)),
         Bead("t-2", priority=1, labels=("other",)),
     ]
-    client = FakeTaskReadClient(records, ready=["t-3", "t-1", "t-2"])
-    assert ready_rows(client, "auto") == (TaskRow("t-3", None, "p-1", "taskloop"), TaskRow("t-1", 0, "", ""))
+    client = ReadyTracker(records, ready=["t-3", "t-1", "t-2"])
+    assert ready_rows(client, "auto", NOW) == (TaskRow("t-3", None, "p-1", "taskloop"), TaskRow("t-1", 0, "", ""))
     assert client.ready_reads == ["auto"] and client.reads == []
 
 
@@ -108,14 +125,14 @@ def test_ready_rows_keep_the_trackers_order_label_and_scheduling_fields() -> Non
     (BdError("other", "bd failed"), "tracker_unavailable"),
 ])
 def test_a_failed_ready_read_raises_and_is_never_empty(fault: BdError, kind: str) -> None:
-    client = FakeTaskReadClient(ready_fault=fault)
+    client = ReadyTracker(ready_fault=fault)
     with pytest.raises(TaskInspectionError) as failure:
-        ready_rows(client, "auto")
+        ready_rows(client, "auto", NOW)
     assert (failure.value.kind, failure.value.backend_kind) == (kind, fault.kind) and "bd failed" in str(failure.value)
 
 
 def test_ancestry_reads_each_unique_missing_parent_once_failures_included() -> None:
-    client = FakeTaskReadClient([Bead("p-1", priority=0, parent="p-2"), Bead("p-2")], faults={"p-9": BdError("timeout", "slow")})
+    client = ReadyTracker([Bead("p-1", priority=0, parent="p-2"), Bead("p-2")], faults={"p-9": BdError("timeout", "slow")})
     lookup = ancestry(client, (TaskRow("t-1", 1, "p-1", ""),))
     assert lookup("t-1") == TaskRow("t-1", 1, "p-1", "")  # a ready row: no read
     assert lookup("p-1") == lookup("p-1") == TaskRow("p-1", 0, "p-2", "")
@@ -125,3 +142,12 @@ def test_ancestry_reads_each_unique_missing_parent_once_failures_included() -> N
             lookup("p-9")
         assert failure.value.kind == "tracker_unavailable"
     assert client.reads == ["p-1", "absent", "p-9"]
+
+
+def test_a_task_deleted_from_the_tracker_is_not_found_not_unavailable(tmp_path: Path) -> None:
+    """bd answers a deleted bead with an error, not an empty read: it must not read as an unreachable tracker (which stops
+    every round)."""
+    gone = BdError("other", 'resolving t-1: no issue found matching "t-1"')
+    with pytest.raises(TaskInspectionError) as failure:
+        inspect_task(TaskBinding(TaskScope("configured"), tmp_path), FakeTaskReadClient(faults={"t-1": gone}), "t-1")
+    assert failure.value.kind == "not_found"

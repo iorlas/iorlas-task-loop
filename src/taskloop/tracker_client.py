@@ -14,7 +14,7 @@ from beads_client import Bd, BdError, Runner
 from taskloop.admit import Claim, Unclaim
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
-from taskloop.tracker import ACTOR, ReadyRows, inspect_task
+from taskloop.tracker import ACTOR, GONE, HELD, ReadyRows, inspect_task
 
 
 def _tracker_root(tracker_root: str) -> Path:
@@ -78,7 +78,6 @@ class TrackerClaims:
 
 
 LOST = frozenset({"not_claimable", "precondition"})  # bd's words for a claim taken, reverted or closed
-GONE = "no issue found matching"  # bd 1.3.1 on a deleted bead (`resolving X: no issue found matching "X"`), classified `other`
 # bd 1.3.1 on an unclaim of a closed task, even one still assigned to the actor (measured 2026-11-12): exit 1, nothing
 # written, the task not reopened; classified `other`. The unclaim maps it, and `GONE`, to "not held" (tl-8bh9.14.9 5.3).
 UNCLAIM_CLOSED = "cannot unclaim closed issue"
@@ -171,7 +170,6 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
     return TrackerClaims(claim, unclaim, heartbeat_for, close)
 
 
-HELD = "held"  # the tracker label a hold adds: a task waiting for a person (never read for control)
 # A hold's label step (tl-8bh9.14.9 5.2): `moved` (the approval label removed, `held` added), `absent` (`held` added, the
 # label was not on the task), `not_ours` (another actor holds the task: nothing written), `closed`, `missing` (nothing
 # written); `precondition` (the fence went stale: nothing written, retried) or `unavailable` (bd could not be asked);

@@ -35,7 +35,7 @@ from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
 from taskloop.prepare import DIVERGED, MAIN, UNPUBLISHED, branch_refusal
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
-from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe
+from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
 from taskloop.steps import STEPS, kind
 from taskloop.task import TaskInspection, TaskInspectionError
 
@@ -43,7 +43,8 @@ type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, 
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
 type Tasks = Callable[[str, str, str], TaskInspection]  # (task id, backlog, tracker root)
 type Refusal = Literal[
-    "choices", "deadline", "expired", "task", "checkout", "no_free_slot", "task_attempted", "input", "claimed_elsewhere", "constraint",
+    "choices", "deadline", "expired", "task", "task_missing", "checkout", "no_free_slot", "task_attempted", "input",
+    "claimed_elsewhere", "constraint",
     "not_repeatable", "repeat_cap", "branch_name", "branch_held", "branch_diverged", "branch_unpublished", "claim_lost",
     "not_advanceable", "branch_moved",
     "commit_missing", "target", "target_profile", "no_required",  # the checks admission's (`check_admit`)
@@ -268,7 +269,8 @@ def read_task(tasks: Tasks, task_id: str, backlog: str, tracker_root: str) -> Ta
         if error.kind == "tracker_unavailable":
             return AdmitUnavailable("tracker", detail=why(error))
         if error.kind == "not_found":
-            return AdmitRefused("task", detail=f"No task {task_id} in the tracker at {tracker_root}")
+            gone = f"{task_id} is gone from the tracker; `tl step release --abandon {task_id}` clears its attempt"
+            return AdmitRefused("task_missing", detail=gone)
         return AdmitRefused("task", detail=f"{error.kind}: {why(error)}")
 
 
@@ -310,7 +312,7 @@ def free_slots(
     if any(view.reason == "store_unavailable" for view in views):
         return AdmitUnavailable("store", detail="Reservations unreadable")
     free = tuple(view for view in views if view.state == "free")
-    return free or AdmitRefused("no_free_slot", views)
+    return free or AdmitRefused("no_free_slot", views, detail=unusable_text(views))
 
 
 def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:

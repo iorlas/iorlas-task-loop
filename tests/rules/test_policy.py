@@ -212,7 +212,7 @@ def test_only_tracker_client_constructs_the_tracker_client() -> None:
     assert bd_importers() == {"tracker_client.py"}
 
 
-SIGNAL_USES = frozenset({"signal", "SIGINT", "SIGTERM", "SIG_IGN", "SIG_DFL", "default_int_handler", "getsignal"})
+SIGNAL_USES = frozenset({"signal", "SIGINT", "SIGTERM", "SIGHUP", "SIG_IGN", "SIG_DFL", "default_int_handler", "getsignal"})
 # Sending or timing signals, under any receiver (`os.kill`, `signal.alarm`, `proc.kill`): no factory source or test uses one.
 SIGNALLING = frozenset({
     "kill", "killpg", "alarm", "setitimer", "pthread_kill", "pthread_sigmask", "set_wakeup_fd", "pidfd_send_signal",
@@ -241,10 +241,10 @@ def signal_uses(path: Path) -> tuple[set[str], set[str], set[str]]:
     return imports, dynamic, signalling
 
 
-def test_the_one_signal_owner_installs_only_a_sigint_handler_and_nothing_sends_a_signal() -> None:
+def test_the_one_signal_owner_installs_only_the_rounds_handlers_and_nothing_sends_a_signal() -> None:
     """CLAUDE.md's one exception: only `interrupts.py` imports `signal`, plainly (no alias, no `from`, no `_signal`, no
-    dynamic import anywhere), and uses only what installs and restores the SIGINT and SIGTERM handlers; no factory source or test sends
-    or times a signal (`SIGNALLING`), and tests never import `signal` (so never install a handler)."""
+    dynamic import anywhere), and uses only what installs and restores the SIGINT, SIGTERM, SIGHUP handlers; no factory source or test
+    sends or times a signal (`SIGNALLING`), and tests never import `signal` (so never install a handler)."""
     owner = ROOT / "src" / "taskloop" / "interrupts.py"
     for path in FILES:
         imports, dynamic, signalling = signal_uses(path)

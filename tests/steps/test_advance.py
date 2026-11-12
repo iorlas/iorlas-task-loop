@@ -138,8 +138,8 @@ def test_a_claimed_task_the_tracker_lost_is_skipped_and_the_next_advance_and_new
     factory.tracker.beads.pop("tl-1")
     factory.tracker.beads["tl-3"] = task("tl-3")
     scripts(factory, factory.slot, "tl-3")
-    assert factory.round() == [("tl-1", "plan", "skip", "task"), ("tl-2", "implement", "advance", "started"),
+    assert factory.round() == [("tl-1", "plan", "skip", "task_missing"), ("tl-2", "implement", "advance", "started"),
                                ("tl-3", "plan", "start", "started")]
     assert factory.last.stopped == ""
-    assert ("tl-1", "plan", "skip", "task") in factory.round() and factory.last.stopped == ""
+    assert ("tl-1", "plan", "skip", "task_missing") in factory.round() and factory.last.stopped == ""
     assert factory.con.execute("SELECT count(*) FROM attempt WHERE task_id='tl-1' AND step='implement'").fetchone() == (0,)
