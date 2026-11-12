@@ -4,8 +4,8 @@ requires-python = ">=3.15"
 
 [[package]]
 name = "any-agent"
-version = "0.5.1"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.5.1#4e093830d05217c5daaf35365bac97e256974231" }
+version = "0.6.0"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.6.0#045c99ee404345cac4aa72db115f2249a6f126d9" }
 dependencies = [
     { name = "stream-proc" },
 ]
@@ -68,12 +68,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.5.1" },
+    { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.6.0" },
     { name = "beads-client", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.2.0" },
     { name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.18.1" },
     { name = "process-lock", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=process-lock-v0.2.1" },
     { name = "sqlite-store", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fsqlite-store&tag=sqlite-store-v0.1.0" },
-    { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.5.1" },
+    { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.6.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -151,4 +151,4 @@ source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2F
 [[package]]
 name = "stream-proc"
 version = "0.7.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.5.1#4e093830d05217c5daaf35365bac97e256974231" }
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.6.0#045c99ee404345cac4aa72db115f2249a6f126d9" }
