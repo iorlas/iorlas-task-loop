@@ -507,7 +507,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
     missing = tmp_path / "factory.db"  # in an existing directory: a writable open would create it
     refused = Failed("refused", "database", "No readable factory.db at this path; `tl slot adopt` creates it")
-    with open_reads(missing) as reads:
+    with open_reads(missing, missing.parent) as reads:
         assert reads == refused
     with open_start(missing, tmp_path / "art") as ports:
         assert ports == refused

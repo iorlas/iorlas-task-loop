@@ -102,16 +102,17 @@ def _reader(con: sqlite3.Connection) -> AttemptStore:
 
 
 @contextmanager
-def open_reads(database: Path) -> Generator[StatusPorts | Failed]:
+def open_reads(database: Path, artifacts: Path) -> Generator[StatusPorts | Failed]:
     """Read-only factory.db, the native process-table observation, the wall clock and the read-only leftovers of a step
-    still to settle (Git and slot reads); writes and creates nothing."""
+    still to settle (Git and slot reads) and the agent's latest command time (evidence); writes and creates nothing."""
     with _read_only(database) as con:
         if isinstance(con, Failed):
             yield con
         else:
             reader = _reader(con)
             verifier = Verifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused)  # never verifies
-            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen)
+            seen = EvidenceFiles(artifacts).last_command
+            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen, seen)
 
 
 @contextmanager
