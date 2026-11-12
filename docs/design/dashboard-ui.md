@@ -5,21 +5,38 @@ can judge the look. No server, no live data and no runtime code exist yet; the b
 below. Terms: [dashboard, board, live tail](../glossary.md). This is separate from the retired round mockups in
 `docs/design/dashboard/`, which were ideas only.
 
-## Decisions (owner design interview, 2026-11-12)
+## Decisions (owner design interview, 2026-11-12, and review of the first mock)
 
-- Read-only: no buttons that change anything, no auth, no charts, no history pages. The only control is the theme switch.
-- One board on one screen. A card is a task, newest activity first in its column. Columns: Waiting, Plan, Implement,
-  Checks, Land, Held, Landed.
-- A card shows task id and title, attempt number, a replan or repeat badge with its reason, time in the current step,
-  slot, and the hold cause. A card that changes column animates to its new place.
-- Clicking a card opens a drawer: task fields and metadata, the attempts so far and the live tail of the current attempt
-  (the last 20 lines at most): commands run, how long each ran, how long we waited before it, agent messages and check
-  results, as compact styled lines. Never raw JSON.
-- Stack: plain HTML, one vanilla JS ES module, no framework, no npm at runtime. Styling is Tailwind compiled once;
-  `dash.css` is committed, so nobody installs Tailwind to use or serve the page. Light and dark theme follow the system;
-  the switch overrides and is remembered in `localStorage` (optional, failure ignored).
+- Read-only: no buttons that change anything, no auth, no charts, no history pages. The controls are the theme switch,
+  the board layout switch and drawer navigation.
+- One board on one screen. A card is a task, newest activity first in its column. Columns: Ready, Plan, Implement,
+  Checks, Land, Held, Landed (the glossary says *ready* for a task not yet admitted; the interview said "Waiting").
+- Two layouts of the same board: **Steps** (one column per step) and **By slot** (swim lanes: one row per slot, plus
+  "no slot" for tasks holding none). Switching animates the cards into place.
+- A card shows task id and title, attempt number, a *repeat* or *restarted at plan* badge with its reason, time in the
+  current step, slot, and the hold cause. A card that changes column animates to its new place.
+- Clicking a card opens a wide drawer (see below): task fields, then the task's history, then the lines of one attempt.
+- The drawer's history reads left to right. A **tab per start from plan** ("From plan 1", "From plan 2"): when a task is
+  restarted at plan (D4) a new tab begins. Inside a tab, the steps plan, implement, checks, land are a strip; a step that
+  did not run is dashed. Under each step are its attempts as pills (`#1 ❌`, `#2 ✅`); click a step or an attempt to see
+  how it ended and its lines. Finished attempts keep their last lines; the running one is the live tail.
+- A line is a compact styled row, never raw JSON: ⚙️ command with ⏱ how long it ran (❌ and the exit code when not 0),
+  💬 agent message, ✅/❌ check result with its duration, 🚦 attempt started. Before a command, when the agent took
+  2 s or more to issue it, a faint 🤔 "agent thought 33s" hint. That number is the time from the previous line to this
+  command's start; it is *not* part of the command's own duration (the first mock showed both as unlabeled ⏱ and ⌛).
+- Stack: plain HTML, one vanilla JS ES module (`app.js`), no framework, no npm at runtime. `mock.js` is the throwaway
+  fake source, deleted when the server slice lands. Styling is Tailwind compiled once; `dash.css` is committed, so nobody
+  installs Tailwind to use or serve the page. Light and dark theme follow the system; the switch overrides and is
+  remembered in `localStorage` (optional, failure ignored).
 - Later slices: a stdlib server in a thread of the rounds process, JSON endpoints and SSE. Typed agent events come from
-  any-agent. The page already consumes the shapes below; `mockSource` in `app.js` is the one part to replace.
+  any-agent. The page already consumes the shapes below; `mockSource` is the one part to replace.
+
+## Words
+
+The page uses glossary terms only: task, step, attempt, repeat, slot (`s1`), hold (cause), landed, check, command, agent,
+live tail. "Cycle", "run", "worker", "waiting" and "in flight" are not used: *restarted at plan* is the glossary's
+restart at plan (D4); the count in the header says "running"; an attempt's state is `running`, `succeeded` or `failed`
+(a *pass* is a stored check result, not an attempt state). Proposed, for the owner to confirm: the tab label "From plan N".
 
 ## Tailwind
 
@@ -47,25 +64,28 @@ Times are ISO 8601 UTC strings. Durations are integer milliseconds. Unknown opti
   "title": "Carry the entry lease through relaunch",
   "column": "implement",
   "attempt": 3,
-  "repeat": {"kind": "replan", "reason": "plan rejected: ..."},
+  "repeat": {"kind": "restart_at_plan", "reason": "plan rejected: ..."},
   "step_started_at": "2026-11-12T10:15:00Z",
   "last_activity_at": "2026-11-12T10:21:50Z",
-  "slot": "slot-2",
+  "slot": "s2",
   "hold_cause": null
 }
 ```
 
-`column` is one of `waiting plan implement checks land held landed`. `attempt` is the number of the current or last
-attempt of the step (0 before any). `repeat` is `null` or `{kind: "replan" | "repeat", reason}`; replan means the task
-went back to plan, repeat means the same step ran again. `step_started_at` starts "time in step" (for Landed: time since
-landing). `last_activity_at` is the sort key (newest first): the last step change or live event. `hold_cause` is the
-sentence the hold owner already shows, only in `held`.
+`column` is one of `waiting plan implement checks land held landed` (`waiting` is shown as Ready). `attempt` is the
+number of the current or last attempt of the step (0 before any). `repeat` is `null` or `{kind, reason}`: `repeat` is a
+new attempt of the same step, `restart_at_plan` is a task sent back to plan. `step_started_at` starts "time in step"
+(for Landed: time since landing). `last_activity_at` is the sort key (newest first): the last step change or live
+event. `slot` is `null` when the task holds none. `hold_cause` is the sentence the hold owner already shows, only in
+`held`.
 
 ### Board snapshot: `GET /api/board`
 
 ```json
-{"generated_at": "2026-11-12T10:22:00Z", "tasks": [ <card>, ... ]}
+{"generated_at": "2026-11-12T10:22:00Z", "slots": ["s1", "s2"], "tasks": [ <card>, ... ]}
 ```
+
+`slots` lists every slot, so By slot shows idle ones.
 
 ### Task detail: `GET /api/tasks/<id>`
 
@@ -74,25 +94,36 @@ sentence the hold owner already shows, only in `held`.
   "task": <card>,
   "fields": {"priority": "P1", "labels": ["auto"], "branch": "task/tl-7d5", "claimed_by": "factory@devbox",
              "created_at": "...", "description": "..."},
-  "attempts": [{"n": 1, "step": "implement", "started_at": "...", "result": "failed: ..."}],
-  "feed": [ <live event>, ... ]
+  "plan_starts": [
+    {"n": 1, "outcome": "restarted", "reason": "plan rejected: ...",
+     "stages": [
+       {"step": "implement", "attempts": [
+         {"n": 1, "state": "failed", "started_at": "...", "ended_at": "...",
+          "summary": "failed: the agent finished without a diff", "feed": [ <live event>, ... ]}
+       ]}
+     ]}
+  ]
 }
 ```
 
-`feed` is the last 20 events of the current attempt, oldest first. `fields` are the tracker's, shown as given.
+`plan_starts` is the task's history split where it started over from plan: each entry is one tab. `outcome` is
+`running`, `restarted` (with `reason`), `held` or `landed`. `stages` hold only steps that ran, in order; `attempts`
+number per step across the whole task. `state` is `running`, `succeeded` or `failed`; `summary` says how it ended
+(the verdict or conclusion the owner of that fact already states). `ended_at` is `null` while running. `feed` is the
+last 20 lines of that attempt, oldest first, read behind the evidence reader; it is display only, never control state.
 
 ### Live event
 
-One line of the live tail. `id` identifies a command so its `finished` event replaces its `running` one.
+One line. `id` identifies a command so its `finished` event replaces its `running` one.
 
 | `type` | fields | shows |
 |---|---|---|
-| `step` | `step`, `attempt` | 🚦 entered the step |
-| `command` | `id`, `cmd`, `state` (`running` or `finished`), `waited_ms`, and when finished `duration_ms`, `exit_code` | ⚙️ the command, ⏱ how long it ran (a running one counts up), ⌛ how long we waited for the agent before it started; ❌ when `exit_code` is not 0 |
+| `step` | `step`, `attempt` | 🚦 attempt started |
+| `command` | `id`, `cmd`, `state` (`running` or `finished`), `waited_ms`, and when finished `duration_ms`, `exit_code` | ⚙️ the command, ⏱ how long it ran (a running one counts up); ❌ and the exit code when not 0; 🤔 `waited_ms` = how long the agent took before issuing it |
 | `message` | `text` | 💬 an agent message |
 | `check` | `name`, `passed`, `duration_ms` | ✅ or ❌ a check result |
 
-Every event carries `at`. Waiting time is measured by the producer from the previous event to this command's start.
+Every event carries `at`. `waited_ms` is measured by the producer: from the previous event's end to this command's start.
 
 ### Stream: `GET /api/events` (SSE)
 
@@ -100,15 +131,16 @@ Each message is one of:
 
 ```json
 {"kind": "task", "task": <card>}
-{"kind": "feed", "task_id": "tl-7c4", "event": <live event>}
+{"kind": "feed", "task_id": "tl-7c4", "step": "implement", "attempt": 1, "event": <live event>}
 ```
 
-A `task` message replaces the card of that id (a changed `column` is the move); the page animates the difference. The
-page loads the snapshot first, then the stream, and loads the detail when a drawer opens.
+A `task` message replaces the card of that id (a changed `column` is the move); the page animates the difference and,
+if that task's drawer is open, reloads its detail because a step or attempt began or ended. A `feed` message appends to
+the named attempt's lines. The page loads the snapshot first, then the stream, and the detail when a drawer opens.
 
 ## Mock mode
 
-`fixtures.json` holds `tasks` (ages as `*_ago_s` seconds so the data never goes stale), `feeds`, `attempts` and `script`:
-timed steps (`after_s`) that replay as stream messages, with task steps as patches merged into the current card. The
-fixture covers every column, a replanned task (attempt 3), a held task with its cause, landed tasks and one task with a
-long feed.
+`fixtures.json` holds `tasks` (ages as `*_ago_s` seconds so the data never goes stale), `slots`, `plan_starts` (history
+with lines per attempt) and `script`: timed steps (`after_s`) that replay as stream messages, with task steps as patches
+merged into the current card. `mock.js` keeps its own detail in step with them. The fixture covers every column, a
+task restarted at plan (two tabs), repeats, a held task with its cause, landed tasks and one long feed.

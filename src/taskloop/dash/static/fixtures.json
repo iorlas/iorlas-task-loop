@@ -50,7 +50,7 @@
    "attempt": 1,
    "repeat": null,
    "step_started_ago_s": 95,
-   "slot": "slot-3",
+   "slot": "s3",
    "hold_cause": null,
    "last_activity_ago_s": 95,
    "fields": {
@@ -71,7 +71,7 @@
    "attempt": 1,
    "repeat": null,
    "step_started_ago_s": 1425,
-   "slot": "slot-1",
+   "slot": "s1",
    "hold_cause": null,
    "last_activity_ago_s": 2,
    "fields": {
@@ -92,11 +92,11 @@
    "column": "implement",
    "attempt": 3,
    "repeat": {
-    "kind": "replan",
+    "kind": "restart_at_plan",
     "reason": "plan rejected: the change touches protected check configuration"
    },
    "step_started_ago_s": 410,
-   "slot": "slot-2",
+   "slot": "s2",
    "hold_cause": null,
    "last_activity_ago_s": 9,
    "fields": {
@@ -121,7 +121,7 @@
     "reason": "checks failed: pyrefly reported 3 errors"
    },
    "step_started_ago_s": 188,
-   "slot": "slot-4",
+   "slot": "s4",
    "hold_cause": null,
    "last_activity_ago_s": 14,
    "fields": {
@@ -142,7 +142,7 @@
    "attempt": 1,
    "repeat": null,
    "step_started_ago_s": 52,
-   "slot": "slot-5",
+   "slot": "s5",
    "hold_cause": null,
    "last_activity_ago_s": 52,
    "fields": {
@@ -228,424 +228,6 @@
    }
   }
  ],
- "feeds": {
-  "tl-7c4": [
-   {
-    "ago_s": 1400,
-    "type": "step",
-    "step": "implement",
-    "attempt": 1
-   },
-   {
-    "ago_s": 1390,
-    "type": "message",
-    "text": "Reading the plan and the attempt status module before touching anything."
-   },
-   {
-    "ago_s": 1380,
-    "type": "command",
-    "id": "c1",
-    "cmd": "rg -n deadline src/taskloop",
-    "state": "finished",
-    "duration_ms": 420,
-    "waited_ms": 9800,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 1350,
-    "type": "command",
-    "id": "c2",
-    "cmd": "sed -n 1,120p src/taskloop/attempt_status.py",
-    "state": "finished",
-    "duration_ms": 90,
-    "waited_ms": 2100,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 1300,
-    "type": "message",
-    "text": "The deadline is in AttemptRow already. I will format it in the status renderer and add a focused test."
-   },
-   {
-    "ago_s": 1240,
-    "type": "command",
-    "id": "c3",
-    "cmd": "apply_patch src/taskloop/attempt_status.py",
-    "state": "finished",
-    "duration_ms": 310,
-    "waited_ms": 41000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 1180,
-    "type": "command",
-    "id": "c4",
-    "cmd": "uv run pytest -q tests/cli/test_step_show.py",
-    "state": "finished",
-    "duration_ms": 8400,
-    "waited_ms": 5200,
-    "exit_code": 1
-   },
-   {
-    "ago_s": 1150,
-    "type": "message",
-    "text": "One failure: the fixture has no deadline column. Adding it to the fixture."
-   },
-   {
-    "ago_s": 1090,
-    "type": "command",
-    "id": "c5",
-    "cmd": "apply_patch tests/cli/test_step_show.py",
-    "state": "finished",
-    "duration_ms": 260,
-    "waited_ms": 22000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 1040,
-    "type": "command",
-    "id": "c6",
-    "cmd": "uv run pytest -q tests/cli/test_step_show.py",
-    "state": "finished",
-    "duration_ms": 7900,
-    "waited_ms": 3100,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 980,
-    "type": "message",
-    "text": "Green. Running the formatter and the type check before declaring done."
-   },
-   {
-    "ago_s": 940,
-    "type": "command",
-    "id": "c7",
-    "cmd": "uv tool run ruff check src tests",
-    "state": "finished",
-    "duration_ms": 1900,
-    "waited_ms": 4600,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 900,
-    "type": "command",
-    "id": "c8",
-    "cmd": "uv tool run pyrefly check",
-    "state": "finished",
-    "duration_ms": 23800,
-    "waited_ms": 2200,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 820,
-    "type": "message",
-    "text": "Types pass. Looking at how the minutes-left value rounds near zero."
-   },
-   {
-    "ago_s": 790,
-    "type": "command",
-    "id": "c9",
-    "cmd": "rg -n 'minutes_left|remaining' src/taskloop",
-    "state": "finished",
-    "duration_ms": 380,
-    "waited_ms": 18000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 700,
-    "type": "command",
-    "id": "c10",
-    "cmd": "apply_patch src/taskloop/attempt_status.py",
-    "state": "finished",
-    "duration_ms": 280,
-    "waited_ms": 52000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 640,
-    "type": "command",
-    "id": "c11",
-    "cmd": "uv run pytest -q tests/cli",
-    "state": "finished",
-    "duration_ms": 31200,
-    "waited_ms": 2600,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 560,
-    "type": "message",
-    "text": "Edge case: a deadline already past must print `expired`, not a negative number."
-   },
-   {
-    "ago_s": 500,
-    "type": "command",
-    "id": "c12",
-    "cmd": "apply_patch src/taskloop/attempt_status.py",
-    "state": "finished",
-    "duration_ms": 300,
-    "waited_ms": 33000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 440,
-    "type": "command",
-    "id": "c13",
-    "cmd": "uv run pytest -q tests/cli/test_step_show.py",
-    "state": "finished",
-    "duration_ms": 8100,
-    "waited_ms": 4100,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 380,
-    "type": "command",
-    "id": "c14",
-    "cmd": "git diff --stat",
-    "state": "finished",
-    "duration_ms": 140,
-    "waited_ms": 21000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 300,
-    "type": "message",
-    "text": "Three files changed, one test added. Checking line caps."
-   },
-   {
-    "ago_s": 240,
-    "type": "command",
-    "id": "c15",
-    "cmd": "wc -l src/taskloop/attempt_status.py",
-    "state": "finished",
-    "duration_ms": 30,
-    "waited_ms": 9000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 120,
-    "type": "command",
-    "id": "c16",
-    "cmd": "uv tool run pyrefly check",
-    "state": "finished",
-    "duration_ms": 22100,
-    "waited_ms": 13000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 40,
-    "type": "message",
-    "text": "Everything passes locally. Writing the final answer."
-   },
-   {
-    "ago_s": 2,
-    "type": "command",
-    "id": "c17",
-    "cmd": "git status --short",
-    "state": "finished",
-    "duration_ms": 60,
-    "waited_ms": 36000,
-    "exit_code": 0
-   }
-  ],
-  "tl-7d5": [
-   {
-    "ago_s": 400,
-    "type": "step",
-    "step": "implement",
-    "attempt": 3
-   },
-   {
-    "ago_s": 380,
-    "type": "message",
-    "text": "Third attempt. The new plan keeps check configuration untouched and changes only entry.py."
-   },
-   {
-    "ago_s": 350,
-    "type": "command",
-    "id": "d1",
-    "cmd": "rg -n lease src/taskloop/attempt_entry.py",
-    "state": "finished",
-    "duration_ms": 350,
-    "waited_ms": 11000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 290,
-    "type": "command",
-    "id": "d2",
-    "cmd": "apply_patch src/taskloop/attempt_entry.py",
-    "state": "finished",
-    "duration_ms": 280,
-    "waited_ms": 48000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 200,
-    "type": "command",
-    "id": "d3",
-    "cmd": "uv run pytest -q tests/steps/test_relaunch.py",
-    "state": "finished",
-    "duration_ms": 12400,
-    "waited_ms": 4000,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 9,
-    "type": "message",
-    "text": "Relaunch keeps its lease. Running the wider step tests now."
-   }
-  ],
-  "tl-6e6": [
-   {
-    "ago_s": 180,
-    "type": "step",
-    "step": "checks",
-    "attempt": 2
-   },
-   {
-    "ago_s": 170,
-    "type": "check",
-    "name": "lint",
-    "passed": true,
-    "duration_ms": 1900
-   },
-   {
-    "ago_s": 140,
-    "type": "check",
-    "name": "types",
-    "passed": false,
-    "duration_ms": 24100
-   },
-   {
-    "ago_s": 14,
-    "type": "check",
-    "name": "rules",
-    "passed": true,
-    "duration_ms": 6400
-   }
-  ],
-  "tl-8f3": [
-   {
-    "ago_s": 90,
-    "type": "step",
-    "step": "plan",
-    "attempt": 1
-   },
-   {
-    "ago_s": 70,
-    "type": "message",
-    "text": "Reading the rounds module for every place a skip is emitted."
-   },
-   {
-    "ago_s": 40,
-    "type": "command",
-    "id": "p1",
-    "cmd": "rg -n \"skip\" src/taskloop/round*.py",
-    "state": "finished",
-    "duration_ms": 300,
-    "waited_ms": 8000,
-    "exit_code": 0
-   }
-  ],
-  "tl-6f7": [
-   {
-    "ago_s": 52,
-    "type": "step",
-    "step": "land",
-    "attempt": 1
-   },
-   {
-    "ago_s": 40,
-    "type": "command",
-    "id": "l1",
-    "cmd": "git fetch origin main",
-    "state": "finished",
-    "duration_ms": 1300,
-    "waited_ms": 500,
-    "exit_code": 0
-   }
-  ],
-  "tl-5b9": [
-   {
-    "ago_s": 2700,
-    "type": "step",
-    "step": "land",
-    "attempt": 1
-   },
-   {
-    "ago_s": 2650,
-    "type": "command",
-    "id": "g1",
-    "cmd": "git push origin HEAD:main",
-    "state": "finished",
-    "duration_ms": 2100,
-    "waited_ms": 900,
-    "exit_code": 0
-   },
-   {
-    "ago_s": 2640,
-    "type": "step",
-    "step": "landed",
-    "attempt": 1
-   }
-  ]
- },
- "attempts": {
-  "tl-7d5": [
-   {
-    "n": 1,
-    "step": "implement",
-    "ago_s": 14000,
-    "result": "failed: agent answered without a diff"
-   },
-   {
-    "n": 2,
-    "step": "plan",
-    "ago_s": 6000,
-    "result": "replan: plan rejected, touches protected check configuration"
-   },
-   {
-    "n": 3,
-    "step": "implement",
-    "ago_s": 410,
-    "result": "running"
-   }
-  ],
-  "tl-6e6": [
-   {
-    "n": 1,
-    "step": "checks",
-    "ago_s": 3000,
-    "result": "failed: pyrefly reported 3 errors"
-   },
-   {
-    "n": 2,
-    "step": "checks",
-    "ago_s": 188,
-    "result": "running"
-   }
-  ],
-  "tl-5a8": [
-   {
-    "n": 1,
-    "step": "implement",
-    "ago_s": 20000,
-    "result": "failed: deadline"
-   },
-   {
-    "n": 2,
-    "step": "implement",
-    "ago_s": 12000,
-    "result": "failed: deadline"
-   },
-   {
-    "n": 3,
-    "step": "implement",
-    "ago_s": 6000,
-    "result": "failed: deadline"
-   }
-  ]
- },
  "script": [
   {
    "after_s": 3,
@@ -654,7 +236,7 @@
     "id": "tl-9a1",
     "column": "plan",
     "attempt": 1,
-    "slot": "slot-3",
+    "slot": "s3",
     "repeat": null,
     "step_started_ago_s": 0
    }
@@ -669,7 +251,9 @@
     "cmd": "uv run pytest -q tests/cli",
     "state": "running",
     "waited_ms": 7400
-   }
+   },
+   "step": "implement",
+   "attempt": 1
   },
   {
    "after_s": 9,
@@ -683,7 +267,9 @@
     "duration_ms": 31900,
     "waited_ms": 7400,
     "exit_code": 0
-   }
+   },
+   "step": "implement",
+   "attempt": 1
   },
   {
    "after_s": 12,
@@ -691,7 +277,8 @@
    "task": {
     "id": "tl-6f7",
     "column": "landed",
-    "step_started_ago_s": 0
+    "step_started_ago_s": 0,
+    "slot": null
    }
   },
   {
@@ -704,7 +291,9 @@
     "cmd": "uv run pytest -q tests/steps",
     "state": "running",
     "waited_ms": 5200
-   }
+   },
+   "step": "implement",
+   "attempt": 3
   },
   {
    "after_s": 18,
@@ -723,7 +312,9 @@
    "event": {
     "type": "message",
     "text": "Pushing the last tweak, then handing over to checks."
-   }
+   },
+   "step": "implement",
+   "attempt": 1
   },
   {
    "after_s": 24,
@@ -737,7 +328,9 @@
     "duration_ms": 18700,
     "waited_ms": 5200,
     "exit_code": 1
-   }
+   },
+   "step": "implement",
+   "attempt": 3
   },
   {
    "after_s": 27,
@@ -757,7 +350,9 @@
     "name": "lint",
     "passed": true,
     "duration_ms": 1800
-   }
+   },
+   "step": "implement",
+   "attempt": 1
   },
   {
    "after_s": 33,
@@ -777,9 +372,1315 @@
     "id": "tl-9a2",
     "column": "plan",
     "attempt": 1,
-    "slot": "slot-1",
+    "slot": "s1",
     "step_started_ago_s": 0
    }
   }
+ ],
+ "plan_starts": {
+  "tl-7d5": [
+   {
+    "outcome": "restarted",
+    "reason": "plan rejected: the change touches protected check configuration",
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 17000,
+        "duration_s": 110,
+        "summary": "Plan admitted: touches 2 files, one new test.",
+        "feed": [
+         {
+          "ago_s": 17000,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 16980,
+          "type": "message",
+          "text": "Reading the task and the modules it names."
+         },
+         {
+          "ago_s": 16955,
+          "type": "command",
+          "id": "p1",
+          "cmd": "rg -n lease src/taskloop",
+          "state": "finished",
+          "duration_ms": 380,
+          "waited_ms": 9000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 16905,
+          "type": "message",
+          "text": "Plan written to docs/design/<task>/plan.md."
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "failed",
+        "started_ago_s": 16800,
+        "duration_s": 780,
+        "summary": "failed: the agent finished without a diff",
+        "feed": [
+         {
+          "ago_s": 16800,
+          "type": "step",
+          "step": "implement",
+          "attempt": 1
+         },
+         {
+          "ago_s": 16770,
+          "type": "message",
+          "text": "The lease already seems carried; checking."
+         },
+         {
+          "ago_s": 16740,
+          "type": "command",
+          "id": "i1",
+          "cmd": "rg -n lease src/taskloop/attempt_entry.py",
+          "state": "finished",
+          "duration_ms": 350,
+          "waited_ms": 11000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 16100,
+          "type": "message",
+          "text": "No change needed, I believe."
+         }
+        ]
+       },
+       {
+        "state": "failed",
+        "started_ago_s": 15500,
+        "duration_s": 1800,
+        "summary": "failed: deadline exceeded after 30m",
+        "feed": [
+         {
+          "ago_s": 15500,
+          "type": "step",
+          "step": "implement",
+          "attempt": 2
+         },
+         {
+          "ago_s": 15460,
+          "type": "command",
+          "id": "j1",
+          "cmd": "apply_patch src/taskloop/attempt_entry.py",
+          "state": "finished",
+          "duration_ms": 280,
+          "waited_ms": 38000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 15380,
+          "type": "command",
+          "id": "j2",
+          "cmd": "uv run pytest -q tests/steps",
+          "state": "finished",
+          "duration_ms": 2100,
+          "waited_ms": 4000,
+          "exit_code": 1
+         },
+         {
+          "ago_s": 14600,
+          "type": "command",
+          "id": "j3",
+          "cmd": "uv run pytest -q tests/steps -x",
+          "state": "finished",
+          "duration_ms": 1700000,
+          "waited_ms": 500,
+          "exit_code": 124
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "outcome": "running",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 6000,
+        "duration_s": 95,
+        "summary": "Plan admitted: only entry.py changes; check configuration untouched.",
+        "feed": [
+         {
+          "ago_s": 6000,
+          "type": "step",
+          "step": "plan",
+          "attempt": 2
+         },
+         {
+          "ago_s": 5985,
+          "type": "message",
+          "text": "Replanning without touching justfile or import-linter contracts."
+         },
+         {
+          "ago_s": 5950,
+          "type": "command",
+          "id": "q1",
+          "cmd": "rg -n lease src/taskloop/attempt_entry.py",
+          "state": "finished",
+          "duration_ms": 310,
+          "waited_ms": 9000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "running",
+        "started_ago_s": 410,
+        "duration_s": null,
+        "summary": "running",
+        "feed": [
+         {
+          "ago_s": 400,
+          "type": "step",
+          "step": "implement",
+          "attempt": 3
+         },
+         {
+          "ago_s": 380,
+          "type": "message",
+          "text": "Third attempt. The new plan keeps check configuration untouched and changes only entry.py."
+         },
+         {
+          "ago_s": 350,
+          "type": "command",
+          "id": "d1",
+          "cmd": "rg -n lease src/taskloop/attempt_entry.py",
+          "state": "finished",
+          "duration_ms": 350,
+          "waited_ms": 11000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 290,
+          "type": "command",
+          "id": "d2",
+          "cmd": "apply_patch src/taskloop/attempt_entry.py",
+          "state": "finished",
+          "duration_ms": 280,
+          "waited_ms": 48000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 200,
+          "type": "command",
+          "id": "d3",
+          "cmd": "uv run pytest -q tests/steps/test_relaunch.py",
+          "state": "finished",
+          "duration_ms": 12400,
+          "waited_ms": 4000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 9,
+          "type": "message",
+          "text": "Relaunch keeps its lease. Running the wider step tests now."
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "tl-6e6": [
+   {
+    "outcome": "running",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 3600,
+        "duration_s": 110,
+        "summary": "Plan admitted: touches 2 files, one new test.",
+        "feed": [
+         {
+          "ago_s": 3600,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 3580,
+          "type": "message",
+          "text": "Reading the task and the modules it names."
+         },
+         {
+          "ago_s": 3555,
+          "type": "command",
+          "id": "p1",
+          "cmd": "rg -n lease src/taskloop",
+          "state": "finished",
+          "duration_ms": 380,
+          "waited_ms": 9000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 3505,
+          "type": "message",
+          "text": "Plan written to docs/design/<task>/plan.md."
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 3300,
+        "duration_s": 420,
+        "summary": "Diff: 2 files, +31 \u22124.",
+        "feed": [
+         {
+          "ago_s": 3300,
+          "type": "step",
+          "step": "implement",
+          "attempt": 1
+         },
+         {
+          "ago_s": 3280,
+          "type": "message",
+          "text": "Adding the slot name to the hold reason."
+         },
+         {
+          "ago_s": 3240,
+          "type": "command",
+          "id": "k1",
+          "cmd": "apply_patch src/taskloop/hold_text.py",
+          "state": "finished",
+          "duration_ms": 260,
+          "waited_ms": 24000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 3100,
+          "type": "command",
+          "id": "k2",
+          "cmd": "uv run pytest -q tests/steps/test_hold.py",
+          "state": "finished",
+          "duration_ms": 6800,
+          "waited_ms": 5200,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "checks",
+      "attempts": [
+       {
+        "state": "failed",
+        "started_ago_s": 3000,
+        "duration_s": 190,
+        "summary": "failed: pyrefly reported 3 errors",
+        "feed": [
+         {
+          "ago_s": 3000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 1
+         },
+         {
+          "ago_s": 2992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1900
+         },
+         {
+          "ago_s": 2960,
+          "type": "check",
+          "name": "types",
+          "passed": false,
+          "duration_ms": 24100
+         }
+        ]
+       },
+       {
+        "state": "running",
+        "started_ago_s": 188,
+        "duration_s": null,
+        "summary": "running",
+        "feed": [
+         {
+          "ago_s": 188,
+          "type": "step",
+          "step": "checks",
+          "attempt": 2
+         },
+         {
+          "ago_s": 182,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1800
+         },
+         {
+          "ago_s": 148,
+          "type": "check",
+          "name": "types",
+          "passed": true,
+          "duration_ms": 23900
+         },
+         {
+          "ago_s": 16,
+          "type": "check",
+          "name": "rules",
+          "passed": true,
+          "duration_ms": 6400
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "tl-7c4": [
+   {
+    "outcome": "running",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 1700,
+        "duration_s": 110,
+        "summary": "Plan admitted: touches 2 files, one new test.",
+        "feed": [
+         {
+          "ago_s": 1700,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 1680,
+          "type": "message",
+          "text": "Reading the task and the modules it names."
+         },
+         {
+          "ago_s": 1655,
+          "type": "command",
+          "id": "p1",
+          "cmd": "rg -n lease src/taskloop",
+          "state": "finished",
+          "duration_ms": 380,
+          "waited_ms": 9000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 1605,
+          "type": "message",
+          "text": "Plan written to docs/design/<task>/plan.md."
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "running",
+        "started_ago_s": 1425,
+        "duration_s": null,
+        "summary": "running",
+        "feed": [
+         {
+          "ago_s": 1400,
+          "type": "step",
+          "step": "implement",
+          "attempt": 1
+         },
+         {
+          "ago_s": 1390,
+          "type": "message",
+          "text": "Reading the plan and the attempt status module before touching anything."
+         },
+         {
+          "ago_s": 1380,
+          "type": "command",
+          "id": "c1",
+          "cmd": "rg -n deadline src/taskloop",
+          "state": "finished",
+          "duration_ms": 420,
+          "waited_ms": 9800,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 1350,
+          "type": "command",
+          "id": "c2",
+          "cmd": "sed -n 1,120p src/taskloop/attempt_status.py",
+          "state": "finished",
+          "duration_ms": 90,
+          "waited_ms": 2100,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 1300,
+          "type": "message",
+          "text": "The deadline is in AttemptRow already. I will format it in the status renderer and add a focused test."
+         },
+         {
+          "ago_s": 1240,
+          "type": "command",
+          "id": "c3",
+          "cmd": "apply_patch src/taskloop/attempt_status.py",
+          "state": "finished",
+          "duration_ms": 310,
+          "waited_ms": 41000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 1180,
+          "type": "command",
+          "id": "c4",
+          "cmd": "uv run pytest -q tests/cli/test_step_show.py",
+          "state": "finished",
+          "duration_ms": 8400,
+          "waited_ms": 5200,
+          "exit_code": 1
+         },
+         {
+          "ago_s": 1150,
+          "type": "message",
+          "text": "One failure: the fixture has no deadline column. Adding it to the fixture."
+         },
+         {
+          "ago_s": 1090,
+          "type": "command",
+          "id": "c5",
+          "cmd": "apply_patch tests/cli/test_step_show.py",
+          "state": "finished",
+          "duration_ms": 260,
+          "waited_ms": 22000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 1040,
+          "type": "command",
+          "id": "c6",
+          "cmd": "uv run pytest -q tests/cli/test_step_show.py",
+          "state": "finished",
+          "duration_ms": 7900,
+          "waited_ms": 3100,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 980,
+          "type": "message",
+          "text": "Green. Running the formatter and the type check before declaring done."
+         },
+         {
+          "ago_s": 940,
+          "type": "command",
+          "id": "c7",
+          "cmd": "uv tool run ruff check src tests",
+          "state": "finished",
+          "duration_ms": 1900,
+          "waited_ms": 4600,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 900,
+          "type": "command",
+          "id": "c8",
+          "cmd": "uv tool run pyrefly check",
+          "state": "finished",
+          "duration_ms": 23800,
+          "waited_ms": 2200,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 820,
+          "type": "message",
+          "text": "Types pass. Looking at how the minutes-left value rounds near zero."
+         },
+         {
+          "ago_s": 790,
+          "type": "command",
+          "id": "c9",
+          "cmd": "rg -n 'minutes_left|remaining' src/taskloop",
+          "state": "finished",
+          "duration_ms": 380,
+          "waited_ms": 18000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 700,
+          "type": "command",
+          "id": "c10",
+          "cmd": "apply_patch src/taskloop/attempt_status.py",
+          "state": "finished",
+          "duration_ms": 280,
+          "waited_ms": 52000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 640,
+          "type": "command",
+          "id": "c11",
+          "cmd": "uv run pytest -q tests/cli",
+          "state": "finished",
+          "duration_ms": 31200,
+          "waited_ms": 2600,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 560,
+          "type": "message",
+          "text": "Edge case: a deadline already past must print `expired`, not a negative number."
+         },
+         {
+          "ago_s": 500,
+          "type": "command",
+          "id": "c12",
+          "cmd": "apply_patch src/taskloop/attempt_status.py",
+          "state": "finished",
+          "duration_ms": 300,
+          "waited_ms": 33000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 440,
+          "type": "command",
+          "id": "c13",
+          "cmd": "uv run pytest -q tests/cli/test_step_show.py",
+          "state": "finished",
+          "duration_ms": 8100,
+          "waited_ms": 4100,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 380,
+          "type": "command",
+          "id": "c14",
+          "cmd": "git diff --stat",
+          "state": "finished",
+          "duration_ms": 140,
+          "waited_ms": 21000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 300,
+          "type": "message",
+          "text": "Three files changed, one test added. Checking line caps."
+         },
+         {
+          "ago_s": 240,
+          "type": "command",
+          "id": "c15",
+          "cmd": "wc -l src/taskloop/attempt_status.py",
+          "state": "finished",
+          "duration_ms": 30,
+          "waited_ms": 9000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 120,
+          "type": "command",
+          "id": "c16",
+          "cmd": "uv tool run pyrefly check",
+          "state": "finished",
+          "duration_ms": 22100,
+          "waited_ms": 13000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 40,
+          "type": "message",
+          "text": "Everything passes locally. Writing the final answer."
+         },
+         {
+          "ago_s": 2,
+          "type": "command",
+          "id": "c17",
+          "cmd": "git status --short",
+          "state": "finished",
+          "duration_ms": 60,
+          "waited_ms": 36000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "tl-8f3": [
+   {
+    "outcome": "running",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "running",
+        "started_ago_s": 95,
+        "duration_s": null,
+        "summary": "running",
+        "feed": [
+         {
+          "ago_s": 90,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 70,
+          "type": "message",
+          "text": "Reading the rounds module for every place a skip is emitted."
+         },
+         {
+          "ago_s": 40,
+          "type": "command",
+          "id": "p1",
+          "cmd": "rg -n \"skip\" src/taskloop/round*.py",
+          "state": "finished",
+          "duration_ms": 300,
+          "waited_ms": 8000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "tl-5a8": [
+   {
+    "outcome": "held",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 26000,
+        "duration_s": 110,
+        "summary": "Plan admitted: touches 2 files, one new test.",
+        "feed": [
+         {
+          "ago_s": 26000,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 25980,
+          "type": "message",
+          "text": "Reading the task and the modules it names."
+         },
+         {
+          "ago_s": 25955,
+          "type": "command",
+          "id": "p1",
+          "cmd": "rg -n lease src/taskloop",
+          "state": "finished",
+          "duration_ms": 380,
+          "waited_ms": 9000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 25905,
+          "type": "message",
+          "text": "Plan written to docs/design/<task>/plan.md."
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "failed",
+        "started_ago_s": 25000,
+        "duration_s": 1800,
+        "summary": "failed: deadline exceeded after 30m",
+        "feed": [
+         {
+          "ago_s": 25000,
+          "type": "step",
+          "step": "implement",
+          "attempt": 1
+         },
+         {
+          "ago_s": 24950,
+          "type": "command",
+          "id": "h1",
+          "cmd": "uv run pytest -q tests",
+          "state": "finished",
+          "duration_ms": 1750000,
+          "waited_ms": 3000,
+          "exit_code": 124
+         }
+        ]
+       },
+       {
+        "state": "failed",
+        "started_ago_s": 21000,
+        "duration_s": 1800,
+        "summary": "failed: deadline exceeded after 30m",
+        "feed": [
+         {
+          "ago_s": 21000,
+          "type": "step",
+          "step": "implement",
+          "attempt": 2
+         },
+         {
+          "ago_s": 20950,
+          "type": "command",
+          "id": "h2",
+          "cmd": "uv run pytest -q tests",
+          "state": "finished",
+          "duration_ms": 1750000,
+          "waited_ms": 3000,
+          "exit_code": 124
+         }
+        ]
+       },
+       {
+        "state": "failed",
+        "started_ago_s": 7200,
+        "duration_s": 1800,
+        "summary": "failed: deadline exceeded after 30m. Held: repeats exhausted.",
+        "feed": [
+         {
+          "ago_s": 7200,
+          "type": "step",
+          "step": "implement",
+          "attempt": 3
+         },
+         {
+          "ago_s": 7150,
+          "type": "command",
+          "id": "h3",
+          "cmd": "uv run pytest -q tests",
+          "state": "finished",
+          "duration_ms": 1750000,
+          "waited_ms": 3000,
+          "exit_code": 124
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "tl-6f7": [
+   {
+    "outcome": "running",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 2400,
+        "duration_s": 110,
+        "summary": "Plan admitted: touches 2 files, one new test.",
+        "feed": [
+         {
+          "ago_s": 2400,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 2380,
+          "type": "message",
+          "text": "Reading the task and the modules it names."
+         },
+         {
+          "ago_s": 2355,
+          "type": "command",
+          "id": "p1",
+          "cmd": "rg -n lease src/taskloop",
+          "state": "finished",
+          "duration_ms": 380,
+          "waited_ms": 9000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 2305,
+          "type": "message",
+          "text": "Plan written to docs/design/<task>/plan.md."
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 2200,
+        "duration_s": 500,
+        "summary": "Diff: 1 file, +2 \u22122.",
+        "feed": [
+         {
+          "ago_s": 2200,
+          "type": "step",
+          "step": "implement",
+          "attempt": 1
+         },
+         {
+          "ago_s": 2160,
+          "type": "command",
+          "id": "m1",
+          "cmd": "apply_patch src/taskloop/step_list.py",
+          "state": "finished",
+          "duration_ms": 270,
+          "waited_ms": 15000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "checks",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 1500,
+        "duration_s": 150,
+        "summary": "All required checks passed.",
+        "feed": [
+         {
+          "ago_s": 1500,
+          "type": "step",
+          "step": "checks",
+          "attempt": 1
+         },
+         {
+          "ago_s": 1492,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1800
+         },
+         {
+          "ago_s": 1465,
+          "type": "check",
+          "name": "types",
+          "passed": true,
+          "duration_ms": 23000
+         },
+         {
+          "ago_s": 1360,
+          "type": "check",
+          "name": "rules",
+          "passed": true,
+          "duration_ms": 6100
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "land",
+      "attempts": [
+       {
+        "state": "running",
+        "started_ago_s": 52,
+        "duration_s": null,
+        "summary": "running",
+        "feed": [
+         {
+          "ago_s": 52,
+          "type": "step",
+          "step": "land",
+          "attempt": 1
+         },
+         {
+          "ago_s": 40,
+          "type": "command",
+          "id": "l1",
+          "cmd": "git fetch origin main",
+          "state": "finished",
+          "duration_ms": 1300,
+          "waited_ms": 500,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "tl-5b9": [
+   {
+    "outcome": "landed",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 8000,
+        "duration_s": 110,
+        "summary": "Plan admitted: touches 2 files, one new test.",
+        "feed": [
+         {
+          "ago_s": 8000,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 7980,
+          "type": "message",
+          "text": "Reading the task and the modules it names."
+         },
+         {
+          "ago_s": 7955,
+          "type": "command",
+          "id": "p1",
+          "cmd": "rg -n lease src/taskloop",
+          "state": "finished",
+          "duration_ms": 380,
+          "waited_ms": 9000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 7905,
+          "type": "message",
+          "text": "Plan written to docs/design/<task>/plan.md."
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 7600,
+        "duration_s": 900,
+        "summary": "Diff: 3 files, +64 \u22129.",
+        "feed": [
+         {
+          "ago_s": 7600,
+          "type": "step",
+          "step": "implement",
+          "attempt": 1
+         },
+         {
+          "ago_s": 7570,
+          "type": "message",
+          "text": "Listing changed check configuration in the land summary."
+         },
+         {
+          "ago_s": 7530,
+          "type": "command",
+          "id": "n1",
+          "cmd": "apply_patch src/taskloop/land_render.py",
+          "state": "finished",
+          "duration_ms": 300,
+          "waited_ms": 30000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "checks",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 6000,
+        "duration_s": 180,
+        "summary": "All required checks passed.",
+        "feed": [
+         {
+          "ago_s": 6000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 1
+         },
+         {
+          "ago_s": 5992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1700
+         },
+         {
+          "ago_s": 5960,
+          "type": "check",
+          "name": "types",
+          "passed": true,
+          "duration_ms": 22000
+         },
+         {
+          "ago_s": 5830,
+          "type": "check",
+          "name": "rules",
+          "passed": true,
+          "duration_ms": 6300
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "land",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 2700,
+        "duration_s": 60,
+        "summary": "Landed as a squash on main.",
+        "feed": [
+         {
+          "ago_s": 2700,
+          "type": "step",
+          "step": "land",
+          "attempt": 1
+         },
+         {
+          "ago_s": 2650,
+          "type": "command",
+          "id": "g1",
+          "cmd": "git push origin HEAD:main",
+          "state": "finished",
+          "duration_ms": 2100,
+          "waited_ms": 900,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 2640,
+          "type": "step",
+          "step": "landed",
+          "attempt": 1
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "tl-4c0": [
+   {
+    "outcome": "landed",
+    "reason": null,
+    "stages": [
+     {
+      "step": "plan",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 14000,
+        "duration_s": 110,
+        "summary": "Plan admitted: touches 2 files, one new test.",
+        "feed": [
+         {
+          "ago_s": 14000,
+          "type": "step",
+          "step": "plan",
+          "attempt": 1
+         },
+         {
+          "ago_s": 13980,
+          "type": "message",
+          "text": "Reading the task and the modules it names."
+         },
+         {
+          "ago_s": 13955,
+          "type": "command",
+          "id": "p1",
+          "cmd": "rg -n lease src/taskloop",
+          "state": "finished",
+          "duration_ms": 380,
+          "waited_ms": 9000,
+          "exit_code": 0
+         },
+         {
+          "ago_s": 13905,
+          "type": "message",
+          "text": "Plan written to docs/design/<task>/plan.md."
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "implement",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 13500,
+        "duration_s": 300,
+        "summary": "Diff: 1 file, +6 \u22122.",
+        "feed": [
+         {
+          "ago_s": 13500,
+          "type": "step",
+          "step": "implement",
+          "attempt": 1
+         },
+         {
+          "ago_s": 13460,
+          "type": "command",
+          "id": "o1",
+          "cmd": "apply_patch src/taskloop/claim_lease.py",
+          "state": "finished",
+          "duration_ms": 250,
+          "waited_ms": 19000,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "checks",
+      "attempts": [
+       {
+        "state": "failed",
+        "started_ago_s": 12800,
+        "duration_s": 40,
+        "summary": "failed: ruff found one unused import",
+        "feed": [
+         {
+          "ago_s": 12800,
+          "type": "step",
+          "step": "checks",
+          "attempt": 1
+         },
+         {
+          "ago_s": 12788,
+          "type": "check",
+          "name": "lint",
+          "passed": false,
+          "duration_ms": 1500
+         }
+        ]
+       },
+       {
+        "state": "succeeded",
+        "started_ago_s": 11000,
+        "duration_s": 170,
+        "summary": "All required checks passed.",
+        "feed": [
+         {
+          "ago_s": 11000,
+          "type": "step",
+          "step": "checks",
+          "attempt": 2
+         },
+         {
+          "ago_s": 10992,
+          "type": "check",
+          "name": "lint",
+          "passed": true,
+          "duration_ms": 1600
+         },
+         {
+          "ago_s": 10960,
+          "type": "check",
+          "name": "types",
+          "passed": true,
+          "duration_ms": 22000
+         },
+         {
+          "ago_s": 10840,
+          "type": "check",
+          "name": "rules",
+          "passed": true,
+          "duration_ms": 6200
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "step": "land",
+      "attempts": [
+       {
+        "state": "succeeded",
+        "started_ago_s": 9100,
+        "duration_s": 70,
+        "summary": "Landed as a squash on main.",
+        "feed": [
+         {
+          "ago_s": 9100,
+          "type": "step",
+          "step": "land",
+          "attempt": 1
+         },
+         {
+          "ago_s": 9090,
+          "type": "command",
+          "id": "o2",
+          "cmd": "git push origin HEAD:main",
+          "state": "finished",
+          "duration_ms": 2000,
+          "waited_ms": 800,
+          "exit_code": 0
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "slots": [
+  "s1",
+  "s2",
+  "s3",
+  "s4",
+  "s5"
  ]
 }
