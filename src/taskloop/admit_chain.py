@@ -46,7 +46,7 @@ from taskloop.admit import (
 )
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.factory_schema import LATER
+from taskloop.factory_schema import LATER, REPEATED
 from taskloop.prepare import HEADS, MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
@@ -57,8 +57,8 @@ from taskloop.tracker import ACTOR
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
 # clean answer with its session complete, of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
 # tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D, step and label (all carried on).
-PREVIOUS = """SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
-EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id),
+PREVIOUS = f"""SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
+{REPEATED},
 p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0

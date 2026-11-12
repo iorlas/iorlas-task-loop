@@ -20,8 +20,9 @@ from typing import Literal, Protocol
 from sqlite_store import Store
 from stream_proc import IdentityUnavailableError, OwnedProcess, ProcessObservation, RegisteredStartUncertainError
 
-from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, StoreUnavailable
-from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
+from taskloop.attempt_reads import StoreUnavailable
+from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
+from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced, entry_identity
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 
@@ -126,10 +127,6 @@ def entry_process(entry: EntryIdentity) -> OwnedProcess:
     return OwnedProcess(entry[0], entry[0], entry[1], entry[2])
 
 
-def _entry(identity: OwnedProcess) -> EntryIdentity:
-    return identity.pid, identity.start, identity.boot
-
-
 class Launcher:
     def __init__(
         self, database: Path, files: EvidenceFiles, clock: Callable[[], float], start: Start, observe: ObserveProcess, executable: str,
@@ -201,7 +198,7 @@ class Launcher:
                 renewed = float(now + minutes * 60)
             except OverflowError:  # no float holds it: the store refuses a non-finite renewal
                 renewed = math.inf
-            answer = writer.register_entry(key, _entry(identity), now, replacing, renewed=renewed)
+            answer = writer.register_entry(key, entry_identity(identity), now, replacing, renewed=renewed)
             if answer != "accepted":
                 raise _CallbackRefused("registration_conflict" if answer == "conflict" else "registration_refused")
             committed = True
@@ -226,7 +223,7 @@ class Launcher:
         except StoreUnavailable:
             return LaunchUnavailable("store")
         except RegisteredStartUncertainError as uncertain:
-            return LaunchUncertain(key, _entry(uncertain.identity))
+            return LaunchUncertain(key, entry_identity(uncertain.identity))
         except (OSError, IdentityUnavailableError, RuntimeError):
             # before the commit nothing was registered and the library cleaned the child; after it, the exec failed
             return LaunchUnavailable("exec_failed_after_commit" if committed else "start")
@@ -235,4 +232,4 @@ class Launcher:
         for pipe in (child.stdin, child.stdout):
             if pipe is not None:
                 pipe.close()
-        return Launched(key, _entry(identity))
+        return Launched(key, entry_identity(identity))

@@ -112,8 +112,8 @@ def hold_task(ports: HoldPorts, view: AttemptView, reason: str | None = None) ->
         claim: Claim = "unknown"  # whose claim the label step read; not known when it ran in an earlier call
         if row.labels is None:
             labelled = _labels(ports, view, row)
-            if isinstance(labelled, tuple):
-                return move("refused" if labelled[0] == "refused:changed" else "pending", "labels", *labelled)
+            if isinstance(labelled, Failed):
+                return move("refused" if labelled.reason == "changed" else "pending", "labels", labelled.word, labelled.detail)
             row, claim = labelled.row, labelled.claim
         return _abandoned(ports, view, row, move, claim)
     except StoreRefused as error:
@@ -153,24 +153,24 @@ class _Labelled:
     claim: Claim
 
 
-def _labels(ports: HoldPorts, view: AttemptView, row: HoldRow) -> _Labelled | tuple[str, str]:
+def _labels(ports: HoldPorts, view: AttemptView, row: HoldRow) -> _Labelled | Failed:
     """5.1 step 3: A still the task's current attempt, then the tracker's label step and its word recorded (fenced on A
     still current), with whose claim it read (`ours` only for the factory's assignee); a stale fence or a tracker failure
-    writes nothing and is retried: (word, detail)."""
+    writes nothing and is retried: the `Failed`."""
     current = ports.reader.attempt_of(view.backlog, view.task_id)
     if current is None or current[0].attempt_id != row.attempt_id:
-        return "refused:changed", "Another attempt of the task is current"
+        return Failed("refused", "changed", "Another attempt of the task is current")
     answer = ports.tracker.labels(row.tracker_root, row.task_id, row.label)
     match answer.word:
         case "moved" | "absent" | "not_ours" | "closed" | "missing":
             claim: Claim = "ours" if answer.word in ("moved", "absent") and answer.detail == ACTOR else "not_ours"
             return _Labelled(ports.store.labelled(row.attempt_id, row.rev, answer.word, ports.clock()), claim)
         case "precondition":
-            return "unavailable:tracker", "precondition: the task's assignee changed after it was read"
+            return Failed("unavailable", "tracker", "precondition: the task's assignee changed after it was read")
         case "bad_label":
-            return "refused:bad_label", f"The stored label {row.label!r} cannot be passed to bd"
+            return Failed("refused", "bad_label", f"The stored label {row.label!r} cannot be passed to bd")
         case "unavailable":
-            return "unavailable:tracker", answer.detail
+            return Failed("unavailable", "tracker", answer.detail)
 
 
 def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move, claim: Claim) -> HoldMove:

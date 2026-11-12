@@ -222,14 +222,17 @@ HOLD = "attempt_id,cause_id,reason,held_at,labels,labelled_at,commenting_at,comm
 CHECK_RESULT = "block,position,name,argv_digest,timeout,pid,pgid,proc_start,boot,started_at,ended_at,rc,conclusion"
 
 
+# A repeat of attempt `p` exists (`previous_attempt_id` links only a step's repeats): its chain is frozen.
+REPEATED = "EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id)"
 # A later attempt of the same task exists (a repeat, the next step or a fresh start): attempt `p` is no longer the current
 # one. The one "not current" rule of every read and fence; `previous_attempt_id` links only a step's repeats.
 LATER = """EXISTS (SELECT 1 FROM attempt later WHERE later.adapter=p.adapter AND later.backlog=p.backlog
 AND later.task_id=p.task_id AND later.seq>p.seq)"""
 # The release's "not current" rule (`slot_release` ROW, FENCE, FLIP): `LATER`, or the attempt's latest checks attempt (its
 # highest `number`) is not abandoned, so the claim is that checks attempt's now and the task's abandon goes checks first.
-SUCCESSOR = "(" + LATER + """ OR EXISTS (SELECT 1 FROM checks_attempt c WHERE c.after_attempt_id=p.attempt_id AND c.abandoned=0
-AND c.number=(SELECT max(d.number) FROM checks_attempt d WHERE d.after_attempt_id=p.attempt_id)))"""
+LATEST_CHECKS = """c.after_attempt_id=p.attempt_id AND c.abandoned=0
+AND c.number=(SELECT max(d.number) FROM checks_attempt d WHERE d.after_attempt_id=p.attempt_id)"""  # `c`: p's live checks attempt
+SUCCESSOR = f"({LATER} OR EXISTS (SELECT 1 FROM checks_attempt c WHERE {LATEST_CHECKS}))"
 
 # A land candidate's validation writes (`land_store.HELD`, and its half of `check_store.RESULT_HELD`): the candidate
 # pending (no validation yet, not superseded) and holding its reservation at the key's generation (`CANDIDATE_RESERVED`).

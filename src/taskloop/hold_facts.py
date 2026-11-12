@@ -9,8 +9,8 @@ from typing import get_args
 
 from any_agent import DecodedAnswer, decode_answer
 
-from taskloop.attempt import collect
 from taskloop.attempt_reads import AttemptRow, StoreRefused
+from taskloop.attempt_result import collect
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import StoredExecution
 from taskloop.check_status import latest

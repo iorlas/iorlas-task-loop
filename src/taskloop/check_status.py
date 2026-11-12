@@ -51,7 +51,7 @@ def route(row: ChecksRow | None) -> Route:
 
 
 def checks_result(row: ChecksRow) -> AttemptResult:
-    """`collected passed`, `collected failed:<reason>`, or `pending admitted` (`attempt.succeeded` accepts `passed`)."""
+    """`collected passed`, `collected failed:<reason>`, or `pending admitted` (`attempt_result.succeeded` accepts `passed`)."""
     if row.conclusion is None:
         return AttemptResult("pending", row.phase)
     return AttemptResult("collected", "passed" if row.conclusion == "passed" else f"failed:{row.reason}")

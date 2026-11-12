@@ -6,7 +6,7 @@ import os
 from any_agent.procs import Worker
 from stream_proc import OwnedProcess, group_alive, inspect_process, observe_owned
 
-from taskloop.attempt_types import EntryIdentity, Seen
+from taskloop.attempt_types import EntryIdentity, Seen, entry_identity
 from taskloop.launch import entry_process
 from taskloop.setup_store import ProcessSeen
 
@@ -45,7 +45,7 @@ def this_process() -> EntryIdentity | None:
     on its candidate while it holds the slot's custody (tl-8bh9.14.8 section 6); None when it cannot be read."""
     seen = inspect_process(os.getpid())
     found = seen.identity
-    return None if seen.kind != "matching" or found is None else (found.pid, found.start, found.boot)
+    return None if seen.kind != "matching" or found is None else entry_identity(found)
 
 
 def current_boot() -> str | None:

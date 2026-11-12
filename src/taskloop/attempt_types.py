@@ -26,6 +26,22 @@ class Checkouts(Protocol):
 type WorkerGone = Callable[[Worker], bool]
 type Seen = Literal["matching", "gone", "different_process", "unknown"]
 type EntryIdentity = tuple[int, str, str]  # a registered entry's (pid, start, boot)
+
+
+class Identified(Protocol):
+    @property
+    def pid(self) -> int: ...
+    @property
+    def start(self) -> str: ...
+    @property
+    def boot(self) -> str: ...
+
+
+def entry_identity(process: Identified) -> EntryIdentity:
+    """The one spelling of an entry's identity from an observed or registered process."""
+    return process.pid, process.start, process.boot
+
+
 type Observe = Callable[[EntryIdentity], Seen]  # a native process-table read of a registered entry; no spawn or signal
 TRAILER: Final = "Task-Loop-Attempt"  # the factory's commit trailer; an agent's message may never carry it
 MiB: Final = 1 << 20

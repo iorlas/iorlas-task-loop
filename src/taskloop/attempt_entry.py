@@ -33,8 +33,9 @@ from stream_proc import ProcessObservation, inspect_process
 
 from taskloop import slot_lock
 from taskloop.admit import Unclaim
-from taskloop.attempt import ACCEPTED, Attempts, judged, succeeded
-from taskloop.attempt_store import StoreRefused, StoreUnavailable
+from taskloop.attempt import ACCEPTED, Attempts
+from taskloop.attempt_reads import StoreRefused, StoreUnavailable
+from taskloop.attempt_result import judged, succeeded
 from taskloop.attempt_types import (
     MAX_GIT_READ_SECONDS,
     MIN_GIT_READ_SECONDS,
@@ -53,6 +54,7 @@ from taskloop.attempt_types import (
     VerifyResult,
     VerifyUnavailable,
     WorkerGone,
+    entry_identity,
 )
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import open_attempts
@@ -161,7 +163,7 @@ def _registered(
     if found is None or tracker is None:
         return "refused absent"
     key, _phase, entry = found
-    me = None if seen.kind != "matching" or seen.identity is None else (seen.identity.pid, seen.identity.start, seen.identity.boot)
+    me = None if seen.kind != "matching" or seen.identity is None else entry_identity(seen.identity)
     if me is None or me != entry:
         return "refused identity"
     record = _record(app, key)

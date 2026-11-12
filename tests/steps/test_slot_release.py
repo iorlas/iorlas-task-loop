@@ -25,7 +25,8 @@ from stream_proc import OwnedProcess
 from taskloop.admit import AdmitRefused
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
 from taskloop.attempt import Attempts
-from taskloop.attempt_store import AttemptStore, StoreRefused
+from taskloop.attempt_reads import StoreRefused
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat, Seen, SlotFiles, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.repo import RepoId

@@ -15,9 +15,9 @@ from pathlib import Path
 from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import SchemaError, Store
 
-from taskloop.attempt_reads import SlotUse
+from taskloop.attempt_reads import SlotUse, StoreUnavailable
 from taskloop.attempt_status import StatusPorts, current_view
-from taskloop.attempt_store import AttemptStore, StoreUnavailable
+from taskloop.attempt_store import AttemptStore
 from taskloop.check_release import ChecksRelease
 from taskloop.composition import (
     adopt_slots,

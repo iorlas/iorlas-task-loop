@@ -12,7 +12,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles, main_at
+from doubles import FakeSlotFiles, RegisteringLauncher, main_at
 from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import begin_immediate
@@ -40,7 +40,6 @@ from taskloop.attempt_types import (
     VerifyResult,
 )
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import (
     Failed,
     Started,
@@ -95,27 +94,13 @@ class Agent:
         return FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
 
-class FakeLauncher:
-    """The launcher: registers the current attempt's entry (a new identity per attempt) as the real one does."""
-
-    def __init__(self, con: sqlite3.Connection) -> None:
-        self.store, self.keys = AttemptStore(lambda: con), list[AttemptKey]()
-
-    def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
-        found = self.store.attempt_of(backlog, task_id)
-        assert found is not None
-        entry = (8 + len(self.keys), "start", "boot")
-        self.keys.append(found[0])
-        assert self.store.register_entry(found[0], entry, 10) == "accepted"
-        return Launched(found[0], entry)
-
-
 class Step:
     """One task's step over the in-memory factory.db: run an attempt, verify it, repeat it."""
 
     def __init__(self, con: sqlite3.Connection, tmp: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> None:
         self.con, self.tmp, self.slot, self.checkouts, self.files = con, tmp, slot, checkouts, files
-        self.store, self.launcher = AttemptStore(lambda: con), FakeLauncher(con)
+        self.store = AttemptStore(lambda: con)
+        self.launcher = RegisteringLauncher(self.store)
         self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold)
 
     def run(self, key: AttemptKey, entry: EntryIdentity, agent: Agent) -> str:
@@ -136,7 +121,7 @@ class Step:
     def next_attempt(self, current: AttemptKey) -> tuple[AttemptKey, EntryIdentity]:
         started = self.repeat(current)
         assert isinstance(started, Started) and started.status == "repeated" and started.entry is not None
-        return self.launcher.keys[-1], started.entry
+        return self.launcher.calls[-1], started.entry
 
     def input(self, key: AttemptKey) -> str:
         record = self.store.load(key)
@@ -463,7 +448,7 @@ def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step:
     step.verifier.verify(KEY)
     slot.stage([STRAY], literal=True)  # the owner's staged file must never become the agent's leftover
     dirs = sorted(path.name for path in (step.tmp / "attempts").iterdir())
-    assert step.repeat(KEY) == Failed("unsettled", "staged", STRAY) and step.launcher.keys == []
+    assert step.repeat(KEY) == Failed("unsettled", "staged", STRAY) and step.launcher.calls == []
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
     assert step.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == ("attempt", 1)
     assert sorted(path.name for path in (step.tmp / "attempts").iterdir()) == dirs  # no input written

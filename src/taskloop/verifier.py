@@ -13,8 +13,9 @@ from pathlib import Path
 
 from git_porcelain import GitUnavailable
 
-from taskloop.attempt import committing, end_word
-from taskloop.attempt_store import AttemptStore, StoreRefused, StoreUnavailable
+from taskloop.attempt_reads import StoreRefused, StoreUnavailable
+from taskloop.attempt_result import committing, end_word
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     Admission,
     AttemptKey,

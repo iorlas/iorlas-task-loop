@@ -22,7 +22,8 @@ from sqlite_store import Store
 
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_entry import shown
-from taskloop.attempt_store import AttemptStore, StoreRefused
+from taskloop.attempt_reads import StoreRefused
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     DEFAULT_GIT_READ_SECONDS,
     Admission,

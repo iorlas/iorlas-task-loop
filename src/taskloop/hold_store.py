@@ -20,7 +20,7 @@ from typing import Final, Literal
 
 from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_text
 from taskloop.check_store import stored_nullable_real, stored_real, stored_word
-from taskloop.factory_schema import HOLD, LATER, SUCCESSOR, marks, prefixed
+from taskloop.factory_schema import HOLD, LATER, LATEST_CHECKS, SUCCESSOR, marks, prefixed
 
 type Labels = Literal["moved", "absent", "not_ours", "closed", "missing", "superseded"]
 type Labelled = Literal["moved", "absent", "not_ours", "closed", "missing"]  # the label step's own words (5.2)
@@ -35,8 +35,7 @@ LOADED: Final = COLUMNS + JOINED
 # a hold of A exists.
 FENCE: Final = f"""SELECT p.label IS NOT NULL,
 CASE WHEN ?=p.attempt_id THEN NOT {SUCCESSOR} ELSE NOT {LATER} AND EXISTS (SELECT 1 FROM checks_attempt c WHERE c.attempt_id=?
- AND c.after_attempt_id=p.attempt_id AND c.abandoned=0
- AND c.number=(SELECT max(d.number) FROM checks_attempt d WHERE d.after_attempt_id=p.attempt_id)) END,
+ AND {LATEST_CHECKS}) END,
 EXISTS (SELECT 1 FROM task_hold h WHERE h.attempt_id=p.attempt_id)
 FROM attempt p WHERE p.attempt_id=?"""
 # Not current: a later attempt of A's task exists (a hold's own abandon leaves A current until the task is taken again).

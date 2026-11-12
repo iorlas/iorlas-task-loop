@@ -19,7 +19,8 @@ from stream_proc import (
     popen_registered,
 )
 
-from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore, StoreUnavailable
+from taskloop.attempt_reads import StoreUnavailable
+from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryIdentity
 from taskloop.check_store import CheckStore
 from taskloop.composition import open_checks_launcher, open_launcher

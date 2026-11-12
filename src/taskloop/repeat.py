@@ -12,8 +12,9 @@ from typing import Protocol
 
 from taskloop.admit import AdmitRefused, Admitted, AdmitUnavailable
 from taskloop.admit_chain import RepeatRequest
-from taskloop.attempt import judged
-from taskloop.attempt_store import AttemptStore, StoreRefused, StoreUnavailable
+from taskloop.attempt_reads import StoreRefused, StoreUnavailable
+from taskloop.attempt_result import judged
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     ATTEMPTS,
     REPEATABLE,
