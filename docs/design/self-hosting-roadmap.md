@@ -266,6 +266,10 @@ through the shelf process API. Needed for M4 on a laptop. 1 slice, no design, sm
 event stream) behind `EvidenceFiles`: display only, never control state (D7, D8). The web dashboard (tl-8bh9.7.x) comes
 later on the same reader. 1 slice; no design for the CLI column; dashboard needs its own.
 
+| | |
+|---|---|
+| Built | The agent's events were in memory only, so B10 adds the stream's one fact: `command_sink.CommandSink`, the run's live sink (carried by `WatchedHooks`, handed to the shelf's `run` by `composition._run`), writes the wall-clock time of the latest command to `last-command` in the attempt's evidence directory, at most once a second, a failed write skipped. `EvidenceFiles.last_command` reads it; the status shows `Last command: N s ago` in `tl step show`, a `last command` column in `tl step list` and `last_command` in the JSON (seconds). Only for an attempt whose entry is running; no or unreadable evidence prints `unknown`, any other attempt `-` in the list and no line in `show`. Display only: no `Next` word reads it (D7). The dashboard reads the same file |
+
 ### B9. Session resume
 
 After a reboot during an agent run the attempt is `stuck:entry_lost`; the hand step is `tl step release --abandon`,

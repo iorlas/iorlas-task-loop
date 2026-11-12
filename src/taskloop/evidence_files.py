@@ -150,6 +150,20 @@ class EvidenceFiles:
                 return shown(line)
         return None
 
+    def note_command(self, key: AttemptKey, at: float) -> None:
+        """Overwrite `last-command` in the attempt's directory with the wall-clock time of the agent's latest command. A
+        display-only artifact (`tl step list` and `show`); nothing reads it for control. OSError propagates."""
+        path = self._path(self.directory(key) + "/last-command")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(repr(at), encoding="utf-8")
+
+    def last_command(self, key: AttemptKey) -> float | None:
+        """Read-only: that time, None when the file is missing, unreadable or not a number; creates nothing."""
+        try:
+            return float(self._path(self.directory(key) + "/last-command").read_text(encoding="utf-8"))
+        except (OSError, ValueError, EvidenceError):
+            return None
+
     def put_input(self, key: AttemptKey, text: str) -> FileRef:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)

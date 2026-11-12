@@ -158,14 +158,14 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_reads(loaded.settings.db.value) as reads:
+    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value) as reads:
         if isinstance(reads, Failed):
             return reads
         return attempt_status.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
 
 
 def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_reads(loaded.settings.db.value) as reads:
+    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value) as reads:
         return reads if isinstance(reads, Failed) else attempt_status.list_attempts(reads, stuck=arguments.stuck)
 
 

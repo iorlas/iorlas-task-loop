@@ -35,6 +35,7 @@ from taskloop.attempt_types import (
     SlotFiles,
     StepRules,
 )
+from taskloop.command_sink import WatchedHooks
 from taskloop.composition import open_attempts
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -154,7 +155,7 @@ def test_execute_and_independent_collection_preserve_facts_and_reservation(tmp_p
     flags = spec.argv.index("--json")
     assert spec.argv[flags - len(CODEX_ACCESS) : flags] == list(CODEX_ACCESS)
     assert spec.env == {"SECRET": "credential"} and timeout == 90
-    assert hooks is not None and hooks.unattended is False
+    assert isinstance(hooks, WatchedHooks) and hooks.unattended is False  # carries the live sink of the last-command time
     assert con.execute("SELECT count(*) FROM reservation").fetchone() == (1,)
     dump = "\n".join(con.iterdump())
     assert "credential" not in dump and "Plan committed" not in dump and "Plan the actual task" not in dump

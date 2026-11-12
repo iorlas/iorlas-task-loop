@@ -507,7 +507,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
 def test_every_opener_but_adopt_refuses_a_missing_database_and_creates_none(tmp_path: Path) -> None:
     missing = tmp_path / "factory.db"  # in an existing directory: a writable open would create it
     refused = Failed("refused", "database", "No readable factory.db at this path; `tl slot adopt` creates it")
-    with open_reads(missing) as reads:
+    with open_reads(missing, missing.parent) as reads:
         assert reads == refused
     with open_start(missing, tmp_path / "art") as ports:
         assert ports == refused
@@ -523,7 +523,7 @@ def test_another_schema_version_is_refused_schema(tmp_path: Path, version: int) 
     path = tmp_path / "factory.db"
     write(path, "PRAGMA journal_mode=WAL")
     write(path, f"PRAGMA user_version={version}")
-    with open_reads(path) as reads:
+    with open_reads(path, path.parent) as reads:
         assert isinstance(reads, Failed) and (reads.kind, reads.reason) == ("refused", "schema")
     con = sqlite3.connect(path)
     assert con.execute("PRAGMA user_version").fetchone() == (version,)

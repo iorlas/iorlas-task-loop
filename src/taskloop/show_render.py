@@ -36,6 +36,12 @@ def _common(each: AttemptView) -> tuple[list[str], str, list[str]]:
     return earlier, entry, released
 
 
+def last_command(each: AttemptView) -> str | None:
+    """The time since the agent's latest command (display only; None when the agent cannot be running)."""
+    found = each.last_command
+    return None if found is None else found if isinstance(found, str) else f"{found} s ago"
+
+
 def _agent_lines(each: AttemptView) -> list[str]:
     earlier, entry, released = _common(each)
     # the stored registration only: the agent may have exited long ago, so it is never shown as running
@@ -47,7 +53,9 @@ def _agent_lines(each: AttemptView) -> list[str]:
         f"Task: {each.task_id} (backlog {each.backlog})", f"Step: {each.step}",
         f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})", *earlier,
         f"Slot: {each.slot}", f"Phase: {each.phase}",
-        f"Entry: {each.entry}{entry}", f"Worker: {worker}", f"Result: {each.result.status} {each.result.reason}".rstrip(),
+        f"Entry: {each.entry}{entry}", f"Worker: {worker}",
+        *([] if last_command(each) is None else [f"Last command: {last_command(each)}"]),
+        f"Result: {each.result.status} {each.result.reason}".rstrip(),
         f"Succeeded: {'yes' if succeeded(each.result) else 'no'}", f"Deadline passed: {'yes' if each.deadline_passed else 'no'}",
         *released, *published,
     ]
