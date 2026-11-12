@@ -4,7 +4,7 @@ process-wide drop of bd's location overrides. The one module that constructs a `
 `cli_composition`."""
 
 import os
-from collections.abc import Callable, MutableMapping
+from collections.abc import Callable, MutableMapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -13,8 +13,8 @@ from beads_client import Bd, BdError, Runner
 
 from taskloop.admit import Claim, Unclaim
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
-from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
-from taskloop.tracker import ACTOR, HELD, ReadyRows, gone, inspect_task
+from taskloop.task import ReadyTitle, TaskBinding, TaskComment, TaskFacts, TaskInspection, TaskInspectionError, TaskScope
+from taskloop.tracker import ACTOR, HELD, ReadyRows, gone, inspect_task, ready_titles, task_comments, task_facts, task_titles
 
 
 def _tracker_root(tracker_root: str) -> Path:
@@ -41,6 +41,30 @@ def tracker_reads(tracker_root: str) -> ReadyRows:
     """The scheduling round's tracker reads (ready set, parents) at the same root rule as `inspect_tracker_task`; raises
     TaskInspectionError(`invalid_binding`) for an unusable root. Only reads are reachable through the returned port."""
     return Bd(ACTOR, cwd=str(_tracker_root(tracker_root)))
+
+
+def _reader(tracker_root: Path) -> Bd:
+    return Bd(ACTOR, cwd=str(tracker_root))
+
+
+def tracker_facts(task_id: str, tracker_root: Path) -> TaskFacts | None:
+    """The task's facts (`Bd.show`); None when the tracker says it does not exist; a failed read raises TaskInspectionError."""
+    return task_facts(_reader(tracker_root), task_id)
+
+
+def tracker_comments(task_id: str, tracker_root: Path) -> tuple[TaskComment, ...]:
+    """The task's comments, oldest first (`Bd.comments`); a failed read raises TaskInspectionError."""
+    return task_comments(_reader(tracker_root), task_id)
+
+
+def tracker_titles(task_ids: Sequence[str], tracker_root: Path) -> dict[str, str]:
+    """Titles by id, one `Bd.show` per distinct id (bd has no batch show); unknown ids are omitted."""
+    return task_titles(_reader(tracker_root), task_ids)
+
+
+def tracker_ready_listing(label: str, tracker_root: Path) -> tuple[ReadyTitle, ...]:
+    """What `bd ready` lists for `label`, in the tracker's order (unclaimed, unblocked)."""
+    return ready_titles(_reader(tracker_root), label)
 
 
 # The land's close (tl-8bh9.14.8 section 8): `closed` by this call, `already_closed` (found closed: never closed twice),

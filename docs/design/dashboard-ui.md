@@ -1,9 +1,9 @@
-# Dashboard UI (mock, proposed)
+# Dashboard UI
 
-Status: **proposed**. The page under `src/taskloop/dash/static/` renders fake data from `fixtures.json` so the owner
-can judge the look. No server, no live data and no runtime code exist yet; the backend slices implement the shapes
-below. Terms: [dashboard, board, live tail](../glossary.md). This is separate from the retired round mockups in
-`docs/design/dashboard/`, which were ideas only.
+Status: **built, slice 1**. `tl step rounds ... --dash-port PORT` serves this page and the endpoints below on
+`127.0.0.1:PORT` from a thread of the rounds process (0 picks a free port; without the flag nothing is served). Terms:
+[dashboard, board, live tail](../glossary.md). The page (`src/taskloop/dash/static/`) was designed on a mock first; the
+owner's decisions below stand. What slice 1 cannot show yet is under *Not in slice 1*.
 
 ## Decisions (owner design interview, 2026-11-12, and review of the first mock)
 
@@ -57,11 +57,9 @@ below. Terms: [dashboard, board, live tail](../glossary.md). This is separate fr
   more to issue it, a faint "agent thought 33s" line. That number is the time from the previous line to this command's
   start; it is *not* part of the command's own duration (the first mock showed both as unlabeled durations).
 - Stack: plain HTML and vanilla JS ES modules (`app.js` board, `drawer.js`, `logs.js`, `ui.js`), no framework, no bundler, no npm
-  at runtime. `mock.js` is the throwaway fake source, deleted when the server slice lands. Styling is Tailwind compiled once; `dash.css` is committed, so nobody
+  at runtime. `api.js` is the one data source (fetch and an event stream). Styling is Tailwind compiled once; `dash.css` is committed, so nobody
   installs Tailwind to use or serve the page. Light and dark theme follow the system; the switch overrides and is
   remembered in `localStorage` (optional, failure ignored).
-- Later slices: a stdlib server in a thread of the rounds process, JSON endpoints and SSE. Typed agent events come from
-  any-agent. The page already consumes the shapes below; `mockSource` is the one part to replace.
 
 ## Words
 
@@ -192,9 +190,35 @@ A `task` message replaces the card of that id (a changed `column` is the move); 
 if that task's drawer is open, reloads its detail because a step or attempt began or ended. A `feed` message appends to
 the named attempt's lines. The page loads the snapshot first, then the stream, and the detail when a drawer opens.
 
-## Mock mode
+## Backend
 
-`fixtures.json` holds `tasks` (ages as `*_ago_s` seconds so the data never goes stale), `slots`, `rounds` (the log), `comments`, `history` (per task: stages of
-attempts with lines, grouped by start from plan; `mock.js` flattens them) and `script`: timed steps (`after_s`) that replay as stream messages, with task steps as patches
-merged into the current card. `mock.js` keeps its own detail in step with them. The fixture covers every column, a
-task restarted at plan, repeats, a held task with its cause, landed tasks and one long feed.
+| Piece | Module | Reads |
+|---|---|---|
+| server, stream, static page | `dash_server` (the one importer of `http.server`) | calls the ports below; one poller thread, only while a page is connected |
+| wiring, `--dash-port` | `dash_composition`, `cli_step` | the same read-only factory.db opening as `tl step list`, one per request |
+| board | `dash_board` | `attempt_status.list_attempts`, the tracker's ready tasks and titles |
+| task detail | `dash_task` | attempts, checks attempts and their results, hold, evidence files, the tracker's task and comments |
+| tracker reads | `dash_tracker`, `tracker_client` | `bd` (cached: titles for good, ready 10 s, a task 5 s; a failure keeps the last answer and sets the board's `notice`) |
+| round log | `round_reader`, `EvidenceFiles.round_tail` | `rounds.log`, display only |
+
+Where a fact has no stored owner yet the page shows a proxy or nothing, never a guess:
+
+- **Step and attempt start**: an attempt row stores none. The start is the modification time of its `input.txt` (written
+  at admission); a checks attempt's is its first check's start; a held task's is the hold's `held_at`; a landed task's the
+  land's `closed_at`. End: the slot release or the checks attempt's `concluded_at`, else none (shown as a dash).
+- **Quiet**: from `last-command` (the B10 fact), only while the attempt's entry runs.
+- **Restart at plan**: derived (a plan attempt with a task `seq` above 1); the reason is not recorded, so it reads
+  "restarted at plan".
+- **Tracker**: priority, labels, design, notes, dates, dependencies and comments through new `tracker.py` reads.
+
+### Not in slice 1
+
+- **The agent's live lines** (commands, messages, durations, "agent thought"): no stored event stream exists. A feed holds
+  the attempt's start and each check's result; Lines is otherwise "No lines recorded". Typed events arrive with any-agent;
+  they need a per-attempt event file behind `EvidenceFiles` and a `feed` stream message (shape below, unchanged).
+- **Exact start and end times**: need a start and end column on `attempt` (a schema version, therefore a factory.db
+  discard, the owner's call) instead of the file-time proxies above.
+- **Land attempts** in the history (the board's Land column and card are real).
+- **Answers for failed agent runs**: `stdout`/`stderr`/`diagnostics` tails are not read yet; a failed check's log tail is.
+- **Move words**: the Logs filter and colours know the real actions (`start relaunch repeat verify advance release publish
+  report skip hold`); more words (`round`, `rounds`, `no_free_slot`) are shown as written.

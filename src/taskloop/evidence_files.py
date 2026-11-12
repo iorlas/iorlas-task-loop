@@ -18,6 +18,7 @@ TERMINATED: Final = "terminated_by_signal"  # the entry log's cause word when a 
 ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
 LOG_CAP: Final = 32 << 20  # bytes of one setup run's or one check's log, and of one agent attempt's stdout or stderr; then `[truncated]`
 TRUNCATED: Final = b"[truncated]\n"
+TAIL_CAP: Final = 256 << 10  # bytes `round_tail` reads from the end of the round log
 
 
 class EvidenceError(Exception):
@@ -151,6 +152,20 @@ class EvidenceFiles:
         except (OSError, EvidenceError):
             return None
 
+    def round_tail(self, limit: int) -> tuple[str, ...]:
+        """Read-only: the last `limit` lines of the round log from a bounded read of its end (at most TAIL_CAP bytes), `()`
+        when it does not exist or cannot be read; creates nothing. A cut first line is dropped. Untrusted display text."""
+        try:
+            with self._path("rounds.log").open("rb") as stream:
+                size = stream.seek(0, 2)
+                start = max(0, size - TAIL_CAP)
+                stream.seek(start)
+                text = stream.read(TAIL_CAP).decode("utf-8", "replace")
+        except (OSError, EvidenceError):
+            return ()
+        lines = text.splitlines()
+        return tuple((lines[1:] if start else lines)[-limit:]) if limit > 0 else ()
+
     def last_entry(self, key: AttemptKey) -> str | None:
         """The last line of the entry log made only of the entry's fixed words (its status word, then `reason`, `key=value`
         or `a:b` words of letters, digits and `_`), at most ENTRY_WORDS words; anything else in the log is never printed."""
@@ -178,6 +193,34 @@ class EvidenceFiles:
             return "none"
         except (OSError, ValueError, EvidenceError):
             return "unreadable"
+
+    def started_at(self, key: AttemptKey) -> float | None:
+        """Read-only: when the attempt's input was written (its admission), None when it is not there. Display only (the
+        dashboard's time in step); the attempt rows store no start time."""
+        try:
+            return self._path(self.directory(key) + "/input.txt").stat().st_mtime
+        except (OSError, EvidenceError):
+            return None
+
+    def text(self, key: AttemptKey, name: Literal["input.txt", "answer.txt"], cap: int = 65536) -> str | None:
+        """Read-only: the first `cap` bytes of the attempt's input or answer file, None when absent or unreadable. Display
+        only (the dashboard's prompt and agent answer); never control state."""
+        try:
+            with self._path(self.directory(key) + "/" + name).open("rb") as stream:
+                return stream.read(cap).decode("utf-8", "replace")
+        except (OSError, EvidenceError):
+            return None
+
+    def check_tail(self, key: AttemptKey, block: int, name: str, cap: int = 8192) -> str | None:
+        """Read-only: the last `cap` bytes of a check's log, None when it is absent or unreadable; creates nothing. Display
+        only (the dashboard's failed-check output)."""
+        try:
+            with self.check_path(key, block, name).open("rb") as stream:
+                size = stream.seek(0, 2)
+                stream.seek(max(0, size - cap))
+                return stream.read(cap).decode("utf-8", "replace")
+        except (OSError, EvidenceError):
+            return None
 
     def put_input(self, key: AttemptKey, text: str) -> FileRef:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""

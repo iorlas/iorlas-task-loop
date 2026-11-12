@@ -5,9 +5,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol
 
-from beads_client import BdError, Bead, ReadyReadClient, TaskReadClient
+from beads_client import BdError, Bead, Comment, ReadyReadClient, TaskReadClient
 
-from taskloop.task import TaskBinding, TaskDependency, TaskInspection, TaskInspectionError, TaskReference
+from taskloop.task import (
+    ReadyTitle,
+    TaskBinding,
+    TaskComment,
+    TaskDependency,
+    TaskFacts,
+    TaskInspection,
+    TaskInspectionError,
+    TaskReference,
+)
 
 HELD: Final = "held"  # the tracker label a hold adds, read for control only to leave a hand-paused task alone
 # bd 1.3.1 on a deleted bead, classified `other`: `resolving X: no issue found matching "X"` (update, close) and
@@ -25,6 +34,12 @@ class ReadyRows(TaskReadClient, ReadyReadClient, Protocol):
     """The tracker's ready set, its in-progress list and single-task read: no write verb is reachable through it."""
 
     def find(self, status: str = "", label: str = "", *, include_closed: bool = False) -> list[Bead]: ...
+
+
+class CommentsRead(Protocol):
+    """The tracker's comments of one task, oldest first."""
+
+    def comments(self, bead: str) -> list[Comment]: ...
 
 
 def leaked_claim(task: str) -> str:
@@ -114,3 +129,48 @@ def ancestry(client: ReadyRows, rows: Sequence[TaskRow]) -> Callable[[str], Task
         return found
 
     return lookup
+
+
+def task_facts(client: TaskReadClient, task_id: str) -> TaskFacts | None:
+    """One `show` mapped to `TaskFacts`; None when the tracker says the task does not exist (also bd's deleted-task
+    error). A failed read raises TaskInspectionError."""
+    try:
+        record = client.show(task_id)
+    except BdError as error:
+        if error.kind == "other" and gone(error.text):
+            return None
+        raise _failure(error, "show failed") from error
+    if record is None:
+        return None
+    return TaskFacts(
+        record.id, record.title, record.status, record.priority, record.labels, record.assignee or None,
+        record.description, record.design, record.acceptance_criteria, record.notes,
+        tuple(dependency.id for dependency in record.dependencies), record.created_at, record.updated_at,
+    )
+
+
+def task_comments(client: CommentsRead, task_id: str) -> tuple[TaskComment, ...]:
+    """The task's comments in the tracker's order (oldest first); a failed read raises TaskInspectionError."""
+    try:
+        return tuple(TaskComment(comment.author, comment.created_at, comment.text) for comment in client.comments(task_id))
+    except BdError as error:
+        raise _failure(error, "comments read failed") from error
+
+
+def task_titles(client: TaskReadClient, task_ids: Sequence[str]) -> dict[str, str]:
+    """Titles by id: the client offers no batch read, so one `show` per distinct id; ids the tracker does not know are
+    omitted. A failed read raises TaskInspectionError."""
+    titles: dict[str, str] = {}
+    for task_id in dict.fromkeys(task_ids):
+        facts = task_facts(client, task_id)
+        if facts is not None:
+            titles[task_id] = facts.title
+    return titles
+
+
+def ready_titles(client: ReadyReadClient, label: str) -> tuple[ReadyTitle, ...]:
+    """The tasks `bd ready` lists for `label`, in the tracker's order; a failed read raises, never `()`."""
+    try:
+        return tuple(ReadyTitle(record.id, record.title, record.priority, record.created_at) for record in client.ready(label))
+    except BdError as error:
+        raise _failure(error, "ready read failed") from error

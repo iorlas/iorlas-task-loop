@@ -54,6 +54,45 @@ class TaskInspection:
     assignee: str
 
 
+@dataclass(frozen=True)
+class TaskFacts:
+    """One task as the tracker holds it, for a read-only view. `created_at` and `updated_at` are the tracker's own ISO
+    strings as the client returns them (not converted; empty when absent); `notes` and `design` are empty when absent."""
+
+    task_id: str
+    title: str
+    status: str
+    priority: int | None
+    labels: tuple[str, ...]
+    assignee: str | None
+    description: str
+    design: str
+    acceptance: str
+    notes: str
+    dependencies: tuple[str, ...]  # ids
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class TaskComment:
+    """One tracker comment; `at` is the tracker's ISO string as returned (empty when absent)."""
+
+    author: str
+    at: str
+    text: str
+
+
+@dataclass(frozen=True)
+class ReadyTitle:
+    """One task `bd ready` lists: what a listing shows of it."""
+
+    task_id: str
+    title: str
+    priority: int | None
+    created_at: str
+
+
 class TaskInspectionError(Exception):
     """A truthful inspection refusal with optional owning-backend diagnostics."""
 

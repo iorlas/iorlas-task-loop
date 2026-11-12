@@ -340,3 +340,21 @@ def test_nothing_forks_execs_or_spawns() -> None:
     """CLAUDE.md: no spawn, fork or exec escape hatch in factory source or tests."""
     uses = Counter((name, str(path.relative_to(ROOT))) for path in FILES for name in process_replacements(ast.parse(path.read_text())))
     assert uses == Counter()
+
+
+def _imported(tree: ast.Module) -> list[str]:
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            found.append(node.module or "")
+    return found
+
+
+def test_only_the_dashboard_server_imports_the_http_server() -> None:
+    """The one allowed importer of the standard library's HTTP code (`.importlinter` ignores exactly `dash_server -> http.server`),
+    and the tests that use a client or a URL parser, are pinned here."""
+    importers = {str(path.relative_to(ROOT)) for path in FILES
+                 if any(name.split(".")[0] in {"http", "urllib", "socketserver"} for name in _imported(ast.parse(path.read_text())))}
+    assert importers == {"src/taskloop/dash_server.py", "tests/cli/test_dash_server.py", "tests/rules/test_isolation.py"}

@@ -7,7 +7,7 @@ const MOVE = {
   hold: "text-rose-600 dark:text-rose-400",
   skip: "text-amber-600 dark:text-amber-400",
   repeat: "text-amber-600 dark:text-amber-400",
-  land: "text-emerald-600 dark:text-emerald-400",
+  publish: "text-emerald-600 dark:text-emerald-400",
 };
 const ATTENTION_WORDS = ["failed", "no_free_slot", "restart_at_plan", "paused"];
 const attention = (r) => ["hold", "skip", "repeat"].includes(r.move) || r.words.some((w) => ATTENTION_WORDS.includes(w) || w.startsWith("unusable"));

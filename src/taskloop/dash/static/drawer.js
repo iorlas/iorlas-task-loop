@@ -168,7 +168,7 @@ function railRow(a) {
   const btn = el("button", `block w-full rounded px-2 py-1.5 text-left ${selected ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`);
   btn.type = "button";
   if (selected) btn.dataset.selected = "1";
-  const dur = a.ended_at ? fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at)) : since(a.started_at);
+  const dur = lasted(a);
   const row = el("span", "flex items-baseline gap-2");
   row.append(
     el("span", `text-[13px] ${selected ? "font-semibold" : "font-medium"}`, `${STEPS.find((s) => s.id === a.step).emoji} ${STEPS.find((s) => s.id === a.step).label}`),
@@ -184,6 +184,13 @@ function railRow(a) {
 
 // ---------- selected attempt ----------
 
+// How long an attempt ran, or has been running; an attempt the stores gave no start or end shows a dash.
+function lasted(a) {
+  if (!a.started_at) return "—";
+  if (a.ended_at) return fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at));
+  return a.state === "running" ? since(a.started_at) : "—";
+}
+
 const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
 
 function pane() {
@@ -193,9 +200,9 @@ function pane() {
   const wrap = el("section", "flex min-w-0 flex-1 flex-col");
   const head = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
   head.append(el("h3", "text-sm font-semibold", `${STEPS.find((s) => s.id === a.step).emoji} ${STEPS.find((s) => s.id === a.step).label}, attempt ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
-  const timing = a.ended_at ? `ran ${fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at))}` : "still running";
-  head.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `started ${ago(a.started_at)}, ${timing}`));
-  if (a.state === "running") head.append(quietSpan(a.feed.at(-1)?.at ?? a.started_at));
+  const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
+  head.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
+  if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) head.append(quietSpan(a.feed.at(-1)?.at ?? a.started_at));
   wrap.append(head);
   if (a.after) {
     const why = el("div", "px-6 pt-3");
