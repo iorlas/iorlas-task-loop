@@ -335,6 +335,12 @@ def test_every_failure_kind_has_its_exit_code(
     assert capsys.readouterr().err.startswith("tl step list: ")
 
 
+def test_release_needs_its_backlog(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as result:
+        main(RELEASE[:3])
+    assert result.value.code == 2 and "usage: tl" in capsys.readouterr().err
+
+
 class Releases:
     def __init__(self) -> None:
         self.calls: list[tuple[AttemptKey, bool]] = []
