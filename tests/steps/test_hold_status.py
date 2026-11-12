@@ -258,6 +258,20 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
     assert isinstance(found, Listed) and found.attempts == () and probed == []
 
 
+def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_verify_not_a_repeat(factory: sqlite3.Connection) -> None:
+    """`tl step show` prints `Unsettled:` from the attempt's leftovers: `head_moved` carries its listing there too, though
+    it is no repeatable leftover (the next action stays `verify`)."""
+    plan(factory)
+    factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
+    factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,
+        session_state) VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""")
+    ports = replace(reads(factory), leftovers=lambda _key: Unsettled("head_moved", ("refs/tags/task/evil",)))
+    found = list_attempts(ports)
+    assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [
+        ("verify", ("head_moved", "refs/tags/task/evil"))]
+
+
 def test_deadline_passed_of_a_captured_agent_attempt_is_whether_its_run_timed_out_not_whether_the_clock_passed(
     factory: sqlite3.Connection,
 ) -> None:

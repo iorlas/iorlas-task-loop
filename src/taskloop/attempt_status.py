@@ -202,7 +202,8 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
              "last_command": _idle(reads, row.key) if entry == "running" else None}
     late = expired if row.phase != "captured" or result.execution is None else result.execution.facts.timed_out
     if left is None or left.reason not in REPEATABLE:
-        return AttemptView(*found, entry, result, late, next_word, row.entry, row.worker, (), *chain, **ended)
+        shown = (left.reason, *left.listing) if left is not None and left.reason == "head_moved" else ()  # the refs the agent made
+        return AttemptView(*found, entry, result, late, next_word, row.entry, row.worker, shown, *chain, **ended)
     next_word = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
     held = AttemptResult("pending", next_word, result.execution)
     return AttemptView(*found, entry, held, late, next_word, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)

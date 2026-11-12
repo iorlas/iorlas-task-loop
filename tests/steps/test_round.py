@@ -405,6 +405,14 @@ def test_a_refusal_about_one_task_moves_on_to_the_next(factory: sqlite3.Connecti
     assert not any("secret" in line for line in bench.lines)
 
 
+def test_a_refusal_naming_a_slot_on_the_task_branch_is_also_reported_unusable_in_the_log(factory: sqlite3.Connection) -> None:
+    held = SlotView("s1", Path("/slots/s1"), "unknown", "attached")
+    bench = Bench(factory, ReadyTracker([bead("t-1")], ready=["t-1"]), Admission({"t-1": AdmitRefused("branch_held", (held,))}))
+    found = bench.round()
+    assert moves(found)[:2] == [("t-1", "start", "refused:branch_held"), ("t-1", "report", "unusable:s1:attached")]
+    assert found.moves[1].detail == "/slots/s1"
+
+
 @pytest.mark.parametrize("fault, stopped, code", [
     (BdError("timeout", "bd failed"), "unavailable:tracker", 3), (BdError("malformed", "bd failed"), "refused:tracker", 1),
 ])

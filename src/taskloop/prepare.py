@@ -24,6 +24,7 @@ from git_porcelain import BranchHeld, GitUnavailable, MissingRevision, Repo
 
 from taskloop.attempt_types import TRAILER, AttemptRecord, AttemptResult, Checkouts, SlotFiles
 from taskloop.slot_state import SlotState, observe_slot, pointer, staged
+from taskloop.slots import SlotView
 
 type BranchRefusal = Literal["branch_name", "branch_held", "branch_diverged", "branch_unpublished", "target"]
 MAIN: Final = "refs/heads/main"  # the target (O1: the person's local `main`): a new task branch starts at its tip, checks read it
@@ -75,6 +76,14 @@ def _foreign_unpublished(repo: Repo, local: str, seen: Sequence[str]) -> bool:
     if not seen:
         return False
     return any(not any(line.startswith(f"{TRAILER}:") for line in each.body.splitlines()) for each in repo.history([local], not_on=seen))
+
+
+def held_slots(repo: Repo, task_id: str) -> tuple[SlotView, ...]:
+    """The linked worktrees on the task branch, as `attached` views named by their folder: after a factory.db discard such a
+    slot is not adopted, so no slot read would show it (`branch_held` names it, the round log reports it `unusable`)."""
+    branch = task_branch(task_id)
+    on = (info for info in repo.worktrees() if info.branch == branch and not info.is_main)
+    return tuple(SlotView(info.path.name, info.path, "unknown", "attached") for info in on)
 
 
 def branch_refusal(repo: Repo, task_id: str, heads: Sequence[str]) -> BranchRefusal | Branch:

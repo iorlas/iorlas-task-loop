@@ -374,6 +374,20 @@ def test_admission_refuses_a_branch_before_its_input_claim_or_rows(
     assert claims.calls == [] and factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
 
 
+def test_a_slot_left_on_the_task_branch_is_named_with_its_fix_while_another_slot_is_free(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+) -> None:
+    """After a factory.db discard the slot an agent left on `task/<id>` is not free: the refusal names it (an `attached`
+    view, which the round log reports `unusable`), the git command that fixes it and `tl slot adopt`, though s2 is free."""
+    first, _second = slots(factory, repo, root, 2)
+    first.checkout_new(BRANCH)
+    result, claims = admitted(factory, repo, root, tmp_path)
+    assert isinstance(result, AdmitRefused) and result.reason == "branch_held" and claims.calls == []
+    assert [(view.name, view.reason, view.path) for view in result.slots] == [("s1", "attached", first.path)]
+    assert "`git switch --detach`" in result.detail and "`tl slot adopt`" in result.detail
+    assert f"s1 attached ({first.path})" in result.detail
+
+
 def test_admission_skips_a_free_slot_whose_head_the_branch_does_not_contain(
     factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
 ) -> None:

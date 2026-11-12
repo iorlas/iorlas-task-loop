@@ -33,7 +33,7 @@ from git_porcelain import GitUnavailable, NotARepo, Repo
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.prepare import DIVERGED, MAIN, UNPUBLISHED, branch_refusal
+from taskloop.prepare import DIVERGED, MAIN, UNPUBLISHED, branch_refusal, held_slots
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
 from taskloop.steps import STEPS, kind
@@ -324,12 +324,18 @@ def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
     if isinstance(found, str):
-        return AdmitRefused(found, detail=DETAILS.get(found, "").format(task=task_id))
+        held = held_slots(repo, task_id) if found == "branch_held" else ()
+        return AdmitRefused(found, held, detail=" ".join(filter(None, (DETAILS.get(found, "").format(task=task_id), unusable_text(held)))))
     passing = tuple(Free(view.name, head) for view in free if (head := heads.get(view.path)) is not None and head in found.passing)
     return passing or AdmitRefused("no_free_slot")
 
 
+HELD = (
+    "task/{task} is checked out in a worktree (a slot is named below, with `report unusable` in the round log): run "
+    "`git switch --detach` there (commit or stash what it holds first, nothing is deleted for you), then `tl slot adopt`."
+)
 DETAILS = {
+    "branch_held": HELD,
     "branch_diverged": DIVERGED,
     "branch_unpublished": UNPUBLISHED,
     "target": f"The checkout has no local branch `{MAIN}` to start task/{{task}} from"}

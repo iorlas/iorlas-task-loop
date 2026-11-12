@@ -762,8 +762,10 @@ def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_work
     slot.repo.tag("task/evil", head(slot))
     result = verifier(registered, checkouts, slot_files).verify(KEY)
     assert result == Unsettled("head_moved", ("refs/tags/task/evil",))
+    assert verifier(registered, checkouts, slot_files).leftovers(KEY) == result  # what `tl step show` reads, with no write
     guide = GUIDE["unsettled"]
     assert "`tl step release --abandon`, then `tl step start`" in guide and "`head_moved`" in guide
+    assert "for `branch`" in guide and "`git switch task/<id>`" in guide
 
 
 def test_a_head_reset_to_the_persons_main_never_lists_main_but_still_lists_an_agent_tag(

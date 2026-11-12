@@ -353,8 +353,7 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
         stop = _stops(result)
         if result.reason != "no_free_slot":
             trail.add(Move(row.task_id, "start", _word(result), detail=result.detail))
-        else:
-            trail.unusable(row.task_id, result)
+        trail.unusable(row.task_id, result)  # the slots a refusal names (no_free_slot's, the one holding a held branch)
         if result.claim_leaked:
             trail.add(Move(row.task_id, "report", "claim_leaked", detail=leaked_claim(row.task_id)))
         if stop:
