@@ -230,7 +230,7 @@ def test_a_slot_unreadable_after_a_check_leaves_its_result_for_the_reconcile(ben
 
 def test_a_log_that_cannot_be_opened_starts_nothing(bench: Bench) -> None:
     (bench.artifacts / "attempts").write_text("a file where the folder belongs")
-    assert bench.run(TEST, CHECK) == AttemptResult("unavailable", "environment:files")
+    assert bench.run(TEST, CHECK) == AttemptResult("unavailable", "log")
     assert bench.rows() == [] and bench.process.calls == []
 
 

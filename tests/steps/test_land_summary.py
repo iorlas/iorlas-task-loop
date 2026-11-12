@@ -13,11 +13,10 @@ from land_bench import LandBench, bench
 
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.land import Landed, LandResult
+from taskloop.land_gate import Changed
 from taskloop.land_summary import (
-    Changed,
     LandSummary,
     Trees,
-    config_files,
     lines,
     message,
     message_at,
@@ -115,9 +114,9 @@ def test_the_summary_changes_nothing(b: LandBench) -> None:
     found = summarized(b.land("summary"))
     assert b.rows() == () and b.reservations() == [] and b.repo.pushes == 0 and b.origin_main() == b.base
     assert b.tracker == [] and b.status == "in_progress" and b.execs() == []
-    assert (found.state, found.again, found.origin, found.added, found.removed, found.argv, found.checks) == (
-        "same_tree", False, b.base, (), (), (), ())
-    assert found.results == (("check", "no result"), ("test", "no result")) and found.files == () and found.setup is None
+    assert (found.state, found.again, found.origin, found.added, found.removed, found.argv) == ("same_tree", False, b.base, (), (), ())
+    assert found.results == (("check", "no result"), ("test", "no result"))
+    assert found.gate is not None and not found.gate.decisive and [each.path for each in found.gate.changes] == ["src/x.py"]
     text = lines(found)
     assert text[0] == f"Checks: checks passed at X {b.x} (main at {b.base})"
     assert f"Required at origin main {b.base}: same" in text and f"Origin main: {b.base}; same tree as X, no checks" in text
@@ -149,14 +148,10 @@ def test_the_summary_compares_the_target_s_profile_with_x_s(b: LandBench) -> Non
     assert (found.added, found.removed, found.again, found.origin) == (("lint",), ("test",), True, o)
     lint = Check("lint", ("ruff", "check"), 60)
     assert found.argv == (Changed("lint", lint, None),)
-    assert found.checks == (Changed("lint", lint, None), Changed("test", Check("test", ("just", "test", "-x"), 600),
-                                                                  Check("test", ("just", "test"), 600)))
-    assert found.setup == ((("just", "setup"),), (("just", "bootstrap"),))
     text = lines(found)
     assert f"Required at origin main {o}: added lint; removed test (the checks run again)" in text
-    assert "Argv changed: lint: ruff check -> (none)" in text and "Setup changed: just setup -> just bootstrap" in text
-    assert "Check removed: lint: ruff check (60 s) -> (none)" in text
-    assert "Check changed: test: just test -x (600 s) -> just test (600 s)" in text
+    assert "Argv changed: lint: ruff check -> (none)" in text
+    assert found.gate is not None and not found.gate.decisive  # the task changed none of it: S keeps the target's profile
 
 
 def test_the_summary_reports_failed_checks_and_refuses_no_change(b: LandBench) -> None:
@@ -170,26 +165,14 @@ def blob(name: str) -> tuple[str, Sha]:
     return ("100644", Sha(name * 40))
 
 
-def test_changed_check_configuration_files_are_listed_and_others_are_not() -> None:
-    argv = ("pytest", "tests/unit/", "-q", "./tools/x.toml", "../up", ".", "/abs", "")
-    at_x = Profile((("sh", "scripts/setup.sh"),), (Check("test", argv, 60),), ("test",), "main")
-    base = {"justfile": blob("1"), "src/a.py": blob("1"), "tests/unit/test_a.py": blob("1"), "uv.lock": blob("1")}
-    tree_x = base | {"justfile": blob("2"), "src/a.py": blob("2"), "tests/rules/test_policy.py": blob("2"), "deep/conftest.py": blob("2"),
-                     "scripts/setup.sh": blob("2"), "tests/unit/test_a.py": blob("2"), "tools/x.toml": blob("2"), "a/justfile": blob("2"),
-                     "pyproject.toml": blob("1")}
-    del tree_x["uv.lock"]
-    assert config_files(base, tree_x, at_x) == ("deep/conftest.py", "justfile", "pyproject.toml", "scripts/setup.sh",
-                                                "tests/rules/test_policy.py", "tests/unit/test_a.py", "tools/x.toml", "uv.lock")
-
-
 def test_each_required_name_s_result_and_printable_conflict_paths(b: LandBench) -> None:
     profile = Profile((), (Check("check", ("just", "check"), 600), Check("test", ("just", "test"), 600)), ("check", "test"), "main")
     results = [ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, "passed"),
                ResultRow(1, 1, "test", None, None, None, 1.0, None, None, None)]
     files = {"src/x.py": blob("1")}
-    trees = Trees(b.base, files, files, files, files)
+    trees = Trees(b.base, files, files, files)
     made = Squashed(Sha(SHA), TreeId(SHA))
-    found = summary(checks_row(b), results, (profile, profile), checks_row(b).required, made, trees, "m\n", b.base)
+    found = summary(checks_row(b), results, (profile, profile), checks_row(b).required, made, trees, ("m\n", None), b.base)
     assert found.results == (("check", "passed"), ("test", "unfinished")) and found.state == "no_change"
     hostile = dataclasses.replace(found, state="conflict", conflicts=("src/\x1b[2Jx.py\nTask: y",))
     assert f"Origin main: {b.base}; conflict (1 paths): src/ [2Jx.py Task: y" in lines(hostile)

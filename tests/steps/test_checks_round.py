@@ -312,7 +312,7 @@ def test_an_abandon_during_checks_is_never_re_advanced_and_its_half_done_state_i
     assert rig.rows() == [("tl-1", 1, "concluded", "failed")] and rig.starts == 1 and rig.tracker.claims == ["tl-1"]
 
 
-def test_two_done_tasks_and_one_slot_check_in_release_order_before_new_work(rig: Checking) -> None:
+def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_waits_for_the_land(rig: Checking) -> None:
     ready(rig, "tl-2")
     for _ in range(4):  # plan and implement both, interleaved through the one slot
         rig.round()
@@ -325,9 +325,9 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_before_new_work(rig:
     assert rig.round() == [("tl-1", "check", "report", "running")] and rig.last.stopped == "no_free_slot"
     assert rig.tracker.ready_reads == reads and rig.next_words()["tl-2"] == ("implement", "advance")  # tl-2 and tl-3 wait
     rig.finish("tl-1", "passed")
-    # tl-2's checks pass at once here (its entry ran within the launch), so the slot is free again for tl-3 after them
-    assert rig.round() == [LAND_LINE, ("tl-2", "check", "advance", "started"), ("tl-3", "plan", "start", "started")]
-    assert rig.rows() == [("tl-1", 1, "concluded", "passed"), ("tl-2", 1, "concluded", "passed")]
+    # tl-1 waits for its land: the slot it freed is left to that land (tl-8bh9.14.34), so tl-2 and tl-3 still wait
+    assert rig.round() == [LAND_LINE] and rig.last.stopped == "slot_for_land"
+    assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.next_words()["tl-2"] == ("implement", "advance")
 
 
 @pytest.mark.parametrize(("body", "pid", "seen"), [
@@ -456,3 +456,15 @@ def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_
     assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]
     bead = rig.tracker.beads["tl-1"]
     assert (bead.assignee, bead.labels) == ("taskloop", ("auto",)) and rig.tracker.holds == ["labels tl-1 auto"]  # no label written
+
+
+def test_a_task_waiting_for_its_land_keeps_the_last_free_slot_from_new_starts(rig: Checking) -> None:
+    """tl-8bh9.14.34: the one slot freed by tl-1's passed checks is left to `tl step land`, not refilled by tl-2's start."""
+    implemented(rig)
+    rig.bodies = ["passed"]
+    assert rig.round() == [("tl-1", "check", "advance", "started")]
+    ready(rig, "tl-2")
+    assert rig.round() == [LAND_LINE] and rig.last.stopped == "slot_for_land" and rig.launched == ["tl-1", "tl-1"]
+    free = "SELECT count(*) FROM slot WHERE (repo_id,name) NOT IN (SELECT repo_id,slot FROM reservation)"
+    assert rig.con.execute(free).fetchone() == (1,)
+    assert rig.next_words() == {"tl-1": ("check", "land")}

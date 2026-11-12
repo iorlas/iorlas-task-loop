@@ -28,7 +28,7 @@ from typing import Literal
 from uuid import uuid4
 
 from beads_client import BdError
-from git_porcelain import GitUnavailable, Repo
+from git_porcelain import GitUnavailable, NotARepo, Repo
 
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
@@ -281,6 +281,8 @@ def checkout_repo(checkouts: Checkouts, path: Path) -> tuple[Repo, RepoId] | Adm
         return repo, inspect_repo(repo, checkout).repo_id
     except (UnsupportedCheckout, RuntimeError, OSError) as error:
         return AdmitRefused("checkout", detail=why(error))
+    except NotARepo:  # a missing path or a directory outside any repository: the person's input, not a transient Git fault
+        return AdmitRefused("checkout", detail=f"{path} is not a Git repository checkout (--checkout names its root).")
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
 

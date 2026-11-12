@@ -300,7 +300,7 @@ class Preparation:
         try:
             log = ports.logs.open_setup_log(key, run)
         except OSError:
-            return _unavailable("environment:files")
+            return _unavailable("log")  # the artifacts directory, not the slot's folders (`environment:files`)
         with closing(log):
             ports.store.start(key, run, head, digest, ports.clock())
             return self._run(_Run(key, run, path, head, target.branch, target.deadline, env, log), slot.gitdir, profile.setup)

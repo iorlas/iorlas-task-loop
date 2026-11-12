@@ -60,13 +60,14 @@ def run(argv: list[str], result: Result, capsys: pytest.CaptureFixture[str], mon
     return code, output.out, output.err
 
 
-@pytest.mark.parametrize(("flags", "mode", "no_change"), [
-    ([], "land", False), (["--summary"], "summary", False), (["--withdraw"], "withdraw", False), (["--no-change"], "land", True),
-    (["--summary", "--no-change"], "summary", True),
-], ids=["land", "summary", "withdraw", "no_change", "summary_no_change"])
+@pytest.mark.parametrize(("flags", "mode", "no_change", "accept"), [
+    ([], "land", False, False), (["--summary"], "summary", False, False), (["--withdraw"], "withdraw", False, False),
+    (["--no-change"], "land", True, False), (["--summary", "--no-change"], "summary", True, False),
+    (["--accept-gate-changes"], "land", False, True),
+], ids=["land", "summary", "withdraw", "no_change", "summary_no_change", "accept_gate_changes"])
 def test_the_flags_become_one_land_request_for_the_one_operation(
-    flags: list[str], mode: Literal["land", "summary", "withdraw"], no_change: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    flags: list[str], mode: Literal["land", "summary", "withdraw"], no_change: bool, accept: bool, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     opened: list[tuple[Path, Path]] = []
     requests: list[LandRequest] = []
@@ -86,7 +87,7 @@ def test_the_flags_become_one_land_request_for_the_one_operation(
     monkeypatch.setattr(land_module, "land", operation)
     assert main([*LAND, *flags, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art")]) == 1
     assert opened == [(tmp_path / "f.db", tmp_path / "art")]
-    assert requests == [LandRequest("tasks", "tl-1", Path("/checkout"), 20, mode, no_change)]
+    assert requests == [LandRequest("tasks", "tl-1", Path("/checkout"), 20, mode, no_change, accept)]
     assert capsys.readouterr().err.startswith("tl step land: refused:choices\nstubbed\n")
 
 
@@ -141,7 +142,7 @@ def test_a_land_prints_what_it_did_the_close_and_the_tracker_line(
     ]
     code, out, _ = run([*LAND, "--json"], found, capsys, monkeypatch)
     data = json.loads(out)
-    assert code == 0 and set(data) == {"status", "backlog", "task", "candidate", "release", "synced"}
+    assert code == 0 and set(data) == {"status", "backlog", "task", "candidate", "release", "synced", "gate"}
     assert set(data["candidate"]) == CANDIDATE and (data["status"], data["synced"]) == ("pushed", False)
     assert (data["candidate"]["delivery"], data["candidate"]["close"]) == ("pushed", "closed")
 
@@ -262,7 +263,7 @@ def _literals(names: tuple[str, ...], call: str, position: int) -> set[str]:
     return found
 
 
-LANDS = ("land", "land_check", "land_push", "land_close", "land_summary", "land_store")
+LANDS = ("land", "land_check", "land_push", "land_close", "land_summary", "land_store", "land_target", "land_gate")
 # The words a land passes through from its collaborators (the `Failed(kind, reason)` built from another value): the
 # candidate release's (`NotReleased`, the park's `slot_<state>`, `repo`, `not_listed`), the stores' fences
 # (`StoreRefused`), the slot choice and the checkout (`AdmitRefused`/`AdmitUnavailable`), the profile at O, the

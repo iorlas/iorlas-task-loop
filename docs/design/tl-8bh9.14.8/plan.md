@@ -294,8 +294,10 @@ attribute agents in landed commits; the task branch keeps the agent's commits).
 2. The required names at O against the checks attempt's: `same`, or each added and removed name (then the checks run
    again).
 3. Each required check whose argv at X differs from its argv at O, both argv shown (`shlex.join`).
-4. Checks added, removed or changed at X against O (they ran on the host too), and a changed `setup` (both shown).
-5. Every changed check-configuration file between merge-base(O, X) and X: `.task-loop.json`, `justfile`,
+4. *(Superseded by section 30.1: the gate facts, S against O.)* Checks added, removed or changed at X against O (they ran
+   on the host too), and a changed `setup` (both shown).
+5. *(Superseded by section 30.1: the shape rule and weakened tests.)* Every changed check-configuration file between
+   merge-base(O, X) and X: `.task-loop.json`, `justfile`,
    `pyproject.toml`, `uv.lock`, `mise.toml`, `.importlinter`, anything under `tests/rules/`, any `conftest.py`, and any
    tracked file a check's argv at X names (an argv element that is a path in X's tree).
 6. O, whether S's tree is X's (`same tree as X`, or `merged onto a moved main: checks run again`), a conflict's paths, or
@@ -1378,3 +1380,81 @@ ancestry, each reading `origin` as the person's Git configuration resolves it, a
 A person who points origin's fetch and push at different repositories owns what land then reads and records. The
 D10 residual (a block editing `.git/config`) is accepted without this mitigation (section 15). git-porcelain stays
 pinned at 0.17.0 (released; no revert).
+
+## 30. Trial defects repaired (tl-8bh9.14.34, .35, .41, .42, .43, .60; 2026-11-12)
+
+Evidence: `docs/design/self-hosting-trial-2.md`, `-trial-4.md`, `-trial-5.md` and the beads.
+
+### 30.1 Decision: a change of the gate is refused unless accepted (.42, .43)
+
+**Problem.** A task could change what decides a pass (check argv, `setup`, `ruff.toml`, a test) and land with the plain
+output `pushed ... Closed ...`: only `--summary` listed it, and the person may never run it. After the pull, every later
+task passed the weakened gate.
+
+**Decision (this slice, proposed to the owner with the PR).** One module, `land_gate`, reads the facts between O and S
+(what would land, not X against O, so a main that moved since the branch is not shown as the task's doing) and is shared
+by `--summary` and the land:
+
+1. every changed file with its diffstat (`Worktree.diff(O, S)`);
+2. each check added, removed or changed (argv or timeout), a changed `setup`, a changed `required` list;
+3. each changed configuration file, by **one short shape rule** instead of a name list: a file at the repository root
+   that is not documentation (`.md`, `.rst`, `.txt`), a `.toml`, `.ini` or `.cfg` file at any depth (`src/ruff.toml`,
+   `tests/pytest.ini`), any `conftest.py`, any tracked file a check's or `setup`'s argv names (`./` prefix and a trailing
+   `/` accepted; `.`, `..`, absolute paths and options name none). Tools whose configuration is a root file or a
+   `.toml`/`.ini`/`.cfg` at any depth are covered without a list; **not covered**: a configuration in another format
+   below the root (a nested `.json` or `.yaml`) that no argv names;
+4. each changed test module (a `.py` named `test_*`, `*_test`, or under a `tests` folder) that was **weakened**: deleted,
+   no longer parsing, fewer test functions, fewer `assert` statements, or more `skip`/`skipif`/`xfail` markers (an
+   attribute `pytest.mark.skip` or a bare `skip()` after `from pytest import skip`) or file-level `# ruff: noqa`
+   comments (parsed with `ast` and `tokenize` at O and at S; no text matching of code). Changes under `tests/rules/` are
+   **not** special any more (the old list flagged any change there): they are test modules and follow this rule.
+
+**Accepted misses** (the diffstat still lists them): a test made vacuous with the counts kept (an early `return`, `assert
+True` swapped for one real assertion), tests moved to a path the rule does not call a test module, a rewrite of a
+test module that keeps the test, assertion and marker counts.
+
+**Accepted cost (false positives).** Merging assertions into one comparison or splitting a test module shows as
+`Test weakened: assertions 3 -> 2` (or `tests` fewer) and blocks the plain land: the refusal says to rerun `tl step land`
+with `--accept-gate-changes`, which is the way through; it is one flag on a command the person already runs.
+
+Items 2 to 4 are *decisive*. A land whose S has any decisive fact is **refused** `refused:gate_changed` (exit 1, nothing
+recorded), the detail being the same lines `--summary` prints (`land_summary.gate_lines`), until the person reruns with
+`--accept-gate-changes`. The flag belongs to the person's call, never to rounds (which never land). An accepted land that
+pushed also prints those lines (`Gate changes accepted:` after `Pushed:`, and a `gate` key in `--json`), read from the
+delivered S against its O, so the plain output of the land that changed the gate names what it changed. A land that
+changes none of it lands exactly as before (no flag, no extra output). `--no-change` has no S to compare and needs no
+flag.
+
+Why refuse and not just print: the plain land is the person's one command, often run in a loop; a line printed after
+the push cannot be acted on. Why not derive "what the checks read": that needs each tool's own rules, which a list or a
+tracer would always lag; the shape rule is short and documented here. Replaces section 10 items 4 and 5 (X against O,
+a fixed name list).
+
+### 30.2 Decision: a freed slot is left to a waiting land (.34)
+
+Rounds refilled every freed slot within seconds, so `tl step land` answered `no_free_slot` for as long as the backlog
+lasted. **Decision:** while any task of the backlog is at `Next: land` (checks passed, not landed), a round does not
+start a step into the **last** free slot: new tasks and advances stop with the round word `slot_for_land` (not
+`no_free_slot`: a slot is free) before it, and only a land (or a release) takes it. Tests: the freed slot stays free
+across a round with a ready task, and the land validates in the one free slot. No new state: `Next: land` is already read by the round. The cost is one slot idle while a land
+is pending, so a single slot runs nothing new until the person lands; that is the person's pending action. A land
+waiting for its own turn queues nowhere: the rerun finds the free slot.
+
+### 30.3 A lost ref race is the race (.35)
+
+A push answered `remote_rejected` is read again by the delivery rule: when origin's `main` is no longer at O (the
+winner's push landed) it is the `rejected` race of section 7 (candidate N+1, at most `target_moved`); `remote_rejected`
+stays for every answer with `main` unchanged, **including** a ref lock still held after the winner's push failed to
+update (rare; the rerun lands). The bead's lock-held case is covered only when main moved.
+
+### 30.4 Setup log failures name the artifacts directory (.41)
+
+An artifacts directory that cannot be written when a setup or check log opens is `unavailable:log`, no longer
+`environment:files` (which is the slot's own folders). The land names the directory, advises fixing its permissions or
+space and says nothing about the task branch or main; a rerun is safe (the candidate resumes).
+
+### 30.5 A checkout that is not a repository is a refusal (.60)
+
+`checkout_repo` answers `refused:checkout` naming the path when Git says `NotARepo` (a missing directory, a directory
+outside any repository), exit 1; `unavailable:git` stays for transient Git faults. Shared by `tl step next`, `start`
+and the land.

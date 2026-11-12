@@ -21,7 +21,8 @@ ABANDON = "`tl step release --abandon` frees the slot and gives the task back."
 ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot frees; "
           "each round holds the tasks it took that stopped (`bd list --label held`), advances claimed tasks whose step is "
           "done to their next step, then starts approved ready tasks; "
-          "the tracker is read only when a slot is free; writes `<artifacts>/rounds.log` (a passed task: `report land`). Runs in this "
+          "the tracker is read only when a slot is free; while a passed task waits for `tl step land`, the last free slot is left "
+          "to that land (`slot_for_land`); writes `<artifacts>/rounds.log` (a passed task: `report land`). Runs in this "
           "terminal until stopped: Ctrl-C once stops after the current move, twice exits at once; launched steps keep "
           "running; started with Ctrl-C ignored (`nohup`, `&`), only SIGTERM stops it. "
           "A move in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
@@ -65,6 +66,8 @@ GUIDE = {
     "`unusable` lines name it and why; fix it or `tl slot adopt`). `tl step rounds` fills a freed slot seconds after.",
     "unusable": "A slot no attempt holds cannot be used (missing, dirty, redirected or on a branch: `unusable:<slot>:<why>`, its "
     "path printed under the line): put it right (`git worktree add --detach`, `git switch --detach`, a clean tree) or `tl slot adopt`.",
+    "slot_for_land": "One slot is free and kept for `tl step land`: a passed task waits for it, so rounds start nothing into the "
+    "last free slot. Run `tl step land` (or release the task); rounds go on as soon as it is landed.",
     "rounds_running": "Another `tl step rounds` runs for this backlog (the pid is its lock record's, informational): use its "
     "terminal, or stop it there with Ctrl-C first. `tl step next` runs beside it.",
     "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5; "
