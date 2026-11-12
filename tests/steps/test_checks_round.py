@@ -148,6 +148,9 @@ class Checking(Factory):
         released = self.releasing().release(key, False, me)
         assert isinstance(released, Released), released
 
+    def checks_release(self) -> ChecksRelease:
+        return self.releasing()
+
     def releasing(self) -> ChecksRelease:
         return ChecksRelease(self.checks, self.checkouts, self.files, lambda _entry: "gone", custody, lambda: self.now,
                              self.command, lambda _scratch: True)
@@ -211,18 +214,23 @@ def test_rounds_take_a_task_through_plan_implement_and_its_checks_to_done_with_o
     assert rig.tracker.beads["tl-1"].status == "in_progress" and rig.logged("tl-1", "check", "advance", "started", checks) == 1
 
 
-def test_a_failed_check_is_reported_once_never_re_run_and_new_work_still_starts(rig: Checking) -> None:
+def test_a_failed_check_is_held_once_never_re_run_and_new_work_still_starts(rig: Checking) -> None:
+    """tl-8bh9.14.9 section 18: a round-taken task's failed checks are held (label moved, abandoned, claim returned, one
+    comment about the checks attempt), never re-run; the hold stops nothing and costs nothing once finished."""
     implemented(rig)
     rig.bodies = ["failed"]
     assert rig.round(frozenset()) == [("tl-1", "check", "advance", "started")]
-    checks = rig.key("tl-1").attempt_id
+    implement = rig.current("tl-1")
     ready(rig, "tl-2")
-    assert rig.round(rig.last.written) == [("tl-1", "check", "report", "failed:test:failed"), ("tl-2", "plan", "start", "started")]
-    assert rig.round(rig.last.written)[0] == ("tl-1", "check", "report", "failed:test:failed")
-    assert rig.logged("tl-1", "check", "report", "failed:test:failed", checks) == 1  # `quiet`: written once
+    assert rig.round(rig.last.written) == [("tl-1", "check", "hold", "held failed:test:failed"), ("tl-2", "plan", "start", "started")]
+    assert rig.round(rig.last.written) == [("tl-2", "plan", "verify", "verified release=released branch=published")]
+    assert rig.logged("tl-1", "check", "hold", "held", "failed:test:failed", implement) == 1
     assert rig.rows() == [("tl-1", 1, "concluded", "failed")] and rig.starts == 1  # no re-run, no relaunch
-    assert rig.next_words()["tl-1"] == ("check", "done") and rig.tracker.claims == ["tl-1", "tl-2"]
-    assert rig.tracker.beads["tl-1"].status == "in_progress"  # the claim is kept
+    assert rig.next_words()["tl-1"] == ("implement", "on_hold") and rig.tracker.claims == ["tl-1", "tl-2"]
+    bead = rig.tracker.beads["tl-1"]
+    assert (bead.status, bead.assignee, bead.labels) == ("open", "", ("held",))  # the claim returned, `auto` moved
+    assert rig.tracker.holds == ["labels tl-1 auto", "comment tl-1"]  # one comment; on_hold: no further tracker call
+    assert "taskloop hold: failed:test:failed" in rig.tracker.comments[0][1] and "\nStep check, attempt 1" in rig.tracker.comments[0][1]
 
 
 @pytest.mark.parametrize(("first", "advance"), [
@@ -244,21 +252,22 @@ def test_an_admitted_checks_attempt_is_relaunched_with_the_checks_launcher_only(
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.logged("tl-1", "check", "relaunch", "relaunched", checks) == 1
 
 
-def test_two_counted_refusals_stop_the_relaunches_without_stopping_new_work_until_a_start_by_hand(rig: Checking) -> None:
+def test_two_counted_refusals_hold_the_task_without_stopping_new_work_and_a_start_by_hand_begins_at_plan(rig: Checking) -> None:
+    """`stuck:checks_refused` of a round-taken task is held; the person's `tl step start` then admits a fresh plan attempt
+    (D4: the hold is an abandon), started by hand (no label)."""
     implemented(rig)
     rig.bodies = ["counted", "counted", "passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     assert rig.round() == [("tl-1", "check", "relaunch", "relaunched")]
     rig.adopt("s2")
     ready(rig, "tl-2")
-    stuck = ("tl-1", "check", "report", "stuck:checks_refused")
-    assert rig.round(frozenset()) == [stuck, ("tl-2", "plan", "start", "started")]
-    assert rig.round(rig.last.written)[0] == stuck and rig.starts == 2 and rig.counted("tl-1") == ("checks:running", 2)
-    assert rig.logged("tl-1", "check", "report", "stuck:checks_refused", rig.key("tl-1").attempt_id) == 1
+    held = ("tl-1", "check", "hold", "held stuck:checks_refused")
+    assert rig.round(frozenset()) == [held, ("tl-2", "plan", "start", "started")]
+    assert held not in rig.round(rig.last.written) and rig.starts == 2 and rig.counted("tl-1") == ("checks:running", 2)
     rig.now += 1
     by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
-    assert isinstance(by_hand, Started) and (by_hand.status, by_hand.step) == ("relaunched", "check")
-    assert rig.next_words()["tl-1"] == ("check", "land") and rig.counted("tl-1") == (None, 0)
+    assert isinstance(by_hand, Started) and (by_hand.status, by_hand.step) == ("started", "plan")
+    assert rig.con.execute("SELECT label FROM attempt WHERE attempt_id=?", (by_hand.attempt_id,)).fetchone() == (None,)
 
 
 @pytest.mark.parametrize(("late", "word"), [("unstartable", "unavailable:start"), ("crash", "relaunched")])
@@ -271,8 +280,8 @@ def test_relaunches_that_never_reach_the_entry_s_count_stop_after_two_past_the_d
     rig.now += AFTER_DEADLINE
     assert rig.round() == [("tl-1", "check", "relaunch", word)] and rig.counted("tl-1") == (LATE, 1)
     assert rig.round() == [("tl-1", "check", "relaunch", word)] and rig.counted("tl-1") == (LATE, 2)
-    assert rig.round() == [("tl-1", "check", "report", "stuck:checks_refused")] and rig.starts == 4 and rig.bodies == []
-    assert rig.rows() == [("tl-1", 1, "admitted", None)]
+    assert rig.round() == [("tl-1", "check", "hold", "held stuck:checks_refused")] and rig.starts == 4 and rig.bodies == []
+    assert rig.rows() == [("tl-1", 1, "admitted", None)] and rig.tracker.beads["tl-1"].labels == ("held",)
 
 
 def test_a_relaunch_past_the_deadline_that_concludes_expired_clears_the_count(rig: Checking) -> None:
@@ -281,7 +290,7 @@ def test_a_relaunch_past_the_deadline_that_concludes_expired_clears_the_count(ri
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     rig.now += AFTER_DEADLINE
     assert rig.round() == [("tl-1", "check", "relaunch", "relaunched")]
-    assert rig.round() == [("tl-1", "check", "report", "failed:expired")] and rig.counted("tl-1") == (None, 0)
+    assert rig.round() == [("tl-1", "check", "hold", "held failed:expired")] and rig.counted("tl-1") == (None, 0)
 
 
 def test_an_abandon_during_checks_is_never_re_advanced_and_its_half_done_state_is_attempted(rig: Checking) -> None:
@@ -352,16 +361,21 @@ def test_a_concluded_checks_attempt_whose_entry_died_before_its_release_is_relea
     assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "land")} and rig.starts == 1
 
 
-def test_a_held_checks_release_is_retried_each_round_logged_once_and_released_once_its_group_ends(rig: Checking) -> None:
+def test_a_hold_kept_by_a_lingering_check_is_retried_each_round_logged_once_and_finished_once_its_group_ends(rig: Checking) -> None:
+    """A failed checks attempt whose release is held by a check still running: the hold's abandon is refused by the
+    same word each round (one line, one comment naming the process), then finishes once the group ends."""
     implemented(rig)
     rig.bodies = ["lingering"]
     assert rig.round(frozenset()) == [("tl-1", "check", "advance", "started")]
-    held = ("tl-1", "check", "release", "held:check_running")
-    assert rig.round(rig.last.written) == [held] and rig.round(rig.last.written) == [held]
-    assert rig.logged("tl-1", "check", "release", "held:check_running", rig.key("tl-1").attempt_id) == 1
+    implement = rig.current("tl-1")
+    pending = ("tl-1", "check", "hold", "pending abandon unsettled:check_running")
+    assert rig.round(rig.last.written) == [pending] and rig.round(rig.last.written) == [pending]
+    assert rig.logged("tl-1", "check", "hold", "pending", "abandon", "unsettled:check_running", implement) == 1
+    assert rig.tracker.holds == ["labels tl-1 auto", "comment tl-1"] and "pid 901" in rig.tracker.comments[0][1]
     rig.groups[901] = "gone"
-    assert rig.round(rig.last.written) == [("tl-1", "check", "release", "released")]
-    assert rig.round(rig.last.written) == [("tl-1", "check", "report", "failed:check:lingering")] and rig.starts == 1
+    assert rig.round(rig.last.written) == [("tl-1", "check", "hold", "held failed:check:lingering")]
+    assert rig.round(rig.last.written) == [] and rig.starts == 1 and rig.tracker.holds == ["labels tl-1 auto", "comment tl-1"]
+    assert rig.tracker.beads["tl-1"].assignee == "" and rig.next_words()["tl-1"] == ("implement", "on_hold")
 
 
 def _candidate(rig: Checking, *, slot: bool) -> AttemptKey:

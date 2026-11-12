@@ -19,7 +19,8 @@ HELD = ("The tracker claim stays held, and the slot until the step ends on a cle
         "its attempt, and rounds skip it (`attempted`).")
 ABANDON = "`tl step release --abandon` frees the slot and gives the task back."
 ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then every --every seconds and as soon as a slot frees; "
-          "each round advances claimed tasks whose step is done to their next step, then starts approved ready tasks; "
+          "each round holds the tasks it took that stopped (`bd list --label held`), advances claimed tasks whose step is "
+          "done to their next step, then starts approved ready tasks; "
           f"the tracker is read only when a slot is free; writes `<artifacts>/rounds.log`; {STEP_ONLY}. Runs in this terminal "
           "until stopped: Ctrl-C once stops after the current move, twice exits at once; launched steps keep running. A move "
           "in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "

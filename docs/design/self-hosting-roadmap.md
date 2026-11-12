@@ -248,6 +248,7 @@ reading every diff. Depends on B4. Size about 2 slices. Design: yes (later). Not
 | Size | 2 slices (hold operation and words; the round applies it) |
 | Open decisions | O5 |
 | Design / smoke | short plan / yes |
+| Built | H1-H3 of [tl-8bh9.14.9](tl-8bh9.14.9/plan.md) (each reviewed): schema v14 and the hold record, the hold operation and its words, the round applying it; the M4 smoke waits for B11 and B13 |
 
 ### B11. Keep-awake
 
@@ -310,7 +311,7 @@ S5a ─────────┼─> B3 profile ─> B13 pinned git_dir ─> R
 | **M1 semi-assisted** | B14, S5 (a-c), B3, B13 pinned `git_dir`, B2 | Label an own task `auto`, run `tl step rounds` from a runner worktree, get plan and implementation (with new tests the agent ran) on `task/<id>` | Run `just check`/`just test` on `task/<id>`; read the diff; squash-merge, push, `bd close`; spot failed tasks in `tl step list` and abandon them; stop rounds before any factory upgrade |
 | **M2 checks in the factory** | B4 (built S6a-S6e; reached once the [M2 live smoke](tl-8bh9.14.6/live-smoke.md) passes) | See per-check passed/failed on X in `tl step show`; rounds run the checks after implement | Read the diff; land and close; handle failures (re-run with `tl step start`, or abandon) |
 | **M3 land and close** | B6 (built L0-L5; reached once the [M3 live smoke](tl-8bh9.14.8/live-smoke.md) passes) | Run `tl step land TASK` after reading diff and checks: squash on origin `main`, task closed | Decide each land; tracker sync if O4 says so; failures |
-| **M4 unattended loop** | B7, B11, B13 Git read timeout | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
+| **M4 unattended loop** | B7 (built H1-H3), B11, B13 Git read timeout; not reached until the M4 live smoke passes | Leave rounds running overnight; find held tasks with reasons in the tracker; answer by editing the task and re-adding `auto` | Land; reboot recovery (`--abandon`); upgrades |
 | **M5 daily self-hosting** | B8, B10 (then the dashboard) | Run a pinned version; land factory changes and adopt them by changing the pin and restarting; see time since last command | Land decisions; pin changes; anything deferred (section 6) |
 
 ## 5. The simplest path to the first self-implemented task

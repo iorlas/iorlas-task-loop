@@ -78,7 +78,9 @@ def register(commands: Parsers) -> None:
     _common(release, "--db")
     _round_flags(_add(step, "next", "Run one scheduling round: settle existing attempts, advance claimed tasks whose "
                       "step is done to the next step (no label check), start approved ready tasks in the free slots left, publish "
-                      f"verified results; {STEP_ONLY}. {HELD}"))
+                      "verified results, hold each task a round took that stopped (its label removed, `held` added, the claim "
+                      "returned, one comment: `bd list --label held`; adding the label back takes it again at plan) and remove "
+                      f"`held` once a held task is taken again; {STEP_ONLY}. {HELD}"))
     rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")

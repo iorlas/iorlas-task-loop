@@ -1,6 +1,7 @@
 """The rounds bench (S5c, S6e): one adopted slot and every round port real over factory.db and the semantic Git fake,
-except the tracker (`Tracker`), the agent (a scripted agent per task and step, run at once by the launch port as the
-registered entry would run it) and the slot setup's process. `test_advance` and `test_checks_round` drive it."""
+except the tracker (`Tracker`, with the hold's label, comment and clear writes), the agent (a scripted agent per task and
+step, run at once by the launch port as the registered entry would run it) and the slot setup's process. `test_advance`,
+`test_checks_round` and `test_round_holds` drive it."""
 
 import json
 import sqlite3
@@ -24,14 +25,17 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksRequest
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.hold import HoldPorts
+from taskloop.hold_store import HoldStore
 from taskloop.launch import Launched, LaunchResult
-from taskloop.operations import ChecksPorts, Round, Started, StartPorts, StartRequest, start, verify_task
+from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, start, verify_task
 from taskloop.publish import BranchPublish
 from taskloop.round import NextRequest, RoundPorts, run_round
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import SlotRelease
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
+from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
 from taskloop.verifier import Verifier
 
 ENTRY = (7, "entry-start", "boot")
@@ -53,14 +57,52 @@ def scripted(repo: FakeRepo, answer: Mapping[str, object], files: Mapping[str, s
 
 
 class Tracker:
-    """The tracker's reads and the claim: a task is ready while open and labelled; the claim makes it in progress for
-    taskloop, an unclaim opens it again."""
+    """The tracker's reads, the claim and the hold's writes: a task is ready while open and labelled; the claim makes it
+    in progress for taskloop, the fenced unclaim opens it again (False when it is not taskloop's or closed). `down`: the
+    hold writes that fail (`unavailable`, a bd outage); `comments` every comment written, `holds` every hold write."""
 
     def __init__(self, *beads: Bead) -> None:
         self.beads = {bead.id: bead for bead in beads}
         self.claims: list[str] = []
         self.shows: list[str] = []
         self.ready_reads = 0
+        self.down: set[str] = set()
+        self.comments: list[tuple[str, str]] = []
+        self.holds: list[str] = []
+
+    def labels(self, _root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+        """5.2: nothing written for a missing or closed task or another actor's; else `held` added and `label` removed."""
+        self.holds.append(f"labels {task_id} {label}")
+        found = self.beads.get(task_id)
+        if "labels" in self.down:
+            return HoldAnswer("unavailable", "lock")
+        if found is None or found.status == "closed":
+            return HoldAnswer("missing" if found is None else "closed")
+        if found.assignee not in ("", "taskloop"):
+            return HoldAnswer("not_ours")
+        kept = tuple(each for each in found.labels if each not in ("held", label))
+        self.beads[task_id] = replace(found, labels=(*kept, "held"))
+        return HoldAnswer("moved" if label in found.labels else "absent", found.assignee)
+
+    def comment(self, _root: str, task_id: str, text: str) -> HoldAnswer[HoldWrite]:
+        self.holds.append(f"comment {task_id}")
+        if "comment" in self.down:
+            return HoldAnswer("unavailable", "lock")
+        self.comments.append((task_id, text))
+        return HoldAnswer("done")
+
+    def clear(self, _root: str, task_id: str) -> HoldAnswer[HoldWrite]:
+        self.holds.append(f"clear {task_id}")
+        if "clear" in self.down:
+            return HoldAnswer("unavailable", "lock")
+        found = self.beads[task_id]
+        self.beads[task_id] = replace(found, labels=tuple(each for each in found.labels if each != "held"))
+        return HoldAnswer("done")
+
+    def answer(self, task_id: str, label: str = "auto") -> None:
+        """The person's answer: the label added back."""
+        found = self.beads[task_id]
+        self.beads[task_id] = replace(found, labels=(*found.labels, label))
 
     def show(self, task_id: str) -> Bead | None:
         self.shows.append(task_id)
@@ -76,7 +118,10 @@ class Tracker:
         return True
 
     def unclaim(self, _root: str, task_id: str) -> bool:
-        self.beads[task_id] = replace(self.beads[task_id], status="open", assignee="")
+        found = self.beads.get(task_id)
+        if found is None or found.status == "closed" or found.assignee != "taskloop":
+            return False
+        self.beads[task_id] = replace(found, status="open", assignee="")
         return True
 
     def inspect(self, task_id: str, backlog: str, root: str) -> TaskInspection:
@@ -140,16 +185,25 @@ class Factory:
         during()
         return "gone"
 
+    def checks_release(self) -> ChecksReleasing:
+        """The hold's abandon of a checks attempt (none on this bench: no check step)."""
+        return NoChecks()
+
+    def holding(self) -> HoldPorts:
+        tracker = TrackerHolds(self.tracker.labels, self.tracker.comment, self.tracker.clear)
+        return HoldPorts(HoldStore(lambda: self.con), self.store, tracker, self.releaser(), self.checks_release(), lambda: self.now,
+                         EvidenceFiles(self.tmp))
+
     def ports(self) -> RoundPorts:
         """Fresh ports over the same factory.db each round, as each `tl step rounds` round opens them (a restart too)."""
         verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold)
         reads = StatusPorts(self.store, self.observe, lambda: self.now, verifier.leftovers, lambda: "boot")
         publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now)
-        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, self.tracker, self.lines.append)
+        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, self.holding(), self.tracker, self.lines.append)
 
-    def round(self, quiet: frozenset[tuple[str, str, str, str]] | None = None) -> list[tuple[str, str, str, str]]:
+    def round(self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto") -> list[tuple[str, str, str, str]]:
         self.now += 1
-        found = run_round(self.ports(), NextRequest("tasks", "/tracker", self.slot.repo.path, "auto", "m", "high", 30, quiet))
+        found = run_round(self.ports(), NextRequest("tasks", "/tracker", self.slot.repo.path, label, "m", "high", 30, quiet))
         assert isinstance(found, Round)
         self.last = found
         return [(each.task_id, each.step, each.action, each.word) for each in found.moves]

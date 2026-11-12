@@ -36,6 +36,8 @@ from taskloop.composition import (
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles, checkouts, remotes
+from taskloop.hold import HoldPorts
+from taskloop.hold_store import HoldStore
 from taskloop.interrupts import installed
 from taskloop.land_check import LandPorts
 from taskloop.land_store import LandStore
@@ -52,7 +54,7 @@ from taskloop.slot_lock import landing, probe, refused, repeating
 from taskloop.slot_release import SlotRelease
 from taskloop.slots import SlotGit
 from taskloop.task import TaskInspectionError
-from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_reads
+from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_holds, tracker_reads
 from taskloop.verifier import Verifier
 
 
@@ -129,7 +131,8 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
 @contextmanager
 def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[RoundPorts | Failed]:
     """`tl step next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
-    refuses `tracker_root`), the start, verify, release and publish ports on one shared writer (closed here), the reads
+    refuses `tracker_root`), the start, verify, release, publish and hold ports on one shared writer (closed here; the
+    hold's abandon uses the release ports `tl step release --abandon` uses, its tracker writes `tracker_holds`), the reads
     and the round log appended under the artifacts root."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
@@ -145,8 +148,11 @@ def open_next(database: Path, artifacts: Path, tracker_root: str) -> Generator[R
             reader = _reader(con)
             leftovers = Verifier(reader, checkouts, RealSlotFiles(), worker_gone, time.time, refused).leftovers
             reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen)
-            yield RoundPorts(reads, _starting(reader, database, artifacts, store), open_verifier(database, store),
-                            open_releaser(database, store), open_publisher(database, store), ready, EvidenceFiles(artifacts).log_round)
+            releaser = open_releaser(database, store)
+            holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
+                                open_checks_releaser(database, store), time.time, EvidenceFiles(artifacts))
+            yield RoundPorts(reads, _starting(reader, database, artifacts, store), open_verifier(database, store), releaser,
+                             open_publisher(database, store), holding, ready, EvidenceFiles(artifacts).log_round)
         finally:
             store.close_shared()
 

@@ -1,11 +1,15 @@
 """`tl step next`: one scheduling round over the existing operations, stateless and idempotent.
 
 Settle each existing attempt of the backlog by its `Next` word (relaunch an admitted attempt whose entry is not running,
-a checks attempt with the checks launcher; verify, repeat; report the rest: a failed checks attempt is reported, never
-re-run), advance each claimed task whose step is done (`Next: advance`) to its next step, oldest
-release first, then admit eligible ready tasks in priority order into the slots left free, then publish the verified,
-released, unpublished results read at the start. It adds no state, lock, Git write, tracker write or process of its own: its
-only other output is one append-only round-log line per move, never read back. Nothing merges or lands.
+a checks attempt with the checks launcher; verify, repeat; hold a round-taken task that stopped (`Next: hold`, through
+`hold.hold_task`; an `on_hold` one costs nothing); report the rest: a failed checks attempt is never re-run), advance each
+claimed task whose step is done (`Next: advance`) to its next step, oldest release first (a round-taken task whose advance
+is refused `claim_lost` or `branch_moved` is held), then admit eligible ready tasks in priority order into the slots left
+free, storing the round's label on each fresh attempt (an `on_hold` task whose hold removed this very label is eligible
+again: `hold_status.reingests`), then publish the verified, released, unpublished results read at the start (a
+round-taken `branch_moved` is held), then remove `held` from held tasks taken again (`hold.clear_holds`). It adds no
+state, lock, Git write, tracker write or process of its own beyond the hold operation's: its only other output is one
+append-only round-log line per move, never read back. No per-task hold word stops admission. Nothing merges or lands.
 
 Claimed work goes before new work (.16 3.6): the advance takes free slots before admission. The label is ingestion's only:
 admission's ready read carries it; an advance checks no label, takes no claim, and reads the tracker once per task (still
@@ -26,6 +30,8 @@ from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attem
 from taskloop.attempt_store import AttemptStore, StoreUnavailable
 from taskloop.attempt_types import AttemptKey
 from taskloop.evidence_files import EvidenceError
+from taskloop.hold import HoldPorts, clear_holds, hold_task
+from taskloop.hold_status import reingests
 from taskloop.operations import (
     UNKNOWN_KINDS,
     Failed,
@@ -64,6 +70,8 @@ STOPS: Final = frozenset({
 ADVANCE_STOPS: Final = frozenset({"no_free_slot", "choices", "deadline", "expired", "database", "schema"})
 # The admission phase's own skip words (`selection.order`): their lines stand while a round does not read the ready rows.
 RANKED_SKIPS: Final = frozenset(get_args(Skip.__value__))
+# The advance's and the publication's refusals that hold a round-taken task (tl-8bh9.14.9 section 3) instead of a skip.
+HOLDS: Final = frozenset({"claim_lost", "branch_moved"})
 # re-running is safe; a single task's unsettled must not stop admission or back off the loop
 STOPPING_UNKNOWN: Final = frozenset(UNKNOWN_KINDS) - {"unsettled"}
 
@@ -89,14 +97,16 @@ class NextRequest:
 
 @dataclass(frozen=True)
 class RoundPorts:
-    """Every port is an existing one, plus the tracker's ready read, the round log (one line per move) and `stopping`,
-    asked before each move."""
+    """Every port is an existing one, plus the hold's (`holding`: its store, the tracker's hold writes, the abandon's
+    release ports, the clock, the evidence reader), the tracker's ready read, the round log (one line per move) and
+    `stopping`, asked before each move."""
 
     reads: StatusPorts
     starting: StartPorts
     verifier: Verify
     releaser: Release
     publisher: Publish
+    holding: HoldPorts
     ready: ReadyRows
     log: Callable[[str], None]
     stopping: Callable[[], bool] = never
@@ -153,11 +163,14 @@ def _word(result: Started | Failed) -> str:
 
 
 def _request(request: NextRequest, task_id: str) -> StartRequest:
-    return StartRequest(task_id, request.backlog, request.tracker_root, request.checkout, request.model, request.effort, request.minutes)
+    """The start of one task under the round's choices and label (stored only by a fresh admission)."""
+    return StartRequest(task_id, request.backlog, request.tracker_root, request.checkout, request.model, request.effort, request.minutes,
+                        request.label)
 
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
-    """One round: settle, advance, admit, publish. A whole-round refusal (empty label, unreadable store) is `Failed`."""
+    """One round: settle, advance, admit, publish, clear. A whole-round refusal (empty label, unreadable store) is
+    `Failed`."""
     label = request.label.strip()
     if not label:
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
@@ -178,6 +191,8 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     stopped = stopped or _admit(ports, request, current, trail)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
+    if stopped != INTERRUPTED and not ports.stopping():
+        _cleared(ports.holding, trail)
     return trail.close(INTERRUPTED if ports.stopping() else stopped)
 
 
@@ -187,7 +202,7 @@ def _backlog(listed: Listed, backlog: str) -> tuple[AttemptView, ...]:
 
 def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _Trail) -> None:
     """One existing attempt by its `Next` word: an abandoned one is never re-admitted; `advance` waits for the advance
-    phase, `publish` for the last one."""
+    phase, `publish` for the last one; `hold` is the hold operation (due, or not finished), `on_hold` nothing at all."""
     task, attempt, step = each.task_id, each.attempt_id, each.step
     abandoned = each.release is not None and each.release.abandoned
     match each.next:
@@ -203,11 +218,13 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: _
                 trail.add(Move(task, action, _word(result), found, _detail(result), step))  # a repeat stays in its step
         case "verify":
             trail.add(_verified(ports, request.backlog, each))
+        case "hold":
+            trail.add(_held(ports.holding, each))
         case "release" if each.checks is not None and each.checks.row.released_at is None:  # its entry is gone (`checks_next`)
             trail.add(_checks_released(ports, each, each.checks.row.key))
         case "wait":
             trail.add(Move(task, "report", "running", attempt, step=step))
-        case "publish" | "advance" | "land" | "landed":  # only the person's `tl step land` lands (`rounds-never-land`)
+        case "publish" | "advance" | "land" | "landed" | "on_hold":  # only the person's `tl step land` lands (`rounds-never-land`)
             return
         case "done" if succeeded(each.result):
             return
@@ -238,6 +255,31 @@ def _resume(ports: StartPorts, backlog: str, minutes: int, each: AttemptView) ->
     if each.next == "repeat":
         return ports.repeat.repeat(backlog, each.task_id, key, entry, minutes)
     return launched(ports.launcher.launch(backlog, each.task_id, minutes), backlog, each.task_id, key, existing=True)
+
+
+def _held(ports: HoldPorts, each: AttemptView, reason: str | None = None) -> Move:
+    """`hold.hold_task` for the view's task as one move of its agent attempt: `held <reason>` when this call finished the
+    hold, `pending <missing step> <refusal>` (the refusal in the word, so the quiet key changes with it and an unchanged
+    pending hold is written once), `refused <refusal>` (a lost race: the task changed since the round read it)."""
+    found = hold_task(ports, each, reason)
+    match found.word:
+        case "held":
+            word = f"held {found.reason}"
+        case "pending":
+            word = f"pending {found.missing} {found.refusal}"
+        case "refused":
+            word = f"refused {found.refusal}"
+    return Move(found.task_id, "hold", word, found.attempt_id, found.detail, found.step)
+
+
+def _cleared(ports: HoldPorts, trail: _Trail) -> None:
+    """Section 7.3 after publication: `hold cleared` once `held` is off a task taken again (or owned by its new hold);
+    `hold clearing <word>` while a tracker or store failure or an unfinished new hold leaves it to a later round (quiet
+    while unchanged). A failed read of the holds names no task: no line, the next round reads them again."""
+    for each in clear_holds(ports.store, ports.tracker, ports.clock):
+        if each.task_id:
+            word = each.word if each.word == "cleared" else f"clearing {each.word}"
+            trail.add(Move(each.task_id, "hold", word, each.attempt_id, each.detail))
 
 
 def _checks_released(ports: RoundPorts, each: AttemptView, key: AttemptKey) -> Move:
@@ -281,7 +323,8 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
     new task. An unknown or a round-wide refusal (`ADVANCE_STOPS`) ends both phases (`no_free_slot` unwritten, as
     admission's); any other refusal is about one task (`claim_lost`, `not_advanceable`, `branch_moved`, `abandoned`,
     `changed`, `task`, `checkout`, `input`, `constraint`): a `skip` of the done attempt, tried again next round, its
-    unchanged line kept out of the log by `quiet`. With every slot reserved: no tracker call."""
+    unchanged line kept out of the log by `quiet`; `claim_lost` and `branch_moved` of a round-taken task (a label on its
+    attempt) hold it instead. With every slot reserved: no tracker call."""
     if not waiting:
         return ""
     if _full(ports.reads.store):
@@ -296,7 +339,9 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
         if result.reason == "no_free_slot":
             return result.reason
         stop = _stops(result, ADVANCE_STOPS)
-        if stop or result.admitted:  # an unknown, a stop, or the next step admitted but not launched (the next round relaunches)
+        if not stop and not result.admitted and result.kind == "refused" and result.reason in HOLDS and each.label is not None:
+            trail.add(_held(ports.holding, each, result.reason))
+        elif stop or result.admitted:  # an unknown, a stop, or the next step admitted but not launched (the next round relaunches)
             trail.add(Move(each.task_id, "advance", result.word, each.attempt_id, result.detail, each.step))
         else:
             trail.add(Move(each.task_id, "skip", result.reason, each.attempt_id, result.detail, each.step))
@@ -316,8 +361,10 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
         rows = ready_rows(ports.ready, request.label)
     except TaskInspectionError as error:
         return "refused:tracker" if error.kind == "malformed" else "unavailable:tracker"
-    # abandoned once its claim is no longer kept: a half-done checks abandon (claim still kept) is `attempted`
-    attempts = {each.task_id: each.release is not None and each.release.claim != "kept" for each in current}
+    # abandoned once its claim is no longer kept: a half-done checks abandon (claim still kept) is `attempted`; a finished
+    # hold that removed this round's label is left out: the label in this ready read is the person's answer (7.2)
+    attempts = {each.task_id: each.release is not None and each.release.claim != "kept" for each in current
+                if not reingests(each.next, each.hold, request.label)}
     ordered, skipped = order(rows, ancestry(ports.ready, rows), attempts, ACTOR)
     trail.ranked = True
     ids = {each.task_id: (each.attempt_id, each.step) for each in current}
@@ -347,7 +394,8 @@ def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow,
 
 def _publish(ports: RoundPorts, backlog: str, verified: Iterable[AttemptView], trail: _Trail) -> str:
     """The verified, released, unpublished results read before settling: pushed again every round until one succeeds. One
-    whose entry still runs is left to that entry, which publishes right after its release; `interrupted` on a stop."""
+    whose entry still runs is left to that entry, which publishes right after its release; `interrupted` on a stop. A
+    round-taken task refused `branch_moved` is held instead of being pushed again every round."""
     for each in verified:
         if ports.stopping():
             return INTERRUPTED
@@ -356,6 +404,8 @@ def _publish(ports: RoundPorts, backlog: str, verified: Iterable[AttemptView], t
         found = publish_task(ports.reads.store, ports.publisher, backlog, each.task_id)
         if isinstance(found, PublishedTask):
             trail.add(Move(each.task_id, "publish", publish_word(found.result), found.attempt_id, step=each.step))
+        elif found.word == "refused:branch_moved" and each.label is not None:
+            trail.add(_held(ports.holding, each, "branch_moved"))
         else:
             trail.add(Move(each.task_id, "publish", found.word, each.attempt_id, found.detail, each.step))
     return ""

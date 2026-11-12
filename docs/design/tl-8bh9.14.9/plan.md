@@ -817,3 +817,70 @@ counter: `hold` 134 (new), `hold_facts` 63 (new), `hold_guide` 67 (new), `hold_s
    `repeats_exhausted` hold is listed; a hand-started attempt is still never probed.
 
 **Unverified.** No round runs a hold until H3; no live bd or Git run in H2 (tracker and abandon are semantic fakes).
+
+## 26. As built: H3 (tl-8bh9.14.9.3)
+
+The round applies holds; nothing of K1 or G1/G2, and no breaker or any other stop of the rounds (section 11). Code lines
+by the policy counter: `round` 285 (+29; under 400, so no `round_publish.py` split), `operations` 367 (+1),
+`cli_composition` 235 (+5), `cli_step` 197 (+2), `step_guide` 195 (+1); `test_round_holds` 204 (new), `round_bench` 193
+(+43), `test_checks_round` 337 (+7), `test_round` 544 (+4), `doubles` 313 (+9), `test_step_cli` 594 (+2).
+
+- **`RoundPorts.holding`**: `hold.HoldPorts` (the hold store, the attempt reader, `TrackerHolds`, the agent attempt's and
+  the checks attempt's release ports, the clock, the evidence reader), placed before `ready`. `cli_composition.open_next`
+  wires it for `tl step next` and every `tl step rounds` round: `HoldStore` on the round's shared writer,
+  `tracker_holds()`, the same `open_releaser` the round uses and `open_checks_releaser` (as `tl step release
+  --abandon`), `time.time`, the artifacts root.
+- **Settle (9.1)**: `Next: hold` (due, or recorded and not finished: H2's deviation 1) is `hold.hold_task(holding, view)`
+  and nothing else for that attempt; `on_hold` writes nothing and calls nothing. Section 3's rule is `attempt_status`'s
+  (a NULL `label` never gets `hold`), so a hand-started task's failure is reported as before.
+- **Advance (9.2)**: a refusal `claim_lost` or `branch_moved` (kind `refused`, not a stop, nothing admitted) of a view
+  whose `label` is set is `hold_task(..., reason)` instead of the `skip`; a hand-started task keeps the `skip`.
+- **Admit (9.3)**: the `attempts` map passed to `selection.order` leaves out every view for which
+  `hold_status.reingests(view.next, view.hold, round label)` holds (`on_hold`, `labels` `moved`/`absent`, stored label
+  equal to the round's); every other abandon keeps the `abandoned` skip. `StartRequest.label` (default None) carries the
+  round's label (`round._request`) into a fresh admission's `AdmitRequest.label`; `tl step start` passes None; an advance
+  and a repeat copy their attempt's (H1).
+- **Publish (9.4)**: `publish_task` refused `branch_moved` of a labelled view is `hold_task(..., "branch_moved")`.
+- **Clear (9.5)**: after publication, unless the round was stopped gracefully (its stopped word `interrupted`, or
+  `stopping` asked true), `hold.clear_holds`; one move per row it returns.
+- **Move lines** (action `hold`, the step of the view, the hold's agent attempt A): `held <reason>`, `pending <missing
+  step> <refusal>` (for example `pending abandon held:slot_dirty`, `pending labels unavailable:tracker`), `refused
+  <refusal>` (a lost race, `refused:changed`); `cleared` and `clearing <word>` (no step: the row's task and A). Quiet as
+  every move: an unchanged line is written once; a changed refusal is a new key and is written again. A finished hold is
+  `on_hold` from the next round on and costs no tracker call and no line. No hold word is a stop word: admission,
+  advances and the back-off are untouched.
+- **Help**: `tl step next` and `tl step rounds` say the round holds the tasks it took that stopped (`bd list --label
+  held`) and removes `held` once a held task is taken again.
+- **Changed behavior in existing tests** (section 18): a round-taken task's failed checks, `stuck:checks_refused`,
+  `failed:expired` and a failed checks attempt whose release a lingering check holds are held now
+  (`test_checks_round`); `tl step start` after such a hold begins at plan with a NULL label. The bench `Tracker`'s
+  unclaim is fenced (False for another actor's, a closed or a missing task), as bd's.
+
+**Deviations (decided here, open to veto).**
+
+1. Section 9 names the refusal of a pending hold "as detail"; the move's `detail` is never logged, and the quiet key must
+   change with the refusal, so the refusal is part of the logged word (`hold pending <missing> <refusal>`), which is also
+   what H2's deviation 7 points the person at. The `HoldMove.detail` stays the move's (unlogged) detail.
+2. 7.3 says a failed clear is "retried next round, quiet". A failed clear (`unavailable:tracker`, `unavailable:store`,
+   `refused:changed`, `pending:held_again`) is a move `hold clearing <word>`, written once while unchanged (the quiet
+   set), so a persistent tracker failure is visible once; a failed read of all holds (no task) writes no line.
+3. Settle acts on `Next: hold` alone, not `cause(view)` again: `attempt_status` already turns a labelled view with a
+   cause into `hold` (H2's deviation 1), so the round has one source of the rule.
+
+**Tests** (`test_round_holds`, the rounds bench with real factory.db, admission, verify, release, publish and the hold
+operation, a semantic tracker with the hold writes): a failed plan held once (labels, abandon, one comment with the
+quoted explanation), then no tracker call and no line; a held task never stops another task or ingestion through one
+slot, claimed work still before new work; the round's label stored on its admissions and advances, None by hand; a
+hand-started failure reported, never held; a bd outage at the label step pending and written once, a changed refusal
+(the comment) written again, the claim returned before the comment, one comment after the lease; a dirty slot keeping
+the hold (`pending abandon held:slot_dirty`, one comment naming the slot, the claim kept) while another slot's task
+starts, finished once the file is gone; `claim_lost` and `branch_moved` advances and a `branch_moved` publication held;
+the person's answer taking the task again at plan (next seq, label stored, base the planned commit on `task/tl-1`) and
+`hold cleared` once; a round under another label skipping it (`abandoned`) though the task carries that label; an
+`absent` hold re-ingested; a re-hold owning `held` (no tracker call for the old row); a `superseded` hold after a person's
+abandon and start by hand; a person's own abandon keeping the skip. Mutations of each round change (the re-ingestion
+filter, the label guard, the stored label, the clear, the publish and advance holds, the pending word, the `hold` and
+`on_hold` cases) each fail a test.
+
+**Unverified.** No live bd, Git or agent run (the M4 smoke, S); the graceful-stop skip of the clear has no test of its
+own; the composition wiring of `holding` is exercised by the gates' import and type checks only.

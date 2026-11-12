@@ -30,6 +30,7 @@ from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_release import ReleaseResult
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
+from taskloop.tracker_client import HoldAnswer, HoldWrite, LabelStep, TrackerHolds
 
 # The `checking` fixture's checks attempt: its key, its slot's HEAD D, the implement attempt's X, its target (`main`'s
 # commit at admission), and the required names with their argv digests at the target.
@@ -196,6 +197,21 @@ class NoChecks:
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         raise AssertionError(f"no checks release expected: {key.attempt_id}")
+
+    def release_candidate(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        raise AssertionError(f"no land candidate release expected: {key.attempt_id}")
+
+
+def no_holds() -> TrackerHolds:
+    """The tracker's hold writes of a round that never holds a task nor clears a hold."""
+
+    def refuse(*args: str) -> HoldAnswer[LabelStep]:
+        raise AssertionError(f"no hold tracker write expected: {args}")
+
+    def unexpected(*args: str) -> HoldAnswer[HoldWrite]:
+        raise AssertionError(f"no hold tracker write expected: {args}")
+
+    return TrackerHolds(refuse, unexpected, unexpected)
 
 
 NO_CHECKS = ChecksPorts(NoChecks(), NoChecks(), NoChecks())

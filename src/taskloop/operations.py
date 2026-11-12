@@ -153,6 +153,7 @@ class StartRequest:
     model: str
     effort: str
     minutes: int
+    label: str | None = None  # the round's approval label, stored on a fresh admission; None: `tl step start` by hand
 
 
 @dataclass(frozen=True)
@@ -435,8 +436,8 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
     deadline = deadline_after(request.minutes, ports.clock)
     choices = (request.checkout, request.model, request.effort, SANDBOX, deadline)
     checks = advance is not None and advance.step == CHECK
-    if advance is None:  # no label yet: H3 of tl-8bh9.14.9 passes the round's (`tl step start` stays None)
-        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices, None))
+    if advance is None:  # the round's label (tl-8bh9.14.9 section 8); an advance and a repeat copy their attempt's
+        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices, request.label))
     elif checks:
         admitted = ports.checks.admission.admit_checks(ChecksRequest(advance.previous, request.checkout, deadline, advance.number))
     else:
