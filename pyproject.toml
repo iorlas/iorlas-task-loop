@@ -7,16 +7,16 @@ name = "iorlas-task-loop"
 version = "0"
 description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
-dependencies = ["any-agent==0.5.0", "beads-client==0.2.0", "git-porcelain==0.18.1", "process-lock==0.2.1", "sqlite-store==0.1.0", "stream-proc==0.6.0"]
+dependencies = ["any-agent==0.5.1", "beads-client==0.2.0", "git-porcelain==0.18.1", "process-lock==0.2.1", "sqlite-store==0.1.0", "stream-proc==0.7.0"]
 
 [tool.uv.sources]
-any-agent = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-agent", tag = "any-agent-v0.5.0" }
+any-agent = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-agent", tag = "any-agent-v0.5.1" }
 sqlite-store = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/sqlite-store", tag = "sqlite-store-v0.1.0" }
 git-porcelain = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/git-porcelain", tag = "git-porcelain-v0.18.1" }
 process-lock = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/process-lock", tag = "process-lock-v0.2.1" }
 beads-client = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/beads-client", tag = "beads-client-v0.2.0" }
 # Same tag and commit as any-agent's own stream-proc: the two must come from one shelf commit.
-stream-proc = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/stream-proc", tag = "any-agent-v0.5.0" }
+stream-proc = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/stream-proc", tag = "any-agent-v0.5.1" }
 
 [project.scripts]
 tl = "taskloop.cli:main"
