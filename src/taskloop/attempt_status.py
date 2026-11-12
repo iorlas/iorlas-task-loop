@@ -50,6 +50,7 @@ class StatusPorts:
     leftovers: Leftovers
     boot: Callable[[], str | None]  # this machine's boot id, None when unknown (then no attempt counts as rebooted)
     commands: SetupSeen = lambda _process: "gone"  # a checks attempt's registered commands (the CLI: `setup_seen`)
+    last_command: Callable[[AttemptKey], float | Literal["none", "unreadable"]] = lambda _key: "none"  # wall time of its latest command
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,8 @@ class AttemptView:
     land: LandView | None = None  # its latest land candidate (tl-8bh9.14.8 section 14), None before the first
     label: str | None = None  # the approval label the round took the task under (`attempt.label`); None: started by hand
     hold: HoldRow | None = None  # the hold of its agent attempt (a checks view's: of the implement attempt it follows)
+    last_command: int | Literal["none", "unreadable"] | None = None  # seconds since the agent's latest command (display only);
+    # `none`: no command noted yet, `unreadable`: the evidence is; None unless the agent can be running (entry `running`)
     hold_due: str | None = None  # `Next: hold` with no hold recorded yet: the reason the next round holds it for
 
 
@@ -173,7 +176,7 @@ def _swapped(
         view, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
         result=checks_result(latest), deadline_passed=expired, next=land_next(checks_next(latest, entry, expired, commands), latest, land),
         entry_process=latest.entry,
-        worker=None, leftovers=(), number=latest.number, previous_attempt_id=None, repeat_reason=None, earlier=earlier,
+        worker=None, last_command=None, leftovers=(), number=latest.number, previous_attempt_id=None, repeat_reason=None, earlier=earlier,
         release=checks_release(latest, claim), checks=ChecksView(latest, results), land=land,
     )
 
@@ -188,12 +191,18 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
     found = (row.backlog, row.task_id, row.step, row.key.attempt_id, row.slot, row.phase)
     left = reads.leftovers(row.key) if probe and next_word == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
-    ended = {"seq": row.seq, "release": row.release, "published": row.published, "label": row.label}
+    ended = {"seq": row.seq, "release": row.release, "published": row.published, "label": row.label,
+             "last_command": _idle(reads, row.key) if entry == "running" else None}
     if left is None or left.reason not in REPEATABLE:
         return AttemptView(*found, entry, result, expired, next_word, row.entry, row.worker, (), *chain, **ended)
     next_word = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
     held = AttemptResult("pending", next_word, result.execution)
     return AttemptView(*found, entry, held, expired, next_word, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
+
+
+def _idle(reads: StatusPorts, key: AttemptKey) -> int | Literal["none", "unreadable"]:
+    at = reads.last_command(key)
+    return at if isinstance(at, str) else max(0, int(reads.clock() - at))
 
 
 def _setup_failed(reads: StatusPorts, row: AttemptRow, step: Next) -> Next:

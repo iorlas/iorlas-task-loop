@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from any_agent import run
+from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, run
 from sqlite_store import Store
 from stream_proc import group_alive, observe_owned, popen_held, popen_registered, stop_tree
 
@@ -27,6 +27,7 @@ from taskloop.check_admit import ChecksAdmission
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
+from taskloop.command_sink import WatchedHooks
 from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -67,6 +68,11 @@ def _environment(setup: SetupStore, database: Path, artifacts: Path) -> Preparat
     ))
 
 
+def _run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
+    """The shelf's `run`, with the live sink the attempt's hooks carry (`command_sink.WatchedHooks`)."""
+    return run(harness, spec, timeout, hooks, live=hooks.live if isinstance(hooks, WatchedHooks) else None)
+
+
 def open_attempts(database: Path, artifacts: Path, credentials: Credentials = codex_machine_credentials) -> Attempts:
     """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
 
@@ -77,7 +83,7 @@ def open_attempts(database: Path, artifacts: Path, credentials: Credentials = co
         AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
         EvidenceFiles(artifacts),
         credentials,
-        run,
+        _run,
         time.time,
         checkouts,
         RealSlotFiles(),

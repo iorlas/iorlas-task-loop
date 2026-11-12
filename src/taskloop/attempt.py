@@ -6,7 +6,17 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
-from any_agent import CodexHarness, DecodedAnswer, Harness, InvalidAnswer, LaunchInputs, LaunchSpec, RunHooks, RunOutcome, decode_answer
+from any_agent import (
+    CodexHarness,
+    DecodedAnswer,
+    Harness,
+    InvalidAnswer,
+    LaunchInputs,
+    LaunchSpec,
+    RunHooks,
+    RunOutcome,
+    decode_answer,
+)
 
 from taskloop.access import CODEX_ACCESS, SANDBOX, folders, prepared_access
 from taskloop.attempt_store import AttemptStore, StoreRefused, StoreUnavailable
@@ -28,6 +38,7 @@ from taskloop.attempt_types import (
     Verdict,
     execution_facts,
 )
+from taskloop.command_sink import CommandSink, WatchedHooks
 from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.prepare import Prepared
@@ -295,7 +306,8 @@ class Attempts:
         self, admission: Admission, harness: CodexHarness, spec: LaunchSpec, remaining: float
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
         latch = SessionLatch(self.store, admission)
-        hooks = RunHooks(started=registration_hook(self.registration_store, admission, self.clock), ref=latch.observe, unattended=False)
+        hooks = WatchedHooks(started=registration_hook(self.registration_store, admission, self.clock), ref=latch.observe, unattended=False,
+                             live=CommandSink(self.files, admission.key, self.clock))
         try:
             return self.execution(harness, spec, remaining, hooks), latch.snapshot()
         except RegistrationRefused as error:

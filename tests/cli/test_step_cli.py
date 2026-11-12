@@ -57,7 +57,7 @@ ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step star
 STATUS_KEYS = {
     "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process",
     "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release", "published",
-    "checks", "land", "label", "hold", "hold_due",  # the hold's keys are additive (tl-8bh9.14.9 section 10)
+    "checks", "land", "label", "hold", "hold_due", "last_command",  # the hold's keys are additive (tl-8bh9.14.9 section 10)
 }
 REPEAT = AttemptView(
     "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
@@ -469,7 +469,7 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
                      "attempt_id": None}
     assert main(["step", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
-    assert listed.startswith("task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\ntl-1\ttasks\tplan\t1/3\ts1\t")
+    assert listed.startswith("task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\tlast command\ntl-1\ttasks\tplan\t1/3\ts1\t")
     assert main(["step", "list", "--db", str(db), "--json"]) == 0
     assert [each["step"] for each in json.loads(capsys.readouterr().out)["attempts"]] == ["plan"]
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
@@ -713,3 +713,16 @@ def test_the_real_opener_refuses_inputs_a_missing_database_and_a_second_rounds_p
         held.release()
     output = capsys.readouterr()
     assert output.out == "" and "tl step rounds: refused:rounds_running" in output.err and step_guide.GUIDE["rounds_running"] in output.err
+
+
+def test_a_running_agents_time_since_its_last_command_is_listed_and_shown(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    view = AttemptView("tasks", "tl-1", "plan", "a", "s1", "registered", "running", AttemptResult("pending", "registered"), False,
+                       "wait", last_command=42)
+    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "list"), lambda _arguments, _loaded: Listed((view,)))
+    monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda _arguments, _loaded: Shown(view, Path("/d"), Path("/d/e")))
+    assert main(["step", "list"]) == 0
+    assert capsys.readouterr().out.splitlines()[1].endswith("\twait\t42 s ago")
+    assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
+    assert "Last command: 42 s ago\n" in capsys.readouterr().out

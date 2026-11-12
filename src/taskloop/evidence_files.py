@@ -5,7 +5,7 @@ import json
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from any_agent import RunOutcome
 
@@ -149,6 +149,25 @@ class EvidenceFiles:
             if words[0] in ENTRY_STATUS and len(words) <= ENTRY_WORDS and all(WORD.fullmatch(word) for word in words[1:]):
                 return shown(line)
         return None
+
+    def note_command(self, key: AttemptKey, at: float) -> None:
+        """Overwrite `last-command` in the attempt's directory with the wall-clock time of the agent's latest command. A
+        display-only artifact (`tl step list` and `show`); nothing reads it for control. OSError propagates."""
+        path = self._path(self.directory(key) + "/last-command")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name("last-command.tmp")  # one writer per attempt; replaced whole, never read half-written
+        temporary.write_text(repr(at), encoding="utf-8")
+        os.replace(temporary, path)
+
+    def last_command(self, key: AttemptKey) -> float | Literal["none", "unreadable"]:
+        """Read-only: that time, `none` when no command was noted yet, `unreadable` when the file cannot be read or is not
+        a number; creates nothing."""
+        try:
+            return float(self._path(self.directory(key) + "/last-command").read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return "none"
+        except (OSError, ValueError, EvidenceError):
+            return "unreadable"
 
     def put_input(self, key: AttemptKey, text: str) -> FileRef:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
