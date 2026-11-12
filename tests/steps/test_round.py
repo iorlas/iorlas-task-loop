@@ -413,6 +413,17 @@ def test_a_refusal_naming_a_slot_on_the_task_branch_is_also_reported_unusable_in
     assert found.moves[1].detail == "/slots/s1"
 
 
+def test_an_advance_refused_branch_held_reports_the_slot_unusable_too(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
+) -> None:
+    store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    held = SlotView("s1", Path("/slots/s1"), "unknown", "attached")
+    bench = Bench(registered, ReadyTracker())
+    bench.advance = Advances(AdmitRefused("branch_held", (held,)))
+    assert ("tl-1", "report", "unusable:s1:attached") in moves(bench.round())
+
+
 @pytest.mark.parametrize("fault, stopped, code", [
     (BdError("timeout", "bd failed"), "unavailable:tracker", 3), (BdError("malformed", "bd failed"), "refused:tracker", 1),
 ])

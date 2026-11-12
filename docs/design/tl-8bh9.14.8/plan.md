@@ -1494,21 +1494,26 @@ stored valid answer's explanation (`hold_facts.explanation`, the decoder the hol
 to answer by editing the description, then `tl step release --abandon` and `tl step start` (after `release` for a slot still
 held); no check-step text.
 
-### 31.4 Decision: a slot left on the task branch is named with its fix; a dirty slot is never cleared for you (.67, .46)
+### 31.4 Decision: a slot left on the task branch is named with its fix; a dirty slot is never cleared for you (.67)
 
 After a `factory.db` discard `tl slot adopt` refuses the slot an agent left on `task/<id>` (`attached`), so no slot row names it
 and no slot read could show it; the retaken task then met `branch_held` with s2 free, and nothing said which slot held the
-branch. `branch_held` now carries `prepare.held_slots` (the linked worktrees on the branch, as `attached` views named by their
-folder) and a detail naming each with the fix: `git switch --detach` there (what it holds is committed or stashed first), then
-`tl slot adopt`. The round writes the refusal's slots as `report unusable:<slot>:attached` lines (the path under the line in
-`tl step next`), like `no_free_slot`'s. The owner decision for .46 stands: no slot's content is deleted automatically and
-there is no `--discard` flag; a dirty slot is fixed by the person, and the hold comment and guide list the leftover paths
-(.46's work, not this change).
+branch. `prepare.held_refusal` tells the worktrees on the branch apart: a sibling of a free slot (same `<root>/<repo id>`
+folder) is a slot, adopted or not, named by its folder as an `attached` view; the person's main checkout and any other
+worktree are named in the detail only, with their own text (switch it off the branch yourself; `tl slot adopt` does not apply,
+no `unusable` line exists). The slot text gives `git switch --detach` there (what it holds committed or stashed first, nothing
+is deleted for you), then `tl slot adopt` if it is not adopted. The round writes the refusal's slots as
+`report unusable:<slot>:attached` lines (start and advance paths; the path under the line in `tl step next`), like
+`no_free_slot`'s. The row writers moved from `admit` to `admit_rows` (the 400-line cap). The owner decision for .46 stands: no
+slot's content is deleted automatically and there is no `--discard` flag; the hold comment and guide listing the leftover
+paths is .46's work, not this change.
 
-### 31.5 `tl step show` lists the refs of `head_moved`; the verify guide names `branch` (.68)
+### 31.5 `tl step show` lists `head_moved`, `branch` and `unborn`; the verify guide names `branch` (.68)
 
-`Verifier.leftovers` (the read `tl step show` and the hold use) returned nothing once HEAD moved; it now returns the same
-`head_moved` listing `tl step verify` prints (the tags and branches that name a commit the agent made), unless the adopt rule's
-commit settles it. `attempt_status` keeps that one non-repeatable leftover on the view (`Unsettled: head_moved` and its refs;
-the next action stays `verify`). The `unsettled` guide names `branch` (the agent left the slot on another HEAD): `git switch
-task/<id>` in the slot when its work is on that branch, then `tl step verify`, else `release --abandon` and start again.
+`Verifier.leftovers` (the read `tl step show` and the hold use) returned nothing once HEAD moved; it now returns what
+`tl step verify` reports: the `head_moved` listing (the tags and branches that name a commit the agent made), unless the adopt
+rule's commit settles it (then nothing). `attempt_status.SHOWN` keeps those three non-repeatable leftovers on the view
+(`Unsettled: head_moved` and its refs, or `branch`, `unborn`; the next action stays `verify`). This costs `tl step show` extra
+Git reads (the refs and history of a moved HEAD, read only for an attempt at `Next: verify`). The `unsettled` guide names
+`branch` (the agent left the slot on another HEAD): `git switch task/<id>` in the slot when its work is on that branch, then
+`tl step verify`, else `release --abandon` and start again.

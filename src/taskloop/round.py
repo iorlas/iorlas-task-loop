@@ -301,8 +301,8 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
         if isinstance(result, Started):
             trail.add(Move(each.task_id, "advance", result.status, result.attempt_id, step=result.step or ""))
             continue
+        trail.unusable(each.task_id, result)  # the slots the refusal names: no_free_slot's, the one holding a held branch
         if result.reason == "no_free_slot":
-            trail.unusable(each.task_id, result)
             return result.reason
         stop = _stops(result, ADVANCE_STOPS)
         if not stop and not result.admitted and result.kind == "refused" and result.reason in HOLDS and each.label is not None:

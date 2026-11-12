@@ -371,6 +371,7 @@ def test_admission_refuses_a_branch_before_its_input_claim_or_rows(
     result, claims = admitted(factory, repo, root, tmp_path, "tl..1" if case == "name" else "tl-1")
     assert isinstance(result, AdmitRefused) and result.reason == f"branch_{case}"
     assert ("git branch -m task/tl-1 old/task/tl-1" in result.detail) is (case == "diverged")
+    assert (result.slots == () and "not a slot" in result.detail) is (case == "held")  # outside the slots folder: no `adopt` advice
     assert claims.calls == [] and factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
 
 
@@ -386,6 +387,16 @@ def test_a_slot_left_on_the_task_branch_is_named_with_its_fix_while_another_slot
     assert [(view.name, view.reason, view.path) for view in result.slots] == [("s1", "attached", first.path)]
     assert "`git switch --detach`" in result.detail and "`tl slot adopt`" in result.detail
     assert f"s1 attached ({first.path})" in result.detail
+
+
+def test_a_main_checkout_on_the_task_branch_is_named_as_the_persons_to_switch_not_as_a_slot(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+) -> None:
+    slots(factory, repo, root, 2)
+    repo.worktree(repo.identity().root).checkout_new(BRANCH)
+    result, claims = admitted(factory, repo, root, tmp_path)
+    assert isinstance(result, AdmitRefused) and result.reason == "branch_held" and result.slots == () and claims.calls == []
+    assert "your main checkout" in result.detail and "tl slot adopt" not in result.detail and "unusable" not in result.detail
 
 
 def test_admission_skips_a_free_slot_whose_head_the_branch_does_not_contain(

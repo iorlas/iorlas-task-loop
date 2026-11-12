@@ -270,6 +270,11 @@ def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_verify_not_a_
     found = list_attempts(ports)
     assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [
         ("verify", ("head_moved", "refs/tags/task/evil"))]
+    for reason in ("branch", "unborn"):  # no listing: the reason alone, which the `unsettled` guide's `branch` text answers
+        found = list_attempts(replace(ports, leftovers=lambda _key, why=reason: Unsettled(why)))
+        assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [("verify", (reason,))]
+    found = list_attempts(replace(ports, leftovers=lambda _key: Unsettled("dirty", ("a",))))  # not shown: only the three
+    assert isinstance(found, Listed) and [each.leftovers for each in found.attempts] == [()]
 
 
 def test_deadline_passed_of_a_captured_agent_attempt_is_whether_its_run_timed_out_not_whether_the_clock_passed(

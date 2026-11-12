@@ -1,4 +1,4 @@
-"""Admit an attempt: the only writer of the admitted `attempt` row and of a new `reservation` row; it runs nothing.
+"""Admit an attempt: it runs nothing; the admitted `attempt` row and a new `reservation` row are written only through `admit_rows`.
 
 A task's first attempt takes a free slot and the tracker claim (`admit`), after the task branch rule passed for that
 slot's HEAD (`prepare.branch_refusal`, read-only, before anything is written or claimed; a new task branch starts at the
@@ -20,7 +20,7 @@ releases a slot; the claim is returned only to compensate a failed admission.
 import math
 import secrets
 import sqlite3
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -30,10 +30,11 @@ from uuid import uuid4
 from beads_client import BdError
 from git_porcelain import GitUnavailable, NotARepo, Repo
 
+from taskloop.admit_rows import as_count, insert_attempt, reserve
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, current, marks
-from taskloop.prepare import DIVERGED, MAIN, UNPUBLISHED, branch_refusal, held_slots
+from taskloop.factory_schema import current
+from taskloop.prepare import branch_refusal, held_refusal, refusal_detail
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
 from taskloop.steps import STEPS, kind
@@ -324,53 +325,10 @@ def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
     if isinstance(found, str):
-        held = held_slots(repo, task_id) if found == "branch_held" else ()
-        return AdmitRefused(found, held, detail=" ".join(filter(None, (DETAILS.get(found, "").format(task=task_id), unusable_text(held)))))
+        held, detail = held_refusal(repo, task_id, free) if found == "branch_held" else ((), refusal_detail(found, task_id))
+        return AdmitRefused(found, held, detail=detail)
     passing = tuple(Free(view.name, head) for view in free if (head := heads.get(view.path)) is not None and head in found.passing)
     return passing or AdmitRefused("no_free_slot")
-
-
-HELD = (
-    "task/{task} is checked out in a worktree (a slot is named below, with `report unusable` in the round log): run "
-    "`git switch --detach` there (commit or stash what it holds first, nothing is deleted for you), then `tl slot adopt`."
-)
-DETAILS = {
-    "branch_held": HELD,
-    "branch_diverged": DIVERGED,
-    "branch_unpublished": UNPUBLISHED,
-    "target": f"The checkout has no local branch `{MAIN}` to start task/{{task}} from"}
-
-
-def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey) -> None:
-    """The new reservation of a free slot for the attempt `key`, and the slot's counter, inside the caller's write
-    transaction."""
-    held = {"slot": slot, "repo_id": repo_id, "generation": key.reservation_generation, "attempt_id": key.attempt_id}
-    con.execute(f"INSERT INTO reservation ({RESERVATION}) VALUES ({marks(RESERVATION)})", bound(RESERVATION, held))
-    issue(con, repo_id, slot, key.reservation_generation)
-
-
-def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object]) -> None:
-    """The admitted attempt row, inside the caller's write transaction."""
-    con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", bound(ATTEMPT_ADMITTED, attempt))
-
-
-def issue(con: sqlite3.Connection, repo_id: object, slot: object, generation: int) -> None:
-    """The slot's counter: the last reservation generation issued for it."""
-    con.execute("UPDATE slot SET generation=? WHERE repo_id=? AND name=?", (generation, repo_id, slot))
-
-
-def bound(columns: str, values: Mapping[str, object]) -> tuple[object, ...]:
-    """Values in the order of the owning column list, by name; a missing or extra column is a programming error."""
-    names = columns.split(",")
-    if set(names) != set(values):
-        raise ValueError(f"Columns {sorted(set(names) ^ set(values))} do not match {columns}")
-    return tuple(values[name] for name in names)
-
-
-def as_count(value: object) -> int:
-    if isinstance(value, int):
-        return value
-    raise sqlite3.DatabaseError("Malformed stored integer")
 
 
 def unheld(con: sqlite3.Connection, repo_id: RepoId, free: Free, generation: int) -> tuple[str, str] | None:
