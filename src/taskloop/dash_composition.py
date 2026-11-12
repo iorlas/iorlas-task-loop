@@ -9,9 +9,9 @@ from pathlib import Path
 
 from taskloop.cli_composition import open_reads
 from taskloop.dash_board import BoardPorts, build_board
-from taskloop.dash_model import Board, TaskDetail
+from taskloop.dash_model import Board, FeedPage, TaskDetail
 from taskloop.dash_server import DashPorts, DashServer
-from taskloop.dash_task import TaskPorts, build_task
+from taskloop.dash_task import TaskPorts, build_feed, build_task
 from taskloop.dash_tracker import CachedTracker
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
@@ -48,10 +48,16 @@ def _ports(request: DashRequest, views: GitViews) -> DashPorts:
         with open_reads(request.db, request.artifacts, views) as reads:
             return reads if isinstance(reads, Failed) else build_task(TaskPorts(reads, files, tracker), request.backlog, task_id)
 
+    def feed(task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
+        with open_reads(request.db, request.artifacts, views) as reads:
+            if isinstance(reads, Failed):
+                return reads
+            return build_feed(TaskPorts(reads, files, tracker), request.backlog, task_id, step, number, cursor)
+
     def log() -> tuple[LogRow, ...]:
         return read_round_log(files, LOG_LINES)
 
-    return DashPorts(board, task, log, request.backlog, STATIC)
+    return DashPorts(board, task, log, feed, request.backlog, STATIC)
 
 
 @contextmanager

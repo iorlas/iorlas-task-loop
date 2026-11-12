@@ -1,16 +1,32 @@
 """The dashboard's task detail: the tracker's task, its comments and every attempt of the task in the order it happened
 (agent attempts, the checks attempts that follow an implement attempt, the land), each with how it ended, the prompt it
-was given and the outputs of its failed checks. Display only; the agent's own live lines do not exist yet, so a feed holds
-only what the stores record (the attempt's start and each check's result)."""
+was given and the outputs of its failed checks. Display only. The lines of an agent attempt are its `events.jsonl`, read
+behind the evidence files; a checks attempt's are its results."""
 
 from dataclasses import dataclass
 
+from any_agent.activity import Activity
+
+from taskloop.activity_file import ActivityPage
 from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.dash_board import card_of
-from taskloop.dash_model import Answer, AttemptDetail, Card, CheckLine, DashTracker, FeedEvent, Fields, Outcome, State, TaskDetail, iso
+from taskloop.dash_model import (
+    Answer,
+    AttemptDetail,
+    Card,
+    CheckLine,
+    DashTracker,
+    FeedEvent,
+    FeedPage,
+    Fields,
+    Outcome,
+    State,
+    TaskDetail,
+    iso,
+)
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldStore
 from taskloop.operations import Failed
@@ -25,6 +41,38 @@ class TaskPorts:
     tracker: DashTracker
 
 
+FEED_LINES = 20  # the agent's latest actions an attempt's detail carries
+FOLLOW_LINES = 20  # the tail a replaced follow answers with
+
+
+def feed_event(a: Activity) -> FeedEvent:
+    """An agent action as the page's live line: a command, a tool, a message, an error or a wait."""
+    at = iso(a.at) or ""
+    finished = a.state == "finished"
+    if a.kind in ("command", "tool"):
+        took = a.duration_ms if finished else None
+        code = (a.exit_code or 0) if finished and a.kind == "command" else None
+        return FeedEvent(a.kind, at, id=a.id, state=a.state, cmd=a.text, name=a.name or None, waited_ms=a.waited_ms, duration_ms=took,
+                         exit_code=code)
+    return FeedEvent(a.kind, at, text=a.text, waited_ms=a.waited_ms)
+
+
+def _page(page: ActivityPage) -> FeedPage:
+    return FeedPage(tuple(feed_event(each) for each in page.events), page.cursor, page.replaced, page.available)
+
+
+def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
+    """The agent's lines of one attempt of the task: its latest, or what came after `cursor`. None: no such agent attempt."""
+    try:
+        rows = ports.reads.store.attempts(backlog, task_id)
+    except StoreUnavailable as error:
+        return Failed("unavailable", "store", str(error))
+    key = next((row.key for row in rows if row.step == step and row.number == number), None)
+    if key is None:
+        return None
+    return _page(ports.files.activity_tail(key, FEED_LINES) if cursor is None else ports.files.activity_after(key, cursor, FOLLOW_LINES))
+
+
 def _agent(ports: TaskPorts, row: AttemptRow, step_number: int) -> AttemptDetail:
     result = collect(ports.reads.store, row.key)
     state: State = "running" if result.status != "collected" and row.held else "succeeded" if succeeded(result) else "failed"
@@ -36,9 +84,10 @@ def _agent(ports: TaskPorts, row: AttemptRow, step_number: int) -> AttemptDetail
     after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == "plan" and row.seq > 1 else None
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     summary = result.reason or result.status
-    feed = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=row.number),)
+    begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=row.number),)
+    page = _page(ports.files.activity_tail(row.key, FEED_LINES))
     return AttemptDetail(row.step, step_number, state, iso(started), iso(ended), summary, after, reason,
-                         ports.files.text(row.key, "input.txt"), Outcome(summary, answer, (), None), feed)
+                         ports.files.text(row.key, "input.txt"), Outcome(summary, answer, (), None), begun + page.events, page.cursor)
 
 
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:

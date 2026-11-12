@@ -43,7 +43,7 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
   - **Prompt**: exactly what the agent was told in that attempt, repeat feedback included; a step that runs commands
     (checks, land) has none. The chosen tab stays when another attempt is selected, so prompts can be compared.
   An attempt that began as a jump also shows why, naming the attempt it follows ("Repeat of Checks #5").
-- Design language: emoji only as step and column icons (Plan, Implement, Checks, Land, Held, Landed), never for state
+- Design language: emoji as step and column icons (Plan, Implement, Checks, Land, Held, Landed) and, since 2026-11-12, as the kind of an agent line (see below), never for state
   or log lines. A state is a coloured dot and a word, a badge is one outlined label, a
   reason is a callout (one accent line, no fill: amber repeat, violet back to plan, rose held or failed, sky running,
   green succeeded), numbers are tabular and right-aligned, colour means status only. The first mocks used emoji for
@@ -52,10 +52,10 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
 - **Quiet**: a running step that has produced no line for 2 minutes shows `Quiet 5m 40s` (amber; red from 15 minutes)
   on its card, with a coloured card border, and in the drawer. Any new line resets it. Display only, from the time of
   the latest agent line (the B10 fact); it decides nothing and the word stuck stays the engine's.
-- A line is one row of a grid, never raw JSON: offset from the attempt's start, kind (`CMD`, `MSG`, `CHECK`, `STEP`),
-  content, duration right-aligned (with the exit code in red when not 0). Before a command, when the agent took 2 s or
+- A line is one row of a grid, never raw JSON: offset from the attempt's start, kind (an emoji: 💻 command, 🧰 tool, 💬 message,
+  ❌ error, ⏳ waiting, 🧪 check, 🚦 step; the owner asked for emoji on the agent's lines, 2026-11-12), content, duration right-aligned (with the exit code in red when not 0). Before a command, when the agent took 2 s or
   more to issue it, a faint "agent thought 33s" line. That number is the time from the previous line to this command's
-  start; it is *not* part of the command's own duration (the first mock showed both as unlabeled durations).
+  start (a message and a tool carry the same hint); it is *not* part of the command's own duration (the first mock showed both as unlabeled durations).
 - Stack: plain HTML and vanilla JS ES modules (`app.js` board, `drawer.js`, `logs.js`, `ui.js`), no framework, no bundler, no npm
   at runtime. `api.js` is the one data source (fetch and an event stream). Styling is Tailwind compiled once; `dash.css` is committed, so nobody
   installs Tailwind to use or serve the page. Light and dark theme follow the system; the switch overrides and is
@@ -165,16 +165,34 @@ all of it is display only, never control state.
 
 ### Live event
 
-One line. `id` identifies a command so its `finished` event replaces its `running` one.
+One line. `id` identifies a command or tool so its `finished` event replaces its `running` one. Unused fields are `null`.
 
 | `type` | fields | shows |
 |---|---|---|
-| `step` | `step`, `attempt` | `STEP` attempt started |
-| `command` | `id`, `cmd`, `state` (`running` or `finished`), `waited_ms`, and when finished `duration_ms`, `exit_code` | `CMD` the command and how long it ran (a running one counts up); the exit code in red when not 0; `waited_ms` as the "agent thought" line before it |
-| `message` | `text` | `MSG` an agent message |
-| `check` | `name`, `passed`, `duration_ms` | `CHECK` name, passed or failed, duration |
+| `step` | `step`, `attempt` | 🚦 attempt started |
+| `command` | `id`, `cmd`, `state` (`running` or `finished`), `waited_ms`, and when finished `duration_ms`, `exit_code` | 💻 the command and how long it ran (a running one counts up); the exit code in red when not 0; `waited_ms` as the "agent thought" line before it |
+| `tool` | `id`, `name`, `cmd` (its main argument), `state`, `waited_ms`, `duration_ms` | 🧰 a non-shell tool call (file edit, search, MCP call) |
+| `message` | `text`, `waited_ms` | 💬 an agent message |
+| `error` | `text` | ❌ the harness's failure text |
+| `waiting` | `text` | ⏳ the harness is retrying, reconnecting or waiting for the network |
+| `check` | `name`, `passed`, `duration_ms` | 🧪 name, passed or failed, duration |
 
-Every event carries `at`. `waited_ms` is measured by the producer: from the previous event's end to this command's start.
+Every event carries `at` (when the action began). `waited_ms` is measured by the producer: from the previous action's end to
+this one's start. The agent lines come from `any_agent.activity` (one record per action, the same model for Codex, Claude
+Code and OpenCode); the factory never parses a vendor line.
+
+### Agent lines: `GET /api/tasks/<id>/attempts/<step>/<n>/feed[?after=<cursor>]`
+
+```json
+{"events": [ <live event>, ... ], "cursor": "93375728:4096", "replaced": false, "available": true}
+```
+
+Without `after`: the attempt's latest 20 actions, oldest first. With `after`: what came after that cursor. The cursor is
+opaque (the page hands back what it was given). `replaced` is true when the cursor was not this attempt's file (replaced
+or shorter): `events` are then the fresh tail and the page drops its lines first. `available` is false when the attempt
+has no events file (an attempt from before the file existed, or one that never ran an agent); that is evidence
+availability, not the attempt's state. A bad cursor is a 400; an unknown attempt or a checks attempt is a 404. The same
+last-20 and cursor are in the task detail (`feed`, `feed_cursor` of each agent attempt).
 
 ### Stream: `GET /api/events` (SSE)
 
@@ -183,12 +201,12 @@ Each message is one of:
 ```json
 {"kind": "task", "task": <card>}
 {"kind": "log", "row": <log row>}
-{"kind": "feed", "task_id": "tl-7c4", "step": "implement", "attempt": 1, "event": <live event>}
 ```
 
 A `task` message replaces the card of that id (a changed `column` is the move); the page animates the difference and,
-if that task's drawer is open, reloads its detail because a step or attempt began or ended. A `feed` message appends to
-the named attempt's lines. The page loads the snapshot first, then the stream, and the detail when a drawer opens.
+if that task's drawer is open, reloads its detail because a step or attempt began or ended. The agent's lines are not on the stream: the open
+drawer follows the selected running attempt through the feed endpoint every 2 s with its cursor, and stops when the drawer
+closes or another attempt is selected. The page loads the snapshot first, then the stream, and the detail when a drawer opens.
 
 ## Backend
 
@@ -200,6 +218,7 @@ the named attempt's lines. The page loads the snapshot first, then the stream, a
 | task detail | `dash_task` | attempts, checks attempts and their results, hold, evidence files, the tracker's task and comments |
 | tracker reads | `dash_tracker`, `tracker_client` | `bd` (cached: titles for good, ready 10 s, a task 5 s; a failure keeps the last answer and sets the board's `notice`) |
 | round log | `round_reader`, `EvidenceFiles.round_tail` | `rounds.log`, display only |
+| agent lines | `activity_file`, `EvidenceFiles.activity_tail/activity_after`, `command_sink` | the attempt's `events.jsonl`, written while the agent runs (capped 8 MiB), display only |
 
 Where a fact has no stored owner yet the page shows a proxy or nothing, never a guess:
 
@@ -213,9 +232,9 @@ Where a fact has no stored owner yet the page shows a proxy or nothing, never a 
 
 ### Not in slice 1
 
-- **The agent's live lines** (commands, messages, durations, "agent thought"): no stored event stream exists. A feed holds
-  the attempt's start and each check's result; Lines is otherwise "No lines recorded". Typed events arrive with any-agent;
-  they need a per-attempt event file behind `EvidenceFiles` and a `feed` stream message (shape below, unchanged).
+- **Agent lines of attempts that ran before `events.jsonl` existed**: `available: false`, "No lines recorded"; nothing is
+  rebuilt from `stdout.txt`. Full retained history (older than the latest 20) and session-reuse bounds are tl-8bh9.7.4 and
+  tl-8bh9.7.1's remainder ([plan](tl-8bh9.7.4/plan.md)).
 - **Exact start and end times**: need a start and end column on `attempt` (a schema version, therefore a factory.db
   discard, the owner's call) instead of the file-time proxies above.
 - **Land attempts** in the history (the board's Land column and card are real).

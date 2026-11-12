@@ -29,11 +29,38 @@ function select(step, n) {
 export async function openDrawer(id) {
   open = { id, detail: await source.detail(id), tab: null, view: null };
   select();
+  follow();
   $("drawer").classList.remove("translate-x-full");
   $("backdrop").classList.remove("pointer-events-none", "opacity-0");
 }
 
+const FOLLOW_MS = 2000;
+let follower = null;
+
+// While the drawer shows a running attempt, ask for the lines after the cursor of the last answer. Closing the drawer or selecting
+// another attempt stops following this one; the page never jumps to the newest attempt by itself.
+function follow() {
+  clearInterval(follower);
+  follower = setInterval(async () => {
+    const mine = open;
+    const a = mine && attemptOf();
+    if (!a || a.state !== "running" || !a.feed_cursor) return;
+    try {
+      const page = await source.feed(mine.id, a.step, a.n, a.feed_cursor);
+      if (open !== mine || attemptOf() !== a) return;
+      a.feed_cursor = page.cursor ?? a.feed_cursor;
+      if (page.replaced) a.feed = a.feed.filter((e) => e.type === "step");
+      for (const e of page.events) apply(a, e);
+      if (page.replaced) render();
+      else page.events.forEach((e) => show(a, e));
+    } catch {
+      // a missed poll is not an error: the next one continues from the same cursor
+    }
+  }, FOLLOW_MS);
+}
+
 export function closeDrawer() {
+  clearInterval(follower);
   open = null;
   $("drawer").classList.add("translate-x-full");
   $("backdrop").classList.add("pointer-events-none", "opacity-0");
@@ -240,33 +267,41 @@ function lines(a) {
   return box;
 }
 
-const KIND = { command: "CMD", message: "MSG", check: "CHECK", step: "STEP" };
+const KIND = { command: "💻", tool: "🧰", message: "💬", error: "❌", waiting: "⏳", check: "🧪", step: "🚦" };
+const WORD = { command: "Command", tool: "Tool", message: "Agent message", error: "Error", waiting: "Waiting", check: "Check", step: "Step" };
+const THINKS = new Set(["command", "tool", "message"]);
 
-// One row of the log grid: offset, kind, content, duration. An "agent thought" hint sits above the command it led to.
+// One row of the log grid: offset, kind emoji, content, duration. An "agent thought" hint sits above the action it led to.
 function line(e, a) {
-  const hint = e.type === "command" && e.waited_ms >= 2000;
+  const hint = THINKS.has(e.type) && e.waited_ms >= 2000;
   const row = el("div", "animate-line-in grid grid-cols-[3.25rem_3.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-xs");
   row.dataset.eid = e.id || "";
+  const r = hint ? "row-start-2" : "row-start-1"; // literal class names: the Tailwind scanner reads strings, not parts
   if (hint) row.append(el("span", "col-start-3 row-start-1 mb-0.5 text-[11px] text-slate-400 dark:text-slate-500", `agent thought ${fmtDur(e.waited_ms)}`));
-  const at = el("span", `${hint ? "col-start-1 row-start-2" : "col-start-1 row-start-1"} font-mono tabular-nums text-slate-400 dark:text-slate-500`, clock(Date.parse(e.at) - Date.parse(a.started_at)));
-  const kind = el("span", `${hint ? "col-start-2 row-start-2" : "col-start-2 row-start-1"} text-[10px] font-semibold tracking-wider text-slate-400 dark:text-slate-500`, KIND[e.type]);
-  const content = el("span", `${hint ? "col-start-3 row-start-2" : "col-start-3 row-start-1"} min-w-0`);
-  const right = el("span", `${hint ? "col-start-4 row-start-2" : "col-start-4 row-start-1"} text-right tabular-nums text-slate-500 dark:text-slate-400`);
-  if (e.type === "command") {
+  const at = el("span", `col-start-1 ${r} font-mono tabular-nums text-slate-400 dark:text-slate-500`, clock(Date.parse(e.at) - Date.parse(a.started_at)));
+  const kind = el("span", `col-start-2 ${r} text-[13px]`, KIND[e.type]);
+  kind.title = WORD[e.type];
+  const content = el("span", `col-start-3 ${r} min-w-0`);
+  const right = el("span", `col-start-4 ${r} text-right tabular-nums text-slate-500 dark:text-slate-400`);
+  if (e.type === "command" || e.type === "tool") {
     const running = e.state === "running";
-    const failed = !running && e.exit_code !== 0;
-    content.append(el("code", "block truncate font-mono text-[12px]", e.cmd));
+    const failed = !running && e.exit_code != null && e.exit_code !== 0;
+    if (e.type === "tool") content.append(el("span", "font-semibold text-slate-600 dark:text-slate-300", e.name), " ");
+    content.append(el("code", `${e.type === "tool" ? "" : "block "}truncate font-mono text-[12px]`, e.cmd));
     if (running) {
       right.dataset.since = e.at;
       right.dataset.prefix = "running ";
       right.className += " text-sky-600 dark:text-sky-400";
       tick(right);
     } else {
-      right.textContent = `${fmtDur(e.duration_ms)}${failed ? `  exit ${e.exit_code}` : ""}`;
+      right.textContent = `${e.duration_ms == null ? "" : fmtDur(e.duration_ms)}${failed ? `  exit ${e.exit_code}` : ""}`;
       if (failed) right.className += " font-medium text-rose-600 dark:text-rose-400";
     }
   } else if (e.type === "message") {
     content.className += " text-slate-700 dark:text-slate-200";
+    content.textContent = e.text;
+  } else if (e.type === "error" || e.type === "waiting") {
+    content.className += e.type === "error" ? " font-medium text-rose-600 dark:text-rose-400" : " text-amber-600 dark:text-amber-400";
     content.textContent = e.text;
   } else if (e.type === "check") {
     content.append(el("span", "font-mono text-[12px]", e.name), "  ", el("span", `font-medium ${e.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`, e.passed ? "passed" : "failed"));
@@ -326,23 +361,18 @@ function prompt(a) {
 
 // ---------- live updates ----------
 
-// Any agent line is activity: it resets the quiet time on the card and in the open drawer.
-export function onFeed(msg) {
-  const e = msg.event;
-  const task = tasks.get(msg.task_id);
-  if (task) task.last_activity_at = e.at;
-  document.querySelector(`[data-id="${msg.task_id}"] [data-quiet]`)?.setAttribute("data-quiet", e.at);
-  if (!open || open.id !== msg.task_id) return;
-  const attempt = open.detail.attempts.find((a) => a.step === msg.step && a.n === msg.attempt);
-  if (!attempt) return;
+// One new line of an attempt: a command's finished line replaces its running one (same id), then the feed keeps its last FEED_LIMIT.
+function apply(attempt, e) {
   const at = e.id ? attempt.feed.findIndex((x) => x.id === e.id) : -1;
   if (at >= 0) attempt.feed[at] = e;
   else attempt.feed.push(e);
   attempt.feed = attempt.feed.slice(-FEED_LIMIT);
-  const drawerQuiet = $("drawer").querySelector("[data-quiet]");
-  if (drawerQuiet) drawerQuiet.dataset.quiet = e.at;
+}
+
+// The new line in the open Lines tab: in place of its running line, else at the end, the list kept to FEED_LIMIT, scrolled to the end.
+function show(attempt, e) {
   const list = $("lines");
-  if (!list || attemptOf() !== attempt) return;
+  if (!list) return;
   if (list.firstChild?.tagName === "P") list.replaceChildren();
   const row = line(e, attempt);
   const old = e.id && [...list.children].find((c) => c.dataset.eid === e.id);
@@ -356,9 +386,9 @@ export function onFeed(msg) {
 // A card moved: the open task's attempts changed (one ended, one began), so reload its detail.
 export async function onTaskMoved(task) {
   if (open?.id !== task.id) return;
-  const follow = attemptOf()?.state === "running" && attemptOf() === open.detail.attempts.at(-1);
+  const following = attemptOf()?.state === "running" && attemptOf() === open.detail.attempts.at(-1);
   open.detail = await source.detail(open.id);
-  if (follow || !attemptOf()) {
+  if (following || !attemptOf()) {
     open.tab = null;
     select();
   } else render();

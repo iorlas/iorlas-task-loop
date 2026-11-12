@@ -13,7 +13,9 @@ export function apiSource() {
     snapshot: () => json("/api/board"),
     detail: (id) => json(`/api/tasks/${encodeURIComponent(id)}`),
     logs: () => json("/api/log"),
-    // Messages are {kind: "task" | "feed" | "log", ...}; a reconnect says {kind: "resync"} so the page reloads the board.
+    // One attempt's agent lines: its latest, or those after `after` (the cursor of the last answer, opaque to the page).
+    feed: (id, step, n, after) => json(`/api/tasks/${encodeURIComponent(id)}/attempts/${step}/${n}/feed${after ? `?after=${after}` : ""}`),
+    // Messages are {kind: "task" | "log", ...}; a reconnect says {kind: "resync"} so the page reloads the board.
     subscribe(on) {
       const stream = new EventSource("/api/events");
       let seen = false;

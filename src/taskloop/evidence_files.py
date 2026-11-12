@@ -9,6 +9,7 @@ from typing import Final, Literal
 
 from any_agent import RunOutcome
 
+from taskloop.activity_file import ActivityPage, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
 from taskloop.round_log import WORD
 from taskloop.slot_state import shown
@@ -18,6 +19,7 @@ TERMINATED: Final = "terminated_by_signal"  # the entry log's cause word when a 
 ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, claim=, release=, branch= (attempt_entry)
 LOG_CAP: Final = 32 << 20  # bytes of one setup run's or one check's log, and of one agent attempt's stdout or stderr; then `[truncated]`
 TRUNCATED: Final = b"[truncated]\n"
+EVENTS_CAP: Final = 8 << 20  # bytes of one attempt's `events.jsonl` (its agent activity); then `[truncated]`
 TAIL_CAP: Final = 256 << 10  # bytes `round_tail` reads from the end of the round log
 
 
@@ -221,6 +223,25 @@ class EvidenceFiles:
                 return stream.read(cap).decode("utf-8", "replace")
         except (OSError, EvidenceError):
             return None
+
+    def events_path(self, key: AttemptKey) -> Path:
+        """The attempt's agent-activity file (`events.jsonl`), made nothing."""
+        return self._path(self.directory(key) + "/events.jsonl")
+
+    def open_events(self, key: AttemptKey) -> CappedLog:
+        """`events_path`, its directory made, opened for append; OSError propagates (display only: the caller drops it)."""
+        path = self.events_path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return CappedLog(path, EVENTS_CAP)
+
+    def activity_tail(self, key: AttemptKey, limit: int) -> ActivityPage:
+        """Read-only: the latest `limit` actions of the attempt's agent, with the cursor to follow from; creates nothing.
+        Display only (the dashboard's lines); never control state."""
+        return tail(self.events_path(key), limit)
+
+    def activity_after(self, key: AttemptKey, cursor: str, limit: int) -> ActivityPage:
+        """Read-only: what the agent did after `cursor`, or a reset with the latest `limit` when the cursor is not the file's."""
+        return follow(self.events_path(key), cursor, limit)
 
     def put_input(self, key: AttemptKey, text: str) -> FileRef:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""

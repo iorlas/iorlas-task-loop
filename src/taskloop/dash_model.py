@@ -87,13 +87,31 @@ class Outcome:
 
 @dataclass(frozen=True)
 class FeedEvent:
-    type: Literal["step", "check"]
+    """One live line (docs/design/dashboard-ui.md, *Live event*); the fields of the other types are null."""
+
+    type: Literal["step", "check", "command", "tool", "message", "error", "waiting"]
     at: str
     step: str | None = None
     attempt: int | None = None
     name: str | None = None
     passed: bool | None = None
     duration_ms: int | None = None
+    id: str | None = None
+    state: Literal["running", "finished"] | None = None
+    cmd: str | None = None  # a command's text, or a tool's main argument
+    text: str | None = None  # a message, an error or a wait
+    waited_ms: int | None = None
+    exit_code: int | None = None
+
+
+@dataclass(frozen=True)
+class FeedPage:
+    """`GET /api/tasks/<id>/attempts/<step>/<n>/feed`: the agent's lines of one attempt and the cursor to follow them from."""
+
+    events: tuple[FeedEvent, ...]
+    cursor: str | None
+    replaced: bool
+    available: bool
 
 
 @dataclass(frozen=True)
@@ -109,6 +127,7 @@ class AttemptDetail:
     input: str | None
     result: Outcome
     feed: tuple[FeedEvent, ...]
+    feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
 
 
 @dataclass(frozen=True)
