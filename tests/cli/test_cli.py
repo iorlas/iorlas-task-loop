@@ -1,5 +1,6 @@
 """Exercise the real parser and module entry without launching a process."""
 
+import json
 import os
 import runpy
 
@@ -72,3 +73,10 @@ def test_bd_location_overrides_are_dropped_before_any_command(monkeypatch: pytes
     assert main([]) == 0
     capsys.readouterr()
     assert "BEADS_DIR" not in os.environ  # a claim, its unclaim and the entry it launches use the given tracker root
+
+
+def test_version_prints_the_running_package_version(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["version"]) == 0
+    text = capsys.readouterr().out.strip()
+    assert main(["version", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"version": text}

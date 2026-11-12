@@ -95,9 +95,7 @@ def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environm
         "control, and only those results count."
     )
     assert environment in text and text.endswith("say why in `explanation`.\n")
-    pinned = ("`tl` on this machine runs the owner's pinned factory install, never this checkout's code; exercise the code under "
-              "test through its checks or tests.")
-    assert f"{environment} {pinned} With `implemented`" in text  # tl-8bh9.8.3 Q14: an agent's `tl` resolves the owner pin
+    assert f"{environment} With `implemented`" in text
     assert "taskloop" not in text  # generic: every repository's agent gets it
     assert "In `explanation`, name each command you ran and how it ended" in text
     assert not any(word in text for word in ("just ", "pytest", "/tmp"))
