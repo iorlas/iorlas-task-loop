@@ -49,7 +49,8 @@ section 2.9 and its decision 8.7 now run `setup` from the task branch.
 | Land and close (B6, [tl-8bh9.14.8](tl-8bh9.14.8/plan.md)): factory.db v13, `tl step land TASK` (squash onto origin `main`, validated when its tree changed, pushed never forced, task closed locally), `Next: land`/`landed`, the abandon going candidate first | L0-L5 built, gated; M3 live smoke not run ([M3 runbook](tl-8bh9.14.8/live-smoke.md)); `origin` trusted as configured, no push-URL guard (owner decision 2026-11-12, plan section 29.3) | L0-L5 commits with their review repairs (plan sections 25-29) |
 | Review step | not built; contract agreed in candidate-checks | none |
 | Questions and holds; a failed result today leaves the task claimed with no signal | not built | none |
-| Install, pin, release; session resume; dashboard; account routing | not built | none |
+| Install, pin, release (B8) | design ([tl-8bh9.8.3](tl-8bh9.8.3/plan.md), proposed); not built | none |
+| Session resume; dashboard; account routing | not built | none |
 | Keep-awake while rounds run (B11) | K1 built, gated; live smoke not run (M4 step 6) | tl-8bh9.14.9 section 27 |
 | Tracker entries for the roadmap (B14) | filed (D13): epic tl-8bh9.14 with 25 children (blocks B3 to B15 and audits; tl-8bh9.14.1 and .14.2 closed), S5 slices under tl-8bh9.4.3.1.16; stale-entry hygiene remains open (tl-8bh9.14.15) | none |
 
@@ -264,12 +265,13 @@ through the shelf process API. Needed for M4 on a laptop. 1 slice, no design, sm
 
 | | |
 |---|---|
-| What (proposed, O6) | Until M5: a dedicated runner worktree at a known commit with its own `.venv`, never synced while rounds run. At M5: one install directory per version (a venv per commit or tag), a durable owner pin in `config.toml`, `tl` resolving the version once at start; the entry process already uses the same interpreter (`sys.executable`). Release: an annotated tag on `main` by the person. No marketplace, plugin cache or canary. Task tl-8bh9.8.3 INSTALL-OWNER. |
+| What (proposed, O6) | Until M5: a dedicated runner worktree at a known commit with its own `.venv`, never synced while rounds run. At M5: one install directory per version (a venv per commit or tag), a durable owner pin beside the machine config (`<config stem>.pin.toml`, [plan](tl-8bh9.8.3/plan.md) Q2), `tl` resolving the version once at start; the entry process already uses the same interpreter (`sys.executable`). Release: an annotated tag on `main` by the person. No marketplace, plugin cache or canary. Task tl-8bh9.8.3 INSTALL-OWNER. |
 | Why | D9: version fixed until restart. Self-hosting lands changes to the factory's own code while it runs; a reinstall under a running loop would give new entry processes new code against an old round and factory.db. |
-| Depends on | nothing (the runner worktree is the interim); built after M4 |
-| Size | 2 slices (install directory and pin; resolve once) |
-| Open decisions | O6; the reduced release scope in [operations](tl-8bh9.8/operations.md) stays proposed |
-| Design / smoke | yes / yes |
+| Design | [tl-8bh9.8.3](tl-8bh9.8.3/plan.md) (2026-11-12, proposed): `tl install REV --checkout PATH` (annotated tag or full commit id; Git objects exported natively, `uv --directory <source> sync --frozen --no-editable --no-dev --reinstall-package iorlas-task-loop` from the installs root, verified, manifest last; an interrupted install refuses `incomplete` and is removed by the person) into `~/.local/share/task-loop/installs/<commit>/`; `tl pin REV` / `--clear` writing `<config stem>.pin.toml` beside the machine config; the `tl` console entry resolving the pin once at start and exec'ing the pinned install (`python -I -m taskloop`), `refused pin:missing|incomplete|broken|invalid` otherwise, never another install; `tl version`; running rounds and their entries keep their interpreter until restarted, and every switch drains first; factory.db unchanged (v14), `refused schema` kept both ways; release an annotated `factory-v*` tag by the person |
+| Depends on | nothing (the runner worktree is the interim until I3); built after M4 |
+| Size | 3 slices (I1 resolver, pin file, the one exec and `tl version`; I2 `tl install`; I3 `tl pin`, words, runbook) plus the M5 B8 smoke; about +760 source, +2,200 test lines, no shelf change |
+| Open decisions | O6 answered by the plan's Q1-Q15 (proposed; Q9 blocks the first release, Q13 needs the owner's sign-off); the reduced release scope in [operations](tl-8bh9.8/operations.md) stays proposed and unbuilt |
+| Design / smoke | yes ([plan](tl-8bh9.8.3/plan.md)) / yes (plan section 17) |
 
 ### B10. Time since the last command (dashboard later)
 
@@ -408,4 +410,4 @@ re-checked against current GitHub documentation for this file):
 5. **O5. How is a task held?** **Recommendation: comment the reason on the task, remove `auto`, return the claim; the
    person answers by editing the task and adding `auto` again, and the task restarts at plan.**
 6. **O6. How is the factory installed before M5?** **Recommendation: a runner worktree at a chosen commit, never
-   synced while running; per-version install directories with a pin in `config.toml` at M5.**
+   synced while running; per-version install directories with a pin file beside the machine config at M5 ([tl-8bh9.8.3](tl-8bh9.8.3/plan.md)).**

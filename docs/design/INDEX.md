@@ -47,6 +47,7 @@ proposed decision stays proposed. Vocabulary is in [the glossary](../glossary.md
 | [tl-8bh9.6.1](tl-8bh9.6.1/plan.md) | Task questions, answers and local waits | design |
 | [tl-8bh9.6.2.1](tl-8bh9.6.2.1/plan.md) | Read one task in its configured backlog | built |
 | [tl-8bh9.7](tl-8bh9.7/plan.md) | Dashboard state, evidence and task reads | design |
+| [tl-8bh9.8.3](tl-8bh9.8.3/plan.md) | Install, pin and release: `tl install` of an annotated tag or commit into `~/.local/share/task-loop/installs/<commit>/`, the owner pin `<config stem>.pin.toml` beside the machine config, `tl` resolving it once at start (one exec), `tl version`; release an annotated tag by the person (block B8, milestone M5) | design; I1-I3 and the M5 smoke not built |
 | [tl-8bh9.8.7](tl-8bh9.8.7/plan.md) | Minimal successor foundation | built |
 | [tl-8bh9.9](tl-8bh9.9/plan.md) | Git consolidation: mechanism versus factory policy | design |
 | [tl-8bh9](tl-8bh9/plan.md) | Architecture review: discussion roadmap | design |
