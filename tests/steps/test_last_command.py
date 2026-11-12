@@ -5,12 +5,13 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from any_agent import events
+from any_agent import CodexHarness, Harness, LaunchSpec, LiveSink, RunHooks, RunOutcome, events
 
+from taskloop import composition
 from taskloop.attempt_status import Listed, Shown, StatusPorts, list_attempts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Seen
-from taskloop.command_sink import CommandSink
+from taskloop.command_sink import CommandSink, WatchedHooks
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.result_data import as_data
 from taskloop.step_render import human
@@ -30,6 +31,10 @@ def command(sink: CommandSink) -> None:
     sink.feed(events.Cmd(id="1", text="just test"))
 
 
+def sink_of(files: EvidenceFiles, wall: Clock, tick: Clock | None = None) -> CommandSink:
+    return CommandSink(files, KEY, wall, tick or wall)
+
+
 def seen(con: sqlite3.Connection, files: EvidenceFiles, now: float, entry: Seen = "matching") -> tuple[list[str], list[str], object]:
     """`tl step show`'s lines, `tl step list`'s lines and the listed attempt's JSON `last_command`."""
     reads = StatusPorts(AttemptStore(lambda: con), lambda _entry: entry, lambda: now, lambda _key: None, lambda: "boot",
@@ -43,7 +48,7 @@ def seen(con: sqlite3.Connection, files: EvidenceFiles, now: float, entry: Seen 
 
 def test_a_running_agent_shows_the_seconds_since_its_last_command(registered: sqlite3.Connection, tmp_path: Path) -> None:
     files, clock = EvidenceFiles(tmp_path), Clock(10.0)
-    sink = CommandSink(files, KEY, clock)
+    sink = sink_of(files, clock)
     command(sink)
     clock.now = 10.4
     command(sink)  # inside the second: not written again
@@ -55,15 +60,15 @@ def test_a_running_agent_shows_the_seconds_since_its_last_command(registered: sq
     assert data == 7
 
 
-@pytest.mark.parametrize("evidence", [None, "not a time", ""])
-def test_no_or_unreadable_evidence_shows_the_word_unknown(registered: sqlite3.Connection, tmp_path: Path, evidence: str | None) -> None:
+@pytest.mark.parametrize(("evidence", "word"), [(None, "none"), ("not a time", "unreadable"), ("", "unreadable")])
+def test_no_or_unreadable_evidence_shows_its_word(registered: sqlite3.Connection, tmp_path: Path, evidence: str | None, word: str) -> None:
     files = EvidenceFiles(tmp_path)
     if evidence is not None:
         files.note_command(KEY, 0.0)
         (tmp_path / files.directory(KEY) / "last-command").write_text(evidence)
     show, rows, data = seen(registered, files, 20.0)
-    assert "Last command: unknown" in show and rows[1].endswith("\twait\tunknown")
-    assert data == "unknown"
+    assert f"Last command: {word}" in show and rows[1].endswith(f"\twait\t{word}")
+    assert data == word
 
 
 def test_an_agent_that_cannot_be_running_shows_no_time_and_the_next_word_is_unchanged(
@@ -79,4 +84,48 @@ def test_an_agent_that_cannot_be_running_shows_no_time_and_the_next_word_is_unch
 def test_a_failed_write_never_fails_the_run(tmp_path: Path) -> None:
     blocked = tmp_path / "file"
     blocked.write_text("not a directory")
-    command(CommandSink(EvidenceFiles(blocked), KEY, Clock(1.0)))
+    command(sink_of(EvidenceFiles(blocked), Clock(1.0)))
+
+
+def test_a_directory_that_escapes_the_evidence_root_never_fails_the_run(tmp_path: Path) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    (root / "attempts").symlink_to(outside, target_is_directory=True)
+    files = EvidenceFiles(root)
+    command(sink_of(files, Clock(1.0)))
+    assert files.last_command(KEY) == "unreadable" and not list(outside.iterdir())
+
+
+def test_the_throttle_runs_on_its_own_clock_and_keeps_the_earlier_wall_time(tmp_path: Path) -> None:
+    files, wall, tick = EvidenceFiles(tmp_path), Clock(100.0), Clock(0.0)
+    sink = sink_of(files, wall, tick)
+    command(sink)
+    wall.now, tick.now = 5000.0, 0.5  # the wall clock jumped, the monotonic one did not: inside the window
+    command(sink)
+    assert files.last_command(KEY) == 100.0
+    wall.now, tick.now = 6.0, 1.5  # the wall clock went back, the monotonic one passed the window
+    command(sink)
+    assert files.last_command(KEY) == 6.0
+    assert [each.name for each in (tmp_path / files.directory(KEY)).iterdir()] == ["last-command"]
+
+
+def test_only_a_command_counts(tmp_path: Path) -> None:
+    files, sink = EvidenceFiles(tmp_path), sink_of(EvidenceFiles(tmp_path), Clock(1.0))
+    for other in (events.Msg(text="thinking"), events.CmdEnd(id="1", text="just test", exit=0), events.Think(text="hm")):
+        sink.feed(other)
+    assert files.last_command(KEY) == "none"
+
+
+def test_the_production_run_hands_the_attempts_live_sink_to_the_shelf_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    given: list[object] = []
+
+    def shelf(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None, *, live: LiveSink | None = None) -> RunOutcome:
+        given.append(live)
+        return RunOutcome(rc=0)
+
+    monkeypatch.setattr(composition, "run", shelf)
+    sink = sink_of(EvidenceFiles(tmp_path), Clock(1.0))
+    composition._run(CodexHarness(), LaunchSpec(argv=[], env={}, cwd="", stdin=""), 1.0, WatchedHooks(live=sink))
+    composition._run(CodexHarness(), LaunchSpec(argv=[], env={}, cwd="", stdin=""), 1.0, RunHooks())
+    assert given == [sink, None]
