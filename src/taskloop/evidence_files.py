@@ -179,6 +179,23 @@ class EvidenceFiles:
         except (OSError, ValueError, EvidenceError):
             return "unreadable"
 
+    def started_at(self, key: AttemptKey) -> float | None:
+        """Read-only: when the attempt's input was written (its admission), None when it is not there. Display only (the
+        dashboard's time in step); the attempt rows store no start time."""
+        try:
+            return self._path(self.directory(key) + "/input.txt").stat().st_mtime
+        except (OSError, EvidenceError):
+            return None
+
+    def text(self, key: AttemptKey, name: Literal["input.txt", "answer.txt"], cap: int = 65536) -> str | None:
+        """Read-only: the first `cap` bytes of the attempt's input or answer file, None when absent or unreadable. Display
+        only (the dashboard's prompt and agent answer); never control state."""
+        try:
+            with self._path(self.directory(key) + "/" + name).open("rb") as stream:
+                return stream.read(cap).decode("utf-8", "replace")
+        except (OSError, EvidenceError):
+            return None
+
     def put_input(self, key: AttemptKey, text: str) -> FileRef:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
