@@ -493,8 +493,8 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
 def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    """Before the factory's commit, `show` reads the leftovers only on the task branch: off it, as `verify` says,
-    `branch` (not repeatable), never a repeat of leftovers the commit would not reach."""
+    """Before the factory's commit, `show` reads the leftovers only on the task branch: off it, as `verify` says, `branch`
+    (not repeatable, so the next word is `verify`), never a repeat of leftovers the commit would not reach."""
     path, near = "docs/design/tl-1/plan.md", "docs/design/tl-1/.gitignore"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
@@ -514,7 +514,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     slot.checkout_new("other")
     assert verifier.leftovers(KEY) == Unsettled("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("verify", ())
+    assert isinstance(off, Shown) and (off.view.next, off.view.leftovers) == ("verify", ("branch",))
     assert verify_task(store, verifier, Releases(), Publishes(), "tasks", "tl-1") == Failed("unsettled", "branch")
 
 

@@ -6,7 +6,7 @@ A failed write is skipped, and nothing reads either for control."""
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 from any_agent import LiveSink, NullSink, RunHooks, events
 from any_agent.activity import Timeline, encode
@@ -29,8 +29,8 @@ class CommandSink:
                  tick: Callable[[], float] = time.monotonic) -> None:
         """`clock`: the wall time written; `tick`: the monotonic time the once-a-second throttle runs on."""
         self._files, self._key, self._clock, self._tick, self._last = files, key, clock, tick, float("-inf")
-        self._timeline, self._lost = Timeline(), False
-        self._run = f"{int(clock() * 1000)}:"  # a vendor restarts its ids with each process: a resumed run must not reuse the last one's
+        # a vendor restarts its ids with each process: a resumed run's scope keeps it from reusing the last run's
+        self._timeline, self._lost = Timeline(f"{int(clock() * 1000)}:"), False
         self._events: CappedLog | None = None  # opened at the first action
 
     def started(self, pid: int) -> None:
@@ -44,8 +44,7 @@ class CommandSink:
             if self._events is None:
                 self._events = self._files.open_events(self._key)
             for record in records:
-                scoped = record if record.id is None else replace(record, id=self._run + record.id)
-                self._events.write((encode(scoped) + "\n").encode())
+                self._events.write((encode(record) + "\n").encode())
         except OSError:
             self._lost = True  # display only: no events file, no retry, never a failed attempt
 
