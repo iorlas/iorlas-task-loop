@@ -287,3 +287,33 @@ def test_a_v13_factory_db_is_refused(con: sqlite3.Connection) -> None:
                  lambda: store(con).labelled("a", 0, "moved", 1.0)):
         with pytest.raises(StoreUnavailable):
             call()
+
+
+def test_the_label_step_of_a_task_taken_again_is_changed(con: sqlite3.Connection) -> None:
+    first = held(con)
+    later(con)
+    with pytest.raises(StoreRefused, match="changed"):
+        store(con).labelled("a", first.rev, "moved", 11.0)
+    assert store(con).cleared("a", first.rev, 20.0).labels == "superseded"
+
+
+def test_a_cleared_hold_takes_no_comment_lease(con: sqlite3.Connection) -> None:
+    moved = store(con).labelled("a", held(con).rev, "moved", 11.0)
+    later(con)
+    cleared = store(con).cleared("a", moved.rev, 20.0)
+    assert store(con).commenting("a", cleared.rev, 30.0) is None
+    assert store(con).of_attempts(("a",))["a"] == cleared
+
+
+@pytest.mark.parametrize(("newer", "again"), [
+    (None, True), ("moved", True), ("absent", True), ("not_ours", False), ("closed", False), ("missing", False),
+])
+def test_only_a_newer_hold_that_may_own_held_counts_as_held_again(
+    con: sqlite3.Connection, newer: Labelled | None, again: bool
+) -> None:
+    store(con).labelled("a", held(con).rev, "moved", 11.0)
+    later(con)
+    renewed = held(con, "b", "b", now=30.0)
+    if newer is not None:
+        store(con).labelled("b", renewed.rev, newer, 31.0)
+    assert [(each.row.attempt_id, each.held_again) for each in store(con).uncleared()] == [("a", again)]

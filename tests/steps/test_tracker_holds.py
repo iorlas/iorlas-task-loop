@@ -83,6 +83,19 @@ def test_a_failed_label_write_is_retried_by_the_next_round(
     assert calls(script) == [SHOW, *written]
 
 
+@pytest.mark.parametrize("label", ["", "-auto", "--force"])
+def test_a_label_bd_would_read_as_a_flag_is_refused_before_any_call(tmp_path: Path, label: str) -> None:
+    script = Script().say(show())
+    assert tracker_holds(script).labels(str(tmp_path), "tl-1", label) == HoldAnswer("bad_label")
+    assert script.calls == []
+
+
+def test_a_locked_tracker_is_asked_once_and_retried_by_the_next_round(tmp_path: Path) -> None:
+    script = Script().say("", "embeddeddolt: acquiring lock: busy", 1)
+    assert tracker_holds(script).comment(str(tmp_path), "tl-1", "text") == HoldAnswer("unavailable", "other")
+    assert len(script.calls) == 1
+
+
 def test_an_unanswered_read_writes_nothing(tmp_path: Path) -> None:
     script = Script().say("", "bd: no answer in 30.0s", 124)
     assert tracker_holds(script).labels(str(tmp_path), "tl-1", "auto") == HoldAnswer("unavailable", "timeout")
@@ -122,7 +135,8 @@ def test_every_hold_call_is_capped_at_bd_timeout_at_the_resolved_root(tmp_path: 
     root = str(tmp_path / "x" / "..")
     assert holds.labels(root, "tl-1", "auto") == holds.comment(root, "tl-1", "t") == holds.clear(root, "tl-1") == HoldAnswer(
         "unavailable", "timeout")
-    assert built == [{"actor": "taskloop", "cwd": str(tmp_path.resolve()), "timeout": BD_TIMEOUT_S}] * 3
+    # one try each (no lock retry): no call outlasts the comment lease
+    assert built == [{"actor": "taskloop", "cwd": str(tmp_path.resolve()), "timeout": BD_TIMEOUT_S, "lock_retries": 0}] * 3
 
 
 @pytest.mark.parametrize(("reply", "back"), [

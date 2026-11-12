@@ -284,8 +284,12 @@ CREATE TABLE task_hold (
 
 Writers: `admit` writes `attempt.label` (fresh admission: the request's label, NULL from `tl step start`),
 `admit_chain` copies it on an advance and a repeat. `hold_store.py` is the one writer of `task_hold`: `insert` (fenced
-as 5.1 step 1), `labelled`, `commenting` (the lease, 5.1 step 5), `commented`, `cleared` (and `superseded`), each fenced
-on `rev`; reads `of_attempts(ids)` (one query for a listing) and `uncleared()` (7.3). `factory_schema` version 14,
+as 5.1 step 1), `labelled` (also fenced on A still current), `commenting` (the lease, 5.1 step 5; never on a cleared
+hold), `commented`, `cleared` (and `superseded`), each fenced on `rev`; reads `of_attempts(ids)` (one query for a
+listing) and `uncleared()` (7.3; `held_again` counts only a newer hold whose labels are NULL, `moved` or `absent`). As
+built (section 24): the comment CHECK reads `commented_at IS NULL OR (labels IS NOT NULL AND labels IN
+('moved','absent','not_ours'))`, and every `TrackerHolds` bd call is one try (no lock retry) capped at 30 s, so one call
+stays within `COMMENT_LEASE`. `factory_schema` version 14,
 `HOLD` column list, docstring line; the policy test's WRITERS map gains `task_hold: hold_store`. Upgrade: land or
 abandon in-flight tasks, stop rounds, discard factory.db, adopt the slots again (as for v11-v13).
 
@@ -468,7 +472,7 @@ Caps: 400 source lines per file, 80 per function, 800 per test file. Estimates a
 | # | Slice | Contents | Source | Tests | Depends on |
 |---|---|---|---|---|---|
 | H1 | Schema v14, the label on the attempt, the hold store, the tracker's hold writes, the comment | `factory_schema` v14 (`attempt.label`, `task_hold`, `HOLD`); `admit` writes the label (`AdmitRequest.label`, NULL from `tl step start`), `admit_chain` copies it; `hold_store.py`; `tracker_client.TrackerHolds` (`labels` per 5.2, `comment`, `clear`, each bd call capped) and the unclaim mapping of 5.3; `hold_text.py` (section 6, by abandon outcome); WRITERS policy entry | about +370 (`hold_store` 160, `hold_text` 100, `tracker_client` +75, schema +20, admission +15) | about +520 (`test_hold_store` every CHECK and fence incl. the comment lease, `test_tracker_holds` with `beads_client.testing.Script`, unclaim of closed and missing, `test_hold_text` per outcome, label written and copied) | B6 built |
-| H2 | The hold operation and its words | `hold.py` (`cause` with the label rule, `hold_task` 5.1, `clear_holds` 7.3); `attempt_status` (`hold`, `on_hold`, `AttemptView.hold` looked up by the agent attempt, `--stuck` includes `hold`); `show_render`/`step_render` `Hold:` lines; `step_guide` guides naming section 12's action per refusal; `result_data`; `operations.Action` gains `hold`; the answer's `explanation` on the collected result if missing; glossary | about +310 (`hold` 210, status +30, render +25, guide +35, data +10) | about +560 (`test_hold`: section 3 incl. NULL label; every partial rerun; each 5.2 row; each section 12 refusal and whether it comments; two concurrent callers comment once; the swapped checks view's lookup; status words) | H1 |
+| H2 | The hold operation and its words | `hold.py` (`cause` with the label rule, `hold_task` 5.1 (it checks right before the label step that A is still current; `HoldStore.labelled` fences it again, `changed`), `clear_holds` 7.3); `attempt_status` (`hold`, `on_hold`, `AttemptView.hold` looked up by the agent attempt, `--stuck` includes `hold`); `show_render`/`step_render` `Hold:` lines; `step_guide` guides naming section 12's action per refusal; `result_data`; `operations.Action` gains `hold`; the answer's `explanation` on the collected result if missing; glossary | about +310 (`hold` 210, status +30, render +25, guide +35, data +10) | about +560 (`test_hold`: section 3 incl. NULL label; every partial rerun; each 5.2 row; each section 12 refusal and whether it comments; two concurrent callers comment once; the swapped checks view's lookup; status words) | H1 |
 | H3 | The round applies it | `round` (9.1-9.5), the round's label into admission, `RoundPorts.holding` and its wiring in `cli_composition`; `round.py` split if over 400 | about +60 | about +330 (`test_round_holds`: each cause held once and quiet after; a pending hold's line again only when its refusal changes; re-ingestion of `moved` and `absent`, the `abandoned` skip kept for others and for hand abandons; a differing round label; hand-started tasks never held; clear incl. re-hold and `superseded`) | H2 |
 | K1 | Keep-awake (tl-8bh9.14.10) | `keep_awake.py` (argv by platform, `Awake` with `stop`); `open_rounds` order (spawn, replay, `installed`, `stop_tree` in `finally`); two log words; the mirrored CLAUDE.md/AGENTS.md note of section 13 | about +100 | about +170 (argv per platform, missing tool, replay before `installed`, stop on each exit path with a fake spawn port) | none |
 | G1 | git-porcelain `read_timeout` (shelf repository) | section 14's API per call with `GIT_OPTIONAL_LOCKS=0`, on the unreleased 0.17.0 branch; the hang test | shelf about +60 | shelf about +120 | none; **owner release** |
@@ -685,6 +689,27 @@ holds a task yet). Code lines by the policy counter: `hold_store` 104 (new), `ho
    abandon finished or not).
 4. `HoldStore.insert` refuses a NULL label as `unlabelled`, not `changed`: it is no race, and H2's `cause` never asks.
 5. The round's admissions still store NULL until H3 (above); this keeps H1 free of round behavior.
+
+**Review repairs of af1f04233 (2026-11-12).**
+
+1. Every `TrackerHolds` bd call is one try (`lock_retries=0`, as the heartbeat): with bd's three lock retries a call
+   could take about 121 s and outlast `COMMENT_LEASE`, so two callers could comment. A locked tracker is
+   `unavailable`, retried by the next round.
+2. Every line of the agent's explanation is quoted (`> `) under its own `The agent explained:` line, so an explanation
+   cannot forge a header, a claim line or an answer.
+3. `absent` is worded "`<label>` is no longer on the task": the word comes from this call's read, which after a crash or
+   a race may follow the factory's own removal.
+4. `uncleared()`'s `held_again` counts only a newer hold whose labels are NULL, `moved` or `absent`; a newer `not_ours`,
+   `closed` or `missing` hold wrote no label, so the old `held` is still removed.
+5. `commenting` refuses a cleared hold; `labelled` is fenced on A still being current (`changed` otherwise: the row is
+   superseded by `cleared`).
+6. **Accepted residual:** the unclaim's `GONE` mapping ("no issue found matching") also matches a stored tracker root
+   that now resolves to another or re-initialised tracker; the abandon then records `not_held` and the real claim
+   stays behind with no retry (before: `unclaiming`, retried). Accepted as for the heartbeat, which already maps `GONE`
+   to `lost`.
+7. The comment names an unknown slot "its slot" and an unknown pid "pid unknown: `tl step show <id>` names it";
+   `TrackerHolds.labels` refuses an empty label or one starting with `-` (bd would read it as a flag) as `bad_label`
+   before any bd call.
 
 **Unverified.** The bd texts are as measured in section 5.4 (not re-measured): the unclaim mapping matches both on
 bd's JSON `error` and on stderr. No live bd run in H1.

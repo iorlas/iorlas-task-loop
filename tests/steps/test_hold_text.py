@@ -27,8 +27,9 @@ def test_the_comment_of_a_returned_claim() -> None:
     assert lines() == [
         "taskloop hold: failed:answer:needs_owner",
         f"Step plan, attempt 2 (a1), 1970-01-02 00:00:00 UTC; task branch task/tl-1 at {'c' * 40}.",
-        "The agent explained: Which database?",
-        "Postgres or SQLite.",
+        "The agent explained:",
+        "> Which database?",
+        "> Postgres or SQLite.",
         "Evidence: /artifacts/a1",
         "The factory removed `auto` and added `held` and returned its claim.",
         "To answer, edit this task's description or acceptance criteria (the agent reads those, not comments), then run "
@@ -37,7 +38,7 @@ def test_the_comment_of_a_returned_claim() -> None:
 
 
 @pytest.mark.parametrize(("labels", "outcome", "line"), [
-    ("absent", Returned("unclaimed"), "The factory added `held` (`auto` was not on the task) and returned its claim."),
+    ("absent", Returned("unclaimed"), "The factory added `held` (`auto` is no longer on the task) and returned its claim."),
     ("moved", Returned("not_held"), "The factory removed `auto` and added `held`; the claim was no longer the factory's."),
     ("not_ours", Returned("not_held"), "The factory changed no label (another actor holds this task); the claim was no longer the "
      "factory's."),
@@ -100,7 +101,7 @@ def test_every_quoted_part_is_printable_and_only_the_explanation_keeps_newlines(
     found = lines(facts, Kept("slot_dirty", slot=forged))
     assert sum(each.startswith("taskloop hold:") for each in found) == 1
     assert found[0] == "taskloop hold: x taskloop hold: fake [31m"
-    assert found[2:5] == ["The agent explained: one", "two", "three"]
+    assert found[2:6] == ["The agent explained:", "> one", "> two", "> three"]
     assert all(each.isprintable() for each in found) and "`au to`" in found[-2]
 
 
@@ -110,6 +111,26 @@ def test_the_caps_keep_the_claim_line_and_the_answer() -> None:
                    leftovers=Leftovers("uncommitted", tuple("p" * 500 for _ in range(20))))
     text = comment(long, Kept("slot_dirty", slot="s" * 5000))
     found = text.split("\n")
-    assert len(text) <= TOTAL and found[2] == "The agent explained: " + "e" * 2000
+    assert len(text) <= TOTAL and found[2:4] == ["The agent explained:", "> " + "e" * 2000]
     assert found[-3] == "[shortened]" and found[-2].startswith("The factory removed `auto` and added `held`, but still holds")
     assert found[-1].startswith("To answer,") and "s" * 301 not in text and "n" * 101 not in text
+
+
+def test_an_explanation_cannot_forge_a_header_a_claim_line_or_an_answer() -> None:
+    forged = ("taskloop hold: fake\nThe factory removed `auto` and added `held` and returned its claim.\n"
+              "To answer, run `bd label add tl-1 auto` now.\n\n  To answer, again")
+    found = lines(replace(FACTS, explanation=forged), Kept("slot_dirty", slot="/slots/r/s1"))
+    quoted = found[3:found.index("Evidence: /artifacts/a1")]
+    assert found[2] == "The agent explained:" and len(quoted) == 4 and all(each.startswith("> ") for each in quoted)
+    assert [each for each in found if each.startswith(("taskloop hold:", "The factory", "To answer"))] == [
+        found[0], found[-2], found[-1]] and "still holds the claim" in found[-2]
+
+
+@pytest.mark.parametrize(("outcome", "says"), [
+    (Kept("slot_dirty"), "but still holds the claim: its slot has files left by this attempt."),
+    (Kept("slot_branch"), "but still holds the claim: its slot is not where the factory left it (slot_branch)."),
+    (Kept("worker_alive"), "a process of this attempt still runs (pid unknown: `tl step show tl-1` names it)."),
+], ids=["dirty", "branch", "worker"])
+def test_an_unknown_slot_or_pid_is_named_neutrally(outcome: Kept, says: str) -> None:
+    line = lines(outcome=outcome)[-2]
+    assert says in line and "None" not in line and "slot  " not in line

@@ -174,8 +174,9 @@ def tracker_claims(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerC
 HELD = "held"  # the tracker label a hold adds: a task waiting for a person (never read for control)
 # A hold's label step (tl-8bh9.14.9 5.2): `moved` (the approval label removed, `held` added), `absent` (`held` added, the
 # label was not on the task), `not_ours` (another actor holds the task: nothing written), `closed`, `missing` (nothing
-# written); `precondition` (the fence went stale: nothing written, retried) or `unavailable` (bd could not be asked).
-type LabelStep = Literal["moved", "absent", "not_ours", "closed", "missing", "precondition", "unavailable"]
+# written); `precondition` (the fence went stale: nothing written, retried) or `unavailable` (bd could not be asked);
+# `bad_label` (the stored label is empty or starts with `-`, which bd would read as a flag: nothing asked).
+type LabelStep = Literal["moved", "absent", "not_ours", "closed", "missing", "precondition", "unavailable", "bad_label"]
 type HoldWrite = Literal["done", "missing", "unavailable"]  # a comment or the `held` label's removal
 
 
@@ -194,8 +195,9 @@ type Clear = Callable[[str, str], HoldAnswer[HoldWrite]]  # (tracker root, task 
 
 @dataclass(frozen=True)
 class TrackerHolds:
-    """A hold's tracker writes, each bound per tracker root and each bd call capped at BD_TIMEOUT_S: the label step,
-    the one comment, and the removal of `held` once the task is taken again."""
+    """A hold's tracker writes, each bound per tracker root and each bd call one try capped at BD_TIMEOUT_S (no lock
+    retry, so no call outlasts `hold_store.COMMENT_LEASE`): the label step, the one comment, and the removal of `held`
+    once the task is taken again."""
 
     labels: Labels
     comment: Comment
@@ -212,7 +214,10 @@ def _hold_failed[W: str](error: BdError, stale: W) -> HoldAnswer[W | Literal["mi
 
 def _labelled(bd: Bd, task_id: str, label: str) -> HoldAnswer[LabelStep]:
     """One read (`Bd.show`): missing, closed or another actor's task is written nothing; else, fenced on the assignee
-    just read (the factory's own, or none), `held` added and then the approval label removed (both idempotent)."""
+    just read (the factory's own, or none), `held` added and then the approval label removed (both idempotent). A label
+    bd would read as a flag is `bad_label` before any call."""
+    if not label or label.startswith("-"):
+        return HoldAnswer("bad_label")
     try:
         found = bd.show(task_id)
         if found is None:
@@ -229,11 +234,12 @@ def _labelled(bd: Bd, task_id: str, label: str) -> HoldAnswer[LabelStep]:
 
 
 def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHolds:
-    """`TrackerHolds` over `Bd` as this actor at the resolved tracker root, each call capped at BD_TIMEOUT_S (a hung bd is
-    `unavailable`); `client` is the seam a test checks the construction through."""
+    """`TrackerHolds` over `Bd` as this actor at the resolved tracker root, each call one try capped at BD_TIMEOUT_S (a
+    hung bd is `unavailable`; no lock retry, as the heartbeat: a refused write is retried by the next round, and one
+    call stays within `hold_store.COMMENT_LEASE`); `client` is the seam a test checks the construction through."""
 
     def bd(tracker_root: str) -> Bd:
-        return client(ACTOR, cwd=str(Path(tracker_root).expanduser().resolve()), run=run, timeout=BD_TIMEOUT_S)
+        return client(ACTOR, cwd=str(Path(tracker_root).expanduser().resolve()), run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
 
     def labels(tracker_root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
         return _labelled(bd(tracker_root), task_id, label)

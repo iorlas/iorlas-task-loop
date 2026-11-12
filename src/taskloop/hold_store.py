@@ -25,7 +25,7 @@ type Labels = Literal["moved", "absent", "not_ours", "closed", "missing", "super
 type Labelled = Literal["moved", "absent", "not_ours", "closed", "missing"]  # the label step's own words (5.2)
 LABELS: Final[tuple[Labels, ...]] = ("moved", "absent", "not_ours", "closed", "missing", "superseded")
 COMMENTED: Final = "('moved','absent','not_ours')"  # the label words after which the hold writes its comment
-COMMENT_LEASE: Final = 120.0  # seconds: longer than one capped bd call (`claim_lease.BD_TIMEOUT_S`, 30 s)
+COMMENT_LEASE: Final = 120.0  # seconds: longer than one bd call of `TrackerHolds` (one try, `claim_lease.BD_TIMEOUT_S`, 30 s)
 COLUMNS: Final = f"SELECT {prefixed('h', HOLD)},p.backlog,p.task_id,p.tracker_root,p.label"
 JOINED: Final = " FROM task_hold h JOIN attempt p ON p.attempt_id=h.attempt_id"
 LOADED: Final = COLUMNS + JOINED
@@ -41,8 +41,10 @@ FROM attempt p WHERE p.attempt_id=?"""
 # Not current: a later attempt of A's task exists (a hold's own abandon leaves A current until the task is taken again).
 SUPERSEDED: Final = f"EXISTS (SELECT 1 FROM attempt p WHERE p.attempt_id=task_hold.attempt_id AND {LATER})"
 # The rows that may have added `held` (labels NULL, `moved`, `absent`), not cleared, whose attempt is not current; with
-# whether the task's current attempt (its highest `seq`) has a hold of its own.
-UNCLEARED: Final = COLUMNS + """,(SELECT EXISTS (SELECT 1 FROM task_hold g WHERE g.attempt_id=q.attempt_id) FROM attempt q
+# whether the task's current attempt (its highest `seq`) has a hold of its own that may own `held` (labels NULL, `moved`
+# or `absent`; a `not_ours`, `closed` or `missing` one wrote no label, so the old `held` is still the factory's to remove).
+UNCLEARED: Final = COLUMNS + """,(SELECT EXISTS (SELECT 1 FROM task_hold g WHERE g.attempt_id=q.attempt_id
+ AND (g.labels IS NULL OR g.labels IN ('moved','absent'))) FROM attempt q
  WHERE q.adapter=p.adapter AND q.backlog=p.backlog AND q.task_id=p.task_id ORDER BY q.seq DESC LIMIT 1)""" + JOINED + f"""
  WHERE h.cleared_at IS NULL AND (h.labels IS NULL OR h.labels IN ('moved','absent')) AND {LATER}
  ORDER BY h.held_at,h.attempt_id"""
@@ -126,16 +128,18 @@ class HoldStore(StoreConnection):
             return self._read(con, hold.attempt_id)
 
     def labelled(self, attempt_id: str, rev: int, labels: Labelled, now: float) -> HoldRow:
-        """The label step's word (5.2), once."""
-        return self._update(attempt_id, rev, "labels=?,labelled_at=?", (labels, now), "labels IS NULL")
+        """The label step's word (5.2), once, while A is still its task's current attempt (taken again meanwhile:
+        `changed`, and `cleared` supersedes the row)."""
+        return self._update(attempt_id, rev, "labels=?,labelled_at=?", (labels, now), f"labels IS NULL AND NOT {SUPERSEDED}")
 
     def commenting(self, attempt_id: str, rev: int, now: float) -> HoldRow | None:
         """The comment lease (5.1 step 5): taken when the label step's word comments, no comment is recorded and no lease
-        is live (none, or one taken more than `COMMENT_LEASE` seconds before `now`). None: not taken (another caller's
-        live lease, a recorded comment, a word that writes none, or `rev` moved): the caller posts nothing."""
+        is live (none, or one taken more than `COMMENT_LEASE` seconds before `now`), and the hold is not cleared. None: not
+        taken (another caller's live lease, a recorded comment, a word that writes none, a cleared hold, or `rev` moved):
+        the caller posts nothing."""
         try:
             return self._update(attempt_id, rev, "commenting_at=?", (now,), f"""labels IN {COMMENTED} AND commented_at IS NULL
-            AND (commenting_at IS NULL OR commenting_at<?)""", (now - COMMENT_LEASE,))
+            AND cleared_at IS NULL AND (commenting_at IS NULL OR commenting_at<?)""", (now - COMMENT_LEASE,))
         except StoreRefused:
             return None
 

@@ -1,11 +1,11 @@
 """A hold's one tracker comment (tl-8bh9.14.9 section 6): a pure function of the hold, its cause and the abandon's outcome.
 
 Fixed English. Every quoted part (the reason, the label, the agent's explanation, check names, paths) has its control,
-format, surrogate, private-use and unassigned characters removed; only the explanation keeps its newlines, every other
-part is one line, so no quoted text can forge a line of its own. Caps: the explanation 2000 characters, 10 failed
-checks, 20 left paths, each other part `PART` characters, the whole comment `TOTAL`: the details are shortened first,
-so the claim line and the answer always stay. The claim line states only what the abandon recorded: "returned" only
-when the claim is `unclaimed`.
+format, surrogate, private-use and unassigned characters removed; every part is one line, except the explanation,
+whose every line is quoted (`> `) under its own header, so no quoted text can forge a line of the comment. Caps: the
+explanation 2000 characters, 10 failed checks, 20 left paths, each other part `PART` characters, the whole comment
+`TOTAL`: the details are shortened first, so the claim line and the answer always stay. The claim line states only
+what the abandon recorded: "returned" only when the claim is `unclaimed`.
 """
 
 import unicodedata
@@ -19,6 +19,7 @@ PATHS: Final = 20
 PART: Final = 300
 TOTAL: Final = 6000
 CUT: Final = "[shortened]"
+QUOTE: Final = "> "  # each line of the agent's explanation
 type LabelsWord = Literal["moved", "absent", "not_ours"]  # the label step's words after which a comment is written
 type KeptWord = Literal["slot_dirty", "slot_branch", "slot_redirected", "slot_unborn", "worker_alive", "setup_running",
                     "landing", "landed"]  # an abandon refusal only the person clears (section 12)
@@ -84,9 +85,10 @@ def part(text: str, cap: int = PART) -> str:
 
 
 def explained(text: str) -> str:
-    """The agent's explanation: printable lines (newlines kept), at most `EXPLANATION` characters."""
+    """The agent's explanation: its printable lines (at most `EXPLANATION` characters in all), each quoted `> `."""
     lines = (part(line, EXPLANATION) for line in text.split("\n"))
-    return "\n".join(line for line in lines if line)[:EXPLANATION].rstrip()
+    capped = "\n".join(line for line in lines if line)[:EXPLANATION].rstrip()
+    return "\n".join(QUOTE + line for line in capped.split("\n")) if capped else ""
 
 
 def _listed[T](items: tuple[T, ...], cap: int) -> tuple[tuple[T, ...], str]:
@@ -101,7 +103,7 @@ def _details(facts: HoldFacts) -> list[str]:
              f"Step {part(facts.step)}, attempt {facts.number} ({part(facts.attempt_id)}), {when}; task branch "
              f"task/{part(facts.task_id)} at {at}."]
     if facts.explanation and (text := explained(facts.explanation)):
-        lines.append(f"The agent explained: {text}")
+        lines.extend(["The agent explained:", text])
     shown, more = _listed(facts.checks, CHECKS)
     lines.extend(f"Failed checks: {part(each.name, 100)} {part(each.conclusion, 40)} {part(each.log)}" for each in shown)
     if more:
@@ -116,7 +118,7 @@ def _details(facts: HoldFacts) -> list[str]:
 def _labelled(facts: HoldFacts) -> str:
     label = part(facts.label, 200)
     return {"moved": f"The factory removed `{label}` and added `held`",
-            "absent": f"The factory added `held` (`{label}` was not on the task)",
+            "absent": f"The factory added `held` (`{label}` is no longer on the task)",
             "not_ours": "The factory changed no label (another actor holds this task)"}[facts.labels]
 
 
@@ -126,20 +128,21 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
     if isinstance(outcome, Returned):
         return done + (" and returned its claim." if outcome.claim == "unclaimed" else "; the claim was no longer the factory's.")
     kept = f"{done}, but still holds the claim: "
-    slot = part(outcome.slot)
+    slot = f"slot {part(outcome.slot)}" if part(outcome.slot) else "its slot"
     match outcome.word:
         case "slot_dirty":
-            return (kept + f"slot {slot} has files left by this attempt. Save what you need, remove them, and the next round "
+            return (kept + f"{slot} has files left by this attempt. Save what you need, remove them, and the next round "
                     "returns the claim. The factory never removes work.")
         case "worker_alive" | "setup_running":
             group = "" if outcome.pgid is None else f", group {outcome.pgid}"
-            return (kept + f"a process of this attempt still runs (pid {outcome.pid}{group}). When it has ended (or after you "
+            pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else f"pid unknown: `tl step show {part(facts.task_id)}` names it"
+            return (kept + f"a process of this attempt still runs ({pid}). When it has ended (or after you "
                     "stop it by that pid), the next round returns the claim.")
         case "landing" | "landed":
             return (kept + f"a land of this task holds its slot or may be on origin ({outcome.word}). Finish or withdraw it "
                     f"(`tl step land {part(facts.task_id)}`), and the next round returns the claim.")
         case _:
-            return (kept + f"slot {slot} is not where the factory left it ({outcome.word}). Put it back (`tl step show "
+            return (kept + f"{slot} is not where the factory left it ({outcome.word}). Put it back (`tl step show "
                     f"{part(facts.task_id)}` says where), and the next round returns the claim.")
 
 
