@@ -74,6 +74,7 @@ LAND_GUIDE: Final = {
     "--force`; a rerun then closes or records it. The code is already on main.",
     "task": "The tracker has no such task: inspect the attempt's tracker root (`bd show <task>`).",
     "checkout": "--checkout is not a checkout of the task's repository: pass your own checkout of it.",
+    "minutes": "S needs validating (main moved or its required names changed): rerun with `--minutes N`, the validation's deadline.",
     "choices": "Fix the flags: `--minutes` from 1 to the maximum; `--summary`, `--withdraw` and `--no-change` exclude each other.",
     "slot_busy": "Another land or entry holds the candidate's slot: wait for it, then rerun.",
     "no_free_slot": "Every slot is held and S must be validated in one: rerun once a slot is free, or stop `tl step rounds`.",

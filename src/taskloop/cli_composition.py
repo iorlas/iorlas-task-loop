@@ -21,7 +21,6 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.check_release import ChecksRelease
 from taskloop.composition import (
     adopt_slots,
-    keep_awake_host,
     open_admission,
     open_advance,
     open_chain,
@@ -40,7 +39,6 @@ from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
 from taskloop.interrupts import Interrupts, installed
-from taskloop.keep_awake import Host, awake
 from taskloop.land_check import LandPorts
 from taskloop.land_store import LandStore
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
@@ -234,21 +232,19 @@ def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | F
 
 
 @contextmanager
-def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextRequest, host: Host | None = None,
+def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextRequest,
                 install: Callable[[Callable[[str], object]], AbstractContextManager[Interrupts]] = installed,
                 ) -> Generator[RoundsPorts | Failed]:
     """`tl step rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock,
-    then the keep-awake helper (`keep_awake.awake`, its spawn's signal hold replayed first) and only then the SIGINT
-    handler (`interrupts`), both for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
-    `time.sleep`, the round log and the `Log: not written` warning on stderr. `host` and `install` are this machine's and
-    the real handler unless a test passes its own."""
+    then the SIGINT handler (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
+    `time.sleep`, the round log and the `Log: not written` warning on stderr. `install` is the real handler unless a test passes its own."""
     release = _rounds_lock(database, request)
     if isinstance(release, Failed):
         yield release
         return
     log, pid = EvidenceFiles(artifacts).log_round, os.getpid()
     try:
-        with awake(host or keep_awake_host(), pid, request.backlog, log, time.time, _say), install(_say) as interrupts:
+        with install(_say) as interrupts:
             rounding = one_round(database, artifacts, views, request, interrupts.stopping)
             yield RoundsPorts(rounding, _slot_use(database), time.time, time.monotonic,
                          time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid)

@@ -188,7 +188,7 @@ class LandBench:
         return LandPorts(self.checking(), self.lands, self.views, lambda path: GitProfileFiles(path, self.views), self.inspect,
                          self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing, self.environ, self.close)
 
-    def land(self, mode: str = "land", *, no_change: bool = False, minutes: int = 5, checkout: Path | None = None) -> LandResult:
+    def land(self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None) -> LandResult:
         modes: dict[str, Literal["land", "summary", "withdraw"]] = {"withdraw": "withdraw", "summary": "summary"}
         request = LandRequest("tasks", "tl-1", checkout or self.repo.path, minutes, modes.get(mode, "land"), no_change)
         return land(self.ports(), request)

@@ -200,6 +200,9 @@ def implemented(rig: Checking) -> None:
     assert rig.next_words() == {"tl-1": ("implement", "advance")}
 
 
+LAND_LINE = ("tl-1", "check", "report", "land")
+
+
 def ready(rig: Checking, task_id: str) -> None:
     rig.tracker.beads[task_id] = task(task_id)
 
@@ -209,7 +212,8 @@ def test_rounds_take_a_task_through_plan_implement_and_its_checks_to_done_with_o
     rig.bodies = ["passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")] and rig.last.stopped == ""
     checks = rig.key("tl-1").attempt_id
-    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "land")}  # a pass writes nothing
+    assert rig.round() == [LAND_LINE] and rig.next_words() == {"tl-1": ("check", "land")}  # a pass reports `land` once
+    assert rig.round(rig.last.written) == [LAND_LINE] and rig.logged("tl-1", "check", "report", "land", checks) == 1
     assert rig.entries == [(CHECK_ENTRY_MODULE, "tl-1")] and rig.launched == ["tl-1", "tl-1"]
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.tracker.claims == ["tl-1"]
     assert rig.tracker.beads["tl-1"].status == "in_progress" and rig.logged("tl-1", "check", "advance", "started", checks) == 1
@@ -248,7 +252,7 @@ def test_an_admitted_checks_attempt_is_relaunched_with_the_checks_launcher_only(
     checks = rig.key("tl-1").attempt_id
     assert rig.next_words() == {"tl-1": ("check", "start")}
     assert rig.round() == [("tl-1", "check", "relaunch", "relaunched")] and rig.last.moves[0].attempt_id == checks
-    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "land")}
+    assert rig.round() == [LAND_LINE] and rig.next_words() == {"tl-1": ("check", "land")}
     assert {module for module, _task in rig.entries} == {CHECK_ENTRY_MODULE} and rig.launched == ["tl-1", "tl-1"]
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.logged("tl-1", "check", "relaunch", "relaunched", checks) == 1
 
@@ -322,7 +326,7 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_before_new_work(rig:
     assert rig.tracker.ready_reads == reads and rig.next_words()["tl-2"] == ("implement", "advance")  # tl-2 and tl-3 wait
     rig.finish("tl-1", "passed")
     # tl-2's checks pass at once here (its entry ran within the launch), so the slot is free again for tl-3 after them
-    assert rig.round() == [("tl-2", "check", "advance", "started"), ("tl-3", "plan", "start", "started")]
+    assert rig.round() == [LAND_LINE, ("tl-2", "check", "advance", "started"), ("tl-3", "plan", "start", "started")]
     assert rig.rows() == [("tl-1", 1, "concluded", "passed"), ("tl-2", 1, "concluded", "passed")]
 
 
@@ -359,7 +363,7 @@ def test_a_concluded_checks_attempt_whose_entry_died_before_its_release_is_relea
         assert rig.round() == [("tl-1", "check", "report", "running")]
         rig.alive.clear()
     assert rig.round() == [("tl-1", "check", "release", "released")] and rig.logged("tl-1", "check", "release", "released", checks) == 1
-    assert rig.round() == [] and rig.next_words() == {"tl-1": ("check", "land")} and rig.starts == 1
+    assert rig.round() == [LAND_LINE] and rig.next_words() == {"tl-1": ("check", "land")} and rig.starts == 1
 
 
 def test_a_hold_kept_by_a_lingering_check_is_retried_each_round_logged_once_and_finished_once_its_group_ends(rig: Checking) -> None:
@@ -397,15 +401,16 @@ def _candidate(rig: Checking, *, slot: bool) -> AttemptKey:
 
 
 def test_rounds_never_land_never_relaunch_and_never_release_a_land_s_slot(rig: Checking) -> None:
-    """`land` and `landed` are silent; a land's `release` (its candidate validated, still holding its slot) is reported,
+    """`land` is reported once per change (never the land itself), `landed` is silent; a land's `release` (its candidate
+    validated, still holding its slot) is reported,
     logged once, never released by the round; nothing is relaunched or admitted for the task."""
     implemented(rig)
     rig.bodies = ["passed"]
     rig.round()
-    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == []
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]
     key = _candidate(rig, slot=True)
     lands = land_store.LandStore(lambda: rig.con)
-    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == []  # pending: `tl step land` resumes it
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]  # pending: `tl step land` resumes it
     lands.conclude(key, "passed", None, rig.now)
     reserved = rig.con.execute("SELECT slot,attempt_id FROM reservation").fetchall()
     assert rig.round(frozenset()) == [("tl-1", "check", "report", "release")] and rig.last.stopped == "no_free_slot"
@@ -423,7 +428,7 @@ def test_a_landed_task_is_silent_in_every_round(rig: Checking) -> None:
     key = _candidate(rig, slot=False)
     lands = land_store.LandStore(lambda: rig.con)
     lands.record_delivery(key, rig.checks_commit(rig.key("tl-1")), rig.now)
-    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == []  # delivered, not closed: the land closes it
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]  # delivered, not closed: the land closes it
     lands.record_close(key, "closed", rig.now)
     assert rig.next_words() == {"tl-1": ("check", "landed")} and rig.round() == [] and rig.round() == []
     assert rig.starts == 1 and rig.launched == ["tl-1", "tl-1"] and rig.tracker.claims == ["tl-1"]
@@ -448,6 +453,6 @@ def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_
     rig.tracker.down = set()
     assert rig.round() == [("tl-1", "check", "hold", "refused refused:retired")]
     assert rig.rows() == [("tl-1", 1, "concluded", "failed"), ("tl-1", 2, "concluded", "passed")]
-    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == []
+    assert rig.next_words() == {"tl-1": ("check", "land")} and rig.round() == [LAND_LINE]
     bead = rig.tracker.beads["tl-1"]
     assert (bead.assignee, bead.labels) == ("taskloop", ("auto",)) and rig.tracker.holds == ["labels tl-1 auto"]  # no label written

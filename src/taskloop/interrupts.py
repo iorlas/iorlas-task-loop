@@ -1,10 +1,12 @@
-"""The rounds process's own Ctrl-C: the only signal use in factory source (CLAUDE.md, `.importlinter` one-signal-owner).
+"""The rounds process's own Ctrl-C and SIGTERM: the only signal use in factory source (CLAUDE.md, `.importlinter`
+one-signal-owner).
 
 While `tl step rounds` runs, a SIGINT handler sets a flag (`stopping`), puts the previous disposition back (Python's
 `default_int_handler` in a terminal, so the next press is the ordinary `KeyboardInterrupt`: the abrupt stop) and says one
-line; on exit the previous disposition is restored. A process started with SIGINT ignored (`SIG_IGN`) keeps it ignored:
-nothing is installed and Ctrl-C is not re-enabled. SIGINT only, this process only: it sends no signal and controls no
-other process. Tests never install it.
+line; on exit the previous disposition is restored. A process started with SIGINT ignored (`SIG_IGN`: `nohup`, `&`, an
+agent's background shell) keeps it ignored and says so once (`IGNORED`). SIGTERM is the abrupt stop in every case: it
+raises `KeyboardInterrupt`, so rounds write their `rounds stopped abrupt` line. This process only: it sends no signal and
+controls no other process. Tests never install it.
 """
 
 import signal
@@ -14,6 +16,7 @@ from types import FrameType
 from typing import Final
 
 NOTICE: Final = "Stopping after the current move; Ctrl-C again to exit at once."
+IGNORED: Final = "Ctrl-C is ignored in this process (started with SIGINT ignored); only SIGTERM stops these rounds, abruptly."
 
 
 class Interrupts:
@@ -34,26 +37,34 @@ class Interrupts:
         self.say(NOTICE)
 
 
+def terminated(_number: int, _frame: FrameType | None) -> None:
+    """SIGTERM is the abrupt stop: the same exception as the second Ctrl-C."""
+    raise KeyboardInterrupt
+
+
 @contextmanager
 def installed(say: Callable[[str], object]) -> Generator[Interrupts]:
-    """The handler for the block's life (main thread only); the previous disposition back when it ends, raised or not
-    (`default_int_handler` when Python cannot name it)."""
+    """The handlers for the block's life (main thread only); the previous dispositions back when it ends, raised or not
+    (`default_int_handler` when Python cannot name SIGINT's)."""
     found = signal.getsignal(signal.SIGINT)
     previous = signal.default_int_handler if found is None else found
+    term = signal.signal(signal.SIGTERM, terminated)
 
     def restore() -> None:
         signal.signal(signal.SIGINT, previous)
 
     interrupts = Interrupts(say, restore)
-    if previous == signal.SIG_IGN:
-        yield interrupts
-        return
 
     def pressed(_number: int, _frame: FrameType | None) -> None:
         interrupts.press()
 
-    signal.signal(signal.SIGINT, pressed)
     try:
-        yield interrupts
+        if previous == signal.SIG_IGN:
+            say(IGNORED)
+            yield interrupts
+        else:
+            signal.signal(signal.SIGINT, pressed)
+            yield interrupts
     finally:
         restore()
+        signal.signal(signal.SIGTERM, signal.SIG_DFL if term is None else term)

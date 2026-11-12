@@ -17,7 +17,7 @@ from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
 from taskloop.round import NextRequest, run_round
 from taskloop.rounds import RoundsRequest, run_rounds
-from taskloop.step_guide import HELD, ROUNDS, STEP_ONLY
+from taskloop.step_guide import ROUNDS, STEP_ONLY
 from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
 
@@ -51,28 +51,28 @@ def register(commands: Parsers) -> None:
     adopt.add_argument("--count", type=int, help="Slots s1..sN (overrides the machine config's slot_count)")
     _common(adopt, "--root", "--db")
     step = _add(commands, "step", f"Step attempts ({STEP_ONLY})").add_subparsers(dest="operation", required=True)
-    start = _add(step, "start", f"Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
-                 f"re-run failed checks on the same commit; {STEP_ONLY}. {HELD}")
+    start = _add(step, "start", "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
+                 "re-run failed checks on the same commit; the claim stays held (see the glossary's claim row)")
     start.add_argument("task_id", metavar="TASK")
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _common(start, "--db", "--artifacts")
-    status = _add(step, "show", f"The task's attempt, its entry, setup run, result and next action (read-only; {STEP_ONLY})")
+    status = _add(step, "show", "The task's attempt, its entry, setup run, result and next action (read-only)")
     status.add_argument("task_id", metavar="TASK")
     status.add_argument("--backlog", required=True)
     _common(status, "--db", "--artifacts")
-    listing = _add(step, "list", f"Every task's current attempt with its next action (read-only; {STEP_ONLY})")
+    listing = _add(step, "list", "Every task's current attempt with its next action (read-only)")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:*, hold or unknown")
     _common(listing, "--db")
-    verify = _add(step, "verify", f"Commit the step's listed files and verify them, then release a clean slot and publish a verified "
-                  f"result; an agent step's only, never the checks ({STEP_ONLY})")
+    verify = _add(step, "verify", "Commit the step's listed files and verify them, then release a clean slot and publish a verified "
+                  "result; an agent step's only, never the checks")
     verify.add_argument("task_id", metavar="TASK")
     verify.add_argument("--backlog", required=True)
     _common(verify, "--db")
     release = _add(step, "release", "Release the slot of a step that ended (parked where it was admitted, the claim kept); with --abandon, "
                    "of any step whose entry and agent or checks are stopped, and return the tracker claim (a land candidate's slot "
-                   f"first, then the check step's, then its implement step's claim) ({STEP_ONLY})")
+                   "first, then the check step's, then its implement step's claim)")
     release.add_argument("task_id", metavar="TASK")
     release.add_argument("--backlog", required=True)
     release.add_argument("--abandon", action="store_true", help="Throw the attempt away and give the task back; `tl step start` "
@@ -82,7 +82,7 @@ def register(commands: Parsers) -> None:
                       "step is done to the next step (no label check), start approved ready tasks in the free slots left, publish "
                       "verified results, hold each task a round took that stopped (its label removed, `held` added, the claim "
                       "returned, one comment: `bd list --label held`; adding the label back takes it again at plan) and remove "
-                      f"`held` once a held task is taken again; {STEP_ONLY}. {HELD}"))
+                      "`held` once a held task is taken again"))
     rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
@@ -105,7 +105,8 @@ def _land_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("task_id", metavar="TASK")
     parser.add_argument("--backlog", required=True)
     parser.add_argument("--checkout", required=True, help="Your checkout of the repository: its origin is fetched and pushed")
-    parser.add_argument("--minutes", type=int, required=True, help="Deadline of a validation block of S if one runs, from now")
+    parser.add_argument("--minutes", type=int, help="Deadline of the validation of S, from now; needed only when it runs (main moved "
+                        "or its required names changed), never for --summary or --withdraw")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--summary", action="store_true", help="Print the land summary (the facts to read before landing); "
                       "records, reserves, pushes and closes nothing")
