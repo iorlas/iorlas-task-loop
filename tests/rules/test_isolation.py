@@ -42,10 +42,10 @@ def test_noneditable_install_matches_current_source() -> None:
 SHARED = {
     "git-porcelain": "git-porcelain-v0.18.1",
     "beads-client": "beads-client-v0.2.0",
-    "any-agent": "any-agent-v0.8.0",
+    "any-agent": "any-agent-v0.9.0",
     "sqlite-store": "sqlite-store-v0.1.0",
     "process-lock": "process-lock-v0.2.1",
-    "stream-proc": "any-agent-v0.8.0",
+    "stream-proc": "any-agent-v0.9.0",
 }
 
 
