@@ -45,8 +45,8 @@ GUIDE = {
     "release": "The step ended; its slot is still held. Remove the listed files if any, then `tl step release`; `--abandon` also "
     "gives the task back (not once a land's S is, or may be, on origin's main: then `tl step land`, which retries its "
     "candidate's release first).",
-    "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl step start` admits a fresh "
-    "attempt.",
+    "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). A round starts a fresh "
+    "attempt once the task carries the approval label (the one restart route).",
     "publish": PUBLISH,
     "advance": "The step is verified and on `origin`. The next `tl step next` round (or `tl step rounds`) starts the next step "
     "once a slot is free, before any new task, oldest first; by hand, `tl step start <task>`. Either way one tracker read "
@@ -65,7 +65,8 @@ GUIDE = {
     "running": "Its entry runs; the round leaves it alone.",
     "attempted": "Open in the tracker while factory.db holds its attempt: the claim was returned or lapsed. `tl step show` it; "
     "rounds never take it again.",
-    "abandoned_skip": "Abandoned here: rounds never re-admit it; `tl step start` admits a fresh attempt.",
+    "abandoned_skip": "Abandoned here, not restarted: a hold's abandon is answered by adding the label back; a half-done one is finished "
+    "by `tl step release --abandon`.",
     "no_free_slot": "No slot is free: each one is reserved, or unusable (missing, dirty, on another branch: the detail and the round log's "
     "`unusable` lines name it and why; fix it or `tl slot adopt`). `tl step rounds` fills a freed slot seconds after.",
     "unusable": "A slot no attempt holds cannot be used (missing, dirty, redirected or on a branch: `unusable:<slot>:<why>`, its "

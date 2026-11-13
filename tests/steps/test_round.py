@@ -26,7 +26,7 @@ from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Seen, S
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.hold import HoldPorts
-from taskloop.hold_store import HoldStore
+from taskloop.hold_store import HoldInsert, HoldStore
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     Advance,
@@ -194,6 +194,17 @@ def seed(con: sqlite3.Connection, task_id: str, attempt_id: str, *, phase: str =
 
 def released(con: sqlite3.Connection, attempt_id: str, claim: str) -> None:
     con.execute("INSERT INTO slot_release VALUES (?,?,1,?,5,?)", (attempt_id, f"token-{attempt_id}", HEAD, claim))
+
+
+def held(con: sqlite3.Connection, attempt_id: str) -> None:
+    """The attempt's hold, finished with a label word that is no answer (`not_ours`): the factory abandoned it and only a person's
+    answer takes it again; the round skips it as `abandoned`."""
+    con.execute("UPDATE attempt SET label='auto' WHERE attempt_id=?", (attempt_id,))  # only a round-taken attempt is held
+    store = HoldStore(lambda: con)
+    row = store.labelled(attempt_id, store.insert(HoldInsert(attempt_id, attempt_id, "stuck:expired_admitted", 10.0)).rev, "not_ours", 11.0)
+    leased = store.commenting(attempt_id, row.rev, 12.0)
+    assert leased is not None
+    store.commented(attempt_id, leased.rev, 13.0)
 
 
 def moves(found: Round) -> list[tuple[str, str, str]]:
@@ -453,9 +464,20 @@ def test_an_empty_label_a_bad_choice_or_minutes_out_of_range_are_refused_before_
     assert ready.ready_reads == [] and bench.lines == [] and bench.launcher.calls == []
 
 
+def test_a_task_a_person_abandoned_is_restarted_only_while_the_tracker_lists_it_under_the_label(factory: sqlite3.Connection) -> None:
+    seed(factory, "t-1", "gone-1")
+    released(factory, "gone-1", "unclaimed")  # `tl step release --abandon`: the claim is back, no hold
+    admission = Admission()
+    idle = Bench(factory, ReadyTracker([bead("t-1")], ready=[]), admission).round()
+    assert moves(idle) == [] and admission.requests == []  # no approval label on it: nothing starts, nothing is skipped
+    found = Bench(factory, ReadyTracker([bead("t-1")], ready=["t-1"]), admission).round()
+    assert moves(found) == [("t-1", "start", "started")] and admission.requests == ["t-1"]
+
+
 def test_skips_abandoned_attempted_assigned_and_ancestry_and_a_second_round_admits_nothing_new(factory: sqlite3.Connection) -> None:
     seed(factory, "t-1", "gone-1")
     released(factory, "gone-1", "unclaimed")
+    held(factory, "gone-1")
     seed(factory, "t-2", "lapsed", entry=ENTRY)
     ready = ReadyTracker(
         [bead("t-1", 0), bead("t-2", 0), bead("t-3", 0, assignee="person"), bead("t-4", 0, parent="missing"), bead("t-5", 4)],
@@ -608,6 +630,7 @@ def test_an_admission_skip_stays_quiet_across_rounds_with_no_free_slot(factory: 
     the next round with a free slot does not write it again."""
     seed(factory, "t-1", "gone-1")
     released(factory, "gone-1", "unclaimed")
+    held(factory, "gone-1")
     bench = Bench(factory, ReadyTracker([bead("t-1")], ready=["t-1"]))
     found = bench.round(replace(REQUEST, quiet=frozenset()))
     factory.execute("DELETE FROM slot WHERE repo_id='other'")
@@ -681,6 +704,7 @@ def test_a_skip_repeated_every_round_is_a_move_so_moves_0_closes_only_once_the_s
     line `round moves=1` is quiet too; the first round without the skip writes `round moves=0`."""
     seed(factory, "t-1", "gone-1")
     released(factory, "gone-1", "unclaimed")
+    held(factory, "gone-1")
     bench = Bench(factory, ReadyTracker([bead("t-1")], ready=["t-1"]))
     found = bench.round(replace(REQUEST, quiet=frozenset()))
     assert [line.split(" ")[2:] for line in bench.lines] == [["t-1", "plan", "skip", "abandoned", "gone-1"], ["round", "moves=1"]]

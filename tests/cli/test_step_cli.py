@@ -56,9 +56,9 @@ STATUS = AttemptView(
 ERROR = {"kind", "reason", "message"}  # every refusal or unknown but an admission's
 ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step start`
 STATUS_KEYS = {
-    "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "entry_process",
-    "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release", "published",
-    "checks", "land", "label", "hold", "hold_due", "last_command",  # the hold's keys are additive (tl-8bh9.14.9 section 10)
+    "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "status",
+    "entry_process", "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release",
+    "published", "checks", "land", "label", "hold", "hold_due", "last_command",  # the hold's keys are additive (tl-8bh9.14.9 section 10)
 }
 REPEAT = AttemptView(
     "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
@@ -196,7 +196,7 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), RUNNING_SETUP), 0,
      [f"Setup: run 3 unfinished at {D}; log /a/d/setup-3.log"], STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (["step", "list", "--stuck"], Listed((STATUS,)), 0,
-     ["task\tbacklog\tstep\tattempt\tslot", "tl-1\ttasks\tplan\t1/3\ts1\tcaptured\tgone\tpending verification\tverify"], {"attempts"}),
+     ["task\tbacklog\tstep\tattempt\tslot", "pending verification\tsettling\tverify"], {"attempts"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log")), 0,
      ["Attempt: attempt (1 of at most 3)\nSlot: s1"], STATUS_KEYS | {"directory", "entry_log", "setup", "failed_checks"}),
     (["step", "verify", "tl-1", "--backlog", "tasks"], VerifiedTask("reused", "tasks", "tl-1", "attempt", "released", "published"), 0,
@@ -461,8 +461,8 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
                      "attempt_id": None}
     assert main(["step", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
-    assert listed.startswith("task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\thold cause\tlast command\n"
-                             "tl-1\ttasks\tplan\t1/3\ts1\t")
+    head = "task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tstatus\tnext\thold cause\tlast command"
+    assert listed.startswith(f"{head}\ntl-1\ttasks\tplan\t1/3\ts1\t")
     assert main(["step", "list", "--db", str(db), "--json"]) == 0
     assert [each["step"] for each in json.loads(capsys.readouterr().out)["attempts"]] == ["plan"]
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0

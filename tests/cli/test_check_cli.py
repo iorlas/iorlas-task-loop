@@ -115,7 +115,8 @@ def test_show_json_adds_the_checks_facts_and_results(capsys: pytest.CaptureFixtu
 def test_list_shows_the_check_step_s_row_and_json(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     listed = Listed((_with(ChecksView(ROW, RESULTS)),))
     out = run(["step", "list"], listed, capsys, monkeypatch)
-    assert "tl-1\ttasks\tcheck\t2\ts1\tconcluded\tgone\tcollected failed:test:failed\tdone\t-\t-" in out.splitlines()
+    row = "tl-1\ttasks\tcheck\t2\ts1\tconcluded\tgone\tcollected failed:test:failed\tneeds a person (failed:test:failed)\tdone\t-\t-"
+    assert row in out.splitlines()
     data = json.loads(run(["step", "list", "--json"], listed, capsys, monkeypatch))
     assert data["attempts"][0]["checks"]["results"][0]["log"] is None  # logs are `tl step show`'s
 

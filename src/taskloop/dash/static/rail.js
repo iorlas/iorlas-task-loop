@@ -49,7 +49,7 @@ export function causeLink(a, select) {
 
 function row(a, selected, select) {
   const st = STATE[a.state];
-  const li = el("li", "relative pl-3");
+  const li = el("li", `relative pl-3 ${a.past ? "opacity-60" : ""}`); // past: a chain a person abandoned
   const dotEl = dot(st.dot);
   dotEl.classList.add("absolute", "-left-[3px]", "top-[0.95rem]");
   const btn = el("button", `block w-full rounded px-2 py-1.5 text-left ${selected ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`);
@@ -58,7 +58,7 @@ function row(a, selected, select) {
   const top = el("span", "flex items-baseline gap-2");
   top.append(
     el("span", `text-[13px] ${selected ? "font-semibold" : "font-medium"}`, `${stepOf(a.step).emoji} ${stepOf(a.step).label}`),
-    el("span", "text-[11px] text-slate-500 dark:text-slate-400", `try ${a.n}`),
+    el("span", "text-[11px] text-slate-500 dark:text-slate-400", a.past ? `try ${a.n}, past` : `try ${a.n}`),
     el("span", "ml-auto text-[11px] tabular-nums text-slate-500 dark:text-slate-400", lasted(a)),
   );
   btn.append(top);
@@ -98,6 +98,7 @@ export function rail(list, t, selected, select) {
     if (a.after) ol.append(jump(a, list, i, select));
     ol.append(row(a, selected.step === a.step && selected.n === a.n, select));
   });
+  if (t.column === "waiting") return wrap.append(ol), wrap; // no current chain: everything above is past, nothing is pending
   const last = list.findLast((x) => x.step !== VERIFY.id);
   const reached = STEPS.findIndex((x) => x.id === last?.step);
   for (const s of STEPS.slice(reached + 1, -1)) {

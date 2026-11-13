@@ -137,7 +137,7 @@ def test_the_needs_owner_guide_is_not_repeated_once_the_attempt_is_abandoned(fac
     shown = show_attempt(reads, tmp_path, "tasks", "tl-1")
     assert isinstance(shown, Shown)
     text = "\n".join(human("show", shown, tmp_path / "factory.db"))
-    assert "answered `needs_owner`" not in text and "`tl step start`" in text
+    assert "answered `needs_owner`" not in text and "approval label" in text
 
 
 def test_a_task_started_by_hand_that_fails_is_reported_never_held(factory: Factory) -> None:
@@ -291,12 +291,12 @@ def test_a_hold_whose_label_step_never_ran_is_superseded_and_held_removed_once_t
     assert factory.tracker.holds[-1] == "clear tl-1" and factory.round() == [("tl-1", "plan", "report", "release")]
 
 
-def test_a_person_s_own_abandon_keeps_the_abandoned_skip(factory: Factory) -> None:
+def test_a_person_s_own_abandon_is_restarted_by_the_round_under_the_label_and_holds_nothing(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]
     factory.round()
     found = factory.store.attempt_of("tasks", "tl-1")
     assert found is not None and factory.releaser().release(found[0], True)  # the person's `tl step release --abandon`
-    assert factory.round() == [("tl-1", "plan", "skip", "abandoned")] and factory.tracker.holds == []
+    assert factory.round() == [("tl-1", "plan", "start", "started")] and factory.tracker.holds == []
 
 
 def test_a_publication_refused_branch_moved_is_held_once_instead_of_pushed_every_round(factory: Factory) -> None:
