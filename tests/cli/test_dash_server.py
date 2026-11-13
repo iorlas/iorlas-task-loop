@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail
-from taskloop.dash_server import DashPorts, DashServer, Hub
+from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
 
@@ -121,6 +121,12 @@ def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served
     assert get(server, "/") == (200, b"<html>page</html>")
     assert get(server, "/api/tasks/unknown")[0] == 200 and get(server, "/api/tasks/broken")[0] == 503
     assert get(server, "/secret.txt")[0] == 404 and get(server, "/../secret.txt")[0] == 404 and get(server, "/api/tasks/a%2F..")[0] == 404
+
+
+def test_every_file_of_the_static_page_is_served_so_no_import_ends_in_a_404() -> None:
+    page = Path(__file__).resolve().parents[2] / "src/taskloop/dash/static"
+    shipped = {path.name for path in page.iterdir() if path.suffix in {".html", ".js", ".css"}} - {"dash.input.css"}
+    assert shipped == set(PAGES.values())
 
 
 def test_only_a_request_addressed_to_the_local_server_is_answered(served: tuple[Ports, DashServer]) -> None:
