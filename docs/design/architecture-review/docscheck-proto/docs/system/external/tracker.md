@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 owns_facts: [requirements, dependencies, questions, answers, discussion, task state]
 port: src/taskloop/tracker_client.py
 used_by: [area/engine]

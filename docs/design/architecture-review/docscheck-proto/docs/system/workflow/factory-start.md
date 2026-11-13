@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 goal: "Rounds run against an intact factory.db with every unfinished attempt reconciled."
 actors: [persona/owner]
 areas: [area/storage, area/engine]

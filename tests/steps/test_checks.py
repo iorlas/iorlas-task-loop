@@ -11,11 +11,12 @@ import pytest
 from doubles import CHECKS, REQUIRED, Command, FakeSetupProcess, PinnedViews
 from git_porcelain import GitUnavailable, Recorded, WorktreeInfo
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from sqlite_store import begin_immediate
 
 from taskloop.access import folders
 from taskloop.agent_credentials import PUSH_REFUSED, scrubbed
-from taskloop.attempt_types import AttemptResult
-from taskloop.check_store import CheckStore, Conclusion, Required, ResultRow, unsettled
+from taskloop.attempt_types import AttemptKey, AttemptResult
+from taskloop.check_store import ChecksAdmitted, CheckStore, Conclusion, Required, ResultRow, insert, unsettled
 from taskloop.checks import Block, BlockPorts, BlockTarget, CheckSink, argv_digest, check_env, completed, conclusion, differs, main_seen
 from taskloop.evidence_files import CappedLog, EvidenceFiles, capped
 from taskloop.profile import Check
@@ -81,6 +82,24 @@ def test_every_check_runs_in_order_after_its_identity_is_committed(bench: Bench)
     assert bench.log("check") == "$ just check\ndone\nexit 0\n" and bench.log("lint") == "$ ruff .\ndone\nexit 1\n"
     stored = bench.con.execute("SELECT name,argv_digest,timeout,proc_start,boot FROM check_result ORDER BY position").fetchall()
     assert stored[0] == ("check", argv_digest(("just", "check")), 600, "start-501", "boot")
+
+
+def test_a_new_checks_attempt_runs_commands_despite_a_previous_pass(bench: Bench) -> None:
+    assert bench.run(CHECK, TEST) is None and bench.verdict() == ("passed", None)
+    key = AttemptKey("new-checks", "new-token", 2)
+    with begin_immediate(bench.con):
+        bench.con.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=11,released_at=12,parked=?",
+                          (bench.x,))
+        bench.con.execute("DELETE FROM reservation WHERE attempt_id=?", (CHECKS.attempt_id,))
+        bench.con.execute("INSERT INTO reservation VALUES ('s2','r',2,?)", (key.attempt_id,))
+        insert(bench.con, ChecksAdmitted(key, "implement", 2, "s2", bench.x, bench.x, REQUIRED, 100))
+    before = len(bench.process.calls)
+    sink = CheckSink(bench.store, key, EvidenceFiles(bench.artifacts), bench.clock)
+    block = Block(BlockPorts(bench.process, bench.process.lingering, bench.clock))
+    assert block.run(bench.target(), sink, bench.store.block(key), (CHECK, TEST)) is None
+    assert len(bench.process.calls) == before + 2
+    assert conclusion(bench.store.results(key), REQUIRED) == ("passed", None)
+    assert conclusion(bench.store.results(CHECKS), REQUIRED) == ("passed", None)
 
 
 def test_each_command_runs_in_the_slot_with_the_scrubbed_environment_and_the_nearer_limit(bench: Bench) -> None:

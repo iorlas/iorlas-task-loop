@@ -105,7 +105,7 @@ Refusal words are `refused <word>` (exit 1) unless written `unavailable` (exit 3
 4. Its latest checks attempt: concluded `passed`, released, not abandoned, else **`not_checked`** with that attempt's
    `Next` and result (a failed one: re-run with `tl step start`, or abandon). With `--no-change` any concluded, released,
    not abandoned checks attempt serves (section 5 step 6).
-5. **The latest land candidate** of this checks attempt (section 11), if any, decides where to resume (section 12). A
+5. <a id="land-resume-decision"></a>**The latest land candidate** ([ADR 08](../tl-8bh9.14.119/adr-08-land-resume.md)) of this checks attempt (section 11), if any, decides where to resume (section 12). A
    candidate still holding its slot is released first (the rerun retries a held release before anything else, closing or
    answering `already_landed` included). A closed one then answers `already_landed` with no Git or tracker call; a
    delivered one goes straight to the close (section 8), whose own `bd show` is its tracker read (no step 6-8 read).

@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 read_when: before touching SQL, a store module, a transaction, factory.db or a row type
 owns: ["src/taskloop/*_store.py", "src/taskloop/factory_schema.py"]
 touches: [area/engine, external/tracker, external/git]

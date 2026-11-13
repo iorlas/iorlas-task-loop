@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 nature: agent
 can:
   - {does: "commit on its task branch inside its assigned slot", through: external/git}

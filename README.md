@@ -4,7 +4,10 @@ The successor task factory implements plan, implement and checks, task holds, ex
 read-only dashboard. It admits approved tasks into free slots, publishes verified agent results as `task/<id>` on
 `origin`, and runs the repository profile's checks. Before implementation and checks, it prepares the slot's
 environment and runs the profile's `setup` (Linux only); the agent works offline with that environment.
-Rounds advance tasks through checks and stop before land. The person delivers a checked task with `tl step land`.
+Rounds advance tasks through checks. Land defaults to `manual`: the person delivers a checked task with `tl step land`.
+With `land: auto` in the target profile read from origin's `main`, a round runs the same land operation for at most
+one task per round. Refusals about the task's change hold it with the recorded cause, preventing repeated attempts
+until the person answers. Other refusals leave it waiting; unavailable results can be retried.
 Review remains future work; the retained designs describe more than the implemented factory.
 
 - `tl repo inspect PATH [--json]` reports the local repository identity, common directory, selected checkout and origin.
@@ -31,7 +34,8 @@ Review remains future work; the retained designs describe more than the implemen
 - `tl step land TASK --backlog BACKLOG --checkout PATH` is the person's delivery command: squash the checked commit
   onto origin's `main`, validate again when required, push without force, then close the task in the local tracker.
   Use `--summary` to inspect first. Some lands require `--minutes N` for validation. Reruns reconcile unfinished actions;
-  tracker synchronization remains the person's responsibility. Publishing a task branch does not land it.
+  changes to what decides a pass require `--accept-gate-changes` when reported by land. Tracker synchronization remains
+  the person's responsibility. Publishing a task branch does not land it.
 
 A required check that exits nonzero can repeat implementation after its checks slot is released. The next agent starts
 at the checked commit in a free clean slot, with the first failed required check's name, exact argv and bounded output
@@ -65,6 +69,8 @@ The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; stat
 is the reference; the design index links each slice's plan and implementation evidence. `tl plan` is no longer a command.
 The previous implementation remains in Git history. [docs/design/INDEX.md](docs/design/INDEX.md) lists every design folder
 and document; [docs/glossary.md](docs/glossary.md) holds the vocabulary, the commit letters and the CLI flag table.
+The [decision records](docs/design/INDEX.md#decision-records) distinguish accepted decisions, later qualifications
+and their enforcing tests.
 
 Python 3.15 and the tool versions in `mise.toml` are required. Run `mise install` after
 trusting the repository configuration through normal mise setup.

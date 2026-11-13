@@ -15,6 +15,8 @@ No source, task priority, check command or configuration changed; no live or ful
 
 ## Owner decision, 2026-11-09
 
+See [ADR 04](../tl-8bh9.14.119/adr-04-check-results.md) for current scope and tests. Current-attempt results and unfinished land continuation remain required state.
+
 Denis approved the proposed check-pipeline simplifications and the discussion roadmap: remove historical successful-check
 caching and carry-forward/closure proofs, agent run_checks/requestable/request-feedback machinery, separate stage/gate/both
 selection and unnecessary routine prechecks. One shared validation operation owns the mandatory configured check set.

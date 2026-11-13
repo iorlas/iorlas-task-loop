@@ -1,5 +1,7 @@
 # Questions and decisions: backend-neutral options
 
+Status: **design**. Accepted decisions and pending proposals are distinguished below; historical source observations are not a delivery receipt. Explicit holds remain in force except where superseded.
+
 The [settled working design](balanced-design.md) records the conclusion after three further Astra balancing rounds;
 it supersedes conflicting exploratory recommendations here. This document remains supporting analysis.
 
