@@ -4,6 +4,7 @@ was given and the outputs of its failed checks. Display only. The lines of an ag
 behind the evidence files; a checks attempt's are its results."""
 
 from dataclasses import dataclass, replace
+from difflib import SequenceMatcher
 
 from any_agent.activity import Activity
 
@@ -11,6 +12,7 @@ from taskloop.activity_file import ActivityPage
 from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
+from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.dash_board import card_of, tries
 from taskloop.dash_model import (
@@ -26,8 +28,11 @@ from taskloop.dash_model import (
     State,
     TaskDetail,
     TrackerDetail,
+    Verification,
     iso,
 )
+from taskloop.dash_verify import STEP as VERIFICATION
+from taskloop.dash_verify import applies, verification
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldStore
 from taskloop.operations import Failed
@@ -40,6 +45,7 @@ class TaskPorts:
     tracker: DashTracker
 
 
+STEP_CHECKS = "checks"
 FEED_LINES = 20  # the agent's latest actions an attempt's detail carries
 FOLLOW_LINES = 20  # the tail a replaced follow answers with
 
@@ -80,8 +86,9 @@ def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
     return _page(ports.files.activity_tail(key, FEED_LINES) if cursor is None else ports.files.activity_after(key, cursor, FOLLOW_LINES))
 
 
-def _agent(ports: TaskPorts, row: AttemptRow, number: int, previous: int | None) -> AttemptDetail:
-    result = collect(ports.reads.store, row.key)
+def _agent(
+    ports: TaskPorts, row: AttemptRow, number: int, result: AttemptResult, previous: int | None, led_by: int | None
+) -> AttemptDetail:
     state: State = "running" if result.status != "collected" and row.held else "succeeded" if succeeded(result) else "failed"
     started = ports.files.started_at(row.key)
     ended = None if state == "running" or row.release is None else row.release.released_at
@@ -90,15 +97,24 @@ def _agent(ports: TaskPorts, row: AttemptRow, number: int, previous: int | None)
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
     page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
     return AttemptDetail(row.step, number, state, iso(started), iso(ended), result.reason or result.status, after, reason,
-                         previous if after == "repeat" else None, begun + page.events, page.cursor)
+                         previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None)
 
 
-def _agent_body(ports: TaskPorts, row: AttemptRow) -> AttemptBody:
-    result = collect(ports.reads.store, row.key)
+def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
+    """The line ranges [start, end) of `now` that `before` lacks: what a repeat's prompt added to the attempt it repeats."""
+    found = SequenceMatcher(None, before.splitlines(), now.splitlines(), autojunk=False).get_opcodes()
+    return tuple((start, end) for kind, _a, _b, start, end in found if kind in ("insert", "replace"))
+
+
+def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody:
     shown = ports.files.text_bounded(row.key, "answer.txt")
     disposition = None if result.execution is None else result.execution.answer.disposition
     answer = None if shown is None else Answer(disposition or "none", shown[0], shown[1])
-    return AttemptBody(ports.files.text(row.key, "input.txt"), Outcome(result.reason or result.status, answer, (), None))
+    shown = ports.files.text(row.key, "input.txt")
+    earlier = next((each for each in rows if each.key.attempt_id == row.previous_attempt_id), None)
+    before = None if earlier is None else ports.files.text(earlier.key, "input.txt")
+    added = () if shown is None or before is None else added_lines(before, shown)
+    return AttemptBody(shown, Outcome(result.reason or result.status, answer, (), None), added)
 
 
 def _took(result: ResultRow) -> int:
@@ -130,34 +146,66 @@ def _checks_body(ports: TaskPorts, store: CheckStore, row: ChecksRow) -> Attempt
     return AttemptBody(None, Outcome(_checks_state(row)[1], None, lines, None))
 
 
-def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[AttemptRow | None, ChecksRow | None, int], ...]:
-    """The task's attempts oldest first as (agent attempt, checks attempt, its try): the agent attempts numbered within their step
-    across the whole task (`tries`, so a restart at plan never repeats a number),
-    the checks attempts after an implement attempt numbered across the task (a checks try is the check step's, not the implement's)."""
+@dataclass(frozen=True)
+class Link:
+    """One entry of the task's chain: an agent attempt, the verification of one, or a checks attempt, with its try."""
+
+    number: int
+    agent: AttemptRow | None = None
+    checks: ChecksRow | None = None
+    result: AttemptResult | None = None  # the agent attempt's stored result, for it and for its verification
+    verifies: bool = False
+    of: int = 0  # a verification's: the try of the agent attempt it verifies
+    successor: AttemptRow | None = None  # the repeat of the verified attempt, which records what a failed verification listed
+
+
+def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
+    """The task's attempts oldest first: each agent attempt (numbered within its step across the whole task, `tries`, so a restart at
+    plan never repeats a number), its verification when the factory verified it (numbered across the task, between it and what follows),
+    and the checks attempts after an implement attempt (numbered across the task: a checks try is the check step's, not the implement's)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
-    found: list[tuple[AttemptRow | None, ChecksRow | None, int]] = []
+    found: list[Link] = []
     numbers = tries(rows)
-    checked = 0
+    verified = checked = 0
     for row in reversed(rows):
-        found.append((row, None, numbers[row.key.attempt_id]))
+        result = collect(ports.reads.store, row.key)
+        found.append(Link(numbers[row.key.attempt_id], agent=row, result=result))
+        if applies(result):
+            verified += 1
+            successor = next((each for each in rows if each.previous_attempt_id == row.key.attempt_id), None)
+            found.append(Link(verified, agent=row, result=result, verifies=True, of=numbers[row.key.attempt_id], successor=successor))
         for checks in store.of_attempt(row.key.attempt_id) if row.step == "implement" else ():
             checked += 1
-            found.append((None, checks, checked))
+            found.append(Link(checked, checks=checks))
     return tuple(found)
 
 
+def _verification(link: Link) -> tuple[AttemptDetail, Verification]:
+    """The verification row: no start or end of its own is stored, so it has none; its result is the typed words."""
+    row, result = link.agent, link.result
+    if row is None or result is None:
+        raise ValueError("A verification belongs to an agent attempt")
+    found, state = verification(row, link.of, result, link.successor)
+    return AttemptDetail(VERIFICATION, link.number, state, None, None, found.result, None, None, None, ()), found
+
+
 def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDetail, ...]:
-    """Oldest first: each agent attempt (numbered within its step), then the checks attempts after an implement attempt."""
+    """Oldest first: each agent attempt, its verification, then the checks attempts after an implement attempt."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     numbers = tries(rows)
     found: list[AttemptDetail] = []
     earlier: str | None = None
-    for row, checks, number in _chain(ports, rows):
-        if row is not None:
-            found.append(_agent(ports, row, number, numbers.get(row.previous_attempt_id or "")))
-        elif checks is not None:
-            found.append(_checks(store, checks, number, earlier))
+    led: dict[str, int] = {}  # agent attempt id -> the try of its verification
+    for link in _chain(ports, rows):
+        if link.checks is not None:
+            found.append(_checks(store, link.checks, link.number, earlier))
             earlier = found[-1].summary
+        elif link.verifies and link.agent is not None:
+            found.append(_verification(link)[0])
+            led[link.agent.key.attempt_id] = link.number
+        elif link.agent is not None and link.result is not None:
+            previous = link.agent.previous_attempt_id or ""
+            found.append(_agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous)))
     return tuple(found)
 
 
@@ -165,11 +213,17 @@ def build_body(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
     """What one attempt shows besides its lines. None: no such attempt."""
     try:
         store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
-        for row, checks, tried in _chain(ports, ports.reads.store.attempts(backlog, task_id)):
-            if row is not None and (row.step, tried) == (step, number):
-                return _agent_body(ports, row)
-            if checks is not None and ("checks", tried) == (step, number):
-                return _checks_body(ports, store, checks)
+        rows = ports.reads.store.attempts(backlog, task_id)
+        for link in _chain(ports, rows):
+            if link.checks is not None and (STEP_CHECKS, link.number) == (step, number):
+                return _checks_body(ports, store, link.checks)
+            if link.agent is None or link.result is None or link.number != number:
+                continue
+            if link.verifies and step == VERIFICATION:
+                found = _verification(link)[1]
+                return AttemptBody(None, Outcome(found.result, None, (), None, found))
+            if not link.verifies and link.agent.step == step:
+                return _agent_body(ports, link.agent, link.result, rows)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     return None

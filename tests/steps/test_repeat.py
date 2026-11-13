@@ -245,6 +245,7 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
     each, new = shown.view, launcher.calls[0]
     assert (each.attempt_id, each.number, each.previous_attempt_id, each.repeat_reason) == (new.attempt_id, 2, "attempt", "unsafe")
     assert (each.phase, each.next, each.earlier) == ("admitted", "start", (("attempt", "unsafe"),)) and probed == []
+    assert AttemptStore(lambda: registered).attempts("tasks", "tl-1")[0].repeat_listing != ()  # the verification's listing is stored
     data = as_data(shown)
     assert (data["number"], data["previous_attempt_id"], data["repeat_reason"], data["earlier"]) == (2, "attempt", "unsafe", ["attempt"])
     listed = list_attempts(reads)

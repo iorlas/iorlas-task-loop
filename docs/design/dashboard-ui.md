@@ -10,7 +10,7 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
 - Read-only: no buttons that change anything, no auth, no charts, no history pages. The controls are the theme switch,
   the board layout switch and drawer navigation.
 - One board on one screen. A card is a task, newest activity first in its column. Columns: Ready, Plan, Implement,
-  Checks, Land, Held, Landed. The Land column is the person's: a card there says *Waiting for you* with the command (`tl step land <id>`, rounds never land) and says *Delivering* only while a land process is observed running (tl-8bh9.14.72). (The glossary says *ready* for a task not yet admitted; the interview said "Waiting").
+  Checks, Land, Held, Landed. The Land column is the person's: a card there says *Waiting for you* with the command (`tl step land <id>`, rounds never land) and says *Landing* only while a land process is observed running (tl-8bh9.14.72; the glossary's word is land, never "delivering"). (The glossary says *ready* for a task not yet admitted; the interview said "Waiting").
 - Two layouts of the same board: **Steps** (one column per step) and **By slot** (swim lanes: one row per slot, plus
   "no slot" for tasks holding none). Switching animates the cards into place.
 - A card shows task id and title, where the task is (`step 2 of 4 · try 1`: a step and a try are different things; a repeat is a new try of the same step), a *repeat* or *restarted at plan* badge with its reason, time in the
@@ -34,7 +34,7 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
 - The Attempts tab is a master and a detail. Left, the **attempt rail**: every attempt of the task, in the **order they happened, top to bottom** (plan, implement, checks, land, each with its own try number; steps still to come are dim rows below; the drawer opens on the newest attempt), one
   aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
   jump names how the next attempt began: `↻ Repeat of Checks` (the same step again) or `↩ Restarted at plan` (D4, with the time it began and how long ago)
-  with its reason; the label sits above the attempt it began. Between two rows an `⏸ idle 4m 00s` line shows the time between the recorded end of one and the recorded start of the next (5 s and up; both are file or row times, so approximate). Every step of the chain is a row: steps not started are dim `pending` rows, and the Land row is the card's state (pending, waiting for you with the idle time since the checks ended, delivering, delivered). A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
+  with its reason; the label sits above the attempt it began. Between two rows an `⏸ idle 4m 00s` line shows the time between the recorded end of one and the recorded start of the next (5 s and up; both are file or row times, so approximate). Every step of the chain is a row: steps not started are dim `pending` rows, and the Land row is the card's state (pending, waiting for you with the idle time since the checks ended, landing, landed). A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
   - **Lines**: the log grid (below). Opens first for a running attempt. New lines never change the tab, the selection or the
     scroll place: the view follows the end only when it was already at the end. No count in the tab name; a quiet line says
     how many lines are kept and whether it is live. A pause of 2 s or more before a line is a faint `⏸ paused 33s` row (the
@@ -48,6 +48,18 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
   - **Prompt**: exactly what the agent was told in that attempt, repeat feedback included; a step that runs commands
     (checks, land) has none. The chosen tab stays when another attempt is selected, so prompts can be compared.
   An attempt that began as a jump also shows why, naming the attempt it follows ("Repeat of Checks #5").
+  - **Verification** (tl-8bh9.14.134): after an agent attempt whose clean run gave a valid answer the factory commits or keeps, the rail has
+    a row *Verification, try n* between that attempt and what follows (the checks attempt, the repeat or the next step), clickable like an
+    attempt but with a Result only (no lines, no prompt). It shows what the factory checked after the answer, in its order (the
+    slot is on the task branch; every listed path is a plain file it may commit; no ignored file under the listed paths; nothing left
+    uncommitted at the commit; the commit passes the step's rules), each *passed*, *failed* or *not reached*, the typed result
+    (`verified`, `reused`, `rejected:<rule>`, `unsettled:<reason>`, `pending`) and, for an unsettled one that was repeated, the listing the
+    failed check gave (the unsafe path and the leftovers beside it, the ignored paths). A verification has no stored start or end, so it
+    shows a dash and no idle time. A **repeat** of an agent attempt names its cause: *because of Verification, try n →* under its
+    reason, in the rail and in the selected attempt's callout, selecting that row.
+  - A repeat's **Prompt** marks the lines it added to the previous attempt's prompt (a green bar; the count in the label): the opening,
+    the listing and the instructions, not the task text the two prompts share. Computed on the server (a line diff against the previous
+    attempt's `input.txt`, `AttemptBody.added`).
 - Design language: emoji as step and column icons (Plan, Implement, Checks, Land, Held, Landed) and, since 2026-11-12, as the kind of an agent line (see below), never for state
   or log lines. A state is a coloured dot and a word, a badge is one outlined label, a
   reason is a callout (one accent line, no fill: amber repeat, violet back to plan, rose held or failed, sky running,
@@ -116,7 +128,7 @@ number of the current or last attempt of the step (0 before any). `repeat` is `n
 new attempt of the same step, `restart_at_plan` is a task sent back to plan. `step_started_at` starts "time in step"
 (for Landed: time since landing). `last_activity_at` is the sort key (newest first): the last step change or live
 event. `slot` is `null` when the task holds none. `hold_cause` is the sentence the hold owner already shows, only in
-`held`. `land` is `null` outside the `land` column; in it `waiting` (the person has to run `tl step land`) or `delivering` (a land
+`held`. `land` is `null` outside the `land` column; in it `waiting` (the person has to run `tl step land`) or `landing` (a land
 process is observed running).
 
 ### Board snapshot: `GET /api/board`
@@ -148,14 +160,16 @@ stream as `{"kind": "log", "row": <row>}`.
   "attempts": [
     {"step": "implement", "n": 2, "state": "failed", "started_at": "...", "ended_at": "...",
      "summary": "failed: deadline exceeded after 30m",
-     "after": "repeat", "reason": "failed: the agent finished without a diff",
-     "repeat_of": 1,
-     "feed": [ <live event>, ... ]}
+     "after": "repeat", "reason": "unsafe",
+     "repeat_of": 1, "led_by": 1,
+     "feed": [ <live event>, ... ]},
+    {"step": "verification", "n": 1, "state": "failed", "started_at": null, "ended_at": null,
+     "summary": "unsettled:unsafe", "after": null, "reason": null, "repeat_of": null, "led_by": null, "feed": []}
   ]
 }
 ```
 
-`attempts` is every attempt of the task, oldest first. `n` counts per step across the whole task (a restart at plan continues the numbering, so `(step, n)` is unique; the stored per-chain number is not used; the checks step's tries are numbered across the task, not per implement attempt); `repeat_of` is the try of the same step that a `repeat` repeats (`null` otherwise). `state` is `running`, `succeeded` or `failed`;
+`attempts` is every attempt of the task, oldest first. `n` counts per step across the whole task (a restart at plan continues the numbering, so `(step, n)` is unique; the stored per-chain number is not used; the checks step's tries are numbered across the task, not per implement attempt); `repeat_of` is the try of the same step that a `repeat` repeats (`null` otherwise). `led_by` is, for a `repeat` of an agent attempt, the try of the `verification` step whose failure led to it (`null` otherwise). A `verification` entry follows each agent attempt the factory verified (a clean run, a valid answer of effect `commit` or `keep`), numbered across the task; its `state` is `succeeded` (a stored verdict that passed), `failed` (rejected, or unsettled and repeated) or `running` (not yet settled while the attempt holds its slot); its `summary` is the typed result. `state` is `running`, `succeeded` or `failed`;
 `summary` says how it ended (the verdict or conclusion the owner of that fact already states); `ended_at` is `null`
 while running. `after` says how the attempt began: `null` (the previous step succeeded), `repeat` or `restart_at_plan`,
 with the `reason` the engine recorded. `feed` is the last 20 lines of that attempt, oldest first. A task with no attempt answers a waiting card and no attempts. This
@@ -168,12 +182,13 @@ answer never waits for the tracker.
  "result": {"summary": "failed: deadline exceeded after 30m",
             "answer": {"disposition": "incomplete", "text": "...", "truncated": false},
             "checks": [{"name": "types", "passed": false, "duration_ms": 23000, "block": 1, "output": "ERROR ..."}],
-            "output": null}}
+            "output": null, "verification": null},
+ "added": []}
 ```
 
 Read when the Result or Prompt tab is first shown (it reads files), again when the attempt has ended since. `input` is the prompt
 text (`null` for a step that runs commands); `answer` is the agent's answer, `null` before it ends or for checks, and
-`truncated` says the file is longer than the 64 KiB shown; `checks` are the check results with the log tail of each (`output` is
+`truncated` says the file is longer than the 64 KiB shown; `added` is a repeat's `[start, end)` line ranges of `input` that the previous attempt's prompt lacks (empty otherwise). A `verification` attempt has `input` null and `result.verification` = `{of_step, of, listed: [paths], checks: [{name, state}], result, listing: [paths]}`. `checks` are the check results with the log tail of each (`output` is
 `null` when its log is gone). 404: no such attempt.
 
 ### Tracker part: `GET /api/tasks/<id>/tracker`
@@ -255,6 +270,11 @@ Where a fact has no stored owner yet the page shows a proxy or nothing, never a 
   at admission); a checks attempt's is its first check's start; a held task's is the hold's `held_at`; a landed task's the
   land's `closed_at`. End: the slot release or the checks attempt's `concluded_at`, else none (shown as a dash).
 - **Quiet**: from `last-command` (the B10 fact), only while the attempt's entry runs.
+- **Verification**: a verdict is stored (`verification` table) and read through `attempt_result`; the listing of an unsettled one
+  (unsafe path, leftovers, ignored paths) was never stored, so since factory.db v15 the repeat attempt stores it (`attempt.repeat_listing`,
+  written once by `admit_repeat` with the repeat's reason, the one writer; read by the status reads, the one reader). An unsettled
+  verification that was not repeated shows `pending` and no listing; nothing is read from logs or the prompt text. `dash_verify` maps the
+  stored reason to the failing check (a display mapping, in the factory's order).
 - **Restart at plan**: derived (a plan attempt with a task `seq` above 1); the reason is not recorded, so it reads
   "restarted at plan".
 - **Tracker**: priority, labels, design, notes, dates, dependencies and comments through new `tracker.py` reads.

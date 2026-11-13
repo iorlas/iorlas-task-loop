@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from any_agent import events
+from conftest import DONE
 from doubles import CHECKS, REQUIRED, TARGET, D
 from sqlite_store import begin_immediate
 
@@ -165,16 +166,16 @@ def land_of(con: sqlite3.Connection, seen: Seen) -> LandView | None:
     return land_view(store, CheckStore(store.connect, store.begin).of_attempt("implement")[-1], lambda _entry: seen)
 
 
-def test_a_checked_task_nobody_has_landed_waits_for_the_person_instead_of_delivering(checking: sqlite3.Connection) -> None:
+def test_a_checked_task_nobody_has_landed_waits_for_the_person_instead_of_landing(checking: sqlite3.Connection) -> None:
     checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
                      "WHERE attempt_id='checks'", ("d" * 40,))
     assert land_of(checking, "matching") is None and land_state(None) == "waiting"
 
 
-def test_a_task_shows_delivering_only_while_its_land_process_runs(landing: sqlite3.Connection) -> None:
+def test_a_task_shows_landing_only_while_its_land_process_runs(landing: sqlite3.Connection) -> None:
     assert land_state(land_of(landing, "matching")) == "waiting"  # its candidate holds a slot but no land process is registered
     landing.execute("UPDATE land_candidate SET entry_pid=7,entry_start='entry-start',entry_boot='boot' WHERE candidate_id='candidate'")
-    assert land_state(land_of(landing, "matching")) == "delivering"
+    assert land_state(land_of(landing, "matching")) == "landing"
     assert land_state(land_of(landing, "gone")) == "waiting"
 
 
@@ -250,3 +251,66 @@ def test_a_plan_restarted_at_plan_is_its_own_try_that_can_be_read_by_its_number(
     assert first.input == "Plan the actual task" and second.input == "Plan it again after the owner's edit"
     assert isinstance(build_feed(ports, "tasks", "tl-1", "plan", 2, None), FeedPage)
     assert build_feed(ports, "tasks", "tl-1", "plan", 3, None) is None
+
+
+def unsafe_repeat(con: sqlite3.Connection, listing: str = '["src/link.py", "src/stray.py"]') -> None:
+    """`checking`'s implement attempt answered `implemented` (a valid, committing answer) and its verification was unsettled: it was
+    repeated as try 2 for `unsafe`, which stored what the verification listed."""
+    con.execute(DONE[0])
+    con.execute(
+        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+        input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
+        repeat_listing) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
+        schema_version,model,effort,sandbox,deadline,2,3,slot_head,'implement','unsafe',? FROM attempt WHERE attempt_id='implement'""",
+        (listing,))
+
+
+def test_an_unsettled_verification_is_its_own_row_that_names_the_failed_check_and_what_it_listed(
+    checking: sqlite3.Connection, tmp_path: Path,
+) -> None:
+    unsafe_repeat(checking)
+    ports = TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker())
+    found = build_task(ports, "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    assert [(each.step, each.n) for each in found.attempts] == [("implement", 1), ("verification", 1), ("checks", 1), ("implement", 2)]
+    verifying, repeat = found.attempts[1], found.attempts[3]
+    assert (verifying.state, verifying.summary) == ("failed", "unsettled:unsafe")
+    assert (repeat.after, repeat.reason, repeat.repeat_of, repeat.led_by) == ("repeat", "unsafe", 1, 1)
+    body = build_body(ports, "tasks", "tl-1", "verification", 1)
+    assert isinstance(body, AttemptBody) and body.input is None and body.result.verification is not None
+    shown = body.result.verification
+    assert (shown.of_step, shown.of, shown.result, shown.listing) == ("implement", 1, "unsettled:unsafe", ("src/link.py", "src/stray.py"))
+    assert [each.state for each in shown.checks] == ["passed", "failed", "not_run", "not_run", "not_run"]
+
+
+def test_a_stored_verdict_is_a_verification_row_that_passed_or_broke_a_rule(checking: sqlite3.Connection, tmp_path: Path) -> None:
+    checking.execute(DONE[0])
+    checking.execute(DONE[1])
+    ports = TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker())
+    body = build_body(ports, "tasks", "tl-1", "verification", 1)
+    assert isinstance(body, AttemptBody) and body.result.verification is not None
+    assert body.result.verification.result == "verified" and {each.state for each in body.result.verification.checks} == {"passed"}
+    checking.execute("DELETE FROM verification")
+    checking.execute("INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
+                     "VALUES ('implement','implement-token',1,'rejected','paths',5)")
+    broken = build_body(ports, "tasks", "tl-1", "verification", 1)
+    assert isinstance(broken, AttemptBody) and broken.result.verification is not None
+    assert broken.result.verification.result == "rejected:paths"
+    assert [each.state for each in broken.result.verification.checks] == ["passed"] * 4 + ["failed"]
+
+
+def test_an_attempt_that_never_reached_verification_has_no_verification_row(checking: sqlite3.Connection, tmp_path: Path) -> None:
+    found = build_task(TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail) and [each.step for each in found.attempts] == ["implement", "checks"]
+    assert build_body(TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker()), "tasks", "tl-1", "verification", 1) is None
+
+
+def test_a_repeats_prompt_marks_the_lines_it_added_to_the_prompt_it_repeats(checking: sqlite3.Connection, tmp_path: Path) -> None:
+    unsafe_repeat(checking)
+    files = EvidenceFiles(tmp_path)
+    files.put_input(AttemptKey("implement", "implement-token", 1), "Title\n\nDo the thing.\n")
+    files.put_input(AttemptKey("again", "again-token", 2), "A path cannot be committed.\nsrc/link.py\n\nTitle\n\nDo the thing.\n")
+    ports = TaskPorts(reads_of(checking), files, Tracker())
+    first, second = (build_body(ports, "tasks", "tl-1", "implement", each) for each in (1, 2))
+    assert isinstance(first, AttemptBody) and isinstance(second, AttemptBody)
+    assert first.added == () and second.added == ((0, 3),)

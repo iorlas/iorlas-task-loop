@@ -13,6 +13,7 @@ the entry requires its task branch to contain. The attempt and reservation rows 
 through `admit`'s shared writes.
 """
 
+import json
 import secrets
 import sqlite3
 from collections.abc import Callable
@@ -73,6 +74,7 @@ class RepeatRequest:
     text: str
     deadline: float
     reason: RepeatReason
+    listing: tuple[str, ...] = ()  # what the failed verification listed; stored with the repeat, the verification's typed result
 
 
 class _Lost(Exception):
@@ -133,7 +135,8 @@ class ChainAdmission:
                 "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
                 "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
-                "repeat_reason": request.reason, "seq": as_count(row[13]) + 1, "slot_head": row[14], "step": row[15],
+                "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": as_count(row[13]) + 1,
+                "slot_head": row[14], "step": row[15],
                 "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
             })
             moved = con.execute(
@@ -303,7 +306,7 @@ class NextAdmission:
                 "backlog": found.backlog, "task_id": found.task_id, "tracker_root": row[6], "repo_id": repo_id, "slot": name,
                 "step": step, "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
-                "previous_attempt_id": None, "repeat_reason": None, "seq": as_count(row[7]) + 1, "slot_head": head,
+                "previous_attempt_id": None, "repeat_reason": None, "repeat_listing": None, "seq": as_count(row[7]) + 1, "slot_head": head,
                 "after_commit": row[5], "label": row[8],
             })
         return Admitted(key, name)

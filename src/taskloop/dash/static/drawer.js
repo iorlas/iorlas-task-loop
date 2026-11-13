@@ -2,9 +2,9 @@
 // it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, JUMP, LAND, STATE, STEPS, ago, callout, el, position, quietSpan, startedAt, tag } from "./ui.js";
+import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, position, quietSpan, startedAt, stepInfo, tag } from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
-import { lasted, rail } from "./rail.js";
+import { causeLink, lasted, rail } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 
@@ -20,7 +20,7 @@ export function initDrawer(src, taskMap) {
 }
 
 const attemptOf = () => open.detail?.attempts.find((a) => a.step === open.step && a.n === open.n);
-const tabOf = (a) => open.tab ?? (a.state === "running" ? "lines" : "result");
+const tabOf = (a) => (a.step === VERIFY.id ? "result" : open.tab ?? (a.state === "running" ? "lines" : "result")); // a verification has only its result
 const signature = (t) => JSON.stringify([t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.land]); // what changes the attempts
 
 // Select an attempt: the given one, else the last of the step, else the last of the task.
@@ -89,7 +89,7 @@ function follow() {
   follower = setInterval(async () => {
     const mine = open;
     const a = mine && attemptOf();
-    if (!a || a.state !== "running" || a.step === "checks") return; // a checks attempt has no agent lines
+    if (!a || a.state !== "running" || a.step === "checks" || a.step === VERIFY.id) return; // checks and verifications have no agent lines
     try {
       const page = await source.feed(mine.id, a.step, a.n, a.feed_cursor ?? "0:0"); // a file not there yet follows from its start
       if (open !== mine || attemptOf() !== a) return;
@@ -131,12 +131,12 @@ export function closeDrawer() {
 
 const VIEWS = [["attempts", "Steps"], ["task", "Task"]];
 
-// What the card says about the task's place: the column, and for a land the real state (waiting for the person, or delivering).
+// What the card says about the task's place: the column, and for a land the real state (waiting for the person, or landing).
 function placeOf(t) {
   const col = COLUMNS.find((c) => c.id === t.column);
   if (t.column !== "land") return { label: `${col.emoji} ${col.label}`, help: col.help };
   const word = LAND[t.land ?? "waiting"];
-  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.land === "delivering" ? "A land is delivering the checked change to main." : "Checked and ready; the factory never lands by itself." };
+  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.land === "landing" ? "A land is putting the checked change on main now." : "Checked and ready; the factory never lands by itself." };
 }
 
 function head(t) {
@@ -173,7 +173,7 @@ function render() {
     hold.append(callout("border-rose-500", "Held", t.hold_cause));
     drawer.append(hold);
   }
-  if (t.column === "land" && t.land !== "delivering") {
+  if (t.column === "land" && t.land !== "landing") {
     const waiting = el("div", "px-6 pb-3");
     waiting.append(callout(LAND.waiting.bar, "Waiting for you to land it", `Run: tl step land ${t.id}`));
     drawer.append(waiting);
@@ -222,7 +222,7 @@ function bodyTab(a, tab) {
 }
 
 const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
-const nameOf = (id) => STEPS.find((s) => s.id === id);
+const nameOf = stepInfo;
 
 function pane() {
   const a = attemptOf();
@@ -232,7 +232,7 @@ function pane() {
   const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
   top.append(el("h3", "text-sm font-semibold", `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
-  top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
+  if (a.step !== VERIFY.id) top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
   if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) {
     const quiet = quietSpan(a.feed.at(-1)?.at ?? a.started_at);
     quiet.id = "quiet";
@@ -242,9 +242,10 @@ function pane() {
   if (a.after) {
     const why = el("div", "px-6 pt-3");
     const list = open.detail.attempts;
-    const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list[list.indexOf(a) - 1];
+    const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
     const what = a.after === "repeat" ? "Repeat of" : "Restarted at plan after";
     why.append(callout(JUMP[a.after].bar, `${what} ${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}${a.after === "repeat" ? "" : `,${startedAt(a.started_at)}`}`, a.reason));
+    if (a.led_by) why.append(causeLink(a, select));
     wrap.append(why);
   }
   const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
@@ -255,7 +256,7 @@ function pane() {
     b.addEventListener("click", () => { open.tab = id; render(); });
     bar.append(b);
   }
-  wrap.append(bar, tab === "lines" ? lines(a) : bodyTab(a, tab));
+  wrap.append(...(a.step === VERIFY.id ? [] : [bar]), tab === "lines" ? lines(a) : bodyTab(a, tab));
   return wrap;
 }
 
