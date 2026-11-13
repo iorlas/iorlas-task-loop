@@ -110,8 +110,8 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     if isinstance(result, Listed):
         attempts = result.attempts
         rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
-                f"{a.result.status} {a.result.reason}\t{status_words(task_status(a))}\t{a.next}\t{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t"
-                f"{last_command(a) or '-'}" for a in attempts]
+                f"{a.result.status} {a.result.reason}\t{status_words(task_status(a))}\t{a.next}\t"
+                f"{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t{last_command(a) or '-'}" for a in attempts]
         kinds = dict.fromkeys((a.next, a.checks is not None) for a in attempts if a.next.startswith("stuck:") or a.next == "hold")
         steps = [f"{kind}: {guide(kind, checks=checks)}" for kind, checks in kinds]
         steps += stuck if any(kind.startswith("stuck:") for kind, _checks in kinds) else []

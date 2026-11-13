@@ -57,7 +57,6 @@ from taskloop.operations import (
     verify_task,
 )
 from taskloop.publish import publish_word
-from taskloop.round_flight import in_flight
 from taskloop.round_land import Landing, land_passed
 from taskloop.round_log import INTERRUPTED
 from taskloop.round_trail import Trail
