@@ -1,4 +1,4 @@
-"""The rounds process's own Ctrl-C, SIGTERM and SIGHUP: the only signal use in factory source (CLAUDE.md, `.importlinter`
+"""The rounds process's own Ctrl-C, SIGTERM and SIGHUP: the only signal use in factory source (AGENTS.md, `.importlinter`
 one-signal-owner).
 
 While `tl step rounds` runs, a SIGINT handler sets a flag (`stopping`), puts the previous disposition back (Python's

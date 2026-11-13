@@ -242,7 +242,7 @@ def signal_uses(path: Path) -> tuple[set[str], set[str], set[str]]:
 
 
 def test_the_one_signal_owner_installs_only_the_rounds_handlers_and_nothing_sends_a_signal() -> None:
-    """CLAUDE.md's one exception: only `interrupts.py` imports `signal`, plainly (no alias, no `from`, no `_signal`, no
+    """AGENTS.md's one exception: only `interrupts.py` imports `signal`, plainly (no alias, no `from`, no `_signal`, no
     dynamic import anywhere), and uses only what installs and restores the SIGINT, SIGTERM, SIGHUP handlers; no factory source or test
     sends or times a signal (`SIGNALLING`), and tests never import `signal` (so never install a handler)."""
     owner = ROOT / "src" / "taskloop" / "interrupts.py"
@@ -337,7 +337,7 @@ def test_the_process_replacement_matcher_sees_uses_and_not_words(source: str, na
 
 
 def test_nothing_forks_execs_or_spawns() -> None:
-    """CLAUDE.md: no spawn, fork or exec escape hatch in factory source or tests."""
+    """AGENTS.md: no spawn, fork or exec escape hatch in factory source or tests."""
     uses = Counter((name, str(path.relative_to(ROOT))) for path in FILES for name in process_replacements(ast.parse(path.read_text())))
     assert uses == Counter()
 

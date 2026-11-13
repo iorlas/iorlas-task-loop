@@ -64,7 +64,16 @@ Retain caps: 400 source lines per file, 80 per function and 800 per test file. N
   third-party library needs a stated reason that tests get smaller, not larger.
 - A schema-changing upgrade drains running attempts first: old entry processes cannot write to the new schema, and the
   old database is discarded.
-- Run commands non-interactively. AGENTS.md and CLAUDE.md are separate files: mirror substantive instruction edits.
+- External actions (Git, tracker, process spawn) follow transactional outbox with reconciliation: a short transaction
+  records the intent, the action runs outside any write transaction and is idempotent or observable, a second short
+  transaction records the result; after a crash, reconciliation asks the world (does the ref exist, is the claim ours)
+  and finishes or releases. No compensation chains; adopt what already happened. No new glossary term.
+- Layout is vertical: one folder per feature, one module per use case (a transition with a typed outcome). A store or
+  service module exists only where it hides something (deletion test). Only a slice's own store touches its tables; SQL
+  and `sqlite3.Connection` never leave the store modules. One composition root per process.
+- Test impact is a design goal: a use case's test imports only its slice and the small shared kernel, so a change runs
+  only the tests its import closure reaches.
+- Run commands non-interactively. AGENTS.md is the only instruction file; there is no CLAUDE.md.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
 ## Beads Issue Tracker
