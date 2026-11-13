@@ -1,5 +1,9 @@
 # M4 live smoke: holds and keep-awake in the unattended loop (owner- or authorized-agent-run, after H3 and K1)
 
+Status: **evidence**. Owner-run smoke runbook and recorded verification scope for the dated implementation.
+Its scratch setup and historical invocations are retained for reproduction; current operator commands are in
+the [README](../../../README.md). Live execution still requires the authorization stated below.
+
 **Status: passed 2026-11-12** at `27c632d5d` (step 9 blocked), with five runbook corrections ([findings](m4-smoke-findings.md)).
 
 Milestone M4 of the [roadmap](../self-hosting-roadmap.md): `tl step rounds ... --label auto` left alone holds every

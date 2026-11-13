@@ -1,5 +1,8 @@
 # Shelf change request: beads-client 0.2.0, a ready-set read with its owning fake
 
+Status: **evidence**. Dated findings, measurements and their limits, retained with the original commands and
+environment. This is not a current setup runbook; use the [README](../../../README.md) for implemented commands.
+
 For: the owner, who releases it (answer to Q4 of [the scheduling plan](plan.md)). Consumer: iorlas-task-loop,
 tl-8bh9.4.3.1.13 (`tl plan next`). Written 2026-11-10 from a read-only look at the shelf: the tag `beads-client-v0.1.0`
 (commit 3afd60d, "Preserve truthful task reads and provide a shared semantic fake (#67)") and the installed 0.1.0 wheel.

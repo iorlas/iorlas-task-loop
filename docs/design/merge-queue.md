@@ -1,5 +1,8 @@
 # Merge queue (MQUEUE): speculative, serial in meaning, parallel in execution (design only, 2026-11-07)
 
+Status: **design**. Historical, explicitly held speculative merge-queue proposal; it is not implemented.
+Current delivery is the person-run [land operation](tl-8bh9.14.8/plan.md); see the [README](../../README.md).
+
 Verdicts: ✅ do, ❌ refuse. Tags on external facts: [V] read in a primary source, [S] secondary report, [I] inference. Anything marked
 `[unverified]` was not re-checked: numeric limits and defaults of other systems came from lossy page summaries and must be re-read before
 they are copied into config. Inputs: land-speed.md, slot-grant.md, stages.md section 6, dashboard/dash-spec.md section 4, and the code under

@@ -1,5 +1,9 @@
 # Collect one already admitted plan attempt
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Use the current [README](../../../README.md)
+and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.1. Status: source proposal reviewed; owning launch prerequisite outstanding, documentation only.
 This is the application body consumed by a later surviving attempt-process entry.
 It does not provide admission, an attempt-process launcher or a working plan command.

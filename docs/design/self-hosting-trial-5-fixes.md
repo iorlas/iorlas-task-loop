@@ -1,5 +1,8 @@
 # Trial 5 fixes: environment, evidence, settlement (tl-8bh9.14.44-.53)
 
+Status: **evidence**. Recorded trial-5 repairs, partial work and decisions open to reconsideration; the qualifications
+in each section remain part of the record. Current commands are in the [README](../../README.md).
+
 Decisions the owner may revisit. Each names the simplest safe default taken and the alternative.
 
 ## Agent and checks environment (.49)

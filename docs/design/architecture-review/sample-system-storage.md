@@ -9,6 +9,10 @@ terms: slice, store, Tx, reserve, release, attempt, reservation, slot (glossary)
 ---
 # storage
 
+Status: **design**. Archived format specimen; `status: current` and the rules/test names in its frontmatter are
+example data, not current storage guarantees. See the [format alternatives](fmt/ALL-variants.md) and current
+[README](../../../README.md).
+
 ## Model
 | thing | owner | tables | writes | reads |
 |---|---|---|---|---|

@@ -1,5 +1,9 @@
 # Final coverage and implementation sequence
 
+Status: **evidence**. Historical coverage and implementation-sequence review at the foundation checkpoint.
+Its inspection-only capability statements below describe that checkpoint; current factory capabilities and
+commands are in the [README](../../../README.md), with slice status in the [index](../INDEX.md).
+
 Review: tl-8bh9. Evidence checked 2026-11-09.
 
 Implementation update: the isolated source foundation now passes focused gates/independent review, with actual CLI

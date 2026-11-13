@@ -1,5 +1,9 @@
 # Canonical repository inspection
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Use the current [README](../../../README.md)
+and CLI help for command syntax.
+
 Task: tl-sqd3.18.1, bounded child of REPOID tl-sqd3.18. Prepared 2026-11-09.
 The successor foundation is the local base; this task is not the whole registry/backlog-binding implementation.
 

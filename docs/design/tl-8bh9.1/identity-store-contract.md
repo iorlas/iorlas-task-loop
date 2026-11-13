@@ -1,5 +1,8 @@
 # Repository binding, lifecycle and STORE ownership
 
+Status: **design**. Accepted identity/lifecycle contract and retained scope, not completion of every listed owner.
+See the [index](../INDEX.md) for built slices and the current [README](../../../README.md) for commands.
+
 Task: tl-8bh9.1, existing REPOID tl-sqd3.18 and STORE tl-sqd3.26. Reviewed with Astra, 2026-11-09.
 Owner accepted this contract and explicitly lifted STORE's design hold for reconciled scope only on 2026-11-09.
 See [corrected STORE scope](../tl-sqd3.26/plan.md); old migration slices are not authorized as formerly written.

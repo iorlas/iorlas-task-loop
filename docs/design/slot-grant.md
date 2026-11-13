@@ -1,5 +1,8 @@
 # Slot grant: deterministic prevention of the 2026-11-03 stall (design only)
 
+Status: **design**. Historical baseline stall-prevention proposal; its file-based grant and commands are not the
+successor contract. See [managed slots](tl-8bh9.4.3.1.3/plan.md) and the current [README](../../README.md).
+
 Verdicts: ✅ do, ❌ refuse. Cost = rough size. Incident: the 2026-11-03 slot queue deadlock (its write-up, `docs/incidents/2026-11-03-slot-queue-deadlock.md`, is not in this tree).
 
 | Item | Verdict | Cost | Note |

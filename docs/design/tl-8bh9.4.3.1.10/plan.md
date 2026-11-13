@@ -1,5 +1,9 @@
 # Slot preparation under a custody lock: the task branch and the attempt-lifetime ProcessLock
 
+Status: **built** for this bounded successor slice. See [the as-built record](#11-as-built-2026-11-10-on-4a4ab31a9). The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.10 (proposed id). Design proposal, 2026-11-10, against HEAD ca9806ab7, revised after an independent
 review. Its findings were checked in the committed source (`git show HEAD:`), and the owner's decision on Q1 is applied.
 Nothing was implemented. The only commands run were read-only source reads, one `git ls-remote` and one

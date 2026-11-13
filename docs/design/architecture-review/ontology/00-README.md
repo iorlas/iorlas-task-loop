@@ -1,4 +1,7 @@
 # task-loop docs ontology (a2kay-format, temporary checker on shelf libs)
+
+Status: **design**. Archived ontology prototype, not an installed checker or current domain schema.
+See the [prototype report](../docscheck-proto/REPORT.md); its specimens and the format alternatives remain examples.
 Kinds are a2kay type YAMLs (name, when_to_use, file_pattern, shape, id, fields, link[...] types).
 Rows (rule, case, outcome, limit, operation, gap, transition, capability, failure, step_row, check) are a2kay
 INLINE kinds: flow-style YAML lists in the owner's frontmatter. No table parser; any-frontmatter + schema check.

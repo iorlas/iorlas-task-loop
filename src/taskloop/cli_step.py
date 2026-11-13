@@ -89,6 +89,8 @@ def register(commands: Parsers) -> None:
     rounds.add_argument("--dash-port", type=int, metavar="PORT", help="Serve the read-only dashboard on 127.0.0.1:PORT while the "
                         "rounds run (0 picks a free port); without it nothing is served")
     _round_flags(rounds)
+    rounds.epilog = ("--json prints JSON Lines: one start record and one end record on a graceful stop; "
+                     "refusals and abrupt end results go to stderr. Dashboard notices go to stderr with --json.")
     publish = _add(step, "publish", "Push the step's verified commit to origin's task/<id> as you, never forced; nothing merges or lands")
     publish.add_argument("task_id", metavar="TASK")
     publish.add_argument("--backlog", required=True)
@@ -191,7 +193,8 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                 if isinstance(address, Failed):
                     print(f"Dashboard not started ({address.detail}); the rounds go on without it", file=sys.stderr, flush=True)
                 elif address is not None:
-                    print(f"Dashboard: http://{address[0]}:{address[1]}/", flush=True)
+                    print(f"Dashboard: http://{address[0]}:{address[1]}/",
+                          file=sys.stderr if arguments.json_output else sys.stdout, flush=True)
                 return run_rounds(ports, request)
     except KeyboardInterrupt:
         return Ended(request.backlog, "abrupt")

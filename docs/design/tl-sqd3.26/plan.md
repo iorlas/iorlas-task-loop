@@ -1,5 +1,8 @@
 # STORE: reconciled retained scope
 
+Status: **design**. Accepted retained STORE scope and exclusions, not a delivery receipt for all listed slices.
+Current implemented slices are identified in the [index](../INDEX.md); commands are in the [README](../../../README.md).
+
 Task: tl-sqd3.26. Owner approved the consolidated identity/lifecycle contract and released its design hold for corrected scope on 2026-11-09. The existing parent and ten open children were rewritten; the previously closed cold-singleton child was left unchanged. This is a scope/ownership record, not a second tracker: current status, assignees and dependencies live in tasks.
 
 ## Approved authority and exclusions

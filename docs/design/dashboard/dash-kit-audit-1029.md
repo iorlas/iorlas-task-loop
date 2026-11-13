@@ -1,5 +1,8 @@
 # UX consistency and UI kit audit, 2026-10-29
 
+Status: **evidence**. Historical 2026-10-29 baseline dashboard audit, not current operator instructions.
+See [dashboard-ui.md](../dashboard-ui.md) for the implemented successor dashboard.
+
 Reviewers: Fable (UX consistency across 1k, 2b, 3b, 4c), ChatGPT/Codex (frontend architecture), Sonnet (inventory of installed tldash 0.23.127). Merged by Opus.
 
 ## Rule of authority

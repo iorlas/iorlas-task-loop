@@ -1,5 +1,8 @@
 # One SQLite execution store: the plan (tl-sqd3.26 STORE)
 
+Status: **design**. Historical baseline migration proposal; migration, import/export and compatibility mechanisms below
+are superseded by [reconciled STORE scope](tl-sqd3.26/plan.md). Current commands are in the [README](../../README.md).
+
 > STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
 > [reconciled STORE slices](tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
 > Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.

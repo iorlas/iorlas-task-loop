@@ -1,5 +1,9 @@
 # Step sequencing and the implement step kind (slice S5)
 
+Status: **built** for S5a–S5c, recorded in [sections 11–14](#11-as-built-s5a-preparation-2026-11-11); remaining scope
+is **design**. The original preparation record below is historical. Setup/access are recorded separately in
+[S5e](../tl-8bh9.4.3.1.16.2/plan.md); current commands are in the [README](../../../README.md).
+
 Task: tl-8bh9.4.3.1.16 (proposed id; not in the tracker). Design, 2026-11-11, against HEAD edc4e31e2 (S4 built). Docs
 only: nothing is built or run. Commands run: source and doc reads, `git status`, the policy's own line counter
 (`tests/rules/test_policy.code_lines`) over every `src` and `tests` file, and reads of the installed `git_porcelain`

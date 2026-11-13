@@ -1,5 +1,8 @@
 # M3 live smoke: findings (2026-11-12)
 
+Status: **evidence**. Dated findings, measurements and their limits, retained with the original commands and
+environment. This is not a current setup runbook; use the [README](../../../README.md) for implemented commands.
+
 **Result: passed.** Rounds from a runner worktree took eight tasks of this repository through plan, implement and the
 check step; the person's `tl step land` then landed six of them on a scratch bare remote as one squash commit each,
 validated S in a slot whenever `main` had moved, pushed never forced from the person's checkout, and closed each task in

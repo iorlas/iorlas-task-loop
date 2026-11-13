@@ -1,7 +1,12 @@
 # tl-8bh9.14.9: questions and holds, and the rest of the unattended loop (block B7 with B11 and B13, milestone M4)
 
-Design, 2026-11-12, against ffbb689c4 (M1, M2 and M3 smokes passed); revised the same day after an independent review
-of 5f775790e (section 23). Docs only: nothing built or run, except two measurements of bd 1.3.1 in scratch trackers
+Status: **built** for H1–H3 and K1 ([sections 24–27](#24-as-built-h1-tl-8bh91491)), and G1/G2
+([section 14](#14-git-read-timeout-b13-tl-8bh9143-review-finding-6), including the later timeout implementation). The [M4 findings](m4-smoke-findings.md)
+record the smoke results and its blocked timeout check at that checkpoint. The original design below is historical
+preparation; current holds and commands are in the [README](../../../README.md).
+
+Original design, 2026-11-12, against ffbb689c4 (M1, M2 and M3 smokes passed); revised the same day after an independent review
+of 5f775790e (section 23). Preparation was docs only: nothing was built or run at that point, except two measurements of bd 1.3.1 in scratch trackers
 under `~/tl-smoke` (section 5.4), removed afterwards. Read: CLAUDE.md, [glossary](../../glossary.md),
 [roadmap](../self-hosting-roadmap.md) (B7, B10, B11, B13, M4, D1-D14, O1-O6, section 6),
 [structured questions](../tl-8bh9.6.1/plan.md) and its [balanced design](../tl-8bh9.6.1/balanced-design.md),

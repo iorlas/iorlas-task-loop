@@ -1,5 +1,9 @@
 # Scheduling: the factory takes ready tasks into free slots (`tl plan next`)
 
+Status: **built** for this bounded successor slice. See [the as-built record](#17-as-built-2026-11-10-on-519cab0c8-uncommitted). The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.13 (proposed id; not in the tracker). Design, 2026-11-10, against HEAD a2c7a47ed; built in
 35bf31804 (`tl plan next`). Design-time commands run: source reads, the policy line counter over HEAD, `bd ready --help` and one read-only
 `bd ready --json -n 2` on this repository's tracker (to see the row shape: `priority`, `issue_type`, `labels`, `parent`

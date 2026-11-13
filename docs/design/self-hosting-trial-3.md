@@ -1,5 +1,8 @@
 # Self-hosting trial 3: failure routes with a real agent, odd input, a deleted task
 
+Status: **evidence**. Dated self-hosting trial results and findings, not a current setup runbook.
+Historical commands and environment details are preserved; current commands are in the [README](../../README.md).
+
 Run 2026-11-12 against `main` at `8fe219905` (PR #736 merged: trial defects .26-.29 fixed). Linux only (OrbStack),
 Codex 0.167.0, model `gpt-6.1-sol`, effort `medium`; the machine was loaded by two other trials (load average 30+).
 Follow-up to [trial 1](self-hosting-trial.md) and [trial 2](self-hosting-trial-2.md); vocabulary: [glossary](../glossary.md).

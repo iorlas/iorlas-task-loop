@@ -1,5 +1,8 @@
 # Self-hosting real run 1: the factory on a real bead, the owner watching
 
+Status: **evidence**. Dated self-hosting trial results and findings, not a current setup runbook.
+Historical commands and environment details are preserved; current commands are in the [README](../../README.md).
+
 Run 2026-11-12 on the owner's PC (Linux, OrbStack), `main` at `fe403175e` (PR #754). Codex 0.167.0, model `gpt-6.1-sol`,
 effort `ultra`. Vocabulary: [glossary](../glossary.md). Follows [trial 6](self-hosting-trial-6.md). Tracker epic
 `tl-8bh9.14`.

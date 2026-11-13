@@ -1,5 +1,9 @@
 # Registered-start prerequisite delivery
 
+Status: **evidence**. Historical delivery record for a **built** owning-library prerequisite. The inspection-only
+factory limitation below describes that checkpoint; later successor slices consume the mechanism. See the current
+[README](../../../README.md) for factory capabilities.
+
 Task: tl-8bh9.4.4.1. Owning library task: shelf-4426. Delivered 2026-11-09.
 
 [Shelf PR 71](https://github.com/yoselabs/shelf/pull/71) was squash-merged as

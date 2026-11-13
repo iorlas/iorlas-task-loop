@@ -1,5 +1,8 @@
 # In-memory settlement probe
 
+Status: **evidence**. Dated findings, measurements and their limits, retained with the original commands and
+environment. This is not a current setup runbook; use the [README](../../../README.md) for implemented commands.
+
 Executed 2026-11-09 from the review worktree with `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python`.
 This uses the actual Settle and effect interpreter with an in-memory refused close and cleanup callbacks.
 It does not contact a task service, run Git, release a real slot or delete a checkpoint. It reproduces the

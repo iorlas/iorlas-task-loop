@@ -1,5 +1,8 @@
 # Execution terms: steps, actions and attempts
 
+Status: **design**. Historical reasoning and remaining proposals; the [glossary](../glossary.md) owns current terms.
+Current commands are in the [README](../../README.md).
+
 > STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
 > [reconciled STORE slices](tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
 > Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.

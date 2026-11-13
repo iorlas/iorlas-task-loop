@@ -1,5 +1,8 @@
 # Self-hosting trial 6: do the trial 1-5 fixes hold on a real run?
 
+Status: **evidence**. Dated self-hosting trial results and findings, not a current setup runbook.
+Historical commands and environment details are preserved; current commands are in the [README](../../README.md).
+
 Run 2026-11-12 against `main` at `c9c60e30c` (PR #745 merged, so PRs #732-#745 are all in the build under test). Linux
 only (OrbStack, aarch64), Codex 0.167.0, model `gpt-6.1-sol`, effort `ultra` for the unattended rounds. Vocabulary:
 [glossary](../glossary.md). Fixes under test: [trial 5 fixes](self-hosting-trial-5-fixes.md) and the findings of

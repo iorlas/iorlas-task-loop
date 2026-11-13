@@ -1,5 +1,8 @@
 # Brief (for a bd brainstorming task): external task sources and the code host
 
+Status: **design**. Owner intake and open questions for future design; importing external tasks is not implemented.
+See the current [README](../../../README.md) for the implemented surface.
+
 Origin: owner's words in the architecture-review grilling, 2026-11-13. Retain all context; this is not yet a design.
 
 ## The situation

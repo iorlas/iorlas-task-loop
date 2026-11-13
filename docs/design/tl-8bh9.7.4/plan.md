@@ -1,5 +1,9 @@
 # tl-8bh9.7.4 plan: readable live lines of an agent attempt
 
+Status: **built** for bounded live activity recording, evidence reads and the attempt feed in `activity_file`,
+`evidence_files` and `dash_task`. Session reuse and full-history paging remain **design** as excluded below.
+The original proposal is retained; current dashboard behavior is in [dashboard-ui.md](../dashboard-ui.md).
+
 Status: implementation plan for the smallest end-to-end slice. Bead: tl-8bh9.7.4 (RECENT-ACTIVITY), reads
 tl-8bh9.7.1 (ATTEMPT-LINK). Page contract: [dashboard-ui.md](../dashboard-ui.md) (*Live event*).
 

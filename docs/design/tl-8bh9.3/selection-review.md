@@ -1,5 +1,9 @@
 # Simple scheduling and existing queue policies
 
+Status: **built** for bounded selection behavior described by [the scheduling slice](../tl-8bh9.4.3.1.13/plan.md);
+other alternatives remain **design**. This is a historical review: `tl plan next` is now `tl step next`.
+See the current [README](../../../README.md) for syntax.
+
 > Implemented for plan admission in [.4.3.1.13](../tl-8bh9.4.3.1.13/plan.md) (`tl plan next`, one-shot rounds); approval
 > is the tracker label `auto`; eligibility is revalidated at acquisition by admission's claim.
 

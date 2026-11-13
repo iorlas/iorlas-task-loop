@@ -1,5 +1,8 @@
 # Architecture review playbook (from the task-loop successor review, 2026-11-13)
 
+Status: **evidence**. Historical review procedure and findings, with proposals distinguished below; it is not a
+current repository instruction file. Current commands are in the [README](../../../README.md).
+
 Purpose: everything this session did, so the same review can be run on another repository. It holds the process, every technique and trick, every decision with its reason, every insight, what we overlooked or got wrong, the findings as an example of output, and copy-paste prompts.
 
 Status words used below: **decided** (owner said yes), **proposed** (I recommended, owner has not confirmed), **open** (no decision), **fact** (measured or read in code), **claim** (reported by a model, not re-checked).

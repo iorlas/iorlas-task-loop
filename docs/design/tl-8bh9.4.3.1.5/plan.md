@@ -1,5 +1,9 @@
 # Plan verification: Git evidence for a returned plan answer
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.5 (proposed id; after [.4.3.1.4](../tl-8bh9.4.3.1.4/plan.md)). Design proposal, 2026-11-10, revised after
 an independent review and the owner's decisions. Nothing has been run or delivered. **The design is frozen until the live
 smoke has run:** Denis runs the [smoke](../tl-8bh9.4.3.1.4/live-smoke.md) before any implementation, and section 9 says

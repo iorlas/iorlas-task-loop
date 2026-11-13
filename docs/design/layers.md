@@ -1,5 +1,8 @@
 # Layers: which software manages which
 
+Status: **design**. Proposed judgments and historical examples, except the explicitly quoted owner decisions below.
+Examples of absent commands are proposals; the current implemented CLI is described in the [README](../../README.md).
+
 Bead tl-isfa.3 (epic tl-isfa, "Remove factory self-management"). Written 2026-11-12. Documentation only: no code changed.
 
 **Status: every judgment below is proposed** unless it is a quoted owner decision. Nothing here moves, renames or

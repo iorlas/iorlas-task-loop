@@ -1,5 +1,9 @@
 # Minimal successor foundation
 
+Status: **built** for the minimal foundation only; see [implementation evidence](implementation.md). The original
+preparation record below is historical. Later bounded slices implement factory execution; current capabilities
+and commands are in the [README](../../../README.md).
+
 Task: tl-8bh9.8.7. Prepared 2026-11-09 after the owner requested autonomous implementation cycles.
 This is a reviewed implementation specification, not a delivery receipt.
 

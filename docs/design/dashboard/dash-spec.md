@@ -1,5 +1,8 @@
 # task-loop dashboard: implementation spec
 
+Status: **design**. Historical baseline dashboard specification; its dated draft and commands are preserved.
+The successor implements the separate [dashboard-ui.md](../dashboard-ui.md) contract.
+
 Status: draft, 2026-10-29, awaiting the owner's review. The owner settled every view in rounds 1–9 (phone v2: "Phone view v2 is ok. Write the full dashboard spec now"); this file consolidates those decisions and has not been approved as a whole.
 
 Audience: the task-loop implementation session. Read this file first. Use the mocks to see the result, and use this spec as the rule.

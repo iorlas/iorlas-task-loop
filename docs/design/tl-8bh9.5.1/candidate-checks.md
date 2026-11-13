@@ -1,5 +1,9 @@
 # One check pipeline, candidate-bound evidence
 
+Status: **design**. Historical accepted validation direction and supporting review, not a delivery receipt.
+Current checks and land are recorded in [the checks plan](../tl-8bh9.14.6/plan.md) and
+[land plan](../tl-8bh9.14.8/plan.md); use the [README](../../../README.md) for current commands.
+
 > STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
 > [reconciled STORE slices](../tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
 > Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.

@@ -1,8 +1,10 @@
 # task-loop dashboard
 
-> **Design only: none of this exists in the successor tree yet.** `tldash`, `tl dash ensure`, `packages/dash`, `docs/contracts/dash-api.md`,
-> `docs/dev/integrations.md` and `tests/dash` are baseline code and documents kept in Git history; the successor builds no dashboard.
-> The design files beside this README (`dash-*.md`, the mockups) are the only parts present.
+Status: **design**. Historical baseline dashboard design and review collection; the commands, packages and
+contracts below describe that baseline, not current operator instructions. The successor dashboard is **built**
+under the separate [dashboard-ui.md](../dashboard-ui.md) contract and runs with `tl step rounds --dash-port PORT`.
+Use the current [README](../../../README.md) for CLI syntax. `tldash`, `tl dash ensure`, `packages/dash`,
+`docs/contracts/dash-api.md`, `docs/dev/integrations.md` and `tests/dash` remain baseline history.
 
 One server per machine, reading state and taking the owner's commands through its write verbs (`contracts.dash.WRITES`) (`python3 -m tldash` on the interpreter `tl dash ensure` runs on, so it has msgspec), one page, one API.
 

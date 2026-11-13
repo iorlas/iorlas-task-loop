@@ -1,5 +1,8 @@
 # M1 end-to-end smoke: findings (2026-11-11)
 
+Status: **evidence**. Dated findings, measurements and their limits, retained with the original commands and
+environment. This is not a current setup runbook; use the [README](../../../README.md) for implemented commands.
+
 **Result: passed.** One `tl step rounds` loop planned and implemented task `m1-h1q` of this repository on a scratch
 remote, tracker and factory.db, with one claim, the `auto` label removed after the claim, and a new test the agent ran
 offline in its sandbox. Run by an agent the owner authorized for this one run ("do it for me"), following

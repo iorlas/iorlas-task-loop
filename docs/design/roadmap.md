@@ -1,5 +1,8 @@
 # Roadmap: speed and less code (2026-11-06)
 
+Status: **design**. Historical 2026-11-06 roadmap for the baseline, not current operator instructions.
+The [self-hosting roadmap](self-hosting-roadmap.md) supersedes its implementation sequence; current commands are in the [README](../../README.md).
+
 > STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
 > [reconciled STORE slices](tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
 > Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.

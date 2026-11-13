@@ -1,5 +1,9 @@
 # First restart-safe agent execution
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Use the current [README](../../../README.md)
+and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1, scoped child of AGENT-CONTRACT tl-8bh9.4.3. Proposed implementation specification,
 2026-11-09, following read-only Astra consultation. This document records a mechanism recommendation, not new
 owner-agreed policy, implemented capability, or permission to implement the whole parent. Source construction

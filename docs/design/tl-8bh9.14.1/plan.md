@@ -1,5 +1,9 @@
 # tl-8bh9.14.1: the repository profile reader (block B3)
 
+Status: **built** for this bounded successor slice. See [the as-built record](#7-as-built). The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Block B3 of the [self-hosting roadmap](../self-hosting-roadmap.md): one reader and validator of a minimal repository
 profile `.task-loop.json`, read from Git at a commit, and one read-only command that prints it. B2 (setup), B4 (checks)
 and B6 (land target) will consume it; this slice runs nothing the profile names. Vocabulary: [glossary](../../glossary.md)

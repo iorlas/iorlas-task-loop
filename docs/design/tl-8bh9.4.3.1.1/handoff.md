@@ -1,5 +1,9 @@
 # Successor factory handover — 2026-11-09
 
+Status: **evidence**. Historical frozen handoff, not an active instruction prompt or current setup runbook.
+The original commands and checkpoint limits below are preserved; current capabilities and commands are in the
+[README](../../../README.md), and `AGENTS.md` is the current instruction file.
+
 This is the copy-ready instruction prompt for the next agent on **pix**, in a **new worktree**.
 Read it fully before acting. It records a frozen WIP checkpoint, not completed delivery.
 Tasks remain the backlog and source of current status. This document preserves context and evidence.

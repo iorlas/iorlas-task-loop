@@ -1,5 +1,8 @@
 # Brief (for a bd brainstorming task): the review model, and the name that replaces `held`
 
+Status: **design**. Owner intake for a future review model; the proposed modes below are not implemented.
+Current holds and explicit land are described in the [README](../../../README.md).
+
 Origin: owner's words in the architecture-review grilling, 2026-11-13. Not yet a design.
 
 ## Problem

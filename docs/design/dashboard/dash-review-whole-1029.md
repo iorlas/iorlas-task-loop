@@ -1,5 +1,8 @@
 # Whole-design review, 2026-10-29
 
+Status: **evidence**. Historical 2026-10-29 baseline dashboard review.
+See [dashboard-ui.md](../dashboard-ui.md) for the implemented successor dashboard.
+
 Reviewers: Fable, Sonnet, ChatGPT (Codex), independently, on 1k card + 2b asks + 3b bead drawer. Merged by Opus.
 
 ## Agreed by all three (apply)

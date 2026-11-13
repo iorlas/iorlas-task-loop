@@ -1,5 +1,8 @@
 # Run S: sandbox and environment spike for block B2 (2026-11-11)
 
+Status: **evidence**. Dated findings, measurements and their limits, retained with the original commands and
+environment. This is not a current setup runbook; use the [README](../../../README.md) for implemented commands.
+
 Owner-authorized spike for the unknowns in [the self-hosting roadmap, B2](../self-hosting-roadmap.md). Run by an agent
 on the owner's word of 2026-11-11. Scratch only under `~/tl-smoke/run-s`; no other `~/tl-smoke` content touched.
 

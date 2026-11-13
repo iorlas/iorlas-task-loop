@@ -1,5 +1,9 @@
 # docscheck prototype - report
 
+Status: **evidence**. Archived checker prototype and measured results, not an installed gate or operator tool.
+The adjacent `docs/` files are schema-bearing test specimens, not current documentation; their frontmatter and
+examples are intentionally preserved. Current commands are in the [README](../../../../README.md).
+
 Scratchpad only: `.../scratchpad/proto/`. Nothing in the repo, shelf or a2kay. No commits.
 
 ## Result

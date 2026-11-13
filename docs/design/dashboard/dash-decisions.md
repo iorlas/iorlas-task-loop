@@ -1,5 +1,8 @@
 # Dashboard revamp decisions (owner, 2026-10-28)
 
+Status: **evidence**. Historical baseline dashboard decisions, retained with their original examples.
+The successor dashboard is documented in [dashboard-ui.md](../dashboard-ui.md), not by these historical commands.
+
 ## Decided
 
 ### 9 · Phone view (2026-10-29, v2 after Denis: "a lot of issues, scrollable elements, embrace mobile UX"; proposed)
