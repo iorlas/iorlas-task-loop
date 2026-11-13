@@ -43,6 +43,8 @@ from taskloop.admit import (
 )
 from taskloop.admit_rows import as_count, insert_attempt, issue, reserve
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
+from taskloop.drain.models import BLOCKED, Reason
+from taskloop.drain.store import blocked
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER, REPEATED
 from taskloop.harness_choice import HarnessKind, provider_of
@@ -115,40 +117,45 @@ class ChainAdmission:
             return AdmitUnavailable("store", detail=why(error))
 
     def _takeover(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
-        previous = request.previous
         with self.begin(con):
-            row: tuple[object, ...] | None = con.execute(PREVIOUS, (previous.attempt_id, previous.dispatch_token,
-                                                                    previous.reservation_generation)).fetchone()
-            if row is None:
-                return AdmitRefused("not_repeatable")
-            if row[10]:
-                return AdmitRefused("task_attempted")
-            number = row[1]
-            if not isinstance(number, int) or number >= ATTEMPTS:
-                return AdmitRefused("repeat_cap")
-            if not row[11]:
-                return AdmitRefused("not_repeatable")
-            refused = deadline_refusal(self.clock, request.deadline)
-            if refused is not None:
-                return refused
-            insert_attempt(con, {
-                "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-                "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
-                "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
-                "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
-                "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": as_count(row[13]) + 1,
-                "slot_head": row[14], "step": row[15],
-                "harness": row[17], "provider": row[18],
-                "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
-            })
-            moved = con.execute(
-                """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
-                AND generation=?""",
-                (key.attempt_id, row[5], row[6], previous.attempt_id, previous.reservation_generation),
-            )
-            if moved.rowcount != 1:
-                raise _Lost
-            issue(con, row[5], row[6], key.reservation_generation)
+            if blocked(con):
+                return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
+            return self._takeover_open(con, request, key, ref)
+
+    def _takeover_open(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
+        previous = request.previous
+        row: tuple[object, ...] | None = con.execute(PREVIOUS, (previous.attempt_id, previous.dispatch_token,
+                                                                previous.reservation_generation)).fetchone()
+        if row is None:
+            return AdmitRefused("not_repeatable")
+        if row[10]:
+            return AdmitRefused("task_attempted")
+        number = row[1]
+        if not isinstance(number, int) or number >= ATTEMPTS:
+            return AdmitRefused("repeat_cap")
+        if not row[11]:
+            return AdmitRefused("not_repeatable")
+        refused = deadline_refusal(self.clock, request.deadline)
+        if refused is not None:
+            return refused
+        insert_attempt(con, {
+            "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
+            "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
+            "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
+            "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
+            "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": as_count(row[13]) + 1,
+            "slot_head": row[14], "step": row[15],
+            "harness": row[17], "provider": row[18],
+            "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
+        })
+        moved = con.execute(
+            """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
+            AND generation=?""",
+            (key.attempt_id, row[5], row[6], previous.attempt_id, previous.reservation_generation),
+        )
+        if moved.rowcount != 1:
+            raise _Lost
+        issue(con, row[5], row[6], key.reservation_generation)
         return Admitted(key, str(row[6]))
 
 
@@ -294,6 +301,8 @@ class NextAdmission:
         con, found, step, free = ready.con, ready.found, ready.step, ready.free
         repo_id, generation = RepoId(found.repo_id), key.reservation_generation
         with self.begin(con):
+            if blocked(con):
+                return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
             row: tuple[object, ...] | None = con.execute(CURRENT, (found.backlog, found.task_id)).fetchone()
             if row is None or row[0:3] != astuple(request.previous):
                 return AdmitRefused("task_attempted")

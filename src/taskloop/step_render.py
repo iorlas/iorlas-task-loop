@@ -5,6 +5,7 @@ from pathlib import Path
 
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
+from taskloop.drain.models import Reason
 from taskloop.hold_guide import hold_guide, pending_guide
 from taskloop.land import Landed
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
@@ -101,7 +102,9 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     """`tl step list`: one row per task. `tl step next`: one line per move as performed, `Stopped:` when admission ended
     early, then the guide of each distinct reported, skipped or stopping word once. `tl step rounds`: why it ended."""
     if isinstance(result, Ended):
-        ended = {"interrupted": "Rounds stopped: interrupted. Launched steps keep running; `tl step rounds` again continues them.",
+        ended = {Reason.DRAINING: "Rounds stopped: new work is blocked by the durable drain request.",
+                 Reason.DRAINED: "Idle was verified; new work remains blocked. The owner can decide whether to restart or upgrade.",
+                 "interrupted": "Rounds stopped: interrupted. Launched steps keep running; `tl step rounds` again continues them.",
                  "abrupt": "Stopped at once."}
         if result.reason in ended:
             return [ended[result.reason]]

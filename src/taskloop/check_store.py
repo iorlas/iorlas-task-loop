@@ -25,6 +25,8 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
+from taskloop.drain.models import ActionKind, Identity, Owner, Role, owners
+from taskloop.drain.store import DrainStore, blocked
 from taskloop.factory_schema import CANDIDATE_HELD, CHECK_RESULT, CHECKS_ADMITTED, CHECKS_LOADED, CLOSED, LANDED, LANDING, marks, prefixed
 
 type Outcome = Literal["passed", "failed"]
@@ -257,6 +259,20 @@ class CheckStore(StoreConnection):
     through `registering` (composition's bounded connection); every other read and write through the store's own
     connection."""
 
+    def owns_entry(self, key: AttemptKey, identity: Identity) -> bool:
+        """Whether this process is the registered entry of this exact attempt; no unrelated execution reads."""
+        with self._connection() as con:
+            return con.execute("SELECT 1 FROM checks_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? "
+                               "AND entry_pid=? AND entry_start=? AND entry_boot=?",
+                               (*astuple(key), identity.pid, identity.start, identity.boot)).fetchone() is not None
+
+    def drain_processes(self) -> tuple[Owner, ...]:
+        """Every recorded execution identity, including historical and already concluded work."""
+        with self._connection() as con:
+            entries = con.execute("SELECT attempt_id,entry_pid,entry_start,entry_boot FROM checks_attempt").fetchall()
+            checks = con.execute("SELECT attempt_id,pid,pgid,proc_start,boot FROM check_result").fetchall()
+        return owners(entries, Role.ENTRY, group=False) + owners(checks, Role.CHECK, group=True)
+
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
@@ -308,6 +324,9 @@ class CheckStore(StoreConnection):
         without its deadline refusal: an entry past the deadline runs nothing and concludes `expired`. `now` is unused."""
         del now
         with self._connection(write=True) as con:
+            if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id
+                                        for action in DrainStore(lambda: con, self.begin).pending()):
+                return "refused"
             row = con.execute("SELECT c.phase,c.deadline,c.entry_pid,c.entry_start,c.entry_boot " + RESERVED, astuple(key)).fetchone()
             if row is None:
                 return "refused"

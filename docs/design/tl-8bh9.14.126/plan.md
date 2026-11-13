@@ -1,8 +1,8 @@
 # Explicit drain command
 
 Task: `tl-8bh9.14.126`. Prepared 2026-11-13 against the current successor.
-Status: proposed implementation plan; implementation starts only after the owner's yes.
-This planning task authorizes this document, not source changes or an upgrade.
+Status: implemented under the owner's implementation request. The preparation below records the accepted design;
+see the As built section for the resulting boundaries. This change authorizes no upgrade or database discard.
 
 ## Purpose and current evidence
 
@@ -194,5 +194,42 @@ repository/live suite, baseline imports, new dependency or typing escape. Retain
 
 Acceptance is demonstrated by the installed `tl drain` surface plus the behavioral
 contracts above: no new work starts after its fence, existing executions finish,
-and success means verified idle. This planning step changes only this document;
-it does not claim those tests have run or that drain exists yet.
+and success means verified idle. The original planning step changed only this document and made no implementation claim.
+
+
+## As built — 2026-11-13
+
+`tl drain` resolves the existing machine configuration and durably fences the whole compatible database before
+printing progress. The drain slice owns request, observation, completion and explicit reopening; one codec renders
+human output and JSON Lines. Interrupted waiting preserves the fence. Refusals, uncertain observations and interruption
+use exits 1, 3 and 130; exit 0 requires verified idle. No drain operation launches an attempt, signals an execution,
+releases an admitted reservation or clears an existing task claim.
+
+Schema 18 adds drain state and external-action records, including boot-aware caller identity, reconciliation revision
+and the land's checkout. All attempt creators recheck the fence in their committing transaction. Fresh admission
+records its claim intent first and serializes competing pending claims before either can overtake the other. Dispatch
+records authorization before registered start; its callback can register across the fence only with that earlier intent.
+A synchronous round, land or finalization records its owner before external IO. An existing registered entry can finish
+its own capture, verification, publication and release after the fence.
+
+The owning readers collect every retained agent entry, agent, setup process, checks entry and check command, including
+historical/concluded rows. Caller death alone never settles a synchronous external action. Claim reconciliation adopts
+committed admission or returns only the unmatched recorded claim; delivery reconciliation observes origin and the
+tracker without another push, close or land. A reconciler adopts the intent transactionally before external IO, so a
+second drain caller cannot count that IO as idle. An outcome that cannot be established remains fenced and reports
+uncertainty, including an interrupted synchronous operation without a sufficient observable result.
+
+Explicit rounds startup finishes an incomplete drain and exits. A later explicit startup rechecks a completed boundary
+and atomically reopens it. Earlier rounds retain their generation and cannot schedule across that reopening. One-shot
+commands cannot reopen it. Matching-runtime unfinished attempts, sessions and reservations remain intact.
+
+The focused contracts added are `tests/steps/test_drain.py`, `tests/steps/test_drain_fences.py`,
+`tests/steps/test_drain_observe.py` and `tests/cli/test_drain_cli.py`. They cover natural agent/check completion,
+registration and admission races, process uncertainty, historical owners, concurrent reconciliation, interrupted restart,
+land delivery reconciliation, and the CLI's output/exit contracts. Existing rounds, claim-concurrency, release-race and
+source/isolation policy contracts now include the new slice and its ownership transactions. `just check` and
+`just test` remain the required gates; their existing selections include all four new files.
+
+The first schema-18 installation still requires the supervisor's verified previous-runtime boundary and the owner's
+deliberate discard. A schema-18 command refuses schema 17. The pinned previous-release runner remains separate delivery
+work. This implementation performs no migration, discard, restart or session continuation.

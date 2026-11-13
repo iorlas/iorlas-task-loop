@@ -268,28 +268,18 @@ def test_one_attempt_per_task_even_when_every_slot_is_held(
     assert again == AdmitRefused("task_attempted") and tracker.calls == [] and rows(factory) == (1, 1)
 
 
-@pytest.mark.parametrize(
-    ("failure", "expected"),
-    [
-        (None, AdmitRefused("task_attempted")),
-        (sqlite3.OperationalError("database is locked"), AdmitUnavailable("store", False, "OperationalError: database is locked")),
-        (sqlite3.IntegrityError("mismatch"), AdmitRefused("constraint", detail="IntegrityError: mismatch")),
-        (BdError("other", "down"), AdmitUnavailable("tracker", False, "BdError: other: down")),
-    ],
-)
-def test_a_concurrent_admission_of_the_task_keeps_the_winners_claim_with_one_slot(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, failure: Exception | None, expected: AdmitResult
+def test_a_concurrent_admission_cannot_overtake_a_pending_claim(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
 ) -> None:
-    """Both claim (Bd.claim is idempotent for the actor); the winner commits first; the loser must never unclaim."""
+    """The first durable intent wins; a second caller never touches or returns its claim."""
     slots(factory, repo, root, 1)
-    winner = Tracker(factory, tmp_path / "artifacts")
-    loser = Tracker(factory, tmp_path / "artifacts", claim=failure if isinstance(failure, BdError) else True)
-    loser.during = lambda: admission(factory, tmp_path, winner, repo).admit(request(tmp_path, repo))
-    admitter = admission(factory, tmp_path, loser, repo)
-    if isinstance(failure, sqlite3.Error):
-        admitter.begin = breaking(failure)
-    assert admitter.admit(request(tmp_path, repo)) == expected
-    assert winner.calls == ["claim:tl-1"] and loser.calls == ["claim:tl-1"] and rows(factory) == (1, 1)
+    first = Tracker(factory, tmp_path / "artifacts")
+    second = Tracker(factory, tmp_path / "artifacts")
+    contenders: list[AdmitResult] = []
+    first.during = lambda: contenders.append(admission(factory, tmp_path, second, repo).admit(request(tmp_path, repo)))
+    assert isinstance(admission(factory, tmp_path, first, repo).admit(request(tmp_path, repo)), Admitted)
+    assert len(contenders) == 1 and isinstance(contenders[0], AdmitRefused) and contenders[0].reason == "task_attempted"
+    assert first.calls == ["claim:tl-1"] and second.calls == [] and rows(factory) == (1, 1)
 
 
 @pytest.mark.parametrize(

@@ -12,7 +12,7 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import astuple, dataclass
-from typing import Final, Literal
+from typing import Final, Literal, override
 
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
@@ -20,6 +20,7 @@ from stream_proc import OwnedProcess
 from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import RESULT_HELD
+from taskloop.drain.models import Owner, Role, owners
 
 type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "interrupted"]
 CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "interrupted")
@@ -90,6 +91,13 @@ class SetupStore(AttemptReads):
     """The fenced `setup_run` writes and the reads the preparation needs. Only the identity write runs inside the
     registered start's window: it goes through `registering` (composition's bounded connection, waiting at most
     REGISTRATION_BUSY_MS); every other read and write through the store's own connection."""
+
+    @override
+    def drain_processes(self) -> tuple[Owner, ...]:
+        """Every recorded execution identity, including historical and already concluded work."""
+        with self._connection() as con:
+            rows = con.execute("SELECT attempt_id,pid,pgid,proc_start,boot FROM setup_run").fetchall()
+        return owners(rows, Role.SETUP, group=True)
 
     def __init__(
         self,

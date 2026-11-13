@@ -13,6 +13,8 @@ from taskloop.attempt_types import AttemptKey, FileRef
 from taskloop.check_repeat.feedback import CheckRepeatReason, FailedCheck
 from taskloop.check_repeat.status import CheckRepeatDecision, decision, failed_result
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
+from taskloop.drain.models import BLOCKED, Reason
+from taskloop.drain.store import blocked
 from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandStore
 from taskloop.repo import RepoId
@@ -76,6 +78,8 @@ class CheckRepeatStore(StoreConnection):
               free: tuple[Free, ...], deadline: float) -> Admitted | AdmitRefused:
         """Fenced source, current attempt, completed block, cap, release, hold and successor uniqueness under one lock."""
         with self._connection(write=True) as con:
+            if blocked(con):
+                return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
             state = CheckRepeatStore(lambda: con, self.begin).state(previous, evidence.source)
             if state is None:
                 return AdmitRefused("task_attempted")

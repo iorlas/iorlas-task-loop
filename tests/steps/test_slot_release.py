@@ -484,18 +484,15 @@ def test_a_checks_admission_committed_between_the_abandons_read_and_its_flip_ref
     """The admission commits first (`SUCCESSOR` in `FLIP`): the abandon read a current attempt, but its flip sees the checks
     attempt and changes nothing; the person reruns `--abandon`, which now refuses until the checks attempt is abandoned."""
     ports = settled(registered, tmp_path, slot, checkouts, slot_files)
-    opened = 0
+    @contextmanager
+    def raced(con: sqlite3.Connection) -> Generator[None]:
+        checks_attempt(registered, 1, False)
+        with begin_immediate(con):
+            yield
 
-    def connect() -> sqlite3.Connection:
-        nonlocal opened
-        opened += 1
-        if opened == 2:  # after the release's read, before its write transaction
-            checks_attempt(registered, 1, False)
-        return registered
-
-    releaser = replace(ports.releaser(), store=AttemptStore(connect))
+    releaser = replace(ports.releaser(), store=AttemptStore(lambda: registered, raced))
     found = releaser.release(KEY, True)
-    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed") and opened == 2
+    assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed")
     assert stored(registered)[1] == [(head(slot), 30.0, "kept")] and ports.unclaimed == []
     assert release_word(ports.releaser().release(KEY, True)) == "refused:changed"
 

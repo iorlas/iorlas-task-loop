@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from taskloop.attempt_reads import SlotUse
+from taskloop.drain.models import Reason
 from taskloop.evidence_files import EvidenceError
 from taskloop.operations import Ended, Failed, Quiet, Round, choices_refused, minutes_refused
 from taskloop.round import STOPPING_UNKNOWN, NextRequest, max_running_refused
@@ -49,6 +50,7 @@ class RoundsPorts:
     stopping: Callable[[], bool]
     pid: int
     ctrl_c: bool = True  # False when this process started with Ctrl-C ignored: only SIGTERM stops it
+    draining: Callable[[], bool] = lambda: False  # durable drain, separate from the interrupt flag
 
 
 def inputs(request: NextRequest) -> Failed | None:
@@ -119,18 +121,18 @@ def run_rounds(ports: RoundsPorts, request: RoundsRequest) -> Ended:
 def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log) -> Ended:
     quiet: Quiet = frozenset()
     backoff = _Backoff(request.every)
-    while not ports.stopping():
+    while not ports.stopping() and not ports.draining():
         before = _held(ports)
         found = ports.round(quiet)
         if isinstance(found, Failed) and found.kind not in STOPPING_UNKNOWN:
-            return _end(log, request.backlog, found.word, found.detail)
+            return _end(log, request.backlog, Reason.DRAINING if found.reason == Reason.DRAINING else found.word, found.detail)
         if isinstance(found, Round):
             log.seen(found.logged)
             quiet = found.written
         if ports.stopping():
             break
         _pause(ports, backoff.after(found, log), _union(before, _held(ports)))
-    return _end(log, request.backlog, INTERRUPTED)
+    return _end(log, request.backlog, Reason.DRAINING if ports.draining() else INTERRUPTED)
 
 
 def _held(ports: RoundsPorts) -> frozenset[tuple[str, str]] | None:
@@ -151,7 +153,7 @@ def _pause(ports: RoundsPorts, delay: int, baseline: frozenset[tuple[str, str]] 
     the round) is no longer reserved. A slot reserved since never wakes; an empty baseline has nothing to lose and is not read
     again; a failed read neither wakes nor fails, and while there is no baseline each check retries it."""
     due = ports.monotonic() + delay
-    while not ports.stopping() and (left := due - ports.monotonic()) > 0:
+    while not ports.stopping() and not ports.draining() and (left := due - ports.monotonic()) > 0:
         ports.wait(min(CHECK, left))
         if baseline is not None and not baseline:
             continue

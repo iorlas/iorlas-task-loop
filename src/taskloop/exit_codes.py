@@ -5,6 +5,7 @@ from enum import IntEnum
 from typing import Final
 
 from taskloop import profile
+from taskloop.drain.models import Reason
 from taskloop.land_guide import INTERRUPTED
 from taskloop.operations import (
     UNKNOWN_KINDS,
@@ -62,7 +63,7 @@ def exit_code(result: Result) -> ExitCode:
         case Round():
             return _round_exit(result)
         case Ended(reason=reason):
-            return (ExitCode.SUCCESS if reason == "interrupted" else
+            return (ExitCode.SUCCESS if reason in {"interrupted", Reason.DRAINING, Reason.DRAINED} else
                     ExitCode.INTERRUPTED if reason == "abrupt" else ExitCode.REFUSED)
         case _:
             return ExitCode.SUCCESS

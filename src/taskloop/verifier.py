@@ -33,6 +33,8 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
     WorkerGone,
 )
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import ActionKind, Reason
 from taskloop.factory_commit import NotSettled, clean_at, leftovers, settle
 from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import SlotState, bounded, observe_slot, staged
@@ -77,6 +79,18 @@ class Verifier:
         self.store, self.checkouts, self.files, self.gone, self.clock, self.hold = store, checkouts, files, gone, clock, hold
 
     def verify(self, key: AttemptKey) -> VerifyResult:
+        try:
+            with operation(self.store, ActionKind.FINALIZE, subject=key.attempt_id,
+                           existing=lambda owner: self.store.owns_entry(key, owner)):
+                return self._verified(key)
+        except Fenced:
+            return VerifyRefused(Reason.DRAINING)
+        except Unobservable:
+            return VerifyUnavailable("observe")
+        except StoreUnavailable:
+            return VerifyUnavailable("store")
+
+    def _verified(self, key: AttemptKey) -> VerifyResult:
         try:
             return self._verify(key)
         except StoreUnavailable:

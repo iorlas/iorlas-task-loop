@@ -210,6 +210,11 @@ class LandStore(StoreConnection):
         with self._connection() as con:
             return held_slot(con, key)
 
+    def for_task(self, backlog: str, task_id: str) -> tuple[LandRow, ...]:
+        with self._connection() as con:
+            rows = con.execute(LOADED + " WHERE a.backlog=? AND a.task_id=? ORDER BY l.number", (backlog, task_id)).fetchall()
+        return tuple(_row(row) for row in rows)
+
     def latest(self, checks: str) -> LandRow | None:
         """The checks attempt's latest candidate (its highest `number`); None before the first."""
         found = self.of_checks(checks)

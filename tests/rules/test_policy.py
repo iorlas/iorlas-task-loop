@@ -63,6 +63,13 @@ def test_caps_cannot_be_relaxed() -> None:
 
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
+    ("CREATE TABLE", "drain_state"): "factory_schema.py",
+    ("CREATE TABLE", "drain_action"): "factory_schema.py",
+    ("CREATE INDEX", "drain_action"): "factory_schema.py",
+    ("INSERT", "drain_state"): "drain/store.py",
+    ("UPDATE", "drain_state"): "drain/store.py",
+    ("INSERT", "drain_action"): "drain/store.py",
+    ("UPDATE", "drain_action"): "drain/store.py",
     ("CREATE TABLE", "slot"): "factory_schema.py",
     ("CREATE TABLE", "reservation"): "factory_schema.py",
     ("CREATE TABLE", "attempt"): "factory_schema.py",
@@ -119,8 +126,9 @@ def write_of(match: re.Match[str]) -> tuple[str, str]:
 
 
 def sql_writes() -> set[tuple[str, str, str]]:
-    paths = (ROOT / "src" / "taskloop").glob("*.py")
-    return {(*write_of(match), path.name) for path in paths for match in WRITE.finditer(path.read_text())}
+    paths = (ROOT / "src" / "taskloop").rglob("*.py")
+    return {(*write_of(match), str(path.relative_to(ROOT / "src" / "taskloop"))) for path in paths
+            for match in WRITE.finditer(path.read_text())}
 
 
 def test_every_sql_write_has_its_one_owner() -> None:

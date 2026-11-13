@@ -36,6 +36,8 @@ from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, a
 from taskloop.attempt_result import collect
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe, SlotFiles, WorkerGone
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks
 from taskloop.prepare import task_branch
 from taskloop.setup_store import SetupSeen, running
@@ -260,6 +262,18 @@ class SlotRelease:
     scratch: Scratch  # empties the slot's `.t/<slot>` after a release (`RealEnvFiles.empty_scratch`)
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        try:
+            with operation(self.store, ActionKind.FINALIZE, subject=key.attempt_id,
+                           existing=lambda owner: self.store.owns_entry(key, owner)):
+                return self._release(key, abandon, me)
+        except Fenced:
+            return NotReleased("refused", Reason.DRAINING, BLOCKED)
+        except Unobservable:
+            return NotReleased("unavailable", "observe", "The calling process cannot be observed.")
+        except (sqlite3.Error, StoreUnavailable):
+            return NotReleased("unavailable", "store")
+
+    def _release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         """Release the attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
         try:
             row = self._read(key)
