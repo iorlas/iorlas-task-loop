@@ -3,6 +3,7 @@
 // things: "step 2 of 4" is where the task is, "try 2" is how often that step ran.
 
 import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, fmtDur, since, startedAt, stepInfo, tick } from "./ui.js";
+import { wordNode } from "./words.js";
 
 const GAP_MS = 5000; // idle time shorter than this is not shown
 const stepOf = stepInfo;
@@ -17,12 +18,22 @@ export function lasted(a) {
 
 const marker = (cls) => el("span", `absolute -left-[3px] top-[0.8rem] h-1.5 w-1.5 rounded-full border ${cls}`);
 
+// "Factory checked the answer of Implement try 1": the verification names the attempt above it (it always follows its own attempt),
+// so its number is the verified step's try, not its own task-wide one.
+export function verifyTitle(list, a) {
+  const of = list[list.indexOf(a) - 1];
+  return `Factory checked the answer of ${stepOf(of?.step ?? a.step).label}${of ? ` try ${of.n}` : ""}`;
+}
+
+// The gap between two steps. Between a step and the next one the factory commits, publishes and starts the checks itself; only a gap
+// before a repeat or a restart can be waiting (for a slot), and it stays "idle".
 function idle(prev, next) {
   if (!prev?.ended_at || !next.started_at) return null;
   const ms = Date.parse(next.started_at) - Date.parse(prev.ended_at);
   if (ms < GAP_MS) return null;
-  const li = el("li", "relative py-1 pl-4 text-[11px] text-slate-400 dark:text-slate-500", `⏸ idle ${fmtDur(ms)}`);
-  li.title = "Time between the recorded end of the step above and the recorded start of this one; both are approximate.";
+  const work = !next.after;
+  const li = el("li", "relative py-1 pl-4 text-[11px] text-slate-400 dark:text-slate-500", work ? `⚙ factory work ${fmtDur(ms)} (commit, publish, start checks)` : `⏸ idle ${fmtDur(ms)}`);
+  li.title = `Time between the recorded end of the step above and the recorded start of this one; both are approximate.${work ? "" : " The factory was waiting, for a slot or its turn."}`;
   return li;
 }
 
@@ -30,24 +41,28 @@ function idle(prev, next) {
 function jump(a, list, i, select) {
   const j = JUMP[a.after];
   const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, i).findLast((x) => x.step !== VERIFY.id);
-  const li = el("li", `relative pb-0.5 pl-4 pt-1.5 text-[11px] leading-snug ${j.text}`);
-  li.title = a.reason ?? "";
+  const li = el("li", "relative pb-0.5 pl-4 pt-1.5");
+  const btn = el("button", `block w-full text-left text-[11px] leading-snug hover:underline ${j.text}`);
+  btn.type = "button";
   const what = a.after === "repeat" ? `${j.glyph} ${j.label} of ${stepOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}` : `${j.glyph} ${j.label} after ${stepOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""},${startedAt(a.started_at)}`;
-  li.append(el("span", "font-medium", what));
-  if (a.reason) li.append(el("span", "block line-clamp-2 text-slate-500 dark:text-slate-400", a.reason));
+  btn.title = a.reason ? `${what}: ${a.reason}` : what; // the full story is one hover or one click away
+  btn.append(el("span", "font-medium", what));
+  if (a.reason) btn.append(el("span", "block line-clamp-2 text-slate-500 dark:text-slate-400", a.reason));
+  btn.addEventListener("click", () => select(a.step, a.n)); // selects the attempt that began after it
+  li.append(btn);
   if (a.led_by) li.append(causeLink(a, select));
   return li;
 }
 
 // A repeat of an agent attempt names what led to it: the failed verification, one click away.
 export function causeLink(a, select) {
-  const btn = el("button", "block text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid", `because of ${VERIFY.label}, try ${a.led_by} →`);
+  const btn = el("button", "block text-left text-[11px] underline decoration-dotted underline-offset-2 hover:decoration-solid", "because the factory's check of the answer failed →");
   btn.type = "button";
   btn.addEventListener("click", () => select(VERIFY.id, a.led_by));
   return btn;
 }
 
-function row(a, selected, select) {
+function row(a, selected, select, list) {
   const st = STATE[a.state];
   const li = el("li", "relative pl-3");
   const dotEl = dot(st.dot);
@@ -57,12 +72,12 @@ function row(a, selected, select) {
   if (selected) btn.dataset.selected = "1";
   const top = el("span", "flex items-baseline gap-2");
   top.append(
-    el("span", `text-[13px] ${selected ? "font-semibold" : "font-medium"}`, `${stepOf(a.step).emoji} ${stepOf(a.step).label}`),
-    el("span", "text-[11px] text-slate-500 dark:text-slate-400", `try ${a.n}`),
+    el("span", `text-[13px] ${selected ? "font-semibold" : "font-medium"}`, a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(list, a)}` : `${stepOf(a.step).emoji} ${stepOf(a.step).label}`),
+    ...(a.step === VERIFY.id ? [] : [el("span", "text-[11px] text-slate-500 dark:text-slate-400", `try ${a.n}`)]),
     el("span", "ml-auto text-[11px] tabular-nums text-slate-500 dark:text-slate-400", lasted(a)),
   );
   btn.append(top);
-  if (a.state === "failed" || a.step === VERIFY.id) btn.append(el("span", "mt-0.5 block truncate text-[11px] text-slate-500 dark:text-slate-400", a.summary));
+  if (a.state === "failed" || a.step === VERIFY.id) btn.append(wordNode(el, a.summary, "mt-0.5 block truncate text-[11px] text-slate-500 dark:text-slate-400"));
   btn.addEventListener("click", () => select(a.step, a.n));
   li.append(dotEl, btn);
   return li;
@@ -97,7 +112,7 @@ export function rail(list, t, selected, select) {
     const gap = a.step === VERIFY.id ? null : idle(list.slice(0, i).findLast((x) => x.step !== VERIFY.id), a); // a verification has no time of its own
     if (gap) ol.append(gap);
     if (a.after) ol.append(jump(a, list, i, select));
-    ol.append(row(a, selected.step === a.step && selected.n === a.n, select));
+    ol.append(row(a, selected.step === a.step && selected.n === a.n, select, list));
   });
   const last = list.findLast((x) => x.step !== VERIFY.id);
   const reached = STEPS.findIndex((x) => x.id === last?.step);

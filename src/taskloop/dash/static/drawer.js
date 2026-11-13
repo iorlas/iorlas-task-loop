@@ -2,9 +2,9 @@
 // it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, position, quietSpan, startedAt, stepInfo, tag } from "./ui.js";
+import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, position, quietSpan, stepInfo, tag } from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
-import { causeLink, lasted, rail } from "./rail.js";
+import { causeLink, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 
@@ -224,13 +224,26 @@ function bodyTab(a, tab) {
 const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
 const nameOf = stepInfo;
 
+// "Began after a repeat of Implement, try 1 · why": the reason is also the hover text, and the rail's jump line selects this attempt.
+function began(a) {
+  const list = open.detail.attempts;
+  const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
+  const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`;
+  const what = a.after === "repeat" ? `a repeat of ${at}` : `a restart at plan (after ${at})`;
+  const line = el("p", `w-full text-xs ${JUMP[a.after].text}`);
+  line.append(el("span", "font-medium", `Began after ${what}`), el("span", "text-slate-500 dark:text-slate-400", a.reason ? ` · ${a.reason}` : ""));
+  line.title = a.reason ?? "";
+  if (a.led_by) line.append(" ", causeLink(a, select));
+  return line;
+}
+
 function pane() {
   const a = attemptOf();
   const st = STATE[a.state];
   const tab = tabOf(a);
   const wrap = el("section", "flex min-w-0 flex-1 flex-col");
   const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
-  top.append(el("h3", "text-sm font-semibold", `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
+  top.append(el("h3", "text-sm font-semibold", a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}` : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
   if (a.step !== VERIFY.id) top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
   if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) {
@@ -239,15 +252,7 @@ function pane() {
     top.append(quiet);
   }
   wrap.append(top);
-  if (a.after) {
-    const why = el("div", "px-6 pt-3");
-    const list = open.detail.attempts;
-    const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
-    const what = a.after === "repeat" ? "Repeat of" : "Restarted at plan after";
-    why.append(callout(JUMP[a.after].bar, `${what} ${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}${a.after === "repeat" ? "" : `,${startedAt(a.started_at)}`}`, a.reason));
-    if (a.led_by) why.append(causeLink(a, select));
-    wrap.append(why);
-  }
+  if (a.after) top.append(began(a)); // one compact line; the rail's jump line, selectable, holds the full story
   const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
   for (const [id, label] of TABS) {
     const on = id === tab;

@@ -1,5 +1,7 @@
 // Shared constants and small DOM helpers for the dashboard page.
 
+import { say } from "./words.js";
+
 export const COLUMNS = [
   { id: "waiting", label: "Ready", emoji: "⏳", help: "Approved by the person and not yet admitted to a slot." },
   { id: "plan", label: "Plan", emoji: "🧭", help: "A plan attempt is running in a slot." },
@@ -56,7 +58,11 @@ const BAR_TEXT = {
 export function callout(barCls, head, body) {
   const node = el("div", `border-l-2 pl-2.5 text-xs leading-snug ${barCls}`);
   if (head) node.append(el("p", `font-medium ${BAR_TEXT[barCls] ?? ""}`, head));
-  if (body) node.append(el("p", "mt-0.5 text-slate-600 dark:text-slate-300", body));
+  if (body) {
+    const text = el("p", "mt-0.5 text-slate-600 dark:text-slate-300", say(body)); // a typed code shows its words, the code as hover text
+    if (say(body) !== body) text.title = body;
+    node.append(text);
+  }
   return node;
 }
 
