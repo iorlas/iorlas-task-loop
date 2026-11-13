@@ -21,7 +21,7 @@ from taskloop.round_reader import LogRow
 
 PAGES = {"": "index.html", "index.html": "index.html", "app.js": "app.js", "api.js": "api.js", "drawer.js": "drawer.js",
          "logs.js": "logs.js", "ui.js": "ui.js", "lines.js": "lines.js", "rail.js": "rail.js",
-         "taskview.js": "taskview.js", "dash.css": "dash.css"}
+         "taskview.js": "taskview.js", "result.js": "result.js", "dash.css": "dash.css"}
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 
 

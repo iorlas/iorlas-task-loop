@@ -2,9 +2,10 @@
 // it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, JUMP, LAND, STATE, STEPS, ago, callout, el, fmtDur, position, quietSpan, tag } from "./ui.js";
+import { $, COLUMNS, JUMP, LAND, STATE, STEPS, ago, callout, el, position, quietSpan, tag } from "./ui.js";
 import { apply, atBottom, lines, show } from "./lines.js";
 import { lasted, rail } from "./rail.js";
+import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 
 let source = null;
@@ -219,53 +220,6 @@ function pane() {
   }
   wrap.append(bar, tab === "lines" ? lines(a) : tab === "result" ? result(a) : prompt(a));
   return wrap;
-}
-
-const BLOCK = "min-h-0 flex-1 overflow-y-auto px-6 py-4";
-const pre = (text, cls = "") => el("pre", `max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50 p-3 font-mono text-[11.5px] leading-relaxed dark:border-slate-800 dark:bg-slate-950/60 ${cls}`, text);
-const label = (text) => el("h4", "mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500", text);
-
-function result(a) {
-  const box = el("div", `${BLOCK} flex flex-col gap-5`);
-  const st = STATE[a.state];
-  const summary = el("div");
-  summary.append(label("Conclusion"), callout(a.state === "failed" ? "border-rose-500" : a.state === "running" ? "border-sky-500" : "border-emerald-500", null, a.result.summary));
-  box.append(summary);
-  if (a.result.answer) {
-    const ans = el("div");
-    ans.append(label("Agent answer"), el("p", "mb-1 text-xs"), pre(a.result.answer.text));
-    ans.children[1].append(tag(a.result.answer.disposition));
-    box.append(ans);
-  }
-  if (a.result.checks.length) {
-    const wrap = el("div");
-    wrap.append(label(`Checks · ${a.result.checks.length}`));
-    for (const c of a.result.checks) {
-      const row = el("div", "border-t border-slate-100 py-2 first:border-t-0 dark:border-slate-800/70");
-      const top = el("div", "flex items-baseline gap-3 text-xs");
-      top.append(el("span", "font-mono text-[12px]", c.name), el("span", `font-medium ${c.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`, c.passed ? "passed" : "failed"), el("span", "ml-auto tabular-nums text-slate-500", fmtDur(c.duration_ms)));
-      row.append(top);
-      if (c.output) row.append(pre(c.output, "mt-2 border-l-2 border-l-rose-500"));
-      wrap.append(row);
-    }
-    box.append(wrap);
-  } else if (a.result.output) {
-    const out = el("div");
-    out.append(label("Output"), pre(a.result.output, "border-l-2 border-l-rose-500"));
-    box.append(out);
-  }
-  if (a.state === "running") box.append(el("p", "text-xs text-slate-500", `${st.label}: the result is written when the attempt ends.`));
-  return box;
-}
-
-function prompt(a) {
-  const box = el("div", BLOCK);
-  if (!a.input) {
-    box.append(el("p", "text-sm text-slate-500", "No prompt: this step runs commands, not the agent."));
-    return box;
-  }
-  box.append(label(`Input sent to the agent · ${a.input.length} characters`), pre(a.input, "max-h-none"));
-  return box;
 }
 
 // A card moved. The drawer reloads the task's steps only when they can have changed (a step or try began or ended, a hold, a land);

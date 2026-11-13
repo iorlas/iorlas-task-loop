@@ -70,7 +70,8 @@ class CheckLine:
     name: str
     passed: bool
     duration_ms: int
-    output: str | None
+    output: str | None  # the tail of the check's log, passed or failed; None: the log is gone or unreadable
+    block: int = 1
 
 
 @dataclass(frozen=True)

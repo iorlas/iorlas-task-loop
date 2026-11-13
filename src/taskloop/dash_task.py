@@ -98,8 +98,7 @@ def _agent(ports: TaskPorts, row: AttemptRow, step_number: int) -> AttemptDetail
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:
     passed = result.conclusion == "passed"
     took = 0 if result.ended_at is None else int((result.ended_at - result.started_at) * 1000)
-    output = None if passed else ports.files.check_tail(row.key, result.block, result.name)
-    return CheckLine(result.name, passed, took, output)
+    return CheckLine(result.name, passed, took, ports.files.check_tail(row.key, result.block, result.name), result.block)
 
 
 def _checks(ports: TaskPorts, store: CheckStore, row: ChecksRow, earlier: str | None) -> AttemptDetail:

@@ -4,6 +4,8 @@ import sqlite3
 from pathlib import Path
 
 from any_agent import events
+from doubles import CHECKS
+from sqlite_store import begin_immediate
 
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
@@ -170,3 +172,20 @@ def test_a_task_shows_delivering_only_while_its_land_process_runs(landing: sqlit
     landing.execute("UPDATE land_candidate SET entry_pid=7,entry_start='entry-start',entry_boot='boot' WHERE candidate_id='candidate'")
     assert land_state(land_of(landing, "matching")) == "delivering"
     assert land_state(land_of(landing, "gone")) == "waiting"
+
+
+def test_each_check_carries_the_end_of_its_log_passed_or_failed_and_none_when_the_log_is_gone(
+    checking: sqlite3.Connection, tmp_path: Path,
+) -> None:
+    files, store = EvidenceFiles(tmp_path), CheckStore(lambda: checking, begin_immediate)
+    for position, name, rc, conclusion in ((0, "lint", 0, "passed"), (1, "test", 1, "failed"), (2, "types", 0, "passed")):
+        store.start(CHECKS, 1, position, name, "a" * 64, 60, 3)
+        store.finish(CHECKS, 1, position, conclusion, rc, 4)
+    files.check_log(CHECKS, 1, "lint").write_text("all clean\n")
+    files.check_log(CHECKS, 1, "test").write_text("FAILED tests/test_a.py::test_one\n" + "x" * 10000 + "\n1 failed\n")
+    found = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    lint, test, types = found.attempts[1].result.checks
+    assert (lint.passed, lint.output, lint.block) == (True, "all clean\n", 1)
+    assert not test.passed and test.output is not None and test.output.endswith("1 failed\n") and len(test.output) <= 8192
+    assert types.passed and types.output is None  # its log file is gone: unavailable, never a made-up empty output

@@ -55,16 +55,21 @@ function row(a, selected, select) {
   return li;
 }
 
-// The land is not an attempt of its own in the history yet: its row is the card's state (waiting for the person, delivering, done).
-function landRow(t) {
-  const word = t.column === "landed" ? LAND.done : LAND[t.land ?? "waiting"];
-  const li = el("li", "relative py-1.5 pl-4");
-  li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : "border-amber-500"), el("span", "text-[13px] font-medium", `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`));
+// The land is not an attempt of its own in the history yet: its row is the card's state (still to come, waiting for the person,
+// delivering, delivered), after the idle time since the checks ended while it waits.
+function landRow(t, last) {
+  const here = t.column === "land" || t.column === "landed";
+  const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "waiting"] : null;
+  const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
+  li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), el("span", `text-[13px] ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`));
+  if (!word) return li.append(el("span", "ml-2 text-[11px]", "pending")), li;
   li.append(el("span", `block text-[11px] ${word.text}`, word.row));
   if (t.column === "land" && t.land !== "delivering") li.append(el("code", "block truncate font-mono text-[11px] text-slate-500 dark:text-slate-400", `tl step land ${t.id}`));
+  if (t.column === "land" && last?.ended_at) li.append(el("span", "block text-[11px] text-slate-400 dark:text-slate-500", `⏸ idle ${fmtDur(Date.now() - Date.parse(last.ended_at))} since the checks ended`));
   return li;
 }
 
+// Every step of the chain in order: what ran (with its tries and the idle time between), then what has not started (pending), the land last.
 export function rail(list, t, selected, select) {
   const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
   wrap.append(el("h3", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", "Steps"));
@@ -76,13 +81,13 @@ export function rail(list, t, selected, select) {
     ol.append(row(a, selected.step === a.step && selected.n === a.n, select));
   });
   const last = list.at(-1);
-  if (STEPS.some((s) => s.id === t.column) && t.column !== "land" && last?.state !== "failed") {
-    for (const s of STEPS.slice(STEPS.findIndex((x) => x.id === last.step) + 1)) {
-      const li = el("li", "relative py-1.5 pl-4 text-[13px] text-slate-400 dark:text-slate-600");
-      li.append(marker("border-slate-300 dark:border-slate-600"), `${s.emoji} ${s.label}`);
-      ol.append(li);
-    }
-  } else if (t.column === "land" || t.column === "landed") ol.append(landRow(t));
+  const reached = STEPS.findIndex((x) => x.id === last?.step);
+  for (const s of STEPS.slice(reached + 1, -1)) {
+    const li = el("li", "relative py-1.5 pl-4 text-[13px] text-slate-400 dark:text-slate-600");
+    li.append(marker("border-slate-300 dark:border-slate-600"), `${s.emoji} ${s.label}`, el("span", "ml-2 text-[11px]", "pending"));
+    ol.append(li);
+  }
+  ol.append(landRow(t, last));
   wrap.append(ol);
   return wrap;
 }

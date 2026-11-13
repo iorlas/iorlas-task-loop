@@ -35,14 +35,17 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
   aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
   jump names how the next attempt began: `↻ Repeat of Checks` (the same step again) or `↩ Back to plan` (restarted at plan, D4)
   with its reason; the label sits above the attempt it began. Between two rows an `⏸ idle 4m 00s` line shows the time nothing
-  ran (5 s and up). The Land row is the card's state (waiting for you, delivering, delivered). A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
+  ran (5 s and up). Every step of the chain is a row: steps not started are dim `pending` rows, and the Land row is the card's state (pending, waiting for you with the idle time since the checks ended, delivering, delivered). A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
   - **Lines**: the log grid (below). Opens first for a running attempt. New lines never change the tab, the selection or the
     scroll place: the view follows the end only when it was already at the end. No count in the tab name; a quiet line says
     how many lines are kept and whether it is live. A pause of 2 s or more before a line is a faint `⏸ paused 33s` row (the
     producer's `waited_ms`, else the time since the previous line ended). An agent message is shown in full; the events carry
     no separate thinking text, so none is shown.
-  - **Result**: the conclusion, the agent's answer (disposition and text) and for checks each check's result with its
-    full output (a failed check shows its output at once). Opens first for an ended attempt.
+  - **Result**: the conclusion, the agent's answer and for checks each check's result with the end of its log (the last 8 KiB of
+    `check-<block>-<name>.log`, read behind the evidence files by the attempt's key, never a path from the browser). A failed
+    check is listed first and open, a passed one folded; a log that is gone says *Output unavailable*. The answer (`answer.txt`,
+    the agent's JSON object) is shown as labelled fields with a *Raw* toggle; text that is not an object is shown as it is.
+    No failure summary is derived from the logs (that would be parsing text), so the tail is the summary. Opens first for an ended attempt.
   - **Prompt**: exactly what the agent was told in that attempt, repeat feedback included; a step that runs commands
     (checks, land) has none. The chosen tab stays when another attempt is selected, so prompts can be compared.
   An attempt that began as a jump also shows why, naming the attempt it follows ("Repeat of Checks #5").
@@ -150,7 +153,7 @@ stream as `{"kind": "log", "row": <row>}`.
      "input": "You are the implementing agent for task tl-7d5. ...",
      "result": {"summary": "failed: deadline exceeded after 30m",
                 "answer": {"disposition": "incomplete", "text": "..."},
-                "checks": [{"name": "types", "passed": false, "duration_ms": 23000, "output": "ERROR ..."}],
+                "checks": [{"name": "types", "passed": false, "duration_ms": 23000, "block": 1, "output": "ERROR ..."}],
                 "output": null},
      "feed": [ <live event>, ... ]}
   ]
@@ -162,7 +165,7 @@ stream as `{"kind": "log", "row": <row>}`.
 while running. `after` says how the attempt began: `null` (the previous step succeeded), `repeat` or `restart_at_plan`,
 with the `reason` the engine recorded. `input` is the prompt text the agent was given (`null` for a step that runs commands). `result.answer` is the
 agent's answer (`null` before it ends or for checks and land); `result.checks` are the check results of a checks attempt
-with the full output of each failed one; `result.output` is any other failure output, such as a stopped command's.
+with the log tail of each check (`output` is `null` when its log is gone); `result.output` is any other failure output, such as a stopped command's.
 `feed` is the last 20 lines of that attempt, oldest first. A task with no attempt answers a waiting card and no attempts. This
 answer never waits for the tracker.
 
