@@ -567,7 +567,7 @@ def test_the_harness_is_cleaned_up_once_on_every_exit(
     surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, case: str, status: str, reason: str, phase: str
 ) -> None:
     flaky, now, execution = Flaky(database(surroundings)), [10.0], fake()
-    monkeypatch.setattr("taskloop.attempt.CodexHarness", CountingHarness)
+    monkeypatch.setattr("taskloop.harness_choice.CodexHarness", CountingHarness)
     monkeypatch.setattr(CountingHarness, "cleanups", [])
     monkeypatch.setattr(CountingHarness, "broken", case == "launch")
 

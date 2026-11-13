@@ -45,6 +45,7 @@ from taskloop.admit_rows import as_count, insert_attempt, issue, reserve
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER, REPEATED
+from taskloop.harness_choice import HarnessKind, provider_of
 from taskloop.prepare import HEADS, MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
@@ -62,7 +63,7 @@ p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.rep
 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
  AND e.effect IN ('commit','keep') AND e.session_state='complete')
 AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
-p.tracker_root,p.seq,p.slot_head,p.step,p.label
+p.tracker_root,p.seq,p.slot_head,p.step,p.label,p.harness,p.provider
 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 
 
@@ -137,6 +138,7 @@ class ChainAdmission:
                 "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": as_count(row[13]) + 1,
                 "slot_head": row[14], "step": row[15],
+                "harness": row[17], "provider": row[18],
                 "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
             })
             moved = con.execute(
@@ -170,6 +172,7 @@ class NextStepRequest:
     effort: str
     sandbox: str
     deadline: float
+    harness: HarnessKind = HarnessKind.CODEX
 
 
 @dataclass(frozen=True)
@@ -307,7 +310,8 @@ class NextAdmission:
                 "step": step, "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None, "repeat_listing": None, "seq": as_count(row[7]) + 1, "slot_head": head,
-                "after_commit": row[5], "label": row[8],
+                "after_commit": row[5], "label": row[8], "harness": request.harness,
+                "provider": provider_of(request.harness, request.model),
             })
         return Admitted(key, name)
 

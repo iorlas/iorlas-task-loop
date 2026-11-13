@@ -10,6 +10,7 @@ from any_agent import RunOutcome, classify
 from any_agent.procs import Worker
 from git_porcelain import Repo
 
+from taskloop.harness_choice import HarnessKind
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference
 
@@ -131,6 +132,7 @@ class Admission:
     number: int  # the attempt's number in its step (1, 2, 3), admitted with it
     step: str  # the step the attempt belongs to (`plan`, `implement`), admitted with it
     after_commit: str | None = None  # attempt 1 of a later step: the previous step's published X, which it starts from
+    harness: HarnessKind = HarnessKind.CODEX  # the agent harness the attempt runs under (`harness_choice`)
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,7 @@ from difflib import SequenceMatcher
 
 from any_agent.activity import Activity
 
+from taskloop.access import SANDBOX
 from taskloop.activity_file import ActivityPage
 from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
@@ -26,6 +27,7 @@ from taskloop.dash_model import (
     FeedEvent,
     FeedPage,
     Outcome,
+    Run,
     State,
     TaskDetail,
     TrackerDetail,
@@ -35,6 +37,7 @@ from taskloop.dash_model import (
 from taskloop.dash_verify import STEP as VERIFICATION
 from taskloop.dash_verify import applies, verification
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS
 from taskloop.hold_store import HoldStore
 from taskloop.operations import Failed
 from taskloop.profile import LandMode
@@ -100,13 +103,25 @@ def _agent(
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
     page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
     return AttemptDetail(row.step, number, state, iso(started), iso(ended), result.reason or result.status, after, reason,
-                         previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None)
+                         previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None,
+                         run=_run(row))
 
 
 def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
     """The line ranges [start, end) of `now` that `before` lacks: what a repeat's prompt added to the attempt it repeats."""
     found = SequenceMatcher(None, before.splitlines(), now.splitlines(), autojunk=False).get_opcodes()
     return tuple((start, end) for kind, _a, _b, start, end in found if kind in ("insert", "replace"))
+
+
+SANDBOX_WORDS = {SANDBOX: "can write its own workspace only, no network"}
+
+
+def _run(row: AttemptRow) -> Run | None:
+    choices = row.run
+    if choices is None:
+        return None
+    return Run(HARNESS_WORDS[choices.harness], PROVIDER_WORDS[choices.provider], choices.model, choices.effort,
+               SANDBOX_WORDS.get(choices.sandbox, choices.sandbox))
 
 
 def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody:

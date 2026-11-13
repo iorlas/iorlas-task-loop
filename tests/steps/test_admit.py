@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,7 @@ from taskloop.composition import adopt_slots, open_admission, real_slots
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind, Provider
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt
@@ -173,6 +175,20 @@ def test_the_admission_stores_the_label_the_task_is_ingested_under(
     result = admission(factory, tmp_path, tracker, repo).admit(request(tmp_path, repo, label=label))
     assert isinstance(result, Admitted)
     assert factory.execute("SELECT attempt_id,label FROM attempt").fetchall() == [(result.key.attempt_id, label)]
+
+
+@pytest.mark.parametrize(("harness", "model", "provider"), [
+    (HarnessKind.CODEX, "gpt-5.5", Provider.OPENAI), (HarnessKind.CLAUDE, "opus", Provider.ANTHROPIC),
+    (HarnessKind.OPENCODE, "opencode/deepseek-v4.1-flash-free", Provider.DEEPSEEK), (HarnessKind.OPENCODE, "mystery", Provider.UNKNOWN),
+])
+def test_the_admission_stores_the_harness_and_the_provider_derived_from_it_and_the_model(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, harness: HarnessKind, model: str, provider: Provider
+) -> None:
+    slots(factory, repo, root, 1)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    wanted = replace(request(tmp_path, repo, model=model), harness=harness)
+    assert isinstance(admission(factory, tmp_path, tracker, repo).admit(wanted), Admitted)
+    assert factory.execute("SELECT harness,provider,model FROM attempt").fetchall() == [(harness, provider, model)]
 
 
 def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(

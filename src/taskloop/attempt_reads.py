@@ -12,6 +12,7 @@ from sqlite_store import begin_immediate
 
 from taskloop.attempt_types import ATTEMPTS, EFFECTS, AttemptKey, ChainLink, Effect, EntryIdentity, FileRef
 from taskloop.factory_schema import REPEATED, current
+from taskloop.harness_choice import HarnessKind, Provider
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,17 @@ class PublishedRow:
 
 
 @dataclass(frozen=True)
+class RunChoices:
+    """What an agent attempt was admitted to run: its harness, the provider of its model, its model, effort and sandbox."""
+
+    harness: HarnessKind
+    provider: Provider
+    model: str
+    effort: str
+    sandbox: str
+
+
+@dataclass(frozen=True)
 class AttemptRow:
     """One attempt as the status reads see it; the key is for further reads only, never for display. `successor`: a
     later attempt of the step names this one (it was repeated, so it is fenced and superseded)."""
@@ -66,6 +78,7 @@ class AttemptRow:
     label: str | None = None  # the approval label a round took the task under (`attempt.label`); None: started by hand
     end_commit: str | None = None  # X, once stored
     repeat_listing: tuple[str, ...] = ()  # a repeat's: what the verification that led to it listed
+    run: RunChoices | None = None  # the agent's harness, provider, model, effort and sandbox as admitted
 
 
 @dataclass(frozen=True)
@@ -253,7 +266,8 @@ class AttemptReads(StoreConnection):
                 {REPEATED},p.seq,
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
                  AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step,
-                p.label,p.end_commit,p.repeat_listing FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
+                p.label,p.end_commit,p.repeat_listing,
+                p.harness,p.provider,p.model,p.effort,p.sandbox FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
                 WHERE p.adapter='beads' AND (?1 IS NULL OR p.backlog=?1) AND (?2 IS NULL OR p.task_id=?2)
                 ORDER BY p.backlog,p.task_id,p.seq DESC""",
@@ -270,7 +284,9 @@ class AttemptReads(StoreConnection):
                 AttemptRow(key, as_text(row[3]), as_text(row[4]), as_text(row[5]), as_text(row[6]), entry, float(row[10]), worker,
                            as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[25]),
                            as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]),
-                           as_nullable_text(row[26]), as_nullable_text(row[27]), as_listed(row[28]))
+                           as_nullable_text(row[26]), as_nullable_text(row[27]), as_listed(row[28]),
+                           RunChoices(HarnessKind(as_text(row[29])), Provider(as_text(row[30])), as_text(row[31]), as_text(row[32]),
+                                      as_text(row[33])))
             )
         return tuple(found)
 

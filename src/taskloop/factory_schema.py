@@ -11,18 +11,24 @@ close; `check_result.attempt_id` names a checks attempt or a land candidate, so 
 `task_hold`, a hold of a round-taken task's agent attempt with its tracker writes' phases (written only by `hold_store`).
 v15 (tl-8bh9.14.134): `attempt.repeat_listing`, the JSON array of paths the failed verification listed (the unsafe path,
 the leftovers, the ignored paths) that a repeat attempt answers; NULL for attempt 1. The dashboard shows it as the
-verification's result. No migration: an older factory.db is refused (`schema`)."""
+verification's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.provider`, the agent harness the step ran under and the
+provider of its model (`harness_choice`), shown on the dashboard. No migration: an older factory.db is refused (`schema`)."""
 
 import sqlite3
 from pathlib import Path
 
 from sqlite_store import Schema, SchemaError
 
+from taskloop.harness_choice import HarnessKind, Provider
+
+_HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
+_PROVIDERS = ",".join(f"'{each}'" for each in Provider)
+
 SCHEMA = Schema(
-    version=15,
+    version=16,
     name="factory",
     steps={},
-    ddl="""
+    ddl=f"""
 CREATE TABLE slot (
  repo_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
  generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
@@ -52,6 +58,8 @@ CREATE TABLE attempt (
  repeat_listing TEXT CHECK(repeat_listing IS NULL OR json_valid(repeat_listing)),
  after_commit TEXT CHECK(after_commit IS NULL OR length(after_commit) IN (40,64)),
  label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 200),
+ harness TEXT NOT NULL DEFAULT '{HarnessKind.CODEX}' CHECK(harness IN ({_HARNESSES})),
+ provider TEXT NOT NULL DEFAULT '{Provider.OPENAI}' CHECK(provider IN ({_PROVIDERS})),
  CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
  CHECK((number = 1 AND step <> 'plan') = (after_commit IS NOT NULL)),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
@@ -190,12 +198,12 @@ SLOT = "repo_id,name,path"
 RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label"
+    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label,harness,provider"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
     "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,end_commit,"
-    "number,previous_attempt_id,step,after_commit"
+    "number,previous_attempt_id,step,after_commit,harness"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,"

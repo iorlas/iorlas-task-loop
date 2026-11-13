@@ -34,6 +34,7 @@ from taskloop.admit_rows import as_count, insert_attempt, reserve
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import current
+from taskloop.harness_choice import HarnessKind, provider_of
 from taskloop.prepare import branch_refusal, held_refusal, refusal_detail
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
@@ -68,6 +69,7 @@ class AdmitRequest:
     sandbox: str
     deadline: float
     label: str | None  # the approval label a round ingests the task under, stored on the attempt; None: started by hand
+    harness: HarnessKind = HarnessKind.CODEX  # the agent harness the step runs under; its provider is derived from it and the model
 
 
 @dataclass(frozen=True)
@@ -258,7 +260,8 @@ class AttemptAdmission:
                 "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
                 "previous_attempt_id": None, "repeat_reason": None, "repeat_listing": None, "seq": _next_seq(con, request),
                 "slot_head": head,
-                "after_commit": None, "label": request.label,
+                "after_commit": None, "label": request.label, "harness": request.harness,
+                "provider": provider_of(request.harness, request.model),
             })
         return Admitted(key, name)
 

@@ -11,6 +11,7 @@ from taskloop import attempt_status, cli_composition, dash_composition, land, op
 from taskloop.composition import real_slots
 from taskloop.exit_codes import exit_code
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind
 from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import ConfigRefused, Effective, Flags, Loaded
 from taskloop.operations import Ended, Failed, Round, StartRequest
@@ -57,6 +58,7 @@ def register(commands: Parsers) -> None:
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
+    _harness_flag(start)
     _common(start, "--db", "--artifacts")
     status = _add(step, "show", "The task's attempt, its entry, setup run, result and next action (read-only)")
     status.add_argument("task_id", metavar="TASK")
@@ -127,6 +129,11 @@ def _land_flags(parser: argparse.ArgumentParser) -> None:
     _common(parser, "--db", "--artifacts")
 
 
+def _harness_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--harness", type=HarnessKind, choices=list(HarnessKind), default=HarnessKind.CODEX,
+                        help="The agent harness a started step runs under (default codex)")
+
+
 def _round_flags(parser: argparse.ArgumentParser) -> None:
     for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
         parser.add_argument(flag, required=True)
@@ -137,6 +144,7 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
                         "at which no new task starts (default 3, at least 1); claimed work advances regardless. Start only what you "
                         "approved: use a label only those tasks carry")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
+    _harness_flag(parser)
     parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
                         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
                         "factory on the tracker); run it once, with `tl step next`")
@@ -150,14 +158,15 @@ def views_for(loaded: Loaded) -> GitViews:
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.model,
-                           arguments.effort, arguments.minutes)
+                           arguments.effort, arguments.minutes, harness=arguments.harness)
     with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
         return ports if isinstance(ports, Failed) else operations.start(ports, request)
 
 
 def _next_request(arguments: argparse.Namespace) -> NextRequest:
     return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
-                       arguments.effort, arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed)
+                       arguments.effort, arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed,
+                       harness=arguments.harness)
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:

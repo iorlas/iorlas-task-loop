@@ -41,6 +41,7 @@ from taskloop.attempt_types import (
 from taskloop.command_sink import CommandSink, WatchedHooks
 from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.harness_choice import launchable
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
@@ -205,7 +206,9 @@ class Attempts:
             schema, out_file = self.files.prepare(admission.key, kind(admission.step).answer_schema)
         except EvidenceError:
             return AttemptResult("unavailable", "files")
-        harness = CodexHarness()
+        harness = launchable(admission.harness)
+        if harness is None:  # the credentials are the machine's Codex login: no other harness has any yet
+            return AttemptResult("unavailable", "harness:" + admission.harness)
         access = prepared_access(folders(Path(admission.slot_path))) if kind(admission.step).environment else CODEX_ACCESS
         inputs = LaunchInputs(
             exe=exe,
