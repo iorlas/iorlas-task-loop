@@ -1,7 +1,7 @@
 // The Result and Prompt tabs of one attempt: the conclusion, the agent's answer (formatted, with a raw toggle) and each check's
 // output (a failed one open, a passed one folded). Display only.
 
-import { STATE, callout, el, fmtDur, tag } from "./ui.js";
+import { STATE, callout, el, fmtDur, stepInfo, tag } from "./ui.js";
 
 const BLOCK = "min-h-0 flex-1 overflow-y-auto px-6 py-4";
 const pre = (text, cls = "") => el("pre", `max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50 p-3 font-mono text-[11.5px] leading-relaxed dark:border-slate-800 dark:bg-slate-950/60 ${cls}`, text);
@@ -64,6 +64,34 @@ function check(c, blocks, shown) {
   return node;
 }
 
+const MARK = {
+  passed: ["passed", "text-emerald-600 dark:text-emerald-400"],
+  failed: ["failed", "text-rose-600 dark:text-rose-400"],
+  not_run: ["not reached", "text-slate-400 dark:text-slate-500"],
+};
+
+// The factory's verification of an agent attempt: what it checked, in its order, which check failed, the typed result and what the
+// failed check listed (a path it will not commit, the leftovers beside it, ignored paths). Display only, from the stored facts.
+function verification(v) {
+  const box = el("div", "flex flex-col gap-5");
+  const what = el("div");
+  what.append(label(`Checked after ${stepInfo(v.of_step).label}, try ${v.of} · the agent listed ${v.listed.length} ${v.listed.length === 1 ? "path" : "paths"}`));
+  const list = el("ol", "list-decimal pl-5 text-sm");
+  for (const c of v.checks) {
+    const li = el("li", "py-0.5");
+    li.append(el("span", c.state === "failed" ? "font-medium" : "", c.name), " ", el("span", `text-xs font-medium ${MARK[c.state][1]}`, MARK[c.state][0]));
+    list.append(li);
+  }
+  what.append(list);
+  box.append(what);
+  if (v.listing.length) {
+    const found = el("div");
+    found.append(label(`Named by the failed check · ${v.listing.length}`), pre(v.listing.join("\n"), "border-l-2 border-l-rose-500"));
+    box.append(found);
+  }
+  return box;
+}
+
 // `body` is what the attempt's own request answered; `shown` is {key, opened}: the attempt's key and the checks the owner toggled.
 export function result(a, body, shown) {
   const box = el("div", `${BLOCK} flex flex-col gap-5`);
@@ -71,6 +99,7 @@ export function result(a, body, shown) {
   const summary = el("div");
   summary.append(label("Conclusion"), callout(a.state === "failed" ? "border-rose-500" : a.state === "running" ? "border-sky-500" : "border-emerald-500", null, body.result.summary));
   box.append(summary);
+  if (body.result.verification) box.append(verification(body.result.verification));
   if (body.result.answer) box.append(answer(body.result.answer));
   if (body.result.checks.length) {
     const wrap = el("div");
@@ -94,6 +123,12 @@ export function prompt(a, body) {
     box.append(el("p", "text-sm text-slate-500", "No prompt: this step runs commands, not the agent."));
     return box;
   }
-  box.append(label(`Input sent to the agent · ${body.input.length} characters`), pre(body.input, "max-h-none"));
+  const added = body.added.reduce((sum, [from, to]) => sum + to - from, 0);
+  box.append(label(`Input sent to the agent · ${body.input.length} characters${added ? ` · ${added} lines added to the previous attempt's prompt, marked` : ""}`));
+  if (!added) return box.append(pre(body.input, "max-h-none")), box;
+  const marked = new Set(body.added.flatMap(([from, to]) => Array.from({ length: to - from }, (_, k) => from + k)));
+  const text = el("div", "whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50 py-2 font-mono text-[11.5px] leading-relaxed dark:border-slate-800 dark:bg-slate-950/60");
+  body.input.split("\n").forEach((line, at) => text.append(el("div", marked.has(at) ? "border-l-2 border-l-emerald-500 bg-emerald-50 px-3 dark:bg-emerald-950/40" : "px-3 border-l-2 border-l-transparent", line || " ")));
+  box.append(text);
   return box;
 }

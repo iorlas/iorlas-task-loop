@@ -65,6 +65,7 @@ class AttemptRow:
     published: PublishedRow | None = None
     label: str | None = None  # the approval label a round took the task under (`attempt.label`); None: started by hand
     end_commit: str | None = None  # X, once stored
+    repeat_listing: tuple[str, ...] = ()  # a repeat's: what the verification that led to it listed
 
 
 @dataclass(frozen=True)
@@ -244,7 +245,7 @@ class AttemptReads(StoreConnection):
                 {REPEATED},p.seq,
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
                  AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step,
-                p.label,p.end_commit FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
+                p.label,p.end_commit,p.repeat_listing FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
                 WHERE p.adapter='beads' AND (?1 IS NULL OR p.backlog=?1) AND (?2 IS NULL OR p.task_id=?2)
                 ORDER BY p.backlog,p.task_id,p.seq DESC""",
@@ -261,7 +262,7 @@ class AttemptReads(StoreConnection):
                 AttemptRow(key, as_text(row[3]), as_text(row[4]), as_text(row[5]), as_text(row[6]), entry, float(row[10]), worker,
                            as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[25]),
                            as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]),
-                           as_nullable_text(row[26]), as_nullable_text(row[27]))
+                           as_nullable_text(row[26]), as_nullable_text(row[27]), as_listed(row[28]))
             )
         return tuple(found)
 

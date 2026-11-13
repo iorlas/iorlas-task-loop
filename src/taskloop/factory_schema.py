@@ -9,7 +9,9 @@ in one block); `setup_run.attempt_id` names an `attempt` or a `checks_attempt`, 
 close; `check_result.attempt_id` names a checks attempt or a land candidate, so it loses its foreign key. v14
 (tl-8bh9.14.9): `attempt.label`, the approval label a round ingested the task under (NULL: started by hand), and
 `task_hold`, a hold of a round-taken task's agent attempt with its tracker writes' phases (written only by `hold_store`).
-No migration: an older factory.db is refused (`schema`)."""
+v15 (tl-8bh9.14.134): `attempt.repeat_listing`, the JSON array of paths the failed verification listed (the unsafe path,
+the leftovers, the ignored paths) that a repeat attempt answers; NULL for attempt 1. The dashboard shows it as the
+verification's result. No migration: an older factory.db is refused (`schema`)."""
 
 import sqlite3
 from pathlib import Path
@@ -17,7 +19,7 @@ from pathlib import Path
 from sqlite_store import Schema, SchemaError
 
 SCHEMA = Schema(
-    version=14,
+    version=15,
     name="factory",
     steps={},
     ddl="""
@@ -47,6 +49,7 @@ CREATE TABLE attempt (
  slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),
  previous_attempt_id TEXT UNIQUE REFERENCES attempt(attempt_id),
  repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored')),
+ repeat_listing TEXT CHECK(repeat_listing IS NULL OR json_valid(repeat_listing)),
  after_commit TEXT CHECK(after_commit IS NULL OR length(after_commit) IN (40,64)),
  label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 200),
  CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
@@ -187,7 +190,7 @@ SLOT = "repo_id,name,path"
 RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head,after_commit,label"
+    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"

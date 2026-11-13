@@ -7,7 +7,7 @@ from typing import Literal, Protocol
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
-type LandState = Literal["waiting", "delivering"]
+type LandState = Literal["waiting", "landing"]
 
 
 def iso(epoch: float | None) -> str | None:
@@ -32,7 +32,7 @@ class Card:
     last_activity_at: str | None
     slot: str | None
     hold_cause: str | None
-    land: LandState | None = None  # in `land` only: `waiting` for the person to run `tl step land`, `delivering` while a land runs
+    land: LandState | None = None  # in `land` only: `waiting` for the person to run `tl step land`, `landing` while a land runs
 
 
 @dataclass(frozen=True)
@@ -82,11 +82,34 @@ class Answer:
 
 
 @dataclass(frozen=True)
+class VerifyCheck:
+    """One check of a verification: the factory's wording of it, and whether it passed, failed or was not reached."""
+
+    name: str
+    state: Literal["passed", "failed", "not_run"]
+
+
+@dataclass(frozen=True)
+class Verification:
+    """What the factory checked after an agent attempt's committing answer: `of_step`/`of` name that attempt, `listed` is what the
+    agent asked to commit, `result` the typed words (`verified`, `reused`, `rejected:<rule>`, `unsettled:<reason>`, `pending`) and
+    `listing` what the failed check named (the unsafe path and the leftovers beside it, the ignored paths)."""
+
+    of_step: str
+    of: int
+    listed: tuple[str, ...]
+    checks: tuple[VerifyCheck, ...]
+    result: str
+    listing: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Outcome:
     summary: str
     answer: Answer | None
     checks: tuple[CheckLine, ...]
     output: str | None
+    verification: Verification | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +154,7 @@ class AttemptDetail:
     repeat_of: int | None  # the try of this step that a `repeat` repeats
     feed: tuple[FeedEvent, ...]
     feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
+    led_by: int | None = None  # a repeat of an agent attempt: the try of the `verification` step whose failure led to it
 
 
 @dataclass(frozen=True)
@@ -140,6 +164,7 @@ class AttemptBody:
 
     input: str | None
     result: Outcome
+    added: tuple[tuple[int, int], ...] = ()  # a repeat's prompt: the line ranges [start, end) the previous attempt's prompt lacks
 
 
 @dataclass(frozen=True)

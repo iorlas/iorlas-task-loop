@@ -83,7 +83,8 @@ class StepRepeat:
         text = self._input(current, found[0], stopped)
         if isinstance(text, Failed):
             return text
-        admitted = self._takeover(RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1]), stopped.admission.slot_path)
+        request = RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1], found[0].listing)
+        admitted = self._takeover(request, stopped.admission.slot_path)
         return self._launch(backlog, task_id, current, admitted, stopped.admission.number + 1, minutes)
 
     def _leftovers(

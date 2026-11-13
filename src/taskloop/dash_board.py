@@ -27,8 +27,8 @@ def column_of(view: AttemptView) -> Column:
 
 
 def land_state(land: LandView | None) -> LandState:
-    """`delivering` only while a land is observed running; every other task in the land column waits for the person."""
-    return "delivering" if land is not None and land.row.pending and land.process == "running" else "waiting"
+    """`landing` only while a land is observed running; every other task in the land column waits for the person."""
+    return "landing" if land is not None and land.row.pending and land.process == "running" else "waiting"
 
 
 def _repeat(view: AttemptView) -> Repeat | None:

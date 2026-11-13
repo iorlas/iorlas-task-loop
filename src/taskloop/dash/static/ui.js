@@ -5,11 +5,14 @@ export const COLUMNS = [
   { id: "plan", label: "Plan", emoji: "🧭", help: "A plan attempt is running in a slot." },
   { id: "implement", label: "Implement", emoji: "🛠️", help: "An implement attempt is running in a slot." },
   { id: "checks", label: "Checks", emoji: "🧪", help: "A checks attempt is running the profile's checks." },
-  { id: "land", label: "Land", emoji: "🚀", help: "Checked and ready. It waits for the person to run tl step land; a card says delivering only while a land runs." },
+  { id: "land", label: "Land", emoji: "🚀", help: "Checked and ready. It waits for the person to run tl step land; a card says landing only while a land runs." },
   { id: "held", label: "Held", emoji: "⛔", help: "The factory will not advance this task until a person acts. The hold cause says what to do." },
-  { id: "landed", label: "Landed", emoji: "✅", help: "Delivered to main and closed." },
+  { id: "landed", label: "Landed", emoji: "✅", help: "Landed on main and closed." },
 ];
 export const STEPS = COLUMNS.slice(1, 5);
+// The factory's verification of an agent attempt's answer is a row of the rail between that attempt and what follows; it is not a column.
+export const VERIFY = { id: "verification", label: "Verification", emoji: "🔎" };
+export const stepInfo = (id) => (id === VERIFY.id ? VERIFY : STEPS.find((s) => s.id === id));
 export const STATE = {
   running: { label: "Running", dot: "bg-sky-500 animate-pulse-dot", text: "text-sky-700 dark:text-sky-300" },
   succeeded: { label: "Succeeded", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" },
@@ -22,8 +25,8 @@ export const JUMP = {
 // The Land column's states (`card.land`): what the card says, and what the drawer's rail row says.
 export const LAND = {
   waiting: { label: "Waiting for you", row: "waiting for you to land it", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
-  delivering: { label: "Delivering", row: "delivering to main now", text: "text-sky-700 dark:text-sky-300", bar: "border-sky-500" },
-  done: { row: "delivered to main", text: "text-emerald-700 dark:text-emerald-300" },
+  landing: { label: "Landing", row: "landing on main now", text: "text-sky-700 dark:text-sky-300", bar: "border-sky-500" },
+  done: { row: "landed on main", text: "text-emerald-700 dark:text-emerald-300" },
 };
 export const FEED_LIMIT = 20;
 
