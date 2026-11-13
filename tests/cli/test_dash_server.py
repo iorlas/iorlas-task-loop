@@ -9,12 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.dash_model import Board, Card, FeedEvent, FeedPage, TaskDetail
+from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail
 from taskloop.dash_server import DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
 
 AT = "2026-11-12T10:00:00Z"
+FIELDS = Fields("P1", (), None, None, AT, AT, (), "Why", "", "", "")
 
 
 def card(task_id: str = "tl-1", column: str = "plan", title: str = "First") -> Card:
@@ -32,7 +33,8 @@ class Ports:
     def __init__(self, static: Path, max_streams: int = 16, queue_depth: int = 256) -> None:
         self.cards, self.mode = [card()], "ok"
         self.rows: tuple[LogRow, ...] = (row(),)
-        self.ports = DashPorts(self.board, self.task, lambda: self.rows, self.feed, "tl", static, 0.03, 0.05, max_streams, queue_depth)
+        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, "tl", static, 0.03, 0.05,
+                               max_streams, queue_depth)
 
     def board(self) -> Board | Failed:
         if self.mode == "raise":
@@ -48,8 +50,19 @@ class Ports:
         line = FeedEvent("command", "2026-11-12T10:00:00Z", id="c1", state="running", cmd="ls")
         return FeedPage((line,), "7:42", replaced=False, available=True) if cursor is None else FeedPage((), cursor, False, True)
 
-    def task(self, task_id: str) -> TaskDetail | Failed | None:
-        return Failed("unavailable", "store") if task_id == "broken" else None
+    def task(self, task_id: str) -> TaskDetail | Failed:
+        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), ())
+
+    def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
+        return AttemptBody("prompt", Outcome("verified", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
+
+    def tracker(self, task_id: str) -> TrackerDetail | Failed | None:
+        """The tracker's side: tl-1 is known, `broken` is unavailable, `slow` raises, anything else is not in the tracker."""
+        if task_id == "slow":
+            raise RuntimeError("bd timed out")
+        if task_id == "broken":
+            return Failed("unavailable", "tracker")
+        return TrackerDetail(FIELDS, ()) if task_id == "tl-1" else None
 
 
 def part(value: object) -> dict[str, object]:
@@ -106,7 +119,7 @@ def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served
     assert status == 200 and json.loads(body)["tasks"][0]["id"] == "tl-1" and json.loads(body)["slots"] == ["s1"]
     assert json.loads(get(server, "/api/log")[1])["rows"][0]["move"] == "admit"
     assert get(server, "/") == (200, b"<html>page</html>")
-    assert get(server, "/api/tasks/unknown")[0] == 404 and get(server, "/api/tasks/broken")[0] == 503
+    assert get(server, "/api/tasks/unknown")[0] == 200 and get(server, "/api/tasks/broken")[0] == 503
     assert get(server, "/secret.txt")[0] == 404 and get(server, "/../secret.txt")[0] == 404 and get(server, "/api/tasks/a%2F..")[0] == 404
 
 
@@ -207,3 +220,21 @@ def test_the_feed_endpoint_answers_the_tail_then_a_follow_and_refuses_a_bad_curs
         "events": [], "cursor": "7:42", "replaced": False, "available": True}
     assert get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=junk")[0] == 400
     assert get(server, "/api/tasks/tl-1/attempts/implement/9/feed")[0] == 404
+
+
+def test_the_tracker_part_of_a_task_is_its_own_request_with_its_own_failures(served: tuple[Ports, DashServer]) -> None:
+    _fake, server = served
+    status, body = get(server, "/api/tasks/tl-1/tracker")
+    assert status == 200 and json.loads(body)["fields"]["description"] == "Why" and json.loads(body)["comments"] == []
+    assert get(server, "/api/tasks/unknown/tracker")[0] == 404
+    assert get(server, "/api/tasks/broken/tracker")[0] == 503
+    status, body = get(server, "/api/tasks/slow/tracker")
+    assert status == 500 and "bd timed out" in json.loads(body)["error"]
+    assert "fields" not in json.loads(get(server, "/api/tasks/tl-1")[1])
+
+
+def test_an_attempts_body_is_its_own_request(served: tuple[Ports, DashServer]) -> None:
+    _fake, server = served
+    status, body = get(server, "/api/tasks/tl-1/attempts/plan/1")
+    assert status == 200 and json.loads(body)["input"] == "prompt"
+    assert get(server, "/api/tasks/tl-1/attempts/plan/9")[0] == 404

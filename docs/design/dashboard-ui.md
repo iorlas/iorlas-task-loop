@@ -10,10 +10,10 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
 - Read-only: no buttons that change anything, no auth, no charts, no history pages. The controls are the theme switch,
   the board layout switch and drawer navigation.
 - One board on one screen. A card is a task, newest activity first in its column. Columns: Ready, Plan, Implement,
-  Checks, Land, Held, Landed (the glossary says *ready* for a task not yet admitted; the interview said "Waiting").
+  Checks, Land, Held, Landed. The Land column is the person's: a card there says *Waiting for you* with the command (`tl step land <id>`, rounds never land) and says *Delivering* only while a land process is observed running (tl-8bh9.14.72). (The glossary says *ready* for a task not yet admitted; the interview said "Waiting").
 - Two layouts of the same board: **Steps** (one column per step) and **By slot** (swim lanes: one row per slot, plus
   "no slot" for tasks holding none). Switching animates the cards into place.
-- A card shows task id and title, attempt number, a *repeat* or *restarted at plan* badge with its reason, time in the
+- A card shows task id and title, where the task is (`step 2 of 4 · try 1`: a step and a try are different things; a repeat is a new try of the same step), a *repeat* or *restarted at plan* badge with its reason, time in the
   current step, slot, and the hold cause. A card that changes column animates to its new place.
 - Clicking a card opens a wide drawer (see below): task fields, then the task's history, then the lines of one attempt.
 - Two screens, chosen in the header: **Board** and **Logs**. The layout switch (Steps, By slot) belongs to the Board.
@@ -31,15 +31,20 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
   badge for where the task is on the board, the slot, one sentence of what the badge means (hover help on each column
   header says the same: *Held* is the glossary's hold, the factory will not advance the task until a person acts), the
   title and, for a held task, the hold cause.
-- The Attempts tab is a master and a detail. Left, the **attempt rail**: every attempt of the task, **newest first** so
-  the running attempt is what the drawer shows on opening (Lines still follow the tail: new lines at the bottom), one
+- The Attempts tab is a master and a detail. Left, the **attempt rail**: every attempt of the task, in the **order they happened, top to bottom** (plan, implement, checks, land, each with its own try number; steps still to come are dim rows below; the drawer opens on the newest attempt), one
   aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
-  jump names how the next attempt began: `↻ Repeat` (the same step again) or `↩ Back to plan` (restarted at plan, D4)
-  with its reason when that adds something; the label sits under the attempt it began. Steps still to come are dim rows
-  above the newest. A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
-  - **Lines**: the log grid (below). Opens first for a running attempt.
-  - **Result**: the conclusion, the agent's answer (disposition and text) and for checks each check's result with its
-    full output (a failed check shows its output at once). Opens first for an ended attempt.
+  jump names how the next attempt began: `↻ Repeat of Checks` (the same step again) or `↩ Back to plan` (restarted at plan, D4)
+  with its reason; the label sits above the attempt it began. Between two rows an `⏸ idle 4m 00s` line shows the time between the recorded end of one and the recorded start of the next (5 s and up; both are file or row times, so approximate). Every step of the chain is a row: steps not started are dim `pending` rows, and the Land row is the card's state (pending, waiting for you with the idle time since the checks ended, delivering, delivered). A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
+  - **Lines**: the log grid (below). Opens first for a running attempt. New lines never change the tab, the selection or the
+    scroll place: the view follows the end only when it was already at the end. No count in the tab name; a quiet line says
+    how many lines are kept and whether it is live. A pause of 2 s or more before a line is a faint `⏸ paused 33s` row (the
+    producer's `waited_ms`, else the time since the previous line ended). An agent message is shown in full; the events carry
+    no separate thinking text, so none is shown.
+  - **Result**: the conclusion, the agent's answer and for checks each check's result with the end of its log (the last 8 KiB of
+    `check-<block>-<name>.log`, read behind the evidence files by the attempt's key, never a path from the browser). A failed
+    check is listed first and open, a passed one folded; a log that is gone says *Output unavailable*. The answer (`answer.txt`,
+    the agent's JSON object) is shown as labelled fields with a *Raw* toggle; text that is not an object is shown as it is.
+    No failure summary is derived from the logs (that would be parsing text), so the tail is the summary. Opens first for an ended attempt.
   - **Prompt**: exactly what the agent was told in that attempt, repeat feedback included; a step that runs commands
     (checks, land) has none. The chosen tab stays when another attempt is selected, so prompts can be compared.
   An attempt that began as a jump also shows why, naming the attempt it follows ("Repeat of Checks #5").
@@ -48,6 +53,9 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
   reason is a callout (one accent line, no fill: amber repeat, violet back to plan, rose held or failed, sky running,
   green succeeded), numbers are tabular and right-aligned, colour means status only. The first mocks used emoji for
   everything and read as noise; the owner accepts a few.
+- The drawer opens at once from factory.db and the evidence files (`GET /api/tasks/<id>`); the tracker's fields and comments
+  (`bd` calls, slow under load) are a second request (`GET /api/tasks/<id>/tracker`) that the page cancels when the drawer
+  closes or another task opens. The Task view shows a skeleton while it loads and the reason with *Try again* when it fails.
 - Header: id, title, then the facts line, the description and, for a held task, the cause.
 - **Quiet**: a running step that has produced no line for 2 minutes shows `Quiet 5m 40s` (amber; red from 15 minutes)
   on its card, with a coloured card border, and in the drawer. Any new line resets it. Display only, from the time of
@@ -98,7 +106,8 @@ Times are ISO 8601 UTC strings. Durations are integer milliseconds. Unknown opti
   "step_started_at": "2026-11-12T10:15:00Z",
   "last_activity_at": "2026-11-12T10:21:50Z",
   "slot": "s2",
-  "hold_cause": null
+  "hold_cause": null,
+  "land": null
 }
 ```
 
@@ -107,7 +116,8 @@ number of the current or last attempt of the step (0 before any). `repeat` is `n
 new attempt of the same step, `restart_at_plan` is a task sent back to plan. `step_started_at` starts "time in step"
 (for Landed: time since landing). `last_activity_at` is the sort key (newest first): the last step change or live
 event. `slot` is `null` when the task holds none. `hold_cause` is the sentence the hold owner already shows, only in
-`held`.
+`held`. `land` is `null` outside the `land` column; in it `waiting` (the person has to run `tl step land`) or `delivering` (a land
+process is observed running).
 
 ### Board snapshot: `GET /api/board`
 
@@ -135,32 +145,51 @@ stream as `{"kind": "log", "row": <row>}`.
 ```json
 {
   "task": <card>,
-  "fields": {"priority": "P1", "labels": ["auto"], "branch": "task/tl-7d5", "claimed_by": "factory@devbox",
-             "created_at": "...", "updated_at": "...", "depends_on": ["tl-6e6"],
-             "description": "...", "acceptance": "...", "design": "...", "notes": "..."},
-  "comments": [{"author": "factory", "at": "...", "text": "..."}],
   "attempts": [
     {"step": "implement", "n": 2, "state": "failed", "started_at": "...", "ended_at": "...",
      "summary": "failed: deadline exceeded after 30m",
      "after": "repeat", "reason": "failed: the agent finished without a diff",
-     "input": "You are the implementing agent for task tl-7d5. ...",
-     "result": {"summary": "failed: deadline exceeded after 30m",
-                "answer": {"disposition": "incomplete", "text": "..."},
-                "checks": [{"name": "types", "passed": false, "duration_ms": 23000, "output": "ERROR ..."}],
-                "output": null},
+     "repeat_of": 1,
      "feed": [ <live event>, ... ]}
   ]
 }
 ```
 
-`attempts` is every attempt of the task, oldest first. `n` counts per step. `state` is `running`, `succeeded` or `failed`;
+`attempts` is every attempt of the task, oldest first. `n` counts per step (the checks step's tries are numbered across the task, not per implement attempt); `repeat_of` is the try of the same step that a `repeat` repeats (`null` otherwise). `state` is `running`, `succeeded` or `failed`;
 `summary` says how it ended (the verdict or conclusion the owner of that fact already states); `ended_at` is `null`
 while running. `after` says how the attempt began: `null` (the previous step succeeded), `repeat` or `restart_at_plan`,
-with the `reason` the engine recorded. `input` is the prompt text the agent was given (`null` for a step that runs commands). `result.answer` is the
-agent's answer (`null` before it ends or for checks and land); `result.checks` are the check results of a checks attempt
-with the full output of each failed one; `result.output` is any other failure output, such as a stopped command's.
-`feed` is the last 20 lines of that attempt, oldest first. `fields` and `comments` are the tracker's, shown as given (empty
-text is omitted from the page); `comments` are oldest first. Lines, prompt and outputs are read behind the evidence reader;
+with the `reason` the engine recorded. `feed` is the last 20 lines of that attempt, oldest first. A task with no attempt answers a waiting card and no attempts. This
+answer never waits for the tracker.
+
+### Attempt body: `GET /api/tasks/<id>/attempts/<step>/<n>`
+
+```json
+{"input": "You are the implementing agent for task tl-7d5. ...",
+ "result": {"summary": "failed: deadline exceeded after 30m",
+            "answer": {"disposition": "incomplete", "text": "...", "truncated": false},
+            "checks": [{"name": "types", "passed": false, "duration_ms": 23000, "block": 1, "output": "ERROR ..."}],
+            "output": null}}
+```
+
+Read when the Result or Prompt tab is first shown (it reads files), again when the attempt has ended since. `input` is the prompt
+text (`null` for a step that runs commands); `answer` is the agent's answer, `null` before it ends or for checks, and
+`truncated` says the file is longer than the 64 KiB shown; `checks` are the check results with the log tail of each (`output` is
+`null` when its log is gone). 404: no such attempt.
+
+### Tracker part: `GET /api/tasks/<id>/tracker`
+
+```json
+{"fields": {"priority": "P1", "labels": ["auto"], "branch": "task/tl-7d5", "claimed_by": "factory@devbox",
+            "created_at": "...", "updated_at": "...", "depends_on": ["tl-6e6"],
+            "description": "...", "acceptance": "...", "design": "...", "notes": "..."},
+ "comments": [{"author": "factory", "at": "...", "text": "..."}]}
+```
+
+`bd` reads, cached (a task 5 s). `fields` and `comments` are the tracker's, shown as given (empty text is omitted from the
+page); `comments` are oldest first. 404: the tracker has no such task; 500/503: the read failed and nothing was read before (the
+drawer says so and offers a retry).
+
+Lines, prompt and outputs of an attempt are read behind the evidence reader (a card's update reloads this list, not the bodies);
 all of it is display only, never control state.
 
 ### Live event

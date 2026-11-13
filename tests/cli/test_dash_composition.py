@@ -35,7 +35,9 @@ def test_a_missing_or_incompatible_factory_db_is_a_503_with_its_reason_never_a_s
 
 
 def test_a_taken_port_is_a_failed_the_rounds_go_on_without_and_no_dashboard_is_left_running(tmp_path: Path) -> None:
-    busy = DashServer(DashPorts(lambda: Failed("refused", "x"), lambda _id: None, tuple, lambda *_: None, "tl", tmp_path), 0)
+    nothing = Failed("refused", "x")
+    ports = DashPorts(lambda: nothing, lambda _id: nothing, lambda _id: None, lambda *_: None, tuple, lambda *_: None, "tl", tmp_path)
+    busy = DashServer(ports, 0)
     try:
         with serving(request(tmp_path, busy.address[1]), GitViews(5)) as address:
             assert isinstance(address, Failed) and address.reason == "dashboard_port" and str(busy.address[1]) in address.detail

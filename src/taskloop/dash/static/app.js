@@ -4,7 +4,7 @@
 import { initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
-import { $, COLUMNS, STEPS, callout, el, quietSpan, tag, tick } from "./ui.js";
+import { $, COLUMNS, LAND, STEPS, callout, el, position, quietSpan, tag, tick } from "./ui.js";
 
 const tasks = new Map(); // id -> board card
 const cards = new Map(); // id -> element
@@ -57,7 +57,7 @@ function fillCard(node, t) {
   node.replaceChildren();
   const top = el("div", "flex items-center gap-2");
   top.append(el("span", "font-mono text-[11px] text-slate-500 dark:text-slate-400", t.id));
-  if (t.attempt > 0) top.append(el("span", "ml-auto text-[11px] text-slate-500 dark:text-slate-400", `attempt ${t.attempt}`));
+  if (position(t)) top.append(el("span", "ml-auto text-[11px] text-slate-500 dark:text-slate-400", position(t)));
   node.append(top, el("h3", "mt-1 line-clamp-2 text-[13px] font-medium leading-snug", t.title));
   const notes = el("div", "mt-2 flex flex-col gap-2");
   if (t.repeat) {
@@ -65,6 +65,7 @@ function fillCard(node, t) {
     notes.append(callout(restart ? "border-violet-500" : "border-amber-500", restart ? "↩ Back to plan" : "↻ Repeat", t.repeat.reason));
   }
   if (t.hold_cause) notes.append(callout("border-rose-500", "Held", t.hold_cause));
+  if (t.column === "land") notes.append(callout(LAND[t.land].bar, `${t.land === "delivering" ? "🚀" : "🧑"} ${LAND[t.land].label}`, t.land === "delivering" ? null : `tl step land ${t.id}`));
   if (notes.children.length) node.append(notes);
   const foot = el("div", "mt-2.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400");
   const time = el("span", "whitespace-nowrap tabular-nums");
