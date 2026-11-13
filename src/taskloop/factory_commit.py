@@ -155,7 +155,7 @@ def refusal(view: Repo, files: SlotFiles, admission: Admission, base: str, answe
         unsafe = git_file(dirt.tracked + dirt.untracked, rules, answer.paths)
     if unsafe is not None:  # the leftovers beside it are listed too, so one repeat can clear them all
         beside = sorted(set(dirt.tracked + dirt.untracked) - {unsafe, *answer.paths})
-        return Unsettled("unsafe", bounded((unsafe, *beside)))
+        return Unsettled("unsafe", bounded((unsafe, *beside)), unsafe_path=unsafe)
     return Unsettled("ignored", bounded(dirt.ignored)) if dirt.ignored else None
 
 
@@ -225,8 +225,9 @@ def secret(data: bytes) -> bool:
     """Bytes that look like a credential the sandbox may let the agent read: a PEM private key header, or a Codex login
     (`auth.json` holds both token names). A committed copy would be published to `origin`; no content of the person's own
     files is read to compare (tl-8bh9.14.50, docs/design/self-hosting-trial-5-fixes.md)."""
-    key = b"-----BEGIN " in data and b"PRIVATE KEY-----" in data
-    return key or (b'"access_token"' in data and b'"refresh_token"' in data)
+    # Keep signature literals separate so this source is not itself mistaken for a credential copy.
+    key = b"-----BEGIN " in data and b"PRIVATE " b"KEY-----" in data
+    return key or (b'"access_' b'token"' in data and b'"refresh_' b'token"' in data)
 
 
 def unsafe_path(

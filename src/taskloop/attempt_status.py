@@ -19,6 +19,7 @@ from taskloop.attempt_reads import AttemptRow, PublishedRow, ReleaseRow, StoreUn
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResult, EntryIdentity, Observe, Unsettled
+from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result, commands_seen
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
@@ -85,6 +86,8 @@ class AttemptView:
     hold: HoldRow | None = None  # the hold of its agent attempt (a checks view's: of the implement attempt it follows)
     last_command: int | Literal["none", "unreadable"] | None = None  # seconds since the agent's latest command (display only);
     # `none`: no command noted yet, `unreadable`: the evidence is; None unless the agent can be running (entry `running`)
+    check_repeat_eligible: bool = False
+    source_checks_id: str | None = None
     hold_due: str | None = None  # `Next: hold` with no hold recorded yet: the reason the next round holds it for
 
 NEEDS_OWNER = "needs_owner"  # the answer's disposition (and the collected result's reason) of a step that needs a decision
@@ -178,11 +181,16 @@ def _swapped(
     stopped = latest.phase == "admitted" and latest.released_at is None and entry not in ("running", "unknown")
     commands: ProcessSeen = commands_seen(reads.commands, setup, results) if stopped else "gone"
     earlier = (*((each.key.attempt_id, "re-run") for each in reversed(rows[:-1])), (view.attempt_id, "advanced"))
+    blocked = land is not None and (land.row.delivery is not None or land.row.holds_slot or land.row.pushable)
+    repeat = decision(view.number, latest, results, blocked=blocked)
+    next_word = land_next(checks_next(latest, entry, expired, commands), latest, land)
+    if repeat is CheckRepeatDecision.REPEAT:
+        next_word = "wait" if entry == "running" else "unknown" if entry == "unknown" else "repeat"
     return replace(
         view, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
         result=checks_result(latest),
         deadline_passed=expired if latest.concluded_at is None else latest.concluded_at >= latest.deadline,
-        next=land_next(checks_next(latest, entry, expired, commands), latest, land),
+        next=next_word, check_repeat_eligible=repeat in (CheckRepeatDecision.RELEASE, CheckRepeatDecision.REPEAT),
         entry_process=latest.entry,
         worker=None, last_command=None, leftovers=(), number=latest.number, previous_attempt_id=None, repeat_reason=None, earlier=earlier,
         release=checks_release(latest, claim), checks=ChecksView(latest, results), land=land,
@@ -200,7 +208,7 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
     left = reads.leftovers(row.key) if probe and next_word == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
     ended = {"seq": row.seq, "release": row.release, "published": row.published, "label": row.label,
-             "last_command": _idle(reads, row.key) if entry == "running" else None}
+             "last_command": _idle(reads, row.key) if entry == "running" else None, "source_checks_id": row.source_checks_id}
     late = expired if row.phase != "captured" or result.execution is None else result.execution.facts.timed_out
     if left is None or left.reason not in REPEATABLE:
         shown = (left.reason, *left.listing) if left is not None and left.reason in SHOWN else ()  # `head_moved`: the agent's refs
@@ -218,7 +226,7 @@ def _idle(reads: StatusPorts, key: AttemptKey) -> int | Literal["none", "unreada
 def _setup_failed(reads: StatusPorts, row: AttemptRow, step: Next) -> Next:
     """An admitted attempt 1 whose setup failed `SETUP_RUNS` times is `stuck:setup_failed`, not `start`: a relaunch
     would only refuse `environment:failed` (a repeat runs no setup). An unreadable count is `unknown`."""
-    if step != "start" or row.number != 1 or row.release is not None:
+    if step != "start" or (row.number != 1 and row.source_checks_id is None) or row.release is not None:
         return step
     try:
         failed = SetupStore(reads.store.connect, reads.store.begin).failures(row.key)
@@ -313,7 +321,7 @@ def _checks_shown(reads: StatusPorts, files: EvidenceFiles, view: AttemptView, c
 def _first(rows: tuple[AttemptRow, ...]) -> AttemptRow:
     """The current attempt's attempt 1 in its step, following each repeat to the attempt it repeats."""
     by_id, found = {row.key.attempt_id: row for row in rows}, rows[0]
-    while found.number > 1 and (earlier := by_id.get(found.previous_attempt_id or "")) is not None:
+    while found.number > 1 and found.source_checks_id is None and (earlier := by_id.get(found.previous_attempt_id or "")) is not None:
         found = earlier
     return found
 

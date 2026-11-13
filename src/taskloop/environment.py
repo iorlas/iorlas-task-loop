@@ -191,7 +191,7 @@ class Preparation:
         scrubbed environment (setup gets it with the folders, the probe with the agent's additions)."""
         admission = record.admission
         target = SetupFor(admission.key, Path(admission.slot_path), None, task_branch(admission.task.task_id),
-                          admission.deadline, admission.number == 1)
+                          admission.deadline, admission.number == 1 or admission.source_checks_id is not None)
         return self.prepare_for(target, slot, renew, launch[1], probe=launch)
 
     def prepare_for(self, target: SetupFor, slot: Prepared, renew: Renew, env: Mapping[str, str], *,

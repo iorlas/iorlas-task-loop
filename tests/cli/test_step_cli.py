@@ -58,7 +58,7 @@ ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step star
 STATUS_KEYS = {
     "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "status",
     "entry_process", "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release",
-    "published", "checks", "land", "label", "hold", "hold_due", "last_command",  # the hold's keys are additive (tl-8bh9.14.9 section 10)
+    "published", "checks", "land", "label", "hold", "hold_due", "last_command", "source_checks_id",
 }
 REPEAT = AttemptView(
     "tasks", "tl-1", "plan", "attempt", "s1", "captured", "gone", AttemptResult("pending", "repeat"), False, "repeat", ENTRY, (42, 41),
