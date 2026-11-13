@@ -2,6 +2,7 @@
 // output (a failed one open, a passed one folded). Display only.
 
 import { STATE, callout, el, fmtDur, stepInfo, tag } from "./ui.js";
+import { say } from "./words.js";
 
 const BLOCK = "min-h-0 flex-1 overflow-y-auto px-6 py-4";
 const pre = (text, cls = "") => el("pre", `max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50 p-3 font-mono text-[11.5px] leading-relaxed dark:border-slate-800 dark:bg-slate-950/60 ${cls}`, text);
@@ -26,7 +27,9 @@ const plain = (text) => text.replace(ESCAPES, "");
 function answer(a) {
   const wrap = el("div");
   const head = el("div", "mb-1.5 flex items-center gap-3");
-  head.append(label("Agent answer"), tag(a.disposition));
+  const disposition = tag(say(a.disposition));
+  if (say(a.disposition) !== a.disposition) disposition.title = a.disposition;
+  head.append(label("Agent answer"), disposition);
   const fields = fieldsOf(a.text);
   let raw = !fields;
   const toggle = el("button", "ml-auto rounded border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", "Raw");
