@@ -32,7 +32,6 @@ source_modules =
     taskloop.round
     taskloop.round_log
     taskloop.round_land
-    taskloop.round_flight
     taskloop.land_mode
     taskloop.selection
     taskloop.result_data
