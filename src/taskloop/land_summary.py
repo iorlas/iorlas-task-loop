@@ -25,7 +25,7 @@ from taskloop.check_store import ChecksRow, Required, ResultRow
 from taskloop.land_gate import ACCEPT, FILES, Changed, Gate, gate_of
 from taskloop.land_push import Origin
 from taskloop.operations import Failed
-from taskloop.printable import one_line
+from taskloop.printable import one_line, title_line
 from taskloop.profile import Argv, Check, Profile, ProfileFiles, Refused, Unavailable, read_profile
 
 TITLE: Final = 72  # a title's and a listed subject's characters
@@ -43,13 +43,13 @@ def commits(repo: Repo, o: str, x: str) -> tuple[tuple[str, str], ...]:
 def message(title: str, checks: ChecksRow, listed: Sequence[tuple[str, str]], plan: bool) -> str:
     """S's commit message (section 9)."""
     task, x = one_line(checks.task_id, TITLE), checks.commit
-    head = one_line(title, TITLE) or "Untitled task"
+    head = title_line(one_line(title) or "Untitled task", TITLE, f" ({task})")
     lines = [f"- {one_line(subject, TITLE) or '(no subject)'} ({sha[:12]})" for sha, subject in listed[:SUBJECTS]]
     lines += [f"- ... and {len(listed) - SUBJECTS} more"] if len(listed) > SUBJECTS else []
     squashed = [f"Squashed from task/{task} at {x}:", *lines] if lines else [f"Squashed from task/{task} at {x}."]
     trailers = [f"Task: {task}", *([f"Plan: {plan_path(task)}"] if plan else []),
                 f"Checked: {checks.key.attempt_id} {checks.conclusion or 'unconcluded'} at {x}"]
-    return "\n".join([f"{head} ({task})", "", *squashed, "", *trailers]) + "\n"
+    return "\n".join([head, "", *squashed, "", *trailers]) + "\n"
 
 
 def plan_path(task_id: str) -> str:

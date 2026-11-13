@@ -70,7 +70,8 @@ def test_no_title_or_subject_adds_a_line_a_paragraph_or_a_trailer(b: LandBench, 
 
 
 def test_a_title_is_cut_to_72_characters_and_an_empty_one_is_named(b: LandBench) -> None:
-    assert message("w" * 100, checks_row(b), [], plan=False).split("\n")[0] == "w" * 72 + " (tl-1)"
+    first = message("w" * 100, checks_row(b), [], plan=False).split("\n")[0]
+    assert first == "w" * 64 + "\u2026 (tl-1)" and len(first) == 72
     assert message(" \n\x1b ", checks_row(b), [], plan=False).startswith("Untitled task (tl-1)\n\nSquashed from task/tl-1 at ")
     assert one_line("  a \t b\n\nc  ", 10) == "a b c" and one_line("abcdef", 3) == "abc"
 
@@ -184,3 +185,11 @@ def test_the_summary_of_changed_required_names_on_the_same_tree_says_the_checks_
     found = summarized(b.land("summary"))
     assert (found.state, found.again, found.added, found.removed) == ("same_tree", True, ("test",), ())
     assert f"Origin main: {b.base}; same tree as X, checks run again: the required names changed" in lines(found)
+
+
+def test_a_long_title_is_cut_at_a_word_and_keeps_its_task_id(b: LandBench) -> None:
+    title = "Time since the agent's last command in tl step list/show, then the dashboard and more words"
+    first = message(title, checks_row(b), [], plan=False).split("\n")[0]
+    assert first == "Time since the agent's last command in tl step list/show, then\u2026 (tl-1)"
+    assert len(first) <= 72
+    assert message("Widget", checks_row(b), [], plan=False).split("\n")[0] == "Widget (tl-1)"
