@@ -582,7 +582,7 @@ def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_pa
     assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
 
 
-ROUNDS = ["step", "rounds", *NEXT[2:]]
+ROUNDS = ["step", "rounds", "--no-dashboard", *NEXT[2:]]
 
 
 class Run:

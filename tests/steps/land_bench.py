@@ -34,6 +34,7 @@ from taskloop.land_check import LandPorts
 from taskloop.land_store import LandRow, LandStore
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import landing
+from taskloop.slots import folder_name
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import CloseAnswer
@@ -245,7 +246,7 @@ def bench(tmp_path: Path, x_files: dict[str, str] | None = None) -> LandBench:
     remote = FakeRemote("https://example.invalid/repo.git")
     base = remote.advance("main", {"README": "one\n", ".task-loop.json": json.dumps(PROFILE)}, "base")
     repo = Racing(FakeRepo.clone(remote, where / "main"))
-    slot = repo.add_worktree(where / "slots" / repo.identity().key / "s1", "HEAD")
+    slot = repo.add_worktree(where / "slots" / folder_name(repo.identity()) / "s1", "HEAD")
     root = repo.worktree(repo.identity().root)
     root.checkout_new("task/tl-1")
     for path, text in (x_files or {"src/x.py": "X = 1\n"}).items():

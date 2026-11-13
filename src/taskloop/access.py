@@ -38,7 +38,7 @@ TMP_BYTES: Final = 64  # TMPDIR's budget: a Unix socket path holds 107 bytes on 
 
 @dataclass(frozen=True)
 class Folders:
-    """Beside the slots and `.locks/` under `<slots_root>/<repo_id>/`: the scratch (`TMPDIR`), uv's cache and its tools.
+    """Beside the slots and `.locks/` under `<slots_root>/<repo name>/`: the scratch (`TMPDIR`), uv's cache and its tools.
     The factory creates each before launch: Codex silently drops a writable root that does not exist."""
 
     tmp: Path

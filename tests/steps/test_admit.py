@@ -31,7 +31,7 @@ from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind, Provider
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
-from taskloop.slots import SlotGit, adopt
+from taskloop.slots import SlotGit, adopt, folder_name
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import BD_DISCOVERY, tracker_claims, tracker_located
@@ -95,7 +95,7 @@ def tasks(task_id: str, backlog: str, tracker_root: str) -> TaskInspection:
 def slots(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> None:
     """A person's `git worktree add --detach` at each derived path, then adoption."""
     for number in range(1, count + 1):
-        repo.add_worktree(root.resolve() / repo.identity().key / f"s{number}", "HEAD")
+        repo.add_worktree(root.resolve() / folder_name(repo.identity()) / f"s{number}", "HEAD")
     adopt(lambda: con, begin_immediate, repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
 
 
@@ -205,7 +205,7 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     collected = attempts(factory, tmp_path, run, checkouts, slot_files).execute(result.key, ENTRY)
     assert (collected.status, collected.reason) == ("pending", "verification") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
-    assert spec.cwd == str(root.resolve() / repo.identity().key / "s1")
+    assert spec.cwd == str(root.resolve() / folder_name(repo.identity()) / "s1")
     prompt = spec.stdin + " ".join(spec.argv)
     assert "Do the thing" in prompt and "It is done" in prompt
     closing = "First read `docs/design/tl-1/plan.md` if it exists. If it is still valid for the task and the code as they are now"
@@ -218,7 +218,7 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
 def test_no_free_slot_refuses_before_any_effect(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, case: str) -> None:
     if case != "none_adopted":
         slots(factory, repo, root, 1)
-    path = root.resolve() / repo.identity().key / "s1"
+    path = root.resolve() / folder_name(repo.identity()) / "s1"
     if case == "held":
         held = "INSERT INTO reservation (slot,repo_id,generation,attempt_id) VALUES ('s1',?,1,'x')"
         factory.execute(held, (repo.identity().key,))
@@ -523,7 +523,7 @@ def test_after_an_abandon_the_task_is_admitted_afresh_on_its_existing_branch_wit
     tracker = Tracker(factory, tmp_path / "artifacts")
     first = admit(factory, tmp_path, repo, tracker)
     assert isinstance(first, Admitted) and first.key.reservation_generation == 1 and generations(factory) == [("s1", 1), ("s2", 0)]
-    path = root.resolve() / repo.identity().key / "s1"
+    path = root.resolve() / folder_name(repo.identity()) / "s1"
     d = factory.execute("SELECT slot_head FROM attempt").fetchone()[0]
     repo.worktree(path).take_branch("task/tl-1", "HEAD", mode="resume")  # as its entry prepared it
     release = SlotRelease(AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody,

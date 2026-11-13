@@ -26,6 +26,7 @@ from taskloop.owned_processes import setup_seen
 from taskloop.prepare import Prepared
 from taskloop.setup_store import SetupStore
 from taskloop.slot_env import RealEnvFiles, setup_process
+from taskloop.slots import folder_name
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -50,7 +51,7 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     (main / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/sh", "-c", SETUP]]}))
     git(main, "add", ".gitignore", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
-    slot = root / "slots" / VIEWS.checkouts(main).identity().key / "s1"
+    slot = root / "slots" / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     (slot / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/false"]]}))  # the working tree is never read

@@ -28,11 +28,10 @@ from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verifie
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
-from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
-from taskloop.slots import SlotGit, adopt
+from taskloop.slots import SlotGit, adopt, folder_name
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -82,8 +81,7 @@ class Published:
         git(self.main, "commit", "-q", "-m", "base")
         git(self.main, "remote", "add", "origin", self.remote.as_uri())
         git(self.main, "push", "-q", "origin", "main")
-        repo_id = RepoId(VIEWS.checkouts(self.main).identity().key)
-        self.slot = root / "slots" / repo_id / "s1"
+        self.slot = root / "slots" / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev(self.slot, "HEAD")
         adopt(lambda: factory, begin_immediate, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), root / "slots", 1)

@@ -13,7 +13,7 @@ Sources inside the session scratchpad (`/tmp/claude-501/-home-iorlas-Workspaces-
 
 ## 1. How to use this on another repository (checklist)
 
-1. Read the repo's rules file (CLAUDE.md/AGENTS.md), glossary, design docs, `.importlinter`/lint config, justfile/CI. Note the rules the agent must obey (here: read-only review, no repo edits, no `~/factory-successor`).
+1. Read the repo's rules file (CLAUDE.md/AGENTS.md), glossary, design docs, `.importlinter`/lint config, justfile/CI. Note the rules the agent must obey (here: read-only review, no repo edits).
 2. Ask the owner for their **direction** (modules, pain points). Their words become the candidate list; map every named concern to a candidate (here: 7 concerns, then 3 more from a peer).
 3. Run the **improve-codebase-architecture** procedure (section 2): explore, candidate report, then grilling.
 4. Compute facts **deterministically first** (section 4.1): import graph, fan-in/out, cycles, cluster matrix, test-impact closure, SQL/connection spread.
