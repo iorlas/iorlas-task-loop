@@ -42,6 +42,7 @@ from taskloop.attempt_types import (
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_status import HALF_DONE, checks_result, latest, route
 from taskloop.check_store import ChecksRow, CheckStore
+from taskloop.harness_choice import HarnessKind
 from taskloop.hold_status import ANSWERED
 from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandRow, LandStore
@@ -156,6 +157,7 @@ class StartRequest:
     effort: str
     minutes: int
     label: str | None = None  # the round's approval label, stored on a fresh admission; None: `tl step start` by hand
+    harness: HarnessKind = HarnessKind.CODEX  # the agent harness a fresh admission or an advance runs under; a repeat keeps its attempt's
 
 
 @dataclass(frozen=True)
@@ -471,11 +473,12 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
     choices = (request.checkout, request.model, request.effort, SANDBOX, deadline)
     checks = advance is not None and advance.step == CHECK
     if advance is None:  # the round's label (tl-8bh9.14.9 section 8); an advance and a repeat copy their attempt's
-        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices, request.label))
+        admitted = ports.admission.admit(
+            AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices, request.label, request.harness))
     elif checks:
         admitted = ports.checks.admission.admit_checks(ChecksRequest(advance.previous, request.checkout, deadline, advance.number))
     else:
-        admitted = ports.advance.admit_next(NextStepRequest(advance.previous, *choices))
+        admitted = ports.advance.admit_next(NextStepRequest(advance.previous, *choices, request.harness))
     if isinstance(admitted, Admitted):
         return admitted.key, False
     if isinstance(admitted, AdmitUnavailable):

@@ -32,6 +32,7 @@ from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
+from taskloop.harness_choice import HarnessKind
 from taskloop.hold import HoldPorts, clear_holds, hold_task
 from taskloop.hold_status import MAIN_MOVED
 from taskloop.operations import (
@@ -99,6 +100,7 @@ class NextRequest:
     quiet: Quiet | None = None
     max_running: int = 3  # in-flight tasks of the backlog (`in_flight`) at which nothing new starts
     retake: bool = False  # admit the factory's own lapsed claims that have no attempt here (after a factory.db discard)
+    harness: HarnessKind = HarnessKind.CODEX  # the agent harness every step the round starts runs under
 
 
 @dataclass(frozen=True)
@@ -126,7 +128,7 @@ def _word(result: Started | Failed) -> str:
 def _request(request: NextRequest, task_id: str) -> StartRequest:
     """The start of one task under the round's choices and label (stored only by a fresh admission)."""
     return StartRequest(task_id, request.backlog, request.tracker_root, request.checkout, request.model, request.effort, request.minutes,
-                        request.label)
+                        request.label, request.harness)
 
 
 def max_running_refused(count: int) -> Failed | None:

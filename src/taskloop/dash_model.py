@@ -119,7 +119,7 @@ class Outcome:
 class FeedEvent:
     """One live line (docs/design/dashboard-ui.md, *Live event*); the fields of the other types are null."""
 
-    type: Literal["step", "check", "command", "tool", "message", "error", "waiting"]
+    type: Literal["step", "check", "command", "tool", "message", "think", "error", "waiting"]
     at: str
     step: str | None = None
     attempt: int | None = None
@@ -129,7 +129,7 @@ class FeedEvent:
     id: str | None = None
     state: Literal["running", "finished", "unfinished"] | None = None  # unfinished: its attempt ended without a finish line
     cmd: str | None = None  # a command's text, or a tool's main argument
-    text: str | None = None  # a message, an error or a wait
+    text: str | None = None  # a message, the agent's reasoning words (only when the harness gave them), an error or a wait
     waited_ms: int | None = None
     exit_code: int | None = None
 
@@ -159,6 +159,19 @@ class AttemptDetail:
     feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
     led_by: int | None = None  # a repeat of an agent attempt: the try of the `verification` step whose failure led to it
     past: bool = False  # belongs to a chain a person abandoned: history, not the task's current steps
+    run: Run | None = None  # an agent attempt's: what ran it; None for a check or a verification
+
+
+@dataclass(frozen=True)
+class Run:
+    """What an agent attempt ran, in plain words: the harness, the provider of its model, the model, the reasoning effort and what
+    its sandbox allows. Its facts are `attempt.harness`, `provider`, `model`, `effort` and `sandbox`, as admitted."""
+
+    harness: str
+    provider: str
+    model: str
+    effort: str
+    sandbox: str
 
 
 @dataclass(frozen=True)

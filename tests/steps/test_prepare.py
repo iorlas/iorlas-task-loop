@@ -62,7 +62,7 @@ def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
 
 @pytest.fixture
 def con(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
-    monkeypatch.setattr("taskloop.attempt.CodexHarness", CountingHarness)
+    monkeypatch.setattr("taskloop.harness_choice.CodexHarness", CountingHarness)
     monkeypatch.setattr(CountingHarness, "cleanups", [])
     return registered
 

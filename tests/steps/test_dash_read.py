@@ -15,7 +15,7 @@ from taskloop.attempt_types import AttemptKey, Seen
 from taskloop.check_store import CheckStore
 from taskloop.command_sink import CommandSink
 from taskloop.dash_board import BoardPorts, build_board, land_state
-from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, Ready, TaskDetail
+from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, Ready, Run, TaskDetail
 from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.land_status import LandView, land_view
@@ -138,6 +138,28 @@ def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_liv
     page = build_feed(ports, "tasks", "tl-1", "plan", 1, attempt.feed_cursor)
     assert isinstance(page, FeedPage) and [line.text for line in page.events] == ["done"] and not page.replaced
     assert build_feed(ports, "tasks", "tl-1", "plan", 7, None) is None
+
+
+def test_an_agent_attempt_says_what_ran_it_in_plain_words(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    registered.execute("UPDATE attempt SET harness='opencode', provider='deepseek', model='opencode/deepseek-v4.1-flash-free'")
+    files = EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Plan the actual task")
+    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    (attempt,) = found.attempts
+    assert attempt.run == Run("OpenCode", "DeepSeek", "opencode/deepseek-v4.1-flash-free", "high",
+                              "can write its own workspace only, no network")
+
+
+def test_reasoning_is_a_collapsed_line_only_when_the_harness_gave_words(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Plan the actual task")
+    sink = CommandSink(files, KEY, iter(range(100, 200, 2)).__next__)
+    sink.feed(events.Think(text="check the schema first"))
+    sink.feed(events.Think(text="   "))  # a redacted block: nothing to show
+    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    assert [(line.type, line.text) for line in found.attempts[0].feed[1:]] == [("think", "check the schema first")]
 
 
 def test_a_poisoned_events_file_does_not_break_the_task_detail(registered: sqlite3.Connection, tmp_path: Path) -> None:
