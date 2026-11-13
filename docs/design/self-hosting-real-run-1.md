@@ -33,7 +33,7 @@ effort `ultra`. Vocabulary: [glossary](../glossary.md). Follows [trial 6](self-h
 |---|---|
 | tl-8bh9.14.69 | No harness, version, thread id, model, effort or license lane per attempt; store them in factory.db, resolve the transcript path through a reader (Codex rollouts are `~/.codex/sessions/<date>/rollout-<time>-<thread>.jsonl`). |
 | tl-8bh9.14.70 | "Quiet for N minutes" comes from the last-command file only; the agent thought and ran commands (no gap over 91 s in `events.jsonl`) yet showed quiet. Needs an explicit attempt state. |
-| tl-8bh9.14.71 | Task drawer takes 3-7 s: three `bd` calls (embedded Dolt, about 1.4 s idle, up to 8 s with load average 22). Files are fast (5 ms). Open the drawer from factory.db, load tracker fields second. Open owner question: bd server mode. |
+| tl-8bh9.14.71 | Task drawer waits for three `bd` calls: 0.7-0.9 s idle, 3-8 s at load average 22 (the load, not `bd` startup, was the cause). Files are fast (5 ms). Open the drawer from factory.db, load tracker fields second. PoC on a scratch tracker: `bd show` 115-135 ms embedded, 77 ms in server mode (`bd init --server`); the real tracker was left embedded (owner decision). |
 | tl-8bh9.14.72 | The "Land" column says the land is delivering; the task is waiting for the person. |
 | tl-8bh9.14.73 | The squash commit title is cut mid-word (`...then the dashb`). |
 | tl-8bh9.14.74 | "Attempt 2" reads as a retry; steps and tries are mixed. Steps top to bottom with idle gaps. |
