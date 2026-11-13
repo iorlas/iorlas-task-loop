@@ -5,7 +5,7 @@ export const COLUMNS = [
   { id: "plan", label: "Plan", emoji: "🧭", help: "A plan attempt is running in a slot." },
   { id: "implement", label: "Implement", emoji: "🛠️", help: "An implement attempt is running in a slot." },
   { id: "checks", label: "Checks", emoji: "🧪", help: "A checks attempt is running the profile's checks." },
-  { id: "land", label: "Land", emoji: "🚀", help: "The land is delivering the checked change to main." },
+  { id: "land", label: "Land", emoji: "🚀", help: "Checked and ready. It waits for the person to run tl step land; a card says delivering only while a land runs." },
   { id: "held", label: "Held", emoji: "⛔", help: "The factory will not advance this task until a person acts. The hold cause says what to do." },
   { id: "landed", label: "Landed", emoji: "✅", help: "Delivered to main and closed." },
 ];
@@ -18,6 +18,12 @@ export const STATE = {
 export const JUMP = {
   repeat: { label: "Repeat", glyph: "↻", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
   restart_at_plan: { label: "Back to plan", glyph: "↩", text: "text-violet-700 dark:text-violet-300", bar: "border-violet-500" },
+};
+// The Land column's states (`card.land`): what the card says, and what the drawer's rail row says.
+export const LAND = {
+  waiting: { label: "Waiting for you", row: "waiting for you to land it", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
+  delivering: { label: "Delivering", row: "delivering to main now", text: "text-sky-700 dark:text-sky-300", bar: "border-sky-500" },
+  done: { row: "delivered to main", text: "text-emerald-700 dark:text-emerald-300" },
 };
 export const FEED_LIMIT = 20;
 
@@ -58,6 +64,12 @@ export function fmtDur(ms) {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ${String(Math.floor(s % 60)).padStart(2, "0")}s`;
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+// Where a task is, in words that keep a step apart from a try: "step 2 of 4 · try 1" (the land has no tries of its own).
+export function position(t) {
+  const at = STEPS.findIndex((s) => s.id === t.column);
+  if (at < 0) return null;
+  return `step ${at + 1} of ${STEPS.length}${t.column === "land" ? "" : ` · try ${t.attempt}`}`;
 }
 export const since = (iso) => fmtDur(Date.now() - Date.parse(iso));
 export const ago = (iso) => `${since(iso)} ago`;

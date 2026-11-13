@@ -4,6 +4,9 @@
 @source "./drawer.js";
 @source "./ui.js";
 @source "./logs.js";
+@source "./lines.js";
+@source "./rail.js";
+@source "./taskview.js";
 
 /* Dark by default from the system; the theme button forces .dark or .light on <html>. */
 @custom-variant dark {

@@ -1,11 +1,15 @@
-// The task drawer: a rail of the task's attempts on the left, one selected attempt on the right
-// (its lines, its result and the prompt it was given). Shapes: docs/design/dashboard-ui.md.
+// The task drawer: a rail of the task's steps on the left, one selected attempt on the right (its lines, its result and the prompt
+// it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
+// fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, FEED_LIMIT, JUMP, STATE, STEPS, ago, callout, clock, dot, el, fmtDur, quietSpan, since, tag, tick } from "./ui.js";
+import { $, COLUMNS, JUMP, LAND, STATE, STEPS, ago, callout, el, fmtDur, position, quietSpan, tag } from "./ui.js";
+import { apply, atBottom, lines, show } from "./lines.js";
+import { lasted, rail } from "./rail.js";
+import { taskView } from "./taskview.js";
 
 let source = null;
 let tasks = null;
-let open = null; // {id, detail, step, n, tab}: the open task, its selected attempt and sub-tab
+let open = null; // {id, detail, tracker, abort, sig, step, n, tab, view}: the open task, its selected attempt and sub-tabs
 
 export function initDrawer(src, taskMap) {
   source = src;
@@ -14,8 +18,9 @@ export function initDrawer(src, taskMap) {
   addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeDrawer(); });
 }
 
-const attemptOf = () => open.detail.attempts.find((a) => a.step === open.step && a.n === open.n);
+const attemptOf = () => open.detail?.attempts.find((a) => a.step === open.step && a.n === open.n);
 const tabOf = (a) => open.tab ?? (a.state === "running" ? "lines" : "result");
+const signature = (t) => JSON.stringify([t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.land]); // what changes the attempts
 
 // Select an attempt: the given one, else the last of the step, else the last of the task.
 function select(step, n) {
@@ -26,18 +31,44 @@ function select(step, n) {
   render();
 }
 
-export async function openDrawer(id) {
-  try {
-    open = { id, detail: await source.detail(id), tab: null, view: null };
-    select();
-    follow();
-  } catch (error) {
-    open = null;
-    showError(id, error);
-  }
+function reveal() {
   $("drawer").classList.remove("translate-x-full");
   $("backdrop").classList.remove("pointer-events-none", "opacity-0");
 }
+
+// Open at once: the board's card is the head and the body says loading; the detail (factory.db and files, milliseconds) renders when
+// it arrives and the tracker's fields (`bd`, slow under load) when they do. Opening another task cancels the first one's tracker read.
+export async function openDrawer(id) {
+  open?.abort.abort();
+  const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, tab: null, view: null };
+  open = mine;
+  render();
+  reveal();
+  loadTracker(mine);
+  try {
+    mine.detail = await source.detail(id);
+  } catch (error) {
+    if (open === mine) showError(id, error);
+    return;
+  }
+  if (open !== mine) return;
+  mine.sig = signature(tasks.get(id) || mine.detail.task);
+  select();
+  follow();
+}
+
+async function loadTracker(mine) {
+  mine.tracker = { state: "loading" };
+  try {
+    mine.tracker = { state: "ready", ...(await source.tracker(mine.id, mine.abort.signal)) };
+  } catch (error) {
+    if (mine.abort.signal.aborted) return;
+    mine.tracker = error.status === 404 ? { state: "none" } : { state: "failed", error: error.message ?? String(error) };
+  }
+  if (open === mine && taskTabOpen()) render();
+}
+
+const taskTabOpen = () => (open.view ?? (open.detail?.attempts.length ? "attempts" : "task")) === "task";
 
 const FOLLOW_MS = 2000;
 let follower = null;
@@ -78,189 +109,110 @@ function showError(id, error) {
 
 export function closeDrawer() {
   clearInterval(follower);
+  open?.abort.abort();
   open = null;
   $("drawer").classList.add("translate-x-full");
   $("backdrop").classList.add("pointer-events-none", "opacity-0");
 }
 
-const VIEWS = [["attempts", "Attempts"], ["task", "Task"]];
+const VIEWS = [["attempts", "Steps"], ["task", "Task"]];
 
-function render() {
-  if (!open) return;
-  const { detail } = open;
-  const t = tasks.get(open.id) || detail.task;
+// What the card says about the task's place: the column, and for a land the real state (waiting for the person, or delivering).
+function placeOf(t) {
   const col = COLUMNS.find((c) => c.id === t.column);
-  const view = open.view ?? (detail.attempts.length ? "attempts" : "task");
-  const drawer = $("drawer");
-  drawer.replaceChildren();
+  if (t.column !== "land") return { label: `${col.emoji} ${col.label}`, help: col.help };
+  const word = LAND[t.land ?? "waiting"];
+  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.land === "delivering" ? "A land is delivering the checked change to main." : "Checked and ready; the factory never lands by itself." };
+}
 
-  const head = el("header", "flex items-start gap-4 px-6 pb-3 pt-5");
+function head(t) {
+  const place = placeOf(t);
+  const wrap = el("header", "flex items-start gap-4 px-6 pb-3 pt-5");
   const title = el("div", "min-w-0 flex-1");
   const status = el("div", "flex items-center gap-2");
-  status.append(el("span", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), tag(`${col.emoji} ${col.label}`, { cls: "text-slate-700 dark:text-slate-200" }), ...(t.slot ? [tag(`slot ${t.slot}`, { cls: "font-mono" })] : []), el("span", "truncate text-xs text-slate-500 dark:text-slate-400", col.help));
+  status.append(el("span", "font-mono text-xs text-slate-500 dark:text-slate-400", t.id), tag(place.label, { cls: "text-slate-700 dark:text-slate-200" }));
+  if (t.slot) status.append(tag(`slot ${t.slot}`, { cls: "font-mono" }));
+  if (position(t)) status.append(el("span", "text-xs text-slate-500 dark:text-slate-400", position(t)));
+  status.append(el("span", "truncate text-xs text-slate-500 dark:text-slate-400", place.help));
   title.append(status, el("h2", "mt-1.5 text-lg font-semibold leading-snug", t.title));
   const close = el("button", "rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", "Close");
   close.type = "button";
   close.addEventListener("click", closeDrawer);
-  head.append(title, close);
-  drawer.append(head);
+  wrap.append(title, close);
+  return wrap;
+}
+
+// Rebuild the drawer. The Lines tab keeps its scroll place across a rebuild of the same attempt: at the bottom it stays at the bottom,
+// anywhere else it stays where it was; a different attempt or tab starts at the bottom.
+function render() {
+  if (!open) return;
+  const { detail } = open;
+  const t = tasks.get(open.id) || detail?.task;
+  const drawer = $("drawer");
+  const kept = $("tail") && { key: $("tail").dataset.key, top: $("tail").scrollTop, bottom: atBottom($("tail")) };
+  drawer.replaceChildren();
+  if (!t) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", `Loading ${open.id}…`));
+  drawer.append(head(t));
   if (t.hold_cause) {
     const hold = el("div", "px-6 pb-3");
     hold.append(callout("border-rose-500", "Held", t.hold_cause));
     drawer.append(hold);
   }
+  if (t.column === "land" && t.land !== "delivering") {
+    const waiting = el("div", "px-6 pb-3");
+    waiting.append(callout(LAND.waiting.bar, "Waiting for you to land it", `Run: tl step land ${t.id}`));
+    drawer.append(waiting);
+  }
+  if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));
 
+  const view = open.view ?? (detail.attempts.length ? "attempts" : "task");
   const bar = el("div", "flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
-  const counts = { attempts: detail.attempts.length };
   for (const [id, label] of VIEWS) {
     const on = id === view;
-    const b = el("button", `-mb-px border-b-2 pb-2 text-sm ${on ? "border-slate-900 font-semibold dark:border-slate-100" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`, counts[id] ? `${label} ${counts[id]}` : label);
+    const b = el("button", `-mb-px border-b-2 pb-2 text-sm ${on ? "border-slate-900 font-semibold dark:border-slate-100" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`, id === "attempts" && detail.attempts.length ? `${label} ${detail.attempts.length}` : label);
     b.type = "button";
     b.addEventListener("click", () => { open.view = id; render(); });
     bar.append(b);
   }
   drawer.append(bar);
 
-  if (view === "task") return drawer.append(taskView(detail));
+  if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }));
   if (!detail.attempts.length) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
   const body = el("div", "flex min-h-0 flex-1");
-  body.append(rail(t), pane());
+  body.append(rail(detail.attempts, t, open, select), pane());
   drawer.append(body);
   body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
   const tail = $("tail");
-  if (tail) tail.scrollTop = tail.scrollHeight;
-}
-
-// ---------- the task as the tracker holds it ----------
-
-const prose = (text) => el("div", "whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-slate-200", text);
-const section = (title, text) => {
-  const node = el("section");
-  node.append(el("h4", "mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500", title), prose(text));
-  return node;
-};
-
-// The task as the tracker holds it: its text and the discussion on the left, its metadata in a sidebar on the right.
-function taskView({ fields: f, comments }) {
-  const wrap = el("div", "flex min-h-0 flex-1");
-  const main = el("div", "flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5");
-  main.append(section("Description", f.description));
-  for (const [title, text] of [["Acceptance criteria", f.acceptance], ["Design", f.design], ["Notes", f.notes]]) if (text) main.append(section(title, text));
-  const thread = el("section", "border-t border-slate-200 pt-5 dark:border-slate-800");
-  thread.append(el("h4", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", `Comments · ${comments.length}`));
-  if (!comments.length) thread.append(el("p", "text-sm text-slate-500", "No comments on this task."));
-  for (const c of comments) {
-    const item = el("article", "mb-4 border-l-2 border-slate-200 pl-3 dark:border-slate-700");
-    const who = el("div", "mb-1 flex items-center gap-2 text-xs");
-    who.append(tag(c.author, { cls: c.author === "factory" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-200" }), el("span", "text-slate-500 dark:text-slate-400", ago(c.at)));
-    item.append(who, prose(c.text));
-    thread.append(item);
-  }
-  main.append(thread);
-  const side = el("aside", "w-60 shrink-0 overflow-y-auto border-l border-slate-200 px-5 py-5 dark:border-slate-800");
-  const props = el("dl", "flex flex-col gap-4 text-xs");
-  for (const [k, v] of [["Priority", f.priority], ["Labels", f.labels.join(", ")], ["Task branch", f.branch], ["Claim", f.claimed_by], ["Depends on", f.depends_on.join(", ")], ["Created", ago(f.created_at)], ["Updated", ago(f.updated_at)]]) {
-    const item = el("div", "min-w-0");
-    item.append(el("dt", "text-slate-500 dark:text-slate-400", k), el("dd", "mt-0.5 break-words font-medium", v || "none"));
-    props.append(item);
-  }
-  side.append(el("h4", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", "Details"), props);
-  wrap.append(main, side);
-  return wrap;
-}
-
-// ---------- rail ----------
-
-// Newest first, so the attempt that is running now is at the top when the drawer opens. A jump label sits under the
-// attempt it began, between it and the one before; steps still to come are dim rows above.
-function rail(t) {
-  const list = open.detail.attempts;
-  const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
-  wrap.append(el("h3", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", `Attempts · ${list.length} · newest first`));
-  const ol = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700");
-  const last = list.at(-1);
-  if (STEPS.some((s) => s.id === t.column) && last.state !== "failed") {
-    for (const s of STEPS.slice(STEPS.findIndex((x) => x.id === last.step) + 1).reverse()) {
-      const li = el("li", "relative py-1.5 pl-4 text-[13px] text-slate-400 dark:text-slate-600");
-      li.append(el("span", "absolute -left-[3px] top-[0.8rem] h-1.5 w-1.5 rounded-full border border-slate-300 dark:border-slate-600"), `${s.emoji} ${s.label}`);
-      ol.append(li);
-    }
-  }
-  for (let i = list.length - 1; i >= 0; i--) {
-    ol.append(railRow(list[i]));
-    if (list[i].after) ol.append(jump(list[i], list[i - 1]));
-  }
-  wrap.append(ol);
-  return wrap;
-}
-
-function jump(a, prev) {
-  const j = JUMP[a.after];
-  const li = el("li", `relative pb-0.5 pl-4 pt-1.5 text-[11px] leading-snug ${j.text}`);
-  li.title = a.reason ?? "";
-  li.append(el("span", "font-medium", `${j.glyph} ${j.label}`));
-  if (a.reason && a.reason !== prev?.summary) li.append(el("span", "block line-clamp-2 text-slate-500 dark:text-slate-400", a.reason));
-  return li;
-}
-
-function railRow(a) {
-  const st = STATE[a.state];
-  const selected = open.step === a.step && open.n === a.n;
-  const li = el("li", "relative pl-3");
-  const dotEl = dot(st.dot);
-  dotEl.classList.add("absolute", "-left-[3px]", "top-[0.95rem]");
-  const btn = el("button", `block w-full rounded px-2 py-1.5 text-left ${selected ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`);
-  btn.type = "button";
-  if (selected) btn.dataset.selected = "1";
-  const dur = lasted(a);
-  const row = el("span", "flex items-baseline gap-2");
-  row.append(
-    el("span", `text-[13px] ${selected ? "font-semibold" : "font-medium"}`, `${STEPS.find((s) => s.id === a.step).emoji} ${STEPS.find((s) => s.id === a.step).label}`),
-    el("span", "text-[11px] text-slate-500 dark:text-slate-400", `#${a.n}`),
-    el("span", "ml-auto text-[11px] tabular-nums text-slate-500 dark:text-slate-400", dur),
-  );
-  btn.append(row);
-  if (a.state === "failed") btn.append(el("span", "mt-0.5 block truncate text-[11px] text-slate-500 dark:text-slate-400", a.summary));
-  btn.addEventListener("click", () => select(a.step, a.n));
-  li.append(dotEl, btn);
-  return li;
+  if (tail) tail.scrollTop = kept && kept.key === tail.dataset.key && !kept.bottom ? kept.top : tail.scrollHeight;
 }
 
 // ---------- selected attempt ----------
 
-// How long an attempt ran, or has been running; an attempt the stores gave no start or end shows a dash.
-function lasted(a) {
-  if (!a.started_at) return "—";
-  if (a.ended_at) return fmtDur(Date.parse(a.ended_at) - Date.parse(a.started_at));
-  return a.state === "running" ? since(a.started_at) : "—";
-}
-
 const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
+const nameOf = (id) => STEPS.find((s) => s.id === id);
 
 function pane() {
   const a = attemptOf();
   const st = STATE[a.state];
   const tab = tabOf(a);
   const wrap = el("section", "flex min-w-0 flex-1 flex-col");
-  const head = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
-  head.append(el("h3", "text-sm font-semibold", `${STEPS.find((s) => s.id === a.step).emoji} ${STEPS.find((s) => s.id === a.step).label}, attempt ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
+  const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
+  top.append(el("h3", "text-sm font-semibold", `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
-  head.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
-  if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) head.append(quietSpan(a.feed.at(-1)?.at ?? a.started_at));
-  wrap.append(head);
+  top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
+  if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) top.append(quietSpan(a.feed.at(-1)?.at ?? a.started_at));
+  wrap.append(top);
   if (a.after) {
     const why = el("div", "px-6 pt-3");
     const prev = open.detail.attempts[open.detail.attempts.indexOf(a) - 1];
     const what = a.after === "repeat" ? "Repeat of" : "Back to plan after";
-    why.append(callout(JUMP[a.after].bar, `${what} ${STEPS.find((s) => s.id === prev.step).label} #${prev.n}`, a.reason));
+    why.append(callout(JUMP[a.after].bar, `${what} ${nameOf(prev.step).label}, try ${prev.n}`, a.reason));
     wrap.append(why);
   }
-
   const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
   for (const [id, label] of TABS) {
     const on = id === tab;
-    const count = id === "lines" ? ` ${a.feed.length}` : "";
-    const b = el("button", `-mb-px border-b-2 pb-2 text-[13px] ${on ? "border-slate-900 font-semibold dark:border-slate-100" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`, `${label}${count}`);
+    const b = el("button", `-mb-px border-b-2 pb-2 text-[13px] ${on ? "border-slate-900 font-semibold dark:border-slate-100" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`, label);
     b.type = "button";
     b.addEventListener("click", () => { open.tab = id; render(); });
     bar.append(b);
@@ -270,66 +222,6 @@ function pane() {
 }
 
 const BLOCK = "min-h-0 flex-1 overflow-y-auto px-6 py-4";
-
-function lines(a) {
-  const box = el("div", BLOCK);
-  box.id = "tail";
-  const head = el("p", "mb-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400");
-  head.append(a.state === "running" ? "Live tail" : "Last lines", el("span", "ml-auto", "Offset from attempt start  ·  agent thought time shown before a command"));
-  const list = el("div", "divide-y divide-slate-100 dark:divide-slate-800/70");
-  list.id = "lines";
-  if (!a.feed.length) list.append(el("p", "py-3 text-sm text-slate-500", "No lines recorded for this attempt."));
-  for (const e of a.feed) list.append(line(e, a));
-  box.append(head, list);
-  return box;
-}
-
-const KIND = { command: "💻", tool: "🧰", message: "💬", error: "❌", waiting: "⏳", check: "🧪", step: "🚦" };
-const WORD = { command: "Command", tool: "Tool", message: "Agent message", error: "Error", waiting: "Waiting", check: "Check", step: "Step" };
-const THINKS = new Set(["command", "tool", "message"]);
-
-// One row of the log grid: offset, kind emoji, content, duration. An "agent thought" hint sits above the action it led to.
-function line(e, a) {
-  const hint = THINKS.has(e.type) && e.waited_ms >= 2000;
-  const row = el("div", "animate-line-in grid grid-cols-[3.25rem_3.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-xs");
-  row.dataset.eid = e.id || "";
-  const r = hint ? "row-start-2" : "row-start-1"; // literal class names: the Tailwind scanner reads strings, not parts
-  if (hint) row.append(el("span", "col-start-3 row-start-1 mb-0.5 text-[11px] text-slate-400 dark:text-slate-500", `agent thought ${fmtDur(e.waited_ms)}`));
-  const at = el("span", `col-start-1 ${r} font-mono tabular-nums text-slate-400 dark:text-slate-500`, clock(Date.parse(e.at) - Date.parse(a.started_at)));
-  const kind = el("span", `col-start-2 ${r} text-[13px]`, KIND[e.type]);
-  kind.title = WORD[e.type];
-  const content = el("span", `col-start-3 ${r} min-w-0`);
-  const right = el("span", `col-start-4 ${r} text-right tabular-nums text-slate-500 dark:text-slate-400`);
-  if (e.type === "command" || e.type === "tool") {
-    const running = e.state === "running";
-    const failed = !running && e.exit_code != null && e.exit_code !== 0;
-    if (e.type === "tool") content.append(el("span", "font-semibold text-slate-600 dark:text-slate-300", e.name), " ");
-    content.append(el("code", `${e.type === "tool" ? "" : "block "}truncate font-mono text-[12px]`, e.cmd));
-    if (running) {
-      right.dataset.since = e.at;
-      right.dataset.prefix = "running ";
-      right.className += " text-sky-600 dark:text-sky-400";
-      tick(right);
-    } else {
-      right.textContent = e.state === "unfinished" ? "unfinished" : `${e.duration_ms == null ? "" : fmtDur(e.duration_ms)}${failed ? `  exit ${e.exit_code}` : ""}`;
-      if (failed) right.className += " font-medium text-rose-600 dark:text-rose-400";
-    }
-  } else if (e.type === "message") {
-    content.className += " text-slate-700 dark:text-slate-200";
-    content.textContent = e.text;
-  } else if (e.type === "error" || e.type === "waiting") {
-    content.className += e.type === "error" ? " font-medium text-rose-600 dark:text-rose-400" : " text-amber-600 dark:text-amber-400";
-    content.textContent = e.text;
-  } else if (e.type === "check") {
-    content.append(el("span", "font-mono text-[12px]", e.name), "  ", el("span", `font-medium ${e.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`, e.passed ? "passed" : "failed"));
-    right.textContent = fmtDur(e.duration_ms);
-  } else {
-    content.append(el("span", "text-slate-500 dark:text-slate-400", `attempt ${e.attempt} of ${e.step} started`));
-  }
-  row.append(at, kind, content, right);
-  return row;
-}
-
 const pre = (text, cls = "") => el("pre", `max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50 p-3 font-mono text-[11.5px] leading-relaxed dark:border-slate-800 dark:bg-slate-950/60 ${cls}`, text);
 const label = (text) => el("h4", "mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500", text);
 
@@ -376,41 +268,21 @@ function prompt(a) {
   return box;
 }
 
-// ---------- live updates ----------
-
-// One new line of an attempt: a command's finished line replaces its running one (same id), then the feed keeps its last FEED_LIMIT.
-function apply(attempt, e) {
-  const at = e.id ? attempt.feed.findIndex((x) => x.id === e.id) : -1;
-  if (at >= 0) attempt.feed[at] = e;
-  else attempt.feed.push(e);
-  attempt.feed = attempt.feed.slice(-FEED_LIMIT);
-}
-
-// The new line in the open Lines tab: in place of its running line, else at the end, the list kept to FEED_LIMIT, scrolled to the end.
-function show(attempt, e) {
-  const list = $("lines");
-  if (!list) return;
-  if (list.firstChild?.tagName === "P") list.replaceChildren();
-  const row = line(e, attempt);
-  const old = e.id && [...list.children].find((c) => c.dataset.eid === e.id);
-  if (old) old.replaceWith(row);
-  else list.append(row);
-  while (list.children.length > FEED_LIMIT) list.firstChild.remove();
-  const box = $("tail");
-  box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
-}
-
-// A card moved: the open task's attempts changed (one ended, one began), so reload its detail.
+// A card moved. The drawer reloads the task's steps only when they can have changed (a step or try began or ended, a hold, a land);
+// a card that only shows newer activity changes nothing here, and never moves the tab, the selection or the scroll place.
 export async function onTaskMoved(task) {
-  if (open?.id !== task.id) return;
+  if (open?.id !== task.id || !open.detail || signature(task) === open.sig) return;
+  const mine = open;
   const following = attemptOf()?.state === "running" && attemptOf() === open.detail.attempts.at(-1);
   try {
-    open.detail = await source.detail(open.id);
+    const fresh = await source.detail(open.id);
+    if (open !== mine) return;
+    open.detail = fresh;
   } catch (error) {
     return showError(open.id, error);
   }
-  if (following || !attemptOf()) {
-    open.tab = null;
-    select();
-  } else render();
+  open.sig = signature(task);
+  if (following || !attemptOf()) select();
+  else render();
+  follow();
 }

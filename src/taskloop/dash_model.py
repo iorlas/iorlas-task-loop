@@ -7,6 +7,7 @@ from typing import Literal, Protocol
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
+type LandState = Literal["waiting", "delivering"]
 
 
 def iso(epoch: float | None) -> str | None:
@@ -31,6 +32,7 @@ class Card:
     last_activity_at: str | None
     slot: str | None
     hold_cause: str | None
+    land: LandState | None = None  # in `land` only: `waiting` for the person to run `tl step land`, `delivering` while a land runs
 
 
 @dataclass(frozen=True)
@@ -132,10 +134,18 @@ class AttemptDetail:
 
 @dataclass(frozen=True)
 class TaskDetail:
+    """`GET /api/tasks/<id>`: from factory.db and the evidence files only, so it never waits for the tracker."""
+
     task: Card
+    attempts: tuple[AttemptDetail, ...]
+
+
+@dataclass(frozen=True)
+class TrackerDetail:
+    """`GET /api/tasks/<id>/tracker`: the tracker's task and its comments (`bd` calls), loaded after the drawer is open."""
+
     fields: Fields
     comments: tuple[Comment, ...]
-    attempts: tuple[AttemptDetail, ...]
 
 
 @dataclass(frozen=True)
@@ -155,6 +165,6 @@ class DashTracker(Protocol):
 
     def titles(self, task_ids: tuple[str, ...]) -> dict[str, str]: ...
 
-    def fields(self, task_id: str) -> tuple[Fields, tuple[Comment, ...]] | None: ...
+    def fields(self, task_id: str) -> tuple[Fields, tuple[Comment, ...]] | None: ...  # None: the tracker has no such task
 
     def notice(self) -> str | None: ...

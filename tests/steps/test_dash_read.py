@@ -7,12 +7,14 @@ from any_agent import events
 
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey
+from taskloop.attempt_types import AttemptKey, Seen
+from taskloop.check_store import CheckStore
 from taskloop.command_sink import CommandSink
-from taskloop.dash_board import BoardPorts, build_board
+from taskloop.dash_board import BoardPorts, build_board, land_state
 from taskloop.dash_model import Board, Comment, FeedPage, Fields, Ready, TaskDetail
-from taskloop.dash_task import TaskPorts, build_feed, build_task
+from taskloop.dash_task import TaskPorts, build_feed, build_task, build_tracker
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.land_status import LandView, land_view
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 FIELDS = Fields("P1", ("auto",), "task/tl-1", "taskloop", "2026-11-12T10:00:00Z", "2026-11-12T11:00:00Z", ("tl-0",), "Why", "Done when",
@@ -75,18 +77,30 @@ def test_a_task_detail_has_the_tracker_text_the_comments_and_each_attempts_promp
     files.put_input(KEY, "Plan the actual task")
     found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(found, TaskDetail)
-    assert found.fields.acceptance == "Done when" and [each.author for each in found.comments] == ["denis"]
+    tracked = build_tracker(Tracker(), "tl-1")
+    assert tracked is not None and tracked.fields.acceptance == "Done when" and [each.author for each in tracked.comments] == ["denis"]
     (attempt,) = found.attempts
     assert (attempt.step, attempt.n, attempt.after, attempt.input) == ("plan", 1, None, "Plan the actual task")
     assert attempt.state == "running" and attempt.feed[0].type == "step"
     assert found.task.column == "plan" and found.task.title == "Title of tl-1"
 
 
-def test_a_task_neither_factory_nor_tracker_knows_is_none_and_a_tracker_only_task_has_no_attempts(
+def test_a_task_with_no_attempt_is_a_waiting_card_and_the_tracker_part_says_whether_it_knows_it(
     registered: sqlite3.Connection, tmp_path: Path,
 ) -> None:
     ports = TaskPorts(reads_of(registered), EvidenceFiles(tmp_path), Tracker())
-    assert build_task(ports, "tasks", "tl-9") is None
+    found = build_task(ports, "tasks", "tl-9")
+    assert isinstance(found, TaskDetail) and found.attempts == () and found.task.column == "waiting"
+    assert build_tracker(Tracker(), "tl-9") is None
+
+
+def test_the_detail_of_a_task_never_asks_the_tracker_for_its_fields(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    class Refusing(Tracker):
+        def fields(self, task_id: str) -> tuple[Fields, tuple[Comment, ...]] | None:
+            raise AssertionError("the drawer's first answer waits for no tracker read")
+
+    found = build_task(TaskPorts(reads_of(registered), EvidenceFiles(tmp_path), Refusing()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail) and found.task.title == "Title of tl-1"
 
 
 def test_the_checks_attempt_follows_its_implement_attempt_in_the_history(checking: sqlite3.Connection, tmp_path: Path) -> None:
@@ -137,3 +151,22 @@ def test_a_command_still_running_in_an_ended_attempt_is_shown_unfinished(checkin
     assert isinstance(found, TaskDetail)
     agent = next(each for each in found.attempts if each.step == "implement")
     assert agent.state != "running" and [line.state for line in agent.feed if line.type == "command"] == ["unfinished"]
+
+
+def land_of(con: sqlite3.Connection, seen: Seen) -> LandView | None:
+    """The checks attempt's land as `attempt_status` reads it, its land process observed as `seen`."""
+    store = AttemptStore(lambda: con)
+    return land_view(store, CheckStore(store.connect, store.begin).of_attempt("implement")[-1], lambda _entry: seen)
+
+
+def test_a_checked_task_nobody_has_landed_waits_for_the_person_instead_of_delivering(checking: sqlite3.Connection) -> None:
+    checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
+                     "WHERE attempt_id='checks'", ("d" * 40,))
+    assert land_of(checking, "matching") is None and land_state(None) == "waiting"
+
+
+def test_a_task_shows_delivering_only_while_its_land_process_runs(landing: sqlite3.Connection) -> None:
+    assert land_state(land_of(landing, "matching")) == "waiting"  # its candidate holds a slot but no land process is registered
+    landing.execute("UPDATE land_candidate SET entry_pid=7,entry_start='entry-start',entry_boot='boot' WHERE candidate_id='candidate'")
+    assert land_state(land_of(landing, "matching")) == "delivering"
+    assert land_state(land_of(landing, "gone")) == "waiting"

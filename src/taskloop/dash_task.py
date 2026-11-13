@@ -21,17 +21,15 @@ from taskloop.dash_model import (
     DashTracker,
     FeedEvent,
     FeedPage,
-    Fields,
     Outcome,
     State,
     TaskDetail,
+    TrackerDetail,
     iso,
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldStore
 from taskloop.operations import Failed
-
-NO_FIELDS = Fields("none", (), None, None, "", "", (), "", "", "", "")
 
 
 @dataclass(frozen=True)
@@ -133,8 +131,8 @@ def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDeta
     return tuple(found)
 
 
-def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Failed | None:
-    """None: neither factory.db nor the tracker knows the task. StoreUnavailable becomes a Failed."""
+def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Failed:
+    """A task with no attempt is a waiting card with none. StoreUnavailable becomes a Failed."""
     try:
         rows = ports.reads.store.attempts(backlog, task_id)
         view = current_view(ports.reads, backlog, task_id)
@@ -144,11 +142,13 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
         attempts = history(ports, rows)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
-    found = ports.tracker.fields(task_id)
-    if view is None and found is None:
-        return None
-    title = ports.tracker.titles((task_id,)).get(task_id, task_id)
-    waiting = Card(task_id, title, "waiting", 0, None, None, None, None, None)
-    card = waiting if view is None else card_of(view, rows[0], title, ports.files, ports.reads.clock())
-    fields, comments = found if found is not None else (NO_FIELDS, ())
-    return TaskDetail(card, fields, comments, attempts)
+    title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
+    card = Card(task_id, title, "waiting", 0, None, None, None, None, None) if view is None else card_of(
+        view, rows[0], title, ports.files, ports.reads.clock())
+    return TaskDetail(card, attempts)
+
+
+def build_tracker(tracker: DashTracker, task_id: str) -> TrackerDetail | None:
+    """The tracker's task and comments (`bd` calls; a failed read raises); None: the tracker does not know the task."""
+    found = tracker.fields(task_id)
+    return None if found is None else TrackerDetail(*found)
