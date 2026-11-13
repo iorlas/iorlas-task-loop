@@ -49,6 +49,10 @@ SHARED = {
 }
 
 
+# Direct dependencies from PyPI, pinned exactly like the shelf ones, but not shelf packages (no tag, no source entry).
+EDGE = {"pydantic"}
+
+
 def locked_source(name: str) -> str:
     lock = tomllib.loads((ROOT / "uv.lock").read_text())
     return next(package for package in lock["package"] if package["name"] == name)["source"]["git"]
@@ -58,7 +62,8 @@ def locked_source(name: str) -> str:
 def test_portable_shared_dependency(name: str) -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     dependency = importlib.metadata.distribution(name)
-    assert set(project["project"]["dependencies"]) == {f"{package}=={importlib.metadata.version(package)}" for package in SHARED}
+    pinned = {f"{package}=={importlib.metadata.version(package)}" for package in set(SHARED) | EDGE}
+    assert set(project["project"]["dependencies"]) == pinned
     tag = SHARED[name]
     assert "workspace" not in project.get("tool", {}).get("uv", {})
     assert set(project["tool"]["uv"]["sources"]) == set(SHARED)
