@@ -17,7 +17,7 @@ export const STATE = {
 };
 export const JUMP = {
   repeat: { label: "Repeat", glyph: "↻", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
-  restart_at_plan: { label: "Back to plan", glyph: "↩", text: "text-violet-700 dark:text-violet-300", bar: "border-violet-500" },
+  restart_at_plan: { label: "Restarted at plan", glyph: "↩", text: "text-violet-700 dark:text-violet-300", bar: "border-violet-500" },
 };
 // The Land column's states (`card.land`): what the card says, and what the drawer's rail row says.
 export const LAND = {
@@ -73,6 +73,8 @@ export function position(t) {
 }
 export const since = (iso) => fmtDur(Date.now() - Date.parse(iso));
 export const ago = (iso) => `${since(iso)} ago`;
+// When a restart began: the time of day and how long ago (an attempt the stores gave no start shows neither).
+export const startedAt = (iso) => (iso ? ` ${new Date(iso).toLocaleString([], { hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}, ${ago(iso)}` : "");
 export const clock = (ms) => `+${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
 // Quiet time of running work: nothing under 2 minutes, then amber, red from 15 minutes. Display only.

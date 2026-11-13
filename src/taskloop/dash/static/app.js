@@ -62,7 +62,7 @@ function fillCard(node, t) {
   const notes = el("div", "mt-2 flex flex-col gap-2");
   if (t.repeat) {
     const restart = t.repeat.kind === "restart_at_plan";
-    notes.append(callout(restart ? "border-violet-500" : "border-amber-500", restart ? "↩ Back to plan" : "↻ Repeat", t.repeat.reason));
+    notes.append(callout(restart ? "border-violet-500" : "border-amber-500", restart ? "↩ Restarted at plan" : "↻ Repeat", t.repeat.reason));
   }
   if (t.hold_cause) notes.append(callout("border-rose-500", "Held", t.hold_cause));
   if (t.column === "land") notes.append(callout(LAND[t.land].bar, `${t.land === "delivering" ? "🚀" : "🧑"} ${LAND[t.land].label}`, t.land === "delivering" ? null : `tl step land ${t.id}`));

@@ -2,7 +2,7 @@
 // it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, JUMP, LAND, STATE, STEPS, ago, callout, el, position, quietSpan, tag } from "./ui.js";
+import { $, COLUMNS, JUMP, LAND, STATE, STEPS, ago, callout, el, position, quietSpan, startedAt, tag } from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
 import { lasted, rail } from "./rail.js";
 import { prompt, result } from "./result.js";
@@ -243,8 +243,8 @@ function pane() {
     const why = el("div", "px-6 pt-3");
     const list = open.detail.attempts;
     const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list[list.indexOf(a) - 1];
-    const what = a.after === "repeat" ? "Repeat of" : "Back to plan after";
-    why.append(callout(JUMP[a.after].bar, `${what} ${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`, a.reason));
+    const what = a.after === "repeat" ? "Repeat of" : "Restarted at plan after";
+    why.append(callout(JUMP[a.after].bar, `${what} ${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}${a.after === "repeat" ? "" : `,${startedAt(a.started_at)}`}`, a.reason));
     wrap.append(why);
   }
   const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
