@@ -22,7 +22,7 @@ host machine state) is a different layer. Terms follow [the glossary](../glossar
 
 "Manages" reads top-down: the person manages the package manager, which puts the factory (and its pinned tools) on
 the host; the factory manages agents. The tracker and Git are not layers in that stack: they are owners of facts
-that the factory and agents consume (CLAUDE.md "one owner per fact").
+that the factory and agents consume (AGENTS.md "one owner per fact").
 
 What the owner decision removes from L3: installing a build of the factory (`tl install`), choosing which build runs
 (`tl pin`, the `start` exec shim), and the per-user install folder and pin file. A bare `tl version` stays: the factory
@@ -33,7 +33,7 @@ reporting its own package version is not managing versions. All of those are L1 
 Rule: **a layer knows only itself and the layer directly below it.** Knowing means importing, naming in code,
 parsing its files or printing instructions about it.
 
-- L3 factory reaches the host only through explicit ports (CLAUDE.md "state/time/IO enter through narrow ports"):
+- L3 factory reaches the host only through explicit ports (AGENTS.md "state/time/IO enter through narrow ports"):
   process, lock, file and agent APIs of the shelf. It never imports, shells to or mentions uv, mise, just, a pin, an
   install folder or a release.
 - L3 factory does not know L1 at all. A repo may name `just bootstrap` in its own `.task-loop.json` `setup`: that is
@@ -148,7 +148,7 @@ the task that adopts it, so a new module has to be placed.
 5. **`justfile` and `mise.toml` pins (proposed: stay as the repo's own L1 config; never referenced from `src/taskloop`).**
    The `pin` recipe reads `mise.toml`; `bootstrap` warms the pinned check tools. That is the project's tooling, correct
    in the package-manager layer, and not factory behavior. Risks: `.task-loop.json` couples to the recipe names
-   (`bootstrap`, `check`, `test`), and CLAUDE.md names `just check`/`just test` as gates. Recommendation: keep, and
+   (`bootstrap`, `check`, `test`), and AGENTS.md names `just check`/`just test` as gates. Recommendation: keep, and
    treat the recipe names as the repo's contract with the factory, stated in the profile only. Remove the `just`/`uv`
    facts from factory docs that describe the factory itself.
 6. **`.task-loop.json` (proposed: factory per-repo data, authored by the repo).** Read by `profile.py` from Git; keys

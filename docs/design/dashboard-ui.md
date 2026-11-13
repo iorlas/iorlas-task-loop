@@ -23,7 +23,7 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
   to open its drawer), the move and its words, and a filter *All moves / Needs attention* (hold, skip, repeat, failed,
   unusable slot, no free slot). The per-attempt evidence files (stdout, `entry.log`, check logs) stay per attempt and are
   read in the drawer. If one factory serves several repos with separate artifacts folders, the reader merges their
-  lines by time; each line carries its backlog. Display only, never control state (CLAUDE.md: no control from logs).
+  lines by time; each line carries its backlog. Display only, never control state (AGENTS.md: no control from logs).
 - The drawer has two top-level tabs: **Attempts** (below) and **Task**: the task as the tracker holds it, laid out like
   a Jira issue. Left, the full text (description, acceptance criteria, design, notes) and under it the **comments**,
   the tracker's discussion oldest first (the factory's hold and landing comments, the person's answers). Right, a
