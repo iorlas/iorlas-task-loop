@@ -28,6 +28,8 @@ from taskloop.attempt_types import (
     Verified,
     entry_identity,
 )
+from taskloop.drain.models import ActionKind
+from taskloop.drain.store import DrainStore, blocked
 from taskloop.factory_schema import EVIDENCE, FACTS, VERDICT
 
 # A registration write (the entry's or the harness's) waits at most this for the write lock, so it finishes well inside
@@ -81,6 +83,9 @@ class AttemptStore(AttemptLoads):
         is refused and writes nothing. A same-boot replacement or a first registration never renews.
         """
         with self._connection(write=True) as con:
+            if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id
+                                        for action in DrainStore(lambda: con, self.begin).pending()):
+                return "refused"
             row: tuple[object, ...] | None = con.execute(
                 """SELECT p.phase,p.deadline,p.entry_pid,p.entry_start,p.entry_boot FROM attempt p
                 JOIN reservation r ON r.slot=p.slot AND r.repo_id=p.repo_id AND r.generation=p.generation AND r.attempt_id=p.attempt_id

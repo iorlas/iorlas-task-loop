@@ -46,6 +46,8 @@ from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.check_status import HALF_DONE
 from taskloop.check_store import ChecksAdmitted, Required, insert
 from taskloop.checks import argv_digest, main_seen
+from taskloop.drain.models import BLOCKED, Reason
+from taskloop.drain.store import blocked
 from taskloop.factory_schema import LANDED, LANDING
 from taskloop.prepare import HEADS, REMOTES, lacks
 from taskloop.profile import Profile, ProfileFiles, Refused, Unavailable, read_profile
@@ -217,6 +219,8 @@ class ChecksAdmission:
         then the reservation, the slot's counter and the row."""
         con, repo_id = ready.con, RepoId(ready.found.repo_id)
         with self.begin(con):
+            if blocked(con):
+                return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
             number = next_number(con, request.previous)
             if isinstance(number, AdmitRefused):
                 return number

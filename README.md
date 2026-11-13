@@ -28,6 +28,10 @@ Review remains future work; the retained designs describe more than the implemen
 - `tl step show TASK [--backlog KEY]` selects the explicit backlog, then the machine config's `backlog`, then the sole
   distinct backlog retained in `factory.db` (including ended attempts). With none or several, supply the flag or config
   default. `tl step list` lists all backlogs; its `hold cause` column shows the recorded or due reason after `next`.
+- `tl drain [--db PATH] [--artifacts PATH] [--json]` durably blocks new work across the resolved factory database and
+  waits for existing entries, agents, setup, checks and synchronous operations to finish. Success verifies idle; it
+  preserves claims, reservations, sessions and unlaunched attempts. Uncertainty exits 3 and Ctrl-C exits 130, leaving
+  the fence in place. JSON writes progress and the final result as JSON Lines.
 - `tl step rounds` repeats rounds in the foreground until Ctrl-C. `--retake-lapsed` on `next` or `rounds` is for recovery
   after discarding `factory.db`: it also takes the factory's expired claims absent from that database, assuming one
   factory on the tracker. Prefer one `next` invocation for that recovery.
@@ -43,9 +47,17 @@ tail in its prompt. Path repeats and check-driven repeats share the three-attemp
 also receives fresh checks. Infrastructure failures and optional failures alone do not trigger repair. Unsafe-path
 feedback names the actual unsafe file, including a nearby Git file omitted from the answer.
 
-Factory schema v17 adds the source checks link for these repeats. Drain attempts before an upgrade: older databases
-are refused, with no migration. Discard the old local database only through its authorized owning operation; the
-implementation never discards a live database or restarts a running factory.
+Factory schema v18 adds the durable drain boundary and external-action ownership records (v17 added the source checks
+link). Older databases are refused, with no migration. For subsequent upgrades, drain with the pinned matching release
+before changing code. The first installation of v18 needs the supervisor to stop admission and verify that the previous
+runtime's entries, agents, checks and other writers finished; the new command cannot drain an incompatible database.
+Discard remains an owner decision through its authorized operation. Drain performs no upgrade, discard or restart.
+
+A completed drain stays fenced. An explicit new rounds invocation rechecks liveness, then reopens it under matching
+code while preserving unfinished work. An invocation encountering an incomplete drain finishes draining and exits;
+a later explicit invocation can reopen it. One-shot commands never reopen admission, and earlier rounds cannot resume
+scheduling across that boundary. Unresolved external actions or unprovable process identities keep drain from reporting
+success. Retrying drain observes the same durable request; it never launches an unstarted attempt to make progress.
 
 Rounds hold tasks they took when work needs a person: the approval label is removed, `held` is added, and a comment
 explains the cause, evidence and claim state. `tl step list --stuck`, `tl step show` and `bd list --label held` expose
@@ -60,7 +72,7 @@ existing shapes. Other commands' `--json` output is a single document.
 
 Exit codes are 0 for success/already complete (including a graceful rounds stop), 1 for refusals and task/repo
 inspection failures, 2 for invalid syntax, 3 for no reliable result (profile unavailable or a step classified unknown;
-retry is safe), and 130 for an abrupt rounds stop or interrupted land. Task/repo inspection failures remain 1 even
+retry is safe), and 130 for an abrupt rounds stop or interrupted land or drain. Task/repo inspection failures remain 1 even
 when a backend read is unavailable. Continuous rounds retry unknown results themselves.
 
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to

@@ -37,6 +37,8 @@ from taskloop import land_store
 from taskloop.attempt_reads import StoreConnection, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe, SlotFiles
 from taskloop.check_store import ChecksRow, CheckStore, Recorded, ResultRow, held_slot, record_release, unsettled
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.environment import reset_to
 from taskloop.factory_schema import current
 from taskloop.land_store import LandRow, LandStore
@@ -247,6 +249,18 @@ class ChecksRelease:
         return self.release_of(CandidateTarget(LandStore(self.store.connect, self.store.begin)), key, abandon, me)
 
     def release_of[R](self, target: ReleaseTarget[R], key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        try:
+            with operation(self.store, ActionKind.FINALIZE, subject=key.attempt_id,
+                           existing=lambda owner: self.store.owns_entry(key, owner)):
+                return self._release_of(target, key, abandon, me)
+        except Fenced:
+            return NotReleased("refused", Reason.DRAINING, BLOCKED)
+        except Unobservable:
+            return NotReleased("unavailable", "observe", "The calling process cannot be observed.")
+        except (sqlite3.Error, StoreUnavailable):
+            return NotReleased("unavailable", "store")
+
+    def _release_of[R](self, target: ReleaseTarget[R], key: AttemptKey, abandon: bool, me: EntryIdentity | None) -> ReleaseResult:
         """Release `target`'s reservation (settled) or abandon it; `me` is the calling entry's (or land process's) identity."""
         try:
             held = target.read(key)

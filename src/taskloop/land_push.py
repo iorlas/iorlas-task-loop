@@ -215,3 +215,16 @@ def withdraw(lands: LandStore, clock: Callable[[], float], origin: Origin, row: 
         return Failed("unavailable", "changed", "The land candidate changed meanwhile: rerun.")
     again = lands.row(row.key)
     return Withdrawn(row if again is None else again)
+
+
+def reconcile_delivery(lands: LandStore, origin: Origin, row: LandRow, now: float) -> bool:
+    """Observe a pre-drain delivery intent after its writer stops; record what happened, never push or close."""
+    if row.delivery is not None or not row.pushable:
+        return True
+    found = _seen(origin, row)
+    if isinstance(found, Failed):
+        return False
+    state, head = found
+    if state == "delivered":
+        return isinstance(_recorded(lands, now, row, head, "already_pushed"), Delivered)
+    return True  # origin does not contain S; keep the candidate and its reservation unchanged

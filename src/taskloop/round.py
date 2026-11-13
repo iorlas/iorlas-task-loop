@@ -21,6 +21,7 @@ lines of an admission that did not read the ready rows this round stay quiet too
 move (the graceful stop: no further move, `stopped=interrupted`).
 """
 
+import sqlite3
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from functools import partial
@@ -32,6 +33,9 @@ from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import BLOCKED, ActionKind, Reason
+from taskloop.drain.store import DrainStore
 from taskloop.harness_choice import HarnessKind
 from taskloop.hold import HoldPorts, clear_holds, hold_task
 from taskloop.hold_status import MAIN_MOVED
@@ -118,6 +122,8 @@ class RoundPorts:
     ready: ReadyRows
     log: Callable[[str], None]
     stopping: Callable[[], bool] = never
+    drain_store: DrainStore | None = None
+    generation: int | None = None  # captured at explicit rounds startup; older loops cannot schedule after reopening
     landing: Landing | None = None  # `land: auto` lands through it; None: rounds land nothing
 
 
@@ -136,6 +142,18 @@ def max_running_refused(count: int) -> Failed | None:
 
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
+    try:
+        with operation(ports.drain_store or ports.starting.reader, ActionKind.ROUND, generation=ports.generation):
+            return _run_round(ports, request)
+    except Fenced:
+        return Failed("refused", Reason.DRAINING, BLOCKED)
+    except Unobservable:
+        return Failed("unavailable", "observe", "The calling process cannot be observed.")
+    except (sqlite3.Error, StoreUnavailable):
+        return Failed("unavailable", "store", "The factory database is unavailable.")
+
+
+def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     """One round: settle, advance, admit (while fewer than `max_running` tasks are in flight), publish, clear. A
     whole-round refusal (empty label, unreadable store) is `Failed`."""
     label = request.label.strip()

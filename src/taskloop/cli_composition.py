@@ -35,6 +35,10 @@ from taskloop.composition import (
     open_releaser,
     open_verifier,
 )
+from taskloop.drain.composition import open_drain
+from taskloop.drain.models import Boundary, Conclusion, Reason, Result, State
+from taskloop.drain.restart import restart
+from taskloop.drain.store import DrainStore
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA, refusal
 from taskloop.git_views import GitProfileFiles, GitViews
@@ -46,7 +50,7 @@ from taskloop.land_check import LandPorts
 from taskloop.land_mode import land_mode
 from taskloop.land_store import LandStore
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
-from taskloop.operations import Adoption, ChecksPorts, Failed, Quiet, Round, StartPorts, require_database
+from taskloop.operations import Adoption, ChecksPorts, Ended, Failed, Quiet, Round, StartPorts, require_database
 from taskloop.owned_processes import current_boot, entry_seen, setup_seen, this_process, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
@@ -175,7 +179,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                 landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
                 yield RoundPorts(reads, _starting(reader, database, artifacts, store, views), open_verifier(database, store, views),
                                  releaser, open_publisher(database, store, views), holding, ready, EvidenceFiles(artifacts).log_round,
-                                 landing=landing)
+                                 landing=landing, drain_store=DrainStore(lambda: store.shared_rw(database)))
         finally:
             store.close_shared()
 
@@ -189,7 +193,7 @@ def _landed(ports: LandPorts, request: LandRequest) -> How | Failed:
 
 
 def one_round(
-    database: Path, artifacts: Path, views: GitViews, request: NextRequest, stopping: Callable[[], bool]
+    database: Path, artifacts: Path, views: GitViews, request: NextRequest, stopping: Callable[[], bool], generation: int | None = None,
 ) -> Callable[[Quiet], Round | Failed]:
     """One `tl step rounds` round: `open_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
     that exists but cannot be opened now (locked, busy) is `unavailable:store`, so the rounds back off; an absent one stays
@@ -199,7 +203,7 @@ def one_round(
         with open_next(database, artifacts, views, request.tracker_root) as ports:
             if isinstance(ports, Failed):
                 return _transient(ports, database)
-            return run_round(replace(ports, stopping=stopping), replace(request, quiet=quiet))
+            return run_round(replace(ports, stopping=stopping, generation=generation), replace(request, quiet=quiet))
 
     return once
 
@@ -255,7 +259,7 @@ def _rounds_lock(database: Path, request: NextRequest) -> Callable[[], None] | F
 @contextmanager
 def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextRequest,
                 install: Callable[[Callable[[str], object]], AbstractContextManager[Interrupts]] = installed,
-                ) -> Generator[RoundsPorts | Failed]:
+                ) -> Generator[RoundsPorts | Ended | Failed]:
     """`tl step rounds`: refused before any round (inputs, `database`/`schema`, `rounds_running`), else the rounds lock,
     then the SIGINT and SIGTERM handlers (`interrupts`) for the block's life, per-round `open_next` ports, the wall and monotonic clocks,
     `time.sleep`, the round log and the `Log: not written` warning on stderr. `install` is the real handler unless a test passes its own."""
@@ -265,10 +269,25 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
         return
     log, pid = EvidenceFiles(artifacts).log_round, os.getpid()
     try:
-        with install(_say) as interrupts:
-            rounding = one_round(database, artifacts, views, request, interrupts.stopping)
-            yield RoundsPorts(rounding, _slot_use(database), time.time, time.monotonic,
-                         time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid, not interrupts.ignored)
+        with open_drain(database) as draining:
+            started = draining if isinstance(draining, Result) else restart(draining)
+            if not isinstance(started, Boundary):
+                if started.conclusion is Conclusion.COMPLETE:
+                    yield Ended(request.backlog, Reason.DRAINED, "Idle was verified; new work remains blocked.")
+                elif started.conclusion is Conclusion.INTERRUPTED:
+                    yield Ended(request.backlog, "abrupt", started.detail)
+                else:
+                    yield Failed("refused" if started.conclusion is Conclusion.REFUSED else "unavailable",
+                                 Reason.DRAINING, started.detail)
+                return
+            assert not isinstance(draining, Result)
+            def fenced() -> bool:
+                current = draining.store.boundary()
+                return current.state is not State.OPEN or current.generation != started.generation
+            with install(_say) as interrupts:
+                rounding = one_round(database, artifacts, views, request, interrupts.stopping, started.generation)
+                yield RoundsPorts(rounding, _slot_use(database), time.time, time.monotonic,
+                             time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid, not interrupts.ignored, fenced)
     finally:
         release()
 

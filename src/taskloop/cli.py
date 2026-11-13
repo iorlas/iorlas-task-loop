@@ -11,7 +11,7 @@ from pathlib import Path
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
-from taskloop import cli_step
+from taskloop import cli_drain, cli_step
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.exit_codes import ExitCode, profile_exit_code
 from taskloop.git_views import GitProfileFiles, GitViews
@@ -119,7 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         description=f"Task-loop successor foundation. Step commands ({STEP_ONLY}).",
         epilog="Exit 0: success; 1: refusal or task/repo inspection error; 2: invalid syntax; "
                "3: no reliable result (profile unavailable or step unknown), safe to retry; "
-               "130: abrupt rounds stop or interrupted land.",
+               "130: abrupt rounds stop, interrupted land or interrupted drain.",
         allow_abbrev=False,
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")
@@ -146,12 +146,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                               "(default: main)")
     profile_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     cli_step.register(commands)
+    cli_drain.register(commands)
     commands.add_parser("version", help="Print the running package version", allow_abbrev=False).add_argument(
         "--json", action="store_true", dest="json_output")
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
         return ExitCode.SUCCESS
+    if arguments.command == "drain":
+        return cli_drain.run(arguments)
     if arguments.command in cli_step.COMMANDS:
         return cli_step.run(arguments)
     handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": show_version}

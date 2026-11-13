@@ -1,5 +1,6 @@
 """The one owner of factory.db DDL, its version and every column list of its tables.
 
+v18: durable factory drain and external-action ownership.
 v17: check-driven repeats retain their source checks link and start at the checked commit.
 Drain old attempts before upgrading; refuse the old database, then discard only through its owning operation.
 
@@ -23,6 +24,7 @@ from pathlib import Path
 from sqlite_store import Schema, SchemaError
 
 from taskloop.check_repeat.feedback import CheckRepeatReason
+from taskloop.drain.models import ActionKind, ActionState, State
 from taskloop.harness_choice import HarnessKind, Provider
 
 _HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
@@ -31,10 +33,23 @@ _PROVIDERS = ",".join(f"'{each}'" for each in Provider)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=17,
+    version=18,
     name="factory",
     steps={},
     ddl=f"""
+CREATE TABLE drain_state (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL CHECK(generation>=1),
+ state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in State)}))
+);
+CREATE TABLE drain_action (
+ action_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ({','.join(repr(each.value) for each in ActionKind)})),
+ state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in ActionState)})),
+ pid INTEGER NOT NULL, pgid INTEGER NOT NULL, start TEXT NOT NULL, boot TEXT NOT NULL,
+ subject TEXT NOT NULL, backlog TEXT NOT NULL, tracker_root TEXT NOT NULL,
+ checkout TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0 CHECK(rev>=0)
+);
+CREATE UNIQUE INDEX drain_claim ON drain_action(tracker_root,backlog,subject)
+ WHERE kind='{ActionKind.CLAIM.value}' AND state<>'{ActionState.DONE.value}';
 CREATE TABLE slot (
  repo_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
  generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),

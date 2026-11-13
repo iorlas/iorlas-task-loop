@@ -39,6 +39,8 @@ from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_status import latest
 from taskloop.check_store import ChecksRow
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.land_check import LandPorts, inserted, released, validated
 from taskloop.land_close import closed
 from taskloop.land_gate import Gate, gate_of
@@ -389,6 +391,14 @@ def land(ports: LandPorts, request: LandRequest) -> LandResult:
     """The land, through the delivery and the close: `Landed`, `Withdrawn`, `LandSummary`, or `Failed` (refused: exit 1; unavailable:
     exit 3, a rerun is safe). A factory.db fault anywhere is `unavailable store`, nothing further changed by this call."""
     try:
-        return _landing(ports, request)
+        with operation(ports.lands, ActionKind.LAND, subject=request.task_id, backlog=request.backlog,
+                       checkout=str(request.checkout.expanduser().absolute())) as call:
+            result = _landing(ports, request)
+            call.resolved = not isinstance(result, Failed) or result.kind not in {"unavailable", "uncertain"}
+            return result
+    except Fenced:
+        return Failed("refused", Reason.DRAINING, BLOCKED)
+    except Unobservable:
+        return Failed("unavailable", "observe", "The calling process cannot be observed.")
     except (sqlite3.Error, StoreUnavailable) as error:
         return Failed("unavailable", "store", f"{type(error).__name__}: rerun.")

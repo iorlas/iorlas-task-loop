@@ -12,6 +12,7 @@ from sqlite_store import begin_immediate
 
 from taskloop.attempt_types import ATTEMPTS, EFFECTS, AttemptKey, ChainLink, Effect, EntryIdentity, FileRef
 from taskloop.check_repeat.feedback import stored_source
+from taskloop.drain.models import Identity, Owner, Role, owners
 from taskloop.factory_schema import REPEATED, current
 from taskloop.harness_choice import HarnessKind, Provider
 
@@ -207,6 +208,20 @@ class StoreConnection:
 
 class AttemptReads(StoreConnection):
     """The status reads of agent attempts (the `attempt` table and its chain)."""
+
+    def owns_entry(self, key: AttemptKey, identity: Identity) -> bool:
+        """Whether this process is the registered entry of this exact attempt; no unrelated execution reads."""
+        with self._connection() as con:
+            return con.execute("SELECT 1 FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? "
+                               "AND entry_pid=? AND entry_start=? AND entry_boot=?",
+                               (*astuple(key), identity.pid, identity.start, identity.boot)).fetchone() is not None
+
+    def drain_processes(self) -> tuple[Owner, ...]:
+        """Every recorded execution identity, including historical and already concluded work."""
+        with self._connection() as con:
+            entries = con.execute("SELECT attempt_id,entry_pid,entry_start,entry_boot FROM attempt").fetchall()
+            agents = con.execute("SELECT attempt_id,worker_pid,worker_pgid,worker_start,worker_boot FROM attempt").fetchall()
+        return owners(entries, Role.ENTRY, group=False) + owners(agents, Role.AGENT, group=True)
 
     def state(self, key: AttemptKey) -> tuple[str, bool] | None:
         """Dispatch phase and recorded session conflict, without needing a live reservation (historical reads)."""

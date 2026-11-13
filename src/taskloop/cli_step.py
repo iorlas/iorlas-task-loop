@@ -9,6 +9,7 @@ from typing import Literal
 
 from taskloop import attempt_status, cli_composition, dash_composition, land, operations, result_data
 from taskloop.composition import real_slots
+from taskloop.drain.models import Reason
 from taskloop.exit_codes import exit_code
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
@@ -191,7 +192,7 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     log = settings.artifacts.value / "rounds.log"
     try:
         with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments)) as ports:
-            if isinstance(ports, Failed):
+            if isinstance(ports, (Failed, Ended)):
                 return ports
             label = arguments.label.strip()  # as `run_round` reads it
             data = result_data.rounds_data(request.backlog, request.every, str(log), label, arguments.max_running)
@@ -286,7 +287,8 @@ def run(arguments: argparse.Namespace) -> int:
         result: Result = operations.refused_config(loaded)
     else:
         result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
-    failed = isinstance(result, Failed) or (isinstance(result, Ended) and result.reason != "interrupted")
+    failed = isinstance(result, Failed) or (isinstance(result, Ended)
+                                            and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING})
     stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:
         admission = (arguments.command, arguments.operation) == ("step", "start")  # the one command whose refusals carry slots
