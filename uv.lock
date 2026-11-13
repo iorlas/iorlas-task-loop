@@ -13,8 +13,8 @@ wheels = [
 
 [[package]]
 name = "any-agent"
-version = "0.6.1"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.6.1#d9b0595438c4b04c727570511f3a155db5acffe3" }
+version = "0.7.0"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.7.0#3e26d161e6d83689235f8d72d2e6f1e0c95ca229" }
 dependencies = [
     { name = "stream-proc" },
 ]
@@ -78,13 +78,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.6.1" },
+    { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.7.0" },
     { name = "beads-client", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.2.0" },
     { name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.18.1" },
     { name = "process-lock", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=process-lock-v0.2.1" },
     { name = "pydantic", specifier = "==2.14.3" },
     { name = "sqlite-store", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fsqlite-store&tag=sqlite-store-v0.1.0" },
-    { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.6.1" },
+    { name = "stream-proc", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.7.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -218,7 +218,7 @@ source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2F
 [[package]]
 name = "stream-proc"
 version = "0.7.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.6.1#d9b0595438c4b04c727570511f3a155db5acffe3" }
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fstream-proc&tag=any-agent-v0.7.0#3e26d161e6d83689235f8d72d2e6f1e0c95ca229" }
 
 [[package]]
 name = "typing-extensions"
