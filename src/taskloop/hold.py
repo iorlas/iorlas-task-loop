@@ -24,6 +24,7 @@ from taskloop.attempt_reads import AttemptRow, StoreRefused, StoreUnavailable
 from taskloop.attempt_status import AttemptView, agent_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.hold_cause import LAND_CAUSE
 from taskloop.hold_facts import Pending, facts, outcome, refusal
 from taskloop.hold_status import MAIN_MOVED, cause
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
@@ -132,6 +133,8 @@ def _caused(ports: HoldPorts, row: HoldRow) -> bool:
         return True
     if fresh.attempt_id != row.cause_id:
         return False
+    if row.reason.startswith(LAND_CAUSE):  # the refused land leaves the view at its `land` (or an abandon's `release`)
+        return fresh.next in ("land", "release")
     if row.reason not in ROUND_CAUSES:
         return cause(fresh) is not None
     return fresh.next in ROUND_WORDS or (fresh.checks is not None and fresh.result.reason == MAIN_MOVED)  # or a checks re-run's

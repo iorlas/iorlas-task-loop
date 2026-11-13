@@ -2,6 +2,7 @@
 tracker's titles and its ready tasks that no attempt has taken yet. Display only; the start times are the evidence
 files' (an attempt row stores none), so they are as good as a file's modification time."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -11,6 +12,7 @@ from taskloop.dash_model import Board, Card, Column, DashTracker, LandState, Rep
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.land_status import LandView
 from taskloop.operations import Failed
+from taskloop.profile import LandMode
 
 STEP_COLUMN: dict[str, Column] = {"plan": "plan", "implement": "implement", "check": "checks"}
 
@@ -26,9 +28,12 @@ def column_of(view: AttemptView) -> Column:
     return STEP_COLUMN.get(view.step, "implement")
 
 
-def land_state(land: LandView | None) -> LandState:
-    """`landing` only while a land is observed running; every other task in the land column waits for the person."""
-    return "landing" if land is not None and land.row.pending and land.process == "running" else "waiting"
+def land_state(land: LandView | None, mode: LandMode | None = None) -> LandState:
+    """`landing` only while a land is observed running; any other task in the land column waits: for a person only when the
+    profile says `manual`, else for the next round (also when the profile cannot be read: no policy is claimed)."""
+    if land is not None and land.row.pending and land.process == "running":
+        return "landing"
+    return "manual" if mode is LandMode.MANUAL else "waiting"
 
 
 def _repeat(view: AttemptView) -> Repeat | None:
@@ -55,6 +60,7 @@ class BoardPorts:
     reads: StatusPorts
     files: EvidenceFiles
     tracker: DashTracker
+    mode: Callable[[], LandMode | None] = lambda: None  # the profile's `land`, read only for a task in the land column
 
 
 def tries(rows: tuple[AttemptRow, ...]) -> dict[str, int]:
@@ -67,7 +73,8 @@ def tries(rows: tuple[AttemptRow, ...]) -> dict[str, int]:
     return found
 
 
-def card_of(view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float, number: int | None = None) -> Card:
+def card_of(view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float, number: int | None = None,
+            mode: Callable[[], LandMode | None] = lambda: None) -> Card:
     column = column_of(view)
     started = _started(view, row, files)
     quiet = now - view.last_command if isinstance(view.last_command, int) else None
@@ -75,7 +82,8 @@ def card_of(view: AttemptView, row: AttemptRow | None, title: str, files: Eviden
     cause = view.hold.reason if view.hold is not None else view.hold_due
     shown = view.number if number is None else number
     return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
-                view.slot if holding else None, cause if column == "held" else None, land_state(view.land) if column == "land" else None)
+                view.slot if holding else None, cause if column == "held" else None,
+                land_state(view.land, mode()) if column == "land" else None)
 
 
 def build_board(ports: BoardPorts) -> Board | Failed:
@@ -91,7 +99,7 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     ready = tuple(each for each in ports.tracker.ready() if each.task_id not in taken)
     titles = ports.tracker.titles(tuple(sorted(taken)))
     cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now,
-             numbers.get(view.attempt_id))
+             numbers.get(view.attempt_id), ports.mode)
              for view in listed.attempts]
     cards += [Card(each.task_id, each.title, "waiting", 0, None, each.since, each.since, None, None) for each in ready]
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")

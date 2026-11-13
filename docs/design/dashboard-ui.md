@@ -10,7 +10,7 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
 - Read-only: no buttons that change anything, no auth, no charts, no history pages. The controls are the theme switch,
   the board layout switch and drawer navigation.
 - One board on one screen. A card is a task, newest activity first in its column. Columns: Ready, Plan, Implement,
-  Checks, Land, Held, Landed. The Land column is the person's: a card there says *Waiting for you* with the command (`tl step land <id>`, rounds never land) and says *Landing* only while a land process is observed running (tl-8bh9.14.72; the glossary's word is land, never "delivering"). (The glossary says *ready* for a task not yet admitted; the interview said "Waiting").
+  Checks, Land, Held, Landed. A card in the Land column says *Landing next round* (the profile's `land` is `auto` or unreadable: a round lands it), *Waiting for a person* (the profile says `land: manual`, said in words, no command) and *Landing* only while a land process is observed running (tl-8bh9.14.72, tl-8bh9.14.136; the glossary's word is land, never "delivering"). (The glossary says *ready* for a task not yet admitted; the interview said "Waiting").
 - Two layouts of the same board: **Steps** (one column per step) and **By slot** (swim lanes: one row per slot, plus
   "no slot" for tasks holding none). Switching animates the cards into place.
 - A card shows task id and title, where the task is (`step 2 of 4 · try 1`: a step and a try are different things; a repeat is a new try of the same step), a *repeat* or *restarted at plan* badge with its reason, time in the
@@ -128,7 +128,7 @@ number of the current or last attempt of the step (0 before any). `repeat` is `n
 new attempt of the same step, `restart_at_plan` is a task sent back to plan. `step_started_at` starts "time in step"
 (for Landed: time since landing). `last_activity_at` is the sort key (newest first): the last step change or live
 event. `slot` is `null` when the task holds none. `hold_cause` is the sentence the hold owner already shows, only in
-`held`. `land` is `null` outside the `land` column; in it `waiting` (the person has to run `tl step land`) or `landing` (a land
+`held`. `land` is `null` outside the `land` column; in it `waiting` (a round lands it), `manual` (the profile says `land: manual`: a person lands it) or `landing` (a land
 process is observed running).
 
 ### Board snapshot: `GET /api/board`

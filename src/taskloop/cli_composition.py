@@ -39,7 +39,9 @@ from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
 from taskloop.interrupts import Interrupts, installed
+from taskloop.land import How, Landed, LandRequest, land
 from taskloop.land_check import LandPorts
+from taskloop.land_mode import land_mode
 from taskloop.land_store import LandStore
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.operations import Adoption, ChecksPorts, Failed, Quiet, Round, StartPorts, require_database
@@ -47,6 +49,7 @@ from taskloop.owned_processes import current_boot, entry_seen, setup_seen, this_
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
 from taskloop.round import NextRequest, RoundPorts, run_round
+from taskloop.round_land import Landing
 from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
 from taskloop.slot_files import RealSlotFiles
@@ -144,7 +147,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
     """`tl step next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
     refuses `tracker_root`), the start, verify, release, publish and hold ports on one shared writer (closed here; the
     hold's abandon uses the release ports `tl step release --abandon` uses, its tracker writes `tracker_holds`), the reads
-    and the round log appended under the artifacts root."""
+    the round log appended under the artifacts root, and the land's ports and profile reader (`land: auto`, `round_land`)."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
@@ -163,10 +166,21 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
             holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
                                 open_checks_releaser(database, store, views), time.time, EvidenceFiles(artifacts),
                                 partial(current_view, reads))
-            yield RoundPorts(reads, _starting(reader, database, artifacts, store, views), open_verifier(database, store, views), releaser,
-                             open_publisher(database, store, views), holding, ready, EvidenceFiles(artifacts).log_round)
+            with open_land(database, artifacts, views) as lands:  # the land's ports, the ones `tl step land` opens
+                landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
+                yield RoundPorts(reads, _starting(reader, database, artifacts, store, views), open_verifier(database, store, views),
+                                 releaser, open_publisher(database, store, views), holding, ready, EvidenceFiles(artifacts).log_round,
+                                 landing=landing)
         finally:
             store.close_shared()
+
+
+def _landed(ports: LandPorts, request: LandRequest) -> How | Failed:
+    """`land.land` as a round asks it: how the task landed, or the refusal."""
+    found = land(ports, request)
+    if isinstance(found, Landed):
+        return found.how
+    return found if isinstance(found, Failed) else Failed("unavailable", "land", "The land answered something else than a land")
 
 
 def one_round(
@@ -322,7 +336,7 @@ def open_land(database: Path, artifacts: Path, views: GitViews) -> Generator[Lan
     remote-capable view (`remotes`: hooks off, bounded transport, the person's credentials), the tracker read and claim
     heartbeat, a new stop event per keep-alive, this process's identity, the slot lock's probe and custody (`landing`),
     this process's environment, and the tracker's close. Here, never in `composition`: neither entry may import the land
-    (`rounds-never-land`)."""
+    (`entries-never-land`)."""
     with _read_only(database) as con:
         if isinstance(con, Failed):
             yield con

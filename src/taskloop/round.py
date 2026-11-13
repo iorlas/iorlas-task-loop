@@ -7,9 +7,10 @@ claimed task whose step is done (`Next: advance`) to its next step, oldest relea
 is refused `claim_lost` or `branch_moved` is held), then admit eligible ready tasks in priority order into the slots left
 free, storing the round's label on each fresh attempt (an `on_hold` task whose hold removed this very label is eligible
 again: `hold_status.reingests`), then publish the verified, released, unpublished results read at the start (a
-round-taken `branch_moved` is held), then remove `held` from held tasks taken again (`hold.clear_holds`). It adds no
-state, lock, Git write, tracker write or process of its own beyond the hold operation's: its only other output is one
-append-only round-log line per move, never read back. No per-task hold word stops admission. Nothing merges or lands.
+round-taken `branch_moved` is held), then remove `held` from held tasks taken again (`hold.clear_holds`). Under the profile's
+`land: auto` it first lands the oldest passed task it took (`round_land`: `land.land`, as `tl step land` runs it). It adds no
+state, lock, Git write, tracker write or process of its own beyond the hold's and the land's: its only other output is one
+append-only round-log line per move, never read back. No per-task hold word stops admission.
 
 Claimed work goes before new work (.16 3.6): the advance takes free slots before admission. The label is ingestion's only:
 admission's ready read carries it; an advance checks no label, takes no claim, and reads the tracker once per task (still
@@ -22,6 +23,7 @@ move (the graceful stop: no further move, `stopped=interrupted`).
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
 from typing import Final
 
@@ -55,6 +57,8 @@ from taskloop.operations import (
     verify_task,
 )
 from taskloop.publish import publish_word
+from taskloop.round_flight import in_flight
+from taskloop.round_land import Landing, land_passed
 from taskloop.round_log import INTERRUPTED
 from taskloop.round_trail import Trail
 from taskloop.selection import order
@@ -112,6 +116,7 @@ class RoundPorts:
     ready: ReadyRows
     log: Callable[[str], None]
     stopping: Callable[[], bool] = never
+    landing: Landing | None = None  # `land: auto` lands through it; None: rounds land nothing
 
 
 def _word(result: Started | Failed) -> str:
@@ -126,16 +131,6 @@ def _request(request: NextRequest, task_id: str) -> StartRequest:
 
 def max_running_refused(count: int) -> Failed | None:
     return None if count >= 1 else Failed("refused", "max_running", "`--max-running` is at least 1 (tasks in flight before nothing starts)")
-
-
-IN_FLIGHT: Final = frozenset({"start", "wait", "verify", "repeat", "release", "publish", "advance", "land"})
-
-
-def in_flight(current: Iterable[AttemptView]) -> frozenset[str]:
-    """The backlog's tasks with work that goes on without the person: a step starting, running, verified, repeated,
-    released, published or advanced, or a passed task waiting for `tl step land` (counted until landed). Failed (`done`),
-    `repeats_exhausted`, `stuck:*`, `unknown`, held, landed and abandoned ones need the person: not counted."""
-    return frozenset(e.task_id for e in current if e.next in IN_FLIGHT and not (e.release is not None and e.release.abandoned))
 
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
@@ -158,7 +153,9 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
         if ports.stopping():
             return trail.close(INTERRUPTED)
         _settle(ports, request, each, trail)
-    reserve = int(any(each.next == "land" for each in current))
+    finished = frozenset() if ports.stopping() else land_passed(
+        ports.landing, request.backlog, request.checkout, request.minutes, current, trail, partial(_held, ports.holding))
+    reserve = int(any(each.next == "land" and each.task_id not in finished for each in current))
     stopped = _advance(ports, request, tuple(each for each in current if each.next == "advance" or _rerun(each)), trail, reserve)
     stopped = stopped or _admit(ports, request, current, trail, reserve)
     if stopped != INTERRUPTED:
@@ -200,9 +197,9 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: T
             trail.add(_held(ports.holding, each))
         case "release" if each.checks is not None and each.checks.row.released_at is None:  # its entry is gone (`checks_next`)
             trail.add(_checks_released(ports, each, each.checks.row.key))
-        case "wait" | "land":  # `land`: passed checks, one line while unchanged: the person's sign to run `tl step land`
+        case "wait" | "land":  # `land`: passed checks, one line while unchanged (landed by `round_land` under `land: auto`)
             trail.add(Move(task, "report", "running" if each.next == "wait" else "land", attempt, step=step))
-        case "publish" | "advance" | "landed" | "on_hold":  # only the person's `tl step land` lands (`rounds-never-land`)
+        case "publish" | "advance" | "landed" | "on_hold":
             return
         case "done" if succeeded(each.result) or _rerun(each):  # a re-run is the advance phase's
             return

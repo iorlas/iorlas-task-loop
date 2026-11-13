@@ -102,7 +102,8 @@ def register(commands: Parsers) -> None:
 LAND = ("Land the task's checked commit X yourself: fetch origin's main (O), squash X onto it as one commit S (Git objects only), "
         "run every check again on S in a free slot, in this shell, only when main moved or its required names changed, push S "
         "to origin's main as you (never forced), then close the task in your local tracker (never synced: `bd dolt push` is "
-        "yours). A rerun does only what is missing; rounds never land. Your checkout and local main are never written. Exit 0 landed "
+        "yours). A rerun does only what is missing; under the profile's `land: auto` a round runs this same land by itself. "
+        "Your checkout and local main are never written. Exit 0 landed "
         "(or already), 1 refused, 3 unknown (a rerun is safe), 130 interrupted by Ctrl-C (a rerun reconciles it)")
 
 
@@ -132,7 +133,7 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
                         "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
     parser.add_argument("--max-running", type=int, default=3, metavar="N", help="Tasks of this backlog in flight (a step "
-                        "running, or passed and waiting for `tl step land`, which counts until landed; not failed, stuck or held) "
+                        "running, or passed and waiting to be landed, which counts until landed; not failed, stuck or held) "
                         "at which no new task starts (default 3, at least 1); claimed work advances regardless. Start only what you "
                         "approved: use a label only those tasks carry")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
@@ -169,7 +170,7 @@ def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_co
     if arguments.dash_port is None:
         return None
     return dash_composition.DashRequest(arguments.backlog, arguments.tracker_root, arguments.label, arguments.dash_port,
-                                        settings.db.value, settings.artifacts.value)
+                                        settings.db.value, settings.artifacts.value, Path(arguments.checkout))
 
 
 def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -187,7 +188,7 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                        f"Rounds for backlog {request.backlog} every {request.every} s, taking tasks labelled {label!r}"
                        + (" (and its own lapsed claims)" if arguments.retake_lapsed else "")
                        + f", none new while {arguments.max_running} or more tasks of this backlog are in flight (a step running, or "
-                       f"passed and waiting for land until `tl step land` lands it); log: {log}; "
+                       f"passed and waiting to be landed, by a round under the profile's `land: auto`, else by a person); log: {log}; "
                        + ("stop with Ctrl-C" if ports.ctrl_c else "Ctrl-C is ignored here: stop with SIGTERM"))
             print(started, flush=True)
             with dash_composition.serving(_dash_request(arguments, settings), views_for(loaded)) as address:
