@@ -128,9 +128,10 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(flag, required=True)
     parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
                         "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
-    parser.add_argument("--max-running", type=int, default=3, metavar="N", help="Tasks in flight (running, or passed and waiting "
-                        "for `tl step land`; not held) beyond which no new task starts (default 3, at least 1); claimed work "
-                        "advances regardless. Start only what you approved: use a label only those tasks carry")
+    parser.add_argument("--max-running", type=int, default=3, metavar="N", help="Tasks of this backlog in flight (a step "
+                        "running, or passed and waiting for `tl step land`, which counts until landed; not failed, stuck or held) "
+                        "at which no new task starts (default 3, at least 1); claimed work advances regardless. Start only what you "
+                        "approved: use a label only those tasks carry")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
     parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
                         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
@@ -182,7 +183,8 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
             started = (json.dumps(data) if arguments.json_output else
                        f"Rounds for backlog {request.backlog} every {request.every} s, taking tasks labelled {label!r}"
                        + (" (and its own lapsed claims)" if arguments.retake_lapsed else "")
-                       + f", none new while {arguments.max_running} or more are in flight (running or waiting for land); log: {log}; "
+                       + f", none new while {arguments.max_running} or more tasks of this backlog are in flight (a step running, or "
+                       f"passed and waiting for land until `tl step land` lands it); log: {log}; "
                        + ("stop with Ctrl-C" if ports.ctrl_c else "Ctrl-C is ignored here: stop with SIGTERM"))
             print(started, flush=True)
             with dash_composition.serving(_dash_request(arguments, settings), views_for(loaded)) as address:

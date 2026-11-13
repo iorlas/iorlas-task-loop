@@ -1522,17 +1522,20 @@ Git reads (the refs and history of a moved HEAD, read only for an attempt at `Ne
 
 Decided after the first real run (docs/design/self-hosting-real-run-1.md):
 
-- Rounds start no new task while `--max-running` (default 3, at least 1) tasks are in flight: an unfinished chain, running
-  or waiting for the person's land; held, landed and abandoned ones are not. This is the real bound (it holds across
-  rounds, and a task waiting for land keeps counting although it freed its slot); the free slots less the land's reserve
-  still bound a round, and the slot words (`no_free_slot`, `slot_for_land`) are named before `max_running`. Reaching it
-  stops admission with `max_running` and no tracker read; claimed work advances regardless. A refused start does not
+- Rounds start no new task while `--max-running` (default 3, at least 1) of the backlog's tasks are in flight (slots are
+  global; the bound is per backlog), counted by the positive `round.IN_FLIGHT` words: a step starting, running, verified,
+  repeated, released, published or advanced, or a passed task waiting for the person's land, which counts until `tl step
+  land` lands it. Failed, `repeats_exhausted`, `stuck:*`, `unknown`, held, landed and abandoned ones need the person and do
+  not count, so hand-started failures never stop the rounds. This is the real bound (it holds across rounds, and a task
+  waiting for land keeps counting although it freed its slot); the free slots less the land's reserve still bound a round,
+  and the slot words (`no_free_slot`, `slot_for_land`) are named before `max_running`. Reaching it stops admission with
+  `max_running` and no tracker read; claimed work advances regardless. A refused start does not
   count. The per-round `--max-new` ramp of the first version was removed: the bound makes it redundant (no unused
   feature), and `tl step next` is back to starting every candidate the bound allows. Nothing starts that lacks the round's
   `--label`; naming one task is a label only that task carries (one owner of "approved"). The rounds start line (and its
   `--json` form: `label` as the round reads it, stripped, and `max_running`) states both before the first round, and
   notes the factory's own lapsed claims under `--retake-lapsed`.
-- The squash title is `<title> (<task id>)` on one line of at most 72 characters: a longer title is cut at a word
+- The squash title is `<title> (<task id>)` on one line of at most 72 characters, except that the task id is never cut (a long id overshoots): a longer title is cut at a word
   boundary and ends in an ellipsis, the task id suffix kept and never cut (an id so long that the line overshoots 72 is
   the one overshoot; `printable.title_line`); hostile titles are sanitized by `one_line` first and leading `fixup!`,
   `squash!`, `amend!` and `reword!` words are dropped (`git rebase --autosquash` would fold S into another commit).

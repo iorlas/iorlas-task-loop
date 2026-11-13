@@ -93,7 +93,7 @@ class NextRequest:
     effort: str
     minutes: int
     quiet: Quiet | None = None
-    max_running: int = 3  # tasks with an unfinished chain (running or waiting for land; not held) beyond which nothing new starts
+    max_running: int = 3  # in-flight tasks of the backlog (`in_flight`) at which nothing new starts
     retake: bool = False  # admit the factory's own lapsed claims that have no attempt here (after a factory.db discard)
 
 
@@ -128,10 +128,14 @@ def max_running_refused(count: int) -> Failed | None:
     return None if count >= 1 else Failed("refused", "max_running", "`--max-running` is at least 1 (tasks in flight before nothing starts)")
 
 
+IN_FLIGHT: Final = frozenset({"start", "wait", "verify", "repeat", "release", "publish", "advance", "land"})
+
+
 def in_flight(current: Iterable[AttemptView]) -> frozenset[str]:
-    """The tasks whose chain is unfinished: running, or waiting for the person's land. Landed, held and abandoned ones are not."""
-    return frozenset(each.task_id for each in current if each.next not in ("landed", "hold", "on_hold")
-                     and not (each.release is not None and each.release.abandoned))
+    """The backlog's tasks with work that goes on without the person: a step starting, running, verified, repeated,
+    released, published or advanced, or a passed task waiting for `tl step land` (counted until landed). Failed (`done`),
+    `repeats_exhausted`, `stuck:*`, `unknown`, held, landed and abandoned ones need the person: not counted."""
+    return frozenset(e.task_id for e in current if e.next in IN_FLIGHT and not (e.release is not None and e.release.abandoned))
 
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:

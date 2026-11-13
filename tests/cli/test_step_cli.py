@@ -620,8 +620,8 @@ def test_rounds_flags_reach_the_opener_and_print_a_start_and_an_end(
     assert run.opened == [(tmp_path / "f.db", art, request)] and run.requests == [cli_step.RoundsRequest("tasks", 60)]
     output = capsys.readouterr()
     assert output.out.splitlines() == [
-        "Rounds for backlog tasks every 60 s, taking tasks labelled 'auto', none new while 3 or more are in flight "
-            f"(running or waiting for land); log: {art / 'rounds.log'}; stop with Ctrl-C",
+        "Rounds for backlog tasks every 60 s, taking tasks labelled 'auto', none new while 3 or more tasks of this backlog are in flight "
+            f"(a step running, or passed and waiting for land until `tl step land` lands it); log: {art / 'rounds.log'}; stop with Ctrl-C",
         "Rounds stopped: interrupted. Launched steps keep running; `tl step rounds` again continues them.",
     ] and output.err == ""
     config = tmp_path / "scratch.toml"
