@@ -1,6 +1,6 @@
 # Skip dashboard socket tests when loopback is denied
 
-Task: `tl-8bh9.14.164`. Status: proposed implementation.
+Task: `tl-8bh9.14.164`. Status: implemented.
 
 The dashboard tests must report skips with a clear capability reason when the
 environment denies loopback sockets. They must continue exercising the real
@@ -73,3 +73,26 @@ global network skips or an alternate socket probe.
 
 Completion means the shared capability decision removes the reported sandbox
 failures while retaining real dashboard socket coverage wherever it can run.
+
+## As built
+
+The session-scoped `require_loopback` fixture in `tests/cli/conftest.py` owns
+the probe and permission-denial skip. The server fixture and the two composition
+tests require it; the four socket-free dashboard cases still run independently.
+`tests/cli/test_loopback_support.py` uses in-process pytest sessions with controlled
+sockets to cover EPERM and EACCES at creation and binding, allowed consumers,
+one probe per session, socket cleanup and propagation of unrelated socket errors.
+
+Verification on 2026-11-13 used the socket-denied agent sandbox:
+
+- `just install` passed.
+- `uv run --frozen --no-sync python -I -m pytest -q -rs
+  tests/cli/test_loopback_support.py tests/cli/test_dash_server.py
+  tests/cli/test_dash_composition.py` passed: 11 passed, 13 skipped. Each dashboard
+  skip reported `Loopback TCP sockets unavailable in this environment: [Errno 1]
+  Operation not permitted`.
+- `just check` passed lint, type checks and all nine import contracts.
+- `just test` passed: 3215 passed, 13 skipped in 182.28 seconds.
+
+The allowed branch was verified with controlled sockets. Real dashboard sockets
+could not run in this environment; their assertions and server behavior are unchanged.
