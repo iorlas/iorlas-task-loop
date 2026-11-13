@@ -1,6 +1,6 @@
 """A task's land in its status (tl-8bh9.14.8 section 14): the latest land candidate of a released checks attempt, its
 latest block's results and its land process as observed now, and the `Next` word it gives. Reads and values only (the
-land's own modules are never imported: `rounds-never-land`); `attempt_status` places the view, `show_render` and
+land's own modules are never imported: `entries-never-land`); `attempt_status` places the view, `show_render` and
 `result_data` print it.
 
 `Next`, after a released, not abandoned checks attempt (otherwise its own word stands):
@@ -14,8 +14,8 @@ land's own modules are never imported: `rounds-never-land`); `attempt_status` pl
 | pending (validating in its slot), pushable, failed, superseded, or delivered and not closed | `land` |
 | delivered and closed, its slot released | `landed` |
 
-A pending candidate holds its slot too, but `tl step land` (not a release) resumes it: `land`. Rounds ignore `land` and
-`landed` and only report a land's `release`."""
+A pending candidate holds its slot too, but `tl step land` (not a release) resumes it: `land`. A round lands it under `land: auto`
+(`round_land`); otherwise rounds only report `land`, `landed` and a land's `release`."""
 
 from collections.abc import Callable
 from dataclasses import dataclass

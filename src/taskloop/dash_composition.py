@@ -15,6 +15,7 @@ from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, bu
 from taskloop.dash_tracker import CachedTracker
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
+from taskloop.land_mode import cached_mode, known_mode
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow, read_round_log
 
@@ -30,21 +31,23 @@ class DashRequest:
     port: int
     db: Path
     artifacts: Path
+    checkout: Path
 
 
 def _ports(request: DashRequest, views: GitViews) -> DashPorts:
     files = EvidenceFiles(request.artifacts)
     tracker = CachedTracker(request.label, Path(request.tracker_root), time.time)
+    mode = cached_mode(known_mode(views.checkouts), request.checkout, time.monotonic)
 
     def board() -> Board | Failed:
         with open_reads(request.db, request.artifacts, views) as reads:
             if isinstance(reads, Failed):
                 return reads
-            return build_board(BoardPorts(reads, files, tracker))
+            return build_board(BoardPorts(reads, files, tracker, mode))
 
     def task(task_id: str) -> TaskDetail | Failed:
         with open_reads(request.db, request.artifacts, views) as reads:
-            return reads if isinstance(reads, Failed) else build_task(TaskPorts(reads, files, tracker), request.backlog, task_id)
+            return reads if isinstance(reads, Failed) else build_task(TaskPorts(reads, files, tracker, mode), request.backlog, task_id)
 
     def tracker_of(task_id: str) -> TrackerDetail | Failed | None:
         return build_tracker(tracker, task_id)

@@ -7,7 +7,7 @@ from typing import Literal, Protocol
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
-type LandState = Literal["waiting", "landing"]
+type LandState = Literal["waiting", "manual", "landing"]
 
 
 def iso(epoch: float | None) -> str | None:
@@ -32,7 +32,8 @@ class Card:
     last_activity_at: str | None
     slot: str | None
     hold_cause: str | None
-    land: LandState | None = None  # in `land` only: `waiting` for the person to run `tl step land`, `landing` while a land runs
+    # in `land` only: `waiting` for a round to land it, `manual` for a person (the profile says `land: manual`), `landing`
+    land: LandState | None = None
 
 
 @dataclass(frozen=True)

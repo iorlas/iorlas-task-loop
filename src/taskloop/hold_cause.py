@@ -91,6 +91,25 @@ def _repeats(_rest: str) -> Cause:
                  "(`Left in the slot` names them).")
 
 
+LAND_CAUSE = "land:"  # the prefix of a land refusal's hold reason (`round_land`)
+ASIDE = ("set the task's old branch aside (rename or delete it, locally and on origin) so the work starts again on the current "
+         "`main`")
+LAND = {  # a land refusal about the task's own change: what happened and the fix ("" = the same work may be tried again)
+    "conflict": ("The checked change no longer merges onto `main`: newer changes on `main` conflict with it.", ASIDE),
+    "checks_failed": ("The checks failed on the change as squashed onto the current `main`, though they passed on the task's own "
+                      "commit (the land's check logs say which).", ASIDE),
+    "remote_rejected": ("Origin refused the push to `main` by its own policy (for example a protected branch), not because `main` "
+                        "moved.", "lift what blocks the push to `main`, or land the change by hand"),
+    "branch_moved": ("The task branch no longer holds exactly the commit that was checked.", None),
+    "claim_lost": ("Someone else changed this task's claim while it waited to land.", None),
+}
+
+
+def _land(rest: str) -> Cause:
+    what, fix = LAND.get(rest, (f"The factory could not land the change ({rest}).", None))
+    return Cause(f"The factory tried to land this task by itself and was refused: {what}", fix)
+
+
 OWNER = {
     "needs_owner": Cause("The agent needs a decision only the owner can give (its explanation is quoted above)."),
     "main_moved": Cause("`main` moved while each of the last checks runs ran (more landing or pushing than the checks take), so "
@@ -98,7 +117,7 @@ OWNER = {
     "incomplete": Cause("The agent stopped without finishing (its explanation is quoted above)."),
 }
 BY_PREFIX: tuple[tuple[str, Callable[[str], Cause]], ...] = (  # the first prefix of the word that fits builds the cause
-    ("run:", _run), ("answer:", _answer), ("rejected:", _rejected), ("repeats_exhausted", _repeats), ("stuck:", _stuck),
+    ("land:", _land), ("run:", _run), ("answer:", _answer), ("rejected:", _rejected), ("repeats_exhausted", _repeats), ("stuck:", _stuck),
 )
 
 

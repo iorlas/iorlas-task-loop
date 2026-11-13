@@ -77,7 +77,6 @@ function landRow(t, last) {
   li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), el("span", `text-[13px] ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`));
   if (!word) return li.append(el("span", "ml-2 text-[11px]", "pending")), li;
   li.append(el("span", `block text-[11px] ${word.text}`, word.row));
-  if (t.column === "land" && t.land !== "landing") li.append(el("code", "block truncate font-mono text-[11px] text-slate-500 dark:text-slate-400", `tl step land ${t.id}`));
   if (t.column === "land" && last?.ended_at) {
     const idle = el("span", "block text-[11px] text-slate-400 dark:text-slate-500");
     [idle.dataset.prefix, idle.dataset.suffix, idle.dataset.since] = ["⏸ idle ", " since the checks ended", last.ended_at];

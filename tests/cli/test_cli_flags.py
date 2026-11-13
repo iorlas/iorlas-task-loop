@@ -98,7 +98,8 @@ def test_dashboard_selection_lifetime_and_output(
     monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
     flags = ([] if port is None else ["--dash-port", str(port)]) + (["--json"] if structured else [])
     assert main(["step", "rounds", *CHOICES, "--db", str(db), "--artifacts", str(artifacts), *flags]) == 0
-    assert dashboard.requests == [None if port is None else DashRequest("tasks", "/tracker", "approved", port, db, artifacts)]
+    shown = None if port is None else DashRequest("tasks", "/tracker", "approved", port, db, artifacts, Path("/checkout"))
+    assert dashboard.requests == [shown]
     assert execution.events == ["rounds entered", "dashboard entered", "rounds ran", "dashboard closed", "rounds closed"]
     output = capsys.readouterr()
     notice = "Dashboard: http://127.0.0.1:8123/\n"
