@@ -93,7 +93,7 @@ class Stream:
 
 
 @pytest.fixture
-def served(tmp_path: Path) -> Iterator[tuple[Ports, DashServer]]:
+def served(tmp_path: Path, require_loopback: None) -> Iterator[tuple[Ports, DashServer]]:
     (tmp_path / "index.html").write_text("<html>page</html>")
     (tmp_path / "secret.txt").write_text("not served")
     fake = Ports(tmp_path)
