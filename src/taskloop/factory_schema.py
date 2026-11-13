@@ -24,6 +24,8 @@ from taskloop.harness_choice import HarnessKind, Provider
 _HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
 _PROVIDERS = ",".join(f"'{each}'" for each in Provider)
 
+# This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
+# interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
     version=16,
     name="factory",
@@ -283,16 +285,17 @@ def current(con: sqlite3.Connection) -> bool:
 
 
 def refusal(error: SchemaError, path: Path) -> str:
-    """The words of `refused schema`: the store's for a newer file (this code must be updated); for an older one, which
-    nothing upgrades (`SCHEMA.steps` is empty), the truth that an older version wrote it and that the owner discards it."""
+    """Explain an incompatible restart without changing the database or offering unsafe upgrade recovery."""
     found = _recorded(path)
-    if found is None or found >= SCHEMA.version:
-        return str(error)
-    if found == 0:
-        return (f"factory.db records no schema version, this code knows v{SCHEMA.version}: it is not a factory.db; the "
-                "owner moves it aside, then tl slot adopt")
-    return (f"factory is schema v{found}, this code knows v{SCHEMA.version}: an older version wrote it and nothing upgrades "
-            "it; the owner discards factory.db (moves it aside), then tl slot adopt")
+    diagnosis = (f"its recorded schema version could not be read ({error})" if found is None else
+                 f"it records schema version {found}" + (" (no schema version recorded)" if found == 0 else ""))
+    return (f"Restart refused: factory.db at {path.resolve()}: {diagnosis}; this runtime expects schema version {SCHEMA.version}. "
+            "The database has been preserved. Resume with matching code to keep unfinished work. For an incompatible "
+            "upgrade, first stop admitting work and let running attempts and their entry processes finish under the "
+            "matching runtime. Draining belongs before the upgrade; this incompatible runtime cannot safely perform it. "
+            "Stopping rounds alone does not confirm that entries or agents have stopped. After confirming they have "
+            "stopped, the owner deliberately discards the old factory database before initializing the new runtime. "
+            "Discard loses local execution progress and session references.")
 
 
 def _recorded(path: Path) -> int | None:
