@@ -28,6 +28,7 @@ from taskloop.operations import (
 from taskloop.publish import publish_word
 from taskloop.slot_release import Released, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
+from taskloop.task_status import task_status
 
 # every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
 # `exit_codes`
@@ -45,6 +46,7 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "phase": each.phase,
         "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
         "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
+        "status": task_status(each).status.value,
         "entry_process": _entry_data(each.entry_process),
         "worker": None if each.worker is None else {"pid": each.worker[0], "pgid": each.worker[1]},
         "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,

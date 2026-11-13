@@ -65,23 +65,24 @@ def test_two_done_tasks_and_one_slot_advance_oldest_release_first_and_new_work_w
     assert factory.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "advance"), "tl-3": ("plan", "verify")}
 
 
-def test_an_abandoned_task_is_never_advanced_nor_re_admitted_by_a_round(factory: Factory) -> None:
+def test_a_task_a_person_abandoned_is_restarted_by_a_round_while_it_carries_the_label(factory: Factory) -> None:
     factory.by_hand("tl-1")
     found = factory.store.attempt_of("tasks", "tl-1")
     assert found is not None and factory.releaser().release(found[0], True)  # the person's `tl step release --abandon`
-    assert factory.round() == [("tl-1", "plan", "skip", "abandoned"), ("tl-2", "plan", "start", "started")]
-    assert factory.tracker.claims == ["tl-1", "tl-2"] and factory.current("tl-1") == found[0].attempt_id
+    assert factory.round() == [("tl-1", "plan", "start", "started")]  # the restart takes the one free slot first
+    assert factory.current("tl-1") != found[0].attempt_id  # a fresh attempt: the one restart route, no `tl step start`
 
 
-def test_an_abandon_after_the_rounds_read_is_skipped_never_admitted_afresh(factory: Factory) -> None:
+def test_an_abandon_after_the_rounds_read_is_restarted_by_the_round_that_sees_the_label(factory: Factory) -> None:
     factory.tracker.beads.pop("tl-2")
     factory.by_hand("tl-1")
     found = factory.store.attempt_of("tasks", "tl-1")
     assert found is not None
     factory.during = lambda: factory.releaser().release(found[0], True)
-    assert factory.round() == [("tl-1", "plan", "skip", "abandoned"), ("tl-1", "plan", "skip", "attempted")]
-    assert factory.tracker.claims == ["tl-1"] and factory.current("tl-1") == found[0].attempt_id
-    assert factory.round() == [("tl-1", "plan", "skip", "abandoned")]
+    assert factory.round() == [("tl-1", "plan", "skip", "abandoned"), ("tl-1", "plan", "skip", "attempted")]  # the snapshot predates it
+    assert factory.current("tl-1") == found[0].attempt_id
+    assert factory.round() == [("tl-1", "plan", "start", "started")]  # the next snapshot sees the abandon and the label
+    assert factory.current("tl-1") != found[0].attempt_id
 
 
 def test_a_claim_lost_between_steps_is_skipped_and_written_once(factory: Factory) -> None:

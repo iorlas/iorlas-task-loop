@@ -21,7 +21,7 @@ export function initDrawer(src, taskMap) {
 
 const attemptOf = () => open.detail?.attempts.find((a) => a.step === open.step && a.n === open.n);
 const tabOf = (a) => (a.step === VERIFY.id ? "result" : open.tab ?? (a.state === "running" ? "lines" : "result")); // a verification has only its result
-const signature = (t) => JSON.stringify([t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.land]); // what changes the attempts
+const signature = (t) => JSON.stringify([t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.land, t.status]); // what changes the attempts
 
 // Select an attempt: the given one, else the last of the step, else the last of the task.
 function select(step, n) {
@@ -172,6 +172,11 @@ function render() {
     const hold = el("div", "px-6 pb-3");
     hold.append(callout("border-rose-500", "Held", t.hold_cause));
     drawer.append(hold);
+  }
+  if (t.column === "waiting" && t.attempt > 0) {
+    const fresh = el("div", "px-6 pb-3");
+    fresh.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
+    drawer.append(fresh);
   }
   if (t.column === "land" && t.land === "manual") {
     const waiting = el("div", "px-6 pb-3");

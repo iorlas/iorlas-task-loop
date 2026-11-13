@@ -54,6 +54,7 @@ source_modules =
     taskloop.hold_status
     taskloop.hold_facts
     taskloop.hold_guide
+    taskloop.task_status
 forbidden_modules =
     taskloop.attempt_entry
     taskloop.check_entry
@@ -74,6 +75,7 @@ source_modules =
     taskloop.hold
     taskloop.hold_status
     taskloop.hold_facts
+    taskloop.task_status
 forbidden_modules =
     taskloop.land
     taskloop.land_check

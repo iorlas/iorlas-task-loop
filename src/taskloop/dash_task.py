@@ -15,7 +15,7 @@ from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
-from taskloop.dash_board import card_of, tries
+from taskloop.dash_board import admission_of, card_of, tries
 from taskloop.dash_model import (
     Answer,
     AttemptBody,
@@ -193,22 +193,31 @@ def _verification(link: Link) -> tuple[AttemptDetail, Verification]:
 
 
 def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDetail, ...]:
-    """Oldest first: each agent attempt, its verification, then the checks attempts after an implement attempt."""
+    """Oldest first: each agent attempt, its verification, then the checks attempts after an implement attempt. Every entry up to
+    the latest abandoned attempt (the chain boundary) is `past`: a person gave that chain up, it is not the task's current steps."""
+    cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
+    past = {each.key.attempt_id for each in rows if each.seq <= cut}
+    return tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows))
+
+
+def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[AttemptDetail, str], ...]:
+    """Each entry with the agent attempt it belongs to (a checks attempt: the implement attempt it follows)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     numbers = tries(rows)
-    found: list[AttemptDetail] = []
+    found: list[tuple[AttemptDetail, str]] = []
     earlier: str | None = None
     led: dict[str, int] = {}  # agent attempt id -> the try of its verification
     for link in _chain(ports, rows):
         if link.checks is not None:
-            found.append(_checks(store, link.checks, link.number, earlier))
-            earlier = found[-1].summary
+            found.append((_checks(store, link.checks, link.number, earlier), link.checks.after))
+            earlier = found[-1][0].summary
         elif link.verifies and link.agent is not None:
-            found.append(_verification(link)[0])
+            found.append((_verification(link)[0], link.agent.key.attempt_id))
             led[link.agent.key.attempt_id] = link.number
         elif link.agent is not None and link.result is not None:
             previous = link.agent.previous_attempt_id or ""
-            found.append(_agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous)))
+            found.append((_agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous)),
+                          link.agent.key.attempt_id))
     return tuple(found)
 
 
@@ -245,7 +254,8 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
         return Failed("unavailable", "store", str(error))
     title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
     card = Card(task_id, title, "waiting", 0, None, None, None, None, None) if view is None else card_of(
-        view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id), ports.mode)
+        view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
+        admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready())), ports.mode)
     return TaskDetail(card, attempts)
 
 

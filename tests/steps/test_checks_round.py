@@ -314,7 +314,7 @@ def test_a_relaunch_past_the_deadline_that_concludes_expired_clears_the_count(ri
     assert rig.round() == [("tl-1", "check", "hold", "held failed:expired")] and rig.counted("tl-1") == (None, 0)
 
 
-def test_an_abandon_during_checks_is_never_re_advanced_and_its_half_done_state_is_attempted(rig: Checking) -> None:
+def test_an_abandon_during_checks_is_never_re_advanced_and_the_finished_abandon_restarts(rig: Checking) -> None:
     implemented(rig)
     rig.bodies = ["failed"]
     rig.round()
@@ -324,8 +324,8 @@ def test_an_abandon_during_checks_is_never_re_advanced_and_its_half_done_state_i
     assert rig.round() == [("tl-1", "check", "report", "release"), ("tl-1", "check", "skip", "attempted")]
     found = rig.store.attempt_of("tasks", "tl-1")
     assert found is not None and found[0].attempt_id == implement and rig.releaser().release(found[0], True)
-    assert rig.round() == [("tl-1", "implement", "skip", "abandoned")]
-    assert rig.rows() == [("tl-1", 1, "concluded", "failed")] and rig.starts == 1 and rig.tracker.claims == ["tl-1"]
+    assert rig.round() == [("tl-1", "plan", "start", "started")]  # the person's finished abandon: restarted fresh at plan
+    assert rig.rows() == [("tl-1", 1, "concluded", "failed")]
 
 
 def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_waits_for_the_land(rig: Checking) -> None:

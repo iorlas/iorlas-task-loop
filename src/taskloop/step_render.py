@@ -31,6 +31,8 @@ from taskloop.show_render import last_command, show_lines
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
 from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, PUBLISH, STEP_ONLY, discard, guide
+from taskloop.task_status import task_status
+from taskloop.task_status import words as status_words
 from taskloop.tracker import leaked_claim
 
 
@@ -74,7 +76,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             steps = [told, *(stuck if each.next.startswith("stuck:") else [])]
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
-            return [*show_lines(result), *paths, *last, *left, f"Next: {each.next}", *steps]
+            return [*show_lines(result), *paths, *last, *left, f"Status: {status_words(task_status(each))}", f"Next: {each.next}", *steps]
         case Listed() | Round() | Ended():
             return _rows_lines(command, result, stuck)
         case VerifiedTask() | ReleasedTask() | PublishedTask():
@@ -108,12 +110,12 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     if isinstance(result, Listed):
         attempts = result.attempts
         rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
-                f"{a.result.status} {a.result.reason}\t{a.next}\t{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t"
+                f"{a.result.status} {a.result.reason}\t{status_words(task_status(a))}\t{a.next}\t{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t"
                 f"{last_command(a) or '-'}" for a in attempts]
         kinds = dict.fromkeys((a.next, a.checks is not None) for a in attempts if a.next.startswith("stuck:") or a.next == "hold")
         steps = [f"{kind}: {guide(kind, checks=checks)}" for kind, checks in kinds]
         steps += stuck if any(kind.startswith("stuck:") for kind, _checks in kinds) else []
-        return ["task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\thold cause\tlast command", *rows, *steps]
+        return ["task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tstatus\tnext\thold cause\tlast command", *rows, *steps]
     width = max((len(each.task_id) for each in result.moves), default=0)
     lines = [f"{each.task_id:<{width}}  {each.action:<8} {each.word} {each.attempt_id}".rstrip() for each in result.moves]
     lines = [line for each, text in zip(result.moves, lines, strict=True) for line in (text, *_path(each))]
