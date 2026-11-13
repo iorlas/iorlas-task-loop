@@ -78,6 +78,7 @@ class CheckLine:
 class Answer:
     disposition: str
     text: str
+    truncated: bool = False  # the file is longer than what is shown
 
 
 @dataclass(frozen=True)
@@ -127,10 +128,18 @@ class AttemptDetail:
     summary: str
     after: Literal["repeat", "restart_at_plan"] | None
     reason: str | None
-    input: str | None
-    result: Outcome
+    repeat_of: int | None  # the try of this step that a `repeat` repeats
     feed: tuple[FeedEvent, ...]
     feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
+
+
+@dataclass(frozen=True)
+class AttemptBody:
+    """`GET /api/tasks/<id>/attempts/<step>/<n>`: what a selected attempt shows besides its lines (prompt, answer, check outputs).
+    Read only when asked, because it reads files."""
+
+    input: str | None
+    result: Outcome
 
 
 @dataclass(frozen=True)

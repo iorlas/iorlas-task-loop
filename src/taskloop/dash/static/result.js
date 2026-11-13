@@ -19,6 +19,10 @@ function fieldsOf(text) {
   }
 }
 
+// Terminal colour codes in a log are display noise here: stripped, the text is otherwise as written.
+const ESCAPES = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+const plain = (text) => text.replace(ESCAPES, "");
+
 function answer(a) {
   const wrap = el("div");
   const head = el("div", "mb-1.5 flex items-center gap-3");
@@ -27,7 +31,7 @@ function answer(a) {
   let raw = !fields;
   const toggle = el("button", "ml-auto rounded border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", "Raw");
   toggle.type = "button";
-  const body = el("div");
+  const body = el("dl");
   const paint = () => {
     toggle.textContent = raw ? "Formatted" : "Raw";
     toggle.hidden = !fields;
@@ -42,50 +46,54 @@ function answer(a) {
   head.append(toggle);
   paint();
   wrap.append(head, body);
+  if (a.truncated) wrap.append(el("p", "mt-1 text-[11px] text-amber-700 dark:text-amber-300", "The answer file is longer than this: the end is cut (64 KiB shown). It is shown as it is."));
   return wrap;
 }
 
 // One check: a failed one opens with its output, a passed one is folded; a log that is gone says so.
-function check(c, blocks) {
+function check(c, blocks, shown) {
   const node = el("details", "border-t border-slate-100 py-2 first:border-t-0 dark:border-slate-800/70");
-  node.open = !c.passed;
+  const key = `${shown.key}/${c.block}/${c.name}`;
+  node.open = shown.opened.get(key) ?? !c.passed; // what the owner opened or closed stays, across the drawer's rebuilds
+  node.addEventListener("toggle", () => shown.opened.set(key, node.open));
   const top = el("summary", "flex cursor-pointer items-baseline gap-3 text-xs");
   top.append(el("span", "font-mono text-[12px]", c.name), el("span", `font-medium ${c.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`, c.passed ? "passed" : "failed"));
   if (blocks > 1) top.append(el("span", "text-slate-500", `block ${c.block}`));
   top.append(el("span", "ml-auto tabular-nums text-slate-500", fmtDur(c.duration_ms)));
-  node.append(top, c.output == null ? el("p", "mt-2 text-xs text-slate-500", "Output unavailable: the log file is gone or cannot be read.") : pre(c.output || "(no output)", `mt-2 ${c.passed ? "" : "border-l-2 border-l-rose-500"}`));
+  node.append(top, c.output == null ? el("p", "mt-2 text-xs text-slate-500", "Output unavailable: the log file is gone or cannot be read.") : pre(plain(c.output) || "(no output)", `mt-2 ${c.passed ? "" : "border-l-2 border-l-rose-500"}`));
   return node;
 }
 
-export function result(a) {
+// `body` is what the attempt's own request answered; `shown` is {key, opened}: the attempt's key and the checks the owner toggled.
+export function result(a, body, shown) {
   const box = el("div", `${BLOCK} flex flex-col gap-5`);
   const st = STATE[a.state];
   const summary = el("div");
-  summary.append(label("Conclusion"), callout(a.state === "failed" ? "border-rose-500" : a.state === "running" ? "border-sky-500" : "border-emerald-500", null, a.result.summary));
+  summary.append(label("Conclusion"), callout(a.state === "failed" ? "border-rose-500" : a.state === "running" ? "border-sky-500" : "border-emerald-500", null, body.result.summary));
   box.append(summary);
-  if (a.result.answer) box.append(answer(a.result.answer));
-  if (a.result.checks.length) {
+  if (body.result.answer) box.append(answer(body.result.answer));
+  if (body.result.checks.length) {
     const wrap = el("div");
-    wrap.append(label(`Checks · ${a.result.checks.length} · the end of each log, failed ones first`));
-    const blocks = new Set(a.result.checks.map((c) => c.block)).size;
-    const sorted = [...a.result.checks].sort((x, y) => x.passed - y.passed);
-    for (const c of sorted) wrap.append(check(c, blocks));
+    wrap.append(label(`Checks · ${body.result.checks.length} · the end of each log, failed ones first`));
+    const blocks = new Set(body.result.checks.map((c) => c.block)).size;
+    const sorted = [...body.result.checks].sort((x, y) => x.passed - y.passed);
+    for (const c of sorted) wrap.append(check(c, blocks, shown));
     box.append(wrap);
-  } else if (a.result.output) {
+  } else if (body.result.output) {
     const out = el("div");
-    out.append(label("Output"), pre(a.result.output, "border-l-2 border-l-rose-500"));
+    out.append(label("Output"), pre(body.result.output, "border-l-2 border-l-rose-500"));
     box.append(out);
   }
   if (a.state === "running") box.append(el("p", "text-xs text-slate-500", `${st.label}: the result is written when the attempt ends.`));
   return box;
 }
 
-export function prompt(a) {
+export function prompt(a, body) {
   const box = el("div", BLOCK);
-  if (!a.input) {
+  if (!body.input) {
     box.append(el("p", "text-sm text-slate-500", "No prompt: this step runs commands, not the agent."));
     return box;
   }
-  box.append(label(`Input sent to the agent · ${a.input.length} characters`), pre(a.input, "max-h-none"));
+  box.append(label(`Input sent to the agent · ${body.input.length} characters`), pre(body.input, "max-h-none"));
   return box;
 }

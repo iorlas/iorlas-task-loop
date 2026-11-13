@@ -4,17 +4,18 @@ import sqlite3
 from pathlib import Path
 
 from any_agent import events
-from doubles import CHECKS
+from doubles import CHECKS, REQUIRED, TARGET, D
 from sqlite_store import begin_immediate
 
+from taskloop import check_store
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Seen
 from taskloop.check_store import CheckStore
 from taskloop.command_sink import CommandSink
 from taskloop.dash_board import BoardPorts, build_board, land_state
-from taskloop.dash_model import Board, Comment, FeedPage, Fields, Ready, TaskDetail
-from taskloop.dash_task import TaskPorts, build_feed, build_task, build_tracker
+from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, Ready, TaskDetail
+from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.land_status import LandView, land_view
 
@@ -82,7 +83,10 @@ def test_a_task_detail_has_the_tracker_text_the_comments_and_each_attempts_promp
     tracked = build_tracker(Tracker(), "tl-1")
     assert tracked is not None and tracked.fields.acceptance == "Done when" and [each.author for each in tracked.comments] == ["denis"]
     (attempt,) = found.attempts
-    assert (attempt.step, attempt.n, attempt.after, attempt.input) == ("plan", 1, None, "Plan the actual task")
+    assert (attempt.step, attempt.n, attempt.after, attempt.repeat_of) == ("plan", 1, None, None)
+    body = build_body(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1", "plan", 1)
+    assert isinstance(body, AttemptBody) and body.input == "Plan the actual task" and body.result.answer is None
+    assert build_body(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1", "plan", 7) is None
     assert attempt.state == "running" and attempt.feed[0].type == "step"
     assert found.task.column == "plan" and found.task.title == "Title of tl-1"
 
@@ -183,9 +187,33 @@ def test_each_check_carries_the_end_of_its_log_passed_or_failed_and_none_when_th
         store.finish(CHECKS, 1, position, conclusion, rc, 4)
     files.check_log(CHECKS, 1, "lint").write_text("all clean\n")
     files.check_log(CHECKS, 1, "test").write_text("FAILED tests/test_a.py::test_one\n" + "x" * 10000 + "\n1 failed\n")
-    found = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
-    assert isinstance(found, TaskDetail)
-    lint, test, types = found.attempts[1].result.checks
+    body = build_body(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1", "checks", 1)
+    assert isinstance(body, AttemptBody)
+    lint, test, types = body.result.checks
     assert (lint.passed, lint.output, lint.block) == (True, "all clean\n", 1)
     assert not test.passed and test.output is not None and test.output.endswith("1 failed\n") and len(test.output) <= 8192
     assert types.passed and types.output is None  # its log file is gone: unavailable, never a made-up empty output
+
+
+def test_an_answer_file_longer_than_the_bound_is_cut_and_says_so(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Plan the actual task")
+    (tmp_path / files.directory(KEY) / "answer.txt").write_text("y" * 70000)
+    body = build_body(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1", "plan", 1)
+    assert isinstance(body, AttemptBody) and body.result.answer is not None
+    assert len(body.result.answer.text) == 65536 and body.result.answer.truncated
+
+
+def test_a_second_checks_try_is_numbered_across_the_task_and_says_which_try_it_repeats(
+    checking: sqlite3.Connection, tmp_path: Path,
+) -> None:
+    checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='failed',reason='test:failed',concluded_at=5,released_at=6,"
+                     "parked=? WHERE attempt_id='checks'", ("d" * 40,))
+    checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")
+    again = check_store.ChecksAdmitted(AttemptKey("again", "again-token", 1), "implement", 2, "s2", D, TARGET, REQUIRED, 100.0)
+    check_store.insert(checking, again)
+    found = build_task(TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    assert [(each.step, each.n, each.after, each.repeat_of) for each in found.attempts[1:]] == [
+        ("checks", 1, None, None), ("checks", 2, "repeat", 1)]
+    assert found.attempts[2].reason == "test:failed"

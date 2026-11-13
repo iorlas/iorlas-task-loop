@@ -34,8 +34,7 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
 - The Attempts tab is a master and a detail. Left, the **attempt rail**: every attempt of the task, in the **order they happened, top to bottom** (plan, implement, checks, land, each with its own try number; steps still to come are dim rows below; the drawer opens on the newest attempt), one
   aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
   jump names how the next attempt began: `↻ Repeat of Checks` (the same step again) or `↩ Back to plan` (restarted at plan, D4)
-  with its reason; the label sits above the attempt it began. Between two rows an `⏸ idle 4m 00s` line shows the time nothing
-  ran (5 s and up). Every step of the chain is a row: steps not started are dim `pending` rows, and the Land row is the card's state (pending, waiting for you with the idle time since the checks ended, delivering, delivered). A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
+  with its reason; the label sits above the attempt it began. Between two rows an `⏸ idle 4m 00s` line shows the time between the recorded end of one and the recorded start of the next (5 s and up; both are file or row times, so approximate). Every step of the chain is a row: steps not started are dim `pending` rows, and the Land row is the card's state (pending, waiting for you with the idle time since the checks ended, delivering, delivered). A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
   - **Lines**: the log grid (below). Opens first for a running attempt. New lines never change the tab, the selection or the
     scroll place: the view follows the end only when it was already at the end. No count in the tab name; a quiet line says
     how many lines are kept and whether it is live. A pause of 2 s or more before a line is a faint `⏸ paused 33s` row (the
@@ -150,24 +149,32 @@ stream as `{"kind": "log", "row": <row>}`.
     {"step": "implement", "n": 2, "state": "failed", "started_at": "...", "ended_at": "...",
      "summary": "failed: deadline exceeded after 30m",
      "after": "repeat", "reason": "failed: the agent finished without a diff",
-     "input": "You are the implementing agent for task tl-7d5. ...",
-     "result": {"summary": "failed: deadline exceeded after 30m",
-                "answer": {"disposition": "incomplete", "text": "..."},
-                "checks": [{"name": "types", "passed": false, "duration_ms": 23000, "block": 1, "output": "ERROR ..."}],
-                "output": null},
+     "repeat_of": 1,
      "feed": [ <live event>, ... ]}
   ]
 }
 ```
 
-`attempts` is every attempt of the task, oldest first. `n` counts per step. `state` is `running`, `succeeded` or `failed`;
+`attempts` is every attempt of the task, oldest first. `n` counts per step (the checks step's tries are numbered across the task, not per implement attempt); `repeat_of` is the try of the same step that a `repeat` repeats (`null` otherwise). `state` is `running`, `succeeded` or `failed`;
 `summary` says how it ended (the verdict or conclusion the owner of that fact already states); `ended_at` is `null`
 while running. `after` says how the attempt began: `null` (the previous step succeeded), `repeat` or `restart_at_plan`,
-with the `reason` the engine recorded. `input` is the prompt text the agent was given (`null` for a step that runs commands). `result.answer` is the
-agent's answer (`null` before it ends or for checks and land); `result.checks` are the check results of a checks attempt
-with the log tail of each check (`output` is `null` when its log is gone); `result.output` is any other failure output, such as a stopped command's.
-`feed` is the last 20 lines of that attempt, oldest first. A task with no attempt answers a waiting card and no attempts. This
+with the `reason` the engine recorded. `feed` is the last 20 lines of that attempt, oldest first. A task with no attempt answers a waiting card and no attempts. This
 answer never waits for the tracker.
+
+### Attempt body: `GET /api/tasks/<id>/attempts/<step>/<n>`
+
+```json
+{"input": "You are the implementing agent for task tl-7d5. ...",
+ "result": {"summary": "failed: deadline exceeded after 30m",
+            "answer": {"disposition": "incomplete", "text": "...", "truncated": false},
+            "checks": [{"name": "types", "passed": false, "duration_ms": 23000, "block": 1, "output": "ERROR ..."}],
+            "output": null}}
+```
+
+Read when the Result or Prompt tab is first shown (it reads files), again when the attempt has ended since. `input` is the prompt
+text (`null` for a step that runs commands); `answer` is the agent's answer, `null` before it ends or for checks, and
+`truncated` says the file is longer than the 64 KiB shown; `checks` are the check results with the log tail of each (`output` is
+`null` when its log is gone). 404: no such attempt.
 
 ### Tracker part: `GET /api/tasks/<id>/tracker`
 
@@ -182,7 +189,7 @@ answer never waits for the tracker.
 page); `comments` are oldest first. 404: the tracker has no such task; 500/503: the read failed and nothing was read before (the
 drawer says so and offers a retry).
 
-Lines, prompt and outputs of an attempt are read behind the evidence reader;
+Lines, prompt and outputs of an attempt are read behind the evidence reader (a card's update reloads this list, not the bodies);
 all of it is display only, never control state.
 
 ### Live event

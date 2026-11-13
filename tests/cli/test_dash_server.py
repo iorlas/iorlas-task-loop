@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.dash_model import Board, Card, FeedEvent, FeedPage, Fields, TaskDetail, TrackerDetail
+from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail
 from taskloop.dash_server import DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
@@ -33,7 +33,7 @@ class Ports:
     def __init__(self, static: Path, max_streams: int = 16, queue_depth: int = 256) -> None:
         self.cards, self.mode = [card()], "ok"
         self.rows: tuple[LogRow, ...] = (row(),)
-        self.ports = DashPorts(self.board, self.task, self.tracker, lambda: self.rows, self.feed, "tl", static, 0.03, 0.05,
+        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, "tl", static, 0.03, 0.05,
                                max_streams, queue_depth)
 
     def board(self) -> Board | Failed:
@@ -52,6 +52,9 @@ class Ports:
 
     def task(self, task_id: str) -> TaskDetail | Failed:
         return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), ())
+
+    def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
+        return AttemptBody("prompt", Outcome("verified", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
 
     def tracker(self, task_id: str) -> TrackerDetail | Failed | None:
         """The tracker's side: tl-1 is known, `broken` is unavailable, `slow` raises, anything else is not in the tracker."""
@@ -228,3 +231,10 @@ def test_the_tracker_part_of_a_task_is_its_own_request_with_its_own_failures(ser
     status, body = get(server, "/api/tasks/slow/tracker")
     assert status == 500 and "bd timed out" in json.loads(body)["error"]
     assert "fields" not in json.loads(get(server, "/api/tasks/tl-1")[1])
+
+
+def test_an_attempts_body_is_its_own_request(served: tuple[Ports, DashServer]) -> None:
+    _fake, server = served
+    status, body = get(server, "/api/tasks/tl-1/attempts/plan/1")
+    assert status == 200 and json.loads(body)["input"] == "prompt"
+    assert get(server, "/api/tasks/tl-1/attempts/plan/9")[0] == 404

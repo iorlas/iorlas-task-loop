@@ -2,7 +2,7 @@
 // its own try number, the idle time between two steps, and a repeat named as a repeat with its reason. A step and a try are two
 // things: "step 2 of 4" is where the task is, "try 2" is how often that step ran.
 
-import { JUMP, LAND, STATE, STEPS, dot, el, fmtDur, since } from "./ui.js";
+import { JUMP, LAND, STATE, STEPS, dot, el, fmtDur, since, tick } from "./ui.js";
 
 const GAP_MS = 5000; // idle time shorter than this is not shown
 const stepOf = (id) => STEPS.find((s) => s.id === id);
@@ -21,15 +21,17 @@ function idle(prev, next) {
   const ms = Date.parse(next.started_at) - Date.parse(prev.ended_at);
   if (ms < GAP_MS) return null;
   const li = el("li", "relative py-1 pl-4 text-[11px] text-slate-400 dark:text-slate-500", `⏸ idle ${fmtDur(ms)}`);
-  li.title = "Nothing ran between the end of the step above and the start of this one.";
+  li.title = "Time between the recorded end of the step above and the recorded start of this one; both are approximate.";
   return li;
 }
 
-function jump(a, prev) {
+// A repeat names the try it repeats (`repeat_of`, a try of the same step); a restart at plan names the step it follows in the chain.
+function jump(a, list, i) {
   const j = JUMP[a.after];
+  const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list[i - 1];
   const li = el("li", `relative pb-0.5 pl-4 pt-1.5 text-[11px] leading-snug ${j.text}`);
   li.title = a.reason ?? "";
-  li.append(el("span", "font-medium", `${j.glyph} ${j.label} of ${stepOf(prev?.step ?? a.step).label}`));
+  li.append(el("span", "font-medium", `${j.glyph} ${j.label} of ${stepOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`));
   if (a.reason) li.append(el("span", "block line-clamp-2 text-slate-500 dark:text-slate-400", a.reason));
   return li;
 }
@@ -65,19 +67,25 @@ function landRow(t, last) {
   if (!word) return li.append(el("span", "ml-2 text-[11px]", "pending")), li;
   li.append(el("span", `block text-[11px] ${word.text}`, word.row));
   if (t.column === "land" && t.land !== "delivering") li.append(el("code", "block truncate font-mono text-[11px] text-slate-500 dark:text-slate-400", `tl step land ${t.id}`));
-  if (t.column === "land" && last?.ended_at) li.append(el("span", "block text-[11px] text-slate-400 dark:text-slate-500", `⏸ idle ${fmtDur(Date.now() - Date.parse(last.ended_at))} since the checks ended`));
+  if (t.column === "land" && last?.ended_at) {
+    const idle = el("span", "block text-[11px] text-slate-400 dark:text-slate-500");
+    [idle.dataset.prefix, idle.dataset.suffix, idle.dataset.since] = ["⏸ idle ", " since the checks ended", last.ended_at];
+    tick(idle);
+    li.append(idle);
+  }
   return li;
 }
 
 // Every step of the chain in order: what ran (with its tries and the idle time between), then what has not started (pending), the land last.
 export function rail(list, t, selected, select) {
   const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
+  wrap.id = "rail";
   wrap.append(el("h3", "mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500", "Steps"));
   const ol = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700");
   list.forEach((a, i) => {
     const gap = idle(list[i - 1], a);
     if (gap) ol.append(gap);
-    if (a.after) ol.append(jump(a, list[i - 1]));
+    if (a.after) ol.append(jump(a, list, i));
     ol.append(row(a, selected.step === a.step && selected.n === a.n, select));
   });
   const last = list.at(-1);

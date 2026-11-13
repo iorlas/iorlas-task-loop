@@ -9,9 +9,9 @@ from pathlib import Path
 
 from taskloop.cli_composition import open_reads
 from taskloop.dash_board import BoardPorts, build_board
-from taskloop.dash_model import Board, FeedPage, TaskDetail, TrackerDetail
+from taskloop.dash_model import AttemptBody, Board, FeedPage, TaskDetail, TrackerDetail
 from taskloop.dash_server import DashPorts, DashServer
-from taskloop.dash_task import TaskPorts, build_feed, build_task, build_tracker
+from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
 from taskloop.dash_tracker import CachedTracker
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
@@ -49,6 +49,12 @@ def _ports(request: DashRequest, views: GitViews) -> DashPorts:
     def tracker_of(task_id: str) -> TrackerDetail | Failed | None:
         return build_tracker(tracker, task_id)
 
+    def body(task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
+        with open_reads(request.db, request.artifacts, views) as reads:
+            if isinstance(reads, Failed):
+                return reads
+            return build_body(TaskPorts(reads, files, tracker), request.backlog, task_id, step, number)
+
     def feed(task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
         with open_reads(request.db, request.artifacts, views) as reads:
             if isinstance(reads, Failed):
@@ -58,7 +64,7 @@ def _ports(request: DashRequest, views: GitViews) -> DashPorts:
     def log() -> tuple[LogRow, ...]:
         return read_round_log(files, LOG_LINES)
 
-    return DashPorts(board, task, tracker_of, log, feed, request.backlog, STATIC)
+    return DashPorts(board, task, tracker_of, body, log, feed, request.backlog, STATIC)
 
 
 @contextmanager

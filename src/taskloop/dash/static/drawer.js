@@ -3,14 +3,14 @@
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
 import { $, COLUMNS, JUMP, LAND, STATE, STEPS, ago, callout, el, position, quietSpan, tag } from "./ui.js";
-import { apply, atBottom, lines, show } from "./lines.js";
+import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
 import { lasted, rail } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 
 let source = null;
 let tasks = null;
-let open = null; // {id, detail, tracker, abort, sig, step, n, tab, view}: the open task, its selected attempt and sub-tabs
+let open = null; // {id, detail, tracker, abort, sig, bodies, opened, step, n, tab, view}: the open task, its selected attempt and sub-tabs
 
 export function initDrawer(src, taskMap) {
   source = src;
@@ -41,7 +41,7 @@ function reveal() {
 // it arrives and the tracker's fields (`bd`, slow under load) when they do. Opening another task cancels the first one's tracker read.
 export async function openDrawer(id) {
   open?.abort.abort();
-  const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, tab: null, view: null };
+  const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, bodies: new Map(), opened: new Map(), tab: null, view: null };
   open = mine;
   render();
   reveal();
@@ -58,14 +58,22 @@ export async function openDrawer(id) {
   follow();
 }
 
+// One tracker read at a time per drawer: a retry cancels the read still in flight, and only the latest read may fill the view in.
 async function loadTracker(mine) {
+  mine.load?.abort();
+  const own = new AbortController();
+  mine.load = own;
   mine.tracker = { state: "loading" };
+  mine.abort.signal.addEventListener("abort", () => own.abort(), { once: true });
+  let found;
   try {
-    mine.tracker = { state: "ready", ...(await source.tracker(mine.id, mine.abort.signal)) };
+    found = { state: "ready", ...(await source.tracker(mine.id, own.signal)) };
   } catch (error) {
-    if (mine.abort.signal.aborted) return;
-    mine.tracker = error.status === 404 ? { state: "none" } : { state: "failed", error: error.message ?? String(error) };
+    if (own.signal.aborted) return;
+    found = error.status === 404 ? { state: "none" } : { state: "failed", error: error.message ?? String(error) };
   }
+  if (mine.load !== own) return;
+  mine.tracker = found;
   if (open === mine && taskTabOpen()) render();
 }
 
@@ -81,17 +89,22 @@ function follow() {
   follower = setInterval(async () => {
     const mine = open;
     const a = mine && attemptOf();
-    if (!a || a.state !== "running" || !a.feed_cursor) return;
+    if (!a || a.state !== "running" || a.step === "checks") return; // a checks attempt has no agent lines
     try {
-      const page = await source.feed(mine.id, a.step, a.n, a.feed_cursor);
+      const page = await source.feed(mine.id, a.step, a.n, a.feed_cursor ?? "0:0"); // a file not there yet follows from its start
       if (open !== mine || attemptOf() !== a) return;
+      a.feedError = null;
+      setNote(a);
       a.feed_cursor = page.cursor ?? a.feed_cursor;
       if (page.replaced) a.feed = a.feed.filter((e) => e.type === "step");
       for (const e of page.events) apply(a, e);
       if (page.replaced) render();
       else page.events.forEach((e) => show(a, e));
-    } catch {
-      // a missed poll is not an error: the next one continues from the same cursor
+      touchQuiet(a);
+    } catch (error) {
+      if (open !== mine || attemptOf() !== a) return;
+      a.feedError = error.message ?? String(error); // shown, and the next poll continues from the same cursor
+      setNote(a);
     }
   }, FOLLOW_MS);
 }
@@ -150,6 +163,7 @@ function render() {
   const { detail } = open;
   const t = tasks.get(open.id) || detail?.task;
   const drawer = $("drawer");
+  const railTop = $("rail")?.scrollTop ?? 0;
   const kept = $("tail") && { key: $("tail").dataset.key, top: $("tail").scrollTop, bottom: atBottom($("tail")) };
   drawer.replaceChildren();
   if (!t) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", `Loading ${open.id}…`));
@@ -182,12 +196,30 @@ function render() {
   const body = el("div", "flex min-h-0 flex-1");
   body.append(rail(detail.attempts, t, open, select), pane());
   drawer.append(body);
-  body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
+  if ($("rail") && railTop) $("rail").scrollTop = railTop;
+  else body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
   const tail = $("tail");
   if (tail) tail.scrollTop = kept && kept.key === tail.dataset.key && !kept.bottom ? kept.top : tail.scrollHeight;
 }
 
 // ---------- selected attempt ----------
+
+// The Result and Prompt tabs read files, so they load when first shown (and again when the attempt has ended since).
+function bodyTab(a, tab) {
+  const key = `${a.step}/${a.n}`;
+  const mine = open;
+  const kept = mine.bodies.get(key);
+  if (kept?.body) return tab === "result" ? result(a, kept.body, { key, opened: mine.opened }) : prompt(a, kept.body);
+  if (kept?.error) return el("p", "px-6 py-4 text-sm text-rose-700 dark:text-rose-300", `This attempt cannot be read: ${kept.error}`);
+  if (!kept) {
+    mine.bodies.set(key, { state: a.state });
+    source.body(mine.id, a.step, a.n).then(
+      (body) => mine.bodies.set(key, { state: a.state, body }),
+      (error) => mine.bodies.set(key, { state: a.state, error: error.message ?? String(error) }),
+    ).then(() => { if (open === mine && attemptOf() === a) render(); });
+  }
+  return el("p", "px-6 py-4 text-sm text-slate-500", "Loading…");
+}
 
 const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
 const nameOf = (id) => STEPS.find((s) => s.id === id);
@@ -201,13 +233,18 @@ function pane() {
   top.append(el("h3", "text-sm font-semibold", `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
   top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
-  if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) top.append(quietSpan(a.feed.at(-1)?.at ?? a.started_at));
+  if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) {
+    const quiet = quietSpan(a.feed.at(-1)?.at ?? a.started_at);
+    quiet.id = "quiet";
+    top.append(quiet);
+  }
   wrap.append(top);
   if (a.after) {
     const why = el("div", "px-6 pt-3");
-    const prev = open.detail.attempts[open.detail.attempts.indexOf(a) - 1];
+    const list = open.detail.attempts;
+    const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list[list.indexOf(a) - 1];
     const what = a.after === "repeat" ? "Repeat of" : "Back to plan after";
-    why.append(callout(JUMP[a.after].bar, `${what} ${nameOf(prev.step).label}, try ${prev.n}`, a.reason));
+    why.append(callout(JUMP[a.after].bar, `${what} ${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`, a.reason));
     wrap.append(why);
   }
   const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
@@ -218,7 +255,7 @@ function pane() {
     b.addEventListener("click", () => { open.tab = id; render(); });
     bar.append(b);
   }
-  wrap.append(bar, tab === "lines" ? lines(a) : tab === "result" ? result(a) : prompt(a));
+  wrap.append(bar, tab === "lines" ? lines(a) : bodyTab(a, tab));
   return wrap;
 }
 
@@ -231,6 +268,7 @@ export async function onTaskMoved(task) {
   try {
     const fresh = await source.detail(open.id);
     if (open !== mine) return;
+    for (const a of fresh.attempts) if (open.bodies.get(`${a.step}/${a.n}`)?.state !== a.state) open.bodies.delete(`${a.step}/${a.n}`);
     open.detail = fresh;
   } catch (error) {
     return showError(open.id, error);

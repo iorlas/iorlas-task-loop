@@ -3,6 +3,8 @@
 
 import { $, FEED_LIMIT, clock, el, fmtDur, tick } from "./ui.js";
 
+const offset = (e, a) => (a.started_at ? clock(Date.parse(e.at) - Date.parse(a.started_at)) : "");
+
 const KIND = { command: "💻", tool: "🧰", message: "💬", error: "❌", waiting: "⏳", check: "🧪", step: "🚦" };
 const WORD = { command: "Command", tool: "Tool", message: "Agent message", error: "Error", waiting: "Waiting", check: "Check", step: "Step" };
 const PAUSE_MS = 2000; // a pause shorter than this is not worth a row
@@ -12,7 +14,8 @@ const BOTTOM_PX = 24; // within this of the end counts as "at the bottom"
 export function pause(e, prev) {
   if (e.type === "step" || !prev) return 0;
   if (e.waited_ms != null) return e.waited_ms;
-  return Date.parse(e.at) - Date.parse(prev.at) - (prev.duration_ms ?? 0);
+  // a command or tool's `at` is its start; a check line's `at` is its end already
+  return Date.parse(e.at) - Date.parse(prev.at) - (prev.type === "check" ? 0 : prev.duration_ms ?? 0);
 }
 
 export const atBottom = (box) => box.scrollHeight - box.scrollTop - box.clientHeight < BOTTOM_PX;
@@ -25,19 +28,39 @@ export function lines(a) {
   list.id = "lines";
   if (!a.feed.length) list.append(el("p", "py-3 text-sm text-slate-500", "No lines recorded for this attempt."));
   a.feed.forEach((e, i) => list.append(line(e, a, a.feed[i - 1])));
-  box.append(el("p", "mb-1 text-[11px] text-slate-400 dark:text-slate-500", `Latest ${FEED_LIMIT} lines${a.state === "running" ? ", live" : ""}`), list);
+  const note = el("p", "mb-1 text-[11px]");
+  note.id = "feednote";
+  box.append(note, list);
+  setNote(a);
   return box;
 }
 
+// The quiet line above the list: how much is kept and whether it is live, or why it stopped following.
+export function setNote(a) {
+  const note = $("feednote");
+  if (!note) return;
+  note.className = `mb-1 text-[11px] ${a.feedError ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"}`;
+  note.textContent = a.feedError ? `Feed stopped: ${a.feedError}. Trying again.` : `Latest ${FEED_LIMIT} lines${a.state === "running" ? ", live" : ""}`;
+}
+
+// The attempt's quiet time counts from its latest line.
+export function touchQuiet(a) {
+  const node = $("quiet");
+  const latest = a.feed.at(-1)?.at;
+  if (!node || !latest) return;
+  node.dataset.quiet = latest;
+  tick(node);
+}
+
 // One row: offset, kind emoji, content, duration. A faint "paused 33s" row sits above a line that came after a pause.
-function line(e, a, prev) {
+function line(e, a, prev, fresh = false) {
   const idle = pause(e, prev);
-  const row = el("div", "animate-line-in grid grid-cols-[3.25rem_3.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-xs");
+  const row = el("div", `${fresh ? "animate-line-in" : ""} grid grid-cols-[3.25rem_3.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-xs`);
   row.dataset.eid = e.id || "";
   const hint = idle >= PAUSE_MS;
   const r = hint ? "row-start-2" : "row-start-1"; // literal class names: the Tailwind scanner reads strings, not parts
   if (hint) row.append(el("span", "col-start-3 row-start-1 mb-0.5 text-[11px] text-slate-400 dark:text-slate-500", `⏸ paused ${fmtDur(idle)}`));
-  const at = el("span", `col-start-1 ${r} font-mono tabular-nums text-slate-400 dark:text-slate-500`, clock(Date.parse(e.at) - Date.parse(a.started_at)));
+  const at = el("span", `col-start-1 ${r} font-mono tabular-nums text-slate-400 dark:text-slate-500`, offset(e, a));
   const kind = el("span", `col-start-2 ${r} text-[13px]`, KIND[e.type]);
   kind.title = WORD[e.type];
   const content = el("span", `col-start-3 ${r} min-w-0`);
@@ -93,7 +116,7 @@ export function show(attempt, e) {
   const follow = atBottom(box);
   if (list.firstChild?.tagName === "P") list.replaceChildren();
   const index = attempt.feed.indexOf(e);
-  const row = line(e, attempt, attempt.feed[index - 1]);
+  const row = line(e, attempt, attempt.feed[index - 1], true);
   const old = e.id && [...list.children].find((c) => c.dataset.eid === e.id);
   if (old) old.replaceWith(row);
   else list.append(row);
@@ -103,6 +126,7 @@ export function show(attempt, e) {
     list.firstChild.remove();
     dropped = true;
   }
+  touchQuiet(attempt);
   if (follow) box.scrollTop = box.scrollHeight;
   else if (dropped) box.scrollTop -= height - box.scrollHeight;
 }

@@ -15,6 +15,7 @@ from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.dash_board import card_of
 from taskloop.dash_model import (
     Answer,
+    AttemptBody,
     AttemptDetail,
     Card,
     CheckLine,
@@ -78,56 +79,97 @@ def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
     return _page(ports.files.activity_tail(key, FEED_LINES) if cursor is None else ports.files.activity_after(key, cursor, FOLLOW_LINES))
 
 
-def _agent(ports: TaskPorts, row: AttemptRow, step_number: int) -> AttemptDetail:
+def _agent(ports: TaskPorts, row: AttemptRow, previous: int | None) -> AttemptDetail:
     result = collect(ports.reads.store, row.key)
     state: State = "running" if result.status != "collected" and row.held else "succeeded" if succeeded(result) else "failed"
     started = ports.files.started_at(row.key)
     ended = None if state == "running" or row.release is None else row.release.released_at
-    text = ports.files.text(row.key, "answer.txt")
-    disposition = None if result.execution is None else result.execution.answer.disposition
-    answer = Answer(disposition or "none", text) if text is not None else None
     after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == "plan" and row.seq > 1 else None
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
-    summary = result.reason or result.status
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=row.number),)
     page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
-    return AttemptDetail(row.step, step_number, state, iso(started), iso(ended), summary, after, reason,
-                         ports.files.text(row.key, "input.txt"), Outcome(summary, answer, (), None), begun + page.events, page.cursor)
+    return AttemptDetail(row.step, row.number, state, iso(started), iso(ended), result.reason or result.status, after, reason,
+                         previous if after == "repeat" else None, begun + page.events, page.cursor)
+
+
+def _agent_body(ports: TaskPorts, row: AttemptRow) -> AttemptBody:
+    result = collect(ports.reads.store, row.key)
+    shown = ports.files.text_bounded(row.key, "answer.txt")
+    disposition = None if result.execution is None else result.execution.answer.disposition
+    answer = None if shown is None else Answer(disposition or "none", shown[0], shown[1])
+    return AttemptBody(ports.files.text(row.key, "input.txt"), Outcome(result.reason or result.status, answer, (), None))
+
+
+def _took(result: ResultRow) -> int:
+    return 0 if result.ended_at is None else int((result.ended_at - result.started_at) * 1000)
 
 
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:
-    passed = result.conclusion == "passed"
-    took = 0 if result.ended_at is None else int((result.ended_at - result.started_at) * 1000)
-    return CheckLine(result.name, passed, took, ports.files.check_tail(row.key, result.block, result.name), result.block)
+    return CheckLine(result.name, result.conclusion == "passed", _took(result),
+                     ports.files.check_tail(row.key, result.block, result.name), result.block)
 
 
-def _checks(ports: TaskPorts, store: CheckStore, row: ChecksRow, earlier: str | None) -> AttemptDetail:
-    results = store.results(row.key)
-    lines = tuple(_check_line(ports, row, each) for each in results)
+def _checks_state(row: ChecksRow) -> tuple[State, str]:
     state: State = "running" if row.phase == "admitted" else "succeeded" if row.conclusion == "passed" else "failed"
+    return state, row.reason or row.conclusion or ("running" if state == "running" else row.phase)
+
+
+def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: str | None) -> AttemptDetail:
+    results = store.results(row.key)
+    state, summary = _checks_state(row)
     started = min((each.started_at for each in results), default=None)
-    summary = row.reason or row.conclusion or ("running" if state == "running" else row.phase)
     feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name, passed=each.conclusion == "passed",
-                           duration_ms=line.duration_ms) for each, line in zip(results, lines, strict=True) if each.conclusion is not None)
-    after = "repeat" if earlier is not None else None
-    return AttemptDetail("checks", row.number, state, iso(started), iso(row.concluded_at), summary, after, earlier, None,
-                         Outcome(summary, None, lines, None), feed)
+                           duration_ms=_took(each)) for each in results if each.conclusion is not None)
+    return AttemptDetail("checks", number, state, iso(started), iso(row.concluded_at), summary, "repeat" if earlier is not None else None,
+                         earlier, number - 1 if earlier is not None else None, feed)
+
+
+def _checks_body(ports: TaskPorts, store: CheckStore, row: ChecksRow) -> AttemptBody:
+    lines = tuple(_check_line(ports, row, each) for each in store.results(row.key))
+    return AttemptBody(None, Outcome(_checks_state(row)[1], None, lines, None))
+
+
+def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[AttemptRow | None, ChecksRow | None, int], ...]:
+    """The task's attempts oldest first as (agent attempt, checks attempt, its try): the agent attempts numbered within their step,
+    the checks attempts after an implement attempt numbered across the task (a checks try is the check step's, not the implement's)."""
+    store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
+    found: list[tuple[AttemptRow | None, ChecksRow | None, int]] = []
+    tries = 0
+    for row in reversed(rows):
+        found.append((row, None, row.number))
+        for checks in store.of_attempt(row.key.attempt_id) if row.step == "implement" else ():
+            tries += 1
+            found.append((None, checks, tries))
+    return tuple(found)
 
 
 def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDetail, ...]:
     """Oldest first: each agent attempt (numbered within its step), then the checks attempts after an implement attempt."""
-    found: list[AttemptDetail] = []
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
-    for row in reversed(rows):
-        found.append(_agent(ports, row, row.number))
-        if row.step != "implement":
-            continue
-        earlier = None
-        for checks in store.of_attempt(row.key.attempt_id):
-            detail = _checks(ports, store, checks, earlier)
-            found.append(detail)
-            earlier = detail.summary
+    numbers = {row.key.attempt_id: row.number for row in rows}
+    found: list[AttemptDetail] = []
+    earlier: str | None = None
+    for row, checks, number in _chain(ports, rows):
+        if row is not None:
+            found.append(_agent(ports, row, numbers.get(row.previous_attempt_id or "")))
+        elif checks is not None:
+            found.append(_checks(store, checks, number, earlier))
+            earlier = found[-1].summary
     return tuple(found)
+
+
+def build_body(ports: TaskPorts, backlog: str, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
+    """What one attempt shows besides its lines. None: no such attempt."""
+    try:
+        store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
+        for row, checks, tried in _chain(ports, ports.reads.store.attempts(backlog, task_id)):
+            if row is not None and (row.step, row.number) == (step, number):
+                return _agent_body(ports, row)
+            if checks is not None and ("checks", tried) == (step, number):
+                return _checks_body(ports, store, checks)
+    except StoreUnavailable as error:
+        return Failed("unavailable", "store", str(error))
+    return None
 
 
 def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Failed:

@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import override
 
-from taskloop.dash_model import Board, Card, FeedPage, TaskDetail, TrackerDetail
+from taskloop.dash_model import AttemptBody, Board, Card, FeedPage, TaskDetail, TrackerDetail
 from taskloop.operations import Failed
 from taskloop.round_log import IDENT
 from taskloop.round_reader import LogRow
@@ -34,6 +34,7 @@ class DashPorts:
     board: Callable[[], Board | Failed]
     task: Callable[[str], TaskDetail | Failed]
     tracker: Callable[[str], TrackerDetail | Failed | None]
+    body: Callable[[str, str, int], AttemptBody | Failed | None]  # task, step, attempt number
     log: Callable[[], tuple[LogRow, ...]]
     feed: Callable[[str, str, int, str | None], FeedPage | Failed | None]  # task, step, attempt number, cursor
     backlog: str
@@ -152,13 +153,14 @@ NOT_FOUND = Reply(404, b'{"error":"not_found"}', JSON)
 FORBIDDEN = Reply(403, b'{"error":"forbidden_host"}', JSON)
 
 
-def _json(found: Board | TaskDetail | TrackerDetail | FeedPage | Failed | None) -> Reply:
+def _json(found: Board | TaskDetail | TrackerDetail | AttemptBody | FeedPage | Failed | None) -> Reply:
     if isinstance(found, Failed):
         return Reply(503, json.dumps({"error": found.word}).encode(), JSON)
     return NOT_FOUND if found is None else Reply(200, json.dumps(asdict(found)).encode(), JSON)
 
 
 FEED = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})/feed")
+BODY = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})")
 TRACKER = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/tracker")
 AFTER = re.compile(r"after=([0-9]{1,20}:[0-9]{1,20})")
 
@@ -175,6 +177,8 @@ def _task_api(ports: DashPorts, path: str, query: str) -> Reply | None:
     """The endpoints of one task: its agent lines, its tracker part, its detail; None when the path is none of them."""
     if found := FEED.fullmatch(path):
         return _feed(ports, found, query)
+    if found := BODY.fullmatch(path):
+        return _json(ports.body(found["task"], found["step"], int(found["n"])))
     if found := TRACKER.fullmatch(path):
         return _json(ports.tracker(found["task"]))
     if path.startswith("api/tasks/") and IDENT.fullmatch(path[10:]):
