@@ -22,6 +22,9 @@ Review remains future work; the retained designs describe more than the implemen
   scheduling round: it settles existing attempts, advances each claimed task whose step is done (no label check), then
   admits approved ready tasks (`--label`) into the slots left while fewer than `--max-running` (default 3) of the backlog's
   tasks are in flight (a step running, or passed and waiting for land). `--max-new` is removed and rejected.
+- `tl step show TASK [--backlog KEY]` selects the explicit backlog, then the machine config's `backlog`, then the sole
+  distinct backlog retained in `factory.db` (including ended attempts). With none or several, supply the flag or config
+  default. `tl step list` lists all backlogs; its `hold cause` column shows the recorded or due reason after `next`.
 - `tl step rounds` repeats rounds in the foreground until Ctrl-C. `--retake-lapsed` on `next` or `rounds` is for recovery
   after discarding `factory.db`: it also takes the factory's expired claims absent from that database, assuming one
   factory on the tracker. Prefer one `next` invocation for that recovery.
@@ -47,7 +50,8 @@ retry is safe), and 130 for an abrupt rounds stop or interrupted land. Task/repo
 when a backend read is unavailable. Continuous rounds retry unknown results themselves.
 
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to
-`~/.local/state/task-loop`. Other commands are rejected until their behavior is implemented. `tl <command> --help`
+`~/.local/state/task-loop`. Its optional `backlog = "KEY"` sets the default for `step show`; `config show` reports
+`unset` (JSON null) when absent. Other commands are rejected until their behavior is implemented. `tl <command> --help`
 is the reference; the design index links each slice's plan and implementation evidence. `tl plan` is no longer a command.
 The previous implementation remains in Git history. [docs/design/INDEX.md](docs/design/INDEX.md) lists every design folder
 and document; [docs/glossary.md](docs/glossary.md) holds the vocabulary, the commit letters and the CLI flag table.

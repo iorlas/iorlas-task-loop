@@ -235,6 +235,14 @@ class AttemptReads(StoreConnection):
             row = con.execute(RELEASED + " WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(key)).fetchone()
         return None if row is None else _released(row)
 
+    def backlogs(self) -> tuple[str, ...]:
+        """Distinct retained backlog identities, including ended attempts, in key order; SELECT only."""
+        with self._connection() as con:
+            rows: list[tuple[object, ...]] = con.execute(
+                "SELECT DISTINCT backlog FROM attempt WHERE adapter='beads' ORDER BY backlog"
+            ).fetchall()
+        return tuple(as_text(row[0]) for row in rows)
+
     def attempts(self, backlog: str | None = None, task_id: str | None = None) -> tuple[AttemptRow, ...]:
         """Every attempt (or one backlog's, or one task's), by backlog, task and `seq`, the current attempt of each task
         first, with whether it still holds its reservation and its release: SELECT only, no deadline check."""

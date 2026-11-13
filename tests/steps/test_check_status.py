@@ -95,7 +95,7 @@ def test_running_checks_never_display_agent_command_age(status: Status, tmp_path
     assert isinstance(shown, Shown) and isinstance(listed, Listed)
     assert shown.view.entry == "running" and shown.view.step == "check" and shown.view.last_command is None
     assert not any(line.startswith("Last command:") for line in human("tl step show", shown, None))
-    assert human("tl step list", listed, None)[1].endswith("\twait\t-")
+    assert human("tl step list", listed, None)[1].endswith("\twait\t-\t-")
     assert as_data(shown)["last_command"] is None
     rows = as_data(listed)["attempts"]
     assert isinstance(rows, list) and isinstance(rows[0], dict) and rows[0]["last_command"] is None

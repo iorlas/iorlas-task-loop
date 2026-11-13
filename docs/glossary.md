@@ -162,7 +162,8 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 
 | Flag | Commands | Meaning |
 |---|---|---|
-| `--backlog KEY` | `step` except `list`, `task show` | The task scope inside the tracker; required, never inferred. Land uses the selected checks attempt's recorded tracker root. |
+| `--backlog KEY` | `step` except `list`, `task show` | The task scope inside the tracker; required except for `step show`, which selects the flag, then config `backlog`, then the sole distinct backlog retained in factory.db (including ended attempts); none or several refuses. Land uses the selected checks attempt's recorded tracker root. |
+| config `backlog` | `step show`, `config show` | Optional nonempty logical backlog key, unset by default. Used by `step show` when `--backlog` is omitted; `step list` continues listing all backlogs. |
 | `--tracker-root PATH` | `step start\|next\|rounds`, `task show` | Required directory of the Beads tracker. Later operations, including land, use the root recorded at admission; land has no `--tracker-root` flag. |
 | `--checkout PATH` | `step start\|next\|rounds\|land`, `profile show` | The person's checkout of the repository; required for these step commands, default `.` for `profile show`. Land fetches and pushes its `origin` using that checkout's Git configuration. |
 | `--at REV` | `profile show` | The commit under test whose `setup` and checks are read (default `HEAD`). |

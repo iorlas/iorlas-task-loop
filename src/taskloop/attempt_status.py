@@ -242,12 +242,22 @@ def _released(row: AttemptRow, step: Next, verified: bool) -> Next:
     return "release" if step == "done" and row.held else step
 
 
-def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str) -> Shown | Failed:
+def show_attempt(
+    reads: StatusPorts, artifacts: Path, backlog: str | None, task_id: str, *, configured_backlog: str | None = None,
+) -> Shown | Failed:
     """The task's current attempt; each earlier one, newest first, was repeated (superseded and fenced: nothing of it is
     collected or read), abandoned, or advanced (done: the next step followed it). Read-only: creates no file or
-    directory (the attempt directory is computed, never made)."""
+    directory (the attempt directory is computed, never made). An explicit backlog wins over the configured one;
+    otherwise the sole distinct retained backlog is selected."""
     files = EvidenceFiles(artifacts)
     try:
+        backlog = configured_backlog if backlog is None else backlog
+        if backlog is None:
+            available = reads.store.backlogs()
+            if len(available) != 1:
+                detail = f"Available backlogs: {', '.join(available)}." if available else "No backlogs are available."
+                return Failed("refused", "backlog", f"{detail} Select --backlog KEY or set the machine-config backlog.")
+            backlog = available[0]
         rows = reads.store.attempts(backlog, task_id)
         first = _first(rows) if rows else None
         latest = None if first is None else SetupStore(reads.store.connect, reads.store.begin).latest(first.key)
@@ -258,17 +268,14 @@ def show_attempt(reads: StatusPorts, artifacts: Path, backlog: str, task_id: str
     directory = files.root / files.directory(rows[0].key)
     earlier = tuple((older.key.attempt_id, _ended(newer, older)) for newer, older in pairwise(rows))
     view = _holding(reads, (_show(reads, rows[0]),))[0]
-    if view.checks is not None:
-        try:
-            return _checks_shown(reads, files, replace(view, earlier=view.earlier + earlier), view.checks)
-        except StoreUnavailable as error:
-            return Failed("unavailable", "store", str(error))
-    setup = None
-    if first is not None and latest is not None:
-        other = None if first is rows[0] else first.key.attempt_id
-        setup = SetupShown(latest, files.root / files.directory(first.key) / f"setup-{latest.run}.log", other)
-    shown = replace(view, earlier=earlier, last_entry=files.last_entry(rows[0].key))
     try:
+        if view.checks is not None:
+            return _checks_shown(reads, files, replace(view, earlier=view.earlier + earlier), view.checks)
+        setup = None
+        if first is not None and latest is not None:
+            other = None if first is rows[0] else first.key.attempt_id
+            setup = SetupShown(latest, files.root / files.directory(first.key) / f"setup-{latest.run}.log", other)
+        shown = replace(view, earlier=earlier, last_entry=files.last_entry(rows[0].key))
         failed = _failed_checks(reads, files, view.hold)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
