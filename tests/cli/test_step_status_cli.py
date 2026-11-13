@@ -160,7 +160,8 @@ def test_list_shows_recorded_and_due_hold_causes_without_changing_stuck_membersh
     output = capsys.readouterr()
     lines = output.out.splitlines()
     header = lines[0].split("\t")
-    assert header == ["task", "backlog", "step", "attempt", "slot", "phase", "entry", "result", "next", "hold cause", "last command"]
+    assert header == ["task", "backlog", "step", "attempt", "slot", "phase", "entry", "result", "status", "next", "hold cause",
+                      "last command"]
     rows = {row["task"]: row for line in lines[1:] if line.startswith("tl-")
             for row in [dict(zip(header, line.split("\t"), strict=True))]}
     expected = {"tl-1": ("hold", "failed:needs_owner"), "tl-2": ("on_hold", "failed:main_moved"),

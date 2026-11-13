@@ -129,7 +129,16 @@ new attempt of the same step, `restart_at_plan` is a task sent back to plan. `st
 (for Landed: time since landing). `last_activity_at` is the sort key (newest first): the last step change or live
 event. `slot` is `null` when the task holds none. `hold_cause` is the sentence the hold owner already shows, only in
 `held`. `land` is `null` outside the `land` column; in it `waiting` (a round lands it), `manual` (the profile says `land: manual`: a person lands it) or `landing` (a land
-process is observed running).
+process is observed running). `status` is the task's one status (`task_status.Status`: `running checking settling waiting_for_land
+landing landed held stuck finished abandoned queued`) and `status_note` says it in plain words; both come from the same function
+`tl step list`, the drawer and the round's admission call (tl-8bh9.14.143). A task with no current attempt (`abandoned`, or
+`queued` to start: a person abandoned its attempt and the tracker lists it ready under the approval label, a ready task no attempt
+has taken) is in the `waiting` column with a note saying why it does not start yet (no free slot, the last slot is kept for a
+land, the in-flight bound, or a selection rule); its old attempts are not its current steps. **Restart rule (decided
+2026-11-13):** a task a person abandoned (`tl step release --abandon`, claim returned, no hold) that carries the approval label is
+restarted fresh by the next round, one restart route, no `tl step start` by hand; removing the label is how a person keeps it
+stopped. A hold's abandon stays held until the person's answer (the label added back). Attempt rows of the abandoned chain carry
+`past: true`: the drawer shows them dimmed and shows no pending steps or Land row after them.
 
 ### Board snapshot: `GET /api/board`
 

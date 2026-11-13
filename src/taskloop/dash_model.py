@@ -34,6 +34,8 @@ class Card:
     hold_cause: str | None
     # in `land` only: `waiting` for a round to land it, `manual` for a person (the profile says `land: manual`), `landing`
     land: LandState | None = None
+    status: str | None = None  # `task_status.Status`: the one status of the task, for every reader
+    status_note: str | None = None  # the status in plain words (`task_status.words`)
 
 
 @dataclass(frozen=True)
@@ -156,6 +158,7 @@ class AttemptDetail:
     feed: tuple[FeedEvent, ...]
     feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
     led_by: int | None = None  # a repeat of an agent attempt: the try of the `verification` step whose failure led to it
+    past: bool = False  # belongs to a chain a person abandoned: history, not the task's current steps
 
 
 @dataclass(frozen=True)

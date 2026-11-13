@@ -65,6 +65,7 @@ function fillCard(node, t) {
     notes.append(callout(restart ? "border-violet-500" : "border-amber-500", restart ? "↩ Restarted at plan" : "↻ Repeat", t.repeat.reason));
   }
   if (t.hold_cause) notes.append(callout("border-rose-500", "Held", t.hold_cause));
+  if (t.column === "waiting" && t.attempt > 0) notes.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
   if (t.column === "land") notes.append(callout(LAND[t.land].bar, `${t.land === "landing" ? "🚀" : t.land === "manual" ? "🧑" : "⏳"} ${LAND[t.land].label}`, t.land === "manual" ? "The profile says land: manual" : null));
   if (notes.children.length) node.append(notes);
   const foot = el("div", "mt-2.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400");

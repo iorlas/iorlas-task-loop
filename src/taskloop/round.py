@@ -33,7 +33,7 @@ from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attem
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
 from taskloop.hold import HoldPorts, clear_holds, hold_task
-from taskloop.hold_status import MAIN_MOVED, reingests
+from taskloop.hold_status import MAIN_MOVED
 from taskloop.operations import (
     UNKNOWN_KINDS,
     Failed,
@@ -57,13 +57,13 @@ from taskloop.operations import (
     verify_task,
 )
 from taskloop.publish import publish_word
-from taskloop.round_flight import in_flight
 from taskloop.round_land import Landing, land_passed
 from taskloop.round_log import INTERRUPTED
 from taskloop.round_trail import Trail
 from taskloop.selection import order
 from taskloop.slot_release import NotReleased, release_word
 from taskloop.task import TaskInspectionError
+from taskloop.task_status import Admission, Status, in_flight, restartable, skipped, task_status, words
 from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, leaked_claim, ready_rows
 
 # A refusal that stops admission for the round: no slot is free, or the round's own inputs or the store are wrong. Any
@@ -176,7 +176,8 @@ def _backlog(listed: Listed, backlog: str) -> tuple[AttemptView, ...]:
 
 
 def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: Trail) -> None:
-    """One existing attempt by its `Next` word: an abandoned one is never re-admitted; `advance` waits for the advance
+    """One existing attempt by its `Next` word: an abandoned one is restarted only by admission
+    (`task_status.restartable`); `advance` waits for the advance
     phase, `publish` for the last one; `hold` is the hold operation (due, or not finished), `on_hold` nothing at all."""
     task, attempt, step = each.task_id, each.attempt_id, each.step
     abandoned = each.release is not None and each.release.abandoned
@@ -341,16 +342,20 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
         rows = ready_rows(ports.ready, request.label, ports.reads.clock(), request.retake)
     except TaskInspectionError as error:
         return "refused:tracker" if error.kind == "malformed" else "unavailable:tracker"
-    # abandoned once its claim is no longer kept: a half-done checks abandon (claim still kept) is `attempted`; a finished
-    # hold that removed this round's label is left out: the label in this ready read is the person's answer (7.2)
-    again = frozenset(each.task_id for each in current if reingests(each.next, each.hold, request.label))
+    # A task a person abandoned (or a hold the person answered) that the tracker lists ready under this label restarts fresh
+    # (`task_status.restartable`): the one restart route. Any other abandoned one is skipped, and the skip is the status's words.
+    admission = Admission(frozenset(row.task_id for row in rows), request.label)
+    again = frozenset(each.task_id for each in current if restartable(each, admission))
     attempts = {each.task_id: each.release is not None and each.release.claim != "kept" for each in current if each.task_id not in again}
-    ordered, skipped = order(rows, ancestry(ports.ready, rows), attempts, ACTOR, again)
+    ordered, skipped_by = order(rows, ancestry(ports.ready, rows), attempts, ACTOR, again)
     trail.ranked = True
     ids = {each.task_id: (each.attempt_id, each.step) for each in current}
-    for task_id, reason in skipped:
+    states = {each.task_id: task_status(each, admission) for each in current}
+    for task_id, reason in skipped_by:
         attempt, step = ids.get(task_id, ("", ""))
-        trail.add(Move(task_id, "skip", reason, attempt, step=step))  # attempted/abandoned: the attempt that holds it
+        found = states.get(task_id)
+        explained = words(found) if found is not None and found.status is Status.ABANDONED else words(skipped(reason))
+        trail.add(Move(task_id, "skip", reason, attempt, explained, step))  # attempted/abandoned: the attempt that holds it
     return _start_each(ports, request, ordered, trail, reserve, len(in_flight(current)))
 
 
