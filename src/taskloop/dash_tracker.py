@@ -1,6 +1,6 @@
 """The dashboard's tracker reads: the tracker's task data turned into the page's model, bounded and cached, because each
 read is a `bd` call. A failed read keeps the last good answer (or none) and says so in `notice`; a task's title is read
-once. Display only."""
+once. A task's fields raise when they cannot be read and nothing was read before (the drawer says so). Display only."""
 
 import threading
 from collections.abc import Callable
@@ -31,6 +31,8 @@ class CachedTracker:
             return self._read_ready()
 
     def titles(self, task_ids: tuple[str, ...]) -> dict[str, str]:
+        if all(each in self._titles for each in task_ids):  # known titles never wait for a `bd` read in flight
+            return {each: self._titles[each] for each in task_ids}
         with self._lock:
             return self._read_titles(task_ids)
 
@@ -68,7 +70,9 @@ class CachedTracker:
             comments = tracker_comments(task_id, self.root) if facts is not None else ()
         except TaskInspectionError as error:
             self._problem = f"Tracker unavailable: {error}"
-            return None if kept is None else kept[1]
+            if kept is None:
+                raise
+            return kept[1]
         found = None if facts is None else (
             Fields(f"P{facts.priority}" if facts.priority is not None else "none", facts.labels, f"task/{facts.task_id}", facts.assignee,
                    facts.created_at, facts.updated_at, facts.dependencies, facts.description, facts.acceptance, facts.design, facts.notes),

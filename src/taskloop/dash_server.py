@@ -14,13 +14,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import override
 
-from taskloop.dash_model import Board, Card, FeedPage, TaskDetail
+from taskloop.dash_model import AttemptBody, Board, Card, FeedPage, TaskDetail, TrackerDetail
 from taskloop.operations import Failed
 from taskloop.round_log import IDENT
 from taskloop.round_reader import LogRow
 
 PAGES = {"": "index.html", "index.html": "index.html", "app.js": "app.js", "api.js": "api.js", "drawer.js": "drawer.js",
-         "logs.js": "logs.js", "ui.js": "ui.js", "dash.css": "dash.css"}
+         "logs.js": "logs.js", "ui.js": "ui.js", "lines.js": "lines.js", "rail.js": "rail.js",
+         "taskview.js": "taskview.js", "result.js": "result.js", "dash.css": "dash.css"}
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 
 
@@ -31,7 +32,9 @@ class DashPorts:
     may listen and how many unsent messages one may hold before it is dropped (it reconnects and reloads)."""
 
     board: Callable[[], Board | Failed]
-    task: Callable[[str], TaskDetail | Failed | None]
+    task: Callable[[str], TaskDetail | Failed]
+    tracker: Callable[[str], TrackerDetail | Failed | None]
+    body: Callable[[str, str, int], AttemptBody | Failed | None]  # task, step, attempt number
     log: Callable[[], tuple[LogRow, ...]]
     feed: Callable[[str, str, int, str | None], FeedPage | Failed | None]  # task, step, attempt number, cursor
     backlog: str
@@ -150,13 +153,15 @@ NOT_FOUND = Reply(404, b'{"error":"not_found"}', JSON)
 FORBIDDEN = Reply(403, b'{"error":"forbidden_host"}', JSON)
 
 
-def _json(found: Board | TaskDetail | FeedPage | Failed | None) -> Reply:
+def _json(found: Board | TaskDetail | TrackerDetail | AttemptBody | FeedPage | Failed | None) -> Reply:
     if isinstance(found, Failed):
         return Reply(503, json.dumps({"error": found.word}).encode(), JSON)
     return NOT_FOUND if found is None else Reply(200, json.dumps(asdict(found)).encode(), JSON)
 
 
 FEED = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})/feed")
+BODY = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})")
+TRACKER = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/tracker")
 AFTER = re.compile(r"after=([0-9]{1,20}:[0-9]{1,20})")
 
 
@@ -168,16 +173,27 @@ def _feed(ports: DashPorts, found: re.Match[str], query: str) -> Reply:
     return _json(ports.feed(found["task"], found["step"], int(found["n"]), after[1] if after else None))
 
 
+def _task_api(ports: DashPorts, path: str, query: str) -> Reply | None:
+    """The endpoints of one task: its agent lines, its tracker part, its detail; None when the path is none of them."""
+    if found := FEED.fullmatch(path):
+        return _feed(ports, found, query)
+    if found := BODY.fullmatch(path):
+        return _json(ports.body(found["task"], found["step"], int(found["n"])))
+    if found := TRACKER.fullmatch(path):
+        return _json(ports.tracker(found["task"]))
+    if path.startswith("api/tasks/") and IDENT.fullmatch(path[10:]):
+        return _json(ports.task(path[10:]))
+    return None
+
+
 def respond(ports: DashPorts, path: str, query: str = "") -> Reply:
     """The answer to a GET that is not the stream: a JSON endpoint or one file of the static page."""
     if path == "api/board":
         return _json(ports.board())
     if path == "api/log":
         return Reply(200, json.dumps({"backlog": ports.backlog, "rows": [asdict(row) for row in ports.log()]}).encode(), JSON)
-    if found := FEED.fullmatch(path):
-        return _feed(ports, found, query)
-    if path.startswith("api/tasks/") and IDENT.fullmatch(path[10:]):
-        return _json(ports.task(path[10:]))
+    if (reply := _task_api(ports, path, query)) is not None:
+        return reply
     if path in PAGES and (file := ports.static / PAGES[path]).is_file():
         return Reply(200, file.read_bytes(), TYPES[file.suffix])
     return NOT_FOUND

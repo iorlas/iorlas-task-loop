@@ -7,8 +7,9 @@ from datetime import UTC, datetime
 
 from taskloop.attempt_reads import AttemptRow
 from taskloop.attempt_status import AttemptView, StatusPorts, list_attempts
-from taskloop.dash_model import Board, Card, Column, DashTracker, Repeat, iso
+from taskloop.dash_model import Board, Card, Column, DashTracker, LandState, Repeat, iso
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.land_status import LandView
 from taskloop.operations import Failed
 
 STEP_COLUMN: dict[str, Column] = {"plan": "plan", "implement": "implement", "check": "checks"}
@@ -23,6 +24,11 @@ def column_of(view: AttemptView) -> Column:
     if view.next == "land" or view.land is not None:
         return "land"
     return STEP_COLUMN.get(view.step, "implement")
+
+
+def land_state(land: LandView | None) -> LandState:
+    """`delivering` only while a land is observed running; every other task in the land column waits for the person."""
+    return "delivering" if land is not None and land.row.pending and land.process == "running" else "waiting"
 
 
 def _repeat(view: AttemptView) -> Repeat | None:
@@ -58,7 +64,7 @@ def card_of(view: AttemptView, row: AttemptRow | None, title: str, files: Eviden
     holding = row is not None and row.held and view.release is None
     cause = view.hold.reason if view.hold is not None else view.hold_due
     return Card(view.task_id, title, column, view.number, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
-                view.slot if holding else None, cause if column == "held" else None)
+                view.slot if holding else None, cause if column == "held" else None, land_state(view.land) if column == "land" else None)
 
 
 def build_board(ports: BoardPorts) -> Board | Failed:

@@ -196,11 +196,17 @@ class EvidenceFiles:
     def text(self, key: AttemptKey, name: Literal["input.txt", "answer.txt"], cap: int = 65536) -> str | None:
         """Read-only: the first `cap` bytes of the attempt's input or answer file, None when absent or unreadable. Display
         only (the dashboard's prompt and agent answer); never control state."""
+        shown = self.text_bounded(key, name, cap)
+        return None if shown is None else shown[0]
+
+    def text_bounded(self, key: AttemptKey, name: Literal["input.txt", "answer.txt"], cap: int = 65536) -> tuple[str, bool] | None:
+        """`text`, with whether the file goes on past `cap` bytes."""
         try:
             with self._path(self.directory(key) + "/" + name).open("rb") as stream:
-                return stream.read(cap).decode("utf-8", "replace")
+                data = stream.read(cap + 1)
         except (OSError, EvidenceError):
             return None
+        return data[:cap].decode("utf-8", "replace"), len(data) > cap
 
     def check_tail(self, key: AttemptKey, block: int, name: str, cap: int = 8192) -> str | None:
         """Read-only: the last `cap` bytes of a check's log, None when it is absent or unreadable; creates nothing. Display

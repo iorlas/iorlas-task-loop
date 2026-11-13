@@ -7,6 +7,7 @@ from typing import Literal, Protocol
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
+type LandState = Literal["waiting", "delivering"]
 
 
 def iso(epoch: float | None) -> str | None:
@@ -31,6 +32,7 @@ class Card:
     last_activity_at: str | None
     slot: str | None
     hold_cause: str | None
+    land: LandState | None = None  # in `land` only: `waiting` for the person to run `tl step land`, `delivering` while a land runs
 
 
 @dataclass(frozen=True)
@@ -68,13 +70,15 @@ class CheckLine:
     name: str
     passed: bool
     duration_ms: int
-    output: str | None
+    output: str | None  # the tail of the check's log, passed or failed; None: the log is gone or unreadable
+    block: int = 1
 
 
 @dataclass(frozen=True)
 class Answer:
     disposition: str
     text: str
+    truncated: bool = False  # the file is longer than what is shown
 
 
 @dataclass(frozen=True)
@@ -124,18 +128,34 @@ class AttemptDetail:
     summary: str
     after: Literal["repeat", "restart_at_plan"] | None
     reason: str | None
-    input: str | None
-    result: Outcome
+    repeat_of: int | None  # the try of this step that a `repeat` repeats
     feed: tuple[FeedEvent, ...]
     feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
 
 
 @dataclass(frozen=True)
+class AttemptBody:
+    """`GET /api/tasks/<id>/attempts/<step>/<n>`: what a selected attempt shows besides its lines (prompt, answer, check outputs).
+    Read only when asked, because it reads files."""
+
+    input: str | None
+    result: Outcome
+
+
+@dataclass(frozen=True)
 class TaskDetail:
+    """`GET /api/tasks/<id>`: from factory.db and the evidence files only, so it never waits for the tracker."""
+
     task: Card
+    attempts: tuple[AttemptDetail, ...]
+
+
+@dataclass(frozen=True)
+class TrackerDetail:
+    """`GET /api/tasks/<id>/tracker`: the tracker's task and its comments (`bd` calls), loaded after the drawer is open."""
+
     fields: Fields
     comments: tuple[Comment, ...]
-    attempts: tuple[AttemptDetail, ...]
 
 
 @dataclass(frozen=True)
@@ -155,6 +175,6 @@ class DashTracker(Protocol):
 
     def titles(self, task_ids: tuple[str, ...]) -> dict[str, str]: ...
 
-    def fields(self, task_id: str) -> tuple[Fields, tuple[Comment, ...]] | None: ...
+    def fields(self, task_id: str) -> tuple[Fields, tuple[Comment, ...]] | None: ...  # None: the tracker has no such task
 
     def notice(self) -> str | None: ...
