@@ -52,6 +52,18 @@ Retain caps: 400 source lines per file, 80 per function and 800 per test file. N
   Explicitly held work stays held. Do not carry adapter behavior until its deletion consequences are assessed.
 - Runtime version stays fixed until restart. Skills are lightweight explicit helpers, not another scheduler,
   policy/state owner or a prerequisite for factory correctness.
+- Names: a new term borrows GitHub's word first; otherwise it chains defined terms (retry attempt, check suite).
+  Before a term enters the glossary or the code, put the options and reasons to a human and wait for the decision.
+  Delete a term that is plain English or derivable from defined terms.
+- Closed vocabularies (outcomes, phases, reasons, step and check names) are enums or classes, never string literals.
+  A string appears only at the edge that stores or prints it, through one codec per vocabulary.
+- A backend's (task tracker, Git, harness) tool names, commands, error text and types stay inside its adapter. The
+  factory's outcome types and messages are generic; the adapter supplies the explanation per outcome. A missing
+  explanation fails a test.
+- Models at the edges (database rows, agent answers, configuration) are pydantic v2 models. Enums stay stdlib. Another
+  third-party library needs a stated reason that tests get smaller, not larger.
+- A schema-changing upgrade drains running attempts first: old entry processes cannot write to the new schema, and the
+  old database is discarded.
 - Run commands non-interactively. AGENTS.md and CLAUDE.md are separate files: mirror substantive instruction edits.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
