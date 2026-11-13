@@ -19,7 +19,8 @@ def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey
 
 def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object]) -> None:
     """The admitted attempt row, inside the caller's write transaction."""
-    con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", bound(ATTEMPT_ADMITTED, attempt))
+    values = bound(ATTEMPT_ADMITTED, {"source_checks_id": None, **attempt})
+    con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
 
 
 def issue(con: sqlite3.Connection, repo_id: object, slot: object, generation: int) -> None:

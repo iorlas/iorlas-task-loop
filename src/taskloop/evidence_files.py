@@ -11,6 +11,7 @@ from any_agent import RunOutcome
 
 from taskloop.activity_file import ActivityPage, command_time, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
+from taskloop.check_repeat.feedback import TAIL_BYTES, TAIL_LINES, Availability, OutputTail
 from taskloop.round_log import WORD
 from taskloop.slot_state import shown
 
@@ -218,6 +219,22 @@ class EvidenceFiles:
                 return stream.read(cap).decode("utf-8", "replace")
         except (OSError, EvidenceError):
             return None
+
+    def check_output(self, key: AttemptKey, block: int, name: str) -> OutputTail:
+        """Bounded evidence only: seek to the last 16 KiB and retain at most 100 lines, including an unfinished line."""
+        try:
+            with self.check_path(key, block, name).open("rb") as stream:
+                size = stream.seek(0, 2)
+                start = max(0, size - TAIL_BYTES)
+                stream.seek(start)
+                data = stream.read(TAIL_BYTES)
+        except (OSError, EvidenceError):
+            return OutputTail(availability=Availability.UNAVAILABLE)
+        if not data:
+            return OutputTail(availability=Availability.EMPTY)
+        lines = data.decode("utf-8", "replace").splitlines(keepends=True)
+        return OutputTail(availability=Availability.AVAILABLE, text="".join(lines[-TAIL_LINES:]),
+                          truncated=bool(start) or len(lines) > TAIL_LINES)
 
     def events_path(self, key: AttemptKey) -> Path:
         """The attempt's agent-activity file (`events.jsonl`), made nothing."""

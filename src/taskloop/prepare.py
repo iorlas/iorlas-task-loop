@@ -179,7 +179,7 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     if isinstance(found, str):
         return _refused(found)
     after = admission.after_commit
-    if after is not None and lacks(repo, after, found.start):
+    if after is not None and (lacks(repo, after, found.start) or (admission.source_checks_id is not None and found.start != after)):
         return _refused("branch_moved")
     named = pointer(files, Path(admission.slot_path))
     if named is None or named.root != state.root or named.gitdir != state.gitdir:
@@ -190,7 +190,8 @@ def _take(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, state: 
     if isinstance(taken, BranchHeld):
         return _refused("branch_held")
     diverged = not repo.is_ancestor(head, taken.head)
-    moved = after is not None and lacks(repo, after, taken.head)
+    moved = after is not None and (lacks(repo, after, taken.head)
+                                  or (admission.source_checks_id is not None and taken.head != after))
     if not diverged and not moved:
         return None
     # a branch made or moved between the rule and the take was checked out as it is, without D or without the previous
@@ -212,7 +213,8 @@ def _prepared(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord) -> 
     """The slot after preparation: already on a branch, or a repeat's slot, is read as it is (no Git write); a detached
     slot of attempt 1 must be clean, then takes its branch and is read again."""
     state = _observed(checkouts, files, record)
-    if isinstance(state, AttemptResult) or state.branch is not None or record.start is not None:
+    inherited = record.start is not None and record.admission.source_checks_id is None
+    if isinstance(state, AttemptResult) or state.branch is not None or inherited:
         return state
     if state.dirty:
         return _refused("slot_dirty")
@@ -226,6 +228,11 @@ def _state_refusal(checkouts: Checkouts, record: AttemptRecord, state: SlotState
     (its leftovers are its feedback, but the factory's commit records the whole index)."""
     if state.branch is None:
         return _refused("slot_detached")
+    if record.admission.source_checks_id is not None and record.base_commit is None:
+        if state.head != record.admission.after_commit:
+            return _refused("branch_moved")
+        if state.dirty:
+            return _refused("slot_dirty")
     problem = state.problem(task_branch(record.admission.task.task_id), record.start)
     after = record.admission.after_commit
     if record.start is None and problem is None and after is not None and lacks(checkouts(state.root), after, state.head or ""):

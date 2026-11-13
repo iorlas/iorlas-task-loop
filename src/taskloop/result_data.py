@@ -54,7 +54,7 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
         "published": _published_data(each.published), "checks": _checks_data(each.checks), "land": view_data(each.land),
         "label": each.label, "hold": _hold_data(each.hold), "hold_due": each.hold_due,
-        "last_command": each.last_command,
+        "last_command": each.last_command, "source_checks_id": each.source_checks_id,
     }
 
 

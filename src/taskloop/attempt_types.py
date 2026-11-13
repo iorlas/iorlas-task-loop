@@ -2,7 +2,7 @@
 
 import unicodedata
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
@@ -133,6 +133,7 @@ class Admission:
     step: str  # the step the attempt belongs to (`plan`, `implement`), admitted with it
     after_commit: str | None = None  # attempt 1 of a later step: the previous step's published X, which it starts from
     harness: HarnessKind = HarnessKind.CODEX  # the agent harness the attempt runs under (`harness_choice`)
+    source_checks_id: str | None = None  # a clean-slot repeat after failed checks; never a dirty-slot takeover
 
 
 @dataclass(frozen=True)
@@ -238,6 +239,7 @@ class Unsettled:
 
     reason: str
     listing: tuple[str, ...] = ()
+    unsafe_path: str | None = field(default=None, compare=False)  # diagnostic identity before the bounded display codec
 
 
 @dataclass(frozen=True)

@@ -53,6 +53,7 @@ def _agent_lines(each: AttemptView) -> list[str]:
     return [
         f"Task: {each.task_id} (backlog {each.backlog})", f"Step: {each.step}",
         f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})", *earlier,
+        *([] if each.source_checks_id is None else [f"Source checks: {each.source_checks_id}"]),
         f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}",
         *([] if last_command(each) is None else [f"Last command: {last_command(each)}"]),

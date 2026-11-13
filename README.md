@@ -33,6 +33,16 @@ Review remains future work; the retained designs describe more than the implemen
   Use `--summary` to inspect first. Some lands require `--minutes N` for validation. Reruns reconcile unfinished actions;
   tracker synchronization remains the person's responsibility. Publishing a task branch does not land it.
 
+A required check that exits nonzero can repeat implementation after its checks slot is released. The next agent starts
+at the checked commit in a free clean slot, with the first failed required check's name, exact argv and bounded output
+tail in its prompt. Path repeats and check-driven repeats share the three-attempt implement limit; an unchanged answer
+also receives fresh checks. Infrastructure failures and optional failures alone do not trigger repair. Unsafe-path
+feedback names the actual unsafe file, including a nearby Git file omitted from the answer.
+
+Factory schema v17 adds the source checks link for these repeats. Drain attempts before an upgrade: older databases
+are refused, with no migration. Discard the old local database only through its authorized owning operation; the
+implementation never discards a live database or restarts a running factory.
+
 Rounds hold tasks they took when work needs a person: the approval label is removed, `held` is added, and a comment
 explains the cause, evidence and claim state. `tl step list --stuck`, `tl step show` and `bd list --label held` expose
 them. Answer by editing the task's description or acceptance criteria, then add its approval label back; the next

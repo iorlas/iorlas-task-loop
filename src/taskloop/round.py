@@ -154,11 +154,14 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     for each in current:
         if ports.stopping():
             return trail.close(INTERRUPTED)
-        _settle(ports, request, each, trail)
+        if each.next != "repeat" or each.checks is None:
+            _settle(ports, request, each, trail)
     finished = frozenset() if ports.stopping() else land_passed(
         ports.landing, request.backlog, request.checkout, request.minutes, current, trail, partial(_held, ports.holding))
     reserve = int(any(each.next == "land" and each.task_id not in finished for each in current))
-    stopped = _advance(ports, request, tuple(each for each in current if each.next == "advance" or _rerun(each)), trail, reserve)
+    waiting = tuple(each for each in current if each.next == "advance" or _rerun(each)
+                    or (each.next == "repeat" and each.checks is not None))
+    stopped = _advance(ports, request, waiting, trail, reserve)
     stopped = stopped or _admit(ports, request, current, trail, reserve)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
@@ -315,7 +318,8 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
         done = each.attempt_id if each.checks is None else each.checks.row.after  # a re-run follows the implement attempt
         result = start(ports.starting, _request(request, each.task_id), advancing=done, rerun=each.checks is not None)
         if isinstance(result, Started):
-            trail.add(Move(each.task_id, "advance", result.status, result.attempt_id, step=result.step or ""))
+            trail.add(Move(each.task_id, "repeat" if each.next == "repeat" else "advance", result.status, result.attempt_id,
+                           step=result.step or ""))
             continue
         trail.unusable(each.task_id, result)  # the slots the refusal names: no_free_slot's, the one holding a held branch
         if result.reason == "no_free_slot":

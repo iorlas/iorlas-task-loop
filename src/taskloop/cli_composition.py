@@ -19,6 +19,8 @@ from taskloop.attempt_reads import SlotUse, StoreUnavailable
 from taskloop.attempt_status import StatusPorts, current_view
 from taskloop.attempt_store import AttemptStore
 from taskloop.check_release import ChecksRelease
+from taskloop.check_repeat.repair import CheckRepeat
+from taskloop.check_repeat.store import CheckRepeatStore
 from taskloop.composition import (
     adopt_slots,
     open_admission,
@@ -139,7 +141,10 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
                         time.time, repeating)
     releaser = open_checks_releaser(database, store, views)
     checks = ChecksPorts(open_checks_admission(database, views), open_checks_launcher(database, artifacts, views), releaser)
-    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views), checks)
+    repair = CheckRepeat(CheckRepeatStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
+                         inspect_tracker_task, views.checkouts, RealSlotFiles(), probe,
+                         partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time)
+    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views), checks, repair)
 
 
 @contextmanager

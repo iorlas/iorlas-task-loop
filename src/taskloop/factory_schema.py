@@ -1,5 +1,8 @@
 """The one owner of factory.db DDL, its version and every column list of its tables.
 
+v17: check-driven repeats retain their source checks link and start at the checked commit.
+Drain old attempts before upgrading; refuse the old database, then discard only through its owning operation.
+
 v11: `attempt.step` admits `implement`; `attempt.after_commit` names, for attempt 1 of every later step, the previous
 step's published X it starts from. `setup_run` is the slot setup's record: "latest" is always the highest `run` of one
 attempt, never a wall-clock order. v12 (tl-8bh9.14.6): the checks step's own tables, `checks_attempt` (one per run of the
@@ -19,13 +22,14 @@ from pathlib import Path
 
 from sqlite_store import Schema, SchemaError
 
+from taskloop.check_repeat.feedback import CheckRepeatReason
 from taskloop.harness_choice import HarnessKind, Provider
 
 _HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
 _PROVIDERS = ",".join(f"'{each}'" for each in Provider)
 
 SCHEMA = Schema(
-    version=16,
+    version=17,
     name="factory",
     steps={},
     ddl=f"""
@@ -54,14 +58,17 @@ CREATE TABLE attempt (
  number INTEGER NOT NULL CHECK(number >= 1), seq INTEGER NOT NULL CHECK(seq >= 1),
  slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),
  previous_attempt_id TEXT UNIQUE REFERENCES attempt(attempt_id),
- repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored')),
+ repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored','{CheckRepeatReason.FAILED_CHECK.value}')),
+ source_checks_id TEXT UNIQUE REFERENCES checks_attempt(attempt_id),
  repeat_listing TEXT CHECK(repeat_listing IS NULL OR json_valid(repeat_listing)),
  after_commit TEXT CHECK(after_commit IS NULL OR length(after_commit) IN (40,64)),
  label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 200),
  harness TEXT NOT NULL DEFAULT '{HarnessKind.CODEX}' CHECK(harness IN ({_HARNESSES})),
  provider TEXT NOT NULL DEFAULT '{Provider.OPENAI}' CHECK(provider IN ({_PROVIDERS})),
  CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
- CHECK((number = 1 AND step <> 'plan') = (after_commit IS NOT NULL)),
+ CHECK(((number = 1 AND step <> 'plan') OR source_checks_id IS NOT NULL) = (after_commit IS NOT NULL)),
+ CHECK((repeat_reason IS '{CheckRepeatReason.FAILED_CHECK.value}') = (source_checks_id IS NOT NULL)),
+ CHECK(source_checks_id IS NULL OR step='implement'),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id, seq)
 );
@@ -198,12 +205,12 @@ SLOT = "repo_id,name,path"
 RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label,harness,provider"
+    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label,harness,provider,source_checks_id"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
     "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,end_commit,"
-    "number,previous_attempt_id,step,after_commit,harness"
+    "number,previous_attempt_id,step,after_commit,harness,source_checks_id"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,"

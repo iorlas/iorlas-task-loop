@@ -40,6 +40,8 @@ class Viewed(Protocol):
     def label(self) -> str | None: ...
     @property
     def number(self) -> int: ...
+    @property
+    def check_repeat_eligible(self) -> bool: ...
 
 
 def cause(view: Viewed) -> str | None:
@@ -49,6 +51,8 @@ def cause(view: Viewed) -> str | None:
     names the repeat reason; every `stuck:*` word but `stuck:hung` is its own reason. The advance's and the
     publication's refusals (`claim_lost`, `branch_moved`) are the round's to pass: no status shows them."""
     if view.label is None or (view.release is not None and view.release.abandoned):
+        return None
+    if view.check_repeat_eligible:
         return None
     word = view.next
     if view.result.reason == MAIN_MOVED and view.number < MAIN_MOVED_RUNS:  # not the task's fault: the round runs them again

@@ -40,6 +40,8 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
 )
 from taskloop.check_admit import ChecksRequest
+from taskloop.check_repeat.feedback import FeedbackReason
+from taskloop.check_repeat.status import CheckRepeatDecision, CheckRepeatTarget, repeat_target
 from taskloop.check_status import HALF_DONE, checks_result, latest, route
 from taskloop.check_store import ChecksRow, CheckStore
 from taskloop.harness_choice import HarnessKind
@@ -126,6 +128,10 @@ class Repeat(Protocol):
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed: ...
 
 
+class CheckRepeating(Protocol):
+    def repair(self, request: StartRequest, previous: AttemptKey, source: AttemptKey) -> Started | Failed: ...
+
+
 @dataclass(frozen=True)
 class ChecksPorts:
     """The check step's start: its admission (`check_admit`) and the launcher of `taskloop.check_entry`; and the settled
@@ -145,6 +151,7 @@ class StartPorts:
     repeat: Repeat
     advance: Advance
     checks: ChecksPorts
+    check_repeat: CheckRepeating | None = None
 
 
 @dataclass(frozen=True)
@@ -336,7 +343,7 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
     repeat: refused `abandoned` when the task's attempt was abandoned since, `changed` when it is no longer that done
     attempt (another current attempt, or not advanceable). `rerun`: the round's one re-run of a failed checks attempt
     (`main_moved`, tl-8bh9.14.64) is that advance too; otherwise an advance is never a re-run."""
-    found = _start(ports, request, advancing, rerun)
+    found = choices_refused(request.model, request.effort) or minutes_refused(request.minutes) or _start(ports, request, advancing, rerun)
     if isinstance(found, Failed) or found.step is not None:
         return found
     try:
@@ -346,16 +353,17 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
 
 
 def _start(ports: StartPorts, request: StartRequest, advancing: str | None, rerun: bool) -> Started | Failed:
-    refused = choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
-    if refused is not None:
-        return refused
     try:
         found = _current(ports, request)
-        wanted = isinstance(found, _Advance) and found.previous.attempt_id == advancing and (found.number == 1 or rerun)
+        wanted = ((isinstance(found, _Advance) and found.previous.attempt_id == advancing and (found.number == 1 or rerun))
+                  or (isinstance(found, CheckRepeatTarget) and found.previous.attempt_id == advancing))
         if advancing is not None and not wanted:
             found = _not_advanced(found)
         if isinstance(found, (Started, Failed)):
             return found
+        if isinstance(found, CheckRepeatTarget):
+            return (Failed("unavailable", FeedbackReason.EVIDENCE, "Check-driven implement repeats are not wired.")
+                    if ports.check_repeat is None else ports.check_repeat.repair(request, found.previous, found.source))
         if isinstance(found, (tuple, _Relaunch)):  # an existing attempt: launched as admitted
             target = (found[0] if isinstance(found, tuple) else found.key, True)
         else:
@@ -374,7 +382,7 @@ def _start(ports: StartPorts, request: StartRequest, advancing: str | None, reru
     return replace(result, admitted=True) if isinstance(result, Failed) and not existing else result
 
 
-type _Found = tuple[AttemptKey, str, EntryIdentity | None] | _Advance | _Relaunch | Started | Failed | None
+type _Found = tuple[AttemptKey, str, EntryIdentity | None] | _Advance | _Relaunch | CheckRepeatTarget | Started | Failed | None
 
 
 def _current(ports: StartPorts, request: StartRequest) -> _Found:
@@ -417,7 +425,10 @@ def _checked(ports: StartPorts, request: StartRequest, implement: AttemptKey) ->
     """The done implement attempt's latest checks attempt (`check_status.route`): advance or re-run it, launch it, refuse
     `release` while the task's abandon is half done (never a launch), or answer its result."""
     row = latest(CheckStore(ports.reader.connect, ports.reader.begin), implement.attempt_id)
-    found = route(row)
+    repeat = repeat_target(ports.reader, implement, row)
+    if isinstance(repeat, CheckRepeatTarget):
+        return repeat
+    found = "answer" if repeat is CheckRepeatDecision.EXHAUSTED else route(row)
     if row is None or found == "advance":
         return _Advance(implement, CHECK)
     match found:

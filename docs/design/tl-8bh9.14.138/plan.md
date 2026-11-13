@@ -1,7 +1,7 @@
 # Feed failed checks back to the next implement attempt
 
 Task: `tl-8bh9.14.138`. Prepared 2026-11-13 against `cab64dc1`.
-Status: proposed; implementation must wait for the owner's yes. This change writes only the plan.
+Status: implemented following the owner’s implementation request. The original design follows; implementation notes are below.
 
 ## Problem and current code
 
@@ -178,3 +178,33 @@ whole-repository or live factory run. Planning itself needs no runtime tests.
 Acceptance is demonstrated by the dispatched repeat prompt carrying the failing check's name,
 command and bounded output tail, and by the unsafe-path text naming its path. A renderer-only test
 without the failed-check-to-repeat application path is insufficient.
+
+## As built
+
+`check_repeat/repair.py` admits a fresh implement attempt through the shared start path used by explicit starts and rounds.
+`check_repeat/status.py` selects a structured required failure and controls repeat/release/hold eligibility;
+`check_repeat/store.py` rechecks current attempt, source block, release, hold, land and the shared implement cap inside
+one reservation transaction. The admitted prompt is immutable evidence and carries one check’s argv from its checked
+commit, verified against the result and profile digests. The new attempt keeps its claim and agent choices, runs
+implement setup in a free clean slot at X and follows normal verification, publication and fresh checks.
+
+The output reader seeks into the last 16 KiB and keeps at most 100 lines. Invalid UTF-8 is replaced, controls are
+escaped, marker-like output is prefixed as data and rendered evidence stays below 64 KiB. Missing and empty output
+are distinct. Unsafe verification preserves the actual unsafe path separately from the bounded display listing so
+the explanatory sentence can identify it with lossless JSON escaping.
+
+Schema v17 stores a unique source checks link on a check-driven repeat; older databases are refused. No database
+was discarded and no running factory was restarted. The existing path-repeat reservation takeover remains separate.
+Behavior coverage is in `tests/steps/test_check_repeat.py` and `tests/steps/test_implement_feedback.py`, with the
+semantic bench in `tests/steps/check_repeat_bench.py` and the additive CLI status contract updated in
+`tests/cli/test_step_cli.py`.
+
+The verifier's credential signatures use adjacent byte literals so the verifier source can itself pass the
+credential-copy check. The compiled signatures and rejection behavior are unchanged. Every retained changed file
+was checked for file type, executable bits, size, symlink ancestry, Git path components and credential signatures.
+
+Validation: `just install` and `just check` passed. The focused command
+`uv run --frozen --no-sync python -I -m pytest -q tests/steps/test_check_repeat.py tests/steps/test_implement_feedback.py tests/steps/test_verifier.py tests/cli/test_step_cli.py tests/rules/test_policy.py`
+passed 592 tests. The required `just test` gate ran: 3,223 passed, with two failures and eleven setup errors in the
+existing dashboard socket tests, all because the implementation sandbox denies socket creation with
+`PermissionError: [Errno 1] Operation not permitted`. Those tests and the socket policy were not changed.
