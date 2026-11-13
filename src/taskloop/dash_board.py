@@ -57,13 +57,24 @@ class BoardPorts:
     tracker: DashTracker
 
 
-def card_of(view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float) -> Card:
+def tries(rows: tuple[AttemptRow, ...]) -> dict[str, int]:
+    """Each attempt's try within its step, counted over the whole task: a restart at plan starts a new repeat chain whose stored
+    number is 1 again, so the stored number is not unique per (step, try); this one is, and it is what the page addresses."""
+    seen: dict[tuple[str, str, str], int] = {}
+    found: dict[str, int] = {}
+    for row in sorted(rows, key=lambda each: (each.backlog, each.task_id, each.seq)):
+        seen[(row.backlog, row.task_id, row.step)] = found[row.key.attempt_id] = seen.get((row.backlog, row.task_id, row.step), 0) + 1
+    return found
+
+
+def card_of(view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float, number: int | None = None) -> Card:
     column = column_of(view)
     started = _started(view, row, files)
     quiet = now - view.last_command if isinstance(view.last_command, int) else None
     holding = row is not None and row.held and view.release is None
     cause = view.hold.reason if view.hold is not None else view.hold_due
-    return Card(view.task_id, title, column, view.number, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
+    shown = view.number if number is None else number
+    return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
                 view.slot if holding else None, cause if column == "held" else None, land_state(view.land) if column == "land" else None)
 
 
@@ -73,11 +84,15 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     if isinstance(listed, Failed):
         return listed
     now = ports.reads.clock()
-    rows = {row.key.attempt_id: row for row in ports.reads.store.attempts()}
+    every = ports.reads.store.attempts()
+    rows = {row.key.attempt_id: row for row in every}
+    numbers = tries(every)
     taken = {view.task_id for view in listed.attempts}
     ready = tuple(each for each in ports.tracker.ready() if each.task_id not in taken)
     titles = ports.tracker.titles(tuple(sorted(taken)))
-    cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now) for view in listed.attempts]
+    cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now,
+             numbers.get(view.attempt_id))
+             for view in listed.attempts]
     cards += [Card(each.task_id, each.title, "waiting", 0, None, each.since, each.since, None, None) for each in ready]
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return Board(stamp, ports.reads.store.slot_names(), tuple(cards), ports.tracker.notice())

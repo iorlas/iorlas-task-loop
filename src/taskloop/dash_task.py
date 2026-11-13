@@ -12,7 +12,7 @@ from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
-from taskloop.dash_board import card_of
+from taskloop.dash_board import card_of, tries
 from taskloop.dash_model import (
     Answer,
     AttemptBody,
@@ -73,22 +73,23 @@ def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
         rows = ports.reads.store.attempts(backlog, task_id)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
-    key = next((row.key for row in rows if row.step == step and row.number == number), None)
+    numbers = tries(rows)
+    key = next((row.key for row in rows if row.step == step and numbers[row.key.attempt_id] == number), None)
     if key is None:
         return None
     return _page(ports.files.activity_tail(key, FEED_LINES) if cursor is None else ports.files.activity_after(key, cursor, FOLLOW_LINES))
 
 
-def _agent(ports: TaskPorts, row: AttemptRow, previous: int | None) -> AttemptDetail:
+def _agent(ports: TaskPorts, row: AttemptRow, number: int, previous: int | None) -> AttemptDetail:
     result = collect(ports.reads.store, row.key)
     state: State = "running" if result.status != "collected" and row.held else "succeeded" if succeeded(result) else "failed"
     started = ports.files.started_at(row.key)
     ended = None if state == "running" or row.release is None else row.release.released_at
     after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == "plan" and row.seq > 1 else None
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
-    begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=row.number),)
+    begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
     page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
-    return AttemptDetail(row.step, row.number, state, iso(started), iso(ended), result.reason or result.status, after, reason,
+    return AttemptDetail(row.step, number, state, iso(started), iso(ended), result.reason or result.status, after, reason,
                          previous if after == "repeat" else None, begun + page.events, page.cursor)
 
 
@@ -130,28 +131,30 @@ def _checks_body(ports: TaskPorts, store: CheckStore, row: ChecksRow) -> Attempt
 
 
 def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[AttemptRow | None, ChecksRow | None, int], ...]:
-    """The task's attempts oldest first as (agent attempt, checks attempt, its try): the agent attempts numbered within their step,
+    """The task's attempts oldest first as (agent attempt, checks attempt, its try): the agent attempts numbered within their step
+    across the whole task (`tries`, so a restart at plan never repeats a number),
     the checks attempts after an implement attempt numbered across the task (a checks try is the check step's, not the implement's)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     found: list[tuple[AttemptRow | None, ChecksRow | None, int]] = []
-    tries = 0
+    numbers = tries(rows)
+    checked = 0
     for row in reversed(rows):
-        found.append((row, None, row.number))
+        found.append((row, None, numbers[row.key.attempt_id]))
         for checks in store.of_attempt(row.key.attempt_id) if row.step == "implement" else ():
-            tries += 1
-            found.append((None, checks, tries))
+            checked += 1
+            found.append((None, checks, checked))
     return tuple(found)
 
 
 def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDetail, ...]:
     """Oldest first: each agent attempt (numbered within its step), then the checks attempts after an implement attempt."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
-    numbers = {row.key.attempt_id: row.number for row in rows}
+    numbers = tries(rows)
     found: list[AttemptDetail] = []
     earlier: str | None = None
     for row, checks, number in _chain(ports, rows):
         if row is not None:
-            found.append(_agent(ports, row, numbers.get(row.previous_attempt_id or "")))
+            found.append(_agent(ports, row, number, numbers.get(row.previous_attempt_id or "")))
         elif checks is not None:
             found.append(_checks(store, checks, number, earlier))
             earlier = found[-1].summary
@@ -163,7 +166,7 @@ def build_body(ports: TaskPorts, backlog: str, task_id: str, step: str, number: 
     try:
         store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
         for row, checks, tried in _chain(ports, ports.reads.store.attempts(backlog, task_id)):
-            if row is not None and (row.step, row.number) == (step, number):
+            if row is not None and (row.step, tried) == (step, number):
                 return _agent_body(ports, row)
             if checks is not None and ("checks", tried) == (step, number):
                 return _checks_body(ports, store, checks)
@@ -185,7 +188,7 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
         return Failed("unavailable", "store", str(error))
     title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
     card = Card(task_id, title, "waiting", 0, None, None, None, None, None) if view is None else card_of(
-        view, rows[0], title, ports.files, ports.reads.clock())
+        view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id))
     return TaskDetail(card, attempts)
 
 

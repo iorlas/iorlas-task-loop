@@ -2,7 +2,7 @@
 // its own try number, the idle time between two steps, and a repeat named as a repeat with its reason. A step and a try are two
 // things: "step 2 of 4" is where the task is, "try 2" is how often that step ran.
 
-import { JUMP, LAND, STATE, STEPS, dot, el, fmtDur, since, tick } from "./ui.js";
+import { JUMP, LAND, STATE, STEPS, dot, el, fmtDur, since, startedAt, tick } from "./ui.js";
 
 const GAP_MS = 5000; // idle time shorter than this is not shown
 const stepOf = (id) => STEPS.find((s) => s.id === id);
@@ -31,7 +31,8 @@ function jump(a, list, i) {
   const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list[i - 1];
   const li = el("li", `relative pb-0.5 pl-4 pt-1.5 text-[11px] leading-snug ${j.text}`);
   li.title = a.reason ?? "";
-  li.append(el("span", "font-medium", `${j.glyph} ${j.label} of ${stepOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`));
+  const what = a.after === "repeat" ? `${j.glyph} ${j.label} of ${stepOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}` : `${j.glyph} ${j.label} after ${stepOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""},${startedAt(a.started_at)}`;
+  li.append(el("span", "font-medium", what));
   if (a.reason) li.append(el("span", "block line-clamp-2 text-slate-500 dark:text-slate-400", a.reason));
   return li;
 }

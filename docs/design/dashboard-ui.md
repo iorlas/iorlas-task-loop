@@ -33,7 +33,7 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
   title and, for a held task, the hold cause.
 - The Attempts tab is a master and a detail. Left, the **attempt rail**: every attempt of the task, in the **order they happened, top to bottom** (plan, implement, checks, land, each with its own try number; steps still to come are dim rows below; the drawer opens on the newest attempt), one
   aligned row each (step, number, duration; a failed one adds its summary). Between two rows a
-  jump names how the next attempt began: `↻ Repeat of Checks` (the same step again) or `↩ Back to plan` (restarted at plan, D4)
+  jump names how the next attempt began: `↻ Repeat of Checks` (the same step again) or `↩ Restarted at plan` (D4, with the time it began and how long ago)
   with its reason; the label sits above the attempt it began. Between two rows an `⏸ idle 4m 00s` line shows the time between the recorded end of one and the recorded start of the next (5 s and up; both are file or row times, so approximate). Every step of the chain is a row: steps not started are dim `pending` rows, and the Land row is the card's state (pending, waiting for you with the idle time since the checks ended, delivering, delivered). A task with ten attempts is ten rows and the rail scrolls. Right, the selected attempt, in three tabs:
   - **Lines**: the log grid (below). Opens first for a running attempt. New lines never change the tab, the selection or the
     scroll place: the view follows the end only when it was already at the end. No count in the tab name; a quiet line says
@@ -155,7 +155,7 @@ stream as `{"kind": "log", "row": <row>}`.
 }
 ```
 
-`attempts` is every attempt of the task, oldest first. `n` counts per step (the checks step's tries are numbered across the task, not per implement attempt); `repeat_of` is the try of the same step that a `repeat` repeats (`null` otherwise). `state` is `running`, `succeeded` or `failed`;
+`attempts` is every attempt of the task, oldest first. `n` counts per step across the whole task (a restart at plan continues the numbering, so `(step, n)` is unique; the stored per-chain number is not used; the checks step's tries are numbered across the task, not per implement attempt); `repeat_of` is the try of the same step that a `repeat` repeats (`null` otherwise). `state` is `running`, `succeeded` or `failed`;
 `summary` says how it ended (the verdict or conclusion the owner of that fact already states); `ended_at` is `null`
 while running. `after` says how the attempt began: `null` (the previous step succeeded), `repeat` or `restart_at_plan`,
 with the `reason` the engine recorded. `feed` is the last 20 lines of that attempt, oldest first. A task with no attempt answers a waiting card and no attempts. This

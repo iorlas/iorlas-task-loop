@@ -217,3 +217,36 @@ def test_a_second_checks_try_is_numbered_across_the_task_and_says_which_try_it_r
     assert [(each.step, each.n, each.after, each.repeat_of) for each in found.attempts[1:]] == [
         ("checks", 1, None, None), ("checks", 2, "repeat", 1)]
     assert found.attempts[2].reason == "test:failed"
+
+
+def restarted_at_plan(con: sqlite3.Connection) -> None:
+    """tl-1's plan attempt `attempt` (seq 1) is followed by an implement attempt and a second plan attempt, each with stored
+    number 1, the way a restart at plan starts a new chain."""
+    for attempt, step, seq in (("implement", "implement", 2), ("again", "plan", 3)):
+        con.execute(
+            """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+            input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,after_commit)
+            SELECT ?,?,1,?,adapter,backlog,
+            task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,sandbox,deadline,1,?,slot_head,?
+            FROM attempt WHERE attempt_id='attempt'""", (attempt, f"{attempt}-token", step, seq, "a" * 40 if step == "implement" else None))
+
+
+def test_a_plan_restarted_at_plan_is_its_own_try_that_can_be_read_by_its_number(
+    registered: sqlite3.Connection, tmp_path: Path,
+) -> None:
+    restarted_at_plan(registered)
+    files = EvidenceFiles(tmp_path)
+    ports = TaskPorts(reads_of(registered), files, Tracker())
+    found = build_task(ports, "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    assert [(each.step, each.n, each.after) for each in found.attempts] == [
+        ("plan", 1, None), ("implement", 1, None), ("plan", 2, "restart_at_plan")]
+    assert found.task.attempt == 2 and found.task.repeat is not None and found.task.repeat.kind == "restart_at_plan"
+    assert [each.attempt for each in board_of(registered, files, Tracker()).tasks] == [2]
+    files.put_input(KEY, "Plan the actual task")
+    files.put_input(AttemptKey("again", "again-token", 1), "Plan it again after the owner's edit")
+    first, second = (build_body(ports, "tasks", "tl-1", "plan", each) for each in (1, 2))
+    assert isinstance(first, AttemptBody) and isinstance(second, AttemptBody)
+    assert first.input == "Plan the actual task" and second.input == "Plan it again after the owner's edit"
+    assert isinstance(build_feed(ports, "tasks", "tl-1", "plan", 2, None), FeedPage)
+    assert build_feed(ports, "tasks", "tl-1", "plan", 3, None) is None
