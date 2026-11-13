@@ -1,0 +1,9 @@
+name: step_row
+storage: inline
+key: do
+when_to_use: one numbered action of a workflow; an event on a lifecycle or an operation of an area
+fields:
+  - {name: do, type: string, required: true}
+  - {name: actor, type: "link[persona|area|external]", required: true}
+  - {name: causes, type: "link[lifecycle]", required: false}   # the lifecycle the step moves
+  - {name: event, type: string, required: false}               # must be declared by that lifecycle

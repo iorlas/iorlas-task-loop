@@ -1,0 +1,12 @@
+name: adr
+when_to_use: a meta decision about how we work or decide, in living form (rewritten in place, no supersession); trial
+file_pattern: "system/adr/{slug}.md"
+shape: leaf
+id: {type: slug}
+body: none
+fields:
+  - {name: lens, type: "enum[work < requirements < design < code]", required: true}
+  - {name: statement, type: string, required: true, rigid: true, max: 200}
+  - {name: read_when, type: string, required: true}
+  - {name: touches, type: "set[link[area|external|workflow|lifecycle|persona|runbook]]", required: false}
+  - {name: history, type: "list[change]", required: true}

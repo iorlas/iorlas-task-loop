@@ -1,0 +1,9 @@
+name: term
+storage: inline
+key: name
+scope: global
+when_to_use: a domain word other docs reference as [[term/<name>]]
+fields:
+  - {name: name, type: string, required: true}
+  - {name: definition, type: string, required: true, standalone: true, rigid: true}
+  - {name: avoid, type: "set[string]", required: false}

@@ -1,0 +1,9 @@
+name: evidence
+storage: inline
+key: artifact
+when_to_use: a file or record an operation leaves behind, with its one writer and its readers
+fields:
+  - {name: artifact, type: string, required: true}
+  - {name: path, type: string, required: true}
+  - {name: writer, type: "link[area]", required: true}
+  - {name: reader, type: "set[link[area|persona]]", required: true}

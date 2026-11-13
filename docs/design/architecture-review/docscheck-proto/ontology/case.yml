@@ -1,0 +1,11 @@
+name: case
+storage: inline
+key: table
+scope: owner
+keys: [table, state]
+when_to_use: one row of an exhaustive decision table; a loader turns the table into parametrized tests
+fields:
+  - {name: table, type: string, required: true}
+  - {name: state, type: string, required: true}
+  - {name: outcome, type: "link[outcome]", required: false}
+  - {name: effect, type: string, required: true, rigid: true}

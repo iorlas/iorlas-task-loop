@@ -1,0 +1,9 @@
+name: rule
+storage: inline
+key: id
+when_to_use: one binary, present-tense requirement; true or the system is wrong
+fields:
+  - {name: id, type: int, required: true}
+  - {name: applies_to, type: string, required: true}        # scope; uses glossary terms or paths only
+  - {name: holds, type: string, required: true, standalone: true}   # lint: no modal or hedge words
+  - {name: check, type: "link[check]", required: false, default: none}

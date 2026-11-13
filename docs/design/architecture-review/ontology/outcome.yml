@@ -1,0 +1,8 @@
+name: outcome
+storage: inline
+key: name
+when_to_use: a typed result other code branches on; never a parsed string
+fields:
+  - {name: name, type: string, required: true}
+  - {name: carries, type: "set[string]", required: false}
+  - {name: handled_in, type: "link[area|workflow]", required: true}

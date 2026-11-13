@@ -1,0 +1,7 @@
+name: capability
+storage: inline
+key: does
+when_to_use: one thing a persona does, through which area or external system
+fields:
+  - {name: does, type: string, required: true, rigid: true}
+  - {name: through, type: "link[area|external]", required: true}

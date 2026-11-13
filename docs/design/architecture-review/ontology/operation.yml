@@ -1,0 +1,8 @@
+name: operation
+storage: inline
+key: name
+when_to_use: a use case other slices or commands call
+fields:
+  - {name: name, type: string, required: true}
+  - {name: source, type: string, required: true}            # path::symbol; must resolve
+  - {name: outcomes, type: "set[link[outcome]]", required: false}

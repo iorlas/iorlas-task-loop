@@ -1,0 +1,9 @@
+name: step_row
+storage: inline
+key: do
+when_to_use: one numbered action of a workflow; may name the lifecycle event it causes
+fields:
+  - {name: do, type: string, required: true, rigid: true}
+  - {name: actor, type: "link[persona|area|external]", required: true}
+  - {name: causes, type: "link[lifecycle]", required: false}
+  - {name: event, type: string, required: false}

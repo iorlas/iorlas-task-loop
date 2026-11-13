@@ -1,0 +1,15 @@
+name: lifecycle
+when_to_use: the states one entity can be in and the events that move it; read before adding a state or an event
+file_pattern: "system/lifecycle/{slug}.md"
+shape: leaf
+id: {type: slug}
+body: none
+fields:
+  - {name: entity, type: "link[term]", required: true}
+  - {name: owner, type: "link[area]", required: true}
+  - {name: source, type: string, required: true, symbol: true}
+  - {name: initial, type: string, required: true}
+  - {name: terminal, type: "set[string]", required: true}
+  - {name: states, type: "list[string]", required: true}
+  - {name: events, type: "set[string]", required: true}
+  - {name: transitions, type: "list[transition]", required: true}

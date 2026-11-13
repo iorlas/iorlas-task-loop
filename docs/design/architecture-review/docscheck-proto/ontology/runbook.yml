@@ -1,0 +1,11 @@
+name: runbook
+when_to_use: what a person or agent does when a named situation occurs; steps are ordered and checkable; trial
+file_pattern: "system/runbook/{slug}.md"
+shape: leaf
+id: {type: slug}
+body: none
+fields:
+  - {name: when, type: string, required: true, rigid: true}
+  - {name: actor, type: "link[persona]", required: true}
+  - {name: touches, type: "set[link[area|external|lifecycle|workflow]]", required: false}
+  - {name: steps, type: "list[runstep]", required: true}

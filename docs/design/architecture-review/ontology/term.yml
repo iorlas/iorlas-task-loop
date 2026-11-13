@@ -1,0 +1,8 @@
+name: term
+storage: inline
+key: name
+when_to_use: a domain word other docs may reference as [[term/<name>]]
+fields:
+  - {name: name, type: string, required: true}
+  - {name: definition, type: string, required: true, standalone: true}
+  - {name: avoid, type: "set[string]", required: false}   # retired or confusable words

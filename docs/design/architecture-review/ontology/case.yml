@@ -1,0 +1,9 @@
+name: case
+storage: inline
+key: state
+when_to_use: one row of an exhaustive decision table; the table drives a parametrized test
+fields:
+  - {name: table, type: string, required: true}             # table name, e.g. start
+  - {name: state, type: string, required: true}             # one token
+  - {name: outcome, type: "link[outcome]", required: false}
+  - {name: effect, type: string, required: true}

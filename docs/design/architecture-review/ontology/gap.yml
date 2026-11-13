@@ -1,0 +1,7 @@
+name: gap
+storage: inline
+key: what
+when_to_use: a part not designed yet; never a rule; points to the task that designs it
+fields:
+  - {name: what, type: string, required: true}
+  - {name: task, type: "link[task]", required: true}

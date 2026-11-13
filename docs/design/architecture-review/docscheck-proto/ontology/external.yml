@@ -1,0 +1,12 @@
+name: external
+when_to_use: a system outside the factory (tracker, Git, code host, agent harness); read before touching its port
+file_pattern: "system/external/{slug}.md"
+shape: leaf
+id: {type: slug}
+body: none
+fields:
+  - {name: owns_facts, type: "set[string]", required: true}
+  - {name: port, type: string, required: true, path: true}
+  - {name: used_by, type: "set[link[area]]", required: true}
+  - {name: rules, type: "list[rule]", required: false}
+  - {name: failures, type: "list[failure]", required: false}

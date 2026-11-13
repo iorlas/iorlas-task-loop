@@ -1,0 +1,9 @@
+name: check
+storage: inline
+key: id
+scope: global
+derived: repo-tests
+when_to_use: a test function or import-linter contract that proves a rule; declared by the repo, not by a doc
+fields:
+  - {name: id, type: string, required: true}
+  - {name: source, type: string, required: true, symbol: true}

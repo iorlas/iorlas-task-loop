@@ -1,0 +1,7 @@
+name: case_table
+storage: inline
+key: name
+when_to_use: the declared states of one decision table; every state has exactly one case
+fields:
+  - {name: name, type: string, required: true}
+  - {name: states, type: "list[string]", required: true}

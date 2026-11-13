@@ -1,0 +1,7 @@
+name: change
+storage: inline
+key: date
+when_to_use: one line of an ADR's own history; the full history stays in Git
+fields:
+  - {name: date, type: datetime, required: true}
+  - {name: what, type: string, required: true, rigid: true}

@@ -1,0 +1,9 @@
+name: persona
+when_to_use: a human or agent role that acts on the system; read to learn what a role reaches
+file_pattern: "system/persona/{slug}.md"
+shape: leaf
+id: {type: slug}
+body: none
+fields:
+  - {name: nature, type: "enum[human < agent]", required: true}
+  - {name: can, type: "list[capability]", required: true}

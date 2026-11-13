@@ -1,0 +1,16 @@
+name: lifecycle
+when_to_use: the states one entity can be in and the events that move it; read before adding a state or an event
+file_pattern: "docs/system/lifecycle/{slug}.md"
+shape: leaf
+id: {type: slug}
+body: none
+fields:
+  - {name: entity, type: "link[term]", required: true}
+  - {name: owner, type: "link[area]", required: true}
+  - {name: source, type: string, required: true}            # path::StateEnum; declared states must equal its members
+  - name: states
+    type: "list[string]"
+    required: true
+    classes: {live: [], open: [], done: []}                 # a2kay lifecycle classes; terminal = done
+  - {name: events, type: "set[string]", required: true}     # must include process-death and restart
+  - {name: transitions, type: "list[transition]", required: true}

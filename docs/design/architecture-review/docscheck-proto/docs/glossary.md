@@ -1,0 +1,27 @@
+---
+terms:
+  - {name: task, definition: "Work to accomplish, with a description, acceptance criteria and status, tracked in the task tracker.", avoid: [bead, ticket, issue]}
+  - {name: task tracker, definition: "The system storing tasks, requirements, dependencies, questions, answers and task discussion; a replaceable backend, currently Beads."}
+  - {name: step, definition: "One bounded operation on a task, with inputs, a result and a completion condition: plan, implement, check, review or land.", avoid: [stage]}
+  - {name: attempt, definition: "One concrete execution try at an operation; a repeat makes another attempt, a coordinator restart observing the same surviving execution does not.", avoid: [run]}
+  - {name: session, definition: "A conversation with an agent, identified by its harness; a process id is not a session id."}
+  - {name: slot, definition: "A managed, reusable worktree reserved for one independently scheduled step attempt at a time."}
+  - {name: factory, definition: "The program that schedules tasks and executes their steps; it has a dashboard and local execution state."}
+  - {name: land, definition: "Finish the task's delivery: accepted integration, confirmed task completion and any required task synchronization; a rerun does only what is missing."}
+  - {name: check, definition: "A named automated validation of the work, run by the check step against the profile's checks."}
+  - {name: repo, definition: "A registered local Git repository binding, shared by its linked worktrees."}
+  - {name: worktree, definition: "A Git checkout linked to a repository, sharing its commits and branches."}
+  - {name: phase, definition: "How far one attempt's launch has got in factory.db: admitted, dispatching, registered or captured; it is not a status or a conclusion."}
+  - {name: admission, definition: "The one transaction that reserves a free slot, creates the attempt and takes the tracker claim."}
+  - {name: reservation, definition: "The factory.db row tying one slot to one attempt; a slot holding one is reserved; it is neither a lock nor a tracker claim."}
+  - {name: entry process, definition: "The process the factory launches for one attempt; it is distinct from the agent process."}
+  - {name: dispatch, definition: "The entry's permit to run the agent: it records the base commit and the phase becomes dispatching; the agent runs at most once per attempt."}
+  - {name: relaunch, definition: "Start the entry process again for the same attempt, after it was lost or the machine rebooted; it is the same attempt id and the same reservation."}
+  - {name: capture, definition: "Store the run's result, evidence and session state in factory.db; it is distinct from publish."}
+  - {name: execution, definition: "One agent run inside an attempt, with its stored facts; an attempt has at most one execution."}
+  - {name: slot release, definition: "Ends an attempt's reservation: parks the slot and keeps the claim; abandon also returns the claim."}
+  - {name: hold, definition: "A task the factory does not advance until a person acts; its reason is recorded in factory.db and one comment is written on the task."}
+  - {name: slice, definition: "A folder owning one noun, with use-case modules, one store module and one public API module.", avoid: [package, layer]}
+  - {name: store, definition: "The one module of a slice that holds SQL and the sqlite connection."}
+  - {name: Tx, definition: "The transaction handle a caller passes to a store call; the callee opens none."}
+---

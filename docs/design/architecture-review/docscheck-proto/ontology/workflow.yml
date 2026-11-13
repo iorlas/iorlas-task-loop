@@ -1,0 +1,14 @@
+name: workflow
+when_to_use: a goal reached by steps across actors and systems; read to see who does what in what order
+file_pattern: "system/workflow/{slug}.md"
+shape: leaf
+id: {type: slug}
+body: none
+fields:
+  - {name: goal, type: string, required: true, rigid: true}
+  - {name: actors, type: "set[link[persona]]", required: true}
+  - {name: areas, type: "set[link[area]]", required: true}
+  - {name: externals, type: "set[link[external]]", required: false}
+  - {name: steps, type: "list[step_row]", required: true}
+  - {name: case_tables, type: "list[case_table]", required: false}
+  - {name: cases, type: "list[case]", required: false}

@@ -1,0 +1,8 @@
+name: waivers
+when_to_use: known gaps between docs and code, each with the task that closes it; the list only shrinks; trial
+file_pattern: "waivers.md"
+shape: leaf
+id: {type: given}
+body: none
+fields:
+  - {name: waivers, type: "list[waiver]", required: true}
