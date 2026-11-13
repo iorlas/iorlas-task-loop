@@ -93,6 +93,7 @@ class NextRequest:
     effort: str
     minutes: int
     quiet: Quiet | None = None
+    max_new: int = 1  # fresh tasks one round starts, at most (the free slots less the land's reserve bound it too)
     retake: bool = False  # admit the factory's own lapsed claims that have no attempt here (after a factory.db discard)
 
 
@@ -123,13 +124,17 @@ def _request(request: NextRequest, task_id: str) -> StartRequest:
                         request.label)
 
 
+def max_new_refused(count: int) -> Failed | None:
+    return None if count >= 1 else Failed("refused", "max_new", "`--max-new` is at least 1: fresh tasks one round starts")
+
+
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     """One round: settle, advance, admit, publish, clear. A whole-round refusal (empty label, unreadable store) is
     `Failed`."""
     label = request.label.strip()
     if not label:
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    refused = choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
+    refused = choices_refused(request.model, request.effort) or minutes_refused(request.minutes) or max_new_refused(request.max_new)
     if refused is not None:
         return refused
     request = replace(request, label=label)
@@ -341,14 +346,18 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
 
 
 def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow, ...], trail: Trail, reserve: int) -> str:
+    taken = 0
     for row in ordered:
         if ports.stopping():
             return INTERRUPTED
+        if taken >= request.max_new:
+            return ""
         if reserve and (word := _full(ports.reads.store, reserve)):
             return word
         result = start(ports.starting, _request(request, row.task_id))
         if isinstance(result, Started):
             trail.add(Move(row.task_id, "start", result.status, result.attempt_id, step=result.step or ""))
+            taken += 1
             continue
         stop = _stops(result)
         if result.reason != "no_free_slot":

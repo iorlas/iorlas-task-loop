@@ -15,3 +15,15 @@ def block(text: str, line: int = 2000, total: int = 20000) -> str:
     most `total` characters in all."""
     body = "\n".join(each[:len(each) - len(each.lstrip(" "))][:20] + one_line(each, line) for each in text.split("\n"))
     return body if len(body) <= total else body[:total].rstrip() + "\n[shortened]"
+
+
+def title_line(text: str, cap: int, tail: str = "") -> str:
+    """`text` as one printable line that, with `tail`, fits `cap` characters: a longer one is cut at a word boundary and
+    ends in an ellipsis (a single word longer than the room is cut, then the ellipsis)."""
+    line, room = one_line(text, 10**6), max(cap - len(tail), 2)
+    if len(line) <= room:
+        return line + tail
+    cut = line[:room - 1]
+    if line[room - 1] != " " and " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip() + "\u2026" + tail

@@ -211,7 +211,7 @@ class Factory:
 
     def round(self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto") -> list[tuple[str, str, str, str]]:
         self.now += 1
-        found = run_round(self.ports(), NextRequest("tasks", "/tracker", self.slot.repo.path, label, "m", "high", 30, quiet))
+        found = run_round(self.ports(), NextRequest("tasks", "/tracker", self.slot.repo.path, label, "m", "high", 30, quiet, max_new=10))
         assert isinstance(found, Round)
         self.last = found
         return [(each.task_id, each.step, each.action, each.word) for each in found.moves]

@@ -1517,3 +1517,16 @@ rule's commit settles it (then nothing). `attempt_status.SHOWN` keeps those thre
 Git reads (the refs and history of a moved HEAD, read only for an attempt at `Next: verify`). The `unsettled` guide names
 `branch` (the agent left the slot on another HEAD): `git switch task/<id>` in the slot when its work is on that branch, then
 `tl step verify`, else `release --abandon` and start again.
+
+## Rounds' intake and the land title (tl-8bh9.14.76, tl-8bh9.14.73)
+
+Decided after the first real run (docs/design/self-hosting-real-run-1.md):
+
+- A round starts at most `--max-new` fresh tasks (default 1, at least 1), on top of the bounds it already has: free slots
+  less the land's reserve. Claimed work advances regardless. The ramp is per round, so a backlog of twelve `auto` beads
+  starts one a round, not twelve at once. Nothing starts that lacks the round's `--label`; naming one task is a label
+  only that task carries (no second selector: one owner of "approved"). The rounds start line (and its `--json` form:
+  `label`, `max_new`) states the label and the cap before the first round.
+- The squash title is `<title> (<task id>)` on one line of at most 72 characters: a longer title is cut at a word
+  boundary and ends in an ellipsis, the task id suffix kept (`printable.title_line`); hostile titles are sanitized by
+  `one_line` first.
