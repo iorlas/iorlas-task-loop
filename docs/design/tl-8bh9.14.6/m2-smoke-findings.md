@@ -1,5 +1,8 @@
 # M2 live smoke: findings (2026-11-11)
 
+Status: **evidence**. Dated findings, measurements and their limits, retained with the original commands and
+environment. This is not a current setup runbook; use the [README](../../../README.md) for implemented commands.
+
 **Result: passed, with three runbook corrections.** Rounds from a runner worktree took tasks of this repository through
 plan, implement and the check step on a scratch remote, tracker and factory.db (schema v12). Every expectation of
 [live-smoke.md](live-smoke.md) held once its commands were corrected; no factory bug (wrong state, stuck slot, wrong

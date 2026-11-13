@@ -1,5 +1,9 @@
 # Repeat a step whose agent left the slot unsettled
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.8 (proposed id; after [.4.3.1.7](../tl-8bh9.4.3.1.7/plan.md), which reports `Next: repeat (deferred)`).
 Design proposal, 2026-11-10, revision 2: revision 1 after an independent review; the coordinator's decisions (owner
 delegated) applied: no resume, Q1-Q3 accepted, the exhausted state renamed. Nothing here is built or run. Read: CLAUDE.md,

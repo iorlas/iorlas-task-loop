@@ -1,6 +1,6 @@
 # Glossary
 
-Canonical language for the redesign, new documentation and conversation. Updated 2026-11-12.
+Canonical language for the redesign, new documentation and conversation. Updated 2026-11-13.
 Use short, familiar GitHub and Git terms where their meanings fit. Keep a factory term when its meaning differs;
 do not invent an extra entity to match GitHub's hierarchy. `task` is the owner's choice instead of `issue`.
 
@@ -162,27 +162,40 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 
 | Flag | Commands | Meaning |
 |---|---|---|
-| `--backlog KEY` | `step` (all), `task show` | The task scope inside the tracker; supplied, never inferred. |
-| `--tracker-root PATH` | `step start\|next\|rounds`, `task show` | The directory of the Beads tracker. |
-| `--checkout PATH` | `step start\|next\|rounds`, `slot adopt`, `profile show` | The person's checkout of the repository (`profile show`: default `.`). |
+| `--backlog KEY` | `step` except `list`, `task show` | The task scope inside the tracker; required, never inferred. Land uses the selected checks attempt's recorded tracker root. |
+| `--tracker-root PATH` | `step start\|next\|rounds`, `task show` | Required directory of the Beads tracker. Later operations, including land, use the root recorded at admission; land has no `--tracker-root` flag. |
+| `--checkout PATH` | `step start\|next\|rounds\|land`, `profile show` | The person's checkout of the repository; required for these step commands, default `.` for `profile show`. Land fetches and pushes its `origin` using that checkout's Git configuration. |
 | `--at REV` | `profile show` | The commit under test whose `setup` and checks are read (default `HEAD`). |
 | `--target REF` | `profile show` | The target ref whose `required` and `target` are read (default `main`). |
 | `--root DIR` | `config show`, `slot adopt` | The slots root (config `slots_root`); slots live at `<root>/<repo_id>/sN`. |
 | `--count N` | `config show`, `slot adopt` | Slot count s1..sN (config `slot_count`). |
 | `--every SECONDS` | `step rounds` | Seconds between rounds, at least 5 (config `round_seconds`). |
+| `--dash-port PORT` | `step rounds` | Serve the read-only dashboard on `127.0.0.1` during rounds; 0 selects a free port. Omission serves nothing; startup failure warns while rounds continue. |
 | config `git_read_seconds` | commands that read the machine config | Seconds a Git read may take, 30 to 86400, default 600; a longer read is `unavailable:git`. An attempt's entry process does not read the config: the launcher passes the value in its argv. No flag. |
 | `TASKLOOP_ENV_PASS` | the factory process's own environment | Comma-separated variable names added to the allow-listed environment an agent and the checks get (PATH, HOME, USER, LOGNAME, SHELL, locale, TERM, TZ, TMPDIR, CODEX_HOME, proxy and CA names, `XDG_*_HOME`, `MISE_*`). Every other variable is dropped, e.g. `UV_INDEX_URL`, `DATABASE_URL`. |
 | `--label LABEL` | `step next`, `step rounds` | Required on `next` and `rounds` (approves a task); not on `start`, whose task is named. |
 | `--max-running N` | `step next`, `step rounds` | In-flight bound, default 3, at least 1: no new task starts while this many of the backlog's tasks are in flight (slots are global, the bound is per backlog): a step running, or a passed task waiting for `tl step land` (counted until landed). Failed, stuck, unknown, held, landed and abandoned ones do not count. The round stops `max_running`, with no tracker read; claimed work still advances. Stated in the rounds start line. |
+| `--retake-lapsed` | `step next`, `step rounds` | Recovery after a factory.db discard only: also take this factory's expired tracker claims with no attempt here. Assumes one factory on the tracker; prefer running once with `next`. Omission leaves this recovery disabled. |
 | `--minutes N` | `step start\|next\|rounds` | An attempt's deadline from now (and its renewal after a reboot). |
 | `--model`, `--effort` | `step start\|next\|rounds` | The agent model and effort for the attempt. |
 | `--db`, `--artifacts` | most `step`, `config show` | factory.db and the artifacts root, overriding the machine config. |
 | `--abandon` | `step release` | Also return the tracker claim and throw the attempt away (a land candidate holding its slot first, then the checks attempt, then the implement attempt; refused `landing` or `landed` while a candidate may be or is on origin's `main`). |
-| `--checkout PATH` | `step land` | The person's checkout whose `origin` is fetched and pushed (as its Git configuration resolves it). |
 | `--minutes N` | `step land` | The deadline of the validation of S, from now; needed when S must be validated (main moved or its required names changed) or a pending candidate resumes; not for `--summary`, `--withdraw`, `--no-change` or a same-tree land. |
 | `--summary` | `step land` | Print the land summary; records, reserves, pushes and closes nothing. |
 | `--withdraw` | `step land` | Give up a validated, undelivered candidate (origin read first, never a push) so the abandon is possible again. |
 | `--no-change` | `step land` | Accept that origin's `main` already holds X's changes: recorded and closed with no push. |
+| `--accept-gate-changes` | `step land` | Explicitly accept that the squash candidate changes what decides a pass; otherwise land refuses and lists the changes. |
+
+Checkout selection has four existing forms: `repo inspect PATH` requires a positional checkout root;
+`slot adopt CHECKOUT` requires the person's checkout as a positional; `profile show --checkout PATH` is optional
+and defaults to `.`; `step start|next|rounds|land --checkout PATH` requires the flag. Adoption does not accept
+`--checkout`. The removed `--max-new` is rejected; use the implemented `--max-running` bound above.
+
+`step rounds --json` is JSON Lines: a normal graceful session writes the existing start and end objects as separate
+stdout lines. Early refusals and abrupt end results go to stderr, along with dashboard notices in JSON mode.
+Other commands' structured output is a single JSON document. The current [README](../README.md) describes the
+shared exit policy: 3 means no reliable result and safe retry (profile unavailable or step unknown); task/repo
+inspection failures stay 1 even when the backend is unavailable.
 
 ## Conversations, evidence and accounts
 
@@ -190,7 +203,7 @@ The meaning of each flag as `tl <command> --help` gives it. Every step runs thro
 |---|---|---|
 | transcript | The retained record of a conversation, including every message, tool input/result and reasoning output the harness exposes. | A compact dashboard view may collapse content; it must not be mistaken for the retained transcript. |
 | log | The chronological record of execution events and diagnostics. | Preparation, a command's output, a retry and the attempt's conclusion. Logs and transcripts remain files behind their readers. |
-| dashboard | The read-only local web page showing how the factory performs. | Proposed, see [dashboard UI](design/dashboard-ui.md); no server exists yet. It changes nothing and holds no state of its own. |
+| dashboard | The read-only local web page showing how the factory performs. | Built, see [dashboard UI](design/dashboard-ui.md); served optionally by `tl step rounds --dash-port PORT` while rounds run. It changes nothing and holds no state of its own. |
 | board | The dashboard's one screen: a card per task in a column per step (Ready, Plan, Implement, Checks, Land), plus Held and Landed; optionally in a row per slot. | Not the earlier `Board` screen name of the retired mockups. Columns derive from task state and are never dragged. |
 | live tail | The last few lines of the current attempt's agent activity (commands with how long they ran and waited, agent messages, check results), shown in a task's drawer. | A display view of the evidence stream, not a transcript and never control state. |
 | artifact | A retained output produced by the work. | A screenshot, PDF, video or report, associated with its producing attempt. A vendor's transcript file is not a screenshot. |

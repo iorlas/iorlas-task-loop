@@ -1,4 +1,8 @@
+# Documentation format alternatives
 
+Status: **design**. Archived alternatives, including adjacent A–E examples, `ONTOLOGY-ALL.md` and `fable` opinions;
+none is a current storage contract or installed gate. Their proposed terms and test names are examples.
+See the current [README](../../../../README.md) and repository instructions for implemented behavior.
 
 =================== A-current ===================
 ## Model

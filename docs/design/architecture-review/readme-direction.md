@@ -1,3 +1,8 @@
+# Proposed database-library direction
+
+Status: **design**. Historical proposed database-library README direction, not the current capability reference.
+See the current [README](../../../README.md).
+
 ## Direction (to add to packages/sqlite-store/README.md)
 
 This package is the seed of a database library, and it will grow into an ORM-shaped one. It is not one yet.

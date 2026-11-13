@@ -1,5 +1,8 @@
 # Decision register (architecture review of the task-loop successor, 2026-11-13)
 
+Status: **evidence**. Historical register of owner decisions, proposals and open questions; those distinctions below
+do not imply implementation. Current commands are in the [README](../../../README.md).
+
 Status: **D** decided (owner said yes), **P** proposed (my recommendation, owner has not confirmed or only partly), **O** open (needs a decision or a design).
 "Enforced by" is a proposal for the test, contract or gate that would hold the decision; "-" means nothing mechanical. Beads: the parent session files them; I have no confirmation of ids, so none are listed.
 Where the decisions should live (proposal P, see section 12): `docs/design/system/<area>.md` (what the system does), ADRs only for meta decisions (how we work), CLAUDE.md/AGENTS.md for rules agents must follow.

@@ -1,5 +1,9 @@
 # First one-shot plan execution
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.3.2.1, scoped child of PLAN-FILE tl-8bh9.3.2. Proposed implementation specification, 2026-11-09.
 This is a bounded consumer of the [agent execution contract](../tl-8bh9.4.3.1/plan.md), not new owner-agreed policy
 or a claim that the successor already executes tasks. Only repo/task inspection is implemented in the inspected

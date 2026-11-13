@@ -1,5 +1,9 @@
 # Generalize the step machinery once: plan becomes the first step kind
 
+Status: **built** for this bounded successor slice. See [the as-built record](#10-as-built). The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.15 (proposed id; not in the tracker). Design, 2026-11-10, against HEAD 283ae2271. Docs only:
 nothing is built or run. Commands run: source and doc reads, and the policy's own line counter
 (`tests/rules/test_policy.code_lines`) over every `src` and `tests` file at HEAD. The working tree also holds another

@@ -1,7 +1,11 @@
 # tl-8bh9.14.6: the checks step (block B4, milestone M2)
 
-Design, 2026-11-11, against HEAD f5ef43664 (M1 built, M1 smoke passed); revised the same day after an independent review
-(section 20) against 4f1d14c2c (composition split). Docs only: nothing built or run. Read: CLAUDE.md,
+Status: **built** for S6a–S6e; [sections 21–25](#21-as-built-s6a-tl-8bh91461) record the bounded slices.
+The [M2 findings](m2-smoke-findings.md) record the passed smoke and its limits. The original design below
+is historical preparation; current commands are in the [README](../../../README.md).
+
+Original design, 2026-11-11, against HEAD f5ef43664 (M1 built, M1 smoke passed); revised the same day after an independent review
+(section 20) against 4f1d14c2c (composition split). Preparation was docs only: nothing was built or run at that point. Read: CLAUDE.md,
 [glossary](../../glossary.md), [roadmap](../self-hosting-roadmap.md) (B3, B4, B6, B7, D1-D14, O1-O6),
 [candidate checks](../tl-8bh9.5.1/candidate-checks.md), [.15](../tl-8bh9.4.3.1.15/plan.md) section 5,
 [.16](../tl-8bh9.4.3.1.16/plan.md) sections 12-15, [S5e](../tl-8bh9.4.3.1.16.2/plan.md) and the

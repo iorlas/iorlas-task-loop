@@ -1,5 +1,9 @@
 # Keep the tracker claim's lease alive while a step runs
 
+Status: **built** for this bounded successor slice. See [the as-built record](#9-decisions-recorded-and-as-built-2026-11-10). The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.9 (proposed id; answers the owner question in [.4.3.1.2](../tl-8bh9.4.3.1.2/plan.md) section 5,
 "The tracker claim's lease"). Design proposal, 2026-11-10, revision 1. Nothing here is built or run. Owner decision taken
 as given: **heartbeat the claim, as part of the tracker contract, in the background while the factory runs a step**; this

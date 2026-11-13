@@ -1,5 +1,8 @@
 # Slots carve plan (tl-e5t0.17, and the largest root cut left in tl-e5t0.40.6)
 
+Status: **design**. Historical baseline package-carve proposal, not the successor layout or current operator instructions.
+See the [curated replacement](tl-8bh9.8/curated-replacement.md) and current [README](../../README.md).
+
 Template: the gate carve (#580, `dev/carve_gate.py`): a pure, rerunnable `git mv` plus importer rewrite, no api.py (consumers import `tlslots.<module>`, as artifacts and gate), one import-linter contract, tests stay where they are and move in a later PR (gate D1/D2). Measured on main ba990b2e.
 
 ## What the stage is

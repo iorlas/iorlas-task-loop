@@ -1,5 +1,9 @@
 # Admission, claims, execution and completion
 
+Status: **evidence** and **design**. Historical baseline lifecycle review with proposed changes; references to
+`tl task` passthrough and close guards below are baseline commands, not current routes. Use the current
+[README](../../../README.md) and [explicit land](../tl-8bh9.14.8/plan.md) for successor delivery.
+
 > STORE scope update, 2026-11-09: Denis accepted the identity/lifecycle contract and lifted its design hold for
 > [reconciled STORE slices](../tl-sqd3.26/plan.md) only. Earlier blanket-hold statements below describe prior review history.
 > Explicit dependencies still gate affected actions; historical migration/compatibility scope and unrelated holds remain excluded.

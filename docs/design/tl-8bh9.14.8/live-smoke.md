@@ -1,5 +1,9 @@
 # M3 live smoke: land and close with `tl step land` (owner-run, after L5)
 
+Status: **evidence**. Owner-run smoke runbook and recorded verification scope for the dated implementation.
+Its scratch setup and historical invocations are retained for reproduction; current operator commands are in
+the [README](../../../README.md). Live execution still requires the authorization stated below.
+
 **Status: passed 2026-11-12** at `ececcf8d3`, with three runbook corrections ([findings](m3-smoke-findings.md)).
 Milestone M3 of the [roadmap](../self-hosting-roadmap.md) is reached when this run passes: tasks of
 **this repository**, taken through plan, implement and the check step by `tl step rounds` from a runner worktree, are

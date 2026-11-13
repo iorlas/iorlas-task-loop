@@ -1,5 +1,9 @@
 # The agent chooses what to commit; the factory commits it and checks the tree is clean
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.7 (proposed id; after [.4.3.1.5](../tl-8bh9.4.3.1.5/plan.md) and [.4.3.1.6](../tl-8bh9.4.3.1.6/plan.md)).
 Design proposal, 2026-11-10, revision 5: revision 3 (independent review and the owner's answers applied) as implemented,
 plus two repair rounds after security reviews (sections 16 and 17). No live agent has run it. It closes .4.3.1.5 section 9 and changes steps 4-5 of the [one-shot plan](../tl-8bh9.3.2.1/plan.md). Read:

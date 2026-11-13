@@ -1,5 +1,8 @@
 # Self-hosting trial 2: source and test change, failed checks, moved main, restart
 
+Status: **evidence**. Dated self-hosting trial results and findings, not a current setup runbook.
+Historical commands and environment details are preserved; current commands are in the [README](../../README.md).
+
 Run 2026-11-12 against `main` at `faa9ff023` (PR #735 merged); follow-up to [trial 1](self-hosting-trial.md) section 5.
 Linux only (OrbStack), Codex 0.167.0, model `gpt-6.1-sol`, effort `medium`. Vocabulary: [glossary](../glossary.md).
 Tracker epic `tl-8bh9.14`. No factory code was changed; the concurrent D1-D4 fixes are not in the build under test.

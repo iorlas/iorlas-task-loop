@@ -1,5 +1,9 @@
 # S5e: the environment for running checks and tests in the agent sandbox (block B2)
 
+Status: **built** for S5e-1 setup and S5e-2 access, recorded in [section 16](#16-as-built-s5e-1-setup-2026-11-11)
+and [section 18](#18-as-built-s5e-2-access-2026-11-11). Remaining scope is **design**; smoke evidence is linked below.
+The original preparation record is historical; current commands are in the [README](../../../README.md).
+
 Task: tl-8bh9.4.3.1.16.2. Design, 2026-11-11, against HEAD 8eced01f6; revised the same day after an independent review
 (section 14). Docs only: nothing built or run. Read: CLAUDE.md, glossary, [roadmap](../self-hosting-roadmap.md) (B2,
 B3, D1-D14), [.16](../tl-8bh9.4.3.1.16/plan.md) (2.8, 2.9, 3.3, 6, 11), [Run S](../tl-8bh9.4.3.1.16/run-s-findings.md),

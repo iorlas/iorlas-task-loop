@@ -1,5 +1,8 @@
 # Grilling record: candidate 1, the tracker seam (2026-11-13)
 
+Status: **evidence**. Architecture-review findings and owner decisions recorded on 2026-11-13; proposed changes below
+are not claims of implementation. Current commands are in the [README](../../../README.md).
+
 ## Settled
 - The seam has beads and a fake now; the owner plans more backends. **For now local beads is always the claim store**; Jira and GitHub Issues are task sources (import) and sinks (report back), see brief-external-sources.md. Long term the claim store should be a server; keep the interface able to host one.
 - Outcome types are **generic classes in the factory's tracker module** (claim lost, blocked, already closed, ...), never beads-specific. `beads_client` keeps its own types. Unexpected failures throw one `TrackerFault` family carrying kind, operation, task and text, so the UI can show a blocker with a copy-context button for an agent.

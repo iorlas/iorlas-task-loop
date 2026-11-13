@@ -1,5 +1,9 @@
 # Time since the agent's last command
 
+Status: **built** for the sidecar-to-stream replacement: `EvidenceFiles.last_command` delegates to
+`activity_file.command_time`, with contracts in `tests/steps/test_last_command.py` and `test_activity_file.py`.
+The dated proposal below is historical; current commands are in the [README](../../../README.md).
+
 Task: tl-8bh9.14.13. One CLI slice for [self-hosting roadmap B10](../self-hosting-roadmap.md#b10-time-since-the-last-command-dashboard-later).
 Prepared against the successor tree on 2026-11-12. This is an implementation plan.
 

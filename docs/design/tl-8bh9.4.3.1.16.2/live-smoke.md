@@ -1,5 +1,9 @@
 # Live smoke: the implement step's environment (S5e) and M1 end to end (owner-run)
 
+Status: **evidence**. Owner-run smoke runbook and recorded verification scope for the dated implementation.
+Its scratch setup and historical invocations are retained for reproduction; current operator commands are in
+the [README](../../../README.md). Live execution still requires the authorization stated below.
+
 **Status: not run.** The S5e part is a checklist (below); the [M1 end-to-end](#m1-end-to-end-smoke-plan-round-advance-implement-owner-run-after-s5c)
 part is a full runbook that covers most of it. The owner-run live smoke of [S5e](plan.md) (setup, S5e-1; access, S5e-2), on Linux
 only (macOS refuses implement with `environment:platform`). Run by Denis, or by an agent Denis has authorized for that one

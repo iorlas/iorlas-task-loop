@@ -1,5 +1,9 @@
 # Release a slot reservation, and abandon an attempt
 
+Status: **built** for this bounded successor slice. See [the as-built record](#14-as-built-2026-11-10-on-7a66d0dff). The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.11 (proposed id). Design proposal, 2026-11-10, against HEAD 7a66d0dff; revision 2 applies the
 owner's answers (section 11). Nothing here is built or run; the only commands run were source reads and the policy line
 counter (`tests/rules/test_policy.code_lines`) over HEAD. Read: CLAUDE.md, glossary, [.4.3.1](../tl-8bh9.4.3.1/plan.md)

@@ -1,5 +1,8 @@
 # Foundation implementation evidence
 
+Status: **evidence**. Dated delivery record for the **built** minimal foundation, not a claim that the entire factory
+is complete. Current capabilities and commands are in the [README](../../../README.md).
+
 Task: tl-8bh9.8.7. Local implementation checkpoint, 2026-11-09.
 This is the minimal foundation; it does not execute factory tasks or establish product cutover.
 Independent review, executable smoke verification, publication and task completion are separate effects.

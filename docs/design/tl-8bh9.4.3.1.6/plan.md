@@ -1,5 +1,9 @@
 # Plan CLI: run the implemented plan path without a driver
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.6 (proposed id; after [.4.3.1.5](../tl-8bh9.4.3.1.5/plan.md)). Design, 2026-11-10, revised after the
 owner's answers. Nothing has been run, implemented or reviewed. Read: CLAUDE.md, AGENTS.md, glossary,
 [foundation](../tl-8bh9.8.7/plan.md), [operations](../tl-8bh9.8/operations.md), [one-shot plan](../tl-8bh9.3.2.1/plan.md),

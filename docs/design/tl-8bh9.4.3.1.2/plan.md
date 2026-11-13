@@ -1,5 +1,9 @@
 # Admit one plan attempt (admission only)
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Use the current [README](../../../README.md)
+and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.2 (proposed id; slice after [.4.3.1.1](../tl-8bh9.4.3.1.1/plan.md)). Design proposal, 2026-11-09,
 revised after independent review and owner answers. Not delivered. "Q" = owner decision left open.
 Read: CLAUDE.md/AGENTS.md, glossary, .8.7, .4.3.1, .3.2.1, STORE tl-sqd3.26, .9, handoff roadmap, plan*.py, and the

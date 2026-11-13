@@ -1,5 +1,9 @@
 # Check execution: remove repetition before choosing a cache
 
+Status: **design**. Historical accepted validation direction; `tl check` and related command examples below
+belong to that baseline/proposal, not the current parser. The successor implements
+[the checks step](../tl-8bh9.14.6/plan.md); current commands are in the [README](../../../README.md).
+
 Task: tl-8bh9.5.1. Design review, 2026-11-08. Owner accepted the proposed execution cuts with "ok" after the review
 summary: remove routine pre-checking, keep focused debugging and mandatory/new-candidate validation. The visual
 precheck cut is conditional on retaining actual capture prerequisites. No source changes made. The general cache

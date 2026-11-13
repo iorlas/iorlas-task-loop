@@ -1,5 +1,9 @@
 # Registered attempt entry: launch an admitted attempt into a surviving process
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Use the current [README](../../../README.md)
+and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.4 (proposed id; after [.4.3.1.2](../tl-8bh9.4.3.1.2/plan.md) and [.4.3.1.3](../tl-8bh9.4.3.1.3/plan.md)).
 Design proposal, 2026-11-09, revised after independent review and owner answers. Not delivered, nothing run.
 Follows the parent [lifecycle](../tl-8bh9.4.3.1/plan.md) and the [body](../tl-8bh9.4.3.1.1/plan.md). It answers .4.3.1.2

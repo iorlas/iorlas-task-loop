@@ -1,5 +1,9 @@
 # Live smoke: registered attempt entry (owner-run)
 
+Status: **evidence**. Owner-run smoke runbook and recorded verification scope for the dated implementation.
+Its scratch setup and historical invocations are retained for reproduction; current operator commands are in
+the [README](../../../README.md). Live execution still requires the authorization stated below.
+
 Run by Denis, or by an agent Denis has authorized for that one run (smoke 3 was such a run, on Linux/OrbStack); never on
 an agent's own initiative. Scratch repo, scratch tracker and scratch `factory.db` only. It settles the
 [plan](plan.md)'s unprovable list (section 9): exec identity on macOS, entry survival, real gate and busy timing,

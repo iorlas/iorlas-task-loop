@@ -1,5 +1,8 @@
 # Stages and their handoffs: audit of night 1 and a redesign (2026-10-23)
 
+Status: **evidence**. Historical baseline design and build record; the dated approval and build notes below do not
+assert successor implementation. Current steps and commands are in the [README](../../README.md).
+
 Status: approved by the owner 2026-10-23 and built on branch claude/stage-design-7716bd (see Build notes at the end); release after
 2026-10-24 06:30. Inputs: engine.py 0.23.6, 104 night-1 runs (10-22 09:41 .. 10-23 05:19), night 2 (10-23
 18:30, 1-3 runs so far), five read-only audits (notes G1..G5, listed under Evidence).

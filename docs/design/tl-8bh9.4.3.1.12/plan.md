@@ -1,5 +1,9 @@
 # Publish the verified plan: push `task/<id>` to the remote
 
+Status: **built** for this bounded successor slice. See [the as-built record](#17-as-built-2026-11-10-on-e9be414e5-uncommitted). The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.12 (proposed id). Design, 2026-11-10, against HEAD e9be414e5; built in 2f2c3b900 (`tl plan publish`). The
 commands run were source reads, the policy line counter over HEAD, and one scratch experiment with the installed
 git_porcelain 0.13.0 against a local bare remote under the session scratchpad (section 12), deleted afterwards. The

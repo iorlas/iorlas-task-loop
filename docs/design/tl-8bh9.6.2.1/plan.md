@@ -1,5 +1,9 @@
 # Read one task in its configured backlog
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Use the current [README](../../../README.md)
+and CLI help for command syntax.
+
 Task: tl-8bh9.6.2.1, bounded child of TASK-CONTRACT tl-8bh9.6.2. Prepared 2026-11-09.
 This is a proposed implementation plan, not a delivery receipt. Source starts only after the prerequisites below.
 

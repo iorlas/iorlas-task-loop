@@ -1,5 +1,9 @@
 # M2 live smoke: the check step in the rounds (owner-run, after S6e)
 
+Status: **evidence**. Owner-run smoke runbook and recorded verification scope for the dated implementation.
+Its scratch setup and historical invocations are retained for reproduction; current operator commands are in
+the [README](../../../README.md). Live execution still requires the authorization stated below.
+
 **Status: passed 2026-11-11** at `4e004864c`, with three runbook corrections ([findings](m2-smoke-findings.md)).
 Milestone M2 of the [roadmap](../self-hosting-roadmap.md) is reached when this run passes: a
 `tl step rounds` loop from a runner worktree takes a small task of **this repository** through plan, implement and the

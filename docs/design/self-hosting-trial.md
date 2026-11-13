@@ -1,5 +1,8 @@
 # Self-hosting trial 1: one real task through plan, implement, checks and land
 
+Status: **evidence**. Dated self-hosting trial results and findings, not a current setup runbook.
+Historical commands and environment details are preserved; current commands are in the [README](../../README.md).
+
 Run 2026-11-12 against `main` at `41612d71d` (PR #732 merged). Linux only (OrbStack, aarch64), Codex 0.167.0, model
 `gpt-6.1-sol`, effort `medium`. Vocabulary: [glossary](../glossary.md). Roadmap: [self-hosting](self-hosting-roadmap.md);
 tracker epic `tl-8bh9.14`.

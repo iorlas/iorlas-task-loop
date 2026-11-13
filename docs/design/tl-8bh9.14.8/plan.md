@@ -1,7 +1,11 @@
 # tl-8bh9.14.8: land and close (block B6, milestone M3)
 
-Design, 2026-11-11, against 08784fe34 (M2 built, M2 smoke passed and its findings fixed); revised the same day after an
-independent review of 365743d89 (section 24). Docs only: nothing built or run. Read: CLAUDE.md, [glossary](../../glossary.md), [roadmap](../self-hosting-roadmap.md) (B4, B6, B7, D1-D14, O1-O6),
+Status: **built** for L0–L5; [sections 25–29](#25-as-built-l1-tl-8bh91482) record delivery and CLI behavior,
+with later trial repairs in sections 30–31. The [M3 findings](m3-smoke-findings.md) record the passed smoke.
+The original design below is historical preparation; current commands are in the [README](../../../README.md).
+
+Original design, 2026-11-11, against 08784fe34 (M2 built, M2 smoke passed and its findings fixed); revised the same day after an
+independent review of 365743d89 (section 24). Preparation was docs only: nothing was built or run at that point. Read: CLAUDE.md, [glossary](../../glossary.md), [roadmap](../self-hosting-roadmap.md) (B4, B6, B7, D1-D14, O1-O6),
 [delivery and publication](../tl-8bh9.9/delivery-publication.md), [operations](../tl-8bh9.8/operations.md),
 [candidate checks](../tl-8bh9.5.1/candidate-checks.md), [the checks step](../tl-8bh9.14.6/plan.md) (sections 3, 4, 6, 10,
 12, 21-25) and its [M2 findings](../tl-8bh9.14.6/m2-smoke-findings.md), and `steps`, `publish`, `check_store`,

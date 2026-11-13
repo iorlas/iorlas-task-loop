@@ -1,5 +1,8 @@
 # M4 live smoke: findings (2026-11-12)
 
+Status: **evidence**. Dated findings, measurements and their limits, retained with the original commands and
+environment. This is not a current setup runbook; use the [README](../../../README.md) for implemented commands.
+
 **Result: passed** (step 9, the Git read timeout, blocked and not run). `tl step rounds --label auto` from a runner
 worktree held every round-taken task it stopped on with the right reason, label moves, claim state and one comment;
 left hand-started and closed tasks' tracker state alone; re-ingested answered holds at plan under their stored label

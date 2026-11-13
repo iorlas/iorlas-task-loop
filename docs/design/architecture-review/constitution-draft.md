@@ -1,5 +1,8 @@
 # Draft: additions for CLAUDE.md and AGENTS.md (mirror both)
 
+Status: **evidence**. Historical instruction draft, not an active instruction file. `AGENTS.md` owns the repository
+instructions; the original wording below is retained as review evidence.
+
 Place under "Architecture and design". Wording follows the file's terse bullet style.
 
 - Names: a new term borrows GitHub's word first; otherwise it chains defined terms (retry attempt, check suite). Before a term enters the glossary or the code, put the options and the reasons to a human and wait for the decision. Delete a term that is plain English or derivable from defined terms.

@@ -1,5 +1,8 @@
 # Roadmap: the factory develops itself (self-hosting)
 
+Status: **design** with **built** milestones and recorded **evidence** identified below. This is an evolving scope and
+decision record, not completion of the whole factory; see the [index](INDEX.md) for slice status and the [README](../../README.md) for current commands.
+
 Written 2026-11-11 against HEAD 0304f0abf (S4 built). Docs only. Goal (owner, 2026-11-11): "by the end of it we will be
 able to run the factory to develop the factory itself". Everything below that is not in section 1 or in the owner
 decisions list is **proposed**. Vocabulary: [glossary](../glossary.md). Order of work: section 4. The older

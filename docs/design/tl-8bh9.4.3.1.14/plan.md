@@ -1,5 +1,9 @@
 # Trigger: rounds start by themselves (`tl plan rounds`)
 
+Status: **built** for this bounded successor slice. See [the as-built record](#25-as-built-2026-11-10-on-ee5dde41b-uncommitted). The dated proposal and preparation statements below
+are historical; they do not describe current availability. Historical `tl plan` commands were superseded by
+`tl step`; use the current [README](../../../README.md) and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.14 (proposed id; not in the tracker). Design, 2026-11-10, against HEAD ee5dde41b; built the same day
 (section 25, as built; not run live). Design-time commands run, all read-only: source and doc reads; the policy line counter over HEAD;
 `bd version`, `bd context`, `bd events --help`, `bd events tail --help`, `bd hooks --help`, `bd dolt --help`,

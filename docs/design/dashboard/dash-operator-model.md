@@ -1,4 +1,7 @@
 # Operator model, views, asks (draft, 2026-10-29)
+
+Status: **design**. Historical dashboard operator-model proposal.
+See [dashboard-ui.md](../dashboard-ui.md) for the implemented successor dashboard and current controls.
 Sources: Fable (roles, ask lifecycle, views), Sonnet research on print/CNC farm software (research-farms.md). Not yet decided by the owner.
 
 ## Roles: one person, two hats, split by cadence

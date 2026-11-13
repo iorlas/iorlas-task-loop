@@ -1,12 +1,13 @@
 # Docs and CLI consistency
 
-Status: **design**. Proposed implementation plan, prepared 2026-11-13 against
-`521597c90645e397edf5bcf4e47284f403600b70`. This document does not authorize implementation or assert completion.
+Status: **built**, with validation limited by this execution sandbox as recorded in [As built](#as-built).
+The original implementation plan below was prepared 2026-11-13 against
+`521597c90645e397edf5bcf4e47284f403600b70`; its proposal and evidence are preserved.
 Task: `tl-8bh9.14.113`.
 
 The result should be an accurate README, explicit status on retained design documents, one owner of application
-exit policy, and CLI behavior tests for the reported flags. This attempt changes only this plan. Implementation
-waits for the owner's yes.
+exit policy, and CLI behavior tests for the reported flags. At planning time only this plan changed and implementation
+awaited the owner's yes; the subsequent implementation request authorized the changes recorded below.
 
 ## Current evidence and interpretation
 
@@ -171,3 +172,25 @@ their deletion. No additional documentation enforcement tool or test for every h
 - The four reported flag concerns have CLI behavior coverage as specified above. Dashboard-enabled JSON output
   remains JSON Lines with the current record shapes.
 - Required focused gates pass. No implementation is claimed from this plan alone.
+
+## As built
+
+Implemented 2026-11-13. README and glossary describe the implemented checks, explicit land, holds, optional dashboard,
+checkout forms, current scheduling flags and JSON Lines output. Design entries distinguish built slices, proposals
+and historical evidence; the index links the retained collections and current dashboard documentation.
+
+`exit_codes.ExitCode` owns application exit values, with the existing step classification and a typed profile mapper.
+CLI inspection errors retain exit 1, profiles retain 0/1/3, and interruption and single-round aggregation keep their
+existing policy. Dashboard URLs use stderr with rounds JSON output; human output and the two record shapes are retained.
+
+New tests: `tests/cli/test_cli_flags.py` covers 32 dashboard, count, scheduling and recovery scenarios through `main`;
+`tests/cli/test_checkout_cli.py` covers five checkout default/required cases. Existing profile, inspection, step and land
+tests continue to protect their exit and stream contracts. No live listener or tracker is used by the new tests.
+
+Validation: `just install` passed. The focused CLI command covering these two new files plus `test_profile_cli.py`,
+`test_repo_cli.py`, `test_task_cli.py`, `test_step_cli.py` and `test_land_cli.py` passed all 308 cases. Installed module
+help for root, `step rounds` and `profile show` rendered successfully. `just check` initially found the refactored
+mapper's excess return statements; after simplifying them, lint, types and all nine import contracts passed.
+`just test` ran every declared test: 3,045 passed, two failed and 11 errored. All failures/errors were existing dashboard
+listener tests in `test_dash_composition.py` and `test_dash_server.py`: this sandbox denies socket creation with
+`PermissionError: [Errno 1] Operation not permitted`. Those tests and the gate remain intact for external verification.

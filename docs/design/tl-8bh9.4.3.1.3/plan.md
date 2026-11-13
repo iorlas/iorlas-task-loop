@@ -1,5 +1,9 @@
 # Managed slots: the smallest slot state admission needs
 
+Status: **built** for this bounded successor slice. The dated proposal and preparation statements below
+are historical; they do not describe current availability. Use the current [README](../../../README.md)
+and CLI help for command syntax.
+
 Task: tl-8bh9.4.3.1.3 (proposed id). Design proposal, 2026-11-09, revised after independent review. Not delivered,
 nothing run. Unblocks the [admission slice](../tl-8bh9.4.3.1.2/plan.md), which the owner held on "managed `s1`-style
 slots, no operator-named path" (its Q2). Implements STORE 5 (tl-sqd3.26.5) only as far as admission needs:

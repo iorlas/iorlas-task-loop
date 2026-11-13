@@ -1,5 +1,8 @@
 # Self-hosting trial 4: concurrency and recovery
 
+Status: **evidence**. Dated self-hosting trial results and findings, not a current setup runbook.
+Historical commands and environment details are preserved; current commands are in the [README](../../README.md).
+
 Run 2026-11-12 against `main` at `8fe219905` (PR #736 merged). Linux only (OrbStack, aarch64), Codex, model `gpt-6.1-sol`,
 effort `low`. Follow-up to [trial 1](self-hosting-trial.md) and [trial 2](self-hosting-trial-2.md) section 4. Vocabulary:
 [glossary](../glossary.md). Tracker epic `tl-8bh9.14`. No factory code was changed. Other trials ran on the same machine at the

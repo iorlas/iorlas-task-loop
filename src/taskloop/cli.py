@@ -13,6 +13,7 @@ from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
 from taskloop import cli_step
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
+from taskloop.exit_codes import ExitCode, profile_exit_code
 from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.printable import block, one_line
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
@@ -53,7 +54,7 @@ def show_task(arguments: argparse.Namespace) -> int:
             print(json.dumps({"error": data}), file=sys.stderr)
         else:
             print(f"tl task show: {error}", file=sys.stderr)
-        return 1
+        return ExitCode.REFUSED
     if arguments.json_output:
         shown = {key: value for key, value in asdict(result).items() if key not in {"status", "assignee"}}  # its keys as they were
         print(json.dumps(shown))
@@ -66,7 +67,7 @@ def show_task(arguments: argparse.Namespace) -> int:
         for dependency in result.dependencies:
             name, status = one_line(dependency.reference.task_id, 200), one_line(dependency.status, 40)
             print(f"  {one_line(dependency.relationship, 40)}: {name} ({status}) {one_line(dependency.title, 500)}")
-    return 0
+    return ExitCode.SUCCESS
 
 
 def _profile_data(found: Resolved, at: str, target_ref: str) -> dict[str, object]:
@@ -93,22 +94,21 @@ def show_profile(arguments: argparse.Namespace) -> int:
         case Resolved():
             data, lines = _profile_data(found, arguments.at, arguments.target), _profile_lines(found, arguments.at, arguments.target)
             print(json.dumps(data) if arguments.json_output else "\n".join(lines))
-            return 0
+            return profile_exit_code(found)
         case Refused(reason=reason, side=side, key=key, detail=detail):
             error: dict[str, str] = {"kind": reason, "side": side, "key": key, "message": detail}
             text = f"tl profile show: refused {reason} ({side}{', ' + key if key else ''}): {detail}"
-            code = 1
         case Unavailable(detail=detail):
-            error, text, code = {"kind": "unavailable", "message": detail}, f"tl profile show: unavailable: {detail}", 3
+            error, text = {"kind": "unavailable", "message": detail}, f"tl profile show: unavailable: {detail}"
     print(json.dumps({"error": error}) if arguments.json_output else text, file=sys.stderr)
-    return code
+    return profile_exit_code(found)
 
 
 def show_version(arguments: argparse.Namespace) -> int:
     """`tl version [--json]`: the version of the package this process runs."""
     found = package_version("iorlas-task-loop")
     print(json.dumps({"version": found}) if arguments.json_output else found)
-    return 0
+    return ExitCode.SUCCESS
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -117,6 +117,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="tl",
         description=f"Task-loop successor foundation. Step commands ({STEP_ONLY}).",
+        epilog="Exit 0: success; 1: refusal or task/repo inspection error; 2: invalid syntax; "
+               "3: no reliable result (profile unavailable or step unknown), safe to retry; "
+               "130: abrupt rounds stop or interrupted land.",
         allow_abbrev=False,
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")
@@ -148,7 +151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
-        return 0
+        return ExitCode.SUCCESS
     if arguments.command in cli_step.COMMANDS:
         return cli_step.run(arguments)
     handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": show_version}
@@ -164,7 +167,7 @@ def inspect_repo(arguments: argparse.Namespace) -> int:
             print(json.dumps({"error": {"kind": inspection_error_kind(error), "message": str(error)}}), file=sys.stderr)
         else:
             print(f"tl repo inspect: {error}", file=sys.stderr)
-        return 1
+        return ExitCode.REFUSED
     data = {
         "repo_id": result.repo_id,
         "common_dir": str(result.common_dir),
@@ -176,4 +179,4 @@ def inspect_repo(arguments: argparse.Namespace) -> int:
     else:
         print(f"Repo ID: {result.repo_id}\nCommon directory: {result.common_dir}\nCheckout: {result.checkout_path}")
         print(f"Origin: {result.origin_url if result.origin_url is not None else '(not configured)'}")
-    return 0
+    return ExitCode.SUCCESS
