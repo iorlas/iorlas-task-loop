@@ -461,7 +461,8 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
                      "attempt_id": None}
     assert main(["step", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
-    assert listed.startswith("task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\tlast command\ntl-1\ttasks\tplan\t1/3\ts1\t")
+    assert listed.startswith("task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\thold cause\tlast command\n"
+                             "tl-1\ttasks\tplan\t1/3\ts1\t")
     assert main(["step", "list", "--db", str(db), "--json"]) == 0
     assert [each["step"] for each in json.loads(capsys.readouterr().out)["attempts"]] == ["plan"]
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
@@ -723,7 +724,7 @@ def test_a_running_agents_time_since_its_last_command_is_listed_and_shown(
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "list"), lambda _arguments, _loaded: Listed((view,)))
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "show"), lambda _arguments, _loaded: Shown(view, Path("/d"), Path("/d/e")))
     assert main(["step", "list"]) == 0
-    assert capsys.readouterr().out.splitlines()[1].endswith("\twait\t42 s ago")
+    assert capsys.readouterr().out.splitlines()[1].endswith("\twait\t-\t42 s ago")
     assert main(["step", "show", "tl-1", "--backlog", "tasks"]) == 0
     assert "Last command: 42 s ago\n" in capsys.readouterr().out
 

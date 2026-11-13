@@ -1,6 +1,8 @@
 """The one JSON shape of every step command result (`as_data`): what the CLI prints with `--json` and a dashboard renders.
 It never holds a dispatch token, a remote URL or Git output."""
 
+from pathlib import Path
+
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, Shown
@@ -179,7 +181,7 @@ def _setup_data(result: Adoption | Loaded) -> dict[str, object]:
     if isinstance(result, Adoption):
         return {"slots": [_slot_data(each) for each in result.slots]}
     settings = {
-        key: {"value": each.value if isinstance(each.value, int) else str(each.value), "source": each.source}
+        key: {"value": str(each.value) if isinstance(each.value, Path) else each.value, "source": each.source}
         for key, each in result.settings.pairs()
     }
     return {"file": {"path": str(result.path), "exists": result.exists}, "settings": settings}

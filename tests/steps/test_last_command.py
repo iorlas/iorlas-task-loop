@@ -60,7 +60,7 @@ def test_a_running_agent_shows_the_seconds_since_its_last_command(registered: sq
     sink.end("done")
     show, rows, data = seen(registered, files, 20.0)
     assert "Last command: 7 s ago" in show
-    assert rows[0].endswith("\tlast command") and rows[1].endswith("\twait\t7 s ago")
+    assert rows[0].endswith("\tlast command") and rows[1].endswith("\twait\t-\t7 s ago")
     assert data == 7
 
 
@@ -72,7 +72,7 @@ def test_no_or_unreadable_evidence_shows_its_word(registered: sqlite3.Connection
         path.parent.mkdir(parents=True)
         path.write_text(evidence)
     show, rows, data = seen(registered, files, 20.0)
-    assert f"Last command: {word}" in show and rows[1].endswith(f"\twait\t{word}")
+    assert f"Last command: {word}" in show and rows[1].endswith(f"\twait\t-\t{word}")
     assert data == word
 
 
@@ -181,7 +181,7 @@ def test_a_future_command_start_clamps_displayed_seconds_to_zero(registered: sql
     command(sink)
     sink.end("done")
     show, rows, data = seen(registered, files, 20.0)
-    assert "Last command: 0 s ago" in show and rows[1].endswith("\twait\t0 s ago") and data == 0
+    assert "Last command: 0 s ago" in show and rows[1].endswith("\twait\t-\t0 s ago") and data == 0
 
 
 @pytest.mark.parametrize(("now", "next_word"), [(20.0, "wait"), (200.0, "stuck:hung")])

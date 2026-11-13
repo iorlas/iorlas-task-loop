@@ -11,7 +11,7 @@ import pytest
 from doubles import D, X
 from sqlite_store import begin_immediate
 
-from taskloop.attempt_reads import ReleaseRow
+from taskloop.attempt_reads import ReleaseRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, agent_attempt, list_attempts, show_attempt, with_hold
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptResult, Unsettled
@@ -21,6 +21,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_guide import HOLD, KEPT_ACTIONS
 from taskloop.hold_status import cause, finished, reingests
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
+from taskloop.operations import Failed
 from taskloop.result_data import as_data
 from taskloop.step_render import human
 
@@ -120,6 +121,25 @@ def listed(con: sqlite3.Connection, *, stuck: bool = False) -> tuple[AttemptView
     return found.attempts
 
 
+@pytest.mark.parametrize(("requested", "configured"), [("tasks", None), (None, "tasks"), ("tasks", "other")])
+def test_show_reads_a_selected_backlog_without_enumerating_others(
+    factory: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    requested: str | None, configured: str | None,
+) -> None:
+    plan(factory)
+    ports = reads(factory)
+
+    def unavailable() -> tuple[str, ...]:
+        raise StoreUnavailable("Backlog enumeration unavailable")
+
+    monkeypatch.setattr(ports.store, "backlogs", unavailable)
+    shown = show_attempt(ports, tmp_path, requested, "tl-1", configured_backlog=configured)
+    assert isinstance(shown, Shown) and shown.view.backlog == "tasks"
+    failed = show_attempt(ports, tmp_path, None, "tl-1")
+    assert isinstance(failed, Failed) and (failed.kind, failed.reason, failed.detail) == (
+        "unavailable", "store", "Backlog enumeration unavailable")
+
+
 def test_a_due_hold_is_listed_stuck_and_a_hand_started_one_keeps_its_word(factory: sqlite3.Connection) -> None:
     plan(factory)
     (view,) = listed(factory, stuck=True)
@@ -206,7 +226,7 @@ def test_list_prints_the_hold_word_and_its_guide_once_and_json_says_due(factory:
     found = list_attempts(reads(factory), stuck=True)
     assert isinstance(found, Listed)
     lines = human("list", found, Path("/f/factory.db"))
-    assert lines[1].endswith("\thold\t-") and lines[2] == f"hold: {HOLD}" and len(lines) == 3  # no discard steps for a hold
+    assert lines[1].endswith("\thold\tstuck:expired_admitted\t-") and lines[2] == f"hold: {HOLD}" and len(lines) == 3
     attempts = as_data(found)["attempts"]
     assert isinstance(attempts, list) and len(attempts) == 1 and isinstance(data := attempts[0], dict)
     assert (data["next"], data["hold_due"], data["hold"], data["label"]) == ("hold", "stuck:expired_admitted", None, "auto")

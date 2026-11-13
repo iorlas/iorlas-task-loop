@@ -21,8 +21,16 @@ def test_no_file_and_no_flags_is_every_built_in_default() -> None:
         Setting(1, "default"),
         Setting(60, "default"),
         Setting(600, "default"),
+        Setting(None, "default"),
     )
     assert config_file(HOME) == HOME / ".config/task-loop/config.toml"
+
+
+@pytest.mark.parametrize("value", ["work", "other.backlog", " a key "])
+def test_backlog_is_an_optional_file_default_using_task_scope_validation(value: str) -> None:
+    found = resolve(f"backlog = {json.dumps(value)}", Flags(), HOME)
+    assert isinstance(found, Effective)
+    assert found.backlog == Setting(value, "file")
 
 
 @pytest.mark.parametrize("key, flags, value", [
@@ -63,6 +71,11 @@ def test_tilde_is_expanded_against_the_given_home_only(monkeypatch: pytest.Monke
     ('db = "/a"\nsandbox = "x"\n', Flags(), "unknown_key", "sandbox"),
     ("[model]\nname = 'x'\n", Flags(), "unknown_key", "model"),
     ("db = 1", Flags(), "type", "db"),
+    ("backlog = 1", Flags(), "type", "backlog"),
+    ("backlog = true", Flags(), "type", "backlog"),
+    ("backlog = []", Flags(), "type", "backlog"),
+    ('backlog = ""', Flags(), "type", "backlog"),
+    ('backlog = "  "', Flags(), "type", "backlog"),
     ('slot_count = "2"', Flags(), "type", "slot_count"),
     ("slot_count = true", Flags(), "type", "slot_count"),
     ("slot_count = 1.5", Flags(), "type", "slot_count"),
@@ -130,13 +143,50 @@ def test_config_show_prints_values_sources_and_the_file(
             "slot_count": {"value": 2, "source": "file"},
             "round_seconds": {"value": 60, "source": "default"},
             "git_read_seconds": {"value": 600, "source": "default"},
+            "backlog": {"value": None, "source": "default"},
         },
     }
     assert main(["config", "show"]) == 0
     text = capsys.readouterr().out
     assert f"Config file: {tmp_path / '.config/task-loop/config.toml'} (missing: built-in defaults)" in text
     assert f"db = {tmp_path / '.local/state/task-loop/factory.db'} (default)" in text
+    assert "backlog = unset (default)" in text
     assert not (tmp_path / ".config").exists() and not (tmp_path / ".local").exists()
+
+
+@pytest.mark.parametrize("structured", [False, True])
+def test_config_show_reports_the_configured_backlog(
+    structured: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    config = tmp_path / "scratch.toml"
+    config.write_text('backlog = "work"\n')
+    assert main(["--config", str(config), "config", "show", *(["--json"] if structured else [])]) == 0
+    output = capsys.readouterr()
+    assert output.err == ""
+    if structured:
+        assert json.loads(output.out)["settings"]["backlog"] == {"value": "work", "source": "file"}
+    else:
+        assert "backlog = work (file)" in output.out
+
+
+@pytest.mark.parametrize("text", ['backlog = ""', 'backlog = "  "', "backlog = 7"])
+@pytest.mark.parametrize("structured", [False, True])
+def test_invalid_backlog_is_refused_even_with_an_explicit_show_override(
+    text: str, structured: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    config = tmp_path / "scratch.toml"
+    config.write_text(text)
+    assert main(["--config", str(config), "step", "show", "t-1", "--backlog", "work", *(["--json"] if structured else [])]) == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    if structured:
+        assert json.loads(output.err)["error"]["reason"] == "type"
+        assert "backlog" in json.loads(output.err)["error"]["message"]
+    else:
+        assert output.err.startswith("tl step show: refused:type") and "backlog" in output.err
+    assert not (tmp_path / ".local").exists()
 
 
 @pytest.mark.parametrize("structured", [False, True])

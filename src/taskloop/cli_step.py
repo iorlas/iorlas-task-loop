@@ -60,7 +60,8 @@ def register(commands: Parsers) -> None:
     _common(start, "--db", "--artifacts")
     status = _add(step, "show", "The task's attempt, its entry, setup run, result and next action (read-only)")
     status.add_argument("task_id", metavar="TASK")
-    status.add_argument("--backlog", required=True)
+    status.add_argument("--backlog", metavar="KEY", help="Task scope; defaults to the machine config's backlog, then the sole backlog "
+                        "in factory.db")
     _common(status, "--db", "--artifacts")
     listing = _add(step, "list", "Every task's current attempt with its next action (read-only)")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:*, hold or unknown")
@@ -204,7 +205,8 @@ def _show(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
         if isinstance(reads, Failed):
             return reads
-        return attempt_status.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id)
+        return attempt_status.show_attempt(reads, loaded.settings.artifacts.value, arguments.backlog, arguments.task_id,
+                                           configured_backlog=loaded.settings.backlog.value)
 
 
 def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:

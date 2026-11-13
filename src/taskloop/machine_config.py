@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS, MIN_GIT_READ_SECONDS
+from taskloop.task import TaskInspectionError, TaskScope
 
 type Source = Literal["flag", "file", "default"]
 MIN_SECONDS: Final = 5
@@ -32,11 +33,12 @@ class Effective:
     slot_count: Setting[int]
     round_seconds: Setting[int]  # `tl step rounds`: seconds from the end of one regular round to the next
     git_read_seconds: Setting[int]  # seconds a Git read (status, diff, ls-files, ...) may take before it is `unavailable:git`
+    backlog: Setting[str | None]  # the file's default for `tl step show`; its explicit flag remains a separate input
 
-    def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int]], ...]:
+    def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int] | Setting[str | None]], ...]:
         """Every key with its setting, in key order."""
         return (("db", self.db), ("artifacts", self.artifacts), ("slots_root", self.slots_root), ("slot_count", self.slot_count),
-                ("round_seconds", self.round_seconds), ("git_read_seconds", self.git_read_seconds))
+                ("round_seconds", self.round_seconds), ("git_read_seconds", self.git_read_seconds), ("backlog", self.backlog))
 
 
 KEYS: Final = tuple(field.name for field in fields(Effective))  # the file's only keys
@@ -83,6 +85,7 @@ def defaults(home: Path) -> Effective:
         Setting(1, "default"),
         Setting(60, "default"),
         Setting(DEFAULT_GIT_READ_SECONDS, "default"),
+        Setting(None, "default"),
     )
 
 
@@ -108,6 +111,16 @@ def _integer(key: str, value: object) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise _Refusal(ConfigRefused("type", key, f"{key} must be an integer"))
     return value
+
+
+def _backlog(key: str, value: object) -> str:
+    detail = f"{key} must be a nonempty string identifying a logical backlog"
+    if not isinstance(value, str):
+        raise _Refusal(ConfigRefused("type", key, detail))
+    try:
+        return TaskScope(value).backlog
+    except TaskInspectionError as error:
+        raise _Refusal(ConfigRefused("type", key, detail)) from error
 
 
 def _count(key: str, value: object) -> int:
@@ -158,6 +171,7 @@ def resolve(text: str | None, flags: Flags, home: Path) -> Effective | ConfigRef
             _chosen("round_seconds", table, flags.round_seconds, built.round_seconds, _seconds),
             _chosen("git_read_seconds", table, flags.git_read_seconds, built.git_read_seconds,
                     _between(MIN_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS)),
+            _chosen("backlog", table, None, built.backlog, _backlog),
         )
     except _Refusal as refusal:
         return refusal.refused

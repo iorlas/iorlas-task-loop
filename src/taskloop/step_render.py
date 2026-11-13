@@ -108,11 +108,12 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     if isinstance(result, Listed):
         attempts = result.attempts
         rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
-                f"{a.result.status} {a.result.reason}\t{a.next}\t{last_command(a) or '-'}" for a in attempts]
+                f"{a.result.status} {a.result.reason}\t{a.next}\t{a.hold.reason if a.hold is not None else a.hold_due or '-'}\t"
+                f"{last_command(a) or '-'}" for a in attempts]
         kinds = dict.fromkeys((a.next, a.checks is not None) for a in attempts if a.next.startswith("stuck:") or a.next == "hold")
         steps = [f"{kind}: {guide(kind, checks=checks)}" for kind, checks in kinds]
         steps += stuck if any(kind.startswith("stuck:") for kind, _checks in kinds) else []
-        return ["task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\tlast command", *rows, *steps]
+        return ["task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tnext\thold cause\tlast command", *rows, *steps]
     width = max((len(each.task_id) for each in result.moves), default=0)
     lines = [f"{each.task_id:<{width}}  {each.action:<8} {each.word} {each.attempt_id}".rstrip() for each in result.moves]
     lines = [line for each, text in zip(result.moves, lines, strict=True) for line in (text, *_path(each))]
@@ -167,5 +168,5 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         hints = ["Make each not_listed slot with `git worktree add --detach <path>`, then adopt again."] if missing else []
         return lines + hints + (["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else [])
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
-    lines += [f"{key} = {each.value} ({each.source})" for key, each in result.settings.pairs()]
+    lines += [f"{key} = {'unset' if each.value is None else each.value} ({each.source})" for key, each in result.settings.pairs()]
     return [*lines, SLOT_COUNT_NOTE]
