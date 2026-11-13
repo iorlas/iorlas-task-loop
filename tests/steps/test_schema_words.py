@@ -1,5 +1,5 @@
 """Rollback and upgrade across factory.db versions stay `refused schema` (tl-8bh9.8.3 section 8, Q13): a newer factory.db
-met by this code ("update it") and an older one (an older version wrote it; the owner discards it) are refused by every
+met by this code and an older one are refused by every
 command that opens factory.db, before any tracker, Git or slot is touched, and nothing is written."""
 
 import hashlib
@@ -26,7 +26,7 @@ COMMANDS = {
     "next": ["step", "next", *BACKLOG, "--label", "auto", *CHOICES],
     "land_summary": ["step", "land", "tl-1", *BACKLOG, "--checkout", "/checkout", "--minutes", "20", "--summary"],
 }
-VERSIONS = {"newer": SCHEMA.version + 1, "older": SCHEMA.version - 1}
+VERSIONS = {"newer": SCHEMA.version + 1, "older": SCHEMA.version - 1, "unversioned": 0}
 
 
 @pytest.fixture(autouse=True)
@@ -65,8 +65,8 @@ def test_another_schema_version_is_refused_schema_and_nothing_is_written(
     assert main([*COMMANDS[command], "--db", str(path), *artifacts, "--json"]) == 1
     error = json.loads(capsys.readouterr().err)["error"]
     assert (error["kind"], error["reason"]) == ("refused", "schema")
-    words = {"newer": "update it", "older": "an older version wrote it and nothing upgrades it; the owner discards factory.db"}
-    assert words[direction] in error["message"] and "not upgraded" not in error["message"]
+    assert f"records schema version {VERSIONS[direction]}" in error["message"]
+    assert "Resume with matching code" in error["message"] and "owner deliberately discards" in error["message"]
     assert digest(path) == before and not (tmp_path / "art").exists()
 
 

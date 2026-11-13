@@ -1,6 +1,6 @@
 # Version check on restart
 
-Task: `tl-8bh9.14.127`. Status: proposed; implementation waits for the owner's yes.
+Task: `tl-8bh9.14.127`. Status: built following the owner's implementation request; original specification below.
 
 Restart with an incompatible `factory.db` fails before scheduling or changing state, with
 a message explaining the mismatch and the drain/discard procedure. Restart with a
@@ -143,3 +143,24 @@ Completion requires an unchanged incompatible database plus an actionable refusa
 observable continuation from the same compatible database after reopening. Plan review
 and implementation approval precede source changes. This planning step changes only
 this file and runs no runtime gates.
+
+## As built
+
+`SCHEMA.version` remains the single persisted-state compatibility version, including incompatible changes to state
+interpretation. No schema bump is needed for these diagnostics. The existing startup and per-use guards remain intact.
+`factory_schema.refusal` now explains older, newer, zero and unreadable versions with the resolved path, expected
+version and the drain-before-discard decision. Matching code can reopen preserved state; this runtime performs no drain
+or discard and advertises no recovery command.
+
+`tests/cli/test_factory_restart.py` covers human/JSON refusal, repeated preservation of populated state, existing SQLite
+sidecars and evidence, startup ordering, absent/corrupt files and temporary access failure. `tests/steps/test_restart.py`
+closes the original store and opens fresh runtime objects over the same database, observing a surviving entry,
+relaunching an admitted attempt with its identity/reservation intact, and preserving unknown liveness, sessions and
+completed-step progress. Existing schema/adoption contracts also cover unversioned files. Session conversation resume
+and draining remain separate work. The supplied task was absent from the local tracker; no task state was changed.
+
+Validation: `just install` passed. The focused installed-package pytest command selecting both new files and
+`tests/steps/test_schema_words.py` passed all 35 cases. `just check` passed lint, types and all nine import contracts.
+`just test` completed with 3,206 passed, two failed and 11 errors: the existing dashboard HTTP tests cannot create
+localhost sockets in this sandbox (`PermissionError: Operation not permitted`). No dashboard behavior or test was changed
+to bypass this environment restriction. `git diff --check` passed.
