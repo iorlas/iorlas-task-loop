@@ -1,0 +1,8 @@
+name: glossary
+when_to_use: the one file naming every domain term; read before using or inventing a word
+file_pattern: "docs/glossary.md"
+shape: leaf
+id: {type: given}
+body: none
+fields:
+  - {name: terms, type: "list[term]", required: true}

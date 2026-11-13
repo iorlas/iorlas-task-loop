@@ -1,0 +1,8 @@
+name: waiver
+storage: inline
+key: finding
+when_to_use: one allowed finding with the task that removes it
+fields:
+  - {name: finding, type: string, required: true}
+  - {name: task, type: "link[task]", required: true}
+  - {name: why, type: string, required: true, rigid: true}

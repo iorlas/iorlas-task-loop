@@ -1,0 +1,17 @@
+name: area
+when_to_use: a bounded part of the system with one set of rules; read before changing code it owns
+file_pattern: "docs/system/area/{slug}.md"
+shape: leaf
+id: {type: slug}
+body: none
+fields:
+  - {name: read_when, type: string, required: true}
+  - {name: owns, type: "set[string]", required: true}        # path globs; each must match a file
+  - {name: touches, type: "set[link[area|external]]", required: false}
+  - {name: terms, type: "set[link[term]]", required: true}
+  - {name: rules, type: "list[rule]", required: true}
+  - {name: cases, type: "list[case]", required: false}
+  - {name: outcomes, type: "list[outcome]", required: false}
+  - {name: limits, type: "list[limit]", required: false}
+  - {name: operations, type: "list[operation]", required: false}
+  - {name: not_designed, type: "list[gap]", required: false}

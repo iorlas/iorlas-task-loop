@@ -1,0 +1,7 @@
+name: check
+when_to_use: a test or import-linter contract that proves a rule; declared by the test, not by a doc
+storage: inline
+key: id
+fields:
+  - {name: id, type: string, required: true}
+  - {name: source, type: string, required: true}            # path::test or contract name

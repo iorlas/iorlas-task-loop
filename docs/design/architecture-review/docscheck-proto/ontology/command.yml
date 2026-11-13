@@ -1,0 +1,8 @@
+name: command
+storage: inline
+key: name
+when_to_use: a CLI command and the operation it runs; one command table; trial
+fields:
+  - {name: name, type: string, required: true}
+  - {name: runs, type: string, required: true, symbol: true}
+  - {name: who, type: "link[persona]", required: true}

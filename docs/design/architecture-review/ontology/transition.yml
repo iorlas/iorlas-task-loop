@@ -1,0 +1,9 @@
+name: transition
+storage: inline
+key: from
+when_to_use: one cell of the state x event table; every declared pair has exactly one row
+fields:
+  - {name: from, type: string, required: true}
+  - {name: event, type: string, required: true}
+  - {name: to, type: string, required: true}
+  - {name: outcome, type: "link[outcome]", required: false}

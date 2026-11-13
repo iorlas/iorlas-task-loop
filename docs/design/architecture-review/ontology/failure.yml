@@ -1,0 +1,7 @@
+name: failure
+storage: inline
+key: when
+when_to_use: how an external system fails and the typed outcome that results
+fields:
+  - {name: when, type: string, required: true}
+  - {name: outcome, type: "link[outcome]", required: true}

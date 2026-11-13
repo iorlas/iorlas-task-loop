@@ -1,0 +1,7 @@
+name: runstep
+storage: inline
+key: do
+when_to_use: one ordered action of a runbook and what is true afterwards
+fields:
+  - {name: do, type: string, required: true, rigid: true}
+  - {name: expect, type: string, required: false, rigid: true}

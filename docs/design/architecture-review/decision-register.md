@@ -14,7 +14,7 @@ Where the decisions should live (proposal P, see section 12): `docs/design/syste
 | M5 | No GitHub Actions or other CI for now; gates run through `just check`, the prek hook and the factory's checks step | D | - |
 | M6 | Trial plugins one at a time, exact pin, measure test time before and after, keep a trial log, drop if no win | D | trial log |
 | M7 | Keep the playbook growing: append lessons after every round | D | - |
-| M8 | Docs structure: system design docs say what; ADRs say how we work; the constitution holds agent rules; plans per task are history | P | docs index test (every doc listed, has a status) |
+| M8 | Docs (owner, round 29: adopt nothing from blueprint beyond what we pick): `docs/system/<area>.md` are beefy but compressed, agent-oriented, structured, reusing glossary terms (the decisions of the register live there); ADRs only for meta decisions (living, rewritten in place, generated one-line index); AGENTS.md thin with pointers and few critical rules generated from their source, CLAUDE.md a symlink; history stays in `docs/design/<task-id>/` with status marks; a tiny own generator builds the indexes and checks dangling references | P | generator `check` in `just check` |
 | M9 | Every mechanically enforceable rule names its test or contract in the design doc that states it | P | docs index test |
 
 ## 2. Architecture
@@ -47,7 +47,7 @@ Where the decisions should live (proposal P, see section 12): `docs/design/syste
 | L8 | Restart must continue unfinished work: record a process identity before the spawn so reconciliation can find it (finding A) | P | crash table test |
 | L9 | Unexpected or unsafe state: `blocked` with context and a generic copyable repair prompt, optionally a repair agent; known states keep deterministic reconciliation | D | - |
 | L10 | Crash test: one table-driven test (crash point x state) in the engine slice, run on engine change and at land; measure cost first | D | the test |
-| L11 | Where the known/unknown line sits | O | - |
+| L11 | Known state = the typed state machine names it and a recorded identity proves the next step is safe; anything else is blocked with a repair prompt | D | - |
 
 ## 4. Storage
 | id | decision | st | enforced by |
@@ -56,7 +56,7 @@ Where the decisions should live (proposal P, see section 12): `docs/design/syste
 | S2 | A cross-slice transition runs in the starting slice with a caller-passed `Tx` | D | - |
 | S3 | The dashboard reads and writes through the same transitions; read-only is a connection mode; transactions stay short (one writer) | D | - |
 | S4 | `sqlite-store` grows into a real DB library/ORM by absorbing needs seen twice; the row-to-model helper is written in the shelf; direction text in its README | D | README |
-| S5 | factory.db stays disposable (2026-11-08 rule); whether it may become a golden source later | O | - |
+| S5 | factory.db stays disposable (2026-11-08 rule); revisit a golden source only when a second machine or a server tracker exists | D | - |
 | S6 | Fix growth and speed: attempts evidence retention, grow-only tables, `quick_check` per open, `attempts()` scans, board rebuild every 2 s, missing index on `attempt(repo_id)` | P | perf tests |
 | S7 | Pydantic v2 at the edges (frozen, strict, extra=forbid; lax per field for database and YAML); plain frozen dataclasses for hot types; msgspec is the fallback; measure on 3.15 | D (fit pending measure) | - |
 
@@ -103,7 +103,7 @@ Where the decisions should live (proposal P, see section 12): `docs/design/syste
 ## 9. CLI, output, messages and vocabulary
 | id | decision | st | enforced by |
 |---|---|---|---|
-| U1 | verb-cli (shelf) is the CLI library and grows: registry with dynamic subparsers, flags from typed models, output layer, exit-code policy from outcome class, structured error surface, `--format`/`--config`, test helpers; rename to `any-cli` possible; no Typer, click, cappa | D | - |
+| U1 | verb-cli (shelf) is the CLI library and grows: registry with dynamic subparsers, flags from typed models, output layer, exit-code policy from outcome class, structured error surface, `--format`/`--config`, test helpers; rename to `any-cli` (no consumer outside the shelf found); no Typer, click, cappa | D | - |
 | U2 | Output formats: JSON for nested, TSV for tables, text for humans; YAML only for human-authored files; default adapts (not a terminal means machine format chosen by shape; `--format` overrides) | D | - |
 | U3 | Outcomes are typed values; no parsing of strings into pieces (no regex, startswith, split) except as JSON or YAML | D | AST test |
 | U4 | Each slice owns a message catalog keyed by its outcome enum (sentence and next action); the three guide modules merge into catalogs | D | completeness test over the enum |

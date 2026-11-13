@@ -1,0 +1,7 @@
+name: limit
+storage: inline
+key: name
+when_to_use: a policy number; the code constant is the authority, this row names it
+fields:
+  - {name: name, type: string, required: true}
+  - {name: source, type: string, required: true}            # path::symbol; must resolve
