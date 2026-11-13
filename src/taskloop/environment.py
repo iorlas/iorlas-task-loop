@@ -264,7 +264,7 @@ class Preparation:
 
     def _apart(self, path: Path, slot: Prepared, found: Folders) -> bool:
         """Resolved, each root is exactly where `folders` puts it beside the resolved slot (no link anywhere below
-        `<slots_root>/<repo_id>/`, so never a sibling slot, `.locks/` or another root), and none equals, holds or sits
+        `<slots_root>/<repo name>/`, so never a sibling slot, `.locks/` or another root), and none equals, holds or sits
         inside the slot, its Git directory G, the common one C, the person's checkout, the evidence root or factory.db's
         folder."""
         resolve = self.ports.files.resolve

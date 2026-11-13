@@ -22,6 +22,7 @@ from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
+DASH_PORT = 8765
 COMMANDS = ("config", "slot", "step")
 
 
@@ -46,7 +47,7 @@ def register(commands: Parsers) -> None:
     _common(show, "--db", "--artifacts", "--root")
     show.add_argument("--count", type=int, help="Slot count (overrides the machine config's slot_count)")
     slot = _add(commands, "slot", "Managed slots (setup)").add_subparsers(dest="operation", required=True)
-    adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo_id>/sN`; creates factory.db")
+    adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo name>/sN`; creates factory.db")
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
     adopt.add_argument("--count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
     _common(adopt, "--root", "--db")
@@ -87,8 +88,9 @@ def register(commands: Parsers) -> None:
     rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
-    rounds.add_argument("--dash-port", type=int, metavar="PORT", help="Serve the read-only dashboard on 127.0.0.1:PORT while the "
-                        "rounds run (0 picks a free port); without it nothing is served")
+    rounds.add_argument("--dash-port", type=int, metavar="PORT", default=DASH_PORT, help="Serve the read-only dashboard on "
+                        f"127.0.0.1:PORT while the rounds run (default {DASH_PORT}; 0 picks a free port)")
+    rounds.add_argument("--no-dashboard", action="store_true", help="Serve no dashboard (for a second rounds on one machine)")
     _round_flags(rounds)
     rounds.epilog = ("--json prints JSON Lines: one start record and one end record on a graceful stop; "
                      "refusals and abrupt end results go to stderr. Dashboard notices go to stderr with --json.")
@@ -167,7 +169,7 @@ def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_composition.DashRequest | None:
-    if arguments.dash_port is None:
+    if arguments.no_dashboard:
         return None
     return dash_composition.DashRequest(arguments.backlog, arguments.tracker_root, arguments.label, arguments.dash_port,
                                         settings.db.value, settings.artifacts.value, Path(arguments.checkout))

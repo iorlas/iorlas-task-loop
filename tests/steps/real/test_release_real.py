@@ -29,7 +29,7 @@ from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
-from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, observe
+from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, folder_name, observe
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -77,7 +77,7 @@ class Repository:
         git(self.main, "commit", "-q", "-m", "base")
         slots = root / "slots"
         self.repo_id = RepoId(VIEWS.checkouts(self.main).identity().key)
-        self.slot = slots / self.repo_id / "s1"
+        self.slot = slots / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev("HEAD")
         adopt(lambda: factory, begin_immediate, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)

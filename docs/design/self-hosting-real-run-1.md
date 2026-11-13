@@ -9,7 +9,7 @@ effort `ultra`. Vocabulary: [glossary](../glossary.md). Follows [trial 6](self-h
 
 ## 1. Setup
 
-- Home `~/factory-successor`: own `config.toml`, `state/factory.db`, `state/artifacts`, `slots` (two adopted), and a
+- Factory home of that trial: own `config.toml`, `state/factory.db`, `state/artifacts`, `slots` (two adopted), and a
   clone `repo` of `git@github.com:iorlas/iorlas-task-loop.git` (a land pushes to the real `main`).
 - **Tracker:** `--tracker-root /home/iorlas/Workspaces/iorlas-task-loop` (the owner's real embedded beads database, used
   only through `bd`, no file in that checkout touched, no `bd init`). Claims and comments there are real.

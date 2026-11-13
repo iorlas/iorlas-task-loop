@@ -1,8 +1,7 @@
 """Machine configuration: the one owner of its keys, built-in defaults, precedence (flag > file > default) and refusals.
 
 Pure: the file's text (None when the file is missing), the flags and the home directory in, values out. No environment
-variable is read; `~` is expanded against the given home only. Locations stay out of `~/.config/task-loop/` itself: that
-folder is the baseline factory's live home on the owner's machine.
+variable is read; `~` is expanded against the given home only.
 """
 
 import tomllib

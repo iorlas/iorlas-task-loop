@@ -383,7 +383,7 @@ def test_a_plan_attempt_launches_with_plans_access_and_no_added_environment(
     assert plan.environment.probes == []
 
 
-@pytest.mark.parametrize(("root", "reason"), [(Path("/" + "r" * 44), None), (Path("/" + "r" * 45), "environment:path_long")],
+@pytest.mark.parametrize(("root", "reason"), [(Path("/" + "r" * 52), None), (Path("/" + "r" * 53), "environment:path_long")],
                          ids=["64_bytes", "65_bytes"], indirect=["root"])
 def test_a_tmpdir_over_64_bytes_is_refused_before_any_folder_is_made(entry: Entry, slot: FakeWorktree, reason: str | None) -> None:
     """A Unix socket path holds 107 bytes on Linux: 64 for TMPDIR leaves 43 for what a test appends."""

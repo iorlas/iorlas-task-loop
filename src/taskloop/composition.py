@@ -173,7 +173,7 @@ def open_checks_launcher(database: Path, artifacts: Path, views: GitViews) -> La
 def adopt_slots(
     database: Path, checkout: Path, root: Path, count: int, git: SlotGit
 ) -> tuple[Adopted | NotAdopted, ...]:
-    """Adopt worktrees a person already made with `git worktree add --detach <root>/<repo_id>/sN`; creates none. `git` is how a slot is
+    """Adopt worktrees a person already made with `git worktree add --detach <root>/<repo name>/sN`; creates none. `git` is how a slot is
     observed (`real_slots`)."""
     store = Store(SCHEMA)
     try:

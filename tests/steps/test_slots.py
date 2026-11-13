@@ -6,18 +6,18 @@ from pathlib import Path
 
 import pytest
 from doubles import FakeSlotFiles, PinnedViews, linked_into
-from git_porcelain import GitUnavailable, WorktreeInfo
+from git_porcelain import GitUnavailable, RepoIdentity, WorktreeInfo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import begin_immediate
 
 from taskloop.attempt_reads import SlotUse, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
 from taskloop.repo import RepoId
-from taskloop.slots import Adopted, NotAdopted, SlotGit, SlotsUnavailable, SlotView, Unclean, adopt, observe, slot_names
+from taskloop.slots import Adopted, NotAdopted, SlotGit, SlotsUnavailable, SlotView, Unclean, adopt, folder_name, observe, slot_names
 
 
 def derived(repo: FakeRepo, root: Path, name: str) -> Path:
-    return root.resolve() / repo.identity().key / name
+    return root.resolve() / folder_name(repo.identity()) / name
 
 
 def add(repo: FakeRepo, root: Path, *names: str) -> None:
@@ -264,3 +264,25 @@ def test_a_slot_is_read_only_through_its_verified_pinned_view_and_a_redirected_o
     linked_into(files, s1, other)  # after adoption: the free slot's pointer now names the other repository
     assert observe(factory, repo, SlotGit(views, files), rid(repo), unlocked) == (SlotView("s1", s1, "unknown", "redirected"),)
     assert views.slot_opens(s1) == [] and (other.identity().root, None) in views.opened  # its identity was read, not the slot
+
+
+@pytest.mark.parametrize(("origin", "name"), [
+    ("git@github.com:iorlas/iorlas-task-loop.git", "iorlas-task-loop"),
+    ("https://github.com/iorlas/iorlas-task-loop/", "iorlas-task-loop"),
+    ("/srv/git/my repo.git", "my-repo"),
+])
+def test_the_folder_is_the_origins_readable_name(origin: str, name: str) -> None:
+    assert folder_name(RepoIdentity(Path("/checkouts/other"), Path("/checkouts/other/.git"), origin, "0123456789ab")) == name
+
+
+def test_without_an_origin_the_checkout_folder_names_it() -> None:
+    assert folder_name(RepoIdentity(Path("/checkouts/mine"), Path("/checkouts/mine/.git"), None, "0123456789ab")) == "mine"
+
+
+def test_the_key_joins_the_name_only_when_another_repository_holds_it(factory: sqlite3.Connection, repo: FakeRepo, root: Path) -> None:
+    held = root.resolve() / folder_name(repo.identity()) / "s1"
+    factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('another','s1',?)", (str(held),))
+    joined = root.resolve() / f"{folder_name(repo.identity())}-{repo.identity().key}"
+    repo.add_worktree(joined / "s1", "HEAD")
+    assert adopted(factory, repo, root, 1) == (Adopted("s1", joined / "s1"),)
+    assert adopted(factory, repo, root, 1) == (Adopted("s1", joined / "s1"),)

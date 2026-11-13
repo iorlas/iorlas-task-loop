@@ -20,6 +20,7 @@ from sqlite_store import Store, begin_immediate
 from taskloop import check_store, land_store
 from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import SCHEMA
+from taskloop.slots import folder_name
 
 
 @pytest.fixture
@@ -49,8 +50,8 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def slot(repo: FakeRepo, root: Path) -> FakeWorktree:
-    """What a person does before adoption: `git worktree add --detach <root>/<repo_id>/s1`, born, detached and clean."""
-    return repo.add_worktree(root.resolve() / repo.identity().key / "s1", "HEAD")
+    """What a person does before adoption: `git worktree add --detach <root>/<repo name>/s1`, born, detached and clean."""
+    return repo.add_worktree(root.resolve() / folder_name(repo.identity()) / "s1", "HEAD")
 
 
 @pytest.fixture

@@ -38,8 +38,8 @@ explains the cause, evidence and claim state. `tl step list --stuck`, `tl step s
 them. Answer by editing the task's description or acceptance criteria, then add its approval label back; the next
 round starts it again at plan. Follow any pending cleanup instructions before reapproval. Comments alone are not answers.
 
-`tl step rounds --dash-port PORT` serves the dashboard on `127.0.0.1` for the lifetime of rounds; 0 chooses a free port.
-Without this flag nothing is served. A dashboard startup failure warns on stderr while rounds continue.
+`tl step rounds` serves the dashboard on `127.0.0.1:8765` for the lifetime of rounds; `--dash-port PORT` changes the port (0 chooses a free port).
+`--no-dashboard` serves none. A dashboard startup failure warns on stderr while rounds continue.
 `step rounds --json` writes JSON Lines: one start record and one end record for a normal graceful session.
 Dashboard notices go to stderr in this mode, as do early refusals and abrupt end results; stdout records keep their
 existing shapes. Other commands' `--json` output is a single document.
@@ -86,5 +86,5 @@ they are not additional executable commands.
 ([S5e](docs/design/tl-8bh9.4.3.1.16.2/plan.md)), on Linux only; the agent then writes three folders beside the slots
 (`TMPDIR`, the uv cache and tools) with uv offline and is told to run every command under `checks` itself. The factory's
 checks step independently runs the profile's setup and checks on the committed implementation. A slots root must keep
-`<slots_root>/<repo_id>/.t/<slot>` within 64 bytes and lie outside
+`<slots_root>/<repo name>/.t/<slot>` within 64 bytes and lie outside
 the checkout, the artifacts root and factory.db's folder.

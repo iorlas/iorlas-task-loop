@@ -1,6 +1,7 @@
 """Managed slots: adoption (the only inserter of `slot` rows; admission advances their `generation`, the last issued) and
 typed free/held/unknown observation; no reservation writer."""
 
+import re
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -8,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, get_args
 
-from git_porcelain import GitUnavailable, Repo, WorktreeInfo
+from git_porcelain import GitUnavailable, Repo, RepoIdentity, WorktreeInfo
 
 from taskloop.attempt_types import Checkouts, SlotFiles
 from taskloop.factory_schema import SLOT, current, marks
@@ -114,6 +115,24 @@ def _adopted(con: sqlite3.Connection, repo_id: str) -> dict[str, str]:
     return dict(rows)
 
 
+def folder_name(identity: RepoIdentity) -> str:
+    """The repo's readable folder name under the slots root: the origin's last path part, else the checkout folder's."""
+    origin = (identity.origin_url or "").rstrip("/").removesuffix(".git")
+    return re.sub(r"[^A-Za-z0-9._-]", "-", re.split(r"[/:]", origin)[-1] or identity.root.name).strip(".-") or "repo"
+
+
+def _folder(con: sqlite3.Connection, root: Path, identity: RepoIdentity) -> Path:
+    """`<root>/<repo name>`: the name is the origin's last path part (else the checkout folder's), readable; the repo's key
+    joins it only when another repository's slots already use that name."""
+    name = folder_name(identity)
+    rows: list[tuple[str, str]] = con.execute("SELECT repo_id,path FROM slot").fetchall()
+    joined = root / f"{name}-{identity.key}"
+    named = root / name
+    if any(repo == identity.key and Path(path).parent == joined for repo, path in rows):
+        return joined
+    return joined if any(repo != identity.key and Path(path).parent == named for repo, path in rows) else named
+
+
 def adopt(
     connect: Callable[[], sqlite3.Connection | None],
     begin: Callable[[sqlite3.Connection], AbstractContextManager[None]],
@@ -122,7 +141,7 @@ def adopt(
     root: Path,
     count: int,
 ) -> tuple[Adopted | NotAdopted, ...]:
-    """Record `s1..sN` at `<root>/<repo_id>/<name>` once Git lists each as a clean linked worktree; idempotent.
+    """Record `s1..sN` at `<root>/<repo name>/<name>` once Git lists each as a clean linked worktree; idempotent.
 
     A name already adopted under another root is reported as `other_root`, never moved; a root inside the main checkout
     is refused, so no slot lives in the person's checkout. Each slot's pointer must name a linked Git directory of the
@@ -130,15 +149,16 @@ def adopt(
     """
     names = slot_names(count)
     try:
-        repo_id = repo.identity().key
+        identity = repo.identity()
     except GitUnavailable:
         return tuple(NotAdopted(name, "git_unavailable") for name in names)
-    base = root.resolve() / repo_id
+    repo_id, base = identity.key, root.resolve() / folder_name(identity)
     try:
         con = connect()
         if con is None or not current(con):
             return tuple(NotAdopted(name, "store_unavailable", base / name) for name in names)
         known = _adopted(con, repo_id)
+        base = _folder(con, root.resolve(), identity)
         pending = [name for name in names if name not in known]
         listed = repo.worktrees() if pending else ()
     except GitUnavailable:
