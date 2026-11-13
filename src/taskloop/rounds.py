@@ -20,7 +20,7 @@ from typing import Final
 from taskloop.attempt_reads import SlotUse
 from taskloop.evidence_files import EvidenceError
 from taskloop.operations import Ended, Failed, Quiet, Round, choices_refused, minutes_refused
-from taskloop.round import STOPPING_UNKNOWN, NextRequest, max_new_refused
+from taskloop.round import STOPPING_UNKNOWN, NextRequest, max_running_refused
 from taskloop.round_log import IDENT, INTERRUPTED, fixed, stamped
 
 CHECK: Final = 2.0  # seconds between two reads of the reservation rows
@@ -58,7 +58,7 @@ def inputs(request: NextRequest) -> Failed | None:
         return Failed("refused", "backlog", "The backlog must be one word of letters, digits and ._:@+-")
     if not request.label.strip():
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    return choices_refused(request.model, request.effort) or minutes_refused(request.minutes) or max_new_refused(request.max_new)
+    return choices_refused(request.model, request.effort) or minutes_refused(request.minutes) or max_running_refused(request.max_running)
 
 
 class _Log:

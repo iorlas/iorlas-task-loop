@@ -128,9 +128,10 @@ def _round_flags(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(flag, required=True)
     parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
                         "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
-    parser.add_argument("--max-new", type=int, default=1, metavar="N", help="Fresh tasks one round starts, at most (default 1; "
-                        "the free slots less the land's reserve bound it too). Claimed work advances regardless; use a label "
-                        "only the tasks you want carry")
+    parser.add_argument("--max-running", type=int, default=3, metavar="N", help="Tasks of this backlog in flight (a step "
+                        "running, or passed and waiting for `tl step land`, which counts until landed; not failed, stuck or held) "
+                        "at which no new task starts (default 3, at least 1); claimed work advances regardless. Start only what you "
+                        "approved: use a label only those tasks carry")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
     parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
                         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
@@ -152,7 +153,7 @@ def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 def _next_request(arguments: argparse.Namespace) -> NextRequest:
     return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
-                       arguments.effort, arguments.minutes, max_new=arguments.max_new, retake=arguments.retake_lapsed)
+                       arguments.effort, arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed)
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -177,10 +178,13 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments)) as ports:
             if isinstance(ports, Failed):
                 return ports
-            data = result_data.rounds_data(request.backlog, request.every, str(log), arguments.label, arguments.max_new)
+            label = arguments.label.strip()  # as `run_round` reads it
+            data = result_data.rounds_data(request.backlog, request.every, str(log), label, arguments.max_running)
             started = (json.dumps(data) if arguments.json_output else
-                       f"Rounds for backlog {request.backlog} every {request.every} s, taking tasks labelled {arguments.label!r}, "
-                       f"at most {arguments.max_new} new per round; log: {log}; "
+                       f"Rounds for backlog {request.backlog} every {request.every} s, taking tasks labelled {label!r}"
+                       + (" (and its own lapsed claims)" if arguments.retake_lapsed else "")
+                       + f", none new while {arguments.max_running} or more tasks of this backlog are in flight (a step running, or "
+                       f"passed and waiting for land until `tl step land` lands it); log: {log}; "
                        + ("stop with Ctrl-C" if ports.ctrl_c else "Ctrl-C is ignored here: stop with SIGTERM"))
             print(started, flush=True)
             with dash_composition.serving(_dash_request(arguments, settings), views_for(loaded)) as address:

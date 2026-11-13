@@ -19,7 +19,7 @@ Nothing merges or lands.
   claim) and publish one task's current attempt, whatever its step (plan, then implement: `tl step start` on a done plan
   admits the implement step). `tl step next` runs one
   scheduling round: it settles existing attempts, advances each claimed task whose step is done (no label check), then
-  admits approved ready tasks (`--label`) into the slots left; `tl step rounds` runs rounds in the foreground until Ctrl-C. `tl plan` is
+  admits approved ready tasks (`--label`) into the slots left while fewer than `--max-running` (default 3) of the backlog's tasks are in flight (a step running, or passed and waiting for `tl step land`); `tl step rounds` runs rounds in the foreground until Ctrl-C. `tl plan` is
   gone (an unknown command).
 
 The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; state defaults to

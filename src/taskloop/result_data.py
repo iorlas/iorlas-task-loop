@@ -158,9 +158,9 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
             return _setup_data(result)
 
 
-def rounds_data(backlog: str, every: int, log: str, label: str, max_new: int) -> dict[str, object]:
+def rounds_data(backlog: str, every: int, log: str, label: str, max_running: int) -> dict[str, object]:
     """`tl step rounds`'s start, printed before the first round; its end is `as_data(Ended)`."""
-    return {"status": "rounds", "backlog": backlog, "every": every, "log": log, "label": label, "max_new": max_new}
+    return {"status": "rounds", "backlog": backlog, "every": every, "log": log, "label": label, "max_running": max_running}
 
 
 def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:

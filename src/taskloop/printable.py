@@ -19,7 +19,8 @@ def block(text: str, line: int = 2000, total: int = 20000) -> str:
 
 def title_line(text: str, cap: int, tail: str = "") -> str:
     """`text` as one printable line that, with `tail`, fits `cap` characters: a longer one is cut at a word boundary and
-    ends in an ellipsis (a single word longer than the room is cut, then the ellipsis)."""
+    ends in an ellipsis (a single word longer than the room is cut, then the ellipsis). `tail` is never cut: one so long
+    that fewer than 2 characters of room are left still follows 2 of the text, so the line then exceeds `cap`."""
     line, room = one_line(text, 10**6), max(cap - len(tail), 2)
     if len(line) <= room:
         return line + tail

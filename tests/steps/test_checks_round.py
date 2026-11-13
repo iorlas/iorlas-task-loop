@@ -479,6 +479,9 @@ def test_a_task_waiting_for_its_land_keeps_the_last_free_slot_from_new_starts(ri
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     ready(rig, "tl-2")
     assert rig.round() == [LAND_LINE] and rig.last.stopped == "slot_for_land" and rig.launched == ["tl-1", "tl-1"]
+    reads = rig.tracker.ready_reads
+    assert rig.round(running=1) == [LAND_LINE] and rig.last.stopped == "slot_for_land"  # the land's slot is named first
+    assert rig.tracker.ready_reads == reads  # a task waiting for land is in flight: with room for none, no read either way
     free = "SELECT count(*) FROM slot WHERE (repo_id,name) NOT IN (SELECT repo_id,slot FROM reservation)"
     assert rig.con.execute(free).fetchone() == (1,)
     assert rig.next_words() == {"tl-1": ("check", "land")}
