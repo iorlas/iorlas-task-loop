@@ -1,3 +1,5 @@
+Status: **evidence**. Historical architecture-review format/opinion specimen; its proposals are not adopted system authority.
+
 # System doc format: independent opinion
 
 Marks: **[K]** = I know (follows from the material or is mechanical), **[B]** = I believe (judgment, not measured).

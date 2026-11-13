@@ -8,6 +8,10 @@ Bead tl-isfa.3 (epic tl-isfa, "Remove factory self-management"). Written 2026-11
 **Status: every judgment below is proposed** unless it is a quoted owner decision. Nothing here moves, renames or
 deletes code; tl-isfa.1 (code removal) and tl-isfa.2 (docs removal) are separate tasks.
 
+<a id="factory-management-decision"></a>
+
+See [ADR 10](tl-8bh9.14.119/adr-10-factory-management-boundary.md) for current scope, supersession and enforcement.
+
 Owner decision (2026-11-12, quoted from the epic's brief): the factory should care only about its own work and its
 children's work (tasks, steps, slots, agents). Software that manages software (installs, versions, pins, releases,
 host machine state) is a different layer. Terms follow [the glossary](../glossary.md).

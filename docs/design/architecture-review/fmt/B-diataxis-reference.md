@@ -1,3 +1,5 @@
+Status: **evidence**. Historical architecture-review format/opinion specimen; its proposals are not adopted system authority.
+
 # storage — reference
 ## Entities
 - Store: per-slice module `store.py`; sole holder of sqlite3.Connection.

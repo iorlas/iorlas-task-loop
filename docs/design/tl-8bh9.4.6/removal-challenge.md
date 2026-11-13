@@ -1,5 +1,7 @@
 # Removing adapters: behavior counterfactuals
 
+Status: **evidence**. Dated source review; recommendations remain proposals unless explicitly accepted below.
+
 Owner sharpened the review on 2026-11-09: what if the behavior disappears, what breaks, is that loss acceptable,
 and what simpler system remains? Astra challenged all 38 modules against the frozen baseline source. This is
 source reasoning, not a production incident or a claim that the successor already supplies the guarantees.

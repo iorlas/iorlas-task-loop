@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 lens: code
 statement: "Source files stop at 400 lines, functions at 80 lines and test files at 800 lines; no new Any, cast or ignore enters the code."
 read_when: "before adding a file, a function or a type escape"

@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 read_when: before changing admission, attempts, slots, rounds or the entry process
 owns: ["src/taskloop/admit*.py", "src/taskloop/attempt*.py", "src/taskloop/slot*.py", "src/taskloop/round*.py"]
 touches: [area/storage, external/tracker, external/git]

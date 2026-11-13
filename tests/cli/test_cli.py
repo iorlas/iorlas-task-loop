@@ -47,7 +47,9 @@ def test_publish_help_says_it_pushes_as_you_never_forced(capsys: pytest.CaptureF
 
 @pytest.mark.parametrize(
     "arguments",
-    [["plan"], ["step"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["step", "prepare"], ["slot"], ["config"]],
+    [["plan"], ["step"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["step", "prepare"], ["slot"], ["config"],
+     ["install"], ["pin"], ["report"], ["repo", "register"], ["task", "create"],
+     ["slot", "list"], ["slot", "release"], ["slot", "hold"]],
 )
 def test_invalid_request(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:

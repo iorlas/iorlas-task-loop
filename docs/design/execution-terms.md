@@ -674,16 +674,22 @@ of an epic may run concurrently. Retain task claims, workspace ownership and sca
 task exclusion. Additional manual queue and epic-order policies are assessed, not yet all approved for deletion,
 in [the selection review](tl-8bh9.3/selection-review.md), task tl-8bh9.3.7.
 
+<a id="ready-task-selection-decision"></a>
+
 Owner subsequently approved manual-queue/epic-order removal and accepted Astra's hierarchical priority contract:
 own task priority first, then direct parent, then successive ancestors to root, then natural task ID. Missing priority
 and absent ancestor levels compare as P2. No multiplier or inherited-priority writes. This supersedes earlier open
 choice/recommendation wording. The [ordering contract](tl-8bh9.3/hierarchical-priority.md) records required results;
 implementation is not permitted to substitute root-first, weighted scores or incidental discovery order.
+See [ADR 02](tl-8bh9.14.119/adr-02-ready-task-selection.md) for current scope and enforcement. Eligibility and ordering are separate contracts.
+
+<a id="profile-change-approval-decision"></a>
 
 Owner decision, 2026-11-09: remove the whole profile-change-specific approval mechanism. No replacement DB grant,
 special profile authorization flag or audit-log delivery gate. Configuration changes follow normal implementation,
 checks, review and land. Profile source/revision selection is a separate question under explanation, not permission
 to reinstate that gate. See [the configuration review](tl-8bh9.1/configuration-review.md), task tl-8bh9.1.3.
+See [ADR 03](tl-8bh9.14.119/adr-03-profile-change-approval.md) for current scope and enforcement. Later land acceptance qualifies the original no-special-flag wording.
 
 Owner accepted configuration strategy on 2026-11-09: new-work admission reads a resolved target-branch profile;
 task checks read the exact candidate revision's profile. Each operation keeps an immutable source snapshot until
@@ -705,13 +711,18 @@ See [limit/workspace contract](tl-8bh9.1/timeouts-workspaces.md). New check-pipe
 recorded in [candidate checks](tl-8bh9.5.1/candidate-checks.md), with generic pass-cache deletion still undecided.
 
 
+<a id="check-results-decision"></a>
+
 Owner decision 2026-11-09: accepted the Astra-reviewed discussion roadmap and check-pipeline simplifications. Remove
 historical pass cache/carry proofs, agent check-request machinery, stage/gate/both selection, routine duplicate checks
 and automatic base-red/unchanged-input exemptions. Keep current-workflow validation completion and repository-owned
 affected testing/incremental tooling. Required failures block; unavailable capacity waits. Revisit successful-check
 caching only on demonstrated need. See [candidate checks](tl-8bh9.5.1/candidate-checks.md) for the authoritative contract
 and [discussion roadmap](tl-8bh9/plan.md) for the accepted review order. This is a design decision, not implemented code.
+See [ADR 04](tl-8bh9.14.119/adr-04-check-results.md) for current scope and enforcement. Current-attempt completion remains required state.
 
+
+<a id="delivery-publication-decision"></a>
 
 Owner approved delivery/publication strategy 2026-11-09: merge plus final squash into target, ordinary append-only
 task-branch publication after completed plan/mutating steps, and resumable land retrying only unfinished required
@@ -719,6 +730,7 @@ actions. PRs may intentionally await human review. Internal progress/decisions a
 phrases: validated structured interchanges, JSON where appropriate, necessary text quirks encapsulated by the owning
 adapter/library. No redundant in-process serialization or new protocol framework. See the
 [delivery contract](tl-8bh9.9/delivery-publication.md). No source implementation has been made.
+See [ADR 01](tl-8bh9.14.119/adr-01-delivery-publication.md) for current scope and enforcement. Direct push is built; PR waiting remains design.
 
 
 Owner accepted local lifecycle defaults 2026-11-09: one shared local database authority for instances managing the same
@@ -744,11 +756,14 @@ A running factory keeps the code it started with. Superseded 2026-11-12: the fac
 installs, pins or releases; uv does (see the [roadmap](self-hosting-roadmap.md) decision).
 
 
+<a id="skills-and-hooks-decision"></a>
+
 Owner clarified lightweight skill purpose 2026-11-09: explicit help with setup, maintenance, compliant task authoring,
 asks and requested factory operations. It is not a second autonomous engine or policy/state store. Astra recommends
 retiring task-loop session hooks and managed Git-hook overlay, with retained runtime guarantees owned directly by normal
 operations. Repository Git/LFS hooks and execution-adapter mechanisms remain separate. See the final section of
 [operations review](tl-8bh9.8/operations.md); no source hook removal was performed.
+See [ADR 05](tl-8bh9.14.119/adr-05-skills-and-hooks.md) for current scope and enforcement. Hook retirement is Astra’s recommendation, distinct from the owner’s skill intent.
 
 
 Owner decision 2026-11-09: remove automatic post-task AI reflection and the daily digest/improvement-task filing
@@ -771,10 +786,13 @@ required unfinished-operation references still survive normal restart in factory
 probes are separate from the agreed minimal plan completion contract, implemented with the actual plan step.
 
 
+<a id="admission-and-host-power-decision"></a>
+
 Owner accepted 2026-11-09: remove proactive RAM-threshold admission initially, retain a small lifetime-scoped
 keep-awake capability for an unattended running factory (including waits), and retain correct-checkout binding
 while removing redundant guard/probe machinery. Planner probe retirement, minimal plan completion checks and
 migration removal remain agreed. None of these features is implemented by the CLI-only foundation.
+See [ADR 06](tl-8bh9.14.119/adr-06-admission-and-host-power.md) for current scope and enforcement. Keep-awake was subsequently deleted; the original retention is superseded.
 
 
 Owner accepted 2026-11-09: repository checks use the host’s normal networking. Remove factory-managed

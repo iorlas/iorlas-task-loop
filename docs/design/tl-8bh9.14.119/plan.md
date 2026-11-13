@@ -1,8 +1,8 @@
 # Design documentation authority and decision records
 
-Status: **design**. Implementation proposal prepared 2026-11-13; awaiting the owner's yes.
-Task: `tl-8bh9.14.119`. This attempt writes only this plan. It does not authorize the documentation
-rewrite, test additions, runtime changes, task closure or publication described below.
+Status: **built** for the documentation inventory, status markers, ten bounded ADRs and focused enforcement tests; see [As built](#as-built).
+Task: `tl-8bh9.14.119`. The owner authorized implementation in this step on 2026-11-13.
+The original proposal below is retained as preparation history; runtime changes, task closure and publication remain outside this task.
 
 ## Requirements and current evidence
 
@@ -202,3 +202,132 @@ actual validation and changed-file inventory only after implementation; do not m
   authorized, and proposed layer judgments do not become accepted by association.
 - Focused contracts and required gates have recorded results. Documentation and tests are reviewable before
   completion is claimed; implementation starts only on the owner's explicit yes.
+
+## As built
+
+Implemented 2026-11-13 under the owner's implementation request. INDEX contains one lexically path-sorted
+row for each of 231 regular files, including itself, supporting artifacts and the ten ADRs. Every Markdown/HTML
+design document has an explicit marker. Sixteen frontmatter specimens changed only by YAML comments, preserving
+all original value/body bytes. Existing accurate status notes and historical command examples were retained.
+README now describes the shared manual/auto land operation, one task per round, task-change holds and later
+check-change acceptance, alongside the already accurate dashboard and default-backlog behavior.
+
+The ADRs link to exact decision paragraphs, later qualifications and 23 existing pytest nodes. ADR 08 records
+the original autonomous design authority, open to owner veto, rather than inventing a separately quoted owner
+decision. The .42/.43 acceptance decision is in land plan section 30.1 and trial 5; separate .42/.43 plan files
+do not exist here. Old migration/compatibility, PR waiting and proposed layer judgments remain historical/design.
+No production code, dependencies, commands, task state, installed hooks or Git refs changed.
+
+### Validation
+
+- `just install`: passed; the declared noneditable wheel was installed.
+- `uv run --frozen --no-sync python -I -m pytest -q tests/steps/test_decision_boundaries.py tests/rules/test_decision_boundaries.py tests/steps/test_checks.py tests/cli/test_cli.py`:
+  initially 79 passed / 1 failed because the new test fixture omitted the required parked commit; fixed the fixture.
+- `uv run --frozen --no-sync python -I -m pytest -q tests/steps/test_decision_boundaries.py tests/rules/test_decision_boundaries.py tests/steps/test_checks.py tests/cli/test_cli.py tests/steps/test_publish.py tests/steps/test_land_close.py tests/steps/test_selection.py tests/steps/test_round_bound.py tests/steps/test_land_gate.py tests/steps/test_restart.py tests/cli/test_factory_restart.py tests/steps/test_land_resume.py tests/rules/test_policy.py`:
+  **494 passed** after that correction, including all new behavior cases and ADR contracts.
+- `uv run --frozen --no-sync python -I -m taskloop --help`, `step land --help`, `step rounds --help` and
+  `step show --help` (each with the same module invocation): passed; checked README against registered behavior.
+- Native read-only Python inventory/link/status/node checks: passed for 231 sorted unique rows, every design
+  Markdown/HTML marker, inventory/README/ADR local targets and fragments, and 23 ADR test references. Initial
+  checks caught nonexistent .42/.43 plan links and a path-component versus lexical sorting mismatch; both fixed.
+- `git diff --no-ext-diff --unified=0 -- docs/design/architecture-review/docscheck-proto/docs docs/design/architecture-review/fmt/E-hybrid.md`
+  with a read-only Python diff assertion: passed; exactly 16 added YAML status comments, no removed/changed value or body lines.
+- `just check`: passed (Ruff, Pyrefly: zero errors, nine import contracts kept).
+- `just test`: **3219 passed, 2 failed, 11 errors**. All failures/errors are existing dashboard socket tests in
+  `tests/cli/test_dash_composition.py` and `tests/cli/test_dash_server.py`: the sandbox denies socket creation
+  with `PermissionError: [Errno 1] Operation not permitted`. The gate was not weakened or skipped.
+- `uv run --frozen --no-sync python -I -m pytest -xq tests/cli/test_dash_composition.py tests/cli/test_dash_server.py`:
+  confirmed the same sandbox socket denial (one failure, stopped at first).
+- `git diff --check`: passed. Read-only `cat`, `sed`, `head`, `tail`, `rg`, `pwd`, `git status`, `git diff`,
+  `git ls-tree`, `git grep` and native Python inspections completed; one exploratory `rg` also named nonexistent
+  `src/taskloop/cli_land.py` and exited 2, then inspection used the actual `cli_step.py` owner. `bd prime`
+  supplied workflow context; no task mutation was attempted.
+
+New test files: `tests/steps/test_decision_boundaries.py` and `tests/rules/test_decision_boundaries.py`.
+Existing `tests/steps/test_checks.py` adds cross-attempt execution coverage; `tests/cli/test_cli.py` extends the
+invalid-command cases. Tests use the owning semantic fakes; no runtime abstraction or dependency was added.
+
+### Changed-file inventory
+
+The following 80 plain, nonexecutable files comprise this implementation (within the 96-file / 1 MiB caps):
+
+- `README.md`
+- `docs/design/INDEX.md`
+- `docs/design/architecture-review/composition-map.html`
+- `docs/design/architecture-review/docscheck-proto/docs/glossary.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/adr/one-owner-per-fact.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/adr/requirements-live-in-the-tracker.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/adr/size-caps.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/adr/work-in-managed-worktrees.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/area/engine.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/area/storage.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/external/git.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/external/tracker.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/lifecycle/attempt.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/persona/implementing-agent.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/persona/owner.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/runbook/factory-db-corrupt.md`
+- `docs/design/architecture-review/docscheck-proto/docs/system/workflow/factory-start.md`
+- `docs/design/architecture-review/docscheck-proto/docs/waivers.md`
+- `docs/design/architecture-review/fmt/A-current.md`
+- `docs/design/architecture-review/fmt/B-diataxis-reference.md`
+- `docs/design/architecture-review/fmt/C-rfc2119-ears.md`
+- `docs/design/architecture-review/fmt/D-graph.md`
+- `docs/design/architecture-review/fmt/E-hybrid.md`
+- `docs/design/architecture-review/fmt/ONTOLOGY-ALL.md`
+- `docs/design/architecture-review/fmt/fable-opinion.md`
+- `docs/design/architecture-review/fmt/fable/fable-opinion-2.md`
+- `docs/design/architecture-review/fmt/fable/fable-opinion-3.md`
+- `docs/design/dashboard/dash-round-6b.html`
+- `docs/design/dashboard/dash-round-7b.html`
+- `docs/design/dashboard/dash-round-8b.html`
+- `docs/design/dashboard/dash-round-9-app.html`
+- `docs/design/dashboard/dash-round-9.html`
+- `docs/design/dashboard/dash-spec.md`
+- `docs/design/execution-terms.md`
+- `docs/design/layers.md`
+- `docs/design/sqlite-store-plan.md`
+- `docs/design/tl-7i9k.56.1/plan.md`
+- `docs/design/tl-8bh9.1/configuration-review.md`
+- `docs/design/tl-8bh9.1/plan.md`
+- `docs/design/tl-8bh9.1/timeouts-workspaces.md`
+- `docs/design/tl-8bh9.13/audit.md`
+- `docs/design/tl-8bh9.13/plan.md`
+- `docs/design/tl-8bh9.14.119/adr-01-delivery-publication.md`
+- `docs/design/tl-8bh9.14.119/adr-02-ready-task-selection.md`
+- `docs/design/tl-8bh9.14.119/adr-03-profile-change-approval.md`
+- `docs/design/tl-8bh9.14.119/adr-04-check-results.md`
+- `docs/design/tl-8bh9.14.119/adr-05-skills-and-hooks.md`
+- `docs/design/tl-8bh9.14.119/adr-06-admission-and-host-power.md`
+- `docs/design/tl-8bh9.14.119/adr-07-execution-store.md`
+- `docs/design/tl-8bh9.14.119/adr-08-land-resume.md`
+- `docs/design/tl-8bh9.14.119/adr-09-hierarchical-priority.md`
+- `docs/design/tl-8bh9.14.119/adr-10-factory-management-boundary.md`
+- `docs/design/tl-8bh9.14.119/plan.md`
+- `docs/design/tl-8bh9.14.132/plan.md`
+- `docs/design/tl-8bh9.14.8/plan.md`
+- `docs/design/tl-8bh9.2/lifecycle.md`
+- `docs/design/tl-8bh9.2/plan.md`
+- `docs/design/tl-8bh9.3/hierarchical-priority.md`
+- `docs/design/tl-8bh9.3/selection-review.md`
+- `docs/design/tl-8bh9.4.6/plan.md`
+- `docs/design/tl-8bh9.4.6/removal-challenge.md`
+- `docs/design/tl-8bh9.4/plan.md`
+- `docs/design/tl-8bh9.4/shared-interfaces.md`
+- `docs/design/tl-8bh9.5.1/candidate-checks.md`
+- `docs/design/tl-8bh9.6.1/balanced-design.md`
+- `docs/design/tl-8bh9.6.1/options.md`
+- `docs/design/tl-8bh9.6.1/plan.md`
+- `docs/design/tl-8bh9.6.1/scenarios.md`
+- `docs/design/tl-8bh9.7/interaction-contract.md`
+- `docs/design/tl-8bh9.7/owner-actions.md`
+- `docs/design/tl-8bh9.7/plan.md`
+- `docs/design/tl-8bh9.8/curated-replacement.md`
+- `docs/design/tl-8bh9.8/operations.md`
+- `docs/design/tl-8bh9.9/delivery-publication.md`
+- `docs/design/tl-8bh9.9/plan.md`
+- `docs/design/tl-8bh9/plan.md`
+- `tests/cli/test_cli.py`
+- `tests/rules/test_decision_boundaries.py`
+- `tests/steps/test_checks.py`
+- `tests/steps/test_decision_boundaries.py`
