@@ -19,6 +19,7 @@ from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, R
 from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.land_status import LandView, land_view
+from taskloop.profile import LandMode
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 FIELDS = Fields("P1", ("auto",), "task/tl-1", "taskloop", "2026-11-12T10:00:00Z", "2026-11-12T11:00:00Z", ("tl-0",), "Why", "Done when",
@@ -166,7 +167,15 @@ def land_of(con: sqlite3.Connection, seen: Seen) -> LandView | None:
     return land_view(store, CheckStore(store.connect, store.begin).of_attempt("implement")[-1], lambda _entry: seen)
 
 
-def test_a_checked_task_nobody_has_landed_waits_for_the_person_instead_of_landing(checking: sqlite3.Connection) -> None:
+def test_a_waiting_task_says_manual_only_when_the_profile_says_so(landing: sqlite3.Connection) -> None:
+    waiting = land_of(landing, "gone")
+    assert land_state(waiting, LandMode.MANUAL) == "manual" and land_state(waiting, LandMode.AUTO) == "waiting"
+    assert land_state(waiting, None) == "waiting"  # an unreadable profile claims no policy
+    landing.execute("UPDATE land_candidate SET entry_pid=7,entry_start='entry-start',entry_boot='boot' WHERE candidate_id='candidate'")
+    assert land_state(land_of(landing, "matching"), LandMode.MANUAL) == "landing"
+
+
+def test_a_checked_task_nobody_has_landed_waits_to_be_landed(checking: sqlite3.Connection) -> None:
     checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
                      "WHERE attempt_id='checks'", ("d" * 40,))
     assert land_of(checking, "matching") is None and land_state(None) == "waiting"

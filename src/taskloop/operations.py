@@ -220,7 +220,7 @@ class Adoption:
     slots: tuple[Adopted | NotAdopted, ...]
 
 
-type Action = Literal["start", "relaunch", "repeat", "verify", "advance", "release", "publish", "report", "skip", "hold"]
+type Action = Literal["start", "relaunch", "repeat", "verify", "advance", "release", "publish", "report", "skip", "hold", "land"]
 
 
 @dataclass(frozen=True)

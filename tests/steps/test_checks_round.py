@@ -31,6 +31,7 @@ from taskloop.git_views import GitProfileFiles
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher, LaunchResult
 from taskloop.operations import LATE, ChecksPorts, Failed, Started, StartPorts, StartRequest, start
 from taskloop.round import RoundPorts
+from taskloop.round_land import Landing
 from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody
 from taskloop.slot_release import Released
@@ -61,6 +62,7 @@ class Checking(Factory):
         self.entries, self.launched, self.alive = list[tuple[str, str]](), list[str](), set[EntryIdentity]()
         self.checks = CheckStore(lambda: con)
         self.groups: dict[int, ProcessSeen] = {}
+        self.landing: Landing | None = None
 
     def command(self, process: OwnedProcess) -> ProcessSeen:
         return self.groups.get(process.pid, "gone")
@@ -68,7 +70,7 @@ class Checking(Factory):
     def ports(self) -> RoundPorts:
         ports = super().ports()
         reads = replace(ports.reads, commands=self.command)
-        return replace(ports, reads=reads, holding=self.holding(reads))
+        return replace(ports, reads=reads, holding=self.holding(reads), landing=self.landing)
 
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         self.launched.append(task_id)  # the agent launcher: plan and implement attempts only

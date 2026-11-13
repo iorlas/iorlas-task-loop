@@ -1,7 +1,9 @@
 """The repository profile `.task-loop.json`: its one reader, validator and the version rule (D11).
 
 Strict and minimal: `setup` (ordered argv lists that prepare a slot; `just install` when the key is absent), `checks`
-(name, argv, timeout seconds), `required` (check names) and `target` (the land branch, `main` when absent). Unknown keys,
+(name, argv, timeout seconds), `required` (check names), `target` (the land branch, `main` when absent) and `land`
+(`manual` when absent: a person lands a passed task; `auto`:
+each round lands one, tl-8bh9.14.136; read from the target ref, like `required`). Unknown keys,
 duplicate names and oversized content are refused; there is no reader of any older key. The file is always read from
 Git at a commit through the `ProfileFiles` port, never from a working tree. `resolve` applies GitHub's model: the
 commands (`setup`, `checks`) come from the commit under test, like a `push`/`pull_request` workflow; `required` and
@@ -11,6 +13,7 @@ typed values out; no execution of anything the profile names.
 
 import json
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from typing import Final, Literal, Protocol
 
 PROFILE_PATH: Final = ".task-loop.json"
@@ -26,7 +29,7 @@ BRANCH_BAD: Final = frozenset("~^:?*[\\")  # git check-ref-format
 MAX_TIMEOUT: Final = 86400
 DEFAULT_SETUP: Final = (("just", "install"),)
 DEFAULT_TARGET: Final = "main"
-KEYS: Final = ("setup", "checks", "required", "target")
+KEYS: Final = ("setup", "checks", "required", "target", "land")
 CHECK_KEYS: Final = ("name", "argv", "timeout")
 
 type Reason = Literal[
@@ -35,6 +38,13 @@ type Reason = Literal[
 ]
 type Side = Literal["commit", "target"]
 type Argv = tuple[str, ...]
+
+
+class LandMode(StrEnum):
+    """Who lands a task whose checks passed: a person (`manual`, the default) or the factory's own round (`auto`)."""
+
+    MANUAL = "manual"
+    AUTO = "auto"
 
 
 @dataclass(frozen=True)
@@ -52,6 +62,7 @@ class Profile:
     checks: tuple[Check, ...]
     required: tuple[str, ...]
     target: str
+    land: LandMode = LandMode.MANUAL
 
 
 @dataclass(frozen=True)
@@ -166,6 +177,13 @@ def _branch(key: str, value: object) -> str:
     return text
 
 
+def _land(key: str, value: object) -> LandMode:
+    try:
+        return LandMode(value)
+    except ValueError:
+        raise _refuse("bad_value", key, f"{key} must be one of: {', '.join(each.value for each in LandMode)}") from None
+
+
 def _argv(key: str, value: object) -> Argv:
     """A non-empty argv of non-empty printable strings (no control character or surrogate), the program not blank,
     each at most MAX_ARG characters."""
@@ -243,9 +261,10 @@ def parse(data: bytes) -> Profile | Refused:
         checks = _checks(table.get("checks", []))
         required = _required(table.get("required", []))
         target = DEFAULT_TARGET if "target" not in table else _branch("target", table["target"])
+        land = LandMode.MANUAL if "land" not in table else _land("land", table["land"])
     except _Refusal as refusal:
         return refusal.refused
-    return Profile(setup, checks, required, target)
+    return Profile(setup, checks, required, target, land)
 
 
 def read_profile(files: ProfileFiles, commit: str) -> Profile | Refused | Unavailable:

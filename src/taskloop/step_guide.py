@@ -6,7 +6,8 @@ from pathlib import Path
 from taskloop.hold_guide import HOLD, ON_HOLD
 from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
 
-STEP_ONLY = "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round"
+STEP_ONLY = ("steps built: plan, implement, check; publishes task/<id>; lands under the profile's `land` "
+             "(`auto`: a round, `manual`: `tl step land`)")
 PUBLISH = ("The step's result is verified but not on `origin` yet: `tl step publish`. A `refused` word names what to fix; "
            "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
            "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl step publish`), rerunning does not "
@@ -22,8 +23,10 @@ ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then e
           "each round holds the tasks it took that stopped (`bd list --label held`), advances claimed tasks whose step is "
           "done to their next step, then starts approved ready tasks while fewer than --max-running (default 3) "
           "of this backlog are in flight (`max_running`); "
-          "the tracker is read only when a slot is free; while a passed task waits for `tl step land`, the last free slot is left "
-          "to that land (`slot_for_land`); writes `<artifacts>/rounds.log` (a passed task: `report land`). Runs in this "
+          "under the profile's `land: auto` (read from origin's main) a round first lands one passed task it took, as `tl step land` "
+          "does (a conflict or a failed re-check holds the task); the tracker is read only when a slot is free; while a passed task "
+          "waits to be landed, the last free slot is left to that land (`slot_for_land`); writes `<artifacts>/rounds.log` (a passed "
+          "task: `report land`, then `land landed` or the hold). Runs in this "
           "terminal until stopped: Ctrl-C once stops after the current move, twice exits at once; launched steps keep "
           "running; started with Ctrl-C ignored (`nohup`, `&`), only SIGTERM stops it. "
           "A move in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
@@ -67,11 +70,11 @@ GUIDE = {
     "`unusable` lines name it and why; fix it or `tl slot adopt`). `tl step rounds` fills a freed slot seconds after.",
     "unusable": "A slot no attempt holds cannot be used (missing, dirty, redirected or on a branch: `unusable:<slot>:<why>`, its "
     "path printed under the line): put it right (`git worktree add --detach`, `git switch --detach`, a clean tree) or `tl slot adopt`.",
-    "slot_for_land": "One slot is free and kept for `tl step land`: a passed task waits for it, so rounds start nothing into the "
-    "last free slot. Run `tl step land` (or release the task); rounds go on as soon as it is landed.",
-    "max_running": "This backlog has as many tasks in flight (a step running, or a passed task waiting for `tl step land`) as "
-    "`--max-running` allows, so rounds start no new one. A waiting task counts until it is landed: `tl step land` frees one; a "
-    "failed, stuck or held task does not count. Rounds go on at once.",
+    "slot_for_land": "One slot is free and kept for a passed task's land, so rounds start nothing into the last free slot. Under "
+    "`land: auto` the next round lands it; under `manual` it waits for a person to land it. Rounds go on as soon as it is landed.",
+    "max_running": "This backlog has as many tasks in flight (a step running, or a passed task waiting to be landed) as "
+    "`--max-running` allows, so rounds start no new one. A waiting task counts until it is landed (by a round under `land: "
+    "auto`, else by a person); a failed, stuck or held task does not count. Rounds go on at once.",
     "rounds_running": "Another `tl step rounds` runs for this backlog (the pid is its lock record's, informational): use its "
     "terminal, or stop it there with Ctrl-C first. `tl step next` runs beside it.",
     "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5; "

@@ -32,6 +32,10 @@ Retain caps: 400 source lines per file, 80 per function and 800 per test file. N
 ## Architecture and design
 
 - Use the glossary: task, task tracker, step, attempt, session, slot and land have distinct meanings.
+- Land is one application operation (`land.land`) shared by the CLI, a round and the dashboard's reads. A round runs it only
+  under the profile's `land: auto` (read from Git at origin's `main`; `manual` is the default), one task per round; a refusal
+  about the task's change holds it with the typed cause, so the same refusal is never tried again each round. The factory
+  never asks the owner to run a CLI command: a message on these paths states the situation and the decision in words.
 - Task tracker owns requirements, dependencies, questions, linked answers and discussion; Git owns code,
   plans and selected design artifacts. Plans belong at `docs/design/<task-id>/plan.md`.
 - factory.db owns local execution state and reservations. Deliberate discard permits normal reevaluation;
