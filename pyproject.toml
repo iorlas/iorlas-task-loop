@@ -7,7 +7,15 @@ name = "iorlas-task-loop"
 version = "0"
 description = "Minimal task-loop successor foundation"
 requires-python = ">=3.15"
-dependencies = ["any-agent==0.6.1", "beads-client==0.2.0", "git-porcelain==0.18.1", "process-lock==0.2.1", "sqlite-store==0.1.0", "stream-proc==0.7.0"]
+dependencies = [
+    "any-agent==0.6.1",
+    "beads-client==0.2.0",
+    "git-porcelain==0.18.1",
+    "process-lock==0.2.1",
+    "pydantic==2.14.3",
+    "sqlite-store==0.1.0",
+    "stream-proc==0.7.0",
+]
 
 [tool.uv.sources]
 any-agent = { git = "https://github.com/yoselabs/shelf.git", subdirectory = "packages/any-agent", tag = "any-agent-v0.6.1" }
