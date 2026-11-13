@@ -93,7 +93,7 @@ class NextRequest:
     effort: str
     minutes: int
     quiet: Quiet | None = None
-    max_new: int = 1  # fresh tasks one round starts, at most (the free slots less the land's reserve bound it too)
+    max_running: int = 3  # tasks with an unfinished chain (running or waiting for land; not held) beyond which nothing new starts
     retake: bool = False  # admit the factory's own lapsed claims that have no attempt here (after a factory.db discard)
 
 
@@ -124,17 +124,24 @@ def _request(request: NextRequest, task_id: str) -> StartRequest:
                         request.label)
 
 
-def max_new_refused(count: int) -> Failed | None:
-    return None if count >= 1 else Failed("refused", "max_new", "`--max-new` is at least 1: fresh tasks one round starts")
+def max_running_refused(count: int) -> Failed | None:
+    return None if count >= 1 else Failed("refused", "max_running", "`--max-running` is at least 1 (tasks in flight before nothing starts)")
+
+
+def in_flight(current: Iterable[AttemptView]) -> frozenset[str]:
+    """The tasks whose chain is unfinished: running, or waiting for the person's land. Landed, held and abandoned ones are not."""
+    return frozenset(each.task_id for each in current if each.next not in ("landed", "hold", "on_hold")
+                     and not (each.release is not None and each.release.abandoned))
 
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
-    """One round: settle, advance, admit, publish, clear. A whole-round refusal (empty label, unreadable store) is
-    `Failed`."""
+    """One round: settle, advance, admit (while fewer than `max_running` tasks are in flight), publish, clear. A
+    whole-round refusal (empty label, unreadable store) is `Failed`."""
     label = request.label.strip()
     if not label:
         return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    refused = choices_refused(request.model, request.effort) or minutes_refused(request.minutes) or max_new_refused(request.max_new)
+    refused = (choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
+               or max_running_refused(request.max_running))
     if refused is not None:
         return refused
     request = replace(request, label=label)
@@ -322,11 +329,12 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
 
 
 def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: Trail, reserve: int) -> str:
-    """Eligible ready tasks in priority order, one start each, until a slot or the round's inputs run out; the word that
-    stopped admission early ("" when the candidates ran out). With every slot reserved: `no_free_slot`, no tracker call."""
+    """Eligible ready tasks in priority order, one start each, until a slot, the in-flight bound (`max_running`) or the
+    round's inputs run out; the word that stopped admission early ("" when the candidates ran out). With every slot
+    reserved (`no_free_slot`, `slot_for_land`) or the bound reached (`max_running`): no tracker call."""
     if ports.stopping():
         return INTERRUPTED
-    if word := _full(ports.reads.store, reserve):
+    if word := _full(ports.reads.store, reserve) or ("max_running" if len(in_flight(current)) >= request.max_running else ""):
         return word
     try:
         rows = ready_rows(ports.ready, request.label, ports.reads.clock(), request.retake)
@@ -342,22 +350,21 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
     for task_id, reason in skipped:
         attempt, step = ids.get(task_id, ("", ""))
         trail.add(Move(task_id, "skip", reason, attempt, step=step))  # attempted/abandoned: the attempt that holds it
-    return _start_each(ports, request, ordered, trail, reserve)
+    return _start_each(ports, request, ordered, trail, reserve, len(in_flight(current)))
 
 
-def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow, ...], trail: Trail, reserve: int) -> str:
-    taken = 0
+def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow, ...], trail: Trail, reserve: int, running: int) -> str:
     for row in ordered:
         if ports.stopping():
             return INTERRUPTED
-        if taken >= request.max_new:
-            return ""
+        if running >= request.max_running:
+            return "max_running"
         if reserve and (word := _full(ports.reads.store, reserve)):
             return word
         result = start(ports.starting, _request(request, row.task_id))
         if isinstance(result, Started):
             trail.add(Move(row.task_id, "start", result.status, result.attempt_id, step=result.step or ""))
-            taken += 1
+            running += 1
             continue
         stop = _stops(result)
         if result.reason != "no_free_slot":

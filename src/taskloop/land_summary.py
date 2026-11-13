@@ -29,6 +29,7 @@ from taskloop.printable import one_line, title_line
 from taskloop.profile import Argv, Check, Profile, ProfileFiles, Refused, Unavailable, read_profile
 
 TITLE: Final = 72  # a title's and a listed subject's characters
+AUTOSQUASH: Final = frozenset({"fixup!", "squash!", "amend!", "reword!"})
 SUBJECTS: Final = 50  # listed commit subjects, then `- ... and <n> more`
 CONFLICTS: Final = 20  # listed conflicted paths
 type Files = Mapping[str, tuple[str, Sha]]
@@ -43,13 +44,21 @@ def commits(repo: Repo, o: str, x: str) -> tuple[tuple[str, str], ...]:
 def message(title: str, checks: ChecksRow, listed: Sequence[tuple[str, str]], plan: bool) -> str:
     """S's commit message (section 9)."""
     task, x = one_line(checks.task_id, TITLE), checks.commit
-    head = title_line(one_line(title) or "Untitled task", TITLE, f" ({task})")
+    head = title_line(_plain(one_line(title)) or "Untitled task", TITLE, f" ({task})")
     lines = [f"- {one_line(subject, TITLE) or '(no subject)'} ({sha[:12]})" for sha, subject in listed[:SUBJECTS]]
     lines += [f"- ... and {len(listed) - SUBJECTS} more"] if len(listed) > SUBJECTS else []
     squashed = [f"Squashed from task/{task} at {x}:", *lines] if lines else [f"Squashed from task/{task} at {x}."]
     trailers = [f"Task: {task}", *([f"Plan: {plan_path(task)}"] if plan else []),
                 f"Checked: {checks.key.attempt_id} {checks.conclusion or 'unconcluded'} at {x}"]
     return "\n".join([head, "", *squashed, "", *trailers]) + "\n"
+
+
+def _plain(title: str) -> str:
+    """The title without leading `fixup!`, `squash!`, `amend!` or `reword!`: `git rebase --autosquash` would fold S into
+    another commit (only the title is the person's; the task id suffix stays)."""
+    while (word := title.split(" ", 1)[0].lower()) in AUTOSQUASH:
+        title = title[len(word):].lstrip()
+    return title
 
 
 def plan_path(task_id: str) -> str:

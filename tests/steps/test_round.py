@@ -54,7 +54,7 @@ KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
 BEFORE_REBOOT = (7, "entry-start", "old-boot")  # registered in another boot than the bench's "boot"
 HEAD, X = "d" * 40, "x" * 40
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "high", 30, max_new=10)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "high", 30, max_running=10)
 STAMP = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks "
 STEPPED = r"\S+ plan (start|relaunch|repeat|verify|publish|report|skip)( \S+)+"  # every attempt-bearing move names its step
 LINE = re.compile(STAMP + rf"({STEPPED}|\S+ (start|report) (refused|unavailable|claim_leaked)\S*|round( \S+)+)")
@@ -392,17 +392,44 @@ def test_admission_follows_selection_and_stops_at_no_free_slot(factory: sqlite3.
     assert ready.ready_reads == ["auto"] and exit_code(found) == 0
 
 
-def test_a_round_starts_at_most_max_new_fresh_tasks_though_slots_are_free(factory: sqlite3.Connection) -> None:
-    ready = ReadyTracker([bead("t-1", 0), bead("t-2", 1), bead("t-3", 2)], ready=["t-1", "t-2", "t-3"])
+DEFAULT = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "high", 30)  # the bound as the CLI leaves it (3)
+
+
+def test_a_backlog_starts_only_up_to_the_default_in_flight_bound_not_every_ready_task(factory: sqlite3.Connection) -> None:
+    ready = ReadyTracker([bead(f"t-{n}", n) for n in range(5)], ready=[f"t-{n}" for n in range(5)])
     admission = Admission({})
-    found = Bench(factory, ready, admission).round(replace(REQUEST, max_new=2))
-    assert moves(found) == [("t-1", "start", "started"), ("t-2", "start", "started")] and found.stopped == ""
-    assert admission.requests == ["t-1", "t-2"]  # t-3 never reached: not claimed
+    found = Bench(factory, ready, admission).round(DEFAULT)
+    assert moves(found) == [(f"t-{n}", "start", "started") for n in range(3)] and found.stopped == "max_running"
+    assert admission.requests == ["t-0", "t-1", "t-2"]  # the others are never claimed
 
 
-def test_a_max_new_below_one_refuses_the_round(factory: sqlite3.Connection) -> None:
-    found = run_round(Bench(factory, ReadyTracker([], ready=[]), Admission({})).ports(), replace(REQUEST, max_new=0))
-    assert isinstance(found, Failed) and found.reason == "max_new"
+def test_tasks_already_running_count_towards_the_bound_and_a_full_one_reads_no_tracker(factory: sqlite3.Connection) -> None:
+    for number in (1, 2):
+        seed(factory, f"tl-{number}", f"attempt-{number}", entry=ENTRY)
+    ready = ReadyTracker([bead("t-1", 0), bead("t-2", 1)], ready=["t-1", "t-2"])
+    bench = Bench(factory, ready)
+    bench.seen = "matching"
+    found = bench.round(DEFAULT)
+    assert ("t-1", "start", "started") in moves(found) and ("t-2", "start", "started") not in moves(found)
+    assert found.stopped == "max_running"
+    seed(factory, "tl-3", "attempt-3", entry=ENTRY)
+    reads = list(ready.ready_reads)
+    assert bench.round(DEFAULT).stopped == "max_running" and ready.ready_reads == reads  # three running: no tracker call
+
+
+def test_an_abandoned_task_is_not_in_flight_and_a_refused_start_does_not_count(factory: sqlite3.Connection) -> None:
+    seed(factory, "tl-1", "attempt-1")
+    released(factory, "attempt-1", "unclaimed")
+    ready = ReadyTracker([bead(f"t-{n}", n) for n in range(5)], ready=[f"t-{n}" for n in range(5)])
+    admission = Admission({"t-0": AdmitRefused("claimed_elsewhere")})
+    found = Bench(factory, ready, admission).round(DEFAULT)
+    assert moves(found) == [("t-0", "start", "refused:claimed_elsewhere"), *[(f"t-{n}", "start", "started") for n in (1, 2, 3)]]
+    assert found.stopped == "max_running"
+
+
+def test_a_max_running_below_one_refuses_the_round(factory: sqlite3.Connection) -> None:
+    found = run_round(Bench(factory, ReadyTracker([], ready=[]), Admission({})).ports(), replace(REQUEST, max_running=0))
+    assert isinstance(found, Failed) and found.reason == "max_running"
 
 
 @pytest.mark.parametrize("refusal", [AdmitRefused(reason, detail="bd said: secret detail") for reason in (

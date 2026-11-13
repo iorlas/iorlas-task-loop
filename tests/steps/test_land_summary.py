@@ -193,3 +193,22 @@ def test_a_long_title_is_cut_at_a_word_and_keeps_its_task_id(b: LandBench) -> No
     assert first == "Time since the agent's last command in tl step list/show, then\u2026 (tl-1)"
     assert len(first) <= 72
     assert message("Widget", checks_row(b), [], plan=False).split("\n")[0] == "Widget (tl-1)"
+
+
+@pytest.mark.parametrize("title, expected", [
+    ("a" * 60 + " bbb ccc", "a" * 60 + " bbb\u2026"),  # the cut falls on the space after a whole word: kept
+    ("a" * 61 + " bbbbb", "a" * 61 + "\u2026"),  # the cut falls inside the next word: that word is left out
+    ("x" * 100, "x" * 64 + "\u2026"),  # one word longer than the room
+    ("fixup! squash! Real title", "Real title"),  # autosquash prefixes, repeated and in any case
+    ("AMEND! reword!", "Untitled task"),
+    ("fixup!x", "fixup!x"),  # not a prefix word
+])
+def test_title_cut_boundaries_and_autosquash_prefixes(b: LandBench, title: str, expected: str) -> None:
+    first = message(title, checks_row(b), [], plan=False).split("\n")[0]
+    assert first == f"{expected} (tl-1)" and len(first) <= 72
+
+
+def test_a_task_id_is_never_cut_even_when_it_overshoots_the_line(b: LandBench) -> None:
+    row = dataclasses.replace(checks_row(b), task_id="tl-" + "9" * 69)
+    first = message("Widget and more", row, [], plan=False).split("\n")[0]
+    assert first == f"W\u2026 (tl-{'9' * 69})" and len(first) > 72
