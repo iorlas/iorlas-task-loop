@@ -229,7 +229,7 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     assert spec.stdin.startswith(PLAN_WARNING + "\n\n")
     prompt = spec.stdin + " ".join(spec.argv)
     assert "Do the thing" in prompt and "It is done" in prompt
-    closing = "First read `docs/design/tl-1/plan.md` if it exists. If it is still valid for the task and the code as they are now"
+    closing = "First read `docs/design/tl-1/plan.md` if it exists. Before answering `planned` or `unchanged`, require a `## Size`"
     assert closing in prompt and "answer `unchanged`" in prompt and "do not run `git add`, `git commit`, `git push`" in prompt
     assert "list in `paths` every file you want committed and give a one-line commit `message`" in prompt
     assert prompt.index("It is done") < prompt.index(closing)  # the fixed closing words come last, in the admitted input
