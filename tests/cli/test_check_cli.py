@@ -24,6 +24,8 @@ from taskloop.step_guide import CHECKS_GUIDE, GUIDE
 
 X, TARGET, D, SEEN = "a" * 40, "b" * 40, "d" * 40, "e" * 40
 CHECK, TEST, SMOKE = "1" * 64, "2" * 64, "3" * 64
+EVENTS = Path("/events.jsonl")
+
 LOGS = Path("/a/c")
 ROW = ChecksRow(
     AttemptKey("checks", "token-never-shown", 3), "implement", 2, "s1", D, TARGET, None,
@@ -43,7 +45,7 @@ VIEW = AttemptView(
     ReleaseRow(D, 1762941600.0, "kept"), PublishedRow(X, X, 6.0),
     ChecksView(ROW, RESULTS, (*(LOGS / f"check-1-{name}.log" for name in ("check", "test", "slow")), None)),
 )
-SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", SetupShown(SetupRow(1, X, "f" * 64, 0, None, "passed"), LOGS / "setup-1.log"))
+SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", EVENTS, SetupShown(SetupRow(1, X, "f" * 64, 0, None, "passed"), LOGS / "setup-1.log"))
 SHOW = ["step", "show", "tl-1", "--backlog", "tasks"]
 
 
@@ -81,7 +83,7 @@ def test_show_prints_the_checks_attempt_s_lines_in_order(capsys: pytest.CaptureF
 def test_show_names_a_moved_main_the_counted_refusals_and_an_unread_profile(
     row: ChecksRow, line: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert line in run(SHOW, Shown(_with(ChecksView(row, RESULTS)), LOGS, LOGS / "entry.log"), capsys, monkeypatch).splitlines()
+    assert line in run(SHOW, Shown(_with(ChecksView(row, RESULTS)), LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch).splitlines()
 
 
 def _with(checks: ChecksView) -> AttemptView:
@@ -89,10 +91,10 @@ def _with(checks: ChecksView) -> AttemptView:
 
 
 def test_show_of_no_block_yet_and_of_an_unfinished_check(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    out = run(SHOW, Shown(_with(ChecksView(ROW, ())), LOGS, LOGS / "entry.log"), capsys, monkeypatch)
+    out = run(SHOW, Shown(_with(ChecksView(ROW, ())), LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch)
     assert "Check: none yet" in out.splitlines()
     unfinished = ResultRow(1, 0, "check", CHECK, 600, None, 10.0, None, None, None)
-    out = run(SHOW, Shown(_with(ChecksView(ROW, (unfinished,))), LOGS, LOGS / "entry.log"), capsys, monkeypatch)
+    out = run(SHOW, Shown(_with(ChecksView(ROW, (unfinished,))), LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch)
     assert "Check: check unfinished" in out.splitlines()
 
 
@@ -157,7 +159,7 @@ def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
 ) -> None:
     running = ResultRow(1, 0, "check", CHECK, 600, OwnedProcess(600, 601, "start", "boot"), 10.0, None, None, None)
     view = replace(VIEW, next=word, release=None, checks=ChecksView(ROW, (running,)))
-    out = run(SHOW, Shown(view, LOGS, LOGS / "entry.log"), capsys, monkeypatch)
+    out = run(SHOW, Shown(view, LOGS, LOGS / "entry.log", EVENTS), capsys, monkeypatch)
     assert CHECKS_GUIDE[word] in out and GUIDE[word] not in out and "attempt_entry" not in out and "Worker" not in out
     assert "Check: check unfinished, process group 601" in out.splitlines()  # the group the hung guide verifies
     assert "round relaunches the checks entry" in CHECKS_GUIDE["start"] and "late_relaunch" in CHECKS_GUIDE["start"]
@@ -167,7 +169,7 @@ def test_a_checks_view_gets_its_own_guide_never_the_agent_s(
     assert f"stuck:hung: {CHECKS_GUIDE['stuck:hung']}" in listed.splitlines()
 
 
-def test_the_half_done_refusal_names_its_own_action_without_the_release_guide(
+def test_the_half_done_detail_keeps_the_structured_release_guide(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     argv = ["step", "start", "tl-1", "--backlog", "tasks", "--tracker-root", "/t", "--checkout", "/c", "--model", "m", "--effort", "high",
@@ -175,4 +177,4 @@ def test_the_half_done_refusal_names_its_own_action_without_the_release_guide(
     monkeypatch.setitem(cli_step.OPERATIONS, ("step", "start"), lambda _arguments, _loaded: Failed("refused", "release", HALF_DONE))
     assert main(argv) == 1
     err = capsys.readouterr().err
-    assert HALF_DONE in err and GUIDE["release"] not in err
+    assert HALF_DONE in err and GUIDE["release"] in err

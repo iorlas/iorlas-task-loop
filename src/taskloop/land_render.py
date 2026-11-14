@@ -13,7 +13,7 @@ from taskloop.land_store import LandRow
 from taskloop.land_summary import LandSummary, gate_lines, lines
 from taskloop.operations import Failed
 from taskloop.printable import one_line
-from taskloop.step_guide import GUIDE
+from taskloop.step_guide import refusal_guide
 
 COMMAND: Final = "tl step land"
 HOW: Final = {
@@ -67,6 +67,6 @@ def failed_lines(command: str, found: Failed) -> list[str]:
     """A refusal (exit 1) or unknown (exit 3) of `tl step land`: its word, its detail as printable lines, then each guide
     once: the reason, its first word and the kind, each from the land's table before the step commands'."""
     detail = [one_line(line, 2000) for line in found.detail.split("\n") if one_line(line, 2000)]
-    keys = dict.fromkeys((found.reason, found.reason.split(":")[0], found.kind))
-    guides = dict.fromkeys(text for key in keys if (text := LAND_GUIDE.get(key) or GUIDE.get(key)) is not None)
+    guides = dict.fromkeys([refusal_guide(found.reason, land=True),
+                            *([LAND_GUIDE[found.kind]] if found.kind in LAND_GUIDE else [])])
     return [f"{command}: {found.word}", *detail, *guides]

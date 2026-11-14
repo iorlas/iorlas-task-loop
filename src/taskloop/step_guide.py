@@ -3,8 +3,10 @@ them to do, and the whole-DB discard steps. Text only; `step_render` places it, 
 
 from pathlib import Path
 
+from taskloop.hold_cause import RULES, RUN
 from taskloop.hold_guide import HOLD, ON_HOLD
 from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
+from taskloop.step_refusal_guide import REFUSALS
 
 STEP_ONLY = ("steps built: plan, implement, check; publishes task/<id>; lands under the profile's `land` "
              "(`auto`: a round, `manual`: `tl step land`)")
@@ -32,6 +34,7 @@ ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then e
           "A move in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
           "no candidate is tried, so a wrong --checkout is refused only once a slot frees.")
 GUIDE = {
+    **REFUSALS,
     "start": "Re-run `tl step start` to relaunch its entry (each `tl step next` round relaunches it until its deadline; an "
     "entry registered before a reboot is relaunched with its deadline renewed from --minutes, once per reboot). "
     "If the last entry says `claim_lost`, the tracker claim is gone (reverted, taken by another actor, or the task closed): "
@@ -223,6 +226,39 @@ NEEDS_OWNER = (
     "before this step can succeed. A hand-started step is never held, so nothing is written to the task and its claim lapses unrenewed. "
     "Answer by editing the task's description, then `tl step release --abandon` and `tl step start` to run the step again."
 )
+
+
+# Commit rules and classified execution failures already have an owning explanation.
+GUIDE.update({word: f"Verification refused: {what}. Inspect the retained evidence and resolve this before continuing."
+              for word, (what, _fix) in RULES.items()})
+GUIDE.update({f"run:{word}": f"{what} The owner must resolve this before new work is approved."
+              for word, (what, _fix) in RUN.items()})
+GUIDE.update({
+    "run:timeout": "The agent exceeded its deadline. Inspect its retained work and evidence before deciding on another attempt.",
+    "incomplete": "The agent reported incomplete work. Inspect its answer and evidence before deciding how to continue.",
+    "needs_owner": NEEDS_OWNER,
+    "run": "The agent execution failed. Inspect its retained stdout, stderr and diagnostics before deciding on another attempt.",
+    "answer": "The agent answer did not meet the answer contract. Inspect diagnostics.txt and the retained answer before "
+    "deciding on another attempt.",
+})
+
+
+def refusal_guide(reason: str, *, checks: bool = False, land: bool = False) -> str:
+    """Resolve a reason, never a failure-kind catch-all. Compound domains keep their owning guide."""
+    if land and reason in LAND_GUIDE:
+        return LAND_GUIDE[reason]
+    domain = reason.split(":", maxsplit=1)[0]
+    if land and domain in LAND_GUIDE:
+        return LAND_GUIDE[domain]
+    if reason in GUIDE:
+        return guide(reason, checks=checks)
+    domain = reason.split(":", maxsplit=1)[0]
+    if domain == "git":
+        return GUIDE[domain]
+    key = "expired" if reason.startswith("expired:") else reason
+    if reason.startswith("slot:"):
+        key = {"branch": "slot_branch", "moved": "head_moved", "redirected": "slot_redirected"}[reason.split(":")[1]]
+    return GUIDE[key]  # A new public reason needs an explicit guide and coverage case.
 
 
 def guide(word: str, *, checks: bool, land: bool = False) -> str:

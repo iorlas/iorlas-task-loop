@@ -144,30 +144,29 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
     slot = f"slot {one_line(outcome.slot)}" if one_line(outcome.slot) else "its slot"
     match outcome.word:
         case "slot_dirty":
-            where = one_line(outcome.slot) or "<slot>"
             return (kept + f"{slot} has files left by this attempt. Save what you need, remove or restore them "
-                    f"(`git -C {where} status --short` lists them), and {back}. The factory never removes work.")
+                    f"after inspecting their status, and {back}. The factory never removes work.")
         case "worker_alive" | "setup_running" | "check_running":
             group = "" if outcome.pgid is None else f", group {outcome.pgid}"
-            task = one_line(facts.task_id)
-            pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else f"pid unknown: `tl step show {task}` names it"
+            pid = f"pid {outcome.pid}{group}" if outcome.pid is not None else "pid unknown: wait for verified process identity"
             return (kept + f"a process of this attempt still runs ({pid}). When it has ended (or after you "
-                    f"stop it by that pid), {back}.")
+                    f"stop it by its verified identity), {back}.")
         case "landing" | "landed":
             return (kept + f"a land of this task holds its slot or may be on origin ({outcome.word}). Finish or withdraw it "
-                    f"(`tl step land {one_line(facts.task_id)}`), and {back}.")
+                    f"after resolving its delivery state, and {back}.")
         case _:
-            return (kept + f"{slot} is not where the factory left it ({outcome.word}). Put it back (`tl step show "
-                    f"{one_line(facts.task_id)}` says where), and {back}.")
+            return (kept + f"{slot} is not where the factory left it ({outcome.word}). "
+                    f"Restore its recorded location and state, and {back}.")
 
 
 def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     """The cause's own line, then its one next step: an owner's answer only for a cause an answer fixes."""
     task, found = one_line(facts.task_id), cause(facts.reason, facts.deadline)
     if facts.labels == "not_ours":
-        retry = f"start it by hand (`tl step start {task}`): rounds do not take it again"
+        retry = "resolve its ownership with the current actor: rounds do not take it again"
     else:
-        retry = f"run `bd label add {task} {one_line(facts.label, 200)}`: the next round starts it again at plan on task/{task} as it is"
+        retry = (f"restore the approval label `{one_line(facts.label, 200)}`: "
+                 f"the next round starts it again at plan on task/{task} as it is")
     edit = "edit this task's description or acceptance criteria (the agent reads those, not comments)"
     lines = [] if found is None else [found.what]
     lines.append(next_step(found, retry, edit))

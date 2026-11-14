@@ -9,6 +9,7 @@ import pytest
 
 from taskloop.attempt_types import Checkouts
 from taskloop.cli import main
+from taskloop.inspection_guide import PROFILE
 from taskloop.profile import NoCommit, Unavailable
 
 MAIN = {"setup": [["just", "install"]], "checks": [{"name": "check", "argv": ["just", "check"], "timeout": 1800},
@@ -65,12 +66,12 @@ def test_a_refusal_is_exit_1_and_unavailable_exit_3(structured: bool, monkeypatc
         assert json.loads(output.err) == {"error": {"kind": "unknown_key", "side": "commit", "key": "engine",
                                                     "message": "Unknown keys: engine"}}
     else:
-        assert output.err == "tl profile show: refused unknown_key (commit, engine): Unknown keys: engine\n"
+        assert output.err == "tl profile show: refused unknown_key (commit, engine): Unknown keys: engine\n" + PROFILE["unknown_key"] + "\n"
     wired(monkeypatch, None)
     assert main(["profile", "show", *flags]) == 3
     error = capsys.readouterr().err
     assert (json.loads(error) == {"error": {"kind": "unavailable", "message": "git down"}} if structured else
-            error == "tl profile show: unavailable: git down\n")
+            error == "tl profile show: unavailable: git down\n" + PROFILE["unavailable"] + "\n")
 
 
 def test_zero_checks_print_none_and_a_forged_line_cannot_appear(monkeypatch: pytest.MonkeyPatch,
@@ -81,7 +82,7 @@ def test_zero_checks_print_none_and_a_forged_line_cannot_appear(monkeypatch: pyt
     wired(monkeypatch, {"HEAD": json.dumps({"setup": [["just", "x\nRequired: (none)"]]}).encode()})
     assert main(["profile", "show"]) == 1
     error = capsys.readouterr().err
-    assert error.count("\n") == 1
+    assert error.count("\n") == 2
     assert error.startswith("tl profile show: refused bad_value (commit, setup[0][1])")
     wired(monkeypatch, {"HEAD": b'{"setup": [["just", "\\ud800"]]}'})
     assert main(["profile", "show"]) == 1

@@ -75,7 +75,7 @@ def test_a_failed_task_is_held_once_then_costs_no_tracker_call_or_line(factory: 
     assert factory.tracker.holds == ["labels tl-1 auto", "comment tl-1"]
     text = factory.tracker.comments[0][1]
     assert text.startswith("taskloop hold: failed:needs_owner\nStep plan, attempt 1") and f"> {ASKED}" in text
-    assert "returned its claim" in text and "`bd label add tl-1 auto`" in text
+    assert "returned its claim" in text and "restore the approval label `auto`" in text
     assert [line.split(" ")[2:] for line in factory.lines if " hold " in line] == [["tl-1", "plan", "hold", "held", "failed:needs_owner",
                                                                                      attempt]]
     assert factory.next_words() == {"tl-1": ("plan", "on_hold")}

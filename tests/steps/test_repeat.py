@@ -257,13 +257,17 @@ def test_a_superseded_attempt_shows_repeated_and_the_current_one_is_followed(
         return None
 
     reads = StatusPorts(AttemptStore(lambda: registered), seen("gone"), lambda: 10, leftovers, lambda: "boot")
-    shown = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
+    artifacts = tmp_path / "custom artifacts with spaces"
+    shown = show_attempt(reads, artifacts, "tasks", "tl-1")
     assert not isinstance(shown, Failed)
     each, new = shown.view, launcher.calls[0]
     assert (each.attempt_id, each.number, each.previous_attempt_id, each.repeat_reason) == (new.attempt_id, 2, "attempt", "unsafe")
     assert (each.phase, each.next, each.earlier) == ("admitted", "start", (("attempt", "unsafe"),)) and probed == []
     assert AttemptStore(lambda: registered).attempts("tasks", "tl-1")[0].repeat_listing != ()  # the verification's listing is stored
+    assert shown.events_path == EvidenceFiles(artifacts).events_path(new)
+    assert shown.events_path != EvidenceFiles(artifacts).events_path(KEY) and not artifacts.exists()
     data = as_data(shown)
+    assert data["events_path"] == str(shown.events_path)
     assert (data["number"], data["previous_attempt_id"], data["repeat_reason"], data["earlier"]) == (2, "attempt", "unsafe", ["attempt"])
     listed = list_attempts(reads)
     assert not isinstance(listed, Failed) and [(a.attempt_id, a.number) for a in listed.attempts] == [(new.attempt_id, 2)]

@@ -756,7 +756,7 @@ def test_an_advance_with_every_free_slot_unusable_names_it_and_the_next_renders_
     found = bench.round()
     assert ("tl-1", "report", "unusable:s4:not_listed") in moves(found) and found.stopped == "no_free_slot"
     lines = human("next", found, None)
-    assert any(line.strip() == "/slots/s4" for line in lines) and any(line.startswith("unusable: ") for line in lines)
+    assert any(line.strip() == "/slots/s4" for line in lines) and any(line.startswith("unusable:s4:not_listed: ") for line in lines)
 
 
 def test_a_transient_slot_state_is_not_called_unusable(factory: sqlite3.Connection) -> None:

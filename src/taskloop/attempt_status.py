@@ -109,6 +109,7 @@ class Shown:
     view: AttemptView
     directory: Path
     entry_log: Path
+    events_path: Path
     setup: SetupShown | None = None  # None: no setup ran for the step (a plan attempt, or implement before its preparation)
     failed: ChecksView | None = None  # the unpassed results (with their logs) of the checks attempt that caused the view's hold
     explanation: str | None = None  # the agent's own words of a `needs_owner` answer (a hand-started step is never held)
@@ -288,7 +289,7 @@ def show_attempt(
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     told = explanation(files, view.result.execution, view.step, view.task_id) if view.result.reason == NEEDS_OWNER else None
-    return Shown(shown, directory, directory / "entry.log", setup, failed, told)
+    return Shown(shown, directory, directory / "entry.log", files.events_path(rows[0].key), setup, failed, told)
 
 
 def _failed_checks(reads: StatusPorts, files: EvidenceFiles, hold: HoldRow | None) -> ChecksView | None:
@@ -315,7 +316,7 @@ def _checks_shown(reads: StatusPorts, files: EvidenceFiles, view: AttemptView, c
     setup = None if latest is None else SetupShown(latest, directory / f"setup-{latest.run}.log")
     land = None if view.land is None else with_logs(view.land, partial(files.check_path, view.land.row.key))
     shown = replace(view, last_entry=files.last_entry(key), checks=replace(checks, logs=logs), land=land)
-    return Shown(shown, directory, directory / "entry.log", setup)
+    return Shown(shown, directory, directory / "entry.log", files.events_path(key), setup)
 
 
 def _first(rows: tuple[AttemptRow, ...]) -> AttemptRow:
