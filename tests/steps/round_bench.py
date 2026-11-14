@@ -184,7 +184,8 @@ class Factory:
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(self.store, self.checkouts, self.files, lambda _entry: "gone", lambda _worker: True, custody,
-                           self.tracker.unclaim, lambda: self.now, lambda _setup: "gone", lambda _scratch: True)
+                           self.tracker.unclaim, lambda: self.now, lambda _setup: "gone", lambda _scratch: True,
+                           HoldStore(lambda: self.con))
 
     def observe(self, _entry: EntryIdentity) -> Seen:
         """Called while the round reads its snapshot: `during` is another actor acting once, right after that read."""

@@ -88,7 +88,8 @@ def hold_guide(view: AttemptView) -> str:
     what = "" if found is None else " " + found.what
     answer = f"{LEAD}{what} {next_step(found, back, edit)} To give up, `bd close {task}`."
     if row.reason == "branch_moved":
-        answer += f" First restore task/{task} to contain the verified commit, or delete it locally and on origin."
+        answer += (f" First restore task/{task} to contain the verified commit, or rename it aside (`old/<id>-` and the first 12 "
+                   "characters of its tip).")
     if row.reason == "claim_lost":
         answer += " Someone else changed this task's claim while the factory worked on it."
     return answer

@@ -134,16 +134,16 @@ DIVERGED: Final = (
     "Where task/{task} would start does not contain any free slot's commit. With no task/{task}, it starts at your local "
     "main: the slots sit at commits outside main's history; detach the free slots at a commit of main (`git -C <slot> "
     "checkout --detach main`). An existing task/{task} is resumed as it is: a local branch: rename it (`git branch -m task/{task} "
-    "old/task/{task}`) or delete it. Only origin's remote-tracking ref: delete the branch on origin (`git push origin "
-    "--delete task/{task}`), or drop the local ref (`git update-ref -d refs/remotes/origin/task/{task}`) and do not fetch "
-    "it again."
+    "old/task/{task}`); saved work stays on it. Only origin's remote-tracking ref: delete the branch on origin (`git push "
+    "origin --delete task/{task}`), or drop the local ref (`git update-ref -d refs/remotes/origin/task/{task}`) and do not "
+    "fetch it again."
 )
 
 
 UNPUBLISHED: Final = (
     "The local task/{task} has commits that are not on origin (`git log --oneline main..task/{task}` or `git log "
     "--oneline origin/task/{task}..task/{task}` lists them) and a publish would push them: rename the branch (`git branch -m "
-    "task/{task} old/task/{task}`) or delete it, or push it by hand, then start again."
+    "task/{task} old/task/{task}`), or push it by hand, then start again."
 )
 
 

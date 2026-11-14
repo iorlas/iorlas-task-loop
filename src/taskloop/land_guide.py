@@ -8,8 +8,8 @@ from typing import Final
 
 def restart(task_id: str = "<id>", x: str = "<X>") -> str:
     """The one recovery from a conflict (or a failed validation that needs new code): a new chain on the current main. The
-    task branch is the chain's memory, so the stale one is set aside under a name no earlier recovery used (X's first 12
-    characters) and dropped from origin; local `main`, where a new branch starts, is brought up to date first."""
+    task branch is the chain's memory, so the stale one is set aside under a name no earlier recovery used (its tip's first 12
+    characters, saved work included) and dropped from origin; local `main`, where a new branch starts, is brought up to date first."""
     aside = f"old/{task_id}-{x[:12]}"
     return (
         "start the task again: its old branch has to be set aside and the factory restarts it from the plan on the current "

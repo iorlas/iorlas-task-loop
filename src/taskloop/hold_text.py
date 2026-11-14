@@ -84,6 +84,7 @@ class HoldFacts:
     evidence: str  # the attempt's evidence directory
     entry: str | None = None  # the entry log's last line of fixed words (`Last entry result`), None when there is none
     deadline: float | None = None  # the attempt's deadline, epoch seconds
+    saved: tuple[str, ...] = ()  # the full ids of the commits the hold saved the slot's unfinished work in, in order
 
 
 def explained(text: str) -> str:
@@ -116,6 +117,10 @@ def _details(facts: HoldFacts) -> list[str]:
     if facts.leftovers is not None:
         paths, more = _listed(facts.leftovers.paths, PATHS)
         lines.append(f"Left in the slot: {one_line(facts.leftovers.reason, 40)} {', '.join(one_line(path) for path in paths)}{more}")
+    if facts.saved:
+        ids = ", ".join(one_line(sha, 64) for sha in facts.saved)
+        lines.append(f"The slot's unfinished work was saved as commit {ids} on {branch}. The implementation is still incomplete: "
+                     "the saved work is not a result and no check ran on it. The slot was released.")
     lines.append(f"Evidence: {one_line(facts.evidence)}")
     return lines
 
@@ -169,7 +174,8 @@ def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     if isinstance(outcome, Kept):
         lines.append("Do that once the slot or process above is cleared: until then the task is not taken again.")
     if facts.reason == "branch_moved":
-        lines.append(f"Restore task/{task} to contain {one_line(facts.end_commit or '')}, or delete it locally and on origin, "
+        lines.append(f"Restore task/{task} to contain {one_line(facts.end_commit or '')}, or rename it aside (`old/{task}-` and the "
+                     "first 12 characters of its tip), "
                      "before adding the label.")
     if facts.reason == "claim_lost":
         lines.append("Someone else changed this task's claim while the factory worked on it.")

@@ -92,7 +92,8 @@ def _repeats(_rest: str) -> Cause:
 
 
 LAND_CAUSE = "land:"  # the prefix of a land refusal's hold reason (`round_land`)
-ASIDE = ("set the task's old branch aside (rename or delete it, locally and on origin) so the work starts again on the current "
+ASIDE = ("set the task's old branch aside (rename it to `old/<id>-` and the first 12 characters of its tip, saved work "
+         "included: nothing is deleted) so the work starts again on the current "
          "`main`")
 LAND = {  # a land refusal about the task's own change: what happened and the fix ("" = the same work may be tried again)
     "conflict": ("The checked change no longer merges onto `main`: newer changes on `main` conflict with it.", ASIDE),

@@ -52,6 +52,7 @@ from taskloop.step_guide import GUIDE
 from taskloop.steps import kind
 from taskloop.verdict import judge
 from taskloop.verifier import Verifier, VerifyHold
+from taskloop.wip import WIP
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -316,6 +317,23 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
     tree = slot.repo.tree(base)
     assert tree is not None and check.verify(KEY) == Verified(tree.files[P][1], reused=True)
     assert end_commit(registered) == base
+
+
+def test_unchanged_over_saved_work_ends_at_its_own_commit_of_the_same_tree(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
+) -> None:
+    """B is a hold's saved commit (its typed trailer): preservation is never a result, so `unchanged` ends at a new commit
+    of the same tree on B, with this attempt's trailer and no other change, and the chain verifies it as one link."""
+    base = commit(slot, PLANNED, f"Save unfinished work\n\nTask-Loop-Attempt: old\n{WIP}: old")
+    main_at(slot)
+    captured(registered, tmp_path, slot, checkouts, slot_files, {}, UNCHANGED)
+    result = verifier(registered, checkouts, slot_files).verify(KEY)
+    assert isinstance(result, Verified) and not result.reused
+    x = end_commit(registered)
+    assert x == head(slot) and x != base
+    assert made(slot, base) == [("Review saved work of tl-1", TRAILER)]
+    kept, saved = slot.repo.tree(base), slot.repo.tree(str(x))
+    assert kept is not None and saved is not None and dict(kept.files) == dict(saved.files)
 
 
 @pytest.mark.parametrize(
@@ -599,13 +617,13 @@ def test_the_writer_refuses_an_end_commit_or_verdict_without_its_preconditions(
     assert stored(registered) == []
 
 
-@pytest.mark.parametrize(("effect", "refused", "accepted"), [("commit", "B", "X"), ("keep", "X", "B"), ("none", "BX", "")])
+@pytest.mark.parametrize(("effect", "refused", "accepted"), [("commit", "B", "X"), ("keep", "", "B"), ("none", "BX", "")])
 def test_the_end_commit_and_verdict_fences_read_the_stored_effect(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
     effect: str, refused: str, accepted: str,
 ) -> None:
-    """The stored disposition stays `planned`; only the effect decides: `commit` ends at X != B, `keep` at B, `none` at
-    neither and never gets a verdict."""
+    """The stored disposition stays `planned`; only the effect decides: `commit` ends at X != B, `keep` at B (or its own
+    commit of saved work), `none` at neither and never gets a verdict."""
     captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
     registered.execute("UPDATE execution SET effect=?", (effect,))
     store = AttemptStore(lambda: registered)

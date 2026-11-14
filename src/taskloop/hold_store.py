@@ -21,6 +21,7 @@ from typing import Final, Literal
 from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_text
 from taskloop.check_store import stored_nullable_real, stored_real, stored_word
 from taskloop.factory_schema import HOLD, LATER, LATEST_CHECKS, SUCCESSOR, marks, prefixed
+from taskloop.wip import SavedCommit, decode, encode
 
 type Labels = Literal["moved", "absent", "not_ours", "closed", "missing", "superseded"]
 type Labelled = Literal["moved", "absent", "not_ours", "closed", "missing"]  # the label step's own words (5.2)
@@ -106,6 +107,27 @@ class HoldStore(StoreConnection):
         with self._connection() as con:
             found = con.execute(LOADED + f" WHERE h.attempt_id IN ({','.join('?' * len(ids))})", ids).fetchall()
         return {each.attempt_id: each for each in map(_row, found)}
+
+    def held(self, attempt_id: str) -> bool:
+        """Whether the agent attempt has a hold (only a hold saves its slot's work)."""
+        with self._connection() as con:
+            return con.execute("SELECT 1 FROM task_hold WHERE attempt_id=?", (attempt_id,)).fetchone() is not None
+
+    def saved(self, attempt_id: str) -> tuple[SavedCommit, ...]:
+        """The commits the hold saved on the task branch, in the order they were made."""
+        with self._connection() as con:
+            found = con.execute("SELECT saved FROM task_hold WHERE attempt_id=?", (attempt_id,)).fetchone()
+        return () if found is None else decode(as_text(found[0]))
+
+    def add(self, attempt_id: str, commit: SavedCommit) -> None:
+        """Record one more saved commit before the slot is parked; recorded once (the same commit again changes nothing)."""
+        with self._connection(write=True) as con:
+            found = con.execute("SELECT saved FROM task_hold WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if found is None:
+                raise StoreRefused("changed")
+            have = decode(as_text(found[0]))
+            if commit.sha not in {each.sha for each in have}:
+                con.execute("UPDATE task_hold SET saved=? WHERE attempt_id=?", (encode((*have, commit)), attempt_id))
 
     def uncleared(self, backlog: str) -> tuple[Uncleared, ...]:
         """Holds of `backlog` whose task was taken again (A not current) and whose `held` may still be on the task:

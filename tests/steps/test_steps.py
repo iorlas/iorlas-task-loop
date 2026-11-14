@@ -5,7 +5,7 @@ import pytest
 from taskloop.admit import task_text
 from taskloop.attempt_types import StepRules, Unsettled
 from taskloop.factory_commit import attributes
-from taskloop.step_text import GIT_WRITES
+from taskloop.step_text import GIT_WRITES, SAVED_WORK
 from taskloop.steps import IMPLEMENT, ORDER, PLAN, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 
@@ -50,7 +50,7 @@ def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environm
         "outside the repository. Your runs are evidence for you: after this step the checks run again outside your "
         "control, and only those results count."
     )
-    assert environment in text and text.endswith("say why in `explanation`.\n")
+    assert environment in text and SAVED_WORK in text and text.endswith(SAVED_WORK + "\n")
     assert f"{environment} With `implemented`" in text
     assert "taskloop" not in text  # generic: every repository's agent gets it
     assert "In `explanation`, name each command you ran and how it ended" in text

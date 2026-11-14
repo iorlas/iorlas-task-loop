@@ -17,10 +17,12 @@ from round_bench import Factory, Tracker, scripted, scripts, task
 
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_types import SlotFiles
+from taskloop.hold_store import HoldStore
 from taskloop.launch import LaunchUnavailable
 from taskloop.operations import Failed, Round, StartRequest, start
 from taskloop.round import NextRequest, run_round
 from taskloop.step_render import human
+from taskloop.wip import SavedCommit
 
 AFTER_DEADLINE = 31 * 60  # past an attempt's deadline: the rounds' --minutes is 30
 ASKED = "Which widget shape do you want?"
@@ -170,26 +172,59 @@ def test_a_bd_outage_mid_hold_is_pending_written_once_per_refusal_and_the_claim_
     assert factory.round(factory.last.written) == []
 
 
-def test_a_hold_refused_by_a_dirty_slot_stays_pending_while_the_round_goes_on(factory: Factory) -> None:
+def test_a_hold_saves_a_dirty_slot_on_the_task_branch_and_releases_it(factory: Factory) -> None:
     """An admitted attempt that never started is `stuck:expired_admitted` past its deadline; the person left a file in
-    its slot, so the hold's abandon is `held:slot_dirty`: one line, one comment naming the slot, the claim kept; another
-    slot's task still starts; once the file is gone the next round finishes the hold."""
+    its slot: the hold saves it as one commit on the task branch, names it, releases the slot clean and detached at D, and
+    another task starts through the same slot, with nothing for a person to clean."""
     factory.adopt("s2")
     factory.failing = LaunchUnavailable("start")
     assert factory.round() == [("tl-1", "", "start", "unavailable:start")]
     factory.now += AFTER_DEADLINE
     factory.slot.write_file("notes.txt", "mine\n")
-    ready(factory, "tl-2")
-    dirty = ("tl-1", "plan", "hold", "pending abandon held:slot_dirty")
-    assert factory.round(frozenset()) == [dirty, ("tl-2", "plan", "start", "started")] and factory.last.stopped == ""
-    assert factory.round(factory.last.written)[0] == dirty
-    assert sum(" pending abandon held:slot_dirty " in each for each in factory.lines) == 1
-    assert factory.tracker.holds == ["labels tl-1 auto", "comment tl-1"] and factory.tracker.beads["tl-1"].assignee == "taskloop"
-    assert f"slot {factory.slot.path} has files left" in factory.tracker.comments[0][1]
-    factory.slot.remove_file("notes.txt")
-    assert factory.round(factory.last.written)[0] == ("tl-1", "plan", "hold", "held stuck:expired_admitted")
+    assert factory.round(frozenset()) == [("tl-1", "plan", "hold", "held stuck:expired_admitted")]
+    saved = _saved(factory)
+    assert len(saved) == 1 and not factory.slot.dirty().raw
+    assert dict(factory.slot.repo.branches("task/"))["task/tl-1"] == saved[0].sha
+    assert not factory.slot.repo.worktree(factory.slot.path).dirty(ignored_under=["."]).ignored
+    assert saved[0].sha in factory.tracker.comments[0][1]
     assert factory.tracker.holds == ["labels tl-1 auto", "comment tl-1"] and factory.tracker.beads["tl-1"].assignee == ""
+    ready(factory, "tl-2")
+    assert factory.round(factory.last.written)[0] == ("tl-2", "plan", "start", "started")
 
+
+def _saved(factory: Factory) -> tuple[SavedCommit, ...]:
+    attempt = str(factory.con.execute("SELECT attempt_id FROM attempt WHERE task_id='tl-1'").fetchone()[0])
+    return HoldStore(lambda: factory.con).saved(attempt)
+
+
+def test_a_hold_saves_edits_deletions_and_new_files_but_not_ignored_files(factory: Factory) -> None:
+    """The saved commit holds the slot's final working state (a tracked edit, a deletion, a new file); a file Git's ignore
+    rules hide stays out of it and on disk; a second round adds no commit and the slot serves another task."""
+    factory.adopt("s2")
+    factory.failing = LaunchUnavailable("start")
+    assert factory.round() == [("tl-1", "", "start", "unavailable:start")]
+    factory.now += AFTER_DEADLINE
+    factory.slot.repo.exclude_locally(["*.log"])
+    factory.slot.write_file("README", "edited\n")
+    factory.slot.write_file("new/file.txt", "new\n")
+    factory.slot.write_file("junk.log", "log\n")
+    factory.round(frozenset())
+    (saved,) = _saved(factory)
+    files = factory.slot.repo.tree(saved.sha)
+    assert files is not None and sorted(files.files) == ["README", "new/file.txt"]
+    assert files.read("README") == b"edited\n"
+    assert not factory.slot.dirty().raw and factory.slot.dirty(ignored_under=["."]).ignored == ("junk.log",)
+    assert len(_saved(factory)) == 1 and len(dict(factory.slot.repo.branches("task/"))) == 1
+
+
+def test_a_hold_of_a_clean_slot_saves_nothing(factory: Factory) -> None:
+    """An expired admitted attempt with an untouched slot is held and released with no commit and no stored save."""
+    factory.adopt("s2")
+    factory.failing = LaunchUnavailable("start")
+    assert factory.round() == [("tl-1", "", "start", "unavailable:start")]
+    factory.now += AFTER_DEADLINE
+    assert factory.round(frozenset()) == [("tl-1", "plan", "hold", "held stuck:expired_admitted")]
+    assert _saved(factory) == () and "task/tl-1" not in dict(factory.slot.repo.branches("task/"))
 
 def test_an_advance_refused_claim_lost_holds_a_round_taken_task_without_touching_another_actor_s_labels(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]
