@@ -371,6 +371,15 @@ class AttemptReads(StoreConnection):
             raise StoreUnavailable("Malformed step chain")
         return steps
 
+    def input_ref(self, key: AttemptKey) -> FileRef:
+        """Immutable input reference, including admitted attempts with no execution or registered entry."""
+        with self._connection() as con:
+            row = con.execute("SELECT input_path,input_digest FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
+                              astuple(key)).fetchone()
+        if row is None:
+            raise StoreUnavailable("Attempt input reference unavailable")
+        return FileRef(as_text(row[0]), as_text(row[1]))
+
 
 def _source(value: object, reason: object) -> str | None:
     try:

@@ -30,6 +30,7 @@ from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
 from taskloop.command_sink import WatchedHooks
+from taskloop.discussion import Discussion
 from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -45,7 +46,7 @@ from taskloop.slot_env import RealEnvFiles, sandbox_probe, setup_process
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_release import Scratch, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
-from taskloop.tracker_client import inspect_tracker_task, tracker_claims
+from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_discussion
 from taskloop.verifier import Verifier
 
 
@@ -197,6 +198,11 @@ def adopt_slots(
         store.close_shared()
 
 
+def open_discussion(database: Path, store: Store) -> Discussion:
+    holds = HoldStore(lambda: store.shared_rw(database), store.begin_immediate)
+    return Discussion(tracker_discussion, holds.latest, inspect_tracker_task)
+
+
 def open_admission(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> AttemptAdmission:
     """Real wiring: per-thread shared writers on factory.db, the tracker claim, the real Git boundary, wall-clock deadlines."""
     store = store if store is not None else Store(SCHEMA)
@@ -212,6 +218,7 @@ def open_admission(database: Path, artifacts: Path, views: GitViews, store: Stor
         time.time,
         slot_lock.probe,
         RealSlotFiles(),
+        discussion=open_discussion(database, store).collect,
         ids=NativeIds(),
     )
 
@@ -229,6 +236,7 @@ def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store 
     return NextAdmission(
         lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), inspect_tracker_task, views.checkouts,
         time.time, slot_lock.probe, RealSlotFiles(),
+        discussion=open_discussion(database, store).collect,
         ids=NativeIds(),
     )
 

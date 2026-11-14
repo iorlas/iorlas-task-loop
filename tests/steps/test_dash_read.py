@@ -292,7 +292,8 @@ def test_a_plan_restarted_at_plan_is_its_own_try_that_can_be_read_by_its_number(
     assert board_task.attempt == 2 and board_task.repeat is not None
     assert (board_task.repeat.kind, board_task.repeat.reason) == ("restart_at_plan", "Reason not recorded")
     files.put_input(KEY, "Plan the actual task")
-    files.put_input(AttemptKey("again", "again-token", 1), "Plan it again after the owner's edit")
+    ref = files.put_input(AttemptKey("again", "again-token", 1), "Plan it again after the owner's edit")
+    registered.execute("UPDATE attempt SET input_path=?,input_digest=? WHERE attempt_id='again'", (ref.path, ref.digest))
     first, second = (build_body(ports, "tasks", "tl-1", "plan", each) for each in (1, 2))
     assert isinstance(first, AttemptBody) and isinstance(second, AttemptBody)
     assert first.input == "Plan the actual task" and second.input == "Plan it again after the owner's edit"
@@ -356,8 +357,10 @@ def test_an_attempt_that_never_reached_verification_has_no_verification_row(chec
 def test_a_repeats_prompt_marks_the_lines_it_added_to_the_prompt_it_repeats(checking: sqlite3.Connection, tmp_path: Path) -> None:
     unsafe_repeat(checking)
     files = EvidenceFiles(tmp_path)
-    files.put_input(AttemptKey("implement", "implement-token", 1), "Title\n\nDo the thing.\n")
-    files.put_input(AttemptKey("again", "again-token", 2), "A path cannot be committed.\nsrc/link.py\n\nTitle\n\nDo the thing.\n")
+    for key, text in ((AttemptKey("implement", "implement-token", 1), "Title\n\nDo the thing.\n"),
+                      (AttemptKey("again", "again-token", 2), "A path cannot be committed.\nsrc/link.py\n\nTitle\n\nDo the thing.\n")):
+        ref = files.put_input(key, text)
+        checking.execute("UPDATE attempt SET input_path=?,input_digest=? WHERE attempt_id=?", (ref.path, ref.digest, key.attempt_id))
     ports = TaskPorts(reads_of(checking), files, Tracker())
     first, second = (build_body(ports, "tasks", "tl-1", "implement", each) for each in (1, 2))
     assert isinstance(first, AttemptBody) and isinstance(second, AttemptBody)
