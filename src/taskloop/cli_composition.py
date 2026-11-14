@@ -141,7 +141,7 @@ def open_start(database: Path, artifacts: Path, views: GitViews) -> Generator[St
 
 
 def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Store, views: GitViews) -> StartPorts:
-    admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, store)
+    admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, views, store)
     launcher = open_launcher(database, artifacts, views)
     repeat = StepRepeat(reader, open_verifier(database, store, views), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
                         time.time, repeating, ids=NativeIds())

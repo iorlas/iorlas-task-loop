@@ -30,6 +30,7 @@ from taskloop.attempt_types import (
     Verdict,
     Verified,
 )
+from taskloop.earlier_attempt import EarlierAttempt
 from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, prefixed
 from taskloop.repo import RepoId
 from taskloop.steps import RULES
@@ -57,6 +58,31 @@ def verdict_of(row: tuple[object, ...]) -> Verdict | None:
 
 class AttemptLoads(AttemptReads):
     """The fenced reads an attempt's writers need; the status reads are `AttemptReads`'."""
+
+    def earlier(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> EarlierAttempt | None:
+        """Latest agent attempt for exactly this registered repo and tracker task; checks have their own table."""
+        with self._connection() as con:
+            row: tuple[object, ...] | None = con.execute(
+                """SELECT attempt_id,dispatch_token,generation,rev,slot,step,end_commit FROM attempt
+                WHERE repo_id=? AND adapter='beads' AND backlog=? AND task_id=? AND tracker_root=?
+                ORDER BY seq DESC LIMIT 1""", (repo_id, backlog, task_id, tracker_root),
+            ).fetchone()
+        if row is None:
+            return None
+        return EarlierAttempt.model_validate({
+            "key": AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), "revision": as_int(row[3]),
+            "repo_id": repo_id, "backlog": backlog, "task_id": task_id, "tracker_root": tracker_root,
+            "slot": as_text(row[4]), "step": as_text(row[5]), "end_commit": as_nullable_text(row[6]),
+        })
+
+    def earlier_for(self, key: AttemptKey) -> EarlierAttempt | None:
+        """Select by the predecessor's fenced identity, independently of its released reservation."""
+        with self._connection() as con:
+            row = con.execute(
+                "SELECT repo_id,backlog,task_id,tracker_root FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
+                astuple(key),
+            ).fetchone()
+        return None if row is None else self.earlier(*(as_text(value) for value in row))
 
     def _load(self, con: sqlite3.Connection, key: AttemptKey) -> AttemptRecord | None:
         """The fenced read; `start` (E) is the previous attempt's X, else its B, frozen since this attempt took over."""

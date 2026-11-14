@@ -47,3 +47,18 @@ Run `just check` and `just test` as the required focused gates during implementa
 Automated acceptance is the saved-input and actual-launch-input contract: a later attempt carries the stored earlier answer (explanation capped at 1,500 characters), recorded retained commit and its names, plus the required instruction, while starting a fresh session.
 
 For the next real repeats with editable work, inspect their existing execution artifacts through the owning readers and count model calls through the first repository edit. The target is a first edit within eight calls. Record attempt identity, call count and whether the supplied commit was used in implementation evidence. This is an observed agent outcome, not something a fake harness proves; do not claim the saving before observing it or add a new control-state owner for measurement. If the target is missed, inspect the supplied block and the observed extra reads before proposing further changes. Attempts legitimately refusing without an edit are recorded separately and do not establish the first-edit target.
+
+## As built
+
+`answer_read` shares the owning step's stored-answer decoder with hold presentation. `AttemptStore.earlier` selects
+the latest agent attempt for the registered repo and tracker task identity; admission rechecks its fenced identity
+and revision in the existing transaction. `earlier_input` composes the escaped answer and retained commit names
+outside that transaction, using `HoldStore` saves before a recorded result commit. Repeats strip the older block
+before composing the immediate predecessor's facts. Dispatch refresh and captured-result reconciliation retain
+the admitted evidence, and agent launches remain fresh sessions.
+
+Focused contracts cover unsafe repeats, successive repeats, Unicode explanation limits, escaped answer and filename
+data, actual saved changes across slots, plan advancement, absent/invalid/unreadable evidence, missing recorded
+Git objects, admission races, input refresh and captured-result replay. No live repeats were launched during this
+implementation. The eight-call first-edit target and token saving remain to be measured on the next real repeats
+through their existing execution readers, as described above.

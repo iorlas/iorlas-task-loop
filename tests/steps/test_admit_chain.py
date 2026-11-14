@@ -27,6 +27,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileRef, SlotFiles
+from taskloop.earlier_input import START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
@@ -146,6 +147,9 @@ def test_a_done_plan_advances_to_implement_attempt_one_after_its_commit(
     text = (tmp_path / row[8]).read_text()
     assert text.startswith("Add a widget\n\nIt must do X") and f"`{PLAN}`" in text
     assert f"Source commit: {planned}" in text
+    assert f'Recorded result commit: "{planned}"' in text and START in text
+    assert 'Disposition: "planned"' in text and 'Explanation: "done"' in text
+    assert f'"{PLAN}"' in text and "BEGIN EARLIER ATTEMPT DATA" in text
     assert registered.execute("SELECT attempt_id FROM reservation").fetchone() == (admitted.key.attempt_id,)
 
 
@@ -215,7 +219,7 @@ def test_a_superseded_or_racing_advance_is_task_attempted_and_one_attempt_is_adm
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     """A second advance wins between the first one's read and its transaction: the first finds another current attempt."""
-    other = advancing(registered, tmp_path / "other", checkouts, slot_files)
+    other = advancing(registered, tmp_path, checkouts, slot_files)
     files = Racing(tmp_path, lambda: other.admit_next(request(slot.repo)))
     racing = NextAdmission(lambda: registered, begin_immediate, files, tasks(CLAIMED), checkouts, lambda: 10,
         lambda _p: True, slot_files, ids=NativeIds())
@@ -275,7 +279,8 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
 
     execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files)
     ids = FixedIds()
-    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=ids).admit_repeat(
+    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                              checkouts, slot_files, ids=ids).admit_repeat(
         RepeatRequest(key, "feedback", 100, "uncommitted"))
     assert isinstance(repeated, Admitted)
     assert repeated.key.attempt_id == ids.fresh[0] and repeated.key.dispatch_token == ids.tokens[0][1]
@@ -299,7 +304,8 @@ def test_the_advance_and_the_repeat_copy_the_label_the_task_was_taken_under(
         slot.write_file("scratch.log", "left over\n")
 
     execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files)
-    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=NativeIds()).admit_repeat(
+    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                              checkouts, slot_files, ids=NativeIds()).admit_repeat(
         RepeatRequest(key, "feedback", 100, "uncommitted"))
     assert isinstance(repeated, Admitted)
     found = registered.execute("SELECT attempt_id,label FROM attempt ORDER BY seq").fetchall()

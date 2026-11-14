@@ -30,8 +30,10 @@ from taskloop.attempt_types import (
     VerifyResult,
     WorkerGone,
 )
+from taskloop.earlier_input import without
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.ids import Ids
+from taskloop.input_context import InputError
 from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, launched, verify_failure
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
@@ -115,10 +117,10 @@ class StepRepeat:
         """The feedback over attempt 1's input, read through its digest."""
         try:
             steps = self.store.chain(current)  # read after the verify: C's commit, if it made one, is stored now
-            task = self.files.read(steps[0].input_ref)
+            task = without(self.files.read(steps[0].input_ref))
         except StoreUnavailable as error:
             return Failed("unavailable", "store", str(error))
-        except EvidenceError as error:
+        except (EvidenceError, InputError) as error:
             return Failed("refused", "input", str(error))
         unrecorded = steps[-1].effect == "commit" and steps[-1].end_commit is None
         admission = record.admission

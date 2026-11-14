@@ -1,23 +1,15 @@
-"""Admit an attempt that continues a task, claiming nothing (the tracker claim taken at the task's first admission is
-kept, and its root copied).
-
-A repeat (`admit_repeat`) is the step's next attempt, which takes over the reservation its previous attempt holds in the
-same transaction, so the slot is never released between attempts; D is copied too. The only writer that moves a
-reservation row from one attempt to the next.
-
-An advance (`admit_next`) is attempt 1 of the next step (`steps.next_step`) after the task's current attempt is done:
-verified, released settled with its claim kept, and its X published. One tracker read confirms the task is still in
-progress for the factory's actor (no label check: the label is ingestion's); then a free slot whose HEAD (D) passes the
-branch rule is reserved as a fresh admission does, and the new attempt stores the previous X as `after_commit`, which
-the entry requires its task branch to contain. The attempt and reservation rows and the slot's counter are written
-through `admit`'s shared writes.
+"""Continue a claimed task, copying its tracker root without claiming again.
+A repeat atomically takes over the held reservation, retaining its original park point.
+An advance follows a verified, released and published step into a free slot, requiring its previous result
+in the task branch. Both store earlier-answer context before their short, fenced admission transaction.
 """
 
 import json
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import astuple, dataclass
+from dataclasses import astuple, dataclass, replace
+from functools import partial
 from pathlib import Path
 
 from git_porcelain import GitUnavailable, Repo
@@ -41,12 +33,17 @@ from taskloop.admit import (
 )
 from taskloop.admit_rows import as_count, insert_attempt, issue, reserve
 from taskloop.agents.settings import AgentSetting, encode_policy
+from taskloop.attempt_reads import StoreUnavailable
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
+from taskloop.earlier_attempt import EarlierAttempt
+from taskloop.earlier_input import EarlierInput, commit_names
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER, REPEATED
 from taskloop.git_views import GitProfileFiles
+from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids
 from taskloop.input_context import InputError
 from taskloop.input_context import read as read_context
@@ -93,10 +90,13 @@ class ChainAdmission:
         begin: Callable[[sqlite3.Connection], AbstractContextManager[None]],
         files: EvidenceFiles,
         clock: Callable[[], float],
+        checkouts: Checkouts,
+        slot_files: SlotFiles,
         *, ids: Ids,
     ) -> None:
         self.ids = ids
         self.connect, self.begin, self.files, self.clock = connect, begin, files, clock
+        self.checkouts, self.slot_files = checkouts, slot_files
 
     def admit_repeat(self, request: RepeatRequest) -> Admitted | AdmitRefused | AdmitUnavailable:
         """The next attempt N of `previous` (P), its input written first under N's key: in one write transaction, every
@@ -108,22 +108,28 @@ class ChainAdmission:
         previous = request.previous
         key = AttemptKey(self.ids.hex(), self.ids.token(16), previous.reservation_generation + 1)
         try:
-            ref = self.files.put_input(key, request.text)
+            reader = AttemptStore(self.connect, self.begin)
+            earlier = reader.earlier_for(previous)
+            if earlier is not None and earlier.key != previous:
+                return AdmitRefused("task_attempted")
+            text = request.text if earlier is None else EarlierInput(
+                reader, self.files, HoldStore(self.connect, self.begin)).attach_slot(request.text, earlier, self.checkouts, self.slot_files)
+            ref = self.files.put_input(key, text)
+            return self._takeover(open_store(self.connect), request, key, ref, earlier)
+        except (_Lost, sqlite3.IntegrityError) as error:
+            return AdmitRefused("task_attempted", detail=why(error))
+        except (sqlite3.Error, StoreUnavailable) as error:
+            return AdmitUnavailable("store", detail=why(error))
         except (EvidenceError, InputError, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
-        try:
-            return self._takeover(open_store(self.connect), request, key, ref)
-        except _Lost:
-            return AdmitRefused("task_attempted")
-        except sqlite3.IntegrityError as error:  # caught after the rollback: a concurrent repeat's UNIQUE number or previous
-            return AdmitRefused("task_attempted", detail=why(error))
-        except sqlite3.Error as error:
-            return AdmitUnavailable("store", detail=why(error))
 
-    def _takeover(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
+    def _takeover(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef,
+                  earlier: EarlierAttempt | None) -> Admitted | AdmitRefused:
         with self.begin(con):
             if blocked(con):
                 return AdmitRefused(Reason.DRAINING, detail=BLOCKED)
+            if AttemptStore(lambda: con).earlier_for(request.previous) != earlier:
+                return AdmitRefused("task_attempted", detail="The earlier attempt changed while the input was being prepared.")
             return self._takeover_open(con, request, key, ref)
 
     def _takeover_open(self, con: sqlite3.Connection, request: RepeatRequest, key: AttemptKey, ref: FileRef) -> Admitted | AdmitRefused:
@@ -206,6 +212,7 @@ class _Ready:
     step: str
     task: TaskInspection
     free: tuple[Free, ...]
+    earlier: EarlierAttempt | None = None
 
 
 class NextAdmission:
@@ -236,16 +243,22 @@ class NextAdmission:
         try:
             key = AttemptKey(self.ids.hex(), self.ids.token(16), issued(ready.con, RepoId(found.repo_id), names) + 1)
             context = read_context(GitProfileFiles(request.checkout, self.checkouts), ready.free[0].source)
-            ref = self.files.put_input(key, task_text(ready.task, ready.step, context))
-        except sqlite3.Error as error:
+            reader = AttemptStore(self.connect, self.begin)
+            earlier = reader.earlier_for(request.previous)
+            ready = replace(ready, earlier=earlier)
+            text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
+                task_text(ready.task, ready.step, context), earlier,
+                partial(commit_names, self.checkouts(request.checkout), request.checkout))
+            ref = self.files.put_input(key, text)
+        except (sqlite3.Error, StoreUnavailable) as error:
             return AdmitUnavailable("store", detail=why(error))
-        except (EvidenceError, InputError, UnicodeError, OSError) as error:
+        except (EvidenceError, InputError, GitUnavailable, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
         try:
             return self._advance(ready, request, key, ref)
         except sqlite3.IntegrityError as error:  # caught after the rollback; every constraint is pre-checked: a schema mismatch
             return AdmitRefused("constraint", detail=why(error))
-        except sqlite3.Error as error:
+        except (sqlite3.Error, StoreUnavailable) as error:
             return AdmitUnavailable("store", detail=why(error))
 
     def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, Task, str] | AdmitRefused | AdmitUnavailable:
@@ -308,6 +321,8 @@ class NextAdmission:
             row: tuple[object, ...] | None = con.execute(CURRENT, (found.backlog, found.task_id)).fetchone()
             if row is None or row[0:3] != astuple(request.previous):
                 return AdmitRefused("task_attempted")
+            if AttemptStore(lambda: con).earlier_for(request.previous) != ready.earlier:
+                return AdmitRefused("task_attempted", detail="The earlier attempt changed while the input was being prepared.")
             if not row[3] or next_step(str(row[4]), True) != step:
                 return AdmitRefused("not_advanceable")
             chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, generation)) is not None), None)

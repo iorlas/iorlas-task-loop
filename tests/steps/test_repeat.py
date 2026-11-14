@@ -106,8 +106,9 @@ def never(*_args: object, **_options: object) -> NoReturn:
     raise AssertionError("a repeat reads no tracker, opens no checkout and claims nothing")
 
 
-def admission(con: sqlite3.Connection, tmp_path: Path, clock: Callable[[], float] = lambda: 10) -> ChainAdmission:
-    return ChainAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), clock, ids=NativeIds())
+def admission(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles,
+              clock: Callable[[], float] = lambda: 10) -> ChainAdmission:
+    return ChainAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), clock, checkouts, files, ids=NativeIds())
 
 
 def gone(_worker: Worker) -> bool:
@@ -139,7 +140,7 @@ def repeater(
     store = AttemptStore(lambda: con)
     check = verifier or Verifier(store, checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
     launcher = launcher or RegisteringLauncher(store, SECOND)
-    return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path), launcher,
+    return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path, checkouts, files), launcher,
                       lambda _worker: not alive, seen(observe), lambda: 10, repeating, ids=NativeIds())
 
 
@@ -250,7 +251,7 @@ def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
         store.verdict(previous.admission, base, None, Rejected("nothing_written"), 1)
     text = EvidenceFiles(tmp_path).read(record.admission.input_ref)
     assert text.startswith(PLAN_WARNING + "\n\n")
-    assert text.endswith(f"The task, for reference:\n\n{TASK}") and "BEGIN SLOT STATUS " in text
+    assert f"The task, for reference:\n\n{TASK}" in text and "BEGIN SLOT STATUS " in text
     assert [size for size, _ in ids.tokens] == [8] and ids.tokens[0][1] in text
 
 
@@ -336,7 +337,7 @@ def test_each_failed_gate_of_admit_repeat_admits_nothing(
     if reason == "repeat_cap":
         renumber(registered, 3)
     before, reserved = rows(registered), held(registered)
-    found = admission(registered, tmp_path).admit_repeat(RepeatRequest(KEY, "feedback", deadline, "unsafe"))
+    found = admission(registered, tmp_path, checkouts, slot_files).admit_repeat(RepeatRequest(KEY, "feedback", deadline, "unsafe"))
     assert isinstance(found, AdmitRefused) and found.reason == reason
     assert rows(registered) == before and held(registered) == reserved
 
@@ -359,7 +360,7 @@ def test_a_second_repeat_of_the_same_attempt_is_task_attempted(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
-    admit = admission(registered, tmp_path)
+    admit = admission(registered, tmp_path, checkouts, slot_files)
     first = admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe"))
     assert isinstance(first, Admitted)
     again = admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe"))
@@ -397,7 +398,7 @@ def test_two_starts_on_two_connections_admit_exactly_one(
     def contender() -> None:
         store = Store(SCHEMA)
         mine = store.open_rw(path)
-        admit = ChainAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), lambda: 10, ids=NativeIds())
+        admit = ChainAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), lambda: 10, checkouts, slot_files, ids=NativeIds())
         outcomes.append(admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")))
 
     threads = [threading.Thread(target=contender) for _ in range(2)]

@@ -119,7 +119,8 @@ class Step:
         return f"{found.status} {found.reason}"
 
     def admission(self) -> ChainAdmission:
-        return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10, ids=NativeIds())
+        return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10,
+                              self.checkouts, self.files, ids=NativeIds())
 
     def repeat(self, current: AttemptKey) -> Started | Failed:
         found = self.store.attempt_of("tasks", "tl-1")
@@ -224,7 +225,7 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
         "a message without a tool call ends the step.\n\nFirst assess depth from the supplied task text alone"
     )
     assert text.index("First assess depth") < text.index("Attempt 2 of this step")
-    assert text.count("BEGIN SLOT STATUS") == 1 and text.endswith(TASK)
+    assert text.count("BEGIN SLOT STATUS") == 1 and TASK in text
     step.run(third, entry, Agent(slot, {}, UNCHANGED))
     shown_three = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_three, Failed)
