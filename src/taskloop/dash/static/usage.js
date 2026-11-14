@@ -1,10 +1,11 @@
-// One presentation of the server's attempt counts and step/task totals. Turns retain the harness's own granularity.
+// One presentation of the server's attempt counts and step/task totals.
 import { el } from "./ui.js";
 
 const fields = [["fresh", "fresh input"], ["cached", "cached input"], ["output", "output"], ["turns", "reported turns"]];
 const number = new Intl.NumberFormat("en-US");
-const explanation = "Reported turns depend on the harness: Codex completed turns, Claude reported turns, "
-  + "OpenCode token-reporting steps. Tool calls are not turns.";
+const explanation = "A turn is one model request and its reply. Tool calls are not turns. "
+  + "Historical values retain the harness's earlier counts. Codex falls back to completed invocations "
+  + "when model-request usage is unavailable.";
 
 export function usageText(usage, label = "Tokens", total = false) {
   if (!usage || fields.every(([key]) => usage[key] == null)) return `${label} · not reported`;

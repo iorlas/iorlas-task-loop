@@ -44,8 +44,9 @@ success or failure. Explanatory sentences may use those verbs; outcome badges sa
   **Reasoning**, **Error** and **Waiting** in the activity view label recorded activity kinds or their presentation.
   **Raw**/**Formatted** switch answer rendering. Paths, characters, lines, blocks and exit codes describe the saved content.
   **Tokens**, **fresh input**, **cached input**, **output**, **reported turns**, **effort**, **Step total** and **Task total**
-  label reported usage and execution settings; missing/incomplete reports remain explicit, and the turns tooltip names
-  harness-specific reporting. **Stream connecting/connected/disconnected**, **Reconnecting**, **Live** and **Latest**
+  label reported usage and execution settings; missing/incomplete reports remain explicit. The turns tooltip defines model
+  requests and notes historical counts and the adapter's fallback. **Stream connecting/connected/disconnected**,
+  **Reconnecting**, **Live** and **Latest**
   describe dashboard data delivery, not factory liveness. **Last recorded round**, its age, clock discrepancy and unavailable
   messages describe only available log observations. **Factory log**, **All moves**, **Needs attention**, **Today** and
   **Yesterday** name the round-log view, its filters and date groups; the attention filter is a display selection, not a hold.
@@ -70,7 +71,12 @@ folded history and accessible names.
 | session | A conversation with an agent, identified by its harness or chat application. | A step can own several sessions. Each agent execution attempt uses one session, which may serve several attempts. Non-agent checks need none. A process ID is not a session ID. |
 | agent | The coding assistant asked to perform work through the agent interface. | An agent can plan or implement. An attempt is its execution record; a session is its conversation. |
 | harness | The program that runs an agent and exposes its conversation and tools. | Codex CLI, Claude Code or OpenCode. Launching it is an ordinary action, not another product entity named "harness invocation". |
+| turn | One request to the model and its reply. | Tool results are fed back in subsequent requests. |
 | ask | A question requiring the owner's answer before the task can proceed. | An unclear change needs a decision. The prompt sent to an agent is input, not an ask. |
+
+`execution.turns` counts model requests per attempt (one agent invocation), from the agent stream's usage evidence.
+Codex calls the whole invocation a "turn"; the factory calls that execution an attempt. Existing rows retain their old counts;
+the Codex adapter falls back to completed invocations when request usage is unavailable.
 
 At the factory level the execution picture is `task -> step -> attempt`. Inside the checks step, individual checks
 may also have attempts. The word has one meaning: a try at the named operation, not a new workflow tier.

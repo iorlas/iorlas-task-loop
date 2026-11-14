@@ -402,10 +402,10 @@ async function waitingRows() {
 }
 
 async function usage() {
-  const counts = { fresh: 49773, cached: 496768, output: 2375, turns: 1, attempts: 1, complete: 1 };
+  const counts = { fresh: 49773, cached: 496768, output: 2375, turns: 74, attempts: 1, complete: 1 };
   const sum = { ...counts, attempts: 2, complete: 1 };
   const text = usageText(counts);
-  for (const value of ["fresh input 49,773", "cached input 496,768", "output 2,375", "reported turns 1"]) {
+  for (const value of ["fresh input 49,773", "cached input 496,768", "output 2,375", "reported turns 74"]) {
     assert(text.includes(value), `exact reported count: ${value}`);
   }
   assert(usageText({ fresh: 0, cached: 0, output: 0, turns: 0 }).includes("output 0"), "reported zero stays zero");
@@ -433,7 +433,9 @@ async function usage() {
   const drawer = document.getElementById("drawer");
   const header = drawer.querySelector("section > div");
   assert(header.textContent.includes(text) && header.textContent.includes("end not recorded"), "attempt counts beside timing");
-  assert(header.querySelector("span[title*='Codex completed turns']"), "reported turns explained in hover");
+  const usage = header.querySelector("span[title*='one model request and its reply']");
+  assert(usage, "reported turns explained in hover");
+  assert(usage.title.includes("Historical values") && usage.title.includes("falls back"), "reporting limitations explained");
   assert(drawer.textContent.includes("Codex · OpenAI · chosen · high effort · full access"), "run context retained");
   assert(drawer.textContent.includes("Task total"), "task context total visible while inspecting attempt");
   button(drawer, "Task").click(); await tick();

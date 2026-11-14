@@ -190,7 +190,7 @@ class ExecutionFacts:
     http_status: int | None
     tokens: tuple[int | None, int | None, int | None] | None
     cumulative: tuple[int | None, int | None, int | None] | None
-    turns: int | None
+    turns: int | None  # model requests during this attempt
     session: str | None
 
 
@@ -392,6 +392,6 @@ def execution_facts(raw: RunOutcome) -> ExecutionFacts:
         optional_int(s.facts.get("http_status")),
         _usage(s.res.get("tokens")),
         _usage(s.res.get("cumulative")),
-        optional_int(s.res.get("turns")),
+        optional_int(s.res.get("requests")),
         ref if isinstance(ref := s.res.get("ref"), str) and ref else None,
     )
