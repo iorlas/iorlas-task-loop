@@ -78,7 +78,7 @@ def test_incomplete_or_changed_evidence_fails(generated: tuple[Case, Digest, Sou
 
 
 @pytest.mark.parametrize("module,old,new", [
-    ("any-agent/src/any_agent/supervisor.py", b"time.time() + timeout", b"self.clock() + timeout"),
+    ("any-agent/src/any_agent/supervisor.py", b"self.clock() + timeout", b"self.clock() - timeout"),
     ("any-agent/src/any_agent/watch.py", b"self.start += gap", b"self.start -= gap"),
     ("any-agent/src/any_agent/supervisor.py", b"self.hooks.started(worker)", b"self.hooks.started(None)"),
     ("stream-proc/src/stream_proc/registered.py", b"_cleanup(child)", b"pass"),

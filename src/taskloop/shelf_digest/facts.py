@@ -63,13 +63,13 @@ class Contract:
 
 
 CONTRACTS = (
-    Contract(FactName.TIMEOUT, "run: wall timeout, 0=off; injected monotonic clock is for watchdogs.", (
+    Contract(FactName.TIMEOUT, "run: timeout on the injected monotonic clock, 0=off; the watchdogs use the same clock.", (
         Rule("any-agent", "supervisor", "Supervisor._wait", (
-            "time.time() + timeout if timeout else None", "time.time() >= end", "self.out.timed_out = True",
+            "self.clock() + timeout if timeout else None", "self.clock() >= end", "self.out.timed_out = True",
             "self._stop(p, killed, 'timeout')")),
         Rule("any-agent", "supervisor", "run", ("clock: Callable[[], float] = time.monotonic",)),
     )),
-    Contract(FactName.SUSPEND, "Watchdog: suspend gap shifts start/last; wall timeout is unadjusted.", (
+    Contract(FactName.SUSPEND, "Watchdog: suspend gap shifts start/last; the run timeout is unadjusted.", (
         Rule("any-agent", "supervisor", "Supervisor.__init__", (
             "watch.Watchdog(lim.first_event_s, hooks.idle_s or lim.silence_s, clock=clock, beat=hooks.beat)",)),
         Rule("any-agent", "watch", "Watchdog.poll", (
@@ -77,7 +77,7 @@ CONTRACTS = (
             "if gap > SLEEP_GAP_S:\n self.start += gap\n self.last += gap")),
     )),
     Contract(FactName.STARTED, "Register before exec: worker, started hook, live.started; callback failure cleans child.", (
-        Rule("any-agent", "supervisor", "Supervisor.run", (
+        Rule("any-agent", "supervisor", "Supervisor._run", (
             "self.out.worker = worker", "self.hooks.started(worker)", "self.live.started(worker.pid)",
             "procs.spawn(spec.argv, spec.cwd, spec.env, registered=register)"), True),
         Rule("any-agent", "procs", "spawn", (
