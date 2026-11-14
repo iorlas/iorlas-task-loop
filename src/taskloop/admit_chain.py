@@ -1,6 +1,4 @@
-"""Continue a claimed task without claiming again. Repeats take over its reservation and original park point.
-Advances require the previous result in the task branch. Both store earlier-answer context before the admission transaction.
-"""
+"""Continue a claimed task: prepare input, then admit a repeat, repair or advance without claiming again."""
 
 import json
 import sqlite3
@@ -84,6 +82,17 @@ class _Lost(Exception):
     """No reservation row moved from the previous attempt: roll the new attempt back."""
 
 
+def transfer(con: sqlite3.Connection, previous: AttemptKey, key: AttemptKey, repo_id: object, slot: object) -> bool:
+    """Move one reservation inside its successor's admission transaction, fencing the predecessor."""
+    moved = con.execute(
+        "UPDATE reservation SET attempt_id=?,generation=? WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",
+        (key.attempt_id, key.reservation_generation, repo_id, slot, previous.attempt_id, previous.reservation_generation),
+    ).rowcount
+    if moved == 1:
+        issue(con, repo_id, slot, key.reservation_generation)
+    return moved == 1
+
+
 class ChainAdmission:
     def __init__(
         self,
@@ -100,9 +109,7 @@ class ChainAdmission:
         self.checkouts, self.slot_files = checkouts, slot_files
 
     def admit_repeat(self, request: RepeatRequest) -> Admitted | AdmitRefused | AdmitUnavailable:
-        """The next attempt N of `previous` (P), its input written first under N's key: in one write transaction, every
-        check re-read under the lock, insert N (P's choices, number + 1, generation + 1) and move the held reservation
-        from P to N, fenced on P and its generation. Afterwards every fenced write of P is refused."""
+        """Write input first; atomically recheck, insert the repeat and transfer custody, fencing the previous attempt."""
         refused = deadline_refusal(self.clock, request.deadline)
         if refused is not None:
             return refused
@@ -162,14 +169,8 @@ class ChainAdmission:
             "compaction_token_limit": row[19],
             "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
         }, request.content_digest)
-        moved = con.execute(
-            """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
-            AND generation=?""",
-            (key.attempt_id, row[5], row[6], previous.attempt_id, previous.reservation_generation),
-        )
-        if moved.rowcount != 1:
+        if not transfer(con, previous, key, row[5], row[6]):
             raise _Lost
-        issue(con, row[5], row[6], key.reservation_generation)
         return Admitted(key, str(row[6]))
 
 

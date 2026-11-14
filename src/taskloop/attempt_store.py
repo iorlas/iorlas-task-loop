@@ -68,6 +68,16 @@ def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:
 class AttemptStore(AttemptLoads):
     """The fenced writes of an admitted attempt; the reads they need are `AttemptLoads`', the status reads `AttemptReads`'."""
 
+    @staticmethod
+    def repair_session(con: sqlite3.Connection, key: AttemptKey, session: str) -> None:
+        """Seed the repair's already validated session inside its admission transaction, before entry registration."""
+        changed = con.execute(
+            "UPDATE attempt SET session_ref=? WHERE attempt_id=? AND dispatch_token=? AND generation=? "
+            "AND phase='admitted' AND session_ref IS NULL AND repair_context IS NOT NULL", (session, *astuple(key)),
+        ).rowcount
+        if changed != 1:
+            raise StoreRefused("changed_admission")
+
     def replace_worker(self, con: sqlite3.Connection, current: AttemptRecord, intent: Intent, worker: Identity) -> int:
         """Only the recovery transaction calls this; admission and original session remain frozen."""
         previous = current.worker
@@ -81,6 +91,8 @@ class AttemptStore(AttemptLoads):
 
     def renew(self, con: sqlite3.Connection, current: AttemptRecord, deadline: float) -> AttemptRecord:
         """Only recovery calls this, after proof and snapshot comparison under the same writer lock."""
+        if current.admission.repair is not None:
+            return current
         admission = replace(current.admission, deadline=max(current.admission.deadline, deadline))
         changed = con.execute(
             "UPDATE attempt SET deadline=?,rev=rev+1 WHERE attempt_id=? AND dispatch_token=? AND generation=? AND rev=?",
@@ -116,7 +128,7 @@ class AttemptStore(AttemptLoads):
         self, con: sqlite3.Connection, record: AttemptRecord, now: float, *, allow_expired: bool = False,
     ) -> AttemptRecord | Result:
         if (not math.isfinite(now) or not math.isfinite(record.admission.deadline)
-                or (not allow_expired and now >= record.admission.deadline)):
+                or ((not allow_expired or record.admission.repair is not None) and now >= record.admission.deadline)):
             return Result(outcome=Outcome.EXPIRED, explanation="The attempt's existing allowance has expired.")
         if record.phase != "registered" or record.worker is None:
             return Result(outcome=Outcome.UNRESOLVED, explanation="Complete entry and worker registration is required for stop proof.")
@@ -164,7 +176,7 @@ class AttemptStore(AttemptLoads):
                                         for action in pending(con)):
                 return "refused"
             row: tuple[object, ...] | None = con.execute(
-                """SELECT p.phase,p.deadline,p.entry_pid,p.entry_start,p.entry_boot FROM attempt p
+                """SELECT p.phase,p.deadline,p.entry_pid,p.entry_start,p.entry_boot,p.repair_context FROM attempt p
                 JOIN reservation r ON r.slot=p.slot AND r.repo_id=p.repo_id AND r.generation=p.generation AND r.attempt_id=p.attempt_id
                 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
                 astuple(key),
@@ -172,7 +184,7 @@ class AttemptStore(AttemptLoads):
             if row is None or not isinstance(deadline := row[1], (int, float)):
                 return "refused"
             stored = None if None in row[2:5] else (as_int(row[2]), as_text(row[3]), as_text(row[4]))
-            if renewed is not None and stored is not None and stored[2] != entry[2]:  # the stored entry is another boot's
+            if renewed is not None and stored is not None and stored[2] != entry[2] and row[5] is None:
                 deadline = max(deadline, renewed) if math.isfinite(renewed) else now
             if now >= deadline:
                 return "refused"

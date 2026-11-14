@@ -46,7 +46,7 @@ def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey
 
 def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object], content_digest: TaskContentDigest | None = None) -> None:
     """The admitted attempt row, inside the caller's write transaction."""
-    values = bound(ATTEMPT_ADMITTED, {"source_checks_id": None, **attempt})
+    values = bound(ATTEMPT_ADMITTED, {"source_checks_id": None, "repair_context": None, **attempt})
     if attempt["step"] == "plan" and content_digest is None:
         raise sqlite3.IntegrityError("Plan admission requires task-content evidence")
     con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)

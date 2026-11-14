@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from taskloop import answer_failures
 from taskloop.agents.settings import AgentSetting
+from taskloop.answer_repair_models import RepairContext
 from taskloop.attempt_reads import (
     AttemptReads,
     StoreRefused,
@@ -165,7 +166,7 @@ class AttemptLoads(AttemptReads):
         row: tuple[object, ...] | None = con.execute(
             f"""SELECT {prefixed("p", ATTEMPT_LOADED)},
             (SELECT path FROM slot WHERE name=p.slot AND repo_id=p.repo_id),
-            (SELECT coalesce(q.end_commit, q.base_commit) FROM attempt q WHERE q.attempt_id=p.previous_attempt_id)
+            (SELECT coalesce(q.end_commit, q.base_commit) FROM attempt q WHERE q.attempt_id=p.previous_attempt_id),p.repair_context
             FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""",
             astuple(key),
         ).fetchone()
@@ -197,12 +198,31 @@ class AttemptLoads(AttemptReads):
             as_text(row[25]),
             as_nullable_text(row[26]),
             as_nullable_text(row[28]),
+            None if row[33] is None else RepairContext.model_validate_json(as_text(row[33])),
         )
         pid, pgid, began, boot = row[15:19]
         worker = None if pid is None else Worker(pid=as_int(pid), pgid=as_int(pgid), start=as_text(began), boot=as_text(boot))
         session, conflict = as_nullable_text(row[19]), bool(as_int(row[20]))
+        if admission.repair is not None and (session != admission.repair.session or
+                                             (row[21] is not None and row[21] != admission.repair.base_commit)):
+            raise StoreUnavailable("Malformed repair context")
+        if admission.repair is not None:
+            self._repair_source(con, as_text(row[24]), admission)
         base, end = as_nullable_text(row[21]), as_nullable_text(row[22])
         return AttemptRecord(admission, as_text(row[13]), as_int(row[14]), worker, session, conflict, base, end, start)
+
+    def _repair_source(self, con: sqlite3.Connection, previous: str, admission: Admission) -> None:
+        row = con.execute(
+            "SELECT p.session_ref,p.base_commit,p.number,p.deadline,p.harness,p.provider,p.model,p.effort,p.access_policy,"
+            "p.compaction_token_limit,p.repair_context,e.answer_failure FROM attempt p JOIN execution e "
+            "ON e.attempt_id=p.attempt_id WHERE p.attempt_id=?", (previous,),
+        ).fetchone()
+        context = admission.repair
+        if (row is None or context is None or row[10] is not None or row[:4] !=
+                (context.session, context.base_commit, admission.number, admission.deadline)
+                or stored_setting(*row[4:10]) != admission.setting
+                or row[11] is None or answer_failures.AnswerFailureData.model_validate_json(as_text(row[11])) != context.failure):
+            raise StoreUnavailable("Repair context disagrees with its failed attempt")
 
     def load(self, key: AttemptKey) -> AttemptRecord | None:
         with self._connection() as con:

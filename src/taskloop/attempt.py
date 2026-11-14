@@ -181,10 +181,11 @@ class Attempts:
         harness, spec, credentials, probe = launch
         running = False
         try:
-            base = self._prepared(record, renew, credentials, probe)
+            base = (self._prepared(record, renew, credentials, probe) if admission.repair is None else
+                    prepared_base(self.checkouts, self.slot_files, record, self.clock))
             if isinstance(base, AttemptResult):
                 return base
-            spec = self._context(admission, base, spec)
+            spec = self._context(admission, base, spec) if admission.repair is None else spec
             if isinstance(spec, AttemptResult):
                 return spec
             running = True
@@ -250,7 +251,7 @@ class Attempts:
         except (EvidenceError, OSError):
             return AttemptResult("unavailable", "files")
         launch = self.agent.build(admission.setting, Path(admission.slot_path), kind(admission.step).environment,
-                                  root, schema, out_file, prompt)
+                                  root, schema, out_file, prompt, resume=None if admission.repair is None else admission.repair.session)
         if isinstance(launch, LaunchFailure):
             return AttemptResult("unavailable", launch.reason, explanation=launch.explanation)
         return launch.harness, launch.spec, launch.credentials, launch.probe

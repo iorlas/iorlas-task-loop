@@ -231,7 +231,7 @@ def _prepared(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord) -> 
     """The slot after preparation: already on a branch, or a repeat's slot, is read as it is (no Git write); a detached
     slot of attempt 1 must be clean, then takes its branch and is read again."""
     state = _observed(checkouts, files, record)
-    inherited = record.start is not None and record.admission.source_checks_id is None
+    inherited = record.admission.repair is not None or (record.start is not None and record.admission.source_checks_id is None)
     if isinstance(state, AttemptResult) or state.branch is not None or inherited:
         return state
     if state.dirty:
@@ -323,10 +323,14 @@ def base(checkouts: Checkouts, files: SlotFiles, record: AttemptRecord, clock: C
     try:
         state = _prepared(checkouts, files, record)
         if isinstance(state, SlotState):
-            state = _state_refusal(checkouts, record, state) or state
+            if record.admission.repair is None:
+                state = _state_refusal(checkouts, record, state) or state
+            elif state.branch != task_branch(record.admission.task.task_id):
+                state = _refused("slot_branch")
     except GitUnavailable:
         return AttemptResult("unavailable", "git")
     if isinstance(state, AttemptResult) or state.head is None:
         return state if isinstance(state, AttemptResult) else _refused("slot_unborn")
     # a Git read is bounded (`git_read_seconds`), not by the attempt deadline: that is checked again right before the dispatch write
-    return _refused("expired") if clock() >= deadline else Prepared(state.head, state.gitdir, state.root)
+    head = state.head if record.admission.repair is None else record.admission.repair.base_commit
+    return _refused("expired") if clock() >= deadline else Prepared(head, state.gitdir, state.root)

@@ -50,7 +50,7 @@ type RunChoices = AgentSetting
 @dataclass(frozen=True)
 class AttemptRow:
     """One attempt as the status reads see it; the key is for further reads only, never for display. `successor`: a
-    later attempt of the step names this one (it was repeated, so it is fenced and superseded)."""
+    later attempt of the step names this one (a repeat or answer repair fences and supersedes it)."""
 
     key: AttemptKey
     backlog: str
@@ -151,7 +151,9 @@ def stored_effect(value: object) -> Effect | None:
     return effect
 
 
-STEP = """SELECT p.number,p.base_commit,p.end_commit,p.input_path,p.input_digest,e.effect,e.commit_paths,p.previous_attempt_id
+STEP = """SELECT p.number,p.base_commit,p.end_commit,p.input_path,p.input_digest,e.effect,e.commit_paths,
+CASE WHEN p.repair_context IS NULL THEN p.previous_attempt_id ELSE
+(SELECT previous_attempt_id FROM attempt WHERE attempt_id=p.previous_attempt_id) END
 FROM attempt p LEFT JOIN execution e ON e.attempt_id=p.attempt_id"""
 
 
@@ -360,7 +362,7 @@ class AttemptReads(StoreConnection):
         return tuple(sorted((as_text(row[0]) for row in rows), key=lambda name: (len(name), name)))
 
     def chain(self, key: AttemptKey) -> tuple[ChainLink, ...]:
-        """Attempts 1..n of the key's dispatched step, oldest first, followed through `previous_attempt_id` (at most
+        """Attempts 1..n of the key's dispatched step, oldest first, skipping rejected answers replaced by repairs (at most
         ATTEMPTS): the earlier ones are frozen once their successor exists. No reservation check; an absent key, an
         undispatched attempt or a broken chain is StoreUnavailable."""
         found: list[tuple[object, ...]] = []
