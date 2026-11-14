@@ -11,10 +11,13 @@ import pytest
 from doubles import FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeWorktree
 
+from taskloop.attempt_reads import StoreUnavailable
+from taskloop.attempt_types import AttemptKey
 from taskloop.cli import main
 from taskloop.cli_composition import adopt
 from taskloop.factory_schema import SCHEMA
 from taskloop.operations import Failed
+from taskloop.recovery.store import RecoveryStore
 from taskloop.slots import SlotGit
 
 BACKLOG = ["--backlog", "tasks"]
@@ -51,6 +54,17 @@ def digest(path: Path) -> str:
     wal = path.with_name(f"{path.name}-wal")
     assert not wal.exists() or wal.stat().st_size == 0
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("direction", list(VERSIONS))
+def test_recovery_refuses_another_version_without_modifying_it(tmp_path: Path, direction: str) -> None:
+    path = database(tmp_path, VERSIONS[direction])
+    before = digest(path)
+    con = sqlite3.connect(path, isolation_level=None)
+    with pytest.raises(StoreUnavailable):
+        RecoveryStore(lambda: con).snapshot(AttemptKey("attempt", "dispatch", 1), 10)
+    con.close()
+    assert digest(path) == before
 
 
 @pytest.mark.parametrize("direction", list(VERSIONS))
