@@ -31,6 +31,7 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(PROFILE_PATH, json.dumps(MAIN_PROFILE))
     assert isinstance(root.record("profile", paths="all"), Recorded)
+    root.push("main")
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)
     assert con is not None

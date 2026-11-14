@@ -68,9 +68,12 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     adopt(lambda: factory, begin_immediate, VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
-    (main / "README").write_text("two\n")
-    git(main, "commit", "-q", "-am", "main moves on")
-    m = git(main, "rev-parse", "HEAD").strip()
+    origin = root / "origin"
+    git(root, "clone", "-q", str(main), str(origin))
+    git(main, "remote", "add", "origin", str(origin))
+    (origin / "README").write_text("two\n")
+    git(origin, "commit", "-q", "-am", "origin main moves on")
+    m = git(origin, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
         lambda: factory, begin_immediate, EvidenceFiles(art), tasks, VIEWS.checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
     , ids=NativeIds())
@@ -107,3 +110,5 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     x = git(slot, "rev-parse", "HEAD").strip()
     assert git(main, "rev-parse", "refs/heads/task/tl-1").strip() == x and git(slot, "rev-parse", "HEAD^").strip() == m != d
     assert git(slot, "status", "--porcelain").strip() == "" and lock_path(str(slot)).is_file()
+    assert git(main, "rev-parse", "main").strip() == d and (main / "README").read_text() == "one\n"
+    assert store.slot_base(admitted.key) == m

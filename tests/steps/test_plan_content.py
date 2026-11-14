@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from doubles import FakeSlotFiles, main_at
+from doubles import FakeSlotFiles, origin_main_at
 from git_porcelain import Sha, Tree
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import CHANGE_MAP, HEADER, PLAN_TEXT
@@ -86,7 +86,7 @@ def test_exact_depth_byte_caps_apply_to_new_and_reused_plans(
     assert len(data) == cap + excess
     if reuse:
         commit(slot, {P: data})
-        main_at(slot)
+        origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {} if reuse else {P: data}, UNCHANGED if reuse else PLAN)
     check = verifier(registered, checkouts, slot_files)
     result = check.verify(KEY)
@@ -110,7 +110,7 @@ def test_format_refusals_survive_storage_for_both_commit_and_reuse(
 ) -> None:
     if reuse:
         commit(slot, {P: text})
-        main_at(slot)
+        origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {} if reuse else {P: text}, UNCHANGED if reuse else PLAN)
     check = verifier(registered, checkouts, slot_files)
     assert check.verify(KEY) == Rejected(rule)
@@ -131,6 +131,6 @@ def test_a_revised_old_plan_can_complete_with_the_new_template(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
 ) -> None:
     commit(slot, {P: "# Old plan\n"})
-    main_at(slot)
+    origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, PLAN)
     assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)

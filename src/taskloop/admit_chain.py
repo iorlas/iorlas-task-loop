@@ -48,7 +48,7 @@ from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids
 from taskloop.input_context import InputError
 from taskloop.input_context import read as read_context
-from taskloop.prepare import HEADS, MAIN, REMOTES, lacks
+from taskloop.prepare import HEADS, ORIGIN_MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
 from taskloop.steps import is_agent, next_step
@@ -386,11 +386,11 @@ def task_of(con: sqlite3.Connection, previous: AttemptKey) -> Task | None:
 
 def _containing(repo: Repo, found: Task, free: tuple[Free, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
     """Read-only, before anything is reserved (the entry checks it again): the free slots, when the start every slot
-    takes, the local `task/<id>`, else origin's remote-tracking one, else `main`'s tip, contains the previous X."""
+    takes, the local `task/<id>`, else origin's remote-tracking one, else origin main's tip, contains the previous X."""
     after, task_id = found.end_commit or "", found.task_id
     try:
-        tips = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES, MAIN])}
-        tip = tips.get(f"{HEADS}/{task_id}") or tips.get(f"{REMOTES}/{task_id}") or tips.get(MAIN)
+        tips = {entry.name: entry.sha for entry in repo.refs([HEADS, REMOTES, ORIGIN_MAIN])}
+        tip = tips.get(f"{HEADS}/{task_id}") or tips.get(f"{REMOTES}/{task_id}") or tips.get(ORIGIN_MAIN)
         keep = free if tip is not None and not lacks(repo, after, tip) else ()
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
