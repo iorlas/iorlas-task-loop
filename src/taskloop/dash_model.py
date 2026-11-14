@@ -37,6 +37,8 @@ class Card:
     land: LandState | None = None
     status: str | None = None  # `task_status.Status`: the one status of the task, for every reader
     status_note: str | None = None  # the status in plain words (`task_status.words`)
+    ask: bool = False
+    question: str | None = None
 
 
 @dataclass(frozen=True)

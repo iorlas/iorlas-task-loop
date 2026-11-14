@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from taskloop.agents.stop_text import stop_text
+from taskloop.answer_read import read as read_answer
 from taskloop.attempt_reads import AttemptRow, SlotUse, StoreUnavailable
-from taskloop.attempt_status import AttemptView, StatusPorts, list_attempts
+from taskloop.attempt_status import NEEDS_OWNER, AttemptView, StatusPorts, list_attempts
 from taskloop.dash_model import Board, Card, Column, DashTracker, Repeat, iso
-from taskloop.evidence_files import EvidenceFiles
+from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.operations import Failed
 from taskloop.task_status import FRESH, Admission, Status, TaskStatus, blocker, task_status, words
 
@@ -79,6 +80,19 @@ def tries(rows: tuple[AttemptRow, ...]) -> dict[str, int]:
     return found
 
 
+def _ask(view: AttemptView, column: Column, files: EvidenceFiles) -> tuple[bool, str | None]:
+    cause = view.hold.reason if view.hold is not None else view.hold_due
+    current = view.hold is None or view.hold.cause_id == view.attempt_id
+    if (column != "held" or not current or view.stop is not None or cause != f"failed:{NEEDS_OWNER}"
+            or view.result.status != "collected" or view.result.reason != NEEDS_OWNER):
+        return False, None
+    try:
+        answer = read_answer(files, view.result.execution, view.step, view.task_id)
+    except EvidenceError:
+        answer = None
+    return True, None if answer is None else answer.explanation
+
+
 def card_of(
     view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float, number: int | None = None,
     admission: Admission | None = None,
@@ -92,9 +106,10 @@ def card_of(
     rc = None if view.result.execution is None else view.result.execution.facts.rc
     cause = stop_text(view.stop, rc) or cause
     shown = view.number if number is None else number
+    ask, question = _ask(view, column, files)
     return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
                 view.slot if holding else None, cause if column == "held" else None,
-                found.land if column == "land" else None, found.status.value, words(found))
+                found.land if column == "land" else None, found.status.value, words(found), ask, question)
 
 
 def build_board(ports: BoardPorts) -> Board | Failed:
