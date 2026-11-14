@@ -9,6 +9,7 @@ from typing import get_args
 
 from any_agent import DecodedAnswer, decode_answer
 
+from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import AttemptRow, StoreRefused
 from taskloop.attempt_result import collect
 from taskloop.attempt_store import AttemptStore
@@ -99,8 +100,13 @@ def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: Labe
         return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit, None, failed, None,
                          str(files.root / files.directory(checks.key)), files.last_entry(checks.key), checks.deadline)
     left = Leftovers(leftovers[0], leftovers[1:]) if leftovers and row.reason.startswith("repeats_exhausted") else None
-    told = explanation(files, collect(reader, agent.key).execution, agent.step, agent.task_id)
+    if agent.key.attempt_id != row.cause_id:
+        raise StoreRefused("changed")
+    execution = collect(reader, agent.key).execution
+    told = explanation(files, execution, agent.step, agent.task_id)
     merge = MergeStore(reader.connect, reader.begin).get(agent.key.attempt_id) if row.reason.startswith("merge:") else None
     told = told if merge is None else merge.explanation
     return HoldFacts(*head, agent.step, agent.number, agent.key.attempt_id, row.held_at, published, agent.end_commit, told, (),
-                     left, str(files.root / files.directory(agent.key)), files.last_entry(agent.key), agent.deadline)
+                     left, str(files.root / files.directory(agent.key)), files.last_entry(agent.key), agent.deadline,
+                     stop=StopStore(reader.connect, reader.begin).get(row.cause_id),
+                     rc=None if execution is None else execution.facts.rc)

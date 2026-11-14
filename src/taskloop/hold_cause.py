@@ -8,6 +8,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from taskloop.agents.stop_models import AgentStop
+from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_types import MiB, StepRules
 
 CHECK_GIT = "look at the task branch and the retained slot evidence"
@@ -33,7 +35,7 @@ RUN = {  # the run's classified end words the shelf names: what happened, and th
                     "correct `--model` or `--effort`"),
     "hung": ("The agent printed nothing for too long and was stopped.", ""),
     "crash": ("The agent process crashed.", ""),
-    "killed": ("The agent process was killed by a signal.", ""),
+    "killed": ("The agent process was killed by a signal. The factory has no recorded sender or stop cause.", ""),
     "secrets": ("A command of the agent exposed a secret, so the run was stopped.",
                 f"find what printed it in {EVIDENCE} and remove that source"),
     "exit": (f"The agent exited with an error and no answer; see {EVIDENCE}.", "read it and fix what it names"),
@@ -122,12 +124,17 @@ BY_PREFIX: tuple[tuple[str, Callable[[str], Cause]], ...] = (  # the first prefi
 )
 
 
-def cause(reason: str, deadline: float | None = None) -> Cause | None:
+def cause(reason: str, deadline: float | None = None, stop: AgentStop | None = None, rc: int | None = None) -> Cause | None:
     """The cause line and fix of a hold's `reason`, None for a reason without one of its own (the owner's answer then)."""
     word = reason.removeprefix("failed:")
     if word == "run:timeout":
-        return Cause(f"The agent did not finish before its deadline{_at(deadline)}.", "raise `--minutes` for the next run")
-    return OWNER.get(word) or next((build(word.removeprefix(prefix)) for prefix, build in BY_PREFIX if word.startswith(prefix)), None)
+        found = Cause(f"The agent did not finish before its deadline{_at(deadline)}.", "raise `--minutes` for the next run")
+    else:
+        found = OWNER.get(word) or next((build(word.removeprefix(prefix)) for prefix, build in BY_PREFIX if word.startswith(prefix)), None)
+    attribution = stop_text(stop, rc) if word.startswith("run:") or word == "stuck:entry_lost" else None
+    if attribution is not None:
+        return Cause(attribution, found.fix if found is not None else "")
+    return found
 
 
 def next_step(found: Cause | None, back: str, owner: str) -> str:

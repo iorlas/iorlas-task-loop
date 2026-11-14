@@ -12,6 +12,7 @@ from any_agent.activity import Activity
 
 from taskloop.access import SANDBOX
 from taskloop.activity_file import ActivityPage
+from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
@@ -274,6 +275,8 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
         if view is not None:
             holds = HoldStore(ports.reads.store.connect, ports.reads.store.begin).of_attempts((agent_attempt(view),))
             view = with_hold(view, holds.get(agent_attempt(view)))
+            view = replace(view, stop=StopStore(ports.reads.store.connect).get(
+                view.attempt_id if view.hold is None else view.hold.cause_id))
         attempts = history(ports, rows)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))

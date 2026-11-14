@@ -17,6 +17,8 @@ from any_agent import (
 from git_porcelain import Repo
 
 from taskloop.agents.launch import AgentLaunch, LaunchFailure
+from taskloop.agents.stop import AgentStops
+from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_result import collect, report
 from taskloop.attempt_store import AttemptStore
@@ -241,7 +243,9 @@ class Attempts:
         self, admission: Admission, harness: Harness, spec: LaunchSpec, remaining: float
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
         latch = SessionLatch(self.store, admission)
+        stops = AgentStops(StopStore(self.registration_store.connect, self.registration_store.begin), admission, self.clock)
         hooks = WatchedHooks(started=registration_hook(self.registration_store, admission, self.clock), ref=latch.observe, unattended=False,
+                             before_stop=stops.before, after_stop=stops.after,
                              live=CommandSink(self.files, admission.key, self.clock))
         try:
             return self.execution(harness, spec, remaining, hooks), latch.snapshot()

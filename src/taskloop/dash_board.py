@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_reads import AttemptRow, SlotUse, StoreUnavailable
 from taskloop.attempt_status import AttemptView, StatusPorts, list_attempts
 from taskloop.dash_model import Board, Card, Column, DashTracker, LandState, Repeat, iso
@@ -100,6 +101,8 @@ def card_of(
     quiet = now - view.last_command if isinstance(view.last_command, int) and column != "waiting" else None
     holding = row is not None and row.held and view.release is None
     cause = view.hold.reason if view.hold is not None else view.hold_due
+    rc = None if view.result.execution is None else view.result.execution.facts.rc
+    cause = stop_text(view.stop, rc) or cause
     shown = view.number if number is None else number
     return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
                 view.slot if holding else None, cause if column == "held" else None,

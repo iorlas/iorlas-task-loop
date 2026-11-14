@@ -2,6 +2,8 @@
 
 Task: `tl-8bh9.14.166`. Status: proposed implementation plan, 2026-11-14.
 
+Implementation and investigation results are recorded in [findings.md](findings.md).
+
 ## Outcome
 
 When an agent ends because of a signal, persist the factory's known initiating cause and
