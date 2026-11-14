@@ -22,6 +22,7 @@ from test_verifier import KEY, P, agent, attempts, verifier
 
 from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, FileRef, Verified
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
@@ -293,7 +294,11 @@ def test_next_agent_step_rechecks_drain_at_its_committing_transaction(
         return original(con)
 
     advance.begin = fence
-    found = advance.admit_next(NextStepRequest(previous, slot.repo.path, "m", "high", "workspace-write", 100))
+    found = advance.admit_next(
+        NextStepRequest(
+            previous, slot.repo.path, AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")), 100
+        )
+    )
     assert isinstance(found, AdmitRefused) and found.reason is Reason.DRAINING
     assert factory.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
     assert factory.execute("SELECT * FROM reservation").fetchall() == []

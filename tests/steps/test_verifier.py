@@ -20,6 +20,7 @@ from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import Store
 
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_entry import shown
 from taskloop.attempt_reads import StoreRefused
@@ -113,7 +114,15 @@ class Counted:
 
 
 def attempts(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: FakeSlotFiles, run: Execution) -> Attempts:
-    return Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
+    return Attempts(
+        AttemptStore(lambda: con),
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        run,
+        lambda: 10,
+        checkouts,
+        files,
+    )
 
 
 def captured(

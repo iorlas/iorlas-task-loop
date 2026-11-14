@@ -1,24 +1,21 @@
-"""Execute, capture, collect and verify one already admitted plan attempt; it grants no admission and releases nothing."""
+"""Execute, capture, collect and verify one already admitted agent attempt; it grants no admission and releases nothing."""
 
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
-from typing import Literal
 
 from any_agent import (
-    CodexHarness,
     DecodedAnswer,
     Harness,
     InvalidAnswer,
-    LaunchInputs,
     LaunchSpec,
     RunHooks,
     RunOutcome,
     decode_answer,
 )
 
-from taskloop.access import CODEX_ACCESS, SANDBOX, folders, prepared_access
+from taskloop.agents.launch import AgentLaunch, LaunchFailure
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_result import collect, report
 from taskloop.attempt_store import AttemptStore
@@ -41,23 +38,13 @@ from taskloop.attempt_types import (
 from taskloop.command_sink import CommandSink, WatchedHooks
 from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.harness_choice import launchable
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
 from taskloop.steps import kind
 
 type Execution = Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]
-type Credentials = Callable[[], tuple[str, dict[str, str]]]
 ACCEPTED = ("accepted", "already_same")
-
-
-class CredentialsUnavailable(Exception):
-    """The credential source has no usable login, executable or environment; `reason` is one fixed word."""
-
-    def __init__(self, reason: Literal["path", "codex", "home", "auth"]) -> None:
-        super().__init__(reason)
-        self.reason = reason
 
 
 class Attempts:
@@ -65,7 +52,7 @@ class Attempts:
         self,
         store: AttemptStore,
         files: EvidenceFiles,
-        credentials: Credentials,
+        agent: AgentLaunch,
         execution: Execution,
         clock: Callable[[], float],
         checkouts: Checkouts,
@@ -77,7 +64,7 @@ class Attempts:
         `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot. `environment`
         prepares the slot of a step kind with `environment` (implement); without it such a step is refused, never run
         without its setup."""
-        self.store, self.files, self.credentials = store, files, credentials
+        self.store, self.files, self.agent = store, files, agent
         self.execution, self.clock, self.checkouts, self.slot_files = execution, clock, checkouts, slot_files
         self.registration_store = store if registration_store is None else registration_store
         self.environment = environment
@@ -147,9 +134,7 @@ class Attempts:
             return "not_entry"
         if self.clock() >= admission.deadline:
             return "expired"
-        if not all(value.strip() for value in (admission.model, admission.effort, admission.sandbox)):
-            return "choices"
-        return "sandbox" if admission.sandbox != SANDBOX else None
+        return None
 
     def _start(self, record: AttemptRecord, me: EntryIdentity, renew: Renew | None) -> AttemptResult:
         """Credentials, files, the launch spec, then the slot's preparation onto its task branch and the base check
@@ -167,10 +152,10 @@ class Attempts:
         launch = self._launch(admission, prompt)
         if isinstance(launch, AttemptResult):
             return launch
-        harness, spec, credentials = launch
+        harness, spec, credentials, probe = launch
         running = False
         try:
-            base = self._prepared(record, renew, credentials)
+            base = self._prepared(record, renew, credentials, probe)
             if isinstance(base, AttemptResult):
                 return base
             self.registration_store.warm()  # the first registration open runs here, never inside the harness registration window
@@ -182,7 +167,9 @@ class Attempts:
             if not running:
                 harness.cleanup()
 
-    def _prepared(self, record: AttemptRecord, renew: Renew | None, credentials: Launch) -> Prepared | AttemptResult:
+    def _prepared(
+        self, record: AttemptRecord, renew: Renew | None, credentials: Launch, probe: tuple[str, ...] | None
+    ) -> Prepared | AttemptResult:
         """The slot on its branch (`prepare.base`), then, for a kind with `environment`, its setup sequence with the
         credentials' executable and scrubbed environment."""
         base = prepared_base(self.checkouts, self.slot_files, record, self.clock)
@@ -190,45 +177,21 @@ class Attempts:
             return base
         if self.environment is None or renew is None:
             return AttemptResult("unavailable", "environment:unwired")
-        return self.environment.prepare(record, base, renew, credentials) or base
+        return self.environment.prepare(record, base, renew, credentials, probe) or base
 
-    def _launch(self, admission: Admission, prompt: str) -> tuple[CodexHarness, LaunchSpec, Launch] | AttemptResult:
-        """The launch spec: plan's access unchanged; a kind with `environment` writes its three folders too, and its shell
-        (only) gets its tools pointed there and uv offline (`access.prepared_access`). Codex's own environment is the
-        credentials' for both. They come back for setup."""
-        try:
-            exe, env = self.credentials()
-        except CredentialsUnavailable as error:
-            return AttemptResult("unavailable", "credentials:" + error.reason)
-        except Exception as error:  # the credential source is injected; its failure is typed, with its cause visible
-            return AttemptResult("unavailable", "credentials:" + type(error).__name__)
+    def _launch(self, admission: Admission, prompt: str) -> tuple[Harness, LaunchSpec, Launch, tuple[str, ...] | None] | AttemptResult:
         try:
             schema, out_file = self.files.prepare(admission.key, kind(admission.step).answer_schema)
-        except EvidenceError:
+            root = self.files.launch_root(admission.key)
+        except (EvidenceError, OSError):
             return AttemptResult("unavailable", "files")
-        harness = launchable(admission.harness)
-        if harness is None:  # the credentials are the machine's Codex login: no other harness has any yet
-            return AttemptResult("unavailable", "harness:" + admission.harness)
-        access = prepared_access(folders(Path(admission.slot_path))) if kind(admission.step).environment else CODEX_ACCESS
-        inputs = LaunchInputs(
-            exe=exe,
-            cwd=admission.slot_path,
-            model=admission.model,
-            effort=admission.effort,
-            prompt=prompt,
-            env=env,
-            schema=schema,
-            sandbox=admission.sandbox,
-            out_file=out_file,
-            access=list(access),
-        )
-        try:
-            return harness, harness.launch_spec(inputs), (exe, env)
-        except Exception as error:
-            harness.cleanup()
-            return AttemptResult("unavailable", "launch:" + type(error).__name__)
+        launch = self.agent.build(admission.setting, Path(admission.slot_path), kind(admission.step).environment,
+                                  root, schema, out_file, prompt)
+        if isinstance(launch, LaunchFailure):
+            return AttemptResult("unavailable", launch.reason, explanation=launch.explanation)
+        return launch.harness, launch.spec, launch.credentials, launch.probe
 
-    def _run(self, admission: Admission, harness: CodexHarness, spec: LaunchSpec) -> AttemptResult:
+    def _run(self, admission: Admission, harness: Harness, spec: LaunchSpec) -> AttemptResult:
         remaining = admission.deadline - self.clock()
         if remaining <= 0:
             harness.cleanup()
@@ -243,7 +206,7 @@ class Attempts:
         return AttemptResult("conflict" if result.status == "conflict" else "unavailable", result.reason, pending=pending)
 
     def _call(
-        self, admission: Admission, harness: CodexHarness, spec: LaunchSpec, remaining: float
+        self, admission: Admission, harness: Harness, spec: LaunchSpec, remaining: float
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
         latch = SessionLatch(self.store, admission)
         hooks = WatchedHooks(started=registration_hook(self.registration_store, admission, self.clock), ref=latch.observe, unattended=False,

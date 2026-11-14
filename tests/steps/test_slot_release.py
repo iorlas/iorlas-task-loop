@@ -24,6 +24,7 @@ from stream_proc import OwnedProcess
 
 from taskloop.admit import AdmitRefused
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
@@ -125,7 +126,15 @@ def executed(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
              written: dict[str, str], rc: int = 0) -> str:
     """The registered attempt run once (the slot prepared on `task/tl-1`): its result's reason."""
     store = AttemptStore(lambda: con)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent(slot, written, rc), lambda: 10, checkouts, files)
+    attempts = Attempts(
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        agent(slot, written, rc),
+        lambda: 10,
+        checkouts,
+        files,
+    )
     return attempts.execute(KEY, ENTRY).reason
 
 

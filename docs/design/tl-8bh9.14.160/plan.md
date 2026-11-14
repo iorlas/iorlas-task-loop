@@ -1,7 +1,7 @@
 # Per-step agent settings
 
-Status: **design**. Task: `tl-8bh9.14.160`. Prepared 2026-11-14 against
-`260d9183`; implementation and required checks remain to be done.
+Status: **built**. Task: `tl-8bh9.14.160`. Prepared 2026-11-14 against
+`260d9183`; implemented 2026-11-14. Required checks are recorded below.
 
 ## Scope and evidence
 
@@ -254,10 +254,45 @@ editable baseline/PYTHONPATH or live vendor sessions.
 
 ## As built
 
-Not implemented in this planning step. Implementation must replace this paragraph
-with changed paths, schema version, focused/full-required-gate results and actual
-limitations. Explicitly retain the agreed gap: Claude/OpenCode sandbox and
-writable-root enforcement are not preflighted here; OpenCode's released sandbox is
-platform-specific. If another released-library limitation prevents a harness path,
-finish the Codex path and record the precise remaining gap here as authorized by
-the scope decision, without inventing a replacement sandbox or waiting for shelf.
+Implemented with the installed `any-agent==0.9.0`, without a dependency change. Factory schema is **v20**:
+`attempt.access_policy` replaces the universal `sandbox` column, while harness/provider/model/effort remain admitted
+facts. The existing schema refusal, old-entry fencing, drain-before-upgrade and deliberate-discard contract remain;
+there is no migration, old-row default or compatibility reader.
+
+- `agents/settings.py`, `agents/config.py` and `machine_config.py` own frozen settings, captured policy documents,
+  validation, defaults and configuration provenance. `cli_step.py`, `operations.py`, `round.py` and `rounds.py` pass a
+  fixed settings snapshot plus optional overrides and select the actual newly admitted step. `config show` reports
+  each field's source, derived provider and safe policy summary; policy content is never presented.
+- `admit.py`, `admit_chain.py`, `check_repeat/store.py`, the attempt types/readers and `factory_schema.py` store and
+  validate the complete policy. Both repeat routes copy it; advancing chooses the new step's setting. A compatible
+  reopened database and relaunch keep admitted contents after the source file disappears.
+- `agents/launch.py` owns released harness construction and typed access translation through the generic `Harness`
+  port. `agent_credentials.py` retains the environment allow-list, push bar and Codex file login, and looks up only
+  the selected executable for Claude/OpenCode. `attempt.py` orchestrates the adapter; `composition.py` wires it for
+  the attempt entry. Credential failures carry generic reasons and useful adapter explanations into the entry log.
+- `access.py`, `environment.py` and `slot_env.py` keep shared folders, setup, reconciliation, cleanup and deadlines.
+  A Codex probe receives the same effective policy argv as launch; an explicit empty writable-roots override closes
+  the released codec's omission of empty roots. Non-workspace modes receive no workspace-only tuning. Claude and
+  OpenCode skip that probe. `evidence_files.py` owns OpenCode's private launcher root outside worktree resets.
+- The dashboard's stored-choice header now has a harness-appropriate access summary; its reasoning line is retained.
+  README and the design index describe delivered configuration and the remaining enforcement boundary.
+
+Added test files: `tests/steps/test_agent_settings.py` and `tests/steps/test_agent_launch.py`. Extended the existing
+config/CLI, admission, ordinary-repeat, failed-check-repeat, environment, credentials and dashboard contracts; updated
+existing fresh-schema fixtures together. Tests cover all three released launch specs and the shared strict answer
+decoder, per-field precedence, invalid policies, safe presentation, mixed-harness rounds, both immutable repeat routes,
+compatible database reopening, setup without Codex credentials/probes, and retained Codex policy semantics.
+
+Validation: `just install` passed; focused installed-package pytest selections exercised the affected contracts.
+`just check` passed (lint, types and all nine import contracts); `just test` passed with **3,389 passed, 13 skipped**.
+The installed `uv run --frozen --no-sync python -I -m taskloop step rounds --help` smoke passed and shows optional
+agent flags. `git diff --check` passed. No live vendor session or whole-suite command was run. Beads task/context reads
+returned no matching task for `.160` or `.149`; no tracker state was changed. No unfinished WIP commit was present.
+
+Commit-safety retry: recreated `tests/steps/test_verifier.py` as a regular mode-0644 file with unchanged contents.
+All 89 changed paths are regular non-executable files below 1 MiB; `just check` and `just test` passed again
+(3,389 passed, 13 skipped), as did the installed rounds-help smoke and `git diff --check`.
+
+Agreed remaining gap: Claude/OpenCode sandbox and writable-root enforcement are not preflighted. OpenCode's released
+shell sandbox uses macOS `sandbox-exec`; accepting an OpenCode setting on Linux does not promise sandbox enforcement.
+Shared setup remains Linux-only. Harness routing, fallback and priority lists remain outside this task.

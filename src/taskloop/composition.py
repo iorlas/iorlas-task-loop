@@ -19,8 +19,9 @@ from stream_proc import group_alive, observe_owned, popen_registered
 from taskloop import slot_lock
 from taskloop.admit import AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, NextAdmission
-from taskloop.agent_credentials import codex_machine_credentials, scrubbed
-from taskloop.attempt import Attempts, Credentials
+from taskloop.agent_credentials import machine_credentials, scrubbed
+from taskloop.agents.launch import AgentLaunch, Credentials
+from taskloop.attempt import Attempts
 from taskloop.attempt_reads import AttemptReads, StoreConnection
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
 from taskloop.attempt_types import Checkouts, Observe, SlotFiles
@@ -74,7 +75,7 @@ def _run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | N
     return run(harness, spec, timeout, hooks, live=hooks.live if isinstance(hooks, WatchedHooks) else None)
 
 
-def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials: Credentials = codex_machine_credentials) -> Attempts:
+def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials: Credentials = machine_credentials) -> Attempts:
     """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
 
     The harness registration write goes through its own store's bounded connections (`_registration`)."""
@@ -83,7 +84,7 @@ def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials:
     return Attempts(
         AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
         EvidenceFiles(artifacts),
-        credentials,
+        AgentLaunch(credentials),
         _run,
         time.time,
         views.checkouts,

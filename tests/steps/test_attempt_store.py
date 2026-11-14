@@ -25,9 +25,9 @@ def seed(con: sqlite3.Connection) -> sqlite3.Connection:
     con.execute(
         """INSERT INTO attempt
         (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-         schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+         schema_version,model,effort,access_policy,deadline,number,seq,slot_head)
         VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker','repo','slot','input.txt','0',1,'chosen','high',
-        'workspace-write',100,1,1,'dddddddddddddddddddddddddddddddddddddddd')"""
+        '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,'dddddddddddddddddddddddddddddddddddddddd')"""
     )
     return con
 

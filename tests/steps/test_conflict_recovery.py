@@ -43,9 +43,10 @@ def seed_chain(b: LandBench, number: int, x: str) -> None:
     with begin_immediate(b.con):
         b.con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
             after_commit) VALUES (?,?,1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt','digest',1,'m','e',
-            'workspace-write',100,'captured',?,?,1,?,?,?)""", (implement, f"{implement}-token", repo_id, base, x, 2 * number, b.d, base))
+            '{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,?,?,?)""", (implement,
+            f"{implement}-token", repo_id, base, x, 2 * number, b.d, base))
         b.con.execute(
             """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,
             stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,session_state)

@@ -19,6 +19,7 @@ from git_porcelain import GitTimeout, GitUnavailable, HookRejected, MissingRemot
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
@@ -126,8 +127,15 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
         written: dict[str, str], disposition: str = "planned", *, verify: bool = True, release: bool = True) -> str:
     """The registered attempt run once on `task/tl-1`, verified and released (settled): the branch tip."""
     store = AttemptStore(lambda: con)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent(slot, written, disposition), lambda: 10,
-                            checkouts, files)
+    attempts = Attempts(
+        store,
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        agent(slot, written, disposition),
+        lambda: 10,
+        checkouts,
+        files,
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     if verify:
         Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere).verify(KEY)

@@ -14,6 +14,7 @@ from git_porcelain import GitUnavailable
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 
+from taskloop.agents.settings import AgentSetting
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Admission, AnswerState, AttemptKey, ChainLink, FileRef, Rejected, Unsettled
 from taskloop.factory_commit import Committed, clean_at, settle
 from taskloop.git_views import GitViews
@@ -66,7 +67,7 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) 
 def admission(main: Path, slot: Path) -> Admission:
     key = VIEWS.checkouts(main).identity().key
     task = TaskReference(TaskScope("tasks"), "tl-1")
-    choices = ("m", "e", "s", 100, (1, "", ""), 1, "plan")
+    choices = (AgentSetting(model="m", effort="e"), 100, (1, "", ""), 1, "plan")
     return Admission(AttemptKey("attempt", "dispatch", 1), task, RepoId(key), "s1", str(slot), FileRef("i", "d"), *choices)
 
 

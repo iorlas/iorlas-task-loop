@@ -22,6 +22,8 @@ from sqlite_store import begin_immediate
 
 from taskloop import prepare
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AttemptAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import TRAILER, AttemptKey, AttemptResult, Checkouts, FileRef, SlotFiles
@@ -62,7 +64,7 @@ def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
 
 @pytest.fixture
 def con(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
-    monkeypatch.setattr("taskloop.harness_choice.CodexHarness", CountingHarness)
+    monkeypatch.setattr("taskloop.agents.launch.CodexHarness", CountingHarness)
     monkeypatch.setattr(CountingHarness, "cleanups", [])
     return registered
 
@@ -107,7 +109,7 @@ def execute(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files
     agent = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
     store = AttemptStore(lambda: con)
     environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096).preparation()  # an implement attempt's setup passes
-    result = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, files,
+    result = Attempts(store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, files,
                       environment=environment).execute(KEY, ENTRY, lambda: "held")
     return result.status, result.reason, agent
 
@@ -349,7 +351,17 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
     claims = Claims(tmp_path / "artifacts")
     admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, PinnedViews(repo),
                               claims.claim, claims.unclaim, lambda: 10, lambda _slot_path: True, FakeSlotFiles(repo))
-    return admission.admit(AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, "m", "high", "workspace-write", 100, None)), claims
+    return admission.admit(
+        AdmitRequest(
+            task_id,
+            "tasks",
+            str(tmp_path),
+            repo.path,
+            AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            100,
+            None,
+        )
+    ), claims
 
 
 def slots(factory: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> list[FakeWorktree]:

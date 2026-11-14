@@ -141,14 +141,15 @@ def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_liv
 
 
 def test_an_agent_attempt_says_what_ran_it_in_plain_words(registered: sqlite3.Connection, tmp_path: Path) -> None:
-    registered.execute("UPDATE attempt SET harness='opencode', provider='deepseek', model='opencode/deepseek-v4.1-flash-free'")
+    registered.execute("UPDATE attempt SET harness='opencode', provider='deepseek', model='opencode/deepseek-v4.1-flash-free', "
+                       "access_policy=?", ('{"harness":"opencode"}',))
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
     found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(found, TaskDetail)
     (attempt,) = found.attempts
     assert attempt.run == Run("OpenCode", "DeepSeek", "opencode/deepseek-v4.1-flash-free", "high",
-                              "can write its own workspace only, no network")
+                              "default sandbox")
 
 
 def test_reasoning_is_a_collapsed_line_only_when_the_harness_gave_words(registered: sqlite3.Connection, tmp_path: Path) -> None:
@@ -257,9 +258,9 @@ def restarted_at_plan(con: sqlite3.Connection) -> None:
     for attempt, step, seq in (("implement", "implement", 2), ("again", "plan", 3)):
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,after_commit)
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,after_commit)
             SELECT ?,?,1,?,adapter,backlog,
-            task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,sandbox,deadline,1,?,slot_head,?
+            task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,1,?,slot_head,?
             FROM attempt WHERE attempt_id='attempt'""", (attempt, f"{attempt}-token", step, seq, "a" * 40 if step == "implement" else None))
 
 
@@ -290,9 +291,10 @@ def unsafe_repeat(con: sqlite3.Connection, listing: str = '["src/link.py", "src/
     con.execute(DONE[0])
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
         repeat_listing) SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,sandbox,deadline,2,3,slot_head,'implement','unsafe',? FROM attempt WHERE attempt_id='implement'""",
+        schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',
+        ? FROM attempt WHERE attempt_id='implement'""",
         (listing,))
 
 

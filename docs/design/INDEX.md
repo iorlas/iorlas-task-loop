@@ -189,6 +189,7 @@ or additional design authority. Prototype documents describe historical experime
 | [tl-8bh9.14.13/plan.md](tl-8bh9.14.13/plan.md) | Time since the agent's last command | built for the sidecar-to-stream replacement: `EvidenceFiles.last_command` delegates to `activity_file.command_time`, with contracts in `tests/steps/test_last_command.py` and… |
 | [tl-8bh9.14.132/plan.md](tl-8bh9.14.132/plan.md) | Default backlog for step show and expose list hold causes | built for default backlog selection and hold-cause reads |
 | [tl-8bh9.14.156/plan.md](tl-8bh9.14.156/plan.md) | tl-8bh9.14.156: the factory at conventional locations | built; the cut-over ran 2026-11-13 (runbook below, as run) |
+| [tl-8bh9.14.160/plan.md](tl-8bh9.14.160/plan.md) | Per-step agent settings: harness, model, effort and captured access policy | built: machine config, immutable admission choices, three harness adapters; Claude/OpenCode enforcement preflight deferred |
 | [tl-8bh9.14.6/live-smoke.md](tl-8bh9.14.6/live-smoke.md) | M2 live smoke: the check step in the rounds (owner-run, after S6e) | evidence |
 | [tl-8bh9.14.6/m2-smoke-findings.md](tl-8bh9.14.6/m2-smoke-findings.md) | M2 live smoke: findings (2026-11-11) | evidence |
 | [tl-8bh9.14.6/plan.md](tl-8bh9.14.6/plan.md) | tl-8bh9.14.6: the checks step (block B4, milestone M2) | built for S6a–S6e; sections 21–25 record the bounded slices |

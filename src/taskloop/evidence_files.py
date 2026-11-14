@@ -99,6 +99,12 @@ class EvidenceFiles:
         encoded = json.dumps([key.attempt_id, key.dispatch_token, key.reservation_generation]).encode()
         return "attempts/" + hashlib.sha256(encoded).hexdigest()
 
+    def launch_root(self, key: AttemptKey) -> Path:
+        """Private launcher files, outside the worktree reset by preparation."""
+        path = self._path(self.directory(key) + "/launcher")
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def entry_log(self, key: AttemptKey) -> Path:
         """The attempt's entry process log (`entry.log` in its key-derived directory), with that directory made."""
         path = self._path(self.directory(key) + "/entry.log")

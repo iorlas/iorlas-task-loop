@@ -1,9 +1,8 @@
 """The closed harness and provider words and the one place a provider is derived."""
 
 import pytest
-from any_agent import CodexHarness
 
-from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS, HarnessKind, Provider, launchable, provider_of
+from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS, HarnessKind, Provider, provider_of
 
 
 @pytest.mark.parametrize(("harness", "model", "provider"), [
@@ -22,7 +21,5 @@ def test_the_provider_is_derived_from_the_harness_and_for_opencode_the_model_id(
     assert provider_of(harness, model) is provider
 
 
-def test_every_word_has_its_plain_name_and_only_codex_is_launchable() -> None:
+def test_every_word_has_its_plain_name() -> None:
     assert set(HARNESS_WORDS) == set(HarnessKind) and set(PROVIDER_WORDS) == set(Provider)
-    assert isinstance(launchable(HarnessKind.CODEX), CodexHarness)
-    assert launchable(HarnessKind.CLAUDE) is None and launchable(HarnessKind.OPENCODE) is None

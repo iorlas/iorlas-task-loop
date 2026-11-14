@@ -15,12 +15,15 @@ from doubles import CHECKS, Command, Environment, FakeProfiles
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 
-from taskloop.access import CODEX_ACCESS, SHELL, folders, prepared_access
+from taskloop.access import folders
+from taskloop.agents.launch import AgentLaunch, codex_access
+from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, encode_policy
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, SlotFiles
 from taskloop.environment import Renewal, SetupFor, setup_digest
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.harness_choice import HarnessKind
 from taskloop.prepare import Prepared
 from taskloop.profile import Unavailable
 
@@ -73,8 +76,16 @@ class Entry:
 
     def execute(self) -> AttemptResult:
         env = self.environment
-        attempts = Attempts(AttemptStore(lambda: env.con), EvidenceFiles(env.artifacts), lambda: ("/bin/codex", {"HOME": "/home/p"}),
-                            self.agent, env.clock, self.checkouts, self.files, environment=env.preparation() if self.wired else None)
+        attempts = Attempts(
+            AttemptStore(lambda: env.con),
+            EvidenceFiles(env.artifacts),
+            AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/p"})),
+            self.agent,
+            env.clock,
+            self.checkouts,
+            self.files,
+            environment=env.preparation() if self.wired else None,
+        )
         return attempts.execute(KEY, ENTRY, self.renew)
 
 
@@ -308,7 +319,16 @@ def test_a_repeat_keeps_its_environment_and_only_empties_the_scratch(entry: Entr
     assert record is not None
     repeat = dataclasses.replace(record, admission=dataclasses.replace(record.admission, number=2))
     gitdir = slot.repo.identity().common_dir / "worktrees" / "s1"
-    assert env.preparation().prepare(repeat, Prepared("d" * 40, gitdir, slot.repo.path), held, ("/bin/codex", {})) is None
+    assert (
+        env.preparation().prepare(
+            repeat,
+            Prepared("d" * 40, gitdir, slot.repo.path),
+            held,
+            ("/bin/codex", {}),
+            codex_access(CodexPolicy(), folders(slot.path)).sandbox_argv("/bin/codex", ["true"]),
+        )
+        is None
+    )
     assert env.events == ["ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1", "probe", "empty .t/s1"]
     assert env.profiles.read == [] and rows(env.con) == []
 
@@ -361,14 +381,19 @@ def test_the_implement_agent_writes_its_folders_offline_and_the_probe_sees_what_
     entry.execute()
     found, env = folders(slot.path), entry.environment
     (spec,) = entry.specs
-    access = prepared_access(found)
+    access = codex_access(CodexPolicy(), found).config()
     flags = spec.argv.index("--json")
     assert spec.argv[flags - len(access) : flags] == list(access) and spec.env == {"HOME": "/home/p"}
-    shell = {key.removeprefix(SHELL): json.loads(value) for key, _, value in (item.partition("=") for item in access)
-             if key.startswith(SHELL)}
+    shell = {
+        key.removeprefix("shell_environment_policy.set."): json.loads(value)
+        for key, _, value in (item.partition("=") for item in access)
+        if key.startswith("shell_environment_policy.set.")
+    }
     assert shell == {"TMPDIR": str(found.tmp), "UV_CACHE_DIR": str(found.cache), "UV_TOOL_DIR": str(found.tools), "UV_OFFLINE": "1"}
     (probe,) = env.probes
-    assert (probe.exe, probe.env, probe.folders) == ("/bin/codex", {"HOME": "/home/p"}, found)
+    assert list(probe.exe[:2]) == ["/bin/codex", "sandbox"]
+    assert probe.exe[4:4 + len(access)] == tuple(access)
+    assert (probe.env, probe.folders) == ({"HOME": "/home/p"}, found)
     assert "UV_OFFLINE" not in env.process.calls[0].env
 
 
@@ -379,7 +404,9 @@ def test_a_plan_attempt_launches_with_plans_access_and_no_added_environment(
     plan.execute()
     (spec,) = plan.specs
     flags = spec.argv.index("--json")
-    assert spec.argv[flags - len(CODEX_ACCESS) : flags] == list(CODEX_ACCESS) and spec.env == {"HOME": "/home/p"}
+    assert spec.argv[flags - len(codex_access(CodexPolicy()).flags() + codex_access(CodexPolicy()).config()) : flags] == list(
+        codex_access(CodexPolicy()).flags() + codex_access(CodexPolicy()).config()
+    ) and spec.env == {"HOME": "/home/p"}
     assert plan.environment.probes == []
 
 
@@ -533,3 +560,16 @@ def test_a_setup_stop_that_left_survivors_is_lingering_for_an_implement_slot_too
     entry.environment.process.script = [Command(rc=None, timed_out=True, survivors=True)]
     refused(entry, "unavailable", "environment:lingering")
     assert rows(entry.environment.con) == [(1, "lingering", None, 0, 501)]
+
+
+@pytest.mark.parametrize("harness", [HarnessKind.CLAUDE, HarnessKind.OPENCODE])
+def test_non_codex_implement_keeps_shared_setup_without_a_codex_probe(entry: Entry, harness: HarnessKind, tmp_path: Path) -> None:
+    policy = (ClaudePolicy(settings_file=tmp_path / "captured.json", settings="{}")
+              if harness is HarnessKind.CLAUDE else OpenCodePolicy())
+    chosen = AgentSetting(harness=harness, model="chosen", effort="medium", access=policy)
+    entry.environment.con.execute("UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
+                                  (chosen.harness, chosen.provider, chosen.model, chosen.effort, encode_policy(policy)))
+    result = entry.execute()
+    assert result.execution is not None and result.execution.answer.kind == "valid"
+    assert entry.environment.probes == [] and entry.environment.process.calls
+    assert entry.environment.events[-3:] == ["empty .t/s1", "renew", "agent"]

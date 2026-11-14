@@ -11,7 +11,7 @@ from typing import Final
 
 from stream_proc import OwnedProcess, RegisteredStartUncertainError, capture, run_registered
 
-from taskloop.access import Folders, folders, probe_argv
+from taskloop.access import Folders, folders
 from taskloop.environment import SetupEnded
 
 PROBE_SECONDS: Final = 30.0
@@ -129,14 +129,14 @@ class RealEnvFiles:
         return emptied
 
 
-def sandbox_probe(exe: str, env: Mapping[str, str], found: Folders) -> bool:
+def sandbox_probe(argv: Sequence[str], env: Mapping[str, str], found: Folders) -> bool:
     """Whether the implement agent's sandbox works on this machine: `codex sandbox` with the agent's keys and environment,
     run in the just emptied scratch (never the slot: a Codex shim there could read the slot's not yet reset files), gives
     the shell its variables, writes each folder and not /tmp (`access.PROBE`): exit 0 within PROBE_SECONDS through the
     shelf's capture (an external-tool reason: only Codex knows its backend, bubblewrap on Linux). The probe removes its own
     folders; a start failure or a process left behind is a failed probe."""
     try:
-        done = capture(probe_argv(exe, found), cwd=found.tmp, env=env, timeout=PROBE_SECONDS)
+        done = capture(argv, cwd=found.tmp, env=env, timeout=PROBE_SECONDS)
     except OSError:
         return False
     return done.exit == 0 and not done.timed_out and not done.survivors

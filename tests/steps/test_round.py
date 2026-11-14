@@ -19,6 +19,8 @@ from git_porcelain.testing import FakeWorktree
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
@@ -54,7 +56,9 @@ KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
 BEFORE_REBOOT = (7, "entry-start", "old-boot")  # registered in another boot than the bench's "boot"
 HEAD, X = "d" * 40, "x" * 40
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "high", 30, max_running=10)
+REQUEST = NextRequest(
+    "tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="model-m", effort="high"), 30, max_running=10
+)
 STAMP = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ tasks "
 STEPPED = r"\S+ plan (start|relaunch|repeat|verify|publish|report|skip)( \S+)+"  # every attempt-bearing move names its step
 LINE = re.compile(STAMP + rf"({STEPPED}|\S+ (start|report) (refused|unavailable|claim_leaked)\S*|round( \S+)+)")
@@ -185,8 +189,10 @@ def seed(con: sqlite3.Connection, task_id: str, attempt_id: str, *, phase: str =
     """One attempt of `tasks/<task_id>` (deadline 100), with its registered entry when given."""
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,phase,base_commit,number,seq,slot_head)
-        VALUES (?,?,1,'plan','beads','tasks',?,'/tracker','repo','s1','input.txt','digest',1,'m','high','workspace-write',
+        input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,phase,base_commit,
+        number,seq,slot_head)
+        VALUES (?,?,1,'plan','beads','tasks',?,'/tracker','repo','s1','input.txt','digest',1,'m','high','{"harness":"codex",
+        "sandbox":"workspace-write"}',
         100,?,?,?,?,?,1,1,?)""",
         (attempt_id, f"token-{attempt_id}", task_id, *(entry or (None, None, None)), phase, None if phase == "admitted" else HEAD, HEAD),
     )
@@ -264,7 +270,9 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: con)
-    Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files).execute(KEY, ENTRY)
+    Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+    ).execute(KEY, ENTRY)
 
 
 @pytest.mark.parametrize("case, expected, calls", [
@@ -354,7 +362,13 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
     assert (moves(found), found.stopped, exit_code(found)) == (expected + ([("t-9", "start", "started")] if not stopped else []), stopped,
                                                                code)
     sent = advances.requests[0]
-    assert (sent.previous, sent.checkout, sent.model, sent.effort, sent.deadline) == (KEY, Path("/checkout"), "model-m", "high", 1810)
+    assert (sent.previous, sent.checkout, sent.setting.model, sent.setting.effort, sent.deadline) == (
+        KEY,
+        Path("/checkout"),
+        "model-m",
+        "high",
+        1810,
+    )
     assert ready.ready_reads == ([] if stopped else ["auto"]) and bench.launcher.calls == ([] if stopped else ["t-9"])
     lines = len(bench.lines)
     bench.round(replace(REQUEST, quiet=found.written))
@@ -451,7 +465,6 @@ def test_a_failed_ready_read_stops_admission_but_settling_still_ran(
 
 @pytest.mark.parametrize("label, minutes, model, effort, reason", [
     (" ", 30, "m", "high", "label"), ("auto", 0, "m", "high", "choices"), ("auto", 7 * 24 * 60 + 1, "m", "high", "choices"),
-    ("auto", 30, "-m", "high", "choices"), ("auto", 30, "m", "a b", "choices"),
 ])
 def test_an_empty_label_a_bad_choice_or_minutes_out_of_range_are_refused_before_any_read(
     factory: sqlite3.Connection, label: str, minutes: int, model: str, effort: str, reason: str
@@ -459,7 +472,10 @@ def test_an_empty_label_a_bad_choice_or_minutes_out_of_range_are_refused_before_
     seed(factory, "tl-1", "attempt", entry=ENTRY)
     ready = ReadyTracker([bead("t-1")], ready=["t-1"])
     bench = Bench(factory, ready)
-    found = run_round(bench.ports(), NextRequest("tasks", "/tracker", Path("/checkout"), label, model, effort, minutes))
+    found = run_round(
+        bench.ports(),
+        NextRequest("tasks", "/tracker", Path("/checkout"), label, StepSettings(), Overrides(model=model, effort=effort), minutes),
+    )
     assert isinstance(found, Failed) and (found.kind, found.reason) == ("refused", reason) and exit_code(found) == 1
     assert ready.ready_reads == [] and bench.lines == [] and bench.launcher.calls == []
 
