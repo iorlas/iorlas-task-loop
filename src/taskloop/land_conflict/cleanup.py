@@ -10,14 +10,14 @@ from taskloop.land_conflict.abort_models import Checkout
 from taskloop.land_conflict.cleanup_models import Cleanup, CleanupPhase
 from taskloop.land_conflict.models import Record, Save
 from taskloop.land_conflict.preserve import Preservation
-from taskloop.merge.models import Reason, Result, Terminal, Unavailable, Work
+from taskloop.merge.models import Completed, Reason, Result, Terminal, Unavailable, Work
 
 
 @dataclass(frozen=True)
 class CleanupSaved:
     preservation: Preservation
 
-    def __call__(self, record: Record, work: Work, saved: Save, result: Terminal) -> Result:
+    def __call__(self, record: Record, work: Work, saved: Save, result: Completed | Terminal) -> Result:
         try:
             return self._resume(record, work, saved, result)
         except AbortRefused as error:
@@ -39,7 +39,7 @@ class CleanupSaved:
                 raise AbortRefused("The recorded ignored paths or their protection changed.")
         return current
 
-    def _resume(self, record: Record, work: Work, saved: Save, result: Terminal) -> Result:
+    def _resume(self, record: Record, work: Work, saved: Save, result: Completed | Terminal) -> Result:
         p = self.preservation
         stopped = p.stopped(work)
         if stopped is not None:
@@ -61,6 +61,7 @@ class CleanupSaved:
             p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot).exclude(
                 tuple(literal_pattern(path) for path in cleanup.ignored))
             if saved.merging:
+                assert isinstance(result, Terminal)
                 aborted = AbortMerge(p)(record, work, saved, result)
                 if not isinstance(aborted, Terminal):
                     return aborted

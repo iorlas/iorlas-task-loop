@@ -9,14 +9,14 @@ from taskloop.land_conflict.cleanup import CleanupSaved
 from taskloop.land_conflict.models import Record, Save
 from taskloop.land_conflict.preserve import Preservation
 from taskloop.land_conflict.release_models import Release, ReleasePhase
-from taskloop.merge.models import Reason, Result, Terminal, Unavailable, Work
+from taskloop.merge.models import Completed, Reason, Result, Terminal, Unavailable, Work
 
 
 @dataclass(frozen=True)
 class ReleaseSaved:
     preservation: Preservation
 
-    def __call__(self, record: Record, work: Work, saved: Save, result: Terminal) -> Result:
+    def __call__(self, record: Record, work: Work, saved: Save, result: Completed | Terminal) -> Result:
         try:
             return self._resume(record, work, saved, result)
         except AbortRefused as error:
@@ -24,7 +24,7 @@ class ReleaseSaved:
         except (GitUnavailable, EmbeddedRepositories, UnmergedPaths) as error:
             return Unavailable(reason=Reason.GIT, explanation=f"The saved-work release is pending; its slot stays reserved: {error}")
 
-    def _resume(self, record: Record, work: Work, saved: Save, result: Terminal) -> Result:
+    def _resume(self, record: Record, work: Work, saved: Save, result: Completed | Terminal) -> Result:
         p = self.preservation
         observer = CleanupSaved(p)
         stopped = p.stopped(work)

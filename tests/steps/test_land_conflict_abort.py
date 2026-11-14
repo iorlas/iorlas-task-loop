@@ -245,7 +245,7 @@ def test_accepted_result_bypasses_abort(execution_case: ExecutionCase, monkeypat
     monkeypatch.setattr(FakeWorktree, "abort_merge", lambda _self: pytest.fail("abort of accepted result"))
     result = c.resume()
     assert isinstance(result, Completed)
-    saved = c.ports.store.saved(c.record.key)
+    saved = c.ports.store.completed(c.record.key)
     assert saved is not None and saved.abort is None
     c.restart()
     assert c.resume() == result

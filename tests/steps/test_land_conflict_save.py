@@ -102,6 +102,7 @@ def test_completed_result_is_retained_directly(execution_case: ExecutionCase) ->
     assert isinstance(result, Completed)
     record = saved(c)
     assert record.accepted and record.commit == result.commit and record.head == result.commit
+    assert head(c.slot) == c.record.base and record.release is not None
     assert not is_saved(c.ports.repo, result.commit) and not c.slot.merging()
     c.restart()
     assert c.resume() == result and saved(c) == record and c.calls == 1

@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Generator
 from pathlib import Path
+from typing import Never
 
 import land_conflict_bench
 import pytest
@@ -14,7 +15,7 @@ from merge_bench import head
 from taskloop.attempt_types import AttemptKey, FileRef
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.merge import git
-from taskloop.merge.models import Completed, Disposition, InProgress, Phase, Reason, Terminal, Unavailable, Work
+from taskloop.merge.models import Completed, Disposition, InProgress, Phase, Reason, Terminal, Work
 from taskloop.merge.store import MergeStore
 
 
@@ -57,9 +58,11 @@ def test_restart_adopts_each_completed_effect(execution_case: ExecutionCase, mon
 
 
 @pytest.mark.parametrize("dirty", [False, True])
-def test_start_adopts_only_clean_matching_completed_merge(execution_case: ExecutionCase, dirty: bool) -> None:
+def test_start_adopts_only_clean_matching_completed_merge(
+    execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch, dirty: bool,
+) -> None:
     c = execution_case
-    assert isinstance(c.resume(), Completed)
+    completed_effect(c, monkeypatch)
     work = c.ports.merges.get(c.record.key.attempt_id)
     assert work is not None and work.target is not None
     c.ports.merges.put(work, work.model_copy(update={"phase": Phase.START, "result": None}))
@@ -71,9 +74,9 @@ def test_start_adopts_only_clean_matching_completed_merge(execution_case: Execut
     assert c.slot.read_file("foreign") == ("unrecorded edit" if dirty else None)
 
 
-def test_foreign_completed_effect_is_preserved_and_refused(execution_case: ExecutionCase) -> None:
+def test_foreign_completed_effect_is_preserved_and_refused(execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch) -> None:
     c = execution_case
-    assert isinstance(c.resume(), Completed)
+    completed_effect(c, monkeypatch)
     work = c.ports.merges.get(c.record.key.attempt_id)
     assert work is not None
     c.ports.merges.put(work, work.model_copy(update={"phase": Phase.START, "result": None}))
@@ -193,9 +196,23 @@ def test_foreign_active_merge_is_never_overwritten(execution_case: ExecutionCase
     assert c.calls == 1 and c.slot.merging() and c.slot.read_file("README") == before
 
 
-def test_completed_result_does_not_accept_later_slot_edits(execution_case: ExecutionCase) -> None:
+def completed_effect(c: ExecutionCase, patch: pytest.MonkeyPatch) -> None:
+    finish = FakeWorktree.finish_merge
+
+    def interrupted(self: FakeWorktree, message: str) -> Never:
+        finish(self, message)
+        raise KeyboardInterrupt
+
+    with patch.context() as context:
+        context.setattr(FakeWorktree, "finish_merge", interrupted)
+        with pytest.raises(KeyboardInterrupt):
+            c.resume()
+
+
+def test_completed_result_replays_without_inspecting_later_slot_edits(execution_case: ExecutionCase) -> None:
     c = execution_case
-    assert isinstance(c.resume(), Completed)
+    result = c.resume()
+    assert isinstance(result, Completed)
     c.slot.write_file("foreign", "retain this edit")
     c.restart()
-    assert isinstance(c.resume(), Unavailable) and c.calls == 1 and c.slot.read_file("foreign") == "retain this edit"
+    assert c.resume() == result and c.calls == 1 and c.slot.read_file("foreign") == "retain this edit"

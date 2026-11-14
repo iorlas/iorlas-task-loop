@@ -11,6 +11,7 @@ from taskloop.attempt_types import AttemptKey
 from taskloop.land_conflict.abort_models import Abort, AbortPhase
 from taskloop.land_conflict.cleanup_models import Cleanup, CleanupPhase
 from taskloop.land_conflict.release_models import Release
+from taskloop.merge.models import Phase
 
 
 class Value(BaseModel):
@@ -122,13 +123,19 @@ class Save(Value):
     def consistent(self) -> Self:
         if self.cleanup is not None:
             cleanup = self.cleanup
-            if self.phase is not SavePhase.COMPLETE or self.accepted:
-                raise ValueError("cleanup requires completely retained unfinished work")
+            if self.phase is not SavePhase.COMPLETE:
+                raise ValueError("cleanup requires completely retained work")
             if ((cleanup.work.attempt_id, cleanup.work.dispatch_token, cleanup.work.generation)
                     != (self.key.attempt_id, self.key.dispatch_token, self.key.reservation_generation)
                     or (cleanup.work.repo_id, cleanup.work.slot, cleanup.work.gitdir, cleanup.work.source, cleanup.work.target)
                     != (self.repo_id, self.slot_path, self.gitdir, self.source, self.target)):
                 raise ValueError("cleanup must retain the exact saved merge identity")
+            if self.accepted and (
+                    self.merging or cleanup.work.phase is not Phase.COMPLETE or cleanup.work.result != self.commit
+                    or self.head != self.commit or cleanup.before.head != self.commit
+                    or cleanup.before.branch is not None or cleanup.before.merging
+                    or cleanup.before.merge_head is not None or cleanup.before.index):
+                raise ValueError("accepted cleanup requires the exact clean detached completed work")
             if self.merging and cleanup.phase is not CleanupPhase.EXCLUDE and (
                     self.abort is None or self.abort.phase is not AbortPhase.COMPLETE):
                 raise ValueError("cleanup parking requires a completed abort")
