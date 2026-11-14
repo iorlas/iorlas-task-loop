@@ -32,7 +32,7 @@ from taskloop.tracker import inspect_task
 from taskloop.tracker_discussion import read_discussion
 
 AT = "2026-11-13T12:00:00Z"
-CONTEXT = InputContext("commit", ("just check",), "")
+CONTEXT = InputContext("commit", ("just check",), "", ())
 planned = planned_fixture
 
 
@@ -111,7 +111,7 @@ def test_delimiter_shaped_text_stays_data_across_repeat_and_context_refresh(fact
     operation = collector(client, factory)
     block = operation.for_task(TASK.reference, "/tracker")
     text = task_text(TASK, "implement", CONTEXT, block)
-    text = refresh(replace_block(text, block), InputContext("new", (), ""))
+    text = refresh(replace_block(text, block), InputContext("new", (), "", ()))
     lines = text.splitlines()
     for marker in (BEGIN, END, CONTEXT_BEGIN, CONTEXT_END):
         assert lines.count(marker) == 1 and f"| {marker}" in lines
