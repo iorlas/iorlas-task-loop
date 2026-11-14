@@ -1,5 +1,6 @@
 """The recovery table owner and the atomic authorization boundary."""
 
+import math
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -84,8 +85,10 @@ class RecoveryStore(StoreConnection):
             save(con, value, current)
             return Result(outcome=Outcome.REGISTERED, explanation="The authorized worker registration is durable.", intent=value)
 
-    def _snapshot(self, con: sqlite3.Connection, key: AttemptKey, now: float) -> Snapshot | Result:
-        record = self.attempts.recovery(con, key, now)
+    def _snapshot(
+        self, con: sqlite3.Connection, key: AttemptKey, now: float, *, allow_expired: bool = False,
+    ) -> Snapshot | Result:
+        record = self.attempts.recovery(con, key, now, allow_expired=allow_expired)
         if isinstance(record, Result):
             return record
         if recovery_held(con, key.attempt_id):
@@ -94,12 +97,14 @@ class RecoveryStore(StoreConnection):
             return Result(outcome=Outcome.DRAINING, explanation="Recovery authorization is closed while the factory drains.")
         return Snapshot(attempt=record, drain=boundary(con), intent=read_intent(con, key))
 
-    def snapshot(self, key: AttemptKey, now: float) -> Snapshot | Result:
+    def snapshot(self, key: AttemptKey, now: float, *, allow_expired: bool = False) -> Snapshot | Result:
         with self._connection(write=True) as con:
-            return self._snapshot(con, key, now)
+            return self._snapshot(con, key, now, allow_expired=allow_expired)
 
-    def _compare(self, con: sqlite3.Connection, expected: Snapshot, now: float) -> Snapshot | Result:
-        current = self._snapshot(con, expected.attempt.admission.key, now)
+    def _compare(
+        self, con: sqlite3.Connection, expected: Snapshot, now: float, *, allow_expired: bool = False,
+    ) -> Snapshot | Result:
+        current = self._snapshot(con, expected.attempt.admission.key, now, allow_expired=allow_expired)
         if isinstance(current, Snapshot) and current != expected:
             return Result(outcome=Outcome.CHANGED, explanation="Recovery facts or ownership changed after observation.",
                           intent=current.intent)
@@ -110,15 +115,27 @@ class RecoveryStore(StoreConnection):
         with self._connection(write=True) as con:
             return self._compare(con, expected, clock())
 
-    def authorize(self, observed: Observations, owner: Identity, token: str, clock: Callable[[], float]) -> Result:
+    def authorize(
+        self, observed: Observations, owner: Identity, token: str, clock: Callable[[], float], *, deadline: float | None = None,
+    ) -> Result:
         refusal = permitted(observed, owner, token)
         if refusal is not None:
             return refusal
         expected = observed.snapshot
         with self._connection(write=True) as con:
-            current = self._compare(con, expected, clock())
+            now = clock()
+            current = self._compare(con, expected, now, allow_expired=deadline is not None)
             if isinstance(current, Result):
                 return current
+            if deadline is not None:
+                if not math.isfinite(deadline) or deadline <= now:
+                    return Result(outcome=Outcome.EXPIRED, explanation="The requested recovery allowance must be finite and future.")
+                old = current.intent
+                if old is None or old.owner != owner or old.token != token:
+                    record = self.attempts.renew(con, current.attempt, deadline)
+                    current = current.model_copy(update={"attempt": record})
+                elif now >= current.attempt.admission.deadline:
+                    return Result(outcome=Outcome.EXPIRED, explanation="This recovery generation's allowance has expired.", intent=old)
             return self._authorize(con, current, owner, token)
 
     def _authorize(self, con: sqlite3.Connection, snapshot: Snapshot, owner: Identity, token: str) -> Result:
