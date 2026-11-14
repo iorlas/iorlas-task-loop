@@ -322,3 +322,21 @@ changes do not complete this task and must not be reported as an implemented res
 This revision was checked against the saved diff and current land, status,
 round, hold, settings and preservation owners. Only this design file changes;
 no source gates or live tests were run for the planning revision.
+
+## Implementation progress (unfinished)
+
+Admission now counts in-flight tasks across the selected backlog, including other
+repositories, while settlement and landing effects remain fenced to the selected
+repository. The CLI, board and drawer now say "Waiting for a person to land it
+(manual policy)". Regression tests cover the backlog bound across repositories,
+backlog isolation, and labelled/unlabelled manual and unknown-policy delivery.
+The retained hand-started automatic-delivery test passes without another plan or
+implementation execution. The required `just check` and `just test` gates passed
+during this attempt; these runs do not constitute factory acceptance.
+
+This is still an unfinished implementation. The conflict-resolution decisions
+above remain the intended behavior, but no land resolution attempt, merge
+preparation/acceptance, persisted execution bound, resolution reconciliation or
+preservation/release integration has been implemented. Textual conflicts still
+follow the old refusal/hold and restart route. Passing the existing checks does
+not demonstrate the conflict-recovery completion criteria.

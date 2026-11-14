@@ -182,7 +182,7 @@ function render() {
   }
   if (t.column === "land" && t.land === "manual") {
     const waiting = el("div", "px-6 pb-3");
-    waiting.append(callout(LAND.manual.bar, "Waiting for a person to approve delivery", "The known origin main profile says land: manual."));
+    waiting.append(callout(LAND.manual.bar, LAND.manual.label, "The known origin main profile says land: manual."));
     drawer.append(waiting);
   }
   if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));

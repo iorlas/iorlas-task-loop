@@ -196,7 +196,8 @@ def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     waiting = tuple(each for each in current if each.next == "advance" or _rerun(each)
                     or (each.next == "repeat" and each.checks is not None))
     stopped = _advance(ports, request, waiting, trail, reserve)
-    stopped = stopped or _admit(ports, request, tuple(each for each in for_land if each.task_id not in finished), trail, reserve)
+    capacity = tuple(each for each in refreshed.attempts if each.backlog == request.backlog and each.task_id not in finished)
+    stopped = stopped or _admit(ports, request, capacity, trail, reserve)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
     if stopped != INTERRUPTED and not ports.stopping():

@@ -33,7 +33,7 @@ def decision(policy: LandPolicy, *, running: bool = False, delivered: bool = Fal
 def words(state: LandState) -> str:
     return {
         LandState.WAITING: "Waiting for the factory to land it",
-        LandState.MANUAL: "Waiting for a person to approve delivery",
+        LandState.MANUAL: "Waiting for a person to land it (manual policy)",
         LandState.UNKNOWN: "Landing policy is unavailable",
         LandState.LANDING: "Land is in progress",
         LandState.FINISHING: "The factory is finishing delivery",

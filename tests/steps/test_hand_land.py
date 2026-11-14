@@ -54,9 +54,28 @@ def test_a_hand_started_task_is_delivered_and_closed_once_without_replanning(tmp
 
 
 @pytest.mark.parametrize("label", [None, "auto"])
+@pytest.mark.parametrize("mode", [LandMode.MANUAL, None])
+def test_rounds_leave_manual_or_unknown_delivery_to_the_stated_policy(
+    tmp_path: Path, label: str | None, mode: LandMode | None,
+) -> None:
+    b = bench(tmp_path)
+    [view] = views(b)
+    view = replace(view, label=label, policy=LandPolicy(mode, b.base))
+
+    def deliver(_request: LandRequest) -> How | Failed:
+        pytest.fail("manual or unknown policy must not land")
+
+    landing = Landing(lambda _path: mode if mode is not None else Failed("unavailable", "git", "Policy cannot be read."), deliver)
+    trail = Trail(lambda _line: None, lambda: b.now, "tasks", None)
+    assert not land_passed(landing, "tasks", b.repo.path, 5, (view,), trail, lambda *_args: pytest.fail("unexpected hold"))
+    assert task_status(view).landing is (LandState.MANUAL if mode is LandMode.MANUAL else LandState.UNKNOWN)
+    assert b.repo.pushes == 0 and b.tracker == [] and b.status == "in_progress"
+
+
+@pytest.mark.parametrize("label", [None, "auto"])
 @pytest.mark.parametrize(("mode", "expected", "note"), [
     (LandMode.AUTO, LandState.WAITING, "Waiting for the factory to land it"),
-    (LandMode.MANUAL, LandState.MANUAL, "Waiting for a person to approve delivery"),
+    (LandMode.MANUAL, LandState.MANUAL, "Waiting for a person to land it (manual policy)"),
     (None, LandState.UNKNOWN, "Landing policy is unavailable"),
 ])
 def test_cli_board_and_drawer_data_convey_the_same_landing_decision(

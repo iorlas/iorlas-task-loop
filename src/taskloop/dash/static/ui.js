@@ -27,7 +27,7 @@ export const JUMP = {
 // The Land column's states (`card.land`): what the card says, and what the drawer's rail row says.
 export const LAND = {
   waiting: { label: "Waiting for the factory to land it", row: "waiting for the factory to land it", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
-  manual: { label: "Waiting for a person to approve delivery", row: "waiting for a person to approve delivery", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
+  manual: { label: "Waiting for a person to land it (manual policy)", row: "waiting for a person to land it (manual policy)", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
   unknown: { label: "Landing policy is unavailable", row: "landing policy is unavailable", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
   finishing: { label: "Finishing delivery", row: "the factory is finishing delivery", text: "text-sky-700 dark:text-sky-300", bar: "border-sky-500" },
   landing: { label: "Landing", row: "landing on main now", text: "text-sky-700 dark:text-sky-300", bar: "border-sky-500" },

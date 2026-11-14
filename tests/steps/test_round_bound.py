@@ -79,3 +79,33 @@ def test_an_abandoned_task_is_not_in_flight_and_a_refused_start_does_not_count(f
 def test_a_max_running_below_one_refuses_the_round(factory: sqlite3.Connection) -> None:
     found = run_round(Bench(factory, ReadyTracker([], ready=[]), Admission({})).ports(), replace(REQUEST, max_running=0))
     assert isinstance(found, Failed) and found.reason == "max_running"
+
+
+@pytest.mark.parametrize("running", [2, 3])
+def test_other_repositories_count_towards_the_backlog_bound_without_receiving_effects(
+    factory: sqlite3.Connection, running: int,
+) -> None:
+    for number in range(running):
+        seed(factory, f"tl-{number}", f"attempt-{number}", entry=ENTRY)
+    ready = backlog(5)
+    admission = Admission({})
+    bench = Bench(factory, ready, admission)
+    bench.seen = "matching"
+    factory.execute("UPDATE attempt SET repo_id='another-repository'")
+    found = bench.round(DEFAULT)
+    assert moves(found) == [(f"t-{n}", "start", "started") for n in range(3 - running)]
+    assert found.stopped == "max_running" and admission.requests == [f"t-{n}" for n in range(3 - running)]
+    assert len(ready.ready_reads) == int(running < 3)
+    assert bench.launcher.calls == [f"t-{n}" for n in range(3 - running)] and bench.recorded.calls == []
+
+
+def test_another_backlog_does_not_consume_the_admission_bound(factory: sqlite3.Connection) -> None:
+    for number in range(3):
+        seed(factory, f"tl-{number}", f"attempt-{number}", entry=ENTRY)
+    bench = Bench(factory, backlog(5), Admission({}))
+    bench.seen = "matching"
+    factory.execute("UPDATE attempt SET backlog='another-backlog'")
+    found = bench.round(DEFAULT)
+    assert moves(found) == [(f"t-{n}", "start", "started") for n in range(3)]
+    assert found.stopped == "max_running"
+    assert bench.launcher.calls == [f"t-{n}" for n in range(3)] and bench.recorded.calls == []
