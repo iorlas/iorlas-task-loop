@@ -84,7 +84,7 @@ def test_reopened_round_finishes_captured_work_before_verifying(
 
 
 @pytest.mark.parametrize("phase, seen, action, word, launches", [
-    ("dispatching", "matching", "report", "running", 0),
+    ("dispatching", "matching", "report", "unknown", 0),
     ("admitted", "gone", "relaunch", "relaunched", 1),
     ("dispatching", "unknown", "report", "unknown", 0),
 ])

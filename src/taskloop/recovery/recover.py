@@ -94,6 +94,17 @@ class Recovery:
             return Result(outcome=Outcome.UNAVAILABLE,
                           explanation=f"Recovery observations or storage are unavailable ({type(error).__name__}).")
 
+    def status(self, key: AttemptKey) -> Observations | Result:
+        """Observe process facts without custody, tracker access or execution authority, even after expiry."""
+        try:
+            snapshot = self.store.snapshot(key, self.clock(), allow_expired=True)
+            if isinstance(snapshot, Result):
+                return snapshot
+            return self._observations(snapshot, allow_expired=True, authority=False)
+        except (StoreUnavailable, ValueError, TypeError) as error:
+            return Result(outcome=Outcome.UNAVAILABLE,
+                          explanation=f"Recovery status is unavailable ({type(error).__name__}).")
+
     def authorize(
         self, key: AttemptKey, owner: Identity, *, token: str | None = None,
         custody: AbstractContextManager[None] | None = None, deadline: float | None = None,
@@ -142,18 +153,18 @@ class Recovery:
         return classify(observed)
 
     def _observations(
-        self, initial: Snapshot, *, allow_expired: bool = False, expected: Intent | None = None,
+        self, initial: Snapshot, *, allow_expired: bool = False, expected: Intent | None = None, authority: bool = True,
     ) -> Observations | Result:
         snapshot = self.store.compare(initial, self.clock, allow_expired=allow_expired)
         if isinstance(snapshot, Result):
             return snapshot
         if expected is not None and not matches(expected, snapshot):
             return Result(outcome=Outcome.CHANGED, explanation="The saved authorization or execution registration changed.")
-        observed = self._observe(snapshot)
+        observed = self._observe(snapshot, authority=authority)
         compared = self.store.compare(snapshot, self.clock, allow_expired=allow_expired)
         return compared if isinstance(compared, Result) else observed
 
-    def _observe(self, snapshot: Snapshot) -> Observations:
+    def _observe(self, snapshot: Snapshot, *, authority: bool = True) -> Observations:
         record = snapshot.attempt
         worker = record.worker
         if worker is None:
@@ -162,5 +173,6 @@ class Recovery:
             snapshot=snapshot, entry=self.processes.entry(record.admission.entry),
             worker=self.processes.process(Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot)),
             owner=None if snapshot.intent is None else self.processes.process(snapshot.intent.owner),
-            claim=self.claim(record.admission),
+            claim=self.claim(record.admission) if authority else Claim(
+                state=ClaimState.UNKNOWN, explanation="Status has not checked claim authority."),
         )

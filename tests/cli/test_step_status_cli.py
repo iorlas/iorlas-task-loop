@@ -8,12 +8,49 @@ from pathlib import Path
 import pytest
 from sqlite_store import Store, begin_immediate
 
+from taskloop import cli_composition
 from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.cli import main
+from taskloop.drain.models import Identity, Seen
 from taskloop.factory_schema import SCHEMA
 from taskloop.hold_store import HoldInsert, HoldStore
+from taskloop.recovery.models import ProcessObservation
+from taskloop.recovery.observe import NativeProcesses
 
 D = "d" * 40
+
+
+@pytest.mark.parametrize("seen", [Seen.ALIVE, Seen.UNKNOWN, Seen.GONE])
+def test_status_composition_observes_worker_groups_without_writing(
+    factory: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str], seen: Seen,
+) -> None:
+    attempt(factory, "a", "tasks", deadline=1e12)
+    factory.execute("INSERT INTO reservation VALUES('s1','repo',1,'a')")
+    factory.execute(
+        """UPDATE attempt SET phase='registered',entry_pid=7,entry_start='entry',entry_boot='boot',
+        worker_pid=8,worker_pgid=8,worker_start='worker',worker_boot='boot',session_ref='saved',base_commit=?""", (D,),
+    )
+    calls: list[int] = []
+
+    def process(_self: NativeProcesses, identity: Identity) -> ProcessObservation:
+        calls.append(identity.pid)
+        return ProcessObservation(seen=seen, explanation="Worker group observation.")
+
+    monkeypatch.setattr(cli_composition, "entry_seen", lambda _entry: "gone")
+    monkeypatch.setattr(NativeProcesses, "entry", lambda _self, _entry: ProcessObservation(
+        seen=Seen.GONE, explanation="Entry is absent."))
+    monkeypatch.setattr(NativeProcesses, "process", process)
+    db, artifacts = tmp_path / "factory.db", tmp_path / "artifacts"
+    before, rows = db.read_bytes(), list(factory.iterdump())
+    expected = {Seen.ALIVE: "wait", Seen.UNKNOWN: "unknown", Seen.GONE: "release"}[seen]
+    for _ in range(2):
+        assert main(["step", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts), "--json"]) == 0
+        assert json.loads(capsys.readouterr().out)["next"] == expected
+        assert main(["step", "list", "--db", str(db), "--json"]) == 0
+        assert json.loads(capsys.readouterr().out)["attempts"][0]["next"] == expected
+    assert calls == [8] * 4
+    assert db.read_bytes() == before and list(factory.iterdump()) == rows and not artifacts.exists()
 
 
 @pytest.fixture

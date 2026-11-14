@@ -1,10 +1,4 @@
-"""Every step command's status read (`tl step show`, `tl step list` and the round's snapshot): a task's current attempt
-with its entry observation, collected result, deadline and the `Next` word a person acts on. Read-only: values in,
-values out; `result_data.as_data` is the one JSON shape.
-
-A task whose current attempt is a done implement attempt with checks attempts shows its latest checks attempt (section 9
-of tl-8bh9.14.6): the view's step, attempt, slot, phase, entry, result, deadline, `Next`, number, last entry and release are
-then that checks attempt's (`check_status`); the backlog, task, order and publication stay the implement attempt's."""
+"""Read-only attempt status shared by CLI, dashboard and rounds, including the latest checks attempt."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -34,6 +28,8 @@ from taskloop.merge.status import result as merge_result
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Clock, Failed
 from taskloop.profile import LandMode
+from taskloop.recovery.models import Observations, Outcome, Result
+from taskloop.recovery.status import process_gate
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
 from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
@@ -62,6 +58,8 @@ class StatusPorts:
     commands: SetupSeen = lambda _process: "gone"  # a checks attempt's registered commands (the CLI: `setup_seen`)
     last_command: Callable[[AttemptKey], float | Literal["none", "unreadable"]] = lambda _key: "none"  # wall time of its latest command
     policy: Callable[[Path, str], LandMode | None] = lambda _path, _repo: None
+    recovery: Callable[[AttemptKey], Observations | Result] = lambda _key: Result(
+        outcome=Outcome.UNAVAILABLE, explanation="Recovery observations were not supplied.")
 
 
 @dataclass(frozen=True)
@@ -133,8 +131,7 @@ class Listed:
 
 
 def next_action(phase: str, entry: EntryState, result: AttemptResult, expired: bool, *, rebooted: bool = False) -> Next:
-    """What a person does next, from the phase, the entry observation, the collected result and the deadline.
-    `rebooted`: the registered entry is from another boot, so its relaunch renews the deadline (`register_entry`)."""
+    """Choose the next action; a rebooted entry's relaunch renews its deadline (`register_entry`)."""
     if entry == "unknown" or result.status in ("unavailable", "refused"):
         return "unknown"
     if result.status == "collected":
@@ -165,10 +162,7 @@ def _observed(reads: StatusPorts, entry: EntryIdentity | None) -> EntryState:
 
 
 def _show(reads: StatusPorts, row: AttemptRow, *, probe: bool = True) -> AttemptView:
-    """A task's current attempt, or (a done implement attempt with checks attempts) its latest checks attempt; a failed
-    read of those is `unknown`. `probe`: read the leftovers of a step still to settle (Git and slot reads); never for a
-    listing that keeps only stuck or unknown attempts, which a `verify`, `repeat` or `repeats_exhausted` step never is,
-    unless a round took it (a labelled attempt may be a due `repeats_exhausted` hold, tl-8bh9.14.9 section 3)."""
+    """Read the current agent or checks view; probe leftovers only when the caller needs them."""
     view = _agent(reads, row, probe=probe)
     if view.next != "advance" or following(row.step) != CHECK:
         return view
@@ -187,10 +181,7 @@ def _swapped(
     reads: StatusPorts, view: AttemptView, rows: tuple[ChecksRow, ...], results: tuple[ResultRow, ...], setup: OwnedProcess | None,
     land: LandView | None = None,
 ) -> AttemptView:
-    """Section 9's field swap: the latest checks attempt's fields; each earlier one `re-run`, then the implement attempt
-    `advanced`, newest first. No worker, leftovers or repeat: a checks attempt has no agent. Its registered commands are
-    observed only for an admitted attempt whose entry does not run (`checks_next`). A released one's `done` goes on to
-    its land (`land_status.land_next`)."""
+    """Swap in the latest checks attempt's fields, results and land decision, retaining the agent's task identity."""
     latest, claim = rows[-1], "kept" if view.release is None else view.release.claim
     entry, expired = _observed(reads, latest.entry), reads.clock() >= latest.deadline
     stopped = latest.phase == "admitted" and latest.released_at is None and entry not in ("running", "unknown")
@@ -220,7 +211,10 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
     expired = reads.clock() >= row.deadline
     rebooted = row.entry is not None and reads.boot() not in (None, row.entry[2])
     next_word = _released(row, next_action(row.phase, entry, result, expired, rebooted=rebooted), succeeded(result))
-    next_word = _setup_failed(reads, row, next_word)
+    blocked = None
+    if row.phase in ("dispatching", "registered") and row.release is None and result.execution is None:
+        blocked = process_gate(reads.store, row.key, reads.recovery, expired)
+    next_word = blocked or _setup_failed(reads, row, next_word)
     if row.phase == "admitted" and row.release is None:
         merging = merge_result(MergeStore(reads.store.connect, reads.store.begin), row.key.attempt_id, reads.clock())
         if merging is not None:
@@ -261,9 +255,8 @@ def _setup_failed(reads: StatusPorts, row: AttemptRow, step: Next) -> Next:
 
 
 def _released(row: AttemptRow, step: Next, verified: bool) -> Next:
-    """A released attempt is `start` again (abandoned), `publish` (settled, verified, not yet on origin: never advanced
-    past), `advance` (settled, verified and published, and its step has a following one) or `done`; a collected one still
-    holding its slot is `release` first (the entry or a verify left it held: the slot was not clean)."""
+    """A released attempt starts again if abandoned, publishes or advances if verified, otherwise is done.
+    A collected attempt still holding its slot requires release first."""
     if row.release is not None and row.release.claim == "unclaiming":
         return "release"  # the abandon's claim is still to be returned
     if row.release is not None and row.release.abandoned:

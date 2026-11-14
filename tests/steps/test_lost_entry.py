@@ -14,7 +14,7 @@ from taskloop.attempt_status import current_view
 from taskloop.attempt_types import Checkouts, Seen, SlotFiles
 from taskloop.hold_store import HoldInsert, HoldStore
 from taskloop.release_proof import Stopping, stop_proof, worker_stopped
-from taskloop.slot_release import AlreadyReleased, NotReleased
+from taskloop.slot_release import AlreadyReleased, NotReleased, Released
 
 
 def dispatched(con: sqlite3.Connection, worker: bool) -> None:
@@ -24,7 +24,7 @@ def dispatched(con: sqlite3.Connection, worker: bool) -> None:
 
 @pytest.mark.parametrize("worker", [False, True])
 @pytest.mark.parametrize("claim_failure", [False, True])
-def test_reopened_database_round_releases_then_finishes_claim_return(
+def test_reopened_status_requires_explicit_release_then_round_finishes_claim_return(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts,
     slot_files: SlotFiles, worker: bool, claim_failure: bool,
 ) -> None:
@@ -41,13 +41,17 @@ def test_reopened_database_round_releases_then_finishes_claim_return(
         bench = Bench(con, free=False)
         bench.releaser = ports.releaser()
         view = current_view(bench.ports().reads, "tasks", "tl-1")
-        assert view is not None and view.next == "release"
+        assert view is not None and view.next == "unknown"
         before = list(con.iterdump())
         assert current_view(bench.ports().reads, "tasks", "tl-1") == view
         assert list(con.iterdump()) == before
         first = bench.round()
-        assert first.moves[0].action == "release"
-        assert first.moves[0].word == ("unavailable:tracker" if claim_failure else "released")
+        assert (first.moves[0].action, first.moves[0].word) == ("report", "unknown")
+        assert stored(con)[0] != [] and ports.unclaimed == []
+        released = ports.releaser().reconcile(KEY)
+        assert isinstance(released, NotReleased if claim_failure else Released)
+        if isinstance(released, NotReleased):
+            assert released.reason == "tracker"
         assert stored(con)[0] == []
         con.close()
         con = sqlite3.connect(path, isolation_level=None)
