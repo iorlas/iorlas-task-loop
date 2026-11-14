@@ -192,6 +192,51 @@ async function waitingStates() {
   assert(node("running").querySelector("[data-quiet]"), "returning to running restores activity age");
 }
 
+async function quietEligibility(layout) {
+  const stale = { execution: "quiet-stale", number: 1, elapsed_ms: 900000, quiet_ms: 900000, frozen: false };
+  const states = [
+    { column: "waiting" },
+    { column: "held" },
+    { column: "held", ask: true, question },
+    { column: "checks" },
+    ...["manual", "waiting", "unknown", "landing"].map((land) => ({ column: "land", land })),
+    ...["plan", "implement"].map((column) => ({ column, status: "held" })),
+    ...["plan", "implement"].map((column) => ({
+      column, duration: { ...stale, execution: `quiet-frozen-${column}`, frozen: true },
+    })),
+  ];
+  const excluded = states.map((state, i) => card(`quiet-excluded-${i}`, "00", {
+    status: "running", duration: stale, ...state,
+  }));
+  const clear = (task) => {
+    const article = node(task.id);
+    assert(!article.querySelector("[data-quiet]"), `${task.column}/${task.status} has no Quiet node`);
+    assert(!("quietLevel" in article.dataset), `${task.column}/${task.status} has no warning border`);
+  };
+  await resync([...mixed, ...excluded]);
+  excluded.forEach(clear);
+  advance(900000);
+  excluded.forEach(clear);
+  document.getElementById(layout).click();
+  excluded.forEach(clear);
+  for (const task of excluded.filter((t) => !t.duration.frozen)) {
+    const live = { ...task, id: "quiet-transition", column: "implement", status: "running" };
+    send({ kind: "task", task: live });
+    const article = node(live.id);
+    assert(article.dataset.quietLevel === "long" && article.querySelector("[data-quiet] .bg-rose-500"),
+      "each transition starts from a live agent with a red warning");
+    const next = { ...task, id: live.id };
+    send({ kind: "task", task: next });
+    assert(node(next.id) === article, "transition reuses the warned article");
+    clear(next);
+    advance(1000);
+    clear(next);
+    document.getElementById(layout).click();
+    clear(next);
+  }
+  await resync(mixed);
+}
+
 async function liveDurations() {
   const sample = { execution: "board-duration", number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
   const live = card("duration", "00", { column: "plan", status: "running", step_started_at: null, duration: sample });
@@ -473,6 +518,7 @@ try {
       await drawers();
       await boardWords();
       await waitingStates();
+      await quietEligibility(layout);
       await resync(mixed);
       if (layout === "view-lanes") {
         assert(node("running").parentNode !== node("ask-old").parentNode, "Slot cells preserve step columns");
