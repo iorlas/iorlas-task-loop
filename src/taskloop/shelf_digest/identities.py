@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from git_porcelain import Repo
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from taskloop.shelf_digest.source import CommittedSource, ReadFailure, open_source, relative_path
+from taskloop.shelf_digest.source import CommittedSource, ReadFailure, Source, open_source, relative_path
 
 PACKAGES = ("any-agent", "beads-client", "git-porcelain", "process-lock", "sqlite-store", "stream-proc")
 
@@ -104,7 +104,7 @@ class _Invalid(ValueError):
     """An explained disagreement between committed inputs."""
 
 
-def _manifest[M: BaseModel](source: CommittedSource, path: str, model: type[M]) -> M | ReadFailure | IdentityFailure:
+def _manifest[M: BaseModel](source: Source, path: str, model: type[M]) -> M | ReadFailure | IdentityFailure:
     data = source.read(path)
     if isinstance(data, ReadFailure):
         return data
@@ -212,7 +212,7 @@ def _validate_package(identity: PackageIdentity, shelf: Repo) -> IdentityFailure
     return None
 
 
-def reconcile_manifests(source: CommittedSource) -> Identities | IdentityFailure | ReadFailure:
+def reconcile_manifests(source: Source) -> Identities | IdentityFailure | ReadFailure:
     """Reconcile task-loop's committed manifests without opening shelf source."""
     project = _manifest(source, "pyproject.toml", _ProjectManifest)
     if isinstance(project, (ReadFailure, IdentityFailure)):

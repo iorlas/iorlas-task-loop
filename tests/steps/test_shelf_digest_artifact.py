@@ -4,10 +4,14 @@ import json
 import tomllib
 from pathlib import Path
 
+import pytest
+from shelf_input_fixtures import shelf_files
+
+from taskloop.shelf_digest.artifact import PATH, read_artifact
 from taskloop.shelf_digest.facts import CONTRACTS, FactName
-from taskloop.shelf_digest.identities import PACKAGES
+from taskloop.shelf_digest.identities import PACKAGES, Identities, reconcile_manifests
 from taskloop.shelf_digest.render import TOKEN_LIMIT
-from taskloop.shelf_digest.source import relative_path
+from taskloop.shelf_digest.source import SourceSnapshot, relative_path
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_COMMIT = "9c93e77e742a18d63616cd44e53ded71bf6f204b"
@@ -61,3 +65,48 @@ def test_artifact_is_complete_canonical_json_within_bound() -> None:
     artifact = json.loads(output)
     canonical = (json.dumps(artifact, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
     assert output == canonical and len(output) <= TOKEN_LIMIT
+
+
+def test_consumer_validates_all_pins_and_keeps_generation_provenance() -> None:
+    files = shelf_files()
+    identities = reconcile_manifests(SourceSnapshot("b" * 40, files))
+    assert isinstance(identities, Identities)
+    result = read_artifact(files[PATH], identities)
+    assert result.source_commit == "a" * 40 and result.encode() == files[PATH]
+
+
+@pytest.mark.parametrize(("old", "new", "reason"), [
+    (b'"0.9.0"', b'"0.8.0"', "package identities"),
+    (b'"any-agent-v0.15.0"', b'"any-agent-v0.14.0"', "package identities"),
+    (b'"packages/stream-proc"', b'"packages/other"', "package identities"),
+    (b'"7292d63cca18ba875fb78a2f4df406a104d03fc2"', b'"7292d63cca18ba875fb78a2f4df406a104d03fc3"', "commit identities"),
+    (b'"0.15.0",0', b'"0.15.0",-1', "identity index"),
+    (b'"0.15.0",0', b'"0.15.0",true', "valid integer"),
+    (b'"stream-proc","0.9.0"', b'"any-agent","0.9.0"', "package identities"),
+    (b"0=off", b"0=on", "fact or references"),
+    (b'[3]],"usage"', b'[-1]],"usage"', "fact or references"),
+    (b'[3]],"usage"', b'[0]],"usage"', "fact attribution"),
+    (b'[3]],"usage"', b'[3,3]],"usage"', "fact or references"),
+    (b'[0,"src/any_agent/events.py"', b'[6,"src/any_agent/events.py"', "package index"),
+    (b'"src/any_agent/events.py"', b'"../any_agent/events.py"', "source path"),
+    (b'"src/any_agent/events.py",1,132', b'"src/any_agent/events.py",1,0', "range"),
+    (b"958a16997841b2e1217eebb1bc464b847cf1057ca07a35aca4416198c22d43a6", b"invalid", "hash"),
+    (b'"source_commit":', b'"source_commit":false,"source_commit":', "Duplicate"),
+    (b'"source_commit":', b'"extra":0,"source_commit":', "Extra inputs"),
+    (b'"timeout":[', b'"unknown":[', "Input should be"),
+    (b'{"commits":', b'{"commits":[],"commits":', "Duplicate"),
+])
+def test_consumer_rejects_altered_or_unsafe_artifacts(old: bytes, new: bytes, reason: str) -> None:
+    files = shelf_files()
+    identities = reconcile_manifests(SourceSnapshot("b" * 40, files))
+    assert isinstance(identities, Identities) and old in files[PATH]
+    with pytest.raises(ValueError, match=reason):
+        read_artifact(files[PATH].replace(old, new), identities)
+
+
+@pytest.mark.parametrize("data", [b"{", b"\xff", b" " * (TOKEN_LIMIT + 1), b"{}", b"[" * 1000 + b"]" * 1000])
+def test_consumer_rejects_malformed_missing_or_oversized_content(data: bytes) -> None:
+    identities = reconcile_manifests(SourceSnapshot("b" * 40, shelf_files()))
+    assert isinstance(identities, Identities)
+    with pytest.raises(ValueError):
+        read_artifact(data, identities)
