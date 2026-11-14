@@ -72,7 +72,7 @@ ENVIRONMENT: Final = (
     "with shell redirection. The project interpreter is `.venv/bin/python`; "
     "use `uv run --frozen --no-sync python -I` for execution or inspection scripts, never for file edits. "
     "Bare `python3` is the host's Python 3.12, not the project's Python 3.15. Only if `apply_patch` is absent, report "
-    "the tool gap in the plan and in `explanation` and retain heredoc edits with the bounded verification above."
+    "the tool gap in `explanation` only and retain heredoc edits with the bounded verification above."
 )
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
@@ -120,12 +120,23 @@ def input_text(task: TaskInspection, rules: StepRules, context: InputContext) ->
 def _closing_words(task_id: str, rules: StepRules) -> str:
     return (
         f"The plan for this task is `docs/design/{task_id}/plan.md`, committed on this branch by the plan step. Read it "
-        "first and implement it, with tests for the behavior it adds or changes. If the code already does what the plan "
+        "first. Immediately after reading the plan, reassess scope before broad exploration or editing. If the work needs "
+        "more than about 60 model calls or touches more than 60 files, stop after the first coherent part, commit nothing "
+        "extra, and answer `needs_owner` with the proposed split. If the excess is evident before editing, answer then; "
+        "do not begin a part just to have something to save. If discovered during work, stop at the first coherent boundary "
+        "without proceeding into another work package. Explain completed and remaining scope and propose named parts, "
+        "each with an acceptance criterion and dependencies (explicitly none where appropriate). Partial work is unfinished: "
+        "use `needs_owner`, `paths: []`, `message: null`; the hold saves it. The owner or orchestrator creates parts in the "
+        "task tracker; do not create them or ask the owner to run a CLI command. The plan's 100 estimated model calls limit "
+        "is distinct from this implement reassessment at about 60 calls; these are scope instructions, not harness call "
+        "quotas. The 60-file stop is earlier than the existing 96-path safety ceiling. Within this scope, implement the "
+        "plan, with tests for the behavior it adds or changes. If the code already does what the plan "
         "asks, change nothing and answer `unchanged`. Otherwise change the files the plan needs and answer `implemented`. "
         f"You may add, change and delete plain files anywhere in the repository, at most {rules.max_paths} files of at most "
         f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, anything under "
-        f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. The plan's own folder may change too (for example "
-        f"an \"As built\" section). {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
+        f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. Do not edit `plan.md`, including status, progress "
+        f"or \"As built\" sections. Other artifacts in the plan's own folder may change under the same rules; add no audit "
+        f"artifact. {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
         "`implemented`, list in `paths` every file you changed, "
         "added or deleted and give a one-line commit `message`; the factory commits exactly those paths. With "
         "`implemented`, remove any other file you created; anything left uncommitted is reported back to you as a failed "
