@@ -41,12 +41,27 @@ ANSWER_SCHEMA: Final = {
         "explanation": {"type": "string"},
     },
 }
-# The environment the entry prepared (S5e, design tl-8bh9.4.3.1.16.2 section 7): generic, no repository command named;
-# the agent reads `checks` in its own checkout's profile.
+# The prepared environment and bounded verification policy (design tl-8bh9.14.178).
 ENVIRONMENT: Final = (
-    "The factory ran this repository's `setup` before you started; there is no network now. Before answering, run every "
-    "command listed under `checks` in `.task-loop.json` (while you work, a focused part such as one test file is fine) and "
-    "fix what they report. Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere "
+    "The factory ran this repository's `setup` before you started; there is no network now. "
+    "While working, run only focused test files for the code you changed. For lint and type validation, run "
+    "`just check 2>&1 | tail -60` at most twice while working, in addition to the required final run. "
+    "Do not run a full `just test` while working. The only direct pytest invocation permitted is "
+    "`uv run --frozen --no-sync python -I -m pytest -q <file> --tb=short | tail -40`, replacing `<file>` with a focused "
+    "test file for your change. Do not invoke ruff or pyrefly directly, or use another direct pytest command. "
+    "After finishing edits and focused verification, run `just check 2>&1 | tail -60` once and then "
+    "`just test 2>&1 | tail -40` once, as the last validation before the answer, including an `unchanged` answer. "
+    "Run the final `just test` once in the foreground with sufficient command wait time; never start it in the "
+    "background or poll a running `just test`. Do not rerun either successful final command. If a command fails, "
+    "fix the reported failure, use focused verification as needed, and rerun only the failed command; failure does "
+    "not justify repeating the successful one. This failure exception overrides the normal run limits. "
+    "Enable pipeline failure propagation in the command shell (`set -o pipefail`) so `tail` cannot conceal a failed "
+    "check or test. Report the underlying command's result, not just `tail`'s status. "
+    "These factory instructions take precedence over AGENTS.md's \"Do not run whole-suite/live tests as an agent\" "
+    "for the two required final checks, once each, with the stated failure exception. This narrow exception does "
+    "not authorize other whole-suite or live tests. Keep line length at most 140 (`E501`), at most six returns per "
+    "function (`PLR0911`), and no function-local imports (`PLC0415`). In `explanation`, name the result of each final "
+    "command. Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere "
     "outside the repository. Your runs are evidence for you: after this step the checks run again outside your control, "
     "and only those results count."
 )
