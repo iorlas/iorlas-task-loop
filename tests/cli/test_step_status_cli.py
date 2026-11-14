@@ -68,7 +68,8 @@ def test_show_reports_persisted_answer_failure_without_artifacts(
     assert not output.err
     if structured:
         result = json.loads(output.out)["result"]
-        assert result == {"status": "collected", "reason": "answer:schema_invalid", "explanation": failure.describe()}
+        assert result == {"status": "collected", "reason": "answer:schema_invalid",
+                          "explanation": failure.describe() + " Usage was not reported by the agent stream."}
     else:
         assert "Result: collected answer:schema_invalid" in output.out
         assert "Answer: " + failure.describe() in output.out

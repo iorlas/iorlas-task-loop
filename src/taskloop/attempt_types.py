@@ -192,6 +192,7 @@ class ExecutionFacts:
     cumulative: tuple[int | None, int | None, int | None] | None
     turns: int | None  # model requests during this attempt
     session: str | None
+    usage_incomplete: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -394,4 +395,5 @@ def execution_facts(raw: RunOutcome) -> ExecutionFacts:
         _usage(s.res.get("cumulative")),
         optional_int(s.res.get("requests")),
         ref if isinstance(ref := s.res.get("ref"), str) and ref else None,
+        incomplete if isinstance(incomplete := s.res.get("usage_incomplete"), bool) else None,
     )

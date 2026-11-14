@@ -14,7 +14,10 @@ from taskloop.dash_task import TaskPorts, build_task
 from taskloop.evidence_files import EvidenceFiles
 
 
-def report(con: sqlite3.Connection, attempt: str, tokens: tuple[int | None, int | None, int | None], turns: int | None) -> None:
+def report(
+    con: sqlite3.Connection, attempt: str, tokens: tuple[int | None, int | None, int | None], turns: int | None,
+    *, incomplete: bool | None = None,
+) -> None:
     """Persist a report at the owning execution boundary; cumulative deliberately differs from attempt usage."""
     con.execute(
         """INSERT OR IGNORE INTO execution
@@ -23,8 +26,8 @@ def report(con: sqlite3.Connection, attempt: str, tokens: tuple[int | None, int 
         SELECT attempt_id,dispatch_token,generation,0,0,1,1,'o','d','e','d','a','d','g','d','missing','complete',?
         FROM attempt WHERE attempt_id=?""",
         (encode(AnswerFailureData(rule=AnswerRule.MISSING, explanation="Answer must not be empty")), attempt))
-    con.execute("UPDATE execution SET t_in=?,t_cached=?,t_out=?,turns=?,c_in=999999,c_cached=999999,c_out=999999 WHERE attempt_id=?",
-                (*tokens, turns, attempt))
+    con.execute("""UPDATE execution SET t_in=?,t_cached=?,t_out=?,turns=?,usage_incomplete=?,
+                c_in=999999,c_cached=999999,c_out=999999 WHERE attempt_id=?""", (*tokens, turns, incomplete, attempt))
 
 
 def detail(con: sqlite3.Connection, root: Path, task_id: str = "tl-1") -> TaskDetail:
@@ -100,3 +103,14 @@ def test_incomplete_totals_sum_known_metrics_without_claiming_complete_coverage(
     found = detail(registered, tmp_path)
     assert found.step_usage == {"plan": Usage(40, 60, 12, 1, 2, 1), "implement": Usage(attempts=1)}
     assert found.usage == Usage(40, 60, 12, 1, 3, 1)
+
+
+def test_interrupted_report_contributes_counts_with_incomplete_coverage(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    restarted_at_plan(registered)
+    report(registered, "attempt", (100, 60, 10), 29, incomplete=True)
+    report(registered, "again", (40, 10, 3), 16, incomplete=False)
+    found = detail(registered, tmp_path)
+    assert found.attempts[0].usage == Usage(40, 60, 10, 29, 1, 0)
+    assert "in-flight request is missing" in found.attempts[0].summary
+    assert found.step_usage["plan"] == Usage(70, 70, 13, 45, 2, 1)
+    assert found.usage == Usage(70, 70, 13, 45, 3, 1)
