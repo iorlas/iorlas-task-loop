@@ -18,6 +18,7 @@ from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import Store
 from stream_proc import ProcessObservation, inspect_process
 
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import AttemptResult, Attempts
 from taskloop.attempt_entry import RESUMES, EntryArgs, arguments, enter, main, renewal, resumed
 from taskloop.attempt_store import AttemptStore
@@ -26,6 +27,7 @@ from taskloop.claim_lease import Beat, Heartbeat, KeepAlive
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind
 from taskloop.slot_lock import SlotBusy, acquire, lock_path
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -112,7 +114,7 @@ class Entry:
         self.observed: list[Worker] = []
         self.unclaimed: list[tuple[str, str]] = []
 
-    def credentials(self) -> tuple[str, dict[str, str]]:
+    def credentials(self, _harness: HarnessKind) -> tuple[str, dict[str, str]]:
         self.credential_calls += 1
         return "/bin/codex", {"SECRET": "credential"}
 
@@ -138,7 +140,7 @@ class Entry:
         self.opened.append((database, artifacts))
         store = Store(SCHEMA)
         connect = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-        return Attempts(connect, self.files, self.credentials, self.execution, self.clock, self.checkouts, self.slot_files)
+        return Attempts(connect, self.files, AgentLaunch(self.credentials), self.execution, self.clock, self.checkouts, self.slot_files)
 
     def clock(self) -> float:
         return self.now

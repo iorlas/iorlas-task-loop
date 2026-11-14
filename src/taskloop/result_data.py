@@ -3,6 +3,7 @@ It never holds a dispatch token, a remote URL or Git output."""
 
 from pathlib import Path
 
+from taskloop.agents.config import display
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, Shown
@@ -182,8 +183,9 @@ def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
 def _setup_data(result: Adoption | Loaded) -> dict[str, object]:
     if isinstance(result, Adoption):
         return {"slots": [_slot_data(each) for each in result.slots]}
-    settings = {
+    settings: dict[str, object] = {
         key: {"value": str(each.value) if isinstance(each.value, Path) else each.value, "source": each.source}
         for key, each in result.settings.pairs()
     }
+    settings.update(display(result.settings.agents, result.settings.agent_sources))
     return {"file": {"path": str(result.path), "exists": result.exists}, "settings": settings}

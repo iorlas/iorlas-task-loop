@@ -20,6 +20,8 @@ from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitResult, AttemptAdmission
 from taskloop.admit_chain import NextAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import Listed, StatusPorts, current_view, list_attempts
 from taskloop.attempt_store import AttemptStore
@@ -168,8 +170,16 @@ class Factory:
         key = found[0]
         self.store.register_entry(key, ENTRY, self.now)  # a relaunch keeps the identity registered first
         step = self.store.step_of(key.attempt_id)
-        attempts = Attempts(self.store, EvidenceFiles(self.tmp), lambda: ("/bin/codex", {}), self.agents[task_id, step or ""],
-                            lambda: self.now, self.checkouts, self.files, environment=self.environment.preparation())
+        attempts = Attempts(
+            self.store,
+            EvidenceFiles(self.tmp),
+            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            self.agents[task_id, step or ""],
+            lambda: self.now,
+            self.checkouts,
+            self.files,
+            environment=self.environment.preparation(),
+        )
         found = attempts.execute(key, ENTRY, lambda: "held")
         self.ran.append(f"{found.status}:{found.reason}")
         return Launched(key, ENTRY)
@@ -214,7 +224,17 @@ class Factory:
         self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto", running: int = 10
     ) -> list[tuple[str, str, str, str]]:
         self.now += 1
-        request = NextRequest("tasks", "/tracker", self.slot.repo.path, label, "m", "high", 30, quiet, max_running=running)
+        request = NextRequest(
+            "tasks",
+            "/tracker",
+            self.slot.repo.path,
+            label,
+            StepSettings(),
+            Overrides(model="m", effort="high"),
+            30,
+            quiet,
+            max_running=running,
+        )
         found = run_round(self.ports(), request)
         assert isinstance(found, Round)
         self.last = found
@@ -223,7 +243,13 @@ class Factory:
     def by_hand(self, task_id: str) -> None:
         """`tl step start` then `tl step verify` (its release and publication), as the person runs them."""
         self.now += 1
-        assert isinstance(start(self.starting(), StartRequest(task_id, "tasks", "/tracker", self.slot.repo.path, "m", "high", 30)), Started)
+        assert isinstance(
+            start(
+                self.starting(),
+                StartRequest(task_id, "tasks", "/tracker", self.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+            ),
+            Started,
+        )
         self.now += 1
         verify_task(self.store, Verifier(self.store, self.checkouts, self.files, lambda _w: True, lambda: self.now, hold), self.releaser(),
                     BranchPublish(self.store, self.checkouts, self.files, lambda: self.now), "tasks", task_id)

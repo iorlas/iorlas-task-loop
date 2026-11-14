@@ -375,8 +375,8 @@ def test_attempt_of_is_the_latest_checks_attempt_of_the_tasks_current_agent_atte
     assert checks.attempt_of("tasks", "tl-1") == (AttemptKey("next", "next-token", 1), "admitted", None)
     checking.execute(  # a fresh plan after an abandon: the task's current attempt has no checks attempt
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head) VALUES ('plan','plan-token',1,'plan','beads',
-        'tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','workspace-write',100,1,3,?)""", (D,))
+        input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head) VALUES ('plan','plan-token',1,'plan','beads',
+        'tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,1,3,?)""", (D,))
     assert checks.attempt_of("tasks", "tl-1") is None
 
 

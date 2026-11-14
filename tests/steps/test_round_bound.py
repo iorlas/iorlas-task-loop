@@ -12,10 +12,13 @@ from doubles import ReadyTracker
 from test_round import ENTRY, REQUEST, Admission, Bench, bead, moves, released, seed
 
 from taskloop.admit import AdmitRefused
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.operations import Failed
 from taskloop.round import NextRequest, run_round
 
-DEFAULT = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "model-m", "high", 30)  # the bound as the CLI leaves it (3)
+DEFAULT = NextRequest(
+    "tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="model-m", effort="high"), 30
+)  # the bound as the CLI leaves it (3)
 
 
 def backlog(count: int) -> ReadyTracker:

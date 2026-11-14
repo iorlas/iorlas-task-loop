@@ -22,6 +22,8 @@ from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, ClaudePolicy, Overrides, StepSettings, encode_policy
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_status import StatusPorts, list_attempts, show_attempt
@@ -44,6 +46,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.harness_choice import HarnessKind
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import (
     Failed,
@@ -136,7 +139,15 @@ def repeater(
 
 def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles, written: Files) -> None:
     run = agent(slot, written)
-    attempts = Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
+    attempts = Attempts(
+        AttemptStore(lambda: con),
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        run,
+        lambda: 10,
+        checkouts,
+        files,
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
 
 
@@ -161,8 +172,10 @@ def renumber(con: sqlite3.Connection, number: int) -> None:
     for n in range(1, number):
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,base_commit,seq,slot_head)
-            VALUES (?,?,1,'plan','beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','s',1,?,?,?,?,?,?)""",
+            input_digest,schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,
+            base_commit,seq,slot_head)
+            VALUES (?,?,1,'plan','beads','tasks','stand-in','/tracker','r','s0','i','d',1,'m','e','{"harness":"codex",
+            "sandbox":"workspace-write"}',1,?,?,?,?,?,?)""",
             (f"a{n}", f"d{n}", n, previous, None if previous is None else "uncommitted", "b" * 40, n, "b" * 40),
         )
         previous = f"a{n}"
@@ -211,7 +224,11 @@ def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
     assert held(registered) == (new.attempt_id, 2) and new.reservation_generation == 2
     record = store.load(new)
     assert record is not None and record.phase == "admitted" and record.admission.number == 2
-    assert (record.admission.model, record.admission.effort, record.admission.sandbox) == ("chosen", "high", "workspace-write")
+    assert (record.admission.setting.model, record.admission.setting.effort, record.admission.setting.summary) == (
+        "chosen",
+        "high",
+        "workspace-write",
+    )
     assert record.admission.deadline == 10 + 30 * 60 and record.admission.slot == "s1"
     assert store.tracker_root(new) == "/tracker"  # copied: a repeat claims nothing, its entry renews the same claim
     assert record.start == (head(slot) if committed else base)
@@ -323,9 +340,9 @@ def test_two_starts_on_two_connections_admit_exactly_one(
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (repo_id,))
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
+            input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,7,'entry-start','boot',1,1,?)""",
+            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?)""",
             (repo_id, hashlib.sha256(TASK.encode()).hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text(TASK)
@@ -448,7 +465,7 @@ class Repeats:
 def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
-    request = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "other-model", "low", 45)
+    request = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="other-model", effort="low"), 45)
     store, launcher, repeats = AttemptStore(lambda: registered), Launching(), Repeats()
     fresh = AttemptAdmission(
         lambda: registered, begin_immediate, EvidenceFiles(tmp_path), never, never, never, never, lambda: 10, never, slot_files
@@ -462,8 +479,9 @@ def test_start_repeats_a_captured_current_attempt_and_launches_any_other(
 
 def test_the_schema_numbers_attempts_and_links_each_to_the_one_it_repeats(registered: sqlite3.Connection) -> None:
     insert = """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-    input_digest,schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head)
-    VALUES (?,?,2,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','s',1,?,?,?,?,'""" + "d" * 40 + "')"
+    input_digest,schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,seq,slot_head)
+    VALUES (?,?,2,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex",
+    "sandbox":"workspace-write"}',1,?,?,?,?,'""" + "d" * 40 + "')"
     for values, constraint in [
         (("n", "t", 2, None, "unsafe", 2), "previous_attempt_id IS NULL"),
         (("n", "t", 2, "attempt", None, 2), "repeat_reason IS NULL"),
@@ -533,3 +551,18 @@ def test_a_held_slot_lock_refuses_the_takeover_and_admits_nothing(
     with occupy(lock_path(str(slot.path))):
         assert found.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Failed("unavailable", "slot_busy")
     assert len(rows(registered)) == 1 and held(registered) == ("attempt", 1) and launcher.calls == []
+
+
+def test_an_ordinary_repeat_copies_the_complete_captured_policy(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+) -> None:
+    policy = ClaudePolicy(settings_file=tmp_path / "deleted.json", settings='{"env":{"CAPTURED":"original"}}')
+    selected = AgentSetting(harness=HarnessKind.CLAUDE, model="opus", effort="high", access=policy)
+    registered.execute("UPDATE attempt SET harness=?,provider=?,model=?,effort=?,access_policy=?",
+                       (selected.harness, selected.provider, selected.model, selected.effort, encode_policy(policy)))
+    unsafe(registered, tmp_path, slot, checkouts, slot_files)
+    launcher = RegisteringLauncher(AttemptStore(lambda: registered), SECOND)
+    result = repeater(registered, tmp_path, checkouts, slot_files, launcher=launcher).repeat("tasks", "tl-1", KEY, ENTRY, 30)
+    assert isinstance(result, Started)
+    repeated = AttemptStore(lambda: registered).load(launcher.calls[0])
+    assert repeated is not None and repeated.admission.setting == selected

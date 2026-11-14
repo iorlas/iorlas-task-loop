@@ -6,6 +6,7 @@ from dataclasses import replace
 from test_checks_round import Checking
 
 from taskloop.admit_chain import ChainAdmission
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_types import AttemptKey, EntryIdentity
 from taskloop.check_repeat.repair import CheckRepeat
 from taskloop.check_repeat.store import CheckRepeatStore
@@ -33,7 +34,9 @@ class Repairing(Checking):
         return replace(super().starting(), check_repeat=repair, repeat=repeat)
 
     def request(self) -> StartRequest:
-        return StartRequest("tl-1", "tasks", "/tracker", self.slot.repo.path, "changed-model", "low", 30)
+        return StartRequest(
+            "tl-1", "tasks", "/tracker", self.slot.repo.path, StepSettings(), Overrides(model="changed-model", effort="low"), 30
+        )
 
     def conclude(self, key: AttemptKey, body: str, me: EntryIdentity) -> None:
         if body not in ("failed", "passed", "unreleased_failed"):

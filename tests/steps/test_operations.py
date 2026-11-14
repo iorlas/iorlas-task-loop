@@ -18,6 +18,8 @@ from sqlite_store import Store
 
 from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown, StatusPorts, list_attempts, next_action, show_attempt
@@ -43,6 +45,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     MAX_MINUTES,
@@ -70,7 +73,7 @@ from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
-REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "model-m", "high", 30)
+REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="model-m", effort="high"), 30)
 
 
 class Admission:
@@ -181,7 +184,12 @@ def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: Attempt
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
-    assert (request.model, request.effort, request.sandbox, request.deadline) == ("model-m", "high", SANDBOX, 1000 + 30 * 60)
+    assert (request.setting.model, request.setting.effort, request.setting.summary, request.deadline) == (
+        "model-m",
+        "high",
+        SANDBOX,
+        1000 + 30 * 60,
+    )
     assert (launcher.calls, launcher.minutes) == ([("tasks", "tl-1")], [30])
 
 
@@ -221,8 +229,8 @@ def test_an_impossible_model_or_effort_is_refused_before_any_read_or_launch(mode
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     unread = AttemptStore(lambda: None)
     ports = StartPorts(unread, admission, launcher, lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS)
-    found = start(ports, replace(REQUEST, model=model, effort=effort))
-    assert isinstance(found, Failed) and found.word == "refused:choices" and found.detail.startswith("--")
+    with pytest.raises(ValueError):
+        start(ports, replace(REQUEST, overrides=Overrides(model=model, effort=effort)))
     assert admission.requests == [] and launcher.calls == []
 
 
@@ -430,7 +438,9 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40)
     first = verify_task(store, Verifier(store, checkouts, slot_files, gone, lambda: 20, hold), releasing, publishing, "tasks", "tl-1")
@@ -463,7 +473,9 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
@@ -505,7 +517,9 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
@@ -614,7 +628,9 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
         return FakeRun(RunOutcome(rc=1, worker=worker, summary=Summary(text="", rc=1, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), failed, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), failed, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).status == "collected"
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
 
@@ -653,9 +669,9 @@ def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_aband
     registered.execute("UPDATE reservation SET attempt_id='fresh',generation=2")
     registered.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+        input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head)
         SELECT 'fresh','token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,
-        sandbox,deadline,1,2,slot_head FROM attempt WHERE attempt_id='attempt'"""
+        access_policy,deadline,1,2,slot_head FROM attempt WHERE attempt_id='attempt'"""
     )
     reads = StatusPorts(AttemptStore(lambda: registered), observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
     listed = list_attempts(reads)
@@ -710,7 +726,9 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
@@ -752,3 +770,12 @@ def test_a_rounds_exit_code(stopped: str, word: str, code: int) -> None:
 @pytest.mark.parametrize("reason, code", [("interrupted", 0), ("abrupt", 130), ("refused:database", 1), ("refused:schema", 1)])
 def test_a_rounds_end_exit_code(reason: str, code: int) -> None:
     assert exit_code(Ended("tasks", reason)) == code
+
+
+def test_a_harness_override_needs_a_matching_policy_before_admission(empty: AttemptStore) -> None:
+    admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
+    ports = StartPorts(empty, admission, launcher, lambda: 10, Repeats(), NoAdvance(), NO_CHECKS)
+    request = replace(REQUEST, overrides=Overrides(harness=HarnessKind.CLAUDE, model="opus"))
+    found = start(ports, request)
+    assert isinstance(found, Failed) and found.reason == "choices" and "matching per-step" in found.detail
+    assert admission.requests == [] and launcher.calls == []

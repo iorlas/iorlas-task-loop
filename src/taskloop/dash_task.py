@@ -121,7 +121,7 @@ def _run(row: AttemptRow) -> Run | None:
     if choices is None:
         return None
     return Run(HARNESS_WORDS[choices.harness], PROVIDER_WORDS[choices.provider], choices.model, choices.effort,
-               SANDBOX_WORDS.get(choices.sandbox, choices.sandbox))
+               SANDBOX_WORDS.get(choices.summary, choices.summary))
 
 
 def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody:

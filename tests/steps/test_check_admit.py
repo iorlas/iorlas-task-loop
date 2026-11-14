@@ -15,6 +15,7 @@ from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import NextAdmission, NextStepRequest
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.checks import argv_digest
@@ -207,5 +208,12 @@ def test_the_agent_advance_refuses_the_check_step_before_any_tracker_read_or_inp
     """`admit_chain` admits only agent steps: after implement it is `not_advanceable` (never `kind("check")`)."""
     advance = NextAdmission(lambda: bench.con, begin_immediate, EvidenceFiles(bench.done.path.parent), bench.inspect, bench.views,
                             lambda: 10, lambda _p: True, bench.files)
-    found = advance.admit_next(NextStepRequest(bench.done.implement, bench.repo.path, "m", "high", "workspace-write", 100.0))
+    found = advance.admit_next(
+        NextStepRequest(
+            bench.done.implement,
+            bench.repo.path,
+            AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            100.0,
+        )
+    )
     assert isinstance(found, AdmitRefused) and found.reason == "not_advanceable" and bench.reads == []

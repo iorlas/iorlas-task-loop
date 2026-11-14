@@ -21,6 +21,7 @@ from stream_proc import OwnedProcess, ProcessObservation
 from taskloop import land_store
 from taskloop.admit import issued
 from taskloop.admit_rows import reserve
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.check_release import ChecksRelease
@@ -286,7 +287,10 @@ def test_two_counted_refusals_hold_the_task_without_stopping_new_work_and_a_star
     assert rig.round(frozenset()) == [held, ("tl-2", "plan", "start", "started")]
     assert held not in rig.round(rig.last.written) and rig.starts == 2 and rig.counted("tl-1") == ("checks:running", 2)
     rig.now += 1
-    by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
+    by_hand = start(
+        rig.starting(),
+        StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+    )
     assert isinstance(by_hand, Failed) and by_hand.word == "refused:on_hold"
     assert rig.con.execute("SELECT count(*) FROM attempt WHERE task_id='tl-1' AND step='plan'").fetchone() == (1,)
 
@@ -459,7 +463,10 @@ def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     rig.tracker.down = {"labels"}
     assert rig.round() == [("tl-1", "check", "hold", "pending labels unavailable:tracker")]
-    by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
+    by_hand = start(
+        rig.starting(),
+        StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+    )
     assert isinstance(by_hand, Failed) and by_hand.word == "refused:held" and rig.starts == 1
     implement = rig.store.attempt_of("tasks", "tl-1")
     assert implement is not None
@@ -515,7 +522,7 @@ def test_a_task_started_by_hand_that_failed_main_moved_is_reported_never_re_run_
     rig.by_hand("tl-1")
     rig.by_hand("tl-1")  # plan, then implement; the label-less task is now at its check advance
     rig.bodies = ["main_moved"]
-    request = StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30)
+    request = StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30)
     assert isinstance(start(rig.starting(), request), Started)
     assert rig.round() == [("tl-1", "check", "report", "failed:main_moved")]
     assert rig.starts == 1 and rig.tracker.holds == []

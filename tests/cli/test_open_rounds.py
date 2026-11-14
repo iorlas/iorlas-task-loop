@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from sqlite_store import Store
 
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.cli_composition import open_rounds
 from taskloop.drain.composition import open_drain
 from taskloop.drain.drain import Ports, drain
@@ -22,7 +23,7 @@ from taskloop.interrupts import Interrupts
 from taskloop.operations import Ended, Failed
 from taskloop.round import NextRequest
 
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
 
 
 class Handler:

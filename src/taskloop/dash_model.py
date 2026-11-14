@@ -165,13 +165,13 @@ class AttemptDetail:
 @dataclass(frozen=True)
 class Run:
     """What an agent attempt ran, in plain words: the harness, the provider of its model, the model, the reasoning effort and what
-    its sandbox allows. Its facts are `attempt.harness`, `provider`, `model`, `effort` and `sandbox`, as admitted."""
+    its access policy allows. Its facts are the admitted harness, provider, model, effort and captured access policy."""
 
     harness: str
     provider: str
     model: str
     effort: str
-    sandbox: str
+    access: str
 
 
 @dataclass(frozen=True)

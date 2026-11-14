@@ -20,6 +20,8 @@ from git_porcelain.testing import apply_hermetic_env, git
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
@@ -94,10 +96,28 @@ class Repository:
 
     def run(self, agent: Agent) -> AttemptKey:
         """Admit the task, register its entry, run the attempt once."""
-        admitted = self.admission.admit(AdmitRequest("tl-1", "tasks", str(self.root), self.main, "m", "high", "workspace-write", 100, None))
+        admitted = self.admission.admit(
+            AdmitRequest(
+                "tl-1",
+                "tasks",
+                str(self.root),
+                self.main,
+                AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+                100,
+                None,
+            )
+        )
         assert isinstance(admitted, Admitted) and admitted.slot == "s1"
         assert self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
-        attempts = Attempts(self.store, EvidenceFiles(self.art), lambda: ("/bin/codex", {}), agent, lambda: 10, VIEWS.checkouts, self.files)
+        attempts = Attempts(
+            self.store,
+            EvidenceFiles(self.art),
+            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            agent,
+            lambda: 10,
+            VIEWS.checkouts,
+            self.files,
+        )
         attempts.execute(admitted.key, ENTRY)
         return admitted.key
 

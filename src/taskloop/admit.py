@@ -31,13 +31,13 @@ from beads_client import BdError
 from git_porcelain import GitUnavailable, NotARepo, Repo
 
 from taskloop.admit_rows import as_count, insert_attempt, reserve
+from taskloop.agents.settings import AgentSetting, encode_policy
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
 from taskloop.drain.models import BLOCKED, ActionKind, Identity, Reason
 from taskloop.drain.observe import identity
 from taskloop.drain.store import DrainStore, blocked
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import current
-from taskloop.harness_choice import HarnessKind, provider_of
 from taskloop.prepare import branch_refusal, held_refusal, refusal_detail
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
@@ -67,12 +67,9 @@ class AdmitRequest:
     backlog: str
     tracker_root: str
     checkout: Path
-    model: str
-    effort: str
-    sandbox: str
+    setting: AgentSetting
     deadline: float
     label: str | None  # the approval label a round ingests the task under, stored on the attempt; None: started by hand
-    harness: HarnessKind = HarnessKind.CODEX  # the agent harness the step runs under; its provider is derived from it and the model
 
 
 @dataclass(frozen=True)
@@ -189,8 +186,6 @@ class AttemptAdmission:
         return _Prepared(replace(request, tracker_root=str(tracker)), task_text(task, FIRST), *found)
 
     def _choices(self, request: AdmitRequest) -> AdmitRefused | None:
-        if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
-            return AdmitRefused("choices")
         return deadline_refusal(self.clock, request.deadline)
 
     def _observe(self, prepared: _Prepared) -> tuple[sqlite3.Connection, tuple[SlotView, ...]] | AdmitRefused | AdmitUnavailable:
@@ -279,17 +274,38 @@ class AttemptAdmission:
                 return AdmitRefused("no_free_slot")
             name, head = chosen
             reserve(con, repo_id, name, key)
-            insert_attempt(con, {
-                "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
-                "adapter": "beads", "backlog": request.backlog, "task_id": request.task_id, "tracker_root": request.tracker_root,
-                "repo_id": repo_id, "slot": name, "step": FIRST,
-                "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
-                "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
-                "previous_attempt_id": None, "repeat_reason": None, "repeat_listing": None, "seq": _next_seq(con, request),
-                "slot_head": head,
-                "after_commit": None, "label": request.label, "harness": request.harness,
-                "provider": provider_of(request.harness, request.model),
-            })
+            insert_attempt(
+                con,
+                {
+                    "attempt_id": key.attempt_id,
+                    "dispatch_token": key.dispatch_token,
+                    "generation": key.reservation_generation,
+                    "adapter": "beads",
+                    "backlog": request.backlog,
+                    "task_id": request.task_id,
+                    "tracker_root": request.tracker_root,
+                    "repo_id": repo_id,
+                    "slot": name,
+                    "step": FIRST,
+                    "input_path": ref.path,
+                    "input_digest": ref.digest,
+                    "schema_version": 1,
+                    "model": request.setting.model,
+                    "effort": request.setting.effort,
+                    "access_policy": encode_policy(request.setting.access),
+                    "deadline": request.deadline,
+                    "number": 1,
+                    "previous_attempt_id": None,
+                    "repeat_reason": None,
+                    "repeat_listing": None,
+                    "seq": _next_seq(con, request),
+                    "slot_head": head,
+                    "after_commit": None,
+                    "label": request.label,
+                    "harness": request.setting.harness,
+                    "provider": request.setting.provider,
+                },
+            )
         return Admitted(key, name)
 
 

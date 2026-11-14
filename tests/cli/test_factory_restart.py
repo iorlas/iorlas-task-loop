@@ -9,13 +9,14 @@ import pytest
 from sqlite_store import SchemaError, Store
 
 from taskloop import cli_composition
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.cli import main
 from taskloop.factory_schema import SCHEMA, refusal
 from taskloop.git_views import GitViews
 from taskloop.operations import Failed
 from taskloop.round import NextRequest
 
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
 VERSIONS = [SCHEMA.version - 1, SCHEMA.version + 1, 0]
 
 

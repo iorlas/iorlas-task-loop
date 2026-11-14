@@ -19,6 +19,8 @@ from git_porcelain.testing import apply_hermetic_env, git
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Verified
@@ -69,7 +71,17 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     admission = AttemptAdmission(
         lambda: factory, begin_immediate, EvidenceFiles(art), tasks, VIEWS.checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
     )
-    admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), main, "m", "high", "workspace-write", 100, None))
+    admitted = admission.admit(
+        AdmitRequest(
+            "tl-1",
+            "tasks",
+            str(root),
+            main,
+            AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            100,
+            None,
+        )
+    )
     assert isinstance(admitted, Admitted) and admitted.slot == "s1"
     store, files = AttemptStore(lambda: factory), RealSlotFiles()
     assert store.register_entry(admitted.key, ENTRY, 10) == "accepted"
@@ -82,7 +94,9 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
-    attempts = Attempts(store, EvidenceFiles(art), lambda: ("/bin/codex", {}), run, lambda: 10, VIEWS.checkouts, files)
+    attempts = Attempts(
+        store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {})), run, lambda: 10, VIEWS.checkouts, files
+    )
     assert attempts.execute(admitted.key, ENTRY).reason == "verification"
     verdict = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold).verify(admitted.key)
     assert isinstance(verdict, Verified) and not verdict.reused

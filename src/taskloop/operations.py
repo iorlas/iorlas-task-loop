@@ -22,9 +22,9 @@ from typing import Final, Literal, Protocol
 
 from sqlite_store import SchemaError
 
-from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
+from taskloop.agents.settings import Overrides, StepSettings, apply
 from taskloop.attempt_reads import PublishedRow, StoreRefused, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
@@ -44,7 +44,6 @@ from taskloop.check_repeat.feedback import FeedbackReason
 from taskloop.check_repeat.status import CheckRepeatDecision, CheckRepeatTarget, repeat_target
 from taskloop.check_status import HALF_DONE, checks_result, latest, route
 from taskloop.check_store import ChecksRow, CheckStore
-from taskloop.harness_choice import HarnessKind
 from taskloop.hold_status import ANSWERED
 from taskloop.hold_store import HoldStore
 from taskloop.land_store import LandRow, LandStore
@@ -160,11 +159,10 @@ class StartRequest:
     backlog: str
     tracker_root: str
     checkout: Path
-    model: str
-    effort: str
+    settings: StepSettings
+    overrides: Overrides
     minutes: int
     label: str | None = None  # the round's approval label, stored on a fresh admission; None: `tl step start` by hand
-    harness: HarnessKind = HarnessKind.CODEX  # the agent harness a fresh admission or an advance runs under; a repeat keeps its attempt's
 
 
 @dataclass(frozen=True)
@@ -301,19 +299,6 @@ def minutes_refused(minutes: int) -> Failed | None:
     return None if ok else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
 
 
-def _word(value: str) -> bool:
-    return bool(value) and value.isprintable() and not any(char.isspace() for char in value) and not value.startswith("-")
-
-
-def choices_refused(model: str, effort: str) -> Failed | None:
-    """`--model` and `--effort` of every agent launch, checked before a slot or claim is taken, by shape only: one printable
-    word that cannot read as a flag. Which models and efforts exist is the vendor's to say (its catalog changes); a value it
-    refuses fails in the agent."""
-    if not _word(model) or not _word(effort):
-        return Failed("refused", "choices", "--model and --effort must each be one printable word that does not start with `-`")
-    return None
-
-
 @dataclass(frozen=True)
 class _Advance:
     """The task's current attempt is done (verified, released settled, published) and its step has a following one:
@@ -343,7 +328,7 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
     repeat: refused `abandoned` when the task's attempt was abandoned since, `changed` when it is no longer that done
     attempt (another current attempt, or not advanceable). `rerun`: the round's one re-run of a failed checks attempt
     (`main_moved`, tl-8bh9.14.64) is that advance too; otherwise an advance is never a re-run."""
-    found = choices_refused(request.model, request.effort) or minutes_refused(request.minutes) or _start(ports, request, advancing, rerun)
+    found = minutes_refused(request.minutes) or _start(ports, request, advancing, rerun)
     if isinstance(found, Failed) or found.step is not None:
         return found
     try:
@@ -481,15 +466,19 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
     """The new attempt's key (a fresh admission, or the next step's after `advance`), or the winner's after
     `task_attempted`; StoreUnavailable propagates."""
     deadline = deadline_after(request.minutes, ports.clock)
-    choices = (request.checkout, request.model, request.effort, SANDBOX, deadline)
     checks = advance is not None and advance.step == CHECK
-    if advance is None:  # the round's label (tl-8bh9.14.9 section 8); an advance and a repeat copy their attempt's
-        admitted = ports.admission.admit(
-            AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices, request.label, request.harness))
-    elif checks:
+    if advance is not None and checks:
         admitted = ports.checks.admission.admit_checks(ChecksRequest(advance.previous, request.checkout, deadline, advance.number))
     else:
-        admitted = ports.advance.admit_next(NextStepRequest(advance.previous, *choices, request.harness))
+        try:
+            setting = apply(request.settings.for_step("plan" if advance is None else advance.step), request.overrides)
+        except ValueError as error:
+            return Failed("refused", "choices", str(error))
+        if advance is None:
+            admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root,
+                                                        request.checkout, setting, deadline, request.label))
+        else:
+            admitted = ports.advance.admit_next(NextStepRequest(advance.previous, request.checkout, setting, deadline))
     if isinstance(admitted, Admitted):
         return admitted.key, False
     if isinstance(admitted, AdmitUnavailable):

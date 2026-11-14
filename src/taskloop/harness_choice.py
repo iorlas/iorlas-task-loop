@@ -1,10 +1,9 @@
 """Which agent harness runs an attempt and which provider answers for its model: the two closed vocabularies, the one place the
-provider is derived, and the plain words the dashboard shows. The harness is a typed per-step choice (`--harness`, default Codex),
+provider is derived, and the plain words the dashboard shows.
+The harness is a typed per-step machine choice (optionally overridden by `--harness`),
 never a constant in the launch."""
 
 from enum import StrEnum
-
-from any_agent import CodexHarness
 
 
 class HarnessKind(StrEnum):
@@ -39,8 +38,3 @@ def provider_of(harness: HarnessKind, model: str) -> Provider:
         return Provider.ANTHROPIC
     lowered = model.casefold()
     return next((provider for word, provider in _BY_MODEL if word in lowered), Provider.UNKNOWN)
-
-
-def launchable(harness: HarnessKind) -> CodexHarness | None:
-    """The harness object for a kind the factory has credentials for (the machine's Codex login); None for the others."""
-    return CodexHarness() if harness is HarnessKind.CODEX else None

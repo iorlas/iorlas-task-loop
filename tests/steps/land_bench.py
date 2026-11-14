@@ -227,9 +227,10 @@ def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) ->
                     (repo_id, repo_id, str(slot)))
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
             after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, base, x, d, base))
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?)""", (repo_id,
+            base, x, d, base))
         for statement in DONE:
             con.execute(statement)
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,4,'kept')", (d,))

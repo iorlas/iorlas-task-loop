@@ -42,12 +42,12 @@ from taskloop.admit import (
     why,
 )
 from taskloop.admit_rows import as_count, insert_attempt, issue, reserve
+from taskloop.agents.settings import AgentSetting, encode_policy
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
 from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER, REPEATED
-from taskloop.harness_choice import HarnessKind, provider_of
 from taskloop.prepare import HEADS, MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
@@ -58,7 +58,7 @@ from taskloop.tracker import ACTOR
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
 # clean answer with its session complete, of effect `commit`/`keep` (the rule check of `factory_commit` and the verdict), no verdict, the
 # tracker root its claim was taken at (copied: a repeat claims nothing), its task-wide order, D, step and label (all carried on).
-PREVIOUS = f"""SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.sandbox,
+PREVIOUS = f"""SELECT p.generation,p.number,p.adapter,p.backlog,p.task_id,p.repo_id,p.slot,p.model,p.effort,p.access_policy,
 {REPEATED},
 p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
  AND r.generation=p.generation)
@@ -142,7 +142,7 @@ class ChainAdmission:
             "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
             "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
             "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": row[7], "effort": row[8],
-            "sandbox": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
+            "access_policy": row[9], "deadline": request.deadline, "number": number + 1, "previous_attempt_id": previous.attempt_id,
             "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": as_count(row[13]) + 1,
             "slot_head": row[14], "step": row[15],
             "harness": row[17], "provider": row[18],
@@ -175,11 +175,8 @@ class NextStepRequest:
 
     previous: AttemptKey
     checkout: Path
-    model: str
-    effort: str
-    sandbox: str
+    setting: AgentSetting
     deadline: float
-    harness: HarnessKind = HarnessKind.CODEX
 
 
 @dataclass(frozen=True)
@@ -247,8 +244,6 @@ class NextAdmission:
     def _previous(self, request: NextStepRequest) -> tuple[sqlite3.Connection, Task, str] | AdmitRefused | AdmitUnavailable:
         """The choices, the deadline, then the previous attempt's task and the step after it; a superseded previous
         attempt is `task_attempted` before any tracker read (the transaction checks it again)."""
-        if not all(value.strip() for value in (request.model, request.effort, request.sandbox)):
-            return AdmitRefused("choices")
         refused = deadline_refusal(self.clock, request.deadline)
         if refused is not None:
             return refused
@@ -313,15 +308,38 @@ class NextAdmission:
                 return AdmitRefused("no_free_slot")
             name, head = chosen
             reserve(con, repo_id, name, key)
-            insert_attempt(con, {
-                "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": generation, "adapter": "beads",
-                "backlog": found.backlog, "task_id": found.task_id, "tracker_root": row[6], "repo_id": repo_id, "slot": name,
-                "step": step, "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1, "model": request.model,
-                "effort": request.effort, "sandbox": request.sandbox, "deadline": request.deadline, "number": 1,
-                "previous_attempt_id": None, "repeat_reason": None, "repeat_listing": None, "seq": as_count(row[7]) + 1, "slot_head": head,
-                "after_commit": row[5], "label": row[8], "harness": request.harness,
-                "provider": provider_of(request.harness, request.model),
-            })
+            insert_attempt(
+                con,
+                {
+                    "attempt_id": key.attempt_id,
+                    "dispatch_token": key.dispatch_token,
+                    "generation": generation,
+                    "adapter": "beads",
+                    "backlog": found.backlog,
+                    "task_id": found.task_id,
+                    "tracker_root": row[6],
+                    "repo_id": repo_id,
+                    "slot": name,
+                    "step": step,
+                    "input_path": ref.path,
+                    "input_digest": ref.digest,
+                    "schema_version": 1,
+                    "model": request.setting.model,
+                    "effort": request.setting.effort,
+                    "access_policy": encode_policy(request.setting.access),
+                    "deadline": request.deadline,
+                    "number": 1,
+                    "previous_attempt_id": None,
+                    "repeat_reason": None,
+                    "repeat_listing": None,
+                    "seq": as_count(row[7]) + 1,
+                    "slot_head": head,
+                    "after_commit": row[5],
+                    "label": row[8],
+                    "harness": request.setting.harness,
+                    "provider": request.setting.provider,
+                },
+            )
         return Admitted(key, name)
 
 

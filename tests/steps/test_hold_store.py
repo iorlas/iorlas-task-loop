@@ -27,8 +27,8 @@ def attempt(con: sqlite3.Connection, attempt_id: str, *, task: str = "tl-1", seq
     """An admitted plan attempt 1 of `task` at `seq`, taken under `label` (None: by hand)."""
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,label) VALUES
-        (?,?,1,'plan','beads','tasks',?,'/tracker','r','s1','input.txt','digest',1,'m','e','workspace-write',100,1,?,?,?)""",
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label) VALUES
+        (?,?,1,'plan','beads','tasks',?,'/tracker','r','s1','input.txt','digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,1,?,?,?)""",
         (attempt_id, attempt_id + "-token", task, seq, D, label))
 
 

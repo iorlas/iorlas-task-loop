@@ -12,6 +12,7 @@ from doubles import ChecksBench, Done, FakeSlotFiles, NoAdvance, NoChecks, Pinne
 from git_porcelain.testing import FakeRepo
 
 from taskloop.admit import AdmitRequest, AdmitResult
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Verified, VerifyResult
@@ -37,7 +38,7 @@ from taskloop.step_guide import CHECKS_GUIDE, GUIDE
 from taskloop.step_render import human
 
 ENTRY = (7, "entry-start", "boot")
-REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/unused"), "m", "high", 30)
+REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/unused"), StepSettings(), Overrides(model="m", effort="high"), 30)
 
 
 class Never:

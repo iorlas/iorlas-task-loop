@@ -10,7 +10,7 @@ from any_agent import RunOutcome, classify
 from any_agent.procs import Worker
 from git_porcelain import Repo
 
-from taskloop.harness_choice import HarnessKind
+from taskloop.agents.settings import AgentSetting
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference
 
@@ -124,15 +124,12 @@ class Admission:
     slot: str
     slot_path: str
     input_ref: FileRef
-    model: str
-    effort: str
-    sandbox: str
+    setting: AgentSetting
     deadline: float
     entry: EntryIdentity
     number: int  # the attempt's number in its step (1, 2, 3), admitted with it
     step: str  # the step the attempt belongs to (`plan`, `implement`), admitted with it
     after_commit: str | None = None  # attempt 1 of a later step: the previous step's published X, which it starts from
-    harness: HarnessKind = HarnessKind.CODEX  # the agent harness the attempt runs under (`harness_choice`)
     source_checks_id: str | None = None  # a clean-slot repeat after failed checks; never a dirty-slot takeover
 
 
@@ -303,6 +300,7 @@ class AttemptResult:
     reason: str = ""
     execution: StoredExecution | None = None
     pending: PendingResult | None = None
+    explanation: str = ""
 
 
 @dataclass(frozen=True)

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from taskloop import cli_composition, cli_step, dash_composition
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.cli import main
 from taskloop.cli_step import DASH_PORT
 from taskloop.dash_composition import DashRequest
@@ -217,8 +218,19 @@ def test_scheduling_choices_reach_each_commands_request(
     quiet = ["--no-dashboard"] if operation == "rounds" else []
     assert main(["step", operation, *CHOICES, *flags, *quiet, "--json"]) == 0
     expected = 3 if maximum is None else maximum
-    assert execution.requests == [NextRequest("tasks", "/tracker", Path("/checkout"), "approved", "m", "high", 30,
-                                             max_running=expected, retake=retake)]
+    assert execution.requests == [
+        NextRequest(
+            "tasks",
+            "/tracker",
+            Path("/checkout"),
+            "approved",
+            StepSettings(),
+            Overrides(model="m", effort="high"),
+            30,
+            max_running=expected,
+            retake=retake,
+        )
+    ]
     output = capsys.readouterr()
     assert output.err == ""
     if operation == "rounds":
@@ -246,3 +258,20 @@ def test_retake_help_keeps_the_recovery_limit(operation: str, capsys: pytest.Cap
     assert "After a factory.db discard only" in shown
     assert "expired lease and no attempt here" in shown
     assert "assumes this is the one factory on the tracker" in shown
+
+
+@pytest.mark.parametrize("operation", ["next", "rounds"])
+def test_round_commands_work_without_agent_flags_and_keep_a_configuration_snapshot(
+    operation: str, execution: Execution, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text('[agents.implement]\nmodel = "configured"\neffort = "low"\n')
+    argv = CHOICES[:8] + CHOICES[12:]
+    assert main(["--config", str(config), "step", operation, *argv, *(["--no-dashboard"] if operation == "rounds" else [])]) == 0
+    capsys.readouterr()
+    (request,) = execution.requests
+    assert request.overrides == Overrides()
+    assert request.settings.plan.effort == "high" and request.settings.implement.effort == "low"
+    assert request.settings.implement.model == "configured"
+    config.unlink()
+    assert request.settings.implement.model == "configured"
