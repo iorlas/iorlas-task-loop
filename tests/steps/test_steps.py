@@ -48,10 +48,9 @@ def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environm
     assert "at most 96 files of at most 1 MiB each" in text and "anything under `.beads/`" in text and GIT_WRITES in text
     assert "The factory ran this repository's `setup` before you started; there is no network now." in text
     assert "Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere outside the repository." in text
-    assert (
-        "Your runs are evidence for you: after this step the checks run again outside your control, and only those results count. "
-        "With `implemented`"
-    ) in text
+    assert "Your runs are evidence for you: after this step the checks run again outside your control, " in text
+    assert "only those results count. " in text
+    assert "retain heredoc edits with the bounded verification above. With `implemented`" in text
     assert SAVED_WORK in text and text.endswith(SAVED_WORK + "\n")
     assert (
         "In `explanation`, name each command you ran and how it ended, and every test file you added. If you could not finish, "
