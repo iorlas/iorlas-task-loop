@@ -41,6 +41,7 @@ from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.environment import reset_to
 from taskloop.factory_schema import current
+from taskloop.ids import Ids
 from taskloop.land_store import LandRow, LandStore
 from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
@@ -239,6 +240,7 @@ class ChecksRelease:
     clock: Callable[[], float]
     setup_seen: SetupSeen
     scratch: Scratch
+    ids: Ids
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         """Release the checks attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
@@ -250,7 +252,7 @@ class ChecksRelease:
 
     def release_of[R](self, target: ReleaseTarget[R], key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         try:
-            with operation(self.store, ActionKind.FINALIZE, subject=key.attempt_id,
+            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
                            existing=lambda owner: self.store.owns_entry(key, owner)):
                 return self._release_of(target, key, abandon, me)
         except Fenced:

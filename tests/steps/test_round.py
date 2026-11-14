@@ -16,6 +16,7 @@ from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from doubles import NO_CHECKS, NoAdvance, NoChecks, ReadyTracker, no_holds
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
@@ -29,6 +30,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldInsert, HoldStore
+from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     Advance,
@@ -177,7 +179,8 @@ class Bench:
         starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance, NO_CHECKS)
         holding = HoldPorts(HoldStore(self.store.connect), self.store, no_holds(), self.releaser, NoChecks(), lambda: self.now,
                             EvidenceFiles(Path("/artifacts")), lambda _backlog, _task: None)  # no label here: nothing is held
-        return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, holding, self.ready, self.log, self.stopping)
+        return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, holding, self.ready,
+            self.log, self.stopping, ids=NativeIds())
 
     def round(self, request: NextRequest = REQUEST) -> Round:
         found = run_round(self.ports(), request)
@@ -263,7 +266,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         outcome = RunOutcome(rc=rc, worker=worker, summary=Summary(text=text if rc == 0 else "", rc=rc, stands=True))
@@ -271,7 +274,8 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
 
     store = AttemptStore(lambda: con)
     Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
     ).execute(KEY, ENTRY)
 
 
@@ -312,12 +316,12 @@ def verified_released(
     """The registered attempt verified (its own publication stubbed), then released: `Next: publish`."""
     captured(registered, tmp_path, slot, checkouts, slot_files)
     store = AttemptStore(lambda: registered)
-    verifier = Verifier(store, checkouts, slot_files, lambda _worker: True, lambda: 20, hold)
+    verifier = Verifier(store, checkouts, slot_files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
     held = Recorded(NotReleased("unavailable", "slot_busy"))
     checked = verify_task(store, verifier, held, held, "tasks", "tl-1")  # its own publication is the recording stub's
     assert isinstance(checked, VerifiedTask) and checked.release == "unavailable:slot_busy"
     real = SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", lambda _worker: True, custody, lambda _r, _t: True, lambda: 30,
-                       lambda _setup: "gone", lambda _scratch: True)
+                       lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
     assert isinstance(real.release(KEY, False), Released)
     return store
 
@@ -327,7 +331,7 @@ def test_a_verified_released_plan_is_published_once_then_advanced_never_before(
 ) -> None:
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
     bench = Bench(registered)
-    bench.publisher = BranchPublish(store, checkouts, slot_files, lambda: 40)
+    bench.publisher = BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
     assert bench.round().moves == (Move("tl-1", "publish", "published", "attempt", step="plan"),)  # unpublished: no advance
     assert registered.execute("SELECT count(*) FROM published_branch").fetchone() == (1,)
     bench.advance = advances = Advances(AdmitRefused("claim_lost", detail="status open"))  # nothing pushed again: next round advances
@@ -354,7 +358,7 @@ def test_an_advance_refusal_is_a_skip_of_the_done_step_and_a_stop_word_ends_admi
     stored facts (`task`, `checkout`, `input`, `constraint`), skips it and admission goes on to the ready task; a round-wide
     word (`no_free_slot`, `deadline`, an unknown) ends the advance and admission (no ready read)."""
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
-    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()).publish(KEY), BranchPublished)
     ready = ReadyTracker([bead("t-9")], ready=["t-9"])
     bench = Bench(registered, ready)
     bench.advance = advances = Advances(answer)
@@ -379,7 +383,7 @@ def test_with_every_slot_reserved_a_done_step_waits_without_a_tracker_read(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
-    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()).publish(KEY), BranchPublished)
     seed(registered, "tl-2", "other", entry=ENTRY)
     registered.execute("INSERT INTO reservation VALUES ('s1',?,2,'other')", (slot.repo.identity().key,))
     bench = Bench(registered, free=False)
@@ -442,7 +446,7 @@ def test_an_advance_refused_branch_held_reports_the_slot_unusable_too(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
-    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()).publish(KEY), BranchPublished)
     held = SlotView("s1", Path("/slots/s1"), "unknown", "attached")
     bench = Bench(registered, ReadyTracker())
     bench.advance = Advances(AdmitRefused("branch_held", (held,)))
@@ -749,14 +753,14 @@ def test_an_advance_with_every_free_slot_unusable_names_it_and_the_next_renders_
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
-    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
+    assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()).publish(KEY), BranchPublished)
     gone = SlotView("s4", Path("/slots/s4"), "unknown", "not_listed")
     bench = Bench(registered, ReadyTracker())
     bench.advance = Advances(AdmitRefused("no_free_slot", (gone,)))
     found = bench.round()
     assert ("tl-1", "report", "unusable:s4:not_listed") in moves(found) and found.stopped == "no_free_slot"
     lines = human("next", found, None)
-    assert any(line.strip() == "/slots/s4" for line in lines) and any(line.startswith("unusable: ") for line in lines)
+    assert any(line.strip() == "/slots/s4" for line in lines) and any(line.startswith("unusable:s4:not_listed: ") for line in lines)
 
 
 def test_a_transient_slot_state_is_not_called_unusable(factory: sqlite3.Connection) -> None:

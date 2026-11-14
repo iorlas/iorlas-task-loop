@@ -151,7 +151,8 @@ def _ended(found: _Registered, verdict: Verdict, claim: str) -> tuple[str, bool]
         return f"refused {refused.reason} claim={claim}", False
     except StoreUnavailable:
         return f"{_counted(found, AttemptResult('unavailable', 'store'))} claim={claim}", False
-    release = ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, _unheld, work.clock, work.seen, work.scratch)
+    release = ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, _unheld, work.clock,
+        work.seen, work.scratch, ids=work.ids)
     word = release_word(release.release(key, False, found.me))
     shown = verdict.outcome if verdict.reason is None else f"{verdict.outcome}:{verdict.reason}"
     return f"collected {shown} claim={claim} release={word}", verdict.outcome == "passed"

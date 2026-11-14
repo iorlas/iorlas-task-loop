@@ -1,7 +1,8 @@
-// One row per step try, with the factory's verification attached to its agent answer.
+// One row per step attempt, with the factory's verification attached to its agent answer.
 // Past history is folded for display only; selection still uses the original (step, n).
 import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, fmtDur, since, stepInfo } from "./ui.js";
 import { say, wordNode } from "./words.js";
+import { usageNode, usageText } from "./usage.js";
 
 const WORK_MS = 120000;
 const muted = "text-slate-500 dark:text-slate-400";
@@ -17,7 +18,7 @@ export function lasted(a) {
 
 export function verifyTitle(list, a) {
   const of = list[list.indexOf(a) - 1];
-  return `Check of ${stepInfo(of?.step ?? a.step).label}${of?.n > 1 ? ` try ${of.n}` : ""}`;
+  return `Check of ${stepInfo(of?.step ?? a.step).label}${of?.n > 1 ? ` attempt ${of.n}` : ""}`;
 }
 
 // Explicitly normalize the old presentation placeholder; it is not a recorded cause.
@@ -68,7 +69,7 @@ function verificationButtons(a, selected, select, agent) {
   const v = verdict(a);
   const mark = el("button", `shrink-0 rounded px-2 py-1.5 text-sm ${v.text} ${chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`, v.mark);
   mark.type = "button";
-  const of = `${stepInfo(agent.step).label}${agent.n > 1 ? ` try ${agent.n}` : ""}`;
+  const of = `${stepInfo(agent.step).label}${agent.n > 1 ? ` attempt ${agent.n}` : ""}`;
   mark.title = `${of}: ${v.label}${a.summary ? ` (${a.summary})` : ""}`;
   mark.setAttribute("aria-label", `Verification of ${of}: ${v.label}. Open Result`);
   mark.setAttribute("aria-pressed", String(!!chosen(a, selected)));
@@ -110,7 +111,7 @@ export function causeLink(a, select) {
   return btn;
 }
 
-function row({ a, verification, gap }, selected, select) {
+function row({ a, verification, gap }, selected, select, stepUsage) {
   const st = STATE[a.state];
   const li = el("li", `relative pl-3 ${a.past ? "opacity-60" : ""}`);
   if (!a.after) li.title = gapWords(gap);
@@ -122,10 +123,11 @@ function row({ a, verification, gap }, selected, select) {
   if (chosen(a, selected)) btn.dataset.selected = "1";
   const top = el("span", "flex items-baseline gap-1");
   top.append(el("span", "text-[13px] font-medium", stepInfo(a.step).label));
-  if (a.n > 1) top.append(el("span", `text-[11px] ${muted}`, `try ${a.n}`));
+  if (a.n > 1) top.append(el("span", `text-[11px] ${muted}`, `attempt ${a.n}`));
   if (a.after === "repeat") {
     const tag = el("span", `text-[11px] ${JUMP.repeat.text}`, "Repeat");
-    tag.title = `Repeat of ${stepInfo(a.step).label}${a.repeat_of ? ` try ${a.repeat_of}` : ""}: ${changeReason(a)}${a.reason ? ` (${a.reason})` : ""}${gap === null ? "" : ` · ${gapWords(gap)}`}`;
+    tag.title = `Repeat of ${stepInfo(a.step).label}${a.repeat_of ? ` attempt ${a.repeat_of}` : ""}: ${changeReason(a)}`
+      + (a.reason ? ` (${a.reason})` : "") + (gap === null ? "" : ` · ${gapWords(gap)}`);
     top.append(tag);
   }
   top.append(el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
@@ -135,6 +137,12 @@ function row({ a, verification, gap }, selected, select) {
   btn.addEventListener("click", () => select(a.step, a.n));
   line.append(btn);
   li.append(dotEl, line);
+  if (a.usage) {
+    li.title = [li.title, usageText(a.usage), usageText(stepUsage, "Step total", true)].filter(Boolean).join(" · ");
+    const total = el("div", "px-2 pb-1");
+    total.append(usageNode(stepUsage, "Step total", true));
+    li.append(total);
+  }
   if (verification) {
     const [mark, reason] = verificationButtons(verification, selected, select, a);
     line.append(mark);
@@ -144,7 +152,7 @@ function row({ a, verification, gap }, selected, select) {
 }
 
 function summary(entries, n) {
-  const parts = [`Run ${n}`];
+  const parts = [`History ${n}`];
   for (const step of STEPS.slice(0, -1)) {
     const tries = entries.filter(({ a }) => a.step === step.id);
     if (!tries.length) continue;
@@ -156,7 +164,7 @@ function summary(entries, n) {
   return parts.join(" · ");
 }
 
-function groupRows(entries, selected, select) {
+function groupRows(entries, selected, select, stepUsage) {
   const ol = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700");
   for (const entry of entries) {
     if (entry.a.after === "restart_at_plan") ol.append(restart(entry, select));
@@ -165,12 +173,12 @@ function groupRows(entries, selected, select) {
       work.title = gapWords(entry.gap);
       ol.append(work);
     }
-    ol.append(row(entry, selected, select));
+    ol.append(row(entry, selected, select, stepUsage[entry.a.step]));
   }
   return ol;
 }
 
-function pastGroup(entries, n, selected, select) {
+function pastGroup(entries, n, selected, select, stepUsage) {
   const key = `${entries[0].a.step}/${entries[0].a.n}`;
   const details = el("details", "mb-2");
   details.dataset.run = key;
@@ -180,23 +188,23 @@ function pastGroup(entries, n, selected, select) {
   if (containsSelection && selected.railSelection !== selectedKey) selected.runs.set(key, true);
   details.open = selected.runs.get(key) ?? false;
   const heading = el("summary", `cursor-pointer text-[11px] ${muted}`, summary(entries, n));
-  heading.title = "Expand to inspect every try and verification result, including earlier failures";
-  details.append(heading, groupRows(entries, selected, select));
+  heading.title = "Expand to inspect every attempt and verification result, including earlier failures";
+  details.append(heading, groupRows(entries, selected, select, stepUsage));
   details.addEventListener("toggle", () => { if (details.isConnected) selected.runs.set(key, details.open); });
   return details;
 }
 
 function landRow(t) {
   const here = t.column === "land" || t.column === "landed";
-  const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "waiting"] : null;
+  const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "unknown"] : null;
   const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
   li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), el("span", `text-[13px] ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`));
-  if (word) li.append(el("span", `block text-[11px] ${word.text}`, word.row));
+  if (word) li.append(el("span", `block text-[11px] ${word.text}`, t.status_note ?? word.row));
   else li.append(el("span", "ml-2 text-[11px]", "pending"));
   return li;
 }
 
-export function rail(list, t, selected, select) {
+export function rail(list, t, selected, select, stepUsage = {}) {
   selected.runs ??= new Map();
   const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
   wrap.id = "rail";
@@ -204,8 +212,8 @@ export function rail(list, t, selected, select) {
   const groups = project(list);
   let current = null;
   groups.forEach((entries, i) => {
-    if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select));
-    else { current = groupRows(entries, selected, select); wrap.append(current); }
+    if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select, stepUsage));
+    else { current = groupRows(entries, selected, select, stepUsage); wrap.append(current); }
   });
   selected.railSelection = `${selected.step}/${selected.n}`;
   if (t.column === "waiting") return wrap;

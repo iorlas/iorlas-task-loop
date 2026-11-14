@@ -19,6 +19,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -48,7 +49,7 @@ def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: C
     return Attempts(
         AttemptStore(lambda: con),
         EvidenceFiles(tmp_path),
-        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
         run,
         lambda: 10,
         checkouts,
@@ -90,7 +91,8 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
 
     agent = run()
     store, files = AttemptStore(lambda: con), EvidenceFiles(tmp_path)
-    owner = Attempts(store, files, AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: now[0], slow, slot_files)
+    owner = Attempts(store, files, AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), agent,
+        lambda: now[0], slow, slot_files)
     result = owner.execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "expired") and agent.calls == [] and CountingHarness.cleanups == [1]
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)

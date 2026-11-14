@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
+from taskloop.land_status import LandState
+
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
-type LandState = Literal["waiting", "manual", "landing"]
 
 
 def iso(epoch: float | None) -> str | None:
@@ -32,10 +33,13 @@ class Card:
     last_activity_at: str | None
     slot: str | None
     hold_cause: str | None
-    # in `land` only: `waiting` for a round to land it, `manual` for a person (the profile says `land: manual`), `landing`
+    # in `land` only: the shared policy/execution decision (`land_status.LandState`)
     land: LandState | None = None
     status: str | None = None  # `task_status.Status`: the one status of the task, for every reader
     status_note: str | None = None  # the status in plain words (`task_status.words`)
+    ask: bool = False
+    question: str | None = None
+    hold_explanation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,18 @@ class FeedPage:
 
 
 @dataclass(frozen=True)
+class Usage:
+    """Known counts and coverage: totals include reported values only when complete < attempts."""
+
+    fresh: int | None = None
+    cached: int | None = None
+    output: int | None = None
+    turns: int | None = None
+    attempts: int = 0
+    complete: int = 0
+
+
+@dataclass(frozen=True)
 class AttemptDetail:
     step: str
     n: int
@@ -160,6 +176,7 @@ class AttemptDetail:
     led_by: int | None = None  # a repeat of an agent attempt: the try of the `verification` step whose failure led to it
     past: bool = False  # belongs to a chain a person abandoned: history, not the task's current steps
     run: Run | None = None  # an agent attempt's: what ran it; None for a check or a verification
+    usage: Usage | None = None  # None for checks/verification; an agent with no report has empty counts
 
 
 @dataclass(frozen=True)
@@ -190,6 +207,8 @@ class TaskDetail:
 
     task: Card
     attempts: tuple[AttemptDetail, ...]
+    step_usage: dict[str, Usage]
+    usage: Usage
 
 
 @dataclass(frozen=True)

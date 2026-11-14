@@ -7,12 +7,14 @@ import json
 from pathlib import Path
 
 import pytest
-from doubles import CHECKS
+from doubles import CHECKS, FixedIds
 from git_porcelain import Recorded, Sha, Squashed, TreeId
 from land_bench import LandBench, bench
 
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
-from taskloop.land import Landed, LandResult
+from taskloop.command_conclusion import CommandConclusion
+from taskloop.land import Landed, LandRequest, LandResult, land
+from taskloop.land_data import summary_data
 from taskloop.land_gate import Changed
 from taskloop.land_summary import (
     LandSummary,
@@ -168,13 +170,17 @@ def blob(name: str) -> tuple[str, Sha]:
 
 def test_each_required_name_s_result_and_printable_conflict_paths(b: LandBench) -> None:
     profile = Profile((), (Check("check", ("just", "check"), 600), Check("test", ("just", "test"), 600)), ("check", "test"), "main")
-    results = [ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, "passed"),
+    results = [ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
                ResultRow(1, 1, "test", None, None, None, 1.0, None, None, None)]
     files = {"src/x.py": blob("1")}
     trees = Trees(b.base, files, files, files)
     made = Squashed(Sha(SHA), TreeId(SHA))
     found = summary(checks_row(b), results, (profile, profile), checks_row(b).required, made, trees, ("m\n", None), b.base)
     assert found.results == (("check", "passed"), ("test", "unfinished")) and found.state == "no_change"
+    assert found.results[0][1] is CommandConclusion.PASSED
+    data = summary_data(found)
+    assert json.loads(json.dumps(data))["results"] == [
+        {"name": "check", "conclusion": "passed"}, {"name": "test", "conclusion": "unfinished"}]
     hostile = dataclasses.replace(found, state="conflict", conflicts=("src/\x1b[2Jx.py\nTask: y",))
     assert f"Origin main: {b.base}; conflict (1 paths): src/ [2Jx.py Task: y" in lines(hostile)
     assert all(line.isprintable() for line in lines(hostile))
@@ -212,3 +218,21 @@ def test_a_task_id_is_never_cut_even_when_it_overshoots_the_line(b: LandBench) -
     row = dataclasses.replace(checks_row(b), task_id="tl-" + "9" * 69)
     first = message("Widget and more", row, [], plan=False).split("\n")[0]
     assert first == f"W\u2026 (tl-{'9' * 69})" and len(first) > 72
+
+
+@pytest.mark.parametrize("validate_again", [False, True])
+def test_both_land_candidate_paths_use_the_supplied_id_and_keep_it_on_reentry(b: LandBench, validate_again: bool) -> None:
+    if validate_again:
+        b.advance({"README": "two\n"})
+    ids = FixedIds()
+    ports = dataclasses.replace(b.ports(), ids=ids)
+    request = LandRequest("tasks", "tl-1", b.repo.path, 5)
+    found = land(ports, request)
+    assert isinstance(found, Landed), found
+    row, = b.rows()
+    assert row.key.attempt_id == ids.fresh[1] and row.key.dispatch_token == ids.tokens[0][1]
+    assert b.con.execute("SELECT action_id FROM drain_action WHERE kind='land'").fetchone() == (ids.fresh[0],)
+    assert [size for size, _ in ids.tokens] == [16]
+    assert (row.slot is not None) is validate_again
+    land(ports, request)
+    assert b.rows() == (row,) and len(ids.tokens) == 1

@@ -17,6 +17,7 @@ from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, lis
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_release import ChecksRelease
+from taskloop.ids import NativeIds
 from taskloop.land import Landed
 from taskloop.land_close import NOT_SYNCED
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE, LAND_NEXT
@@ -203,7 +204,8 @@ def release(b: LandBench, abandon: bool, implement: Implement, alive: set[EntryI
     def seen(entry: EntryIdentity) -> Seen:
         return "matching" if entry in (alive or set()) else "gone"
 
-    checks = ChecksRelease(work.store, work.checkouts, work.slot_files, seen, b.ports().custody, work.clock, work.seen, work.scratch)
+    checks = ChecksRelease(work.store, work.checkouts, work.slot_files, seen, b.ports().custody, work.clock,
+        work.seen, work.scratch, ids=NativeIds())
     ports = HalfWay(checks) if halfway else checks
     return release_task(AttemptStore(lambda: b.con), implement, ports, "tasks", "tl-1", abandon=abandon)
 

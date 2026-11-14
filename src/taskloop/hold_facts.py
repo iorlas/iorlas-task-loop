@@ -7,20 +7,22 @@ Agent text goes to the person only, through `hold_text`."""
 from dataclasses import dataclass
 from typing import get_args
 
-from any_agent import DecodedAnswer, decode_answer
-
+from taskloop.agents.stop_store import StopStore
+from taskloop.answer_read import read as read_answer
 from taskloop.attempt_reads import AttemptRow, StoreRefused
 from taskloop.attempt_result import collect
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import StoredExecution
 from taskloop.check_status import latest
 from taskloop.check_store import CheckStore
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.hold_store import HoldRow
 from taskloop.hold_text import FailedCheck, HoldFacts, Kept, KeptWord, LabelsWord, Leftovers, Returned
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed, ReleasedTask
 from taskloop.setup_store import SetupStore
-from taskloop.steps import CHECK, is_agent, kind
+from taskloop.steps import CHECK
 
 
 @dataclass(frozen=True)
@@ -65,15 +67,11 @@ def outcome(reader: AttemptStore, agent: AttemptRow, released: ReleasedTask | Fa
 def explanation(files: EvidenceFiles, execution: StoredExecution | None, step: str, task_id: str) -> str | None:
     """The agent's explanation from its stored valid answer, by the step kind's own decoder; None without one (no valid
     answer, a checks attempt, or an answer file that no longer reads as stored)."""
-    if execution is None or execution.answer.kind != "valid" or not is_agent(step):
-        return None
-    found = kind(step)
-    rules = found.rules(task_id)
     try:
-        answer = decode_answer(files.read(execution.evidence.answer), lambda value: found.decode(value, rules))
+        answer = read_answer(files, execution, step, task_id)
     except EvidenceError:
         return None
-    return answer.value.explanation if isinstance(answer, DecodedAnswer) else None
+    return None if answer is None else answer.explanation
 
 
 def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: LabelsWord, agent: AttemptRow,
@@ -91,12 +89,19 @@ def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: Labe
         if checks is None:
             raise StoreRefused("changed")
         failed = tuple(
-            FailedCheck(each.name, each.conclusion or "unfinished",
-                        "" if each.conclusion == "undefined" else str(files.check_path(checks.key, each.block, each.name)))
-            for each in store.results(checks.key) if each.conclusion != "passed")
+            FailedCheck(each.name, encode(each.conclusion) or "unfinished",
+                        "" if each.conclusion == CommandConclusion.UNDEFINED else str(files.check_path(checks.key, each.block, each.name)))
+            for each in store.results(checks.key) if each.conclusion != CommandConclusion.PASSED)
         return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit, None, failed, None,
                          str(files.root / files.directory(checks.key)), files.last_entry(checks.key), checks.deadline)
     left = Leftovers(leftovers[0], leftovers[1:]) if leftovers and row.reason.startswith("repeats_exhausted") else None
-    told = explanation(files, collect(reader, agent.key).execution, agent.step, agent.task_id)
+    if agent.key.attempt_id != row.cause_id:
+        raise StoreRefused("changed")
+    execution = collect(reader, agent.key).execution
+    told = explanation(files, execution, agent.step, agent.task_id)
+    merge = MergeStore(reader.connect, reader.begin).get(agent.key.attempt_id) if row.reason.startswith("merge:") else None
+    told = told if merge is None else merge.explanation
     return HoldFacts(*head, agent.step, agent.number, agent.key.attempt_id, row.held_at, published, agent.end_commit, told, (),
-                     left, str(files.root / files.directory(agent.key)), files.last_entry(agent.key), agent.deadline)
+                     left, str(files.root / files.directory(agent.key)), files.last_entry(agent.key), agent.deadline,
+                     stop=StopStore(reader.connect, reader.begin).get(row.cause_id),
+                     rc=None if execution is None else execution.facts.rc)

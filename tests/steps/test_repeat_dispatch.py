@@ -15,6 +15,7 @@ from any_agent.testing import FakeRun
 from doubles import FakeSlotFiles, RegisteringLauncher, main_at
 from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT, PLAN_V2
 from sqlite_store import begin_immediate
 
 from taskloop.admit import Admitted
@@ -41,6 +42,7 @@ from taskloop.attempt_types import (
     VerifyResult,
 )
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 from taskloop.operations import (
     Failed,
     Started,
@@ -102,13 +104,13 @@ class Step:
         self.con, self.tmp, self.slot, self.checkouts, self.files = con, tmp, slot, checkouts, files
         self.store = AttemptStore(lambda: con)
         self.launcher = RegisteringLauncher(self.store)
-        self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold)
+        self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
 
     def run(self, key: AttemptKey, entry: EntryIdentity, agent: Agent) -> str:
         attempts = Attempts(
             self.store,
             EvidenceFiles(self.tmp),
-            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             agent,
             lambda: 10,
             self.checkouts,
@@ -118,13 +120,14 @@ class Step:
         return f"{found.status} {found.reason}"
 
     def admission(self) -> ChainAdmission:
-        return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10)
+        return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10,
+                              self.checkouts, self.files, ids=NativeIds())
 
     def repeat(self, current: AttemptKey) -> Started | Failed:
         found = self.store.attempt_of("tasks", "tl-1")
         assert found is not None and found[0] == current
         repeat = StepRepeat(self.store, self.verifier, EvidenceFiles(self.tmp), self.admission(), self.launcher, lambda _worker: True,
-                            lambda _entry: "gone", lambda: 10, repeating)
+                            lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
         return repeat.repeat("tasks", "tl-1", current, found[2], 30)
 
     def next_attempt(self, current: AttemptKey) -> tuple[AttemptKey, EntryIdentity]:
@@ -151,7 +154,7 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
     step: Step, slot: FakeWorktree
 ) -> None:
     base = head(slot)
-    assert step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN)) == "pending verification"
+    assert step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN)) == "pending verification"
     assert shown(step.verifier.verify(KEY)) == "unsettled:uncommitted"
     x1 = head(slot)
     key, entry = step.next_attempt(KEY)
@@ -169,10 +172,10 @@ def test_the_next_attempt_dispatches_at_e_with_the_leftovers_as_a_fresh_session_
 
 def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_paths(step: Step, slot: FakeWorktree) -> None:
     base = head(slot)
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", NOTE: "n"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, NOTE: "n"}, PLAN))
     assert shown(step.verifier.verify(KEY)) == "unsettled:uncommitted"
     key, entry = step.next_attempt(KEY)
-    step.run(key, entry, Agent(slot, {P: "# Plan v2\n"}, PLAN | {"paths": [P, NOTE]}))
+    step.run(key, entry, Agent(slot, {P: PLAN_V2}, PLAN | {"paths": [P, NOTE]}))
     found = step.verifier.verify(key)
     assert isinstance(found, Verified) and not found.reused
     assert made(slot, base) == ["Plan tl-1", "Plan tl-1"]
@@ -182,7 +185,7 @@ def test_a_second_commit_on_the_first_is_verified_with_each_held_to_its_own_path
 
 
 def test_planned_with_nothing_new_in_a_later_attempt_is_rejected_for_good(step: Step, slot: FakeWorktree) -> None:
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     step.verifier.verify(KEY)
     key, entry = step.next_attempt(KEY)
     step.run(key, entry, Agent(slot, {}, PLAN, removed=[STRAY]))
@@ -192,7 +195,7 @@ def test_planned_with_nothing_new_in_a_later_attempt_is_rejected_for_good(step: 
 @pytest.mark.parametrize(("move", "word"), [("commit", "head_moved"), ("branch", "branch"), ("detached", "detached")])
 def test_a_slot_not_at_e_refuses_dispatch_and_the_attempt_stays_admitted(step: Step, slot: FakeWorktree, move: str, word: str) -> None:
     """A repeat dispatches only on its task branch at E: never a commit elsewhere, another branch or a detached HEAD."""
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     step.verifier.verify(KEY)
     key, entry = step.next_attempt(KEY)
     if move == "commit":
@@ -209,7 +212,7 @@ def test_a_slot_not_at_e_refuses_dispatch_and_the_attempt_stays_admitted(step: S
 def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path: Path) -> None:
     """Each repeat's input is its own feedback over attempt 1's task, never an earlier feedback nested; the third
     unsettled attempt is `repeats_exhausted`, shown and refused, nothing admitted."""
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     step.verifier.verify(KEY)
     second, entry = step.next_attempt(KEY)
     step.run(second, entry, Agent(slot, {}, UNCHANGED))
@@ -218,7 +221,12 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     assert not isinstance(shown_two, Failed) and (shown_two.view.number, shown_two.view.next) == (2, "repeat")
     third, entry = step.next_attempt(second)
     text = step.input(third)
-    assert text.startswith("Attempt 2 of this step") and text.count("BEGIN SLOT STATUS") == 1 and text.endswith(TASK)
+    assert text.startswith(
+        "Your final message must be the JSON answer only; write plan.md before you answer `planned`; "
+        "a message without a tool call ends the step.\n\nFirst assess depth from the supplied task text alone"
+    )
+    assert text.index("First assess depth") < text.index("Attempt 2 of this step")
+    assert text.count("BEGIN SLOT STATUS") == 1 and TASK in text
     step.run(third, entry, Agent(slot, {}, UNCHANGED))
     shown_three = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_three, Failed)
@@ -234,7 +242,7 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
 
 def test_a_late_verify_of_a_superseded_attempt_writes_no_git(step: Step, slot: FakeWorktree) -> None:
     base = head(slot)
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     taken = step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted"))
     assert isinstance(taken, Admitted)
     assert step.verifier.verify(KEY) == VerifyRefused("stale_reservation") and made(slot, base) == []
@@ -245,7 +253,7 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
 ) -> None:
     """P was loaded before the handoff; the takeover lands during its pre-commit status read: nothing is staged."""
     base = head(slot)
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     index, read = dict(slot.state().index), FakeWorktree.dirty
 
     def dirty(self: FakeWorktree, base: str | None = None, *, ignored_under: Sequence[str] = ()) -> Dirty:
@@ -261,8 +269,8 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
 
 
 @pytest.mark.parametrize(("before", "written", "expected"), [
-    (None, {P: "# Plan\n", ".gitattributes": "* filter=x\n"}, Unsettled("unsafe", (".gitattributes",))),
-    ({".gitignore": "*.log\n"}, {P: "# Plan\n", D + "x.log": "x"}, Unsettled("ignored", (D + "x.log",))),
+    (None, {P: PLAN_TEXT, ".gitattributes": "* filter=x\n"}, Unsettled("unsafe", (".gitattributes",))),
+    ({".gitignore": "*.log\n"}, {P: PLAN_TEXT, D + "x.log": "x"}, Unsettled("ignored", (D + "x.log",))),
 ], ids=["git_file", "ignored"])
 def test_show_judges_leftovers_before_the_commit_as_the_verify_does(
     step: Step, slot: FakeWorktree, before: Files | None, written: Files, expected: Unsettled
@@ -284,7 +292,7 @@ def attempt(number: int, base: str, end_commit: str | None, paths: tuple[str, ..
 
 def test_judge_holds_each_commit_of_the_chain_to_its_own_attempts_paths(repo: FakeRepo, slot: FakeWorktree) -> None:
     base = head(slot)
-    x1 = commit(slot, {P: "# Plan\n", NOTE: "n"})
+    x1 = commit(slot, {P: PLAN_TEXT, NOTE: "n"})
     x2 = commit(slot, {NOTE: "changed"})
     first = attempt(1, base, x1, (P, NOTE))
     assert isinstance(judge(repo, repo.path, x2, STEP, rules(), (first, attempt(2, x1, None, (P, NOTE)))), Verified)
@@ -296,9 +304,9 @@ def test_judge_holds_each_commit_of_the_chain_to_its_own_attempts_paths(repo: Fa
 
 def test_judge_refuses_a_foreign_commit_inside_the_chain(repo: FakeRepo, slot: FakeWorktree) -> None:
     base = head(slot)
-    x1 = commit(slot, {P: "# Plan\n"})
+    x1 = commit(slot, {P: PLAN_TEXT})
     commit(slot, {"README": "two"}, "someone else")
-    x2 = commit(slot, {P: "# Plan v2\n"})
+    x2 = commit(slot, {P: PLAN_V2})
     chain = (attempt(1, base, x1, (P,)), attempt(2, x1, None, (P,)))
     assert judge(repo, repo.path, x2, STEP, rules(), chain) == Rejected("chain_length")
     assert judge(repo, repo.path, x2, STEP, rules(), (attempt(1, base, None, (P,)), attempt(2, x1, None, (P,)))) == Rejected("chain_length")
@@ -317,7 +325,7 @@ def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_aga
         commit(slot, {".gitignore": "*.log\n"})
         main_at(slot)
     base = head(slot)
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", **({stray: "x"} if reason == "ignored" else {})}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, **({stray: "x"} if reason == "ignored" else {})}, PLAN))
     if reason == "unsafe":
         slot_files.entries[slot.path / P] = FileStat("file", 7, True)
     assert shown(step.verifier.verify(KEY)) == f"unsettled:{reason}"
@@ -331,7 +339,7 @@ def test_after_an_attempt_that_committed_nothing_the_repeat_lists_every_file_aga
 
 
 def test_the_true_count_of_leftovers_reaches_the_next_attempt(step: Step, slot: FakeWorktree) -> None:
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n"} | {f"stray-{n:02}": "s" for n in range(53)}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT} | {f"stray-{n:02}": "s" for n in range(53)}, PLAN))
     found = step.verifier.verify(KEY)
     assert isinstance(found, Unsettled) and len(found.listing) == 51 and found.listing[-1] == "+3 more"
     key, _entry = step.next_attempt(KEY)
@@ -349,10 +357,10 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
     if reason == "ignored":
         commit(slot, {".gitignore": "*.md\n!plan.md\n"})
         main_at(slot)
-        written = {P: "# Plan\n", EVIL: "x"} | {f"{D}n{n:04}.md": "x" for n in range(1000)}
+        written = {P: PLAN_TEXT, EVIL: "x"} | {f"{D}n{n:04}.md": "x" for n in range(1000)}
         step.run(KEY, ENTRY, Agent(slot, written, PLAN))
     else:
-        step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", EVIL: "x"}, PLAN | {"paths": [P, EVIL]}))
+        step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, EVIL: "x"}, PLAN | {"paths": [P, EVIL]}))
         slot_files.entries[slot.path / EVIL] = FileStat("file", 1, True)
     reads = StatusPorts(step.store, lambda _entry: "gone", lambda: 10, step.verifier.leftovers, lambda: "boot")
     shown_now = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
@@ -362,11 +370,12 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
     if reason == "ignored":
         assert len(left) == 52 and left[-1] == "+951 more"
     else:
-        assert left[1:] == ("docs/design/tl-1/e?]0;owned??31m.md",)
+        assert json.dumps(EVIL, ensure_ascii=True) in left[1] and "execute bit" in left[1]
+        assert left[2:] == ("docs/design/tl-1/e?]0;owned??31m.md",)
 
 
 def test_a_staged_index_at_e_never_dispatches(step: Step, slot: FakeWorktree) -> None:
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     step.verifier.verify(KEY)
     key, entry = step.next_attempt(KEY)
     slot.stage([STRAY], literal=True)  # a person staged the scratch file: the factory's record would sweep it in
@@ -380,7 +389,7 @@ def test_a_superseded_verify_that_staged_leaves_the_next_attempt_undispatched(
     """The takeover lands after P's verify staged its paths (the second fence then stops it): N refuses to dispatch on
     that index rather than commit P's staged plan as its own."""
     base = head(slot)
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     stage = FakeWorktree.stage
 
     def staging(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
@@ -399,7 +408,7 @@ def test_a_path_staged_beside_the_listed_ones_is_never_committed(
     step: Step, slot: FakeWorktree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = head(slot)
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     stage = FakeWorktree.stage
 
     def staging(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
@@ -411,18 +420,18 @@ def test_a_path_staged_beside_the_listed_ones_is_never_committed(
 
 
 def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: FakeWorktree) -> None:
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     taken = step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted"))
     assert isinstance(taken, Admitted)
     repeat = StepRepeat(step.store, step.verifier, EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10, repeating)
+                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
     found = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)  # its read of the current attempt predates the takeover
     assert found == Started("relaunched", "tasks", "tl-1", taken.key.attempt_id, True, (8, "start", "boot"))
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (2,)
 
 
 def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, slot: FakeWorktree) -> None:
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     taken: list[AttemptKey] = []
 
     class Racing:
@@ -436,7 +445,7 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
             return step.verifier.staged(key)
 
     repeat = StepRepeat(step.store, Racing(), EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10, repeating)
+                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
     assert repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Started("relaunched", "tasks", "tl-1", taken[0].attempt_id, True,
                                                                       (8, "start", "boot"))
 
@@ -444,16 +453,16 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
 def test_judge_refuses_a_chain_whose_commit_does_not_sit_on_the_stored_one(repo: FakeRepo, slot: FakeWorktree) -> None:
     """The count from B1 matches, but X2's first parent is not the stored X1 (a side commit took its place)."""
     base = head(slot)
-    side = commit(slot, {P: "# Plan\n"})
+    side = commit(slot, {P: PLAN_TEXT})
     slot.checkout(base)
-    commit(slot, {P: "# Plan\n"}, "other")
-    x2 = commit(slot, {P: "# Plan v2\n"})
+    commit(slot, {P: PLAN_TEXT}, "other")
+    x2 = commit(slot, {P: PLAN_V2})
     chain = (attempt(1, base, side, (P,)), attempt(2, side, None, (P,)))
     assert judge(repo, repo.path, x2, STEP, rules(), chain) == Rejected("not_descendant")
 
 
 def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step: Step, slot: FakeWorktree) -> None:
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     step.verifier.verify(KEY)
     slot.stage([STRAY], literal=True)  # the owner's staged file must never become the agent's leftover
     dirs = sorted(path.name for path in (step.tmp / "attempts").iterdir())
@@ -465,14 +474,14 @@ def test_a_staged_slot_is_refused_before_the_takeover_and_nothing_is_spent(step:
 
 def test_a_file_staged_by_a_person_alone_is_staged_never_committed(step: Step, slot: FakeWorktree) -> None:
     base = head(slot)
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
     slot.write_file(STRAY, "s")
     slot.stage([STRAY], literal=True)
     assert step.verifier.verify(KEY) == Unsettled("staged", (STRAY,)) and made(slot, base) == []
 
 
 def test_show_says_why_an_admitted_attempts_entry_gave_up(step: Step, slot: FakeWorktree, tmp_path: Path) -> None:
-    step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "s"}, PLAN))
+    step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
     step.verifier.verify(KEY)
     key, _entry = step.next_attempt(KEY)
     log = EvidenceFiles(tmp_path).entry_log(key)

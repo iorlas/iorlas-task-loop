@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
+from any_agent.access import CodexSandbox
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from doubles import CHECKS, Command, Environment, FakeProfiles
@@ -24,6 +25,7 @@ from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, SlotFil
 from taskloop.environment import Renewal, SetupFor, setup_digest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.prepare import Prepared
 from taskloop.profile import Unavailable
 
@@ -79,7 +81,7 @@ class Entry:
         attempts = Attempts(
             AttemptStore(lambda: env.con),
             EvidenceFiles(env.artifacts),
-            AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/p"})),
+            AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/p"}), ids=NativeIds()),
             self.agent,
             env.clock,
             self.checkouts,
@@ -141,6 +143,27 @@ def test_attempt_one_runs_the_setup_in_order_then_dispatches(entry: Entry, slot:
     assert "UV_OFFLINE" not in call.env
     log = EvidenceFiles(tmp_path).setup_log(KEY, 1).read_text()
     assert log == "$ just install\ndone\nexit 0\n$ just bootstrap\ndone\nexit 0\n"
+
+
+def test_full_access_prepares_the_same_folders_without_a_sandbox_probe(entry: Entry, slot: FakeWorktree) -> None:
+    env = entry.environment
+    policy = CodexPolicy(sandbox=CodexSandbox.DANGER_FULL_ACCESS)
+    env.con.execute("UPDATE attempt SET access_policy=?", (encode_policy(policy),))
+    result = entry.execute()
+    assert result.execution is not None and result.execution.answer.kind == "valid"
+    assert env.probes == []
+    assert env.events == [
+        "ensure .t/s1", "ensure s1/uv-cache", "ensure s1/uv-tools", "empty .t/s1",
+        "empty .env/s1", "ensure s1/uv-cache", "ensure s1/uv-tools",
+        "exec just bootstrap", "group 501", "empty .t/s1", "renew", "agent",
+    ]
+    found = folders(slot.path)
+    argv = entry.specs[0].argv
+    for name, path in (("TMPDIR", found.tmp), ("UV_CACHE_DIR", found.cache), ("UV_TOOL_DIR", found.tools)):
+        assert f"shell_environment_policy.set.{name}={json.dumps(str(path))}" in argv
+        assert env.process.calls[0].env[name] == str(path)
+    assert 'shell_environment_policy.set.UV_OFFLINE="1"' in argv
+    assert "UV_OFFLINE" not in env.process.calls[0].env
 
 
 def test_every_setup_resets_the_slots_ignored_files(entry: Entry, slot: FakeWorktree) -> None:

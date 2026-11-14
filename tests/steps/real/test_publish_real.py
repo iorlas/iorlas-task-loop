@@ -18,6 +18,7 @@ from beads_client.testing import FakeTaskReadClient
 from git_porcelain import Repo
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
@@ -29,6 +30,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
@@ -63,7 +65,7 @@ def gone(_worker: Worker) -> bool:
 def write_plan(slot: Path) -> Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]:
     def run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         (slot / P).parent.mkdir(parents=True)
-        (slot / P).write_text("# Plan\n")
+        (slot / P).write_text(PLAN_TEXT)
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
@@ -79,7 +81,8 @@ class Published:
         self.main.mkdir()
         git(self.main, "init", "-q", "-b", "main")
         (self.main / "README").write_text("one\n")
-        git(self.main, "add", "README")
+        (self.main / ".task-loop.json").write_text("{}")
+        git(self.main, "add", "README", ".task-loop.json")
         git(self.main, "commit", "-q", "-m", "base")
         git(self.main, "remote", "add", "origin", self.remote.as_uri())
         git(self.main, "push", "-q", "origin", "main")
@@ -91,7 +94,7 @@ class Published:
         admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe,
             RealSlotFiles()
-        )
+        , ids=NativeIds())
         admitted = admission.admit(
             AdmitRequest(
                 "tl-1",
@@ -108,17 +111,18 @@ class Published:
         attempts = Attempts(
             self.store,
             EvidenceFiles(root / "art"),
-            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             write_plan(self.slot),
             lambda: 10,
             VIEWS.checkouts,
             self.files,
         )
         attempts.execute(self.key, ENTRY)
-        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold).verify(self.key), Verified)
+        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold,
+            ids=NativeIds()).verify(self.key), Verified)
         self.x = self.rev(self.main, BRANCH)
         releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
-                               lambda _setup: "gone", lambda _scratch: True)
+                               lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
         assert isinstance(releaser.release(self.key, False), Released)
         self.opened: list[Path] = []
 
@@ -135,7 +139,7 @@ class Published:
         return VIEWS.remotes(path, git_dir=git_dir)
 
     def publish(self) -> PublishResult:
-        return BranchPublish(self.store, self.counted, self.files, lambda: 40).publish(self.key)
+        return BranchPublish(self.store, self.counted, self.files, lambda: 40, ids=NativeIds()).publish(self.key)
 
     def other(self, name: str) -> Path:
         """Another clone of origin, as another PC would have."""

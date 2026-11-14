@@ -3,6 +3,7 @@
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
@@ -202,7 +203,13 @@ class AnswerState:
 
 
 # Every verdict rule word: the chain's (CHAIN_RULES, any step) and each step kind's artifact rules (`steps.RULES` has all).
-type Rule = Literal[
+class PlanContentRule(StrEnum):
+    CHANGE_MAP = "plan_change_map"
+    DEPTH = "plan_depth"
+    HEADING = "plan_heading"
+
+
+type Rule = PlanContentRule | Literal[
     "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
     "plan_encoding", "plan_empty", "plan_size",
 ]
@@ -229,6 +236,18 @@ class Rejected:
 
 
 @dataclass(frozen=True)
+class PathExplanation:
+    """A rejected path and the owning check's explanation, without file content."""
+
+    path: str
+    explanation: str
+
+    def __post_init__(self) -> None:
+        if not self.explanation.strip():
+            raise ValueError("A refused path needs an explanation")
+
+
+@dataclass(frozen=True)
 class Unsettled:
     """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `worker_alive`, `superseded`,
     `staged`, `uncommitted`, `unsafe`, `ignored`); nothing stored, retryable. `listing` is data for a person and a repeat's
@@ -236,7 +255,7 @@ class Unsettled:
 
     reason: str
     listing: tuple[str, ...] = ()
-    unsafe_path: str | None = field(default=None, compare=False)  # diagnostic identity before the bounded display codec
+    explanations: tuple[PathExplanation, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)

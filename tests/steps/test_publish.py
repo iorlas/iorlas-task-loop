@@ -18,6 +18,7 @@ from doubles import FakeSlotFiles
 from git_porcelain import GitTimeout, GitUnavailable, HookRejected, MissingRemote, RefRejected, Rejected, RemoteRejected, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
@@ -25,6 +26,7 @@ from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileStat, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.verifier import Verifier
@@ -81,7 +83,7 @@ class Pushing(FakeWorktree):
 def remote(request: pytest.FixtureRequest) -> FakeRemote:
     """origin; `indirect` parametrization adds files to main's first commit (a plan already at D)."""
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "one", **getattr(request, "param", {})})
+    found.advance("main", {"README": "one", ".task-loop.json": "{}", **getattr(request, "param", {})})
     return found
 
 
@@ -130,7 +132,7 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
     attempts = Attempts(
         store,
         EvidenceFiles(tmp_path),
-        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
         agent(slot, written, disposition),
         lambda: 10,
         checkouts,
@@ -138,10 +140,10 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     if verify:
-        Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere).verify(KEY)
+        Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).verify(KEY)
     if release:
         releaser = SlotRelease(store, checkouts, files, lambda _e: "gone", lambda _w: True, nowhere, lambda _r, _t: True, lambda: 30,
-                               lambda _setup: "gone", lambda _scratch: True)
+                               lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
         assert isinstance(releaser.release(KEY, False), Released)
     return tip(slot.repo)
 
@@ -151,7 +153,7 @@ def tip(repo: FakeRepo, prefix: str = "refs/heads/task/") -> str:
 
 
 def publisher(con: sqlite3.Connection, git: Checkouts, files: SlotFiles, store: AttemptStore | None = None) -> BranchPublish:
-    return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40)
+    return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40, ids=NativeIds())
 
 
 def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:
@@ -162,7 +164,7 @@ def test_a_verified_released_plan_is_pushed_from_the_checkout_and_recorded_once(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     registered.execute("INSERT INTO reservation VALUES ('s1',?,2,'other')", (repo.identity().key,))  # taken again
     git = Observed(checkouts)
     found = publisher(registered, git, slot_files).publish(KEY)
@@ -174,7 +176,7 @@ def test_a_verified_released_plan_is_pushed_from_the_checkout_and_recorded_once(
     assert publisher(registered, again, slot_files).publish(KEY) == PublishedRow(x, x, 40.0) and again.opened == []
 
 
-@pytest.mark.parametrize("remote", [{P: "# Plan\n"}], indirect=True)
+@pytest.mark.parametrize("remote", [{P: PLAN_TEXT}], indirect=True)
 def test_a_reused_plan_publishes_b(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, remote: FakeRemote, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
@@ -225,7 +227,7 @@ def test_each_precondition_refuses_before_any_push(
     slot_files: FakeSlotFiles, change: Callable[[sqlite3.Connection, FakeWorktree, ScriptedPushRepo, FakeSlotFiles], None], reason: str,
     opened: int,
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     change(registered, slot, repo, slot_files)
     pushes: list[bool] = []
     repo.during = lambda: pushes.append(True)
@@ -251,7 +253,7 @@ def test_a_remote_ahead_that_contains_x_is_refused_and_never_recorded(
     slot_files: SlotFiles,
 ) -> None:
     """`ls_remote` reads the fetch side, which a `pushurl` may make another repository: only `Pushed` is recorded."""
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     repo.worktree(repo.path).push("task/tl-1", head=Sha(x))  # someone published X, then added a commit on top
     t = remote.advance("task/tl-1", {"later.md": "more"})
     repo.fetch("origin")
@@ -263,7 +265,7 @@ def test_a_remote_ahead_that_contains_x_is_refused_and_never_recorded(
 def test_a_rejected_push_records_nothing_even_when_the_remote_tip_is_x_and_a_rerun_records(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     repo.worktree(repo.path).push("task/tl-1", head=Sha(x))  # another publisher won the race
     repo.answer = RefRejected("! [rejected] (fetch first)")
     found = publisher(registered, checkouts, slot_files).publish(KEY)
@@ -305,7 +307,7 @@ def test_a_rejected_push_that_is_not_a_refusal_is_rerun_able_and_records_nothing
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles, arrange: Callable[[sqlite3.Connection, ScriptedPushRepo, FakeRemote], str], expected: tuple[str, str],
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     before = arrange(registered, repo, remote)
     repo.answer = RefRejected("! [rejected] (non-fast-forward)")
     found = publisher(registered, checkouts, slot_files).publish(KEY)
@@ -317,7 +319,7 @@ def test_a_diverged_remote_is_refused_and_kept_and_an_unknown_tip_is_remote_move
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     t = remote.advance("task/tl-1", {"other.md": "unrelated"})  # another branch of the same name, unknown here
     moved = publisher(registered, checkouts, slot_files).publish(KEY)
     assert isinstance(moved, NotPublished) and (moved.kind, moved.reason) == ("refused", "remote_moved") and t in moved.detail
@@ -342,7 +344,7 @@ def test_a_push_that_does_not_land_records_nothing_and_prints_no_git_output(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles, answer: PushResult | GitUnavailable | None, expected: tuple[str, str],
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     remote.offline = answer is None
     repo.answer = answer
     found = publisher(registered, checkouts, slot_files).publish(KEY)
@@ -355,7 +357,7 @@ def test_an_abandon_committed_during_the_push_is_refused_and_records_nothing(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: FakeSlotFiles,
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     repo.during = lambda: abandoned(registered, slot, repo, slot_files)
     found = publisher(registered, checkouts, slot_files).publish(KEY)
     assert isinstance(found, NotPublished) and (found.kind, found.reason) == ("refused", "abandoned")
@@ -365,7 +367,7 @@ def test_an_abandon_committed_during_the_push_is_refused_and_records_nothing(
 def test_a_failed_record_is_unavailable_store_and_a_rerun_records_it(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
 
     def refused(_con: sqlite3.Connection) -> AbstractContextManager[None]:
         raise sqlite3.OperationalError("database is locked")
@@ -379,7 +381,7 @@ def test_a_failed_record_is_unavailable_store_and_a_rerun_records_it(
 def test_two_publishers_at_once_record_one_row(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     inner: list[PublishResult] = []
     started: list[bool] = []
 
@@ -397,7 +399,7 @@ def test_a_ref_name_collision_on_origin_is_named_not_reported_as_the_remotes_pol
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
     slot_files: SlotFiles,
 ) -> None:
-    run(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     remote.advance("task/tl-1/x", {"other.md": "unrelated"})
     repo.answer = RemoteRejected("! [remote rejected] task/tl-1 (cannot lock ref)")
     found = publisher(registered, checkouts, slot_files).publish(KEY)

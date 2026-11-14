@@ -22,6 +22,7 @@ from typing import Final, Literal
 from git_porcelain import Conflicted, GitUnavailable, MissingRevision, Repo, Sha, Squashed
 
 from taskloop.check_store import ChecksRow, Required, ResultRow
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.land_gate import ACCEPT, FILES, Changed, Gate, gate_of
 from taskloop.land_push import Origin
 from taskloop.operations import Failed
@@ -82,7 +83,7 @@ class LandSummary:
     conclusion: str | None
     target: str
     x: str
-    results: tuple[tuple[str, str], ...]
+    results: tuple[tuple[str, CommandConclusion | Literal["unfinished", "no result"]], ...]
     origin: str
     added: tuple[str, ...]
     removed: tuple[str, ...]
@@ -114,7 +115,9 @@ def summary(checks: ChecksRow, results: Sequence[ResultRow], profiles: tuple[Pro
     """Section 10's facts from the checks attempt, its latest block's results, the profiles at O and X, the required names
     at O, the squash, the tree listings, and the message with the gate facts."""
     at_o, at_x = profiles
-    concluded = {row.name: row.conclusion or "unfinished" for row in results}
+    concluded: dict[str, CommandConclusion | Literal["unfinished", "no result"]] = {
+        row.name: row.conclusion or "unfinished" for row in results}
+
     names_o, names_c = [name for name, _ in required_o], [name for name, _ in checks.required]
     argv_x = {check.name: check for check in at_x.checks}
     argv_o = {check.name: check for check in at_o.checks}
@@ -183,7 +186,7 @@ def lines(found: LandSummary) -> tuple[str, ...]:
                           f"removed {', '.join(found.removed)}" if found.removed else "") if part) + " (the checks run again)"
     return (
         f"Checks: {found.checks_id} {found.conclusion or 'unconcluded'} at X {found.x} (main at {found.target})",
-        *(f"Check: {name} {result}" for name, result in found.results),
+        *(f"Check: {name} {encode(result) if isinstance(result, CommandConclusion) else result}" for name, result in found.results),
         f"Required at origin main {found.origin}: {names}",
         *(f"Argv changed: {each.name}: {_argv(None if each.at_o is None else each.at_o.argv)} -> "
           f"{_argv(None if each.at_x is None else each.at_x.argv)}" for each in found.argv),

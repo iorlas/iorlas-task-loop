@@ -1,8 +1,12 @@
 // Load rail.html from a static server or Chromium with --allow-file-access-from-files. No dependencies needed.
-import { rail, changeReason, lasted } from "../../src/taskloop/dash/static/rail.js";
+import { rail, changeReason, lasted, verifyTitle } from "../../src/taskloop/dash/static/rail.js";
 import { say, wordNode } from "../../src/taskloop/dash/static/words.js";
-import { el } from "../../src/taskloop/dash/static/ui.js";
+import { COLUMNS, STATE, el, position, quietSpan, tick as updateTime } from "../../src/taskloop/dash/static/ui.js";
+import { result } from "../../src/taskloop/dash/static/result.js";
+import { lines, setNote } from "../../src/taskloop/dash/static/lines.js";
 import { initDrawer, openDrawer, closeDrawer } from "../../src/taskloop/dash/static/drawer.js";
+import { taskView } from "../../src/taskloop/dash/static/taskview.js";
+import { usageText } from "../../src/taskloop/dash/static/usage.js";
 
 const fixture = document.getElementById("fixture");
 const results = document.getElementById("results");
@@ -24,16 +28,16 @@ function mount(list, t = task, selected = {}, select = () => {}) {
 function healthyRows() {
   const clicks = [];
   const node = mount(healthy(), task, { step: "verification", n: 38 }, (...args) => clicks.push(args));
-  assert(primary(node).length === 4, "healthy task: Plan, Implement, Checks, Land");
+  assert(primary(node).length === 4 && button(node, "Check—"), "healthy task: Plan, Implement, Check, Land");
   assert(marks(node).length === 2 && marks(node).every((b) => b.textContent === "✓"), "success marks attached to agents");
-  assert(!node.textContent.includes("try 1") && !node.textContent.includes("Factory checked"), "no routine try/verification text");
+  assert(!node.textContent.includes("attempt 1") && !node.textContent.includes("Factory checked"), "no routine attempt/verification text");
   assert(!node.querySelector("button button"), "no nested buttons");
   assert(marks(node)[1].getAttribute("aria-pressed") === "true", "selected verification has an indication");
   assert(marks(node)[1].getAttribute("aria-label").includes("Implement"), "accessible name identifies its agent step");
   marks(node)[1].focus();
   assert(document.activeElement === marks(node)[1], "mark independently focusable");
   marks(node)[1].click();
-  assert(clicks[0].join("/") === "verification/38", "verification number need not match agent try");
+  assert(clicks[0].join("/") === "verification/38", "verification number need not match agent attempt");
   button(node, "Plan—").click();
   assert(clicks[1].join("/") === "plan/1", "step button selects its own result");
 }
@@ -79,8 +83,15 @@ function gaps() {
     const node = mount([attempt("plan", 1, { ended_at: end }), attempt("implement", 1, { started_at: start })]);
     assert(!node.textContent.includes("Factory work") && !node.textContent.includes("NaN"), "invalid gap omitted");
   }
-  const node = mount(healthy(), { ...task, column: "land", land: "manual" });
+  const node = mount(healthy(), { ...task, column: "land", land: "manual",
+    status_note: "waiting for land: waits for a person; the profile says land: manual" });
   assert(node.textContent.includes("land: manual") && !node.textContent.includes("idle"), "Land keeps policy, no idle line");
+  for (const [land, status_note] of [["unknown", "waiting for land: landing policy is unavailable"],
+    ["waiting", "waiting for land: waits for the factory"]]) {
+    const waiting = mount(healthy(), { ...task, column: "land", land, status_note });
+    assert(waiting.textContent.includes(status_note), "Land uses the server's policy explanation");
+    assert(!waiting.textContent.includes("next round"), "Land makes no unconditional timing promise");
+  }
   assert(lasted(attempt("plan", 1, { started_at: "bad", ended_at: end })) === "—", "invalid attempt timing omitted");
 }
 
@@ -105,7 +116,9 @@ function restartsAndRepeats() {
   for (const step of ["plan", "implement"]) {
     node = mount([attempt(step, 1, { ended_at: before.toISOString() }), repeat(step, 2, { started_at: today.toISOString() })]);
     const tag = [...node.querySelectorAll("span")].find((s) => s.textContent === "Repeat");
-    assert(tag?.title.includes("try 1: A listed path is unsafe") && tag.title.includes("8m 21s"), "readable repeat tag with previous try and gap");
+    assert(tag?.title.includes("attempt 1: A listed path is unsafe") && tag.title.includes("8m 21s"),
+      "readable repeat tag with previous attempt and gap");
+    assert(node.textContent.includes("attempt 2"), "repeated attempt numbered");
     assert(!node.textContent.includes("Factory work") && !node.textContent.includes("Restarted"), "repeat adds no row or factory gap");
     assert(!node.querySelector("details"), "repeat never starts another group");
   }
@@ -115,7 +128,7 @@ function restartsAndRepeats() {
   const tag = [...node.querySelectorAll("span")].find((s) => s.textContent === "Repeat");
   assert(tag.title.includes("The checks failed") && marks(node).length === 1, "check-driven repeat invents no verification cause");
   [...node.querySelectorAll("button")].find((b) => b.textContent.includes("Checks failed: lint")).click();
-  assert(clicks[0].join("/") === "checks/1", "failed Checks result remains reachable");
+  assert(clicks[0].join("/") === "checks/1", "failed Check result remains reachable");
 }
 
 function reviewed() {
@@ -126,7 +139,9 @@ function reviewed() {
 async function pastRuns() {
   const selected = { step: "checks", n: 2 };
   let node = mount(reviewed(), task, selected);
-  assert(node.querySelector("summary").textContent === "Run 1 · Plan ✓ · Implement ✓ · Checks ✓", "past status from actual results");
+  assert(node.querySelector("summary").textContent === "History 1 · Plan ✓ · Implement ✓ · Check ✓",
+    "past status from actual results");
+  assert(node.querySelector("summary").title.includes("every attempt and verification result"), "history tooltip uses attempt");
   assert(!node.querySelector("details").open && primary(node).length === 6, "reviewed shape folds past, about eight lines including failure");
   node.querySelector("details").open = true;
   await tick();
@@ -144,7 +159,7 @@ async function pastRuns() {
     repeat("plan", 2, { past: true }), verify(2, { past: true }), restart(3, { past: true }), verify(3, { past: true }), restart(4)];
   node = mount(history);
   const summaries = [...node.querySelectorAll("summary")];
-  assert(summaries.length === 2 && summaries[1].textContent.startsWith("Run 2"), "restart boundaries split multiple past runs");
+  assert(summaries.length === 2 && summaries[1].textContent.startsWith("History 2"), "restart boundaries split past history");
   assert(summaries[0].textContent.includes("Plan ✓ (earlier failure)"), "success never hides earlier failures");
   node = mount([attempt("plan", 1, { past: true })], { ...task, column: "waiting" });
   assert(!node.textContent.includes("pending") && !primary(node).length, "entirely past waiting task invents no steps");
@@ -172,12 +187,17 @@ async function drawerSelection() {
   assert(drawer.querySelector("#rail details").open, "disclosure survives redraw before toggle event fires");
   await tick();
   for (const tab of ["Lines", "Prompt", "Result"]) {
-    const row = [...drawer.querySelectorAll("#rail button")].find((b) => b.textContent.includes("Implementtry 3"));
+    const row = [...drawer.querySelectorAll("#rail button")].find((b) => b.textContent.includes("Implementattempt 3"));
     row.click(); await tick();
+    assert(drawer.querySelector("section h3").textContent.includes("Implement, attempt 3"), "selected attempt title");
+    assert(drawer.querySelector("section").textContent.includes("Success"), "successful attempt badge");
     button(drawer, tab).click(); await tick();
     assert(drawer.textContent.includes("A listed path is unsafe"), "selected repeat reason translated");
     const mark = marks(drawer).find((b) => b.textContent === "✗");
     mark.click(); await tick();
+    assert(drawer.querySelector("section h3").textContent.includes("Check of Implement attempt 2"), "verification title");
+    assert(drawer.querySelector("section").textContent.includes("Failure"), "failed attempt and validation badges");
+    assert(mark.getAttribute("aria-label").includes("Implement attempt 2"), "accessible verification reference");
     assert(drawer.textContent.includes("Named by the failed check") && drawer.textContent.includes("src/link.py") && drawer.textContent.includes("Path must be a plain file"), `${tab} → verification Result includes rule and listing`);
     assert(drawer.querySelector("#rail [aria-pressed=true]"), "verification selection survives body redraw");
   }
@@ -189,10 +209,107 @@ function words() {
   for (const code of ["verification", "unsafe", "ignored", "uncommitted", "failed_check", "test:lint"]) assert(say(code) !== code, `${code} readable`);
   assert(say("unknown:new") === "unknown:new" && say("Owner changed scope") === "Owner changed scope", "unknown codes/prose preserved");
   assert(wordNode(el, "unsafe").title === "unsafe", "raw code hover retained");
+  assert(say("run:unknown") === "The agent attempt failed: unknown", "agent failure family keeps its tail");
+}
+
+function vocabulary() {
+  assert(COLUMNS.find((c) => c.id === "checks").label === "Check", "step label singular");
+  assert(COLUMNS.find((c) => c.id === "held").label === "Hold", "hold label");
+  assert(STATE.succeeded.label === "Success" && STATE.failed.label === "Failure", "outcome labels");
+  assert(position({ column: "implement", attempt: 3 }) === "step 2 of 4 · attempt 3", "board attempt position");
+  assert(position({ column: "land", attempt: 3 }) === "step 4 of 4", "land adds no numbered attempt");
+  const list = [attempt("implement", 2), verify(88)];
+  assert(verifyTitle(list, list[1]) === "Check of Implement attempt 2", "verification names the agent attempt");
+  const item = attempt("checks", 2, { feed: [
+    { type: "step", step: "checks", attempt: 2, at: "2026-11-14T10:00:00Z" },
+    { type: "check", name: "try external command", passed: true, duration_ms: 1000, at: "2026-11-14T10:00:01Z" },
+    { type: "check", name: "lint", passed: false, duration_ms: 1000, at: "2026-11-14T10:00:02Z" },
+  ] });
+  fixture.replaceChildren(lines(item));
+  assert(fixture.textContent.includes("Check attempt 2 started"), "feed uses the step's display label");
+  assert(fixture.textContent.includes("Success") && fixture.textContent.includes("Failure"), "feed check outcomes");
+  assert(fixture.textContent.includes("try external command"), "external check name preserved");
+  setNote({ ...item, feedError: "offline" });
+  assert(document.getElementById("feednote").textContent === "Feed stopped: offline. Reconnecting.", "feed reconnection");
+  const body = { result: { summary: "passed", checks: [
+    { name: "build", passed: true, duration_ms: 1000, block: 1, output: "try raw output" },
+    { name: "lint", passed: false, duration_ms: 1000, block: 1, output: "error" },
+  ] } };
+  const view = result(item, body, { key: "checks/2", opened: new Map() });
+  const checks = [...view.querySelectorAll("details")];
+  assert(checks[0].querySelector("summary").textContent.includes("Failure") && checks[0].open, "failed check open first");
+  assert(checks[1].querySelector("summary").textContent.includes("Success") && !checks[1].open, "successful check folded");
+  assert(view.textContent.includes("Checks · 2") && view.textContent.includes("try raw output"), "collection and raw output");
+  let reloads = 0;
+  const task = taskView({ state: "failed", error: "offline" }, () => reloads++);
+  button(task, "Reload task").click();
+  assert(reloads === 1, "reload reads tracker through the existing callback");
+  const clock = Date.now;
+  Date.now = () => Date.parse("2026-11-14T10:15:00Z");
+  try {
+    const activity = quietSpan("2026-11-14T10:13:01Z");
+    assert(activity.hidden, "activity age hidden under two minutes");
+    activity.dataset.quiet = "2026-11-14T10:13:00Z";
+    updateTime(activity);
+    assert(!activity.hidden && activity.textContent === "Last activity 2m 00s ago", "activity age at two minutes");
+    assert(activity.querySelector(".bg-amber-500"), "two-minute activity colour retained");
+    activity.dataset.quiet = "2026-11-14T10:00:00Z";
+    updateTime(activity);
+    assert(activity.textContent === "Last activity 15m 00s ago" && activity.querySelector(".bg-rose-500"),
+      "fifteen-minute activity wording and colour");
+  } finally {
+    Date.now = clock;
+  }
+}
+
+async function usage() {
+  const counts = { fresh: 49773, cached: 496768, output: 2375, turns: 1, attempts: 1, complete: 1 };
+  const sum = { ...counts, attempts: 2, complete: 1 };
+  const text = usageText(counts);
+  for (const value of ["fresh input 49,773", "cached input 496,768", "output 2,375", "reported turns 1"]) {
+    assert(text.includes(value), `exact reported count: ${value}`);
+  }
+  assert(usageText({ fresh: 0, cached: 0, output: 0, turns: 0 }).includes("output 0"), "reported zero stays zero");
+  assert(usageText({}).includes("not reported"), "absent attempt usage");
+  assert(usageText({ ...counts, turns: null }).includes("reported turns not reported"), "missing turns independent of tokens");
+  const list = [attempt("plan", 1, { usage: counts }), repeat("plan", 2, { usage: {} })];
+  const node = rail(list, task, {}, () => {}, { plan: sum });
+  fixture.replaceChildren(node);
+  assert(node.textContent.includes("Step total") && node.textContent.includes("reported values only"), "partial step total visible");
+  assert(primary(node)[0].title.includes(text) && primary(node)[0].title.includes("1/2 attempts complete"), "hover has attempt and step total");
+  assert(primary(node)[1].title.includes("not reported"), "missing report in attempt hover");
+  assert(node.querySelector("span[title*='Repeat of']").title.includes("unsafe"), "repeat explanation retained with usage");
+  for (const tracker of [{ state: "loading" }, { state: "failed", error: "offline" }, { state: "none" }]) {
+    const view = taskView(tracker, () => {}, sum);
+    assert(view.textContent.includes("Task total") && view.textContent.includes("1/2 attempts complete"), "tracker-independent task total");
+  }
+  const run = { harness: "Codex", provider: "OpenAI", model: "chosen", effort: "high", access: "full access" };
+  const source = {
+    detail: async () => ({ task, attempts: [attempt("plan", 1, { usage: counts, run })], step_usage: { plan: counts }, usage: counts }),
+    tracker: async () => ({ fields: null, comments: [] }),
+    body: async () => ({ input: "Plan", result: { summary: "passed", checks: [] } }),
+  };
+  initDrawer(source, new Map([[task.id, task]]));
+  await openDrawer(task.id); await tick();
+  const drawer = document.getElementById("drawer");
+  const header = drawer.querySelector("section > div");
+  assert(header.textContent.includes(text) && header.textContent.includes("end not recorded"), "attempt counts beside timing");
+  assert(header.querySelector("span[title*='Codex completed turns']"), "reported turns explained in hover");
+  assert(drawer.textContent.includes("Codex · OpenAI · chosen · high effort · full access"), "run context retained");
+  assert(drawer.textContent.includes("Task total"), "task context total visible while inspecting attempt");
+  button(drawer, "Task").click(); await tick();
+  assert(drawer.textContent.includes("Task total") && !drawer.textContent.includes("not reported"), "task view retains total");
+  closeDrawer();
+  source.detail = async () => ({ task, attempts: [attempt("plan", 1, { usage: {}, run })], usage: {} });
+  await openDrawer(task.id); await tick();
+  assert(drawer.querySelector("section > div").textContent.includes("Tokens · not reported"), "missing attempt report in header");
+  closeDrawer();
 }
 
 try {
-  for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns, drawerSelection, words]) await test();
+  for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns, drawerSelection, words, vocabulary, usage]) {
+    await test();
+  }
   for (const dark of [false, true]) {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.classList.toggle("light", !dark);
@@ -201,7 +318,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 7 browser contracts, both themes";
+  results.textContent = "PASS: 9 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;

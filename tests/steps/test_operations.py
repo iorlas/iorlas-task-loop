@@ -14,6 +14,7 @@ from any_agent.testing import FakeRun
 from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance, PinnedViews
 from git_porcelain import GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store
 
 from taskloop.access import SANDBOX
@@ -46,6 +47,7 @@ from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     MAX_MINUTES,
@@ -143,7 +145,7 @@ class Publishes:
 def releaser(store: AttemptStore, checkouts: Checkouts, slot_files: SlotFiles) -> SlotRelease:
     """The real release over the fakes: the entry gone, the agent gone, the real slot lock, a claim that returns."""
     return SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", gone, custody, lambda _root, _task: True, lambda: 30,
-                       lambda _setup: "gone", lambda _scratch: True)
+                       lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
 
 
 class FakeVerifier:
@@ -432,18 +434,20 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40)
-    first = verify_task(store, Verifier(store, checkouts, slot_files, gone, lambda: 20, hold), releasing, publishing, "tasks", "tl-1")
+    releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
+    first = verify_task(store, Verifier(store, checkouts, slot_files, gone, lambda: 20, hold,
+        ids=NativeIds()), releasing, publishing, "tasks", "tl-1")
     assert first == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
@@ -453,8 +457,8 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         return checkouts(where, git_dir=git_dir)
 
     again = releaser(store, counted, slot_files)  # already released and published: nothing pending, no Git
-    verifier = Verifier(store, counted, slot_files, gone, lambda: 20, hold)
-    second = verify_task(store, verifier, again, BranchPublish(store, counted, slot_files, lambda: 50), "tasks", "tl-1")
+    verifier = Verifier(store, counted, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    second = verify_task(store, verifier, again, BranchPublish(store, counted, slot_files, lambda: 50, ids=NativeIds()), "tasks", "tl-1")
     # the fresh call said released/published; the same verdict again says the already-done words
     assert second == VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published")
     assert opened == []
@@ -466,7 +470,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     path, stray = "docs/design/tl-1/plan.md", "docs/design/tl-1/stray.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         slot.write_file(stray, "x")
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -474,10 +478,11 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
     before = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("verify", ())  # nothing committed yet
@@ -510,7 +515,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     path, near = "docs/design/tl-1/plan.md", "docs/design/tl-1/.gitignore"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         slot.write_file(near, "x")
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -518,13 +523,16 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
     on = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(on, Shown) and (on.view.next, on.view.leftovers) == ("repeat", ("unsafe", near))
+    assert isinstance(on, Shown) and on.view.next == "repeat"
+    assert on.view.leftovers[0] == "unsafe" and on.view.leftovers[-1] == near
+    assert "A changed Git file" in on.view.leftovers[1] and near in on.view.leftovers[1]
     slot.checkout_new("other")
     assert verifier.leftovers(KEY) == Unsettled("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
@@ -629,7 +637,8 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), failed, lambda: 10, checkouts, slot_files
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            failed, lambda: 10, checkouts, slot_files
     )
     assert attempts.execute(KEY, ENTRY).status == "collected"
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
@@ -720,17 +729,18 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
     attempts = Attempts(
-        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, slot_files
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
 
     def shown() -> AttemptView:
@@ -745,7 +755,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
     assert (shown().next, shown().published) == ("publish", None)
     x = next(ref.sha for ref in slot.repo.refs(["refs/heads/task/"]) if ref.name == "refs/heads/task/tl-1")
-    found = publish_task(store, BranchPublish(store, checkouts, slot_files, lambda: 40), "tasks", "tl-1")
+    found = publish_task(store, BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()), "tasks", "tl-1")
     assert found == PublishedTask("tasks", "tl-1", "attempt", BranchPublished(x, x))
     assert (shown().next, shown().published) == ("advance", PublishedRow(x, x, 40.0))  # implement follows plan
 

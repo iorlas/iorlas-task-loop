@@ -41,8 +41,31 @@ Review remains future work; the retained designs describe more than the implemen
   changes to what decides a pass require `--accept-gate-changes` when reported by land. Tracker synchronization remains
   the person's responsibility. Publishing a task branch does not land it.
 
-A required check that exits nonzero can repeat implementation after its checks slot is released. The next agent starts
-at the checked commit in a free clean slot, with the first failed required check's name, exact argv and bounded output
+For a refusal, retain its kind, reason and supplied detail and follow the reason-specific guidance. To inspect the
+local situation without advancing work, use `tl config show`, `tl repo inspect CHECKOUT`,
+`tl profile show --checkout CHECKOUT --at REV --target main`, and
+`tl task show TASK --backlog KEY --tracker-root TRACKER`. Inspect retained execution with
+`tl step list --stuck` and `tl step show TASK --backlog KEY`; add `--json` to these reads for structured output.
+Use the same machine config and database/artifacts overrides as the factory being inspected.
+
+`step show` prints `Directory:`, `Entry log:` and `Events:`; JSON includes `directory`, `entry_log` and `events_path`.
+These belong to the selected attempt, including a repeat or the latest checks attempt. Candidate logs are identified
+separately. An events path is a location even before launch or when no events file exists; showing it neither creates
+nor reads that file. Preserve the evidence when investigating a refusal, and review configuration, origins, agent
+input and transcripts for private data before sharing them.
+
+Dedicated doctor and bug-report commands are deferred. The implemented inspection commands above provide the manual
+diagnostic procedure. A future doctor needs an agreed definition of health and partial-failure behavior; a collected
+bug report also needs an agreed content and redaction policy. No report is collected automatically.
+
+Before a clean step starts, the factory brings its retained task branch onto fetched origin main. Main advancing does
+not replay the plan. Textual conflicts use up to three separately recorded resolution executions; unsupported or
+ambiguous conflicts hold the task with its work preserved. Preparation also runs under `land: manual`: that policy
+controls delivery. Free slots may park at different commits belonging to main or the selected task history.
+
+A required check that exits nonzero can repeat implementation after its checks slot is released. Preparation first
+validates the exact checked source, then integrates current main. The next agent starts in a free clean slot with
+the first failed required check's name, exact argv and bounded output
 tail in its prompt. Path repeats and check-driven repeats share the three-attempt implement limit; an unchanged answer
 also receives fresh checks. Infrastructure failures and optional failures alone do not trigger repair. Unsafe-path
 feedback names the actual unsafe file, including a nearby Git file omitted from the answer.
@@ -126,8 +149,18 @@ and document; [docs/glossary.md](docs/glossary.md) holds the vocabulary, the com
 The [decision records](docs/design/INDEX.md#decision-records) distinguish accepted decisions, later qualifications
 and their enforcing tests.
 
-Python 3.15 and the tool versions in `mise.toml` are required. Run `mise install` after
-trusting the repository configuration through normal mise setup.
+Install system Git at the exact version in `mise.toml`'s `vars.git_version` first.
+That file is the authoritative source for supported Git, Codex, Python and Tailwind
+versions. Run `mise install` after trusting the repository configuration through normal
+mise setup, and activate mise in your shell. Mise installs the pinned Python and standalone
+Codex and Tailwind executables; Node is not required. `.python-version` selects that same
+Python for uv; the package's `>=3.15` compatibility range is separate from this development pin.
+The committed `mise.lock` records managed downloads.
+
+`just check`, `just test`, the prek lint hook and `just css` verify these versions locally.
+A missing tool, unexpected executable version or contradictory committed declaration fails
+with the tool's expected version and observed detail. Install the declared version and check
+your shell's PATH before retrying; verification never installs or upgrades external tools.
 
 ```bash
 just install
@@ -145,6 +178,24 @@ rounds tests (the folder name is historical). No historical test bootstrap or ke
 The Git, task tracker, agent, SQLite, process-lock and stream boundaries come from released
 [shelf](https://github.com/yoselabs/shelf) libraries, pinned in [pyproject.toml](pyproject.toml) and [uv.lock](uv.lock)
 and checked for portable source provenance.
+
+The direct runtime dependencies are pinned as follows:
+
+| Package | Version |
+| --- | --- |
+| any-agent | 0.11.0 |
+| beads-client | 0.2.0 |
+| git-porcelain | 0.21.0 |
+| process-lock | 0.2.1 |
+| pydantic | 2.14.3 |
+| sqlite-store | 0.1.0 |
+| stream-proc | 0.9.0 |
+
+The build requirement is hatchling 1.33.0. Development requirements are pytest 9.2.0
+and pytest-xdist 3.8.0. [pyproject.toml](pyproject.toml) owns these declarations;
+[uv.lock](uv.lock) owns the frozen dependency resolutions. stream-proc's package
+version is 0.9.0, but its shelf source uses the `any-agent-v0.11.0` tag so that
+stream-proc and any-agent resolve to the same shelf commit.
 
 [Design and acceptance](docs/design/tl-8bh9.8.7/plan.md) describe the boundary of this
 foundation. Preserved design documents may describe future behavior or the historical implementation;

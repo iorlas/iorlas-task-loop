@@ -1,0 +1,285 @@
+// Load owner-attention.html in Chromium with --allow-file-access-from-files, or from a static server.
+const results = document.getElementById("results");
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const question = "Which database?\nUse <img src=x onerror=alert(1)>?\n" + "Long question ".repeat(40);
+const explanation = "The agent did not finish before its deadline.\nSee <img src=x onerror=alert(1)>.";
+const card = (id, minute, extra = {}) => ({
+  id, title: id, column: "held", attempt: 1, slot: "s1", hold_cause: "branch_moved",
+  step_started_at: "2026-11-14T10:00:00Z", last_activity_at: `2026-11-14T10:${minute}:00Z`, ...extra,
+});
+const mixed = [card("hold-old", "03"), card("hold-new", "04", {
+  hold_cause: "failed:run:timeout", hold_explanation: explanation,
+}),
+  card("ask-old", "01", { ask: true, question }),
+  card("ask-new", "02", { ask: true, question: "Which region?\nChoose one." }),
+  card("running", "05", { column: "implement", ask: true })];
+let snapshot = { slots: ["s1", "s2"], tasks: mixed };
+const backlog = "fixture/main";
+const round = (at, extra = {}) => ({ at, backlog, move: "round", task: null, step: null, words: ["moves=0"], ...extra });
+let now = Date.parse("2026-11-14T12:00:00Z");
+Date.now = () => now;
+const timers = [];
+const interval = window.setInterval;
+window.setInterval = (callback, ms) => {
+  if (ms !== 1000) return interval(callback, ms);
+  timers.push(callback);
+  return 0;
+};
+const advance = (ms) => { now += ms; timers.forEach((callback) => callback()); };
+let logSnapshot = { backlog, rows: [round("2026-11-14T10:00:00Z")] };
+let logResponse = () => logSnapshot;
+let boardError = null;
+let logReads = 0;
+let stream;
+window.fetch = async (url) => {
+  let data;
+  if (url === "/api/board") {
+    if (boardError) throw boardError;
+    data = snapshot;
+  } else if (url === "/api/log") {
+    logReads++;
+    data = await logResponse();
+  } else if (url.endsWith("/tracker")) data = null;
+  else if (url.startsWith("/api/tasks/")) {
+    const task = snapshot.tasks.find((t) => t.id === url.split("/").at(-1));
+    data = { task, attempts: [], step_usage: {}, usage: {} };
+  } else throw new Error(`Unexpected request: ${url}`);
+  return { ok: true, json: async () => structuredClone(data) };
+};
+window.EventSource = class extends EventTarget {
+  constructor(url) {
+    super();
+    assert(url === "/api/events", "Expected the existing stream endpoint");
+    stream = this;
+  }
+};
+const send = (message) => stream.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+const node = (id) => document.querySelector(`article[data-id="${id}"]`);
+const ids = (parent) => [...parent.querySelectorAll("article")].map((n) => n.dataset.id).join(",");
+function summary(asks, held) {
+  const text = document.getElementById("summary").textContent;
+  assert(text.includes(`${asks} need you`) && text.includes(`${held} on hold`), `Wrong summary: ${text}`);
+}
+function placement() {
+  assert(ids(node("ask-old").parentNode) === "ask-new,ask-old,hold-new,hold-old", "Asks first, then recency in each group");
+}
+async function resync(tasks) {
+  snapshot = { ...snapshot, tasks };
+  send({ kind: "resync" });
+  await tick();
+}
+function questions() {
+  const body = [...node("ask-old").querySelectorAll("p")].find((p) => p.textContent === question);
+  assert(body && body.getClientRects().length, "Complete question visible without opening the drawer");
+  assert(!node("ask-old").querySelector("img"), "HTML-shaped question is text");
+  assert(getComputedStyle(body).whiteSpace === "pre-wrap", "Question line breaks preserved");
+  assert(getComputedStyle(body).overflowWrap === "break-word", "Long question wraps");
+  assert(getComputedStyle(body).webkitLineClamp === "none", "Question is not clamped");
+  assert(node("ask-new").textContent.includes("Which region?\nChoose one."), "Each ask has its own question");
+  assert(!node("ask-old").textContent.includes("Factory problem:"), "An agent ask is not a factory problem");
+  fault(node("hold-new"));
+  assert(node("hold-old").textContent.includes("Factory problem: branch_moved"), "Unknown cause stays visible");
+  assert(node("hold-old").textContent.includes("Explanation unavailable:"), "Missing explanation has explicit fallback");
+}
+
+function fault(parent, text = explanation) {
+  const heading = [...parent.querySelectorAll("p")].find((p) =>
+    p.textContent === "Factory problem: The agent did not finish in time");
+  assert(heading?.title === "failed:run:timeout", "Readable factory problem label keeps raw cause on hover");
+  const body = [...parent.querySelectorAll("p")].find((p) => p.textContent === text);
+  assert(body && body.getClientRects().length, "Factory explanation is visible");
+  assert(getComputedStyle(body).whiteSpace === "pre-wrap", "Explanation preserves line breaks");
+  assert(!parent.querySelector("img"), "HTML-shaped explanation is text");
+  assert(!parent.textContent.includes("Needs you"), "Factory problem is distinguishable from an agent ask");
+}
+
+async function drawers() {
+  node("hold-new").click();
+  await tick();
+  fault(document.getElementById("drawer"));
+  const revised = `${explanation}\nThe deadline was confirmed.`;
+  send({ kind: "task", task: { ...mixed[1], hold_explanation: revised } });
+  await tick();
+  fault(node("hold-new"), revised);
+  fault(document.getElementById("drawer"), revised);
+  node("ask-old").click();
+  await tick();
+  const drawer = document.getElementById("drawer");
+  assert(drawer.textContent.includes("⛔ Hold"), "Drawer uses the shared Hold label");
+  assert(drawer.textContent.includes("Needs you") && drawer.textContent.includes(question), "Drawer preserves agent question");
+  assert(!drawer.textContent.includes("Factory problem:") && !drawer.querySelector("img"), "Drawer ask is safe and distinct");
+  document.getElementById("backdrop").click();
+}
+
+async function boardWords() {
+  const headings = [...document.querySelectorAll("#board h2")].map((h) => h.textContent);
+  assert(headings.join("|") === "Waiting|Plan|Implement|Check|Land|Hold|Landed", "glossary column labels in both layouts");
+  for (const status of ["queued", "abandoned"]) {
+    const task = card(`waiting-${status}`, "00", { column: "waiting", status, slot: null,
+      status_note: `${status}: no current work`, hold_cause: null });
+    send({ kind: "task", task });
+    const article = node(task.id);
+    assert(article.textContent.includes(status === "queued" ? "Queued" : "Abandoned"), "waiting retains status explanation");
+    assert(article.querySelector("[data-since]").textContent.endsWith(" waiting"), "waiting duration does not claim ready");
+    assert(!article.querySelector("[data-quiet]"), "waiting adds no running-activity observation");
+    article.click(); await tick();
+    assert(document.getElementById("drawer").textContent.includes("Waiting"), "drawer shares Waiting label");
+    document.getElementById("backdrop").click();
+  }
+  const heading = document.querySelector("#board h2").parentNode;
+  assert(heading.title.includes("queued and abandoned") && !heading.title.includes("Approved"), "waiting membership help");
+  assert(node("running").textContent.includes("step 2 of 4 · attempt 1"), "board position uses attempt");
+  const activity = node("running").querySelector("[data-quiet]");
+  const previous = activity.textContent;
+  assert(previous.startsWith("Last activity ") && previous.endsWith(" ago"), "board activity age label");
+  advance(60000);
+  assert(activity.textContent !== previous && activity.textContent.endsWith(" ago"), "activity age still updates");
+}
+
+const healthText = () => document.getElementById("mode").textContent;
+const health = (text) => assert(healthText().includes(text), `Expected ${text}: ${healthText()}`);
+const transport = (kind) => stream.dispatchEvent(new Event(kind));
+const logEvent = (row) => send({ kind: "log", row });
+const reload = async () => { send({ kind: "resync" }); await tick(); };
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+};
+
+async function healthStates() {
+  now = Date.parse("2026-11-14T12:00:00Z");
+  logSnapshot = { backlog, rows: [round("2026-11-14T10:00:00Z"), round("2026-11-14T09:00:00Z")] };
+  await reload();
+  const before = logReads;
+  transport("open");
+  await tick();
+  assert(logReads > before, "Every stream open reloads the log, including the first open");
+  health("Stream connected");
+  health("Last recorded round 2h 00m ago");
+  assert(document.querySelector("#mode [data-since]").title === "2026-11-14T10:00:00Z", "Round timestamp on hover");
+  assert(!document.getElementById("mode").querySelector(".bg-emerald-500"), "No unconditional green indicator");
+  transport("error");
+  health("Stream disconnected");
+  advance(60000);
+  health("Last recorded round 2h 01m ago");
+  for (const row of [round("2026-11-14T12:00:00Z", { backlog: "other" }),
+    round("2026-11-14T12:00:00Z", { move: "rounds" }), round("2026-11-14T12:00:00Z", { move: "admit", task: "tl-1" }),
+    round("invalid"), round("2026-02-30T12:00:00Z")]) logEvent(row);
+  health("Last recorded round 2h 01m ago");
+  logEvent(round("2026-11-14T12:00:00Z"));
+  health("Last recorded round 1m 00s ago");
+  advance(60000);
+  health("Last recorded round 2m 00s ago");
+  logSnapshot.rows = [round("2026-11-14T12:01:00Z")];
+  transport("open");
+  await tick();
+  health("Stream connected");
+  health("Last recorded round 1m 00s ago");
+  send({ kind: "error", error: "fixture board failed" });
+  health("Stream connected");
+  assert(!document.getElementById("banner").hidden, "Application read errors retain the board failure banner");
+  logSnapshot.rows = [round("2026-11-14T12:02:00Z", { backlog: "other" }), round("invalid")];
+  boardError = new Error("fixture board failed");
+  await reload();
+  health("No round in available log");
+  health("Stream connected");
+  boardError = null;
+  logSnapshot.rows = [round("2026-11-14T12:01:00Z")];
+  await reload();
+  health("Last recorded round 1m 00s ago");
+  logResponse = () => { throw new Error("fixture log failed"); };
+  await reload();
+  health("Last round unavailable");
+  logResponse = () => logSnapshot;
+  logSnapshot.rows = [round("2026-11-14T12:03:00Z")];
+  await reload();
+  health("clock discrepancy");
+  assert(!document.querySelector("#mode [data-since]"), "Future timestamp does not fabricate zero age");
+  advance(120000);
+  health("Last recorded round 1m 00s ago");
+  logSnapshot.rows = [];
+  await reload();
+  health("No round in available log");
+  assert(document.getElementById("banner").hidden, "Board recovers independently of an empty log");
+}
+
+async function healthRaces() {
+  const old = deferred();
+  logResponse = () => old.promise;
+  send({ kind: "resync" });
+  logEvent(round("2026-11-14T12:03:00Z"));
+  old.resolve({ backlog, rows: [] });
+  await tick();
+  health("Last recorded round 1m 00s ago");
+  const first = deferred();
+  logResponse = () => first.promise;
+  send({ kind: "resync" });
+  logSnapshot.rows = [round("2026-11-14T12:04:00Z")];
+  logResponse = () => logSnapshot;
+  await reload();
+  first.resolve({ backlog, rows: [round("2026-11-14T10:00:00Z")] });
+  await tick();
+  health("Last recorded round 0ms ago");
+  const obsolete = deferred();
+  logResponse = () => obsolete.promise;
+  send({ kind: "resync" });
+  logSnapshot.rows = [];
+  logResponse = () => logSnapshot;
+  await reload();
+  obsolete.resolve({ backlog, rows: [round("2026-11-14T12:04:00Z")] });
+  await tick();
+  health("No round in available log");
+  document.getElementById("nav-logs").click();
+  await tick();
+  logEvent(round("2026-11-14T12:04:00Z", { move: "rounds", words: ["stopped"] }));
+  assert(document.getElementById("logs").textContent.includes("stopped"), "All log rows still reach the log screen");
+  health("No round in available log");
+  document.getElementById("nav-board").click();
+}
+
+try {
+  await import("../../src/taskloop/dash/static/app.js");
+  for (let n = 0; !stream && n < 100; n++) await tick();
+  assert(stream, "App subscribed to stream");
+  health("Stream connecting");
+  health("Last recorded round 2h 00m ago");
+  for (const theme of ["light", "dark"]) {
+    document.documentElement.className = theme;
+    await healthStates();
+    await healthRaces();
+    await resync(mixed);
+    for (const layout of ["view-columns", "view-lanes"]) {
+      document.getElementById(layout).click();
+      summary(2, 4);
+      placement();
+      questions();
+      await drawers();
+      await boardWords();
+      await resync(mixed);
+      if (layout === "view-lanes") {
+        assert(node("running").parentNode !== node("ask-old").parentNode, "Slot cells preserve step columns");
+      }
+    }
+    send({ kind: "task", task: { ...mixed[3], question: null } });
+    assert(node("ask-new").textContent.includes("Question unavailable"), "Missing question has an explanation");
+    summary(2, 4);
+    send({ kind: "task", task: { ...mixed[3], column: "implement" } });
+    summary(1, 3);
+    assert(!node("ask-new").textContent.includes("Needs you"), "Leaving Hold removes ask treatment");
+    send({ kind: "gone", id: "ask-old" });
+    summary(0, 2);
+    assert(!node("ask-old"), "Removed ask disappears");
+    await resync(mixed.slice(0, 2));
+    summary(0, 2);
+    assert(!node("ask-new") && !node("running"), "Resync drops missing cards");
+    await resync(mixed);
+    summary(2, 4);
+    placement();
+  }
+  results.textContent = "PASS: stream state and round age, reload races, owner attention and factory faults, both layouts and themes";
+} catch (error) {
+  results.textContent = `FAIL: ${error.stack ?? error}`;
+  throw error;
+}

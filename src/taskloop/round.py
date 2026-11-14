@@ -8,7 +8,7 @@ is refused `claim_lost` or `branch_moved` is held), then admit eligible ready ta
 free, storing the round's label on each fresh attempt (an `on_hold` task whose hold removed this very label is eligible
 again: `hold_status.reingests`), then publish the verified, released, unpublished results read at the start (a
 round-taken `branch_moved` is held), then remove `held` from held tasks taken again (`hold.clear_holds`). Under the profile's
-`land: auto` it first lands the oldest passed task it took (`round_land`: `land.land`, as `tl step land` runs it). It adds no
+`land: auto` it first lands the oldest passed task in the repository (`round_land`: the shared `land.land`). It adds no
 state, lock, Git write, tracker write or process of its own beyond the hold's and the land's: its only other output is one
 append-only round-log line per move, never read back. No per-task hold word stops admission.
 
@@ -23,22 +23,24 @@ move (the graceful stop: no further move, `stopped=interrupted`).
 
 import sqlite3
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import Final
 
+from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey
+from taskloop.attempt_types import AttemptKey, Checkouts
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.drain.store import DrainStore
 from taskloop.hold import HoldPorts, clear_holds, hold_task
 from taskloop.hold_status import MAIN_MOVED
+from taskloop.ids import Ids
 from taskloop.operations import (
     UNKNOWN_KINDS,
     Failed,
@@ -119,10 +121,12 @@ class RoundPorts:
     holding: HoldPorts
     ready: ReadyRows
     log: Callable[[str], None]
+    ids: Ids = field(kw_only=True)
     stopping: Callable[[], bool] = never
     drain_store: DrainStore | None = None
     generation: int | None = None  # captured at explicit rounds startup; older loops cannot schedule after reopening
     landing: Landing | None = None  # `land: auto` lands through it; None: rounds land nothing
+    repository: Callable[[Path], str | Failed] = lambda _path: Failed("unavailable", "checkout")
 
 
 def _word(result: Started | Failed) -> str:
@@ -149,7 +153,7 @@ def max_running_refused(count: int) -> Failed | None:
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     try:
-        with operation(ports.drain_store or ports.starting.reader, ActionKind.ROUND, generation=ports.generation):
+        with operation(ports.drain_store or ports.starting.reader, ActionKind.ROUND, ids=ports.ids, generation=ports.generation):
             return _run_round(ports, request)
     except Fenced:
         return Failed("refused", Reason.DRAINING, BLOCKED)
@@ -163,10 +167,8 @@ def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     """One round: settle, advance, admit (while fewer than `max_running` tasks are in flight), publish, clear. A
     whole-round refusal (empty label, unreadable store) is `Failed`."""
     label = request.label.strip()
-    if not label:
-        return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    refused = (minutes_refused(request.minutes)
-               or max_running_refused(request.max_running))
+    refused = (Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
+               if not label else minutes_refused(request.minutes) or max_running_refused(request.max_running))
     if refused is not None:
         return refused
     request = replace(request, label=label)
@@ -180,13 +182,22 @@ def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
             return trail.close(INTERRUPTED)
         if each.next != "repeat" or each.checks is None:
             _settle(ports, request, each, trail)
+    refreshed = list_attempts(ports.reads) if ports.landing is not None else listed
+    if isinstance(refreshed, Failed):
+        return refreshed
+    after_settle = _backlog(refreshed, request.backlog)
+    needs_land = ports.landing is not None and any(each.next == "land" for each in after_settle)
+    repo_id = ports.repository(request.checkout) if needs_land else None
+    if isinstance(repo_id, Failed):
+        return repo_id
+    for_land = tuple(each for each in after_settle if repo_id is None or each.repo_id == repo_id)
     finished = frozenset() if ports.stopping() else land_passed(
-        ports.landing, request.backlog, request.checkout, request.minutes, current, trail, partial(_held, ports.holding))
-    reserve = int(any(each.next == "land" and each.task_id not in finished for each in current))
+        ports.landing, request.backlog, request.checkout, request.minutes, for_land, trail, partial(_held, ports.holding))
+    reserve = int(any(each.next == "land" and each.task_id not in finished for each in for_land))
     waiting = tuple(each for each in current if each.next == "advance" or _rerun(each)
                     or (each.next == "repeat" and each.checks is not None))
     stopped = _advance(ports, request, waiting, trail, reserve)
-    stopped = stopped or _admit(ports, request, current, trail, reserve)
+    stopped = stopped or _admit(ports, request, after_settle, trail, reserve, finished)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
     if stopped != INTERRUPTED and not ports.stopping():
@@ -202,6 +213,13 @@ def _rerun(each: AttemptView) -> bool:
 
 def _backlog(listed: Listed, backlog: str) -> tuple[AttemptView, ...]:
     return tuple(each for each in listed.attempts if each.backlog == backlog)
+
+
+def repository_of(checkouts: Checkouts, checkout: Path) -> str | Failed:
+    found = checkout_repo(checkouts, checkout)
+    if isinstance(found, (AdmitRefused, AdmitUnavailable)):
+        return Failed("refused" if isinstance(found, AdmitRefused) else "unavailable", "checkout", found.detail)
+    return found[1]
 
 
 def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: Trail) -> None:
@@ -360,13 +378,15 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
     return ""
 
 
-def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: Trail, reserve: int) -> str:
+def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: Trail, reserve: int,
+           finished: frozenset[str]) -> str:
     """Eligible ready tasks in priority order, one start each, until a slot, the in-flight bound (`max_running`) or the
     round's inputs run out; the word that stopped admission early ("" when the candidates ran out). With every slot
     reserved (`no_free_slot`, `slot_for_land`) or the bound reached (`max_running`): no tracker call."""
     if ports.stopping():
         return INTERRUPTED
-    if word := _full(ports.reads.store, reserve) or ("max_running" if len(in_flight(current)) >= request.max_running else ""):
+    running = len(in_flight(current) - finished)
+    if word := _full(ports.reads.store, reserve) or ("max_running" if running >= request.max_running else ""):
         return word
     try:
         rows = ready_rows(ports.ready, request.label, ports.reads.clock(), request.retake)
@@ -386,7 +406,7 @@ def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, 
         found = states.get(task_id)
         explained = words(found) if found is not None and found.status is Status.ABANDONED else words(skipped(reason))
         trail.add(Move(task_id, "skip", reason, attempt, explained, step))  # attempted/abandoned: the attempt that holds it
-    return _start_each(ports, request, ordered, trail, reserve, len(in_flight(current)))
+    return _start_each(ports, request, ordered, trail, reserve, running)
 
 
 def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow, ...], trail: Trail, reserve: int, running: int) -> str:

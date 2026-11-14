@@ -131,6 +131,7 @@ forbidden_modules =
 allow_indirect_imports = True
 ignore_imports =
     taskloop.dash_server -> http.server
+    taskloop.shelf_digest.identities -> urllib.parse
 
 [importlinter:contract:process-lock-owners]
 name = Only slot custody and the rounds lock import the process lock library

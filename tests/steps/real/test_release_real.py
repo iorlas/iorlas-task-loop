@@ -17,6 +17,7 @@ from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
@@ -27,6 +28,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
@@ -75,7 +77,8 @@ class Repository:
         self.main.mkdir()
         git(self.main, "init", "-q", "-b", "main")
         (self.main / "README").write_text("one\n")
-        git(self.main, "add", "README")
+        (self.main / ".task-loop.json").write_text("{}")
+        git(self.main, "add", "README", ".task-loop.json")
         git(self.main, "commit", "-q", "-m", "base")
         slots = root / "slots"
         self.repo_id = RepoId(VIEWS.checkouts(self.main).identity().key)
@@ -85,10 +88,10 @@ class Repository:
         adopt(lambda: factory, begin_immediate, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         self.releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
-                                    lambda _setup: "gone", lambda _scratch: True)
+                                    lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
         self.admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(self.art), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
-        )
+        , ids=NativeIds())
         self.root = root
 
     def rev(self, name: str) -> str:
@@ -112,7 +115,7 @@ class Repository:
         attempts = Attempts(
             self.store,
             EvidenceFiles(self.art),
-            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             agent,
             lambda: 10,
             VIEWS.checkouts,
@@ -124,10 +127,10 @@ class Repository:
     def planned(self) -> tuple[AttemptKey, str]:
         def write() -> None:
             (self.slot / P).parent.mkdir(parents=True)
-            (self.slot / P).write_text("# Plan\n")
+            (self.slot / P).write_text(PLAN_TEXT)
 
         key = self.run(answered(PLAN, write))
-        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold).verify(key), Verified)
+        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold, ids=NativeIds()).verify(key), Verified)
         return key, self.rev("HEAD")
 
 

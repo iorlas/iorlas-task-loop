@@ -18,7 +18,7 @@ from taskloop.attempt_types import AttemptResult, Unsettled
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold_guide import HOLD, KEPT_ACTIONS
+from taskloop.hold_guide import HOLD
 from taskloop.hold_status import cause, finished, reingests
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
 from taskloop.operations import Failed
@@ -218,7 +218,7 @@ def test_show_of_a_pending_hold_names_each_action_and_the_claim_kept(factory: sq
     lines = human("show", shown, tmp_path / "factory.db")
     assert "Hold tracker: `auto` removed, `held` added, not commented yet" in lines
     assert "Hold claim: kept: the abandon has not finished" in lines
-    assert lines[-1] == HOLD and "hold pending <step> <word>" in HOLD and not any(word in HOLD for word in KEPT_ACTIONS)
+    assert lines[-1] == HOLD and "hold pending <step> <word>" in HOLD and "`tl " not in HOLD
 
 
 def test_list_prints_the_hold_word_and_its_guide_once_and_json_says_due(factory: sqlite3.Connection) -> None:

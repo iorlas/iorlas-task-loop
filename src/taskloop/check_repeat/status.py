@@ -6,6 +6,7 @@ from enum import StrEnum
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import ATTEMPTS, AttemptKey
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.land_store import LandStore
 
 
@@ -22,15 +23,15 @@ def failed_result(row: ChecksRow, results: tuple[ResultRow, ...]) -> ResultRow |
     The attempt's cause must agree with the structured result (expired/profile/main-moved take precedence)."""
     if row.phase != "concluded" or row.conclusion != "failed" or row.abandoned or not results:
         return None
-    if any(each.conclusion not in ("passed", "failed") or each.ended_at is None for each in results):
+    if any(each.conclusion not in (CommandConclusion.PASSED, CommandConclusion.FAILED) or each.ended_at is None for each in results):
         return None
     by_name = {each.name: each for each in results}
     if any(name not in by_name for name, _ in row.required):
         return None
-    first = next((by_name[name] for name, _ in row.required if by_name[name].conclusion != "passed"), None)
-    if first is None or first.rc in (None, 0) or first.conclusion != "failed":
+    first = next((by_name[name] for name, _ in row.required if by_name[name].conclusion is not CommandConclusion.PASSED), None)
+    if first is None or first.rc in (None, 0) or first.conclusion != CommandConclusion.FAILED:
         return None
-    return first if row.reason == f"{first.name}:{first.conclusion}" else None
+    return first if row.reason == f"{first.name}:{encode(first.conclusion)}" else None
 
 
 def decision(number: int, row: ChecksRow, results: tuple[ResultRow, ...], *, blocked: bool = False) -> CheckRepeatDecision:

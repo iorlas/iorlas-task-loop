@@ -30,6 +30,7 @@ from taskloop.check_store import (
     stored_word,
 )
 from taskloop.factory_schema import CANDIDATE_HELD, CANDIDATE_RESERVED, LAND_ADMITTED, LAND_LOADED, LANDED, LANDING, LATER, marks, prefixed
+from taskloop.land_conflict.reservation_store import holds_source
 
 type Validation = Literal["same_tree", "no_change", "passed", "failed"]
 type Settled = Literal["same_tree", "no_change"]  # a candidate inserted validated, with no slot
@@ -148,19 +149,39 @@ def held_slot(con: sqlite3.Connection, key: AttemptKey) -> str | None:
     return None if found is None else as_nullable_text(found[0])
 
 
+def blocks_conflict(con: sqlite3.Connection, checks: str) -> bool:
+    """Candidates across every checks run of this implement source, using actual reservation identity."""
+    return con.execute(
+        "SELECT 1 FROM land_candidate l JOIN checks_attempt c ON c.attempt_id=l.checks_attempt_id "
+        "JOIN attempt i ON i.attempt_id=c.after_attempt_id "
+        "WHERE c.after_attempt_id=(SELECT after_attempt_id FROM checks_attempt WHERE attempt_id=?) "
+        "AND (l.delivery IS NOT NULL OR (l.superseded IS NULL AND l.validation IN ('same_tree','passed')) "
+        "OR EXISTS (SELECT 1 FROM reservation q WHERE q.repo_id=i.repo_id AND q.slot=l.slot "
+        "AND q.attempt_id=l.candidate_id AND q.generation=l.generation))", (checks,),
+    ).fetchone() is not None
+
+
+def require_checked(con: sqlite3.Connection, checks: str, *, no_change: bool = False, conflict: bool = False) -> None:
+    """Shared source eligibility fence, inside an admission transaction."""
+    checked = con.execute(CHECKED, (checks,)).fetchone()
+    if checked is None or (checked[0] != "passed" and not no_change):
+        raise StoreRefused("not_checked")
+    if checked[1] is None:
+        raise StoreRefused("not_done")
+    blocked = blocks_conflict(con, checks) if conflict else checked[2]
+    if blocked:
+        raise StoreRefused("landing")
+
+
 def insert(con: sqlite3.Connection, admitted: LandAdmitted) -> None:
     """The candidate's row, in the caller's write transaction (with `admit.reserve` when it validates in a slot). Fenced:
     the checks attempt the latest of its implement attempt, released, not abandoned and `passed` (any conclusion for
     `no_change`), else `not_checked`; the implement attempt current with its claim `kept`, else `not_done`; no candidate
     of its implement attempt (of any of its checks attempts) delivered, holding a slot or pushable (`LANDING`), and
     `number` the latest plus one, else `landing`."""
-    checked = con.execute(CHECKED, (admitted.checks,)).fetchone()
-    if checked is None or (checked[0] != "passed" and admitted.validation != "no_change"):
-        raise StoreRefused("not_checked")
-    if checked[1] is None:
-        raise StoreRefused("not_done")
+    require_checked(con, admitted.checks, no_change=admitted.validation == "no_change")
     latest = con.execute("SELECT coalesce(max(number),0) FROM land_candidate WHERE checks_attempt_id=?", (admitted.checks,)).fetchone()
-    if checked[2] or admitted.number != as_int(latest[0]) + 1:
+    if holds_source(con, admitted.checks) or admitted.number != as_int(latest[0]) + 1:
         raise StoreRefused("landing")
     no_change = admitted.validation == "no_change"  # delivered at insert: no slot, no push
     values = (*astuple(admitted.key), admitted.checks, admitted.number, admitted.origin, admitted.commit, int(admitted.tree_same),

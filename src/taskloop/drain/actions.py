@@ -8,6 +8,7 @@ from typing import Protocol
 from taskloop.drain.models import BLOCKED, ActionKind, Identity
 from taskloop.drain.observe import identity
 from taskloop.drain.store import Begin, Connect, DrainStore
+from taskloop.ids import Ids
 
 
 class Connection(Protocol):
@@ -34,6 +35,7 @@ def operation(
     store: Connection,
     kind: ActionKind,
     *,
+    ids: Ids,
     subject: str = "",
     generation: int | None = None,
     backlog: str = "",
@@ -44,7 +46,7 @@ def operation(
     owner = me()
     if owner is None:
         raise Unobservable("The calling process's identity is unavailable")
-    drain = DrainStore(store.connect)
+    drain = DrainStore(store.connect, ids=ids)
     call = Call()
     if kind is ActionKind.FINALIZE and (existing(owner) or drain.owns_active(owner)):
         yield call  # already recorded by the entry or its enclosing synchronous operation

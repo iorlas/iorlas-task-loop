@@ -8,12 +8,13 @@ from pathlib import Path
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from check_repeat_bench import ASSERTION, Repairing
-from doubles import MAIN_PROFILE, PinnedViews
+from doubles import MAIN_PROFILE, FixedIds, PinnedViews
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from round_bench import Tracker, scripted, scripts, task
 from sqlite_store import Store
 from test_checks_round import implemented
+from test_input_context import GLOSSARY
 
 from taskloop.admit import AdmitRefused, Admitted, Free
 from taskloop.agents.config import resolve_agents
@@ -23,11 +24,17 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, FileRef, SlotFiles, Unsettled
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_repeat.feedback import FailedCheck
+from taskloop.check_repeat.repair import CheckRepeat
 from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_repeat.store import CheckRepeatStore
+from taskloop.command_conclusion import CommandConclusion
+from taskloop.discussion import BEGIN as DISCUSSION_BEGIN
+from taskloop.discussion import frame
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.glossary_extract import HEADING
 from taskloop.harness_choice import HarnessKind
+from taskloop.input_context import BEGIN, END
 from taskloop.launch import LaunchUnavailable
 from taskloop.operations import Failed, Round, Started, release_task, start
 from taskloop.round import NextRequest, run_round
@@ -39,6 +46,7 @@ from taskloop.steps import kind
 def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: SlotFiles) -> Generator[Repairing]:
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    root.write_file("docs/glossary.md", GLOSSARY.decode())
     assert isinstance(root.record("profile", paths="all"), Recorded)
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)
@@ -55,6 +63,21 @@ def failed(rig: Repairing, body: str = "failed") -> tuple[AttemptKey, AttemptKey
     rig.bodies = [body]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     return previous, rig.key("tl-1")
+
+
+def test_repair_sends_fresh_discussion_once_alongside_check_feedback(rig: Repairing) -> None:
+    failed(rig)
+    specs = repair_agent(rig)
+    ports = rig.starting()
+    assert isinstance(ports.check_repeat, CheckRepeat)
+    block = frame(["Author: owner; time: 2026-11-13T12:00:00Z", "Decision after failed checks"])
+    repair = replace(ports.check_repeat, discussion=lambda _reference, _root: block)
+    result = start(replace(ports, check_repeat=repair), rig.request())
+    assert isinstance(result, Started)
+    text = specs[0].stdin
+    assert text.splitlines().count(DISCUSSION_BEGIN) == text.splitlines().count(BEGIN) == 1
+    assert text.count("Decision after failed checks") == 1 and "Failed check\n" in text
+    assert "No tracker discussion." not in text
 
 
 def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
@@ -79,13 +102,30 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert not isinstance(released, Failed)
     x = rig.tip("tl-1")
     specs = repair_agent(rig, change=change)
-    result = start(rig.starting(), rig.request())
+    ports = rig.starting()
+    assert isinstance(ports.check_repeat, CheckRepeat)
+    ids = FixedIds()
+    ports = replace(ports, check_repeat=replace(ports.check_repeat, ids=ids))
+    result = start(ports, rig.request())
     assert isinstance(result, Started) and result.step == "implement"
+    assert result.attempt_id == ids.fresh[0] and [size for size, _ in ids.tokens] == [16, 16]
+    assert rig.store.attempts("tasks", "tl-1")[0].key.dispatch_token == ids.tokens[0][1]
+    assert ids.tokens[1][1] in specs[0].stdin
     (spec,) = specs
     assert "Failed check\n" in spec.stdin and "Check: test" in spec.stdin
     assert 'Command argv: ["just", "test"]' in spec.stdin and all(line in spec.stdin for line in ASSERTION.splitlines())
     assert "Widget tl-1" in spec.stdin and "docs/design/tl-1/plan.md" in spec.stdin
     assert "List only your new changes" in spec.stdin
+    assert spec.stdin.count(BEGIN) == spec.stdin.count(END) == spec.stdin.count(HEADING) == 1
+    assert spec.stdin.splitlines().count("CODE MAP") == 1
+    block = spec.stdin.split(BEGIN)[1].split(END)[0]
+    glossary, code_map = block.split("\nCODE MAP\n")
+    assert "task: Work to accomplish." in glossary
+    assert code_map.splitlines().count("docs/design/tl-1/plan.md") == 1
+    assert f"Source commit: {x}" in spec.stdin and "task: Work to accomplish." in spec.stdin
+    assert "- just check\n- just test" in spec.stdin
+    assert (rig.tmp / EvidenceFiles(rig.tmp).directory(rig.store.attempts("tasks", "tl-1")[0].key) /
+            "launched-input.txt").read_text() == spec.stdin
     assert "--resume" not in spec.argv and "changed-model" not in spec.argv
     row = rig.store.attempts("tasks", "tl-1")[0]
     assert (row.number, row.previous_attempt_id, row.source_checks_id) == (2, previous.attempt_id, source.attempt_id)
@@ -93,7 +133,7 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert rig.con.execute("SELECT base_commit,after_commit FROM attempt WHERE attempt_id=?", (row.key.attempt_id,)).fetchone() == (x, x)
     assert rig.ran[-1] == "pending:verification"
     setup = SetupStore(lambda: rig.con).latest(row.key)
-    assert setup is not None and setup.commit == x and setup.conclusion == "passed"
+    assert setup is not None and setup.commit == x and setup.conclusion == CommandConclusion.PASSED
     assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
     rig.bodies = ["passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
@@ -119,7 +159,11 @@ def test_rounds_share_the_implement_cap_and_hold_once_after_three_attempts(rig: 
 def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: Repairing) -> None:
     previous, source = failed(rig)
     rig.failing = LaunchUnavailable("start")
-    first = start(rig.starting(), rig.request())
+    ports = rig.starting()
+    assert isinstance(ports.check_repeat, CheckRepeat)
+    ids = FixedIds()
+    repair = replace(ports.check_repeat, ids=ids)
+    first = start(replace(ports, check_repeat=repair), rig.request())
     assert isinstance(first, Failed)
     row = rig.store.attempts("tasks", "tl-1")[0]
     files = EvidenceFiles(rig.tmp)
@@ -127,10 +171,9 @@ def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: 
     files.check_log(source, 1, "test").write_text("different output after admission\n")
     specs = repair_agent(rig)
     # A losing caller with the old source adopts the admitted successor; the normal restart does too.
-    repair = rig.starting().check_repeat
-    assert repair is not None
     second = repair.repair(rig.request(), previous, source)
     assert isinstance(second, Started) and second.attempt_id == row.key.attempt_id and len(specs) == 1
+    assert ids.fresh == [row.key.attempt_id] and len(ids.tokens) == 2
     assert prompt is not None and specs[0].stdin.startswith(prompt) and all(line in specs[0].stdin for line in ASSERTION.splitlines())
     assert len(rig.store.attempts("tasks", "tl-1")) == 3  # plan, implement, repeat
 
@@ -204,7 +247,7 @@ def test_required_order_selects_one_failure_and_optional_failure_alone_does_not_
     assert isinstance(start(rig.starting(), rig.request()), Started)
     assert "Check: test\n" in specs[0].stdin and "Check: slow\n" not in specs[0].stdin
     # The same structured evidence with only an optional failure is ineligible.
-    results = tuple(replace(each, conclusion="failed" if each.name == "slow" else "passed",
+    results = tuple(replace(each, conclusion=CommandConclusion.FAILED if each.name == "slow" else CommandConclusion.PASSED,
                             rc=1 if each.name == "slow" else 0) for each in rig.checks.results(source))
     assert decision(1, row, results) is CheckRepeatDecision.INELIGIBLE
     assert previous != rig.store.attempts("tasks", "tl-1")[0].key
@@ -323,7 +366,7 @@ def test_unsafe_feedback_names_a_nearby_git_file_even_when_not_listed_in_the_ans
     rig.round()
     row = rig.store.attempts("tasks", "tl-1")[0]
     found = rig.ports().verifier.verify(row.key)
-    assert isinstance(found, Unsettled) and found.reason == "unsafe" and found.unsafe_path == path
+    assert isinstance(found, Unsettled) and found.reason == "unsafe" and found.explanations[0].path == path
     step = kind("implement")
     text = step.feedback(found, step.rules("tl-1"), 1, "Task", "NONCE", unrecorded=True)
     assert json.dumps(path, ensure_ascii=True) in text.splitlines()[0] and "\x1b" not in text
@@ -373,3 +416,18 @@ def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_
     if harness is HarnessKind.CLAUDE:
         assert json.loads(specs[0].argv[specs[0].argv.index("--settings") + 1]) == {"env": {"CAPTURED": "first"}}
     assert rig.store.attempts("tasks", "tl-1")[0].run == settings.implement
+
+
+@pytest.mark.parametrize("conclusion", list(CommandConclusion))
+def test_failed_check_evidence_retains_the_canonical_enum_and_rejects_other_conclusions(conclusion: CommandConclusion) -> None:
+    data = {
+        "source": AttemptKey("checks", "token", 1), "block": 1, "commit": "a" * 40,
+        "name": "test", "argv": ("just", "test"), "rc": 1, "result": conclusion,
+        "output": {"availability": "empty"},
+    }
+    if conclusion is CommandConclusion.FAILED:
+        found = FailedCheck.model_validate(data)
+        assert found.result is conclusion and found.model_dump(mode="json")["result"] == "failed"
+    else:
+        with pytest.raises(ValueError, match="A failed check needs a failed conclusion"):
+            FailedCheck.model_validate(data)

@@ -6,15 +6,20 @@ import dataclasses
 import re
 import sqlite3
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, D, X
+from git_porcelain.testing import FakeRepo
+from land_conflict_bench import bench, copy_row
 from sqlite_store import begin_immediate
 
 from taskloop import land_store
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Replaced
 from taskloop.check_store import Outcome, Recorded, required_json
+from taskloop.land_conflict.admit import admit as admit_conflict
+from taskloop.land_conflict.models import Outcome as ConflictOutcome
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, Validation
 
 ENTRY = (7, "land-start", "boot")
@@ -241,6 +246,30 @@ def test_a_delivered_earlier_candidate_refuses_any_later_insert(checking: sqlite
     put(checking, numbered(SAME | {"superseded": "moved", "superseded_at": 5}, 2))  # only past the store's fences
     with pytest.raises(StoreRefused, match="landing"):
         insert(checking, admitted(3))
+
+
+@pytest.mark.parametrize("validation", ["same_tree", "no_change"])
+@pytest.mark.parametrize("other_task", [False, True])
+def test_conflict_reservation_excludes_later_checks_candidates_only_of_its_source(
+    on_slot: Path, repo: FakeRepo, tmp_path: Path, validation: Settled, other_task: bool,
+) -> None:
+    b = bench(on_slot, repo, tmp_path)
+    assert admit_conflict(b.ports, b.request).outcome is ConflictOutcome.ADMITTED
+    if other_task:
+        copy_row(b.con, "attempt", "implement", {"attempt_id": "other", "dispatch_token": "other-token", "task_id": "tl-2"})
+        copy_row(b.con, "slot_release", "implement", {"attempt_id": "other", "dispatch_token": "other-token"})
+    copy_row(b.con, "checks_attempt", "checks", {"attempt_id": "checks2", "dispatch_token": "checks2-token",
+                                                "after_attempt_id": "other" if other_task else "implement",
+                                                "number": 1 if other_task else 2})
+    proposed = dataclasses.replace(admitted(validation=validation), checks="checks2")
+    if other_task:
+        insert(b.con, proposed)
+        assert store(b.con).latest("checks2") is not None
+    else:
+        with pytest.raises(StoreRefused, match="landing"):
+            insert(b.con, proposed)
+        assert rows(b.con) == []
+    b.con.close()
 
 
 def validation_writes(lands: LandStore, key: AttemptKey) -> dict[str, Callable[[], object]]:
