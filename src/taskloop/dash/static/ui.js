@@ -12,7 +12,7 @@ export const COLUMNS = [
   { id: "landed", label: "Landed", emoji: "✅", help: "Landed on main and closed." },
 ];
 export const STEPS = COLUMNS.slice(1, 5);
-// The factory's verification of an agent attempt's answer is a row of the rail between that attempt and what follows; it is not a column.
+// The factory's verification is a mark on its agent attempt's rail row; it has its own Result, but no column.
 export const VERIFY = { id: "verification", label: "Verification", emoji: "🔎" };
 export const stepInfo = (id) => (id === VERIFY.id ? VERIFY : STEPS.find((s) => s.id === id));
 export const STATE = {

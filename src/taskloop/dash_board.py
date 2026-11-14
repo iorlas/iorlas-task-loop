@@ -52,10 +52,10 @@ def admission_of(reads: StatusPorts, approved: frozenset[str]) -> Admission:
 
 
 def _repeat(view: AttemptView) -> Repeat | None:
-    if view.step == "plan" and view.seq > 1:
-        return Repeat("restart_at_plan", view.repeat_reason or "restarted at plan")
-    if view.number > 1:
+    if view.previous_attempt_id is not None or view.number > 1:
         return Repeat("repeat", view.repeat_reason or "repeat")
+    if view.step == "plan" and view.seq > 1:
+        return Repeat("restart_at_plan", view.repeat_reason or "Reason not recorded")
     return None
 
 
