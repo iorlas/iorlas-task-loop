@@ -134,3 +134,13 @@ def test_a_revised_old_plan_can_complete_with_the_new_template(
     origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, PLAN)
     assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)
+
+
+def test_inline_depth_is_refused_with_the_one_line_form_and_own_line_passes() -> None:
+    inline = "# Header\ntl-1; base X. Depth: small; one behaviour\n" + CHANGE_MAP
+    assert artifact(inline.encode()) == Rejected(PlanContentRule.DEPTH)
+    explanation = cause("rejected:" + str(PlanContentRule.DEPTH))
+    assert explanation is not None
+    fix = explanation.fix or ""
+    assert "`Depth: small`" in fix and "not inside a sentence" in fix
+    assert artifact(("# Header\ntl-1; base X.\nDepth: small; one behaviour\n" + CHANGE_MAP).encode()) == "b" * 40
