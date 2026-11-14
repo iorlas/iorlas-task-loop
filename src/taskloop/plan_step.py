@@ -78,8 +78,9 @@ ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "pla
 TEMPLATE: Final = (
     "Use exactly these sections in this order, with UTF-8 byte allowances (text after each colon is guidance, "
     "not heading text):\n"
-    "# Header: task, base commit, `Depth: small|medium|large` (one value, optionally followed by a semicolon and "
-    "explanation), assessment and Size estimate; 300 bytes.\n"
+    "# Header: task, base commit, assessment and Size estimate; 300 bytes. The Header must contain one line that is "
+    "only `Depth: small|medium|large` (one value, optionally followed by a semicolon and explanation); a Depth "
+    "written inside a sentence is refused.\n"
     "## Outcome and non-goals: 800 bytes.\n"
     "## Settled decisions: one line each; a reason only when not obvious; cite the task's own decision numbers "
     "instead of restating them; 1,500 bytes.\n"
