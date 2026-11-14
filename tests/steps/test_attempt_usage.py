@@ -31,7 +31,7 @@ def test_usage_survives_endings_and_capture_replay(
     raw = RunOutcome(rc=rc, timed_out=timed_out, stop=stop, worker=WORKER, summary=Summary(
         rc=rc, text=answer, res={"tokens": {"in": 740000, "cached": 600000, "out": 1500},
                                "cumulative": {"in": 1790000, "cached": 1000000, "out": 3000},
-                               "turns": 16, "usage_incomplete": incomplete}))
+                               "requests": 16, "usage_incomplete": incomplete}))
     execution = FakeRun(raw)
     owner = app(con, surroundings, execution)
     result = owner.execute(KEY, ENTRY)
@@ -75,7 +75,7 @@ def test_missing_and_zero_usage_in_attempt_views(
     con = database(surroundings)
     counts = None if tokens is None else dict(zip(("in", "cached", "out"), tokens, strict=True))
     execution = FakeRun(RunOutcome(rc=0, stop="answer", worker=WORKER, summary=Summary(
-        text=json.dumps(PLAN), res={"tokens": counts, "turns": turns})))
+        text=json.dumps(PLAN), res={"tokens": counts, "requests": turns})))
     owner = app(con, surroundings, execution)
     result = owner.execute(KEY, ENTRY)
     assert result.execution is not None
