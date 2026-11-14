@@ -12,6 +12,7 @@ from doubles import PinnedViews
 from git_porcelain import Recorded, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from land_bench import REQUIRED, LandBench, bench
+from plan_fixtures import PLAN_TEXT
 from round_bench import Factory, Tracker, scripted, task
 from sqlite_store import begin_immediate
 
@@ -132,7 +133,7 @@ def factory(factory: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, che
     plan, code = "docs/design/tl-1/plan.md", "src/shared.py"
     built.agents["tl-1", "plan"] = scripted(
         slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
-        {plan: "# Plan\n"})
+        {plan: PLAN_TEXT})
     built.agents["tl-1", "implement"] = scripted(
         slot.repo, {"disposition": "implemented", "paths": [code], "message": "Add it", "explanation": "ran just check"},
         {code: "X = 1\n"})

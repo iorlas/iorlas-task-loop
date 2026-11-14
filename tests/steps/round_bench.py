@@ -16,6 +16,7 @@ from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from doubles import Environment, NoChecks, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitResult, AttemptAdmission
@@ -301,7 +302,7 @@ def scripts(factory: Factory, slot: FakeWorktree, *task_ids: str) -> None:
         plan, code, test = f"docs/design/{task_id}/plan.md", f"src/{task_id}.py", f"tests/test_{task_id}.py"
         factory.agents[task_id, "plan"] = scripted(
             slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
-            {plan: "# Plan\n"})
+            {plan: PLAN_TEXT})
         factory.agents[task_id, "implement"] = scripted(
             slot.repo, {"disposition": "implemented", "paths": [code, test], "message": "Add it", "explanation": "ran just check"},
             {code: "X = 1\n", test: "def test_x() -> None: ...\n"})

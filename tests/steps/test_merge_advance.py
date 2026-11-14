@@ -10,6 +10,7 @@ from beads_client import Bead
 from doubles import MAIN_PROFILE, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from merge_bench import MergeRepo
+from plan_fixtures import READ_LIST
 from round_bench import Factory, Tracker, scripted
 
 from taskloop.merge.models import Phase
@@ -38,7 +39,7 @@ def test_implementation_starts_with_its_published_plan_and_main_without_another_
     case.merge_before_dispatch = True
     path = "docs/design/tl-1/plan.md"
     case.agents["tl-1", "plan"] = scripted(repo, {"disposition": "planned", "plan_path": path,
-                     "paths": [path], "message": "Plan tl-1", "explanation": "Plan retained."}, {path: "# Retained plan\n"})
+                     "paths": [path], "message": "Plan tl-1", "explanation": "Plan retained."}, {path: "# Retained plan\n" + READ_LIST})
     case.by_hand("tl-1")
     original = case.tip("tl-1")
     target = remote.advance("main", {"other": "another task landed\n"})
@@ -47,7 +48,7 @@ def test_implementation_starts_with_its_published_plan_and_main_without_another_
 
     def implementation(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         here = repo.worktree(Path(spec.cwd or ""))
-        assert here.read_file(path) == "# Retained plan\n" and here.read_file("other") == "another task landed\n"
+        assert here.read_file(path) == "# Retained plan\n" + READ_LIST and here.read_file("other") == "another task landed\n"
         return scripted(repo, {"disposition": "implemented", "paths": ["code.py"], "message": "Implement retained plan",
                                "explanation": "Both changes retained."}, {"code.py": "value = 1\n"})(harness, spec, timeout, hooks)
 
@@ -78,7 +79,7 @@ def test_sequential_main_landings_do_not_restart_several_waiting_plans(
     for task in tasks:
         path = f"docs/design/{task}/plan.md"
         case.agents[task, "plan"] = scripted(repo, {"disposition": "planned", "plan_path": path,
-            "paths": [path], "message": f"Plan {task}", "explanation": "Retained plan."}, {path: f"# Plan {task}\n"})
+            "paths": [path], "message": f"Plan {task}", "explanation": "Retained plan."}, {path: f"# Plan {task}\n" + READ_LIST})
         case.agents[task, "implement"] = scripted(repo, {"disposition": "implemented", "paths": [f"{task}.py"],
             "message": f"Implement {task}", "explanation": "Completed retained work."}, {f"{task}.py": "value = 1\n"})
         case.by_hand(task)

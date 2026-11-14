@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from taskloop.attempt_types import MiB, StepRules
+from taskloop.attempt_types import MiB, PlanContentRule, StepRules
 
 CHECK_GIT = "look at the task branch and the retained slot evidence"
 EVIDENCE = "its `stdout.txt`, `stderr.txt` and `diagnostics.txt` in the evidence directory"
@@ -17,6 +17,7 @@ RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the 
     "plan_encoding": ("`plan.md` is not valid UTF-8 text", ""),
     "plan_empty": ("`plan.md` is empty or only whitespace", ""),
     "plan_size": (f"`plan.md` is over the {StepRules('').file_cap // MiB} MiB limit", ""),
+    PlanContentRule.READ_LIST: ("`plan.md` needs a `## Read list` heading followed by a nonempty Markdown bullet list", ""),
     "paths": ("a listed path is not allowed (outside the step's folder, a Git file, or too many paths)", ""),
     "mode": ("a listed file is not a plain, non-executable file", ""),
     "file_size": ("a listed file is over the size limit", ""),

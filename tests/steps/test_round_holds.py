@@ -13,6 +13,7 @@ import pytest
 from doubles import PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from round_bench import Factory, Tracker, scripted, scripts, task
 
 from taskloop.agents.settings import Overrides, StepSettings
@@ -124,7 +125,7 @@ def test_a_size_refusal_holds_the_parent_once_and_keeps_any_coherent_part_unfini
         assert f"Task-Loop-Wip: {attempt}" in history[0].body.splitlines()
         tree = factory.slot.repo.tree(saved[0].sha)
         assert tree is not None and tree.read("README") == b"coherent hand-start fix\n"
-        assert tree.read("docs/design/tl-1/plan.md") == b"# Plan\n"
+        assert tree.read("docs/design/tl-1/plan.md") == PLAN_TEXT.encode()
         assert "implementation is still incomplete" in comment and "no check ran on it" in comment
     else:
         assert saved == ()

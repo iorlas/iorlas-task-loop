@@ -119,7 +119,14 @@ def input_text(task: TaskInspection, rules: StepRules, context: InputContext) ->
 def _closing_words(task_id: str, rules: StepRules) -> str:
     return (
         f"The plan for this task is `docs/design/{task_id}/plan.md`, committed on this branch by the plan step. Read it "
-        "first. Immediately after reading the plan, reassess scope before broad exploration or editing. If the work needs "
+        "first. Immediately after reading the plan, reassess scope before broad exploration or editing. "
+        "Read its Read list by the stated line ranges before exploring other files. Search with `rg -n` and read "
+        "only needed ranges; searching for an omitted caller is allowed. Do not `cat` a file over 300 lines. Before any "
+        "`cat` of a file over 150 lines, run `rg -n '^def |^class '` on it and use range reads, even if the symbol search "
+        "is empty. Do not batch whole-file dumps. Do not read a file again within this session unless it changed since "
+        "you last read it; then read only the changed range, including verification after an edit. Keep enough location "
+        "information from the first read to edit without reopening unchanged content. "
+        "If the work needs "
         "more than about 60 model calls or touches more than 60 files, stop after the first coherent part, commit nothing "
         "extra, and answer `needs_owner` with the proposed split. If the excess is evident before editing, answer then; "
         "do not begin a part just to have something to save. If discovered during work, stop at the first coherent boundary "

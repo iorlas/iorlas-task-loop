@@ -3,6 +3,7 @@
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
@@ -202,7 +203,11 @@ class AnswerState:
 
 
 # Every verdict rule word: the chain's (CHAIN_RULES, any step) and each step kind's artifact rules (`steps.RULES` has all).
-type Rule = Literal[
+class PlanContentRule(StrEnum):
+    READ_LIST = "plan_read_list"
+
+
+type Rule = PlanContentRule | Literal[
     "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
     "plan_encoding", "plan_empty", "plan_size",
 ]
