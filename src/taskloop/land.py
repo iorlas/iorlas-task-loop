@@ -211,8 +211,6 @@ def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, n
     """Section 5: a new candidate S onto origin's `main` as fetched now, inserted (and validated when it must be)."""
     resumed = None if request.no_change else ports.conflicts.resume(origin.repo, task.implement, task.checks)
     target = resumed if isinstance(resumed, Failed) else fetched_target(ports.profiles, origin)
-    if isinstance(resumed, Completed) and not isinstance(target, Failed) and target[0] != resumed.target:
-        target = Failed("refused", "conflict", "Origin's main moved after the resolution; its retained content awaits reconciliation.")
     if isinstance(target, Failed):
         return target
     o, required = target
