@@ -16,6 +16,7 @@ from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
@@ -92,7 +93,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         assert git(slot, "symbolic-ref", "--short", "HEAD").strip() == "task/tl-1"  # the agent starts on the branch, at M
         assert git(slot, "rev-parse", "HEAD").strip() == m and (slot / "README").read_text() == "two\n"
         (slot / P).parent.mkdir(parents=True)
-        (slot / P).write_text("# Plan\n")
+        (slot / P).write_text(PLAN_TEXT)
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 

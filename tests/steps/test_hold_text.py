@@ -158,6 +158,7 @@ def test_an_entry_ended_by_a_signal_is_said_so_and_its_agent_session_is_not_cont
     ("failed:rejected:plan_encoding", "`plan.md` is not valid UTF-8 text", "To try again, restore"),
     ("failed:rejected:plan_empty", "`plan.md` is empty", "To try again, restore"),
     ("failed:rejected:plan_size", "over the 1 MiB limit", "To try again, restore"),
+    ("failed:rejected:plan_read_list", "`## Read list` heading followed by a nonempty Markdown bullet list", "To try again, restore"),
     ("failed:rejected:plan_missing", "an `unchanged` answer needs an existing plan", "To try again, restore"),
     ("failed:rejected:commit_absent", "commit is not in the slot's repository", "To fix it, look at the task branch "
      "and the retained slot evidence"),

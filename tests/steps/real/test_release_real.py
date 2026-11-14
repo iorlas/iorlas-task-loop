@@ -17,6 +17,7 @@ from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
@@ -126,7 +127,7 @@ class Repository:
     def planned(self) -> tuple[AttemptKey, str]:
         def write() -> None:
             (self.slot / P).parent.mkdir(parents=True)
-            (self.slot / P).write_text("# Plan\n")
+            (self.slot / P).write_text(PLAN_TEXT)
 
         key = self.run(answered(PLAN, write))
         assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold, ids=NativeIds()).verify(key), Verified)

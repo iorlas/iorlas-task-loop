@@ -18,6 +18,7 @@ from doubles import FakeSlotFiles, PinnedViews, linked_into, main_at
 from git_porcelain import Dirty, Recorded, Repo, Tree
 from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT, PLAN_V2
 from sqlite_store import Store
 
 from taskloop.agents.launch import AgentLaunch
@@ -67,7 +68,6 @@ PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan
 UNCHANGED = {"disposition": "unchanged", "plan_path": P, "paths": [], "message": None, "explanation": "Still valid"}
 TRAILER = "Task-Loop-Attempt: attempt"
 type Files = Mapping[str, str | bytes]
-
 
 type After = Callable[[FakeWorktree, FakeSlotFiles], object]
 
@@ -166,7 +166,7 @@ def foreign(slot: FakeWorktree, _files: FakeSlotFiles) -> None:
 
 def trailer_commit(slot: FakeWorktree, files: FakeSlotFiles) -> None:
     """This attempt's trailer commit of a changed plan: adoptable for `planned`, never for `unchanged` (X is B)."""
-    slot.write_file(P, "# Plan v2\n")
+    slot.write_file(P, PLAN_V2)
     adopt(slot, files)
 
 
@@ -202,12 +202,12 @@ LOST = "unavailable:git:MissingRevision"  # B no longer resolves: permanently un
 # in the process, so a fixed replacement digit was a no-op whenever an earlier test left B starting with it)
 LOSE_BASE = "UPDATE attempt SET base_commit=(CASE substr(base_commit,1,1) WHEN 'f' THEN 'e' ELSE 'f' END) || substr(base_commit,2)"
 OTHER_REPO = "UPDATE slot SET repo_id='other'; UPDATE reservation SET repo_id='other'; UPDATE attempt SET repo_id='other'"
-PLANNED = {P: "# Plan\n"}
+PLANNED = {P: PLAN_TEXT}
 # id, files committed before dispatch (B), files the agent writes, its answer, a change after the run, SQL, expected, commits
 CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, str | None, str, int]] = [
     ("plan_only", None, PLANNED, PLAN, None, None, "verified", 1),
     ("plan_and_note", None, PLANNED | {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "verified", 1),
-    ("replan", PLANNED, {P: "# Plan v2\n"}, PLAN, None, None, "verified", 1),
+    ("replan", PLANNED, {P: PLAN_V2}, PLAN, None, None, "verified", 1),
     ("unlisted_file", None, PLANNED | {NOTE: "n"}, PLAN, None, None, "unsettled:uncommitted", 1),
     ("nothing_written", PLANNED, PLANNED, PLAN, None, None, "rejected:nothing_written", 0),
     ("unchanged", PLANNED, {}, UNCHANGED, None, None, "reused", 0),
@@ -216,7 +216,7 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("unchanged_with_a_stray_file", PLANNED, {NOTE: "n"}, UNCHANGED, None, None, "unsettled:uncommitted", 0),
     ("plan_empty", None, {P: " \n\t"}, PLAN, None, None, "rejected:plan_empty", 1),
     ("plan_encoding", None, {P: b"\xff\xfe plan"}, PLAN, None, None, "rejected:plan_encoding", 1),
-    ("plan_at_cap", None, {P: "a" * (1 << 20)}, PLAN, None, None, "verified", 1),
+    ("plan_at_cap", None, {P: PLAN_TEXT + "a" * ((1 << 20) - len(PLAN_TEXT.encode()))}, PLAN, None, None, "verified", 1),
     ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "unsettled:unsafe", 0),
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
     ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
@@ -413,7 +413,7 @@ def test_the_staged_read_is_pinned_and_unknown_when_the_pointer_names_another_re
     well-formed by layout but names a linked Git directory of another repository is unknown, the slot never opened."""
     other = FakeRepo.init(tmp_path / "other")
     views = PinnedViews(repo, other)
-    slot.write_file(P, "# Plan\n")
+    slot.write_file(P, PLAN_TEXT)
     slot.stage([P], literal=True)
     assert verifier(registered, views, slot_files).staged(KEY) == (P,)
     assert views.slot_opens(slot.path) == [slot_files.common / "worktrees/s1"] * 2  # the status read and the staged read
@@ -435,11 +435,11 @@ def one(base: str, paths: tuple[str, ...]) -> tuple[ChainLink, ...]:
 @pytest.mark.parametrize(
     ("changes", "paths", "cap", "expected"),
     [
-        ([PLANNED, {P: "# Plan v2\n"}], (P,), 1 << 20, Rejected("chain_length")),
+        ([PLANNED, {P: PLAN_V2}], (P,), 1 << 20, Rejected("chain_length")),
         ([PLANNED | {NOTE: "n"}], (P,), 1 << 20, Rejected("paths")),
         ([PLANNED | {"src/x.py": "x"}], (P, "src/x.py"), 1 << 20, Rejected("paths")),
-        ([PLANNED | {NOTE: "0123456789a"}], (P, NOTE), 10, Rejected("file_size")),
-        ([PLANNED | {NOTE: "0123456789"}], (P, NOTE), 10, None),
+        ([PLANNED | {NOTE: "a" * (len(PLAN_TEXT.encode()) + 1)}], (P, NOTE), len(PLAN_TEXT.encode()), Rejected("file_size")),
+        ([PLANNED | {NOTE: "a" * len(PLAN_TEXT.encode())}], (P, NOTE), len(PLAN_TEXT.encode()), None),
     ],
     ids=["chain_length", "unlisted_change", "outside_root", "file_size", "at_cap"],
 )

@@ -112,6 +112,21 @@ class GitProfileFiles:
     checkout: Path
     repos: Checkouts
 
+    def paths(self, commit: str) -> tuple[str, ...] | NoCommit | Unavailable:
+        """List the pinned committed tree through the owning Git API."""
+        try:
+            repo = self.repos(self.checkout)
+            try:
+                tree = repo.tree(f"{commit}^{{commit}}")
+            except ValueError:
+                return NoCommit()
+            if tree is None:
+                repo.identity()
+                return NoCommit()
+            return tuple(tree.files)
+        except GitUnavailable as error:
+            return Unavailable(str(error))
+
     def blob(self, commit: str, path: str) -> bytes | NoCommit | NotAFile | Unavailable | None:
         try:
             repo = self.repos(self.checkout)

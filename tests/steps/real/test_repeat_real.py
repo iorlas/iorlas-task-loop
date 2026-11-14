@@ -16,6 +16,7 @@ from any_agent.testing import FakeRun
 from doubles import RegisteringLauncher
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT, PLAN_V2
 from sqlite_store import begin_immediate
 
 from taskloop.admit_chain import ChainAdmission
@@ -92,7 +93,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
         )
 
     verifier = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
-    assert attempts(agent(slot, {P: "# Plan\n", "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
+    assert attempts(agent(slot, {P: PLAN_TEXT, "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
     admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, ids=NativeIds())
@@ -103,7 +104,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     assert isinstance(started, Started) and started.status == "repeated"
     found = store.attempt_of("tasks", "tl-1")
     assert found is not None
-    second = agent(slot, {P: "# Plan v2\n"}, ("scratch.txt",), [P])
+    second = agent(slot, {P: PLAN_V2}, ("scratch.txt",), [P])
     assert attempts(second).execute(found[0], SECOND).reason == "verification"
     verdict = verifier.verify(found[0])
     assert isinstance(verdict, Verified) and not verdict.reused

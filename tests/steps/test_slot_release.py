@@ -19,6 +19,7 @@ from beads_client.testing import Script
 from doubles import FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
@@ -141,7 +142,7 @@ def executed(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
 
 def verified(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> str:
     """The registered attempt run and verified: X, on `task/tl-1`."""
-    assert executed(con, tmp_path, slot, checkouts, files, {P: "# Plan\n"}) == "verification"
+    assert executed(con, tmp_path, slot, checkouts, files, {P: PLAN_TEXT}) == "verification"
     store = AttemptStore(lambda: con)
     assert isinstance(Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).verify(KEY), Verified)
     return head(slot)
@@ -186,7 +187,7 @@ def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
         registered.execute("UPDATE attempt SET phase='registered',base_commit=?,worker_pid=42,worker_pgid=42,worker_start='s',"
                            "worker_boot='b'", (head(slot),))
     elif phase == "captured":  # pending verification
-        assert executed(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"}) == "verification"
+        assert executed(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}) == "verification"
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     found = ports.releaser().release(KEY, False)
     assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("refused", "not_terminal")

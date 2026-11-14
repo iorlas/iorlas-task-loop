@@ -11,6 +11,7 @@ from taskloop.attempt_types import (
     MODE,
     Answer,
     Effect,
+    PlanContentRule,
     Rejected,
     RepeatReason,
     Rule,
@@ -67,7 +68,7 @@ DEPTH_ASSESSMENT: Final = (
     "included glossary excerpt at every depth; collect missing terms into at most one targeted glossary read, after "
     "the assessment permits planning. Depth is plain English: add no glossary term or new stage."
 )
-ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size")  # the plan.md rule's words
+ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size", PlanContentRule.READ_LIST)
 ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
 # The structural answer contract Codex forwards as an OpenAI strict response format: a plain object at the top level (no
 # allOf/anyOf/oneOf/not/enum/if there), every property required, nullable by type list, no composition keywords at all.
@@ -132,7 +133,12 @@ def _closing_words(rules: StepRules) -> str:
     root = rules.root
     return (
         f"After the depth assessment permits planning, read `{root}{PLAN_NAME}` if it exists. "
-        "Before answering `planned` or `unchanged`, require a `## Size` "
+        "Require the literal heading `## Read list`, followed by a nonempty "
+        "Markdown bullet list with 25 entries or fewer. Each entry gives an existing file as `path:first-last` and a short "
+        "reason, covering every file implementation must edit or consult, including producers and callers. Use narrow, "
+        "useful line ranges. Identify new files as new in the implementation narrative and list their existing integration "
+        "points. Additional targeted searches are allowed for missed callers or changed source. A plan without this "
+        "section must be rewritten, not reused as `unchanged`. Before answering `planned` or `unchanged`, require a `## Size` "
         "section with estimated changed files (including tests and artifacts), independent behaviours, and model calls "
         "for one implement attempt. Each independent behaviour must have an independently testable acceptance criterion; "
         "file count alone is insufficient. An existing plan without this assessment needs revision, not `unchanged`. "
@@ -214,4 +220,30 @@ def _content(data: bytes, cap: int) -> Rule | None:
         return "plan_encoding"
     if not text.strip():
         return "plan_empty"
-    return "plan_size" if len(data) > cap else None
+    if len(data) > cap:
+        return "plan_size"
+    return None if _read_list(text) else PlanContentRule.READ_LIST
+
+
+def _read_list(text: str) -> bool:
+    """Recognize the fixed heading and a following bullet, ignoring fenced code and blank lines."""
+    fence = ""
+    waiting = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if fence:
+            if stripped.startswith(fence) and not stripped[len(fence):].strip(fence[0]):
+                fence = ""
+            continue
+        if stripped.startswith(("```", "~~~")):
+            marker = stripped[0]
+            fence = marker * (len(stripped) - len(stripped.lstrip(marker)))
+            waiting = False
+            continue
+        if line == "## Read list":
+            waiting = True
+        elif waiting and stripped:
+            if stripped.startswith(("- ", "* ", "+ ")) and stripped[2:].strip():
+                return True
+            waiting = False
+    return False

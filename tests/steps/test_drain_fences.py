@@ -9,6 +9,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from doubles import CHECKS, ChecksBench, Command, Done, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from land_bench import LandBench, bench
+from plan_fixtures import PLAN_TEXT
 from round_bench import Factory, scripts, task
 from round_bench import Tracker as RoundTracker
 from sqlite_store import Store
@@ -245,7 +246,7 @@ def test_an_authorized_agent_body_can_capture_and_finalize_after_drain(
     assert me is not None
     entry = me.pid, me.start, me.boot
     registered.execute("UPDATE attempt SET entry_pid=?,entry_start=?,entry_boot=?", entry)
-    body = agent(slot, {P: "# Plan\n"})
+    body = agent(slot, {P: PLAN_TEXT})
 
     def running(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         DrainStore(lambda: registered, ids=NativeIds()).request()

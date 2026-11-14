@@ -17,6 +17,7 @@ from beads_client.testing import FakeTaskReadClient
 from doubles import NO_CHECKS, Environment, FixedIds, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, Admitted, AttemptAdmission
@@ -113,7 +114,7 @@ def tip(repo: FakeRepo) -> str:
 def planned(registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles) -> str:
     """The registered plan attempt ran, was verified, released settled and published: its X."""
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}
-    assert execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, "# Plan\n")), checkouts, slot_files) == (
+    assert execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, PLAN_TEXT)), checkouts, slot_files) == (
         "verification")
     assert finish(registered, checkouts, slot_files).published == "published"
     return tip(slot.repo)
@@ -187,7 +188,7 @@ def test_only_a_verified_settled_published_current_attempt_advances(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, case: str
 ) -> None:
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}
-    execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, "# Plan\n")), checkouts, slot_files)
+    execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, PLAN_TEXT)), checkouts, slot_files)
     finish(registered, checkouts, slot_files, publish=case != "unpublished")
     if case == "published_elsewhere":
         registered.execute("UPDATE published_branch SET commit_sha=?", ("f" * 40,))

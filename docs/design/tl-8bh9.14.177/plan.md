@@ -52,6 +52,15 @@ Use the existing owning transcript/evidence readers for the next eight implement
 
 Acceptance is fewer than 100 repeat file reads across eight attempts and mean input tokens no greater than 6.3544M per implement attempt (at least 6% below 6.76M). Include CODE MAP and any increased plan-input cost in the cost report; the expected plan increase is about 0.1M tokens. Results remain pending until those attempts exist. Record missing evidence and sample differences rather than claiming savings from prompt tests. If the targets fail, report whether missed locations, unchanged rereads or map size account for the result before proposing another change.
 
+## As built
+
+The Read list artifact rule, bounded reading directions and committed CODE MAP are implemented. Positive lifecycle fixtures
+explicitly supply the required section; focused artifact and input tests cover rejection, reuse, retries and committed-map
+refresh. No historical plans are rewritten.
+
+The follow-up performance measurement remains pending: eight later implement attempts and their transcript evidence are
+required before the repeat-read or token-saving targets can be assessed.
+
 ## Read list
 
 - `src/taskloop/plan_step.py:27-35`, `src/taskloop/plan_step.py:90-112`, `src/taskloop/plan_step.py:142-168` — plan directions and the shared artifact check.

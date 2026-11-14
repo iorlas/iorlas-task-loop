@@ -14,6 +14,7 @@ from any_agent.testing import FakeRun
 from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance, PinnedViews
 from git_porcelain import GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store
 
 from taskloop.access import SANDBOX
@@ -433,7 +434,7 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
@@ -469,7 +470,7 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     path, stray = "docs/design/tl-1/plan.md", "docs/design/tl-1/stray.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         slot.write_file(stray, "x")
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -514,7 +515,7 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     path, near = "docs/design/tl-1/plan.md", "docs/design/tl-1/.gitignore"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         slot.write_file(near, "x")
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -728,7 +729,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)

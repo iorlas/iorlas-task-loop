@@ -11,7 +11,7 @@ from taskloop.step_text import GIT_WRITES, SAVED_WORK
 from taskloop.steps import IMPLEMENT, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 
-CONTEXT = InputContext("a" * 40, ("just check", "just test"), "Partial glossary: task: Work.\n")
+CONTEXT = InputContext("a" * 40, ("just check", "just test"), "Partial glossary: task: Work.\n", ())
 
 TASK = TaskInspection(
     TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.\nAnd Y.", "- X works\n- Y works", (), "in_progress",
@@ -275,3 +275,29 @@ def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
     feedback = failed_check_feedback(failed, text, "nonce")
     assert feedback.endswith(text) and "Only with `implemented` should `paths` list files" in feedback
     assert "the factory saves unfinished slot work" in feedback and SAVED_WORK in feedback
+
+
+def test_plan_requests_bounded_read_locations_and_rewrite_of_missing_sections() -> None:
+    text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
+    for phrase in ("literal heading `## Read list`", "nonempty Markdown bullet list", "25 entries or fewer",
+                   "`path:first-last`", "short reason", "producers and callers", "narrow, useful line ranges",
+                   "new files as new", "must be rewritten, not reused as `unchanged`"):
+        assert phrase in text
+
+
+@pytest.mark.parametrize("route", ["initial", "repeat", "failed_check"])
+def test_implement_reading_directions_survive_both_retry_routes(route: str) -> None:
+    text = IMPLEMENT.input_text(TASK, IMPLEMENT.rules("tl-1"), CONTEXT)
+    if route == "repeat":
+        text = IMPLEMENT.feedback(Unsettled("uncommitted", ("?? stray",)), IMPLEMENT.rules("tl-1"), 2,
+                                  text, "nonce", unrecorded=False)
+    elif route == "failed_check":
+        failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
+                             argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
+        text = failed_check_feedback(failed, text, "nonce")
+    for phrase in ("Read its Read list by the stated line ranges before exploring other files", "Search with `rg -n`",
+                   "omitted caller is allowed", "Do not `cat` a file over 300 lines", "file over 150 lines",
+                   "`rg -n '^def |^class '`", "even if the symbol search is empty", "Do not batch whole-file dumps",
+                   "Do not read a file again within this session unless it changed", "read only the changed range",
+                   "including verification after an edit", "edit without reopening unchanged content"):
+        assert phrase in text

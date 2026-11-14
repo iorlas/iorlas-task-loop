@@ -19,6 +19,7 @@ from any_agent.testing import FakeRun
 from doubles import NO_CHECKS, FakeSlotFiles, FixedIds, NoAdvance, RegisteringLauncher, main_at
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission
@@ -159,7 +160,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
 
 def unsafe(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: FakeSlotFiles) -> None:
     """Attempt 1 captured with its plan executable: `unsafe`, nothing committed, so E is B."""
-    captured(con, tmp_path, slot, checkouts, files, {P: "# Plan\n"})
+    captured(con, tmp_path, slot, checkouts, files, {P: PLAN_TEXT})
     files.entries[slot.path / P] = FileStat("file", 7, True)
 
 
@@ -201,9 +202,9 @@ def executable(slot: FakeWorktree, files: FakeSlotFiles) -> None:
 # id, before dispatch, the agent's files, after the run, the reason, whether attempt 1 committed (E is X1, else B)
 type Change = Callable[[FakeWorktree, FakeSlotFiles], None]
 LEFTOVERS: list[tuple[str, Change | None, Files, Change | None, str, bool]] = [
-    ("uncommitted", None, {P: "# Plan\n", NOTE: "n"}, None, "uncommitted", True),
-    ("unsafe", None, {P: "# Plan\n"}, executable, "unsafe", False),
-    ("ignored", ignored, {P: "# Plan\n", D + "x.log": "x"}, None, "ignored", False),
+    ("uncommitted", None, {P: PLAN_TEXT, NOTE: "n"}, None, "uncommitted", True),
+    ("unsafe", None, {P: PLAN_TEXT}, executable, "unsafe", False),
+    ("ignored", ignored, {P: PLAN_TEXT, D + "x.log": "x"}, None, "ignored", False),
 ]
 
 

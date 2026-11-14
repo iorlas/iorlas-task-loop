@@ -39,6 +39,9 @@ class Files:
         self.glossary, self.profile = glossary, profile
         self.reads: list[tuple[str, str]] = []
 
+    def paths(self, commit: str) -> tuple[str, ...]:
+        return ()
+
     def blob(self, commit: str, path: str) -> bytes | NotAFile | Unavailable | NoCommit | None:
         self.reads.append((commit, path))
         return self.profile if path == ".task-loop.json" else self.glossary
@@ -115,6 +118,7 @@ def test_absent_glossary_is_truthful() -> None:
 def committed(worktree: FakeWorktree, word: str) -> str:
     worktree.write_file("docs/glossary.md", GLOSSARY.decode().replace("Work to accomplish.", word))
     worktree.write_file(".task-loop.json", json.dumps(PROFILE))
+    worktree.write_file("src/context.py", word)
     made = worktree.record(f"Context\n\n{TRAILER}: earlier", paths="all")
     assert isinstance(made, Recorded)
     return made.sha
@@ -160,7 +164,7 @@ def test_input_failure_precedes_claim_and_reservation(
 
 def test_moved_source_is_refreshed_before_dispatch_and_complete_input_is_retained(surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
-    before = InputContext("old", ("obsolete check",), extract(GLOSSARY)).render()
+    before = InputContext("old", ("obsolete check",), extract(GLOSSARY), ("src/obsolete.py",)).render()
     files = EvidenceFiles(surroundings.tmp)
     ref = files.put_input(KEY, f"Complete task spec\n{before}\n{SAVED_WORK}")
     con.execute("UPDATE attempt SET input_path=?, input_digest=?", (ref.path, ref.digest))
@@ -172,7 +176,8 @@ def test_moved_source_is_refreshed_before_dispatch_and_complete_input_is_retaine
     text = run.calls[0][1].stdin
     assert "Complete task spec" in text and SAVED_WORK in text
     assert f"Source commit: {commit}" in text and "task: New meaning." in text and "obsolete check" not in text
-    assert text.count(HEADING) == text.count(BEGIN) == 1
+    assert text.count(HEADING) == text.count(BEGIN) == text.count("CODE MAP") == 1
+    assert "src/obsolete.py" not in text and "src/context.py" in text
     assert files.read(ref).find("Source commit: old") >= 0
     path = surroundings.tmp / files.directory(KEY) / "launched-input.txt"
     assert path.read_text() == text and "Return exactly one JSON object" in text
@@ -193,7 +198,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     commit = committed(slot.repo.worktree(slot.repo.identity().root), "Original definition.")
-    context = InputContext(commit, ("just check", "just test"), extract(GLOSSARY))
+    context = InputContext(commit, ("just check", "just test"), extract(GLOSSARY), ())
     files = EvidenceFiles(tmp_path)
     ref = files.put_input(KEY, PLAN.input_text(TASK, PLAN.rules("tl-1"), context))
     registered.execute("UPDATE attempt SET input_path=?,input_digest=?", (ref.path, ref.digest))
@@ -211,6 +216,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     record = store.load(current[0])
     assert record is not None and f"Source commit: {record.base_commit}" in text
     assert record.base_commit != commit
-    assert text.count(BEGIN) == text.count(HEADING) == 1 and text.count("BEGIN SLOT STATUS") == 1
+    assert text.count(BEGIN) == text.count(HEADING) == text.count("CODE MAP") == 1 and text.count("BEGIN SLOT STATUS") == 1
+    assert "src/context.py" in text
     assert TASK.requirements in text and SAVED_WORK in text and "- just check\n- just test" in text
     assert (tmp_path / files.directory(current[0]) / "launched-input.txt").read_text() == text
