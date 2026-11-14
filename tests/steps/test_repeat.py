@@ -93,12 +93,14 @@ def commit(slot: FakeWorktree, files: Files) -> str:
     return head(slot)
 
 
-def agent(slot: FakeWorktree, files: Files, answer: Mapping[str, object] = PLAN) -> Execution:
+def agent(slot: FakeWorktree, files: Files, answer: Mapping[str, object] = PLAN, *, session: str | None = None) -> Execution:
     def call(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         for path, text in files.items():
             slot.write_file(path, text)
         text = json.dumps(answer)
-        return FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
+        run = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=text, rc=0, stands=True, res={"ref": session})),
+                      refs=() if session is None else (session,))
+        return run(harness, spec, timeout, hooks)
 
     return call
 
@@ -145,8 +147,9 @@ def repeater(
                       lambda _worker: not alive, seen(observe), lambda: 10, repeating, ids=NativeIds())
 
 
-def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles, written: Files) -> None:
-    run = agent(slot, written)
+def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles, written: Files,
+             *, session: str | None = None) -> None:
+    run = agent(slot, written, session=session)
     attempts = Attempts(
         AttemptStore(lambda: con),
         EvidenceFiles(tmp_path),
@@ -259,10 +262,13 @@ def test_a_repeat_takes_the_reservation_over_and_freezes_the_previous_attempt(
 def test_a_repeated_plan_launch_starts_with_the_warning_and_preserves_the_original_input(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
 ) -> None:
-    unsafe(registered, tmp_path, slot, checkouts, slot_files)
+    saved_session = "previous-attempt-session"
+    captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}, session=saved_session)
+    slot_files.entries[slot.path / P] = FileStat("file", 7, True)
     store, files = AttemptStore(lambda: registered), EvidenceFiles(tmp_path)
     first = store.load(KEY)
     assert first is not None
+    assert first.session_ref == saved_session
     original = first.admission.input_ref
     result = repeater(registered, tmp_path, checkouts, slot_files).repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(result, Started)
@@ -276,6 +282,9 @@ def test_a_repeated_plan_launch_starts_with_the_warning_and_preserves_the_origin
     attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()), run,
                         lambda: 10, checkouts, slot_files)
     assert attempts.execute(new, SECOND).reason == "verification"
+    harness, spec, _, _ = run.calls[0]
+    assert "resume" not in spec.argv and saved_session not in spec.argv
+    assert harness.evidence.ref is None
     assert retained.startswith(PLAN_WARNING + "\n\n") and run.calls[0][1].stdin.startswith(PLAN_WARNING + "\n\n")
     assert files.read(original) == TASK  # restart/dispatch never rewrites already admitted evidence
 

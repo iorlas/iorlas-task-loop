@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from any_agent import RunOutcome, Summary
+from any_agent import LaunchInputs, LaunchSpec, OpenCodeHarness, RunOutcome, Summary
 from any_agent.access import CodexSandbox
 from any_agent.testing import FakeRun
 from doubles import FixedIds
@@ -18,6 +18,8 @@ from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, Op
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HarnessKind
 from taskloop.ids import NativeIds
+
+SAVED_SESSION = "saved-session-reference"
 
 
 def setting(harness: HarnessKind, tmp_path: Path) -> AgentSetting:
@@ -64,11 +66,69 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
         result.harness.cleanup()
 
 
+@pytest.mark.parametrize("harness", list(HarnessKind))
+@pytest.mark.parametrize("prepared", [False, True])
+def test_native_continuation_keeps_the_saved_session(tmp_path: Path, harness: HarnessKind, prepared: bool) -> None:
+    files = EvidenceFiles(tmp_path)
+    contract = {"type": "object", "properties": {}}
+    schema, out = files.prepare(KEY, contract)
+    root = files.launch_root(KEY)
+    slot = tmp_path / "slot"
+    credentials = (f"/bin/{harness}", {"HOME": str(tmp_path)})
+    ids = FixedIds()
+    result = AgentLaunch(lambda _kind: credentials, ids=ids).build(
+        setting(harness, tmp_path), slot, prepared, root, schema, out, "Continue task", resume=SAVED_SESSION,
+    )
+    assert isinstance(result, LaunchedAgent)
+    try:
+        argv = result.spec.argv
+        assert ids.sessions == [] and result.harness.evidence.ref == SAVED_SESSION
+        assert result.credentials == credentials and result.spec.cwd == str(slot)
+        expected = "Continue task\nReturn exactly one JSON object satisfying this answer schema:\n" + Path(schema).read_text()
+        assert result.spec.stdin == expected
+        assert argv[0] == credentials[0] and "chosen" in argv
+        if harness is HarnessKind.CODEX:
+            assert argv[1:3] == ["exec", "resume"] and argv[-2:] == [SAVED_SESSION, "-"]
+            assert argv[argv.index("--output-schema") + 1] == schema and argv[argv.index("-o") + 1] == out
+            assert 'model_reasoning_effort="medium"' in argv and (result.probe is not None) is prepared
+            result.harness.parse_line(json.dumps({"type": "thread.started", "thread_id": SAVED_SESSION}))
+        elif harness is HarnessKind.CLAUDE:
+            assert argv[argv.index("--resume") + 1] == SAVED_SESSION and "--session-id" not in argv
+            assert argv[argv.index("--permission-mode") + 1] == "dontAsk" and "--json-schema" in argv
+            assert json.loads(argv[argv.index("--settings") + 1]) == {"env": {"OPAQUE": "value"}}
+        else:
+            assert argv[argv.index("--session") + 1] == SAVED_SESSION
+            assert Path(result.spec.env["SHELL"]) == root / f"opencode-shell-{SAVED_SESSION[:8]}.sh"
+            assert "edit" not in json.loads(result.spec.env["OPENCODE_CONFIG_CONTENT"])["permission"]
+        assert result.harness.summary(0, "", "", None, False).res["ref"] == SAVED_SESSION
+    finally:
+        result.harness.cleanup()
+
+
+@pytest.mark.parametrize("harness", list(HarnessKind))
+def test_ordinary_builds_allocate_fresh_sessions(tmp_path: Path, harness: HarnessKind) -> None:
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, {"type": "object"})
+    ids = FixedIds()
+    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", {"HOME": str(tmp_path)}), ids=ids)
+    for _ in range(2):
+        result = adapter.build(setting(harness, tmp_path), tmp_path, False, files.launch_root(KEY), schema, out, "Task")
+        assert isinstance(result, LaunchedAgent)
+        try:
+            assert not {"resume", "--resume", "--session"}.intersection(result.spec.argv)
+            expected_ref = ids.sessions[-1] if harness is HarnessKind.CLAUDE else None
+            assert result.harness.evidence.ref == expected_ref
+        finally:
+            result.harness.cleanup()
+    assert len(ids.sessions) == len(set(ids.sessions)) == 2
+
+
 @pytest.mark.parametrize("sandbox", [CodexSandbox.WORKSPACE_WRITE, CodexSandbox.DANGER_FULL_ACCESS])
 @pytest.mark.parametrize("prepared", [False, True])
 @pytest.mark.parametrize("host_tmp", [None, "/host/scratch"], ids=["unset", "conflicting_host"])
+@pytest.mark.parametrize("resume", [None, SAVED_SESSION])
 def test_codex_launch_limits_automatic_context_and_preserves_access(
-    tmp_path: Path, sandbox: CodexSandbox, prepared: bool, host_tmp: str | None,
+    tmp_path: Path, sandbox: CodexSandbox, prepared: bool, host_tmp: str | None, resume: str | None,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     schema, out = files.prepare(KEY, {"type": "object", "properties": {}})
@@ -78,7 +138,7 @@ def test_codex_launch_limits_automatic_context_and_preserves_access(
         credentials["TMPDIR"] = host_tmp
     adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", credentials), ids=NativeIds())
     slot = tmp_path / "slots" / "repo" / "s1"
-    result = adapter.build(chosen, slot, prepared, files.launch_root(KEY), schema, out, "Task input")
+    result = adapter.build(chosen, slot, prepared, files.launch_root(KEY), schema, out, "Task input", resume=resume)
     assert isinstance(result, LaunchedAgent)
     try:
         argv = result.spec.argv
@@ -93,7 +153,10 @@ def test_codex_launch_limits_automatic_context_and_preserves_access(
                     "UV_TOOL_DIR": str(slot.parent / ".env" / "s1" / "uv-tools"), "UV_OFFLINE": "1"}
         assert shell_env == (expected if prepared else {})
         assert result.spec.env == credentials
-        assert argv[argv.index("-s") + 1] == sandbox
+        if resume is None:
+            assert argv[argv.index("-s") + 1] == sandbox
+        else:
+            assert json.loads(settings["sandbox_mode"]) == sandbox and "-s" not in argv
         assert 'approval_policy="never"' in argv and "tool_output_token_limit=3000" in argv
         assert "--ignore-user-config" in argv and "--ignore-rules" in argv
         if sandbox is CodexSandbox.DANGER_FULL_ACCESS:
@@ -106,6 +169,41 @@ def test_codex_launch_limits_automatic_context_and_preserves_access(
             assert settings["sandbox_workspace_write.exclude_tmpdir_env_var"] == "true"
     finally:
         result.harness.cleanup()
+
+
+@pytest.mark.parametrize("harness", list(HarnessKind))
+@pytest.mark.parametrize("resume", ["", " ", "saved session", "saved\n", "\tsaved", "--last", "-session"])
+def test_invalid_continuation_is_explained_without_allocating_a_session(
+    tmp_path: Path, harness: HarnessKind, resume: str,
+) -> None:
+    ids = FixedIds()
+    result = AgentLaunch(lambda kind: (f"/bin/{kind}", {}), ids=ids).build(
+        setting(harness, tmp_path), tmp_path, False, tmp_path, "unused", "unused", "Task", resume=resume,
+    )
+    assert isinstance(result, LaunchFailure) and result.reason == "launch:ValueError"
+    assert "session reference" in result.explanation and ids.sessions == []
+
+
+@pytest.mark.parametrize("resume", [None, SAVED_SESSION])
+def test_failed_preparation_cleans_up_harness_resources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, resume: str | None) -> None:
+    launch_spec = OpenCodeHarness.launch_spec
+    shells: list[Path] = []
+
+    def fail_after_preparation(harness: OpenCodeHarness, inputs: LaunchInputs) -> LaunchSpec:
+        spec = launch_spec(harness, inputs)
+        shell = Path(spec.env["SHELL"])
+        assert shell.exists()
+        shells.append(shell)
+        raise ValueError("preparation failed")
+
+    monkeypatch.setattr(OpenCodeHarness, "launch_spec", fail_after_preparation)
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, {"type": "object"})
+    result = AgentLaunch(lambda _kind: ("/bin/opencode", {"HOME": str(tmp_path)}), ids=FixedIds()).build(
+        setting(HarnessKind.OPENCODE, tmp_path), tmp_path, False, files.launch_root(KEY), schema, out, "Task", resume=resume,
+    )
+    assert isinstance(result, LaunchFailure) and result.reason == "launch:ValueError" and result.explanation
+    assert len(shells) == 1 and not shells[0].exists()
 
 
 @pytest.mark.parametrize("harness", [HarnessKind.CLAUDE, HarnessKind.OPENCODE])
