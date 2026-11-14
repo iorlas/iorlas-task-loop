@@ -182,8 +182,9 @@ def test_plan_assessment_precedes_task_orientation_and_reads_and_is_visible_and_
     assert "returning only a count of files and opening nothing" in text
     assert "only then read the existing plan and gather bounded evidence" in text
     assert "Planning is never skipped: a small task gets a short plan" in text
-    assert "Put depth, reason, decision/dependency status, evidence budget and the Size estimate in Header" in text
-    assert "do not add separate Depth or Size sections" in text
+    assert "Put depth on its own line in Header as prescribed below" in text
+    assert "reason, decision/dependency status, evidence budget and the Size estimate in Header too" in text
+    assert "Do not add separate Depth or Size sections" in text
     assert "current assessments in Header; an existing plan without them needs revision, not `unchanged`" in text
     assert "Use the included glossary excerpt at every depth" in text
     assert "collect missing terms into at most one targeted glossary read, after the assessment permits planning" in text
@@ -345,7 +346,11 @@ def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -
                    "numbered, with files and the acceptance lines each closes", "intent, effect, result",
                    "cite the task's own decision numbers instead of restating them", "alternatives paragraphs",
                    "restating task text, AGENTS.md or glossary rules", "history or provenance", "tables repeating decisions or code",
-                   "Status, As built, Progress or Implementation progress headings and content"):
+                   "Status, As built, Progress or Implementation progress headings and content",
+                   "Put depth on its own line in Header", "exactly one standalone line outside fenced code",
+                   "`Depth: small`, `Depth: medium` or `Depth: large`", "For example:\nDepth: small\n",
+                   "An optional `; explanation` suffix", "Only up to three spaces may precede `Depth:`",
+                   "Do not embed depth after task/base prose", "an inline-only declaration is rejected"):
         assert phrase in text
     assert "## Size" not in text
 

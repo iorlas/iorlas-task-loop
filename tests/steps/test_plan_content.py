@@ -52,6 +52,32 @@ def test_missing_duplicate_unknown_or_fenced_depth_refuses_completion(depth: str
     assert artifact(("# Header\n" + depth + CHANGE_MAP).encode()) == Rejected(PlanContentRule.DEPTH)
 
 
+@pytest.mark.parametrize("depth", ["small", "medium", "large"])
+@pytest.mark.parametrize("suffix", ["", "; one behaviour"])
+@pytest.mark.parametrize("standalone", [False, True])
+@pytest.mark.parametrize("reuse", [False, True])
+def test_standalone_depth_passes_and_inline_depth_refuses_new_and_reused_plans(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts,
+    slot_files: FakeSlotFiles, depth: str, suffix: str, standalone: bool, reuse: bool,
+) -> None:
+    header = "# Header\ntl-1; base X." + ("\n" if standalone else " ") + f"Depth: {depth}{suffix}\n"
+    text = header + CHANGE_MAP
+    expected = "b" * 40 if standalone else Rejected(PlanContentRule.DEPTH)
+    assert artifact(text.encode()) == expected
+    if reuse:
+        commit(slot, {P: text})
+        origin_main_at(slot)
+    captured(registered, tmp_path, slot, checkouts, slot_files, {} if reuse else {P: text}, UNCHANGED if reuse else PLAN)
+    check = verifier(registered, checkouts, slot_files)
+    result = check.verify(KEY)
+    if standalone:
+        assert isinstance(result, Verified) and result.reused is reuse
+    else:
+        assert result == Rejected(PlanContentRule.DEPTH)
+        assert stored(registered)[0][1] == PlanContentRule.DEPTH.value
+    assert check.verify(KEY) == result
+
+
 @pytest.mark.parametrize("heading", [
     "# As built", "## AS BUILT ###", "### Status: implemented", "## status", "###### Progress",
     "## Implementation progress", "As built\n========", "STATUS: implemented\n---", "Progress\n=======",
@@ -125,6 +151,16 @@ def test_every_content_refusal_has_words_and_removal_or_repair_advice(rule: Rule
     explanation = cause("rejected:" + str(rule))
     assert explanation is not None and explanation.fix
     assert str(rule) not in explanation.what + explanation.fix
+
+
+def test_depth_refusal_names_the_standalone_form_and_inline_repair() -> None:
+    explanation = cause("rejected:" + PlanContentRule.DEPTH)
+    assert explanation is not None and explanation.fix is not None
+    assert "exactly one valid standalone depth line in Header outside fenced code" in explanation.what
+    for line in ("Depth: small", "Depth: medium", "Depth: large"):
+        assert f"`{line}`" in explanation.what
+    assert "move an inline depth declaration onto its own line" in explanation.fix
+    assert "keep exactly one such line, optionally followed by `; explanation`" in explanation.fix
 
 
 def test_a_revised_old_plan_can_complete_with_the_new_template(
