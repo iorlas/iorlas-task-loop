@@ -355,9 +355,9 @@ def test_a_repeats_prompt_marks_the_lines_it_added_to_the_prompt_it_repeats(chec
 def test_a_plan_repeat_is_a_repeat_on_the_board_and_in_history(registered: sqlite3.Connection, tmp_path: Path) -> None:
     registered.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason)
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason)
         SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-        schema_version,model,effort,sandbox,deadline,2,2,slot_head,'attempt','unsafe' FROM attempt WHERE attempt_id='attempt'""")
+        schema_version,model,effort,access_policy,deadline,2,2,slot_head,'attempt','unsafe' FROM attempt WHERE attempt_id='attempt'""")
     files = EvidenceFiles(tmp_path)
     board_task, = board_of(registered, files, Tracker()).tasks
     assert board_task.repeat is not None
