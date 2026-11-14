@@ -205,15 +205,15 @@ def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move, cl
 
 def _comment(ports: HoldPorts, row: HoldRow, agent: AttemptRow, found: Returned | Kept, leftovers: tuple[str, ...]) -> HoldRow | str:
     """The one comment under the lease: a lost lease (another caller's, live) writes nothing (`refused:leased`); a
-    posted comment (or a task deleted meanwhile, which can take none) is recorded; a tracker failure keeps the lease,
-    retaken once it is older than `COMMENT_LEASE`."""
+    posted comment (or a task deleted meanwhile, which can take none) is recorded. A tracker failure releases the lease;
+    a lost caller's lease expires after `COMMENT_LEASE`. Both retry with the same attempt key."""
     leased = ports.store.commenting(row.attempt_id, row.rev, ports.clock())
     labels = None if leased is None else leased.labels
     if leased is None or labels not in COMMENTING:
         return "refused:leased"
     saved = tuple(each.sha for each in ports.store.saved(leased.attempt_id))
     text = comment(replace(facts(ports.files, ports.reader, leased, labels, agent, leftovers), saved=saved), found)
-    answer = ports.tracker.comment(leased.tracker_root, leased.task_id, text)
+    answer = ports.tracker.comment(leased.tracker_root, leased.task_id, leased.attempt_id, text)
     if answer.word == "unavailable":  # one capped try failed: the lease is given back, so the next round retries at once
         ports.store.uncommenting(leased.attempt_id, leased.rev)
         return "unavailable:tracker"

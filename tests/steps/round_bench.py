@@ -75,6 +75,7 @@ class Tracker:
         self.down: set[str] = set()
         self.deleted_as = ""  # bd's words for a task not in `beads` (empty: `show` answers nothing)
         self.comments: list[tuple[str, str]] = []
+        self.comment_keys: set[tuple[str, str]] = set()
         self.holds: list[str] = []
 
     def labels(self, _root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
@@ -91,11 +92,13 @@ class Tracker:
         self.beads[task_id] = replace(found, labels=(*kept, "held"))
         return HoldAnswer("moved" if label in found.labels else "absent", found.assignee)
 
-    def comment(self, _root: str, task_id: str, text: str) -> HoldAnswer[HoldWrite]:
+    def comment(self, _root: str, task_id: str, key: str, text: str) -> HoldAnswer[HoldWrite]:
         self.holds.append(f"comment {task_id}")
         if "comment" in self.down:
             return HoldAnswer("unavailable", "lock")
-        self.comments.append((task_id, text))
+        if (task_id, key) not in self.comment_keys:
+            self.comment_keys.add((task_id, key))
+            self.comments.append((task_id, text))
         return HoldAnswer("done")
 
     def clear(self, _root: str, task_id: str) -> HoldAnswer[HoldWrite]:
