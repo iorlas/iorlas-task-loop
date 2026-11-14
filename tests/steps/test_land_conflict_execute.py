@@ -37,11 +37,10 @@ def test_execution_prepares_the_reserved_base_and_keeps_checked_refs(execution_c
     branches = dict(c.ports.repo.branches("task/"))
     result = c.resume()
     assert isinstance(result, Completed) and result.source == c.record.request.checked and result.target == c.record.request.target
-    assert c.slot.branch() is None and head(c.slot) == result.commit and not c.slot.merging()
+    assert c.slot.branch() is None and head(c.slot) == c.record.base and not c.slot.merging()
     assert dict(c.ports.repo.branches("task/")) == branches and c.calls == 1
     assert c.environment.probes and c.environment.process.calls[0].cwd == c.record.slot_path
-    assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        c.record.key.attempt_id, c.record.key.reservation_generation)
+    assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() is None
     assert c.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)
     assert SetupStore(lambda: c.con).drain_processes()[0].subject == c.record.key.attempt_id
 

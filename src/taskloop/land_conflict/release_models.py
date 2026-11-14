@@ -6,7 +6,7 @@ from typing import Self
 from pydantic import model_validator
 
 from taskloop.land_conflict.abort_models import Checkout, Value
-from taskloop.merge.models import Phase, Terminal, Work
+from taskloop.merge.models import Completed, Phase, Terminal, Work
 
 
 class ReleasePhase(StrEnum):
@@ -18,13 +18,18 @@ class Release(Value):
     work: Work
     before: Checkout
     after: Checkout
-    result: Terminal
+    result: Completed | Terminal
     phase: ReleasePhase = ReleasePhase.PENDING
 
     @model_validator(mode="after")
     def consistent(self) -> Self:
-        if (self.work.phase is not Phase.TERMINAL or self.result.reason != self.work.reason
-                or self.result.explanation != self.work.explanation):
+        if isinstance(self.result, Completed):
+            if (self.work.phase is not Phase.COMPLETE
+                    or (self.result.commit, self.result.source, self.result.target, self.result.explanation)
+                    != (self.work.result, self.work.source, self.work.target, self.work.explanation)):
+                raise ValueError("release requires the exact completed work and result")
+        elif (self.work.phase is not Phase.TERMINAL or self.result.reason != self.work.reason
+              or self.result.explanation != self.work.explanation):
             raise ValueError("release requires the exact terminal work and result")
         for checkout in (self.before, self.after):
             if (checkout.repo_id, checkout.root, checkout.path, checkout.gitdir) != (
