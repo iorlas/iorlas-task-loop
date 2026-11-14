@@ -8,7 +8,7 @@ from git_porcelain import GitUnavailable, Recorded, Repo
 from git_porcelain.testing import FakeRepo
 
 from taskloop.git_views import GitProfileFiles
-from taskloop.input_context import InputError, read, refresh
+from taskloop.input_context import BEGIN, END, InputError, read, refresh
 from taskloop.profile import NoCommit, Unavailable
 
 SETTINGS = '[tool.pytest.ini_options]\naddopts = "--import-mode=importlib -p no:cacheprovider"\npythonpath = ["tests/steps"]\n'
@@ -35,7 +35,9 @@ def test_map_is_the_complete_sorted_committed_path_list(repo: FakeRepo, checkout
     context = read(files, commit)
     assert context.paths == names
     text = context.render()
-    assert text.count("CODE MAP") == 1 and "\n".join(names) in text
+    assert text.splitlines().count("CODE MAP") == text.splitlines().count(BEGIN) == text.splitlines().count(END) == 1
+    assert text.index(BEGIN) < text.index(context.glossary) < text.index("\nCODE MAP\n") < text.index(END)
+    assert text.split("\nCODE MAP\n")[1] == "\n".join((*names, END))
     assert "untracked" not in text and "deleted.py" not in text and "srcish/" not in text and "docs/designer/" not in text
     assert not context.layout and "src/taskloop" not in text
     assert "src/deleted.py" in read(files, first).paths
@@ -58,21 +60,32 @@ def test_map_refresh_replaces_old_paths_once(repo: FakeRepo, checkouts: PinnedVi
     assert text.startswith("retry frame\n") and text.endswith("\ntask")
 
 
-@pytest.mark.parametrize("settings", [SETTINGS, SETTINGS.replace('pythonpath = ["tests/steps"]', 'pythonpath = ["tests"]')])
+@pytest.mark.parametrize("settings", [SETTINGS, SETTINGS.replace('pythonpath = ["tests/steps"]', 'pythonpath = ["tests"]'),
+                                     SETTINGS.replace("--import-mode=importlib", "--import-mode=prepend")])
+@pytest.mark.parametrize("missing_folders", [False, True])
 def test_taskloop_hints_follow_committed_paths_and_pytest_settings(
-    repo: FakeRepo, checkouts: PinnedViews, settings: str,
+    repo: FakeRepo, checkouts: PinnedViews, settings: str, missing_folders: bool,
 ) -> None:
     paths = ("src/taskloop/app.py", "src/taskloop/agents/a.py", "src/taskloop/drain/a.py", "src/taskloop/check_repeat/a.py",
              "src/taskloop/dash/a.py", "tests/steps/doubles.py", "tests/cli/a.py", "tests/rules/a.py")
+    if missing_folders:
+        paths = tuple(path for path in paths if path not in ("src/taskloop/drain/a.py", "tests/rules/a.py"))
     commit = record(repo, dict.fromkeys(paths, "") | {"pyproject.toml": settings})
     repo.worktree(repo.path).write_file("pyproject.toml", "dirty invalid toml")
     context = read(GitProfileFiles(repo.path, checkouts), commit)
-    assert "src/taskloop/*.py" in context.layout
-    for folder in ("agents", "drain", "check_repeat", "dash"):
-        assert f"src/taskloop/{folder}/" in context.layout
-    assert ("Shared test helpers" in context.layout) is (settings == SETTINGS)
+    hints = ["In this repository, source modules are primarily src/taskloop/*.py.",
+             "Feature subfolders: src/taskloop/agents/, src/taskloop/drain/, src/taskloop/check_repeat/, src/taskloop/dash/.",
+             "Tests: tests/steps/, tests/cli/, tests/rules/."]
+    if missing_folders:
+        hints[1] = "Feature subfolders: src/taskloop/agents/, src/taskloop/check_repeat/, src/taskloop/dash/."
+        hints[2] = "Tests: tests/steps/, tests/cli/."
     if settings == SETTINGS:
-        assert 'pythonpath = ["tests/steps"]' in context.layout and "importlib mode" in context.layout
+        hints.append('Shared test helpers such as doubles.py live in tests/steps; committed pytest settings use '
+                     'importlib mode and pythonpath = ["tests/steps"].')
+    text = context.render()
+    assert text.splitlines().count("CODE MAP") == text.splitlines().count(BEGIN) == text.splitlines().count(END) == 1
+    assert text.index(BEGIN) < text.index(context.glossary) < text.index("\nCODE MAP\n") < text.index(END)
+    assert text.split("\nCODE MAP\n")[1] == "\n".join((*hints, *sorted(paths), END))
 
 
 @pytest.mark.parametrize("failure", [Unavailable("listing failed"), NoCommit()])
