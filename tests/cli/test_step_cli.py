@@ -75,8 +75,8 @@ ABANDONED = AttemptView(
     "tasks", "tl-1", "plan", "second", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, "start",
     earlier=(("first", "abandoned"),), seq=2, release=ReleaseRow(D, 30.0, "unclaimed"),
 )
-FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, CommandConclusion.FAILED), Path("/a/d/setup-2.log"))
-RUNNING_SETUP = SetupShown(SetupRow(3, D, "f" * 64, 1, OwnedProcess(5, 5, "s", "b"), None), Path("/a/d/setup-3.log"))
+FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, CommandConclusion.FAILED, 10.0, 11.0), Path("/a/d/setup-2.log"))
+RUNNING_SETUP = SetupShown(SetupRow(3, D, "f" * 64, 1, OwnedProcess(5, 5, "s", "b"), None, 10.0, None), Path("/a/d/setup-3.log"))
 RELEASE = ["step", "release", "tl-1", "--backlog", "tasks"]
 FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned", "checks", "land",
          "candidate"}
@@ -198,7 +198,8 @@ CASES: list[tuple[list[str], Result, int, list[str], set[str]]] = [
       "Attempt: attempt (2 of at most 3; repeats first, uncommitted)\nEarlier: first repeated (uncommitted)\nSlot: s1"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS, FAILED_SETUP), 0,
-     [f"Deadline passed: no\nSetup: run 2 failed at {D}; log /a/d/setup-2.log\nDirectory"],
+     [f"Deadline passed: no\nSetup: run 2 failed at {D}; log /a/d/setup-2.log; started 1970-01-01 00:00:10 UTC; "
+      "ended 1970-01-01 00:00:11 UTC; duration unavailable (no usable recorded duration)\nDirectory"],
      STATUS_KEYS | {"directory", "entry_log", "events_path", "setup", "failed_checks"}),
     (["step", "show", "tl-1", "--backlog", "tasks"], Shown(STATUS, Path("/a/d"), Path("/a/d/entry.log"), EVENTS, RUNNING_SETUP), 0,
      [f"Setup: run 3 unfinished at {D}; log /a/d/setup-3.log"],
@@ -445,6 +446,7 @@ def test_a_repeat_shows_the_setup_of_the_attempt_whose_environment_it_keeps(tmp_
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     shown = json.loads(capsys.readouterr().out)
     assert shown["attempt_id"] == "second" and shown["setup"]["attempt_id"] == "attempt"
+    assert (shown["setup"]["started_at"], shown["setup"]["ended_at"], shown["setup"]["duration_seconds"]) == (1, 2, 1)
     assert shown["setup"]["log"] != f"{shown['directory']}/setup-1.log" and shown["setup"]["log"].endswith("/setup-1.log")
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art)]) == 0
     assert f"Setup: run 1 passed at {'d' * 40} (attempt attempt's, which this repeat keeps); log" in capsys.readouterr().out
@@ -467,7 +469,7 @@ def test_the_real_read_paths_write_nothing_and_never_print_the_token(tmp_path: P
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     setup = json.loads(capsys.readouterr().out)["setup"]
     assert setup == {"run": 1, "conclusion": "passed", "commit": "d" * 40, "log": f"{shown['directory']}/setup-1.log",
-                     "attempt_id": None}
+                     "attempt_id": None, "started_at": 1.0, "ended_at": 2.0, "duration_seconds": 1.0}
     assert main(["step", "list", "--stuck", "--db", str(db)]) == 0
     listed = capsys.readouterr().out
     head = "task\tbacklog\tstep\tattempt\tslot\tphase\tentry\tresult\tstatus\tnext\thold cause\tlast command"

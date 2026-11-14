@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import ValidationError
 
-from taskloop import attempt_status, cli_composition, dash_composition, land, operations, result_data
+from taskloop import attempt_status, cli_composition, dash_composition, land, operations, result_data, setup_timing
 from taskloop.agents.settings import Overrides
 from taskloop.composition import real_slots
 from taskloop.drain.models import Reason
@@ -24,6 +24,7 @@ from taskloop.operations import Ended, Failed, Round, StartRequest
 from taskloop.result_data import Result
 from taskloop.round import NextRequest, run_round
 from taskloop.rounds import RoundsRequest, run_rounds
+from taskloop.setup_store import SetupStore
 from taskloop.step_guide import ROUNDS, STEP_ONLY
 from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
@@ -76,6 +77,9 @@ def register(commands: Parsers) -> None:
     listing = _add(step, "list", "Every task's current attempt with its next action (read-only)")
     listing.add_argument("--stuck", action="store_true", help="Only attempts whose next action is stuck:*, hold or unknown")
     _common(listing, "--db")
+    timing = _add(step, "setup-times", "Recent persisted implement setup times (read-only; no decision)")
+    timing.add_argument("--backlog", metavar="KEY", required=True)
+    _common(timing, "--db")
     verify = _add(step, "verify", "Commit the step's listed files and verify them, then release a clean slot and publish a verified "
                   "result; an agent step's only, never the checks")
     verify.add_argument("task_id", metavar="TASK")
@@ -253,6 +257,13 @@ def _list(arguments: argparse.Namespace, loaded: Loaded) -> Result:
         return reads if isinstance(reads, Failed) else attempt_status.list_attempts(reads, stuck=arguments.stuck)
 
 
+def _setup_times(arguments: argparse.Namespace, loaded: Loaded) -> Result:
+    with cli_composition.open_reads(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as reads:
+        if isinstance(reads, Failed):
+            return reads
+        return setup_timing.report(SetupStore(reads.store.connect, reads.store.begin), arguments.backlog)
+
+
 def _verify(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     with cli_composition.open_verify(loaded.settings.db.value, views_for(loaded)) as opened:
         return opened if isinstance(opened, Failed) else operations.verify_task(*opened, arguments.backlog, arguments.task_id)
@@ -311,6 +322,7 @@ OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]
     ("step", "rounds"): _rounds,
     ("step", "show"): _show,
     ("step", "list"): _list,
+    ("step", "setup-times"): _setup_times,
     ("step", "verify"): _verify,
     ("step", "release"): _release,
     ("step", "publish"): _publish,

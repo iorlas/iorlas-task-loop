@@ -6,6 +6,7 @@ from pathlib import Path
 from taskloop.agents.config import display
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
+from taskloop.command_conclusion import encode
 from taskloop.drain.models import Reason
 from taskloop.hold_guide import hold_guide, pending_guide
 from taskloop.inspection_guide import CONFIG, SLOT
@@ -31,7 +32,8 @@ from taskloop.printable import block
 from taskloop.publish import is_published, publish_word
 from taskloop.result_data import Result, StepResult
 from taskloop.round_guide import automatic_guide
-from taskloop.show_render import last_command, show_lines
+from taskloop.setup_timing import SetupTimingReport
+from taskloop.show_render import last_command, setup_times, show_lines
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
 from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, STEP_ONLY, discard, guide, refusal_guide
@@ -80,7 +82,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             left = [f"Unsettled: {each.leftovers[0]}", *(f"  {line}" for line in each.leftovers[1:])] if each.leftovers else []
             last = [] if each.last_entry is None else [f"Last entry result: {each.last_entry}"]
             return [*show_lines(result), *paths, *last, *left, f"Status: {status_words(task_status(each))}", f"Next: {each.next}", *steps]
-        case Listed() | Round() | Ended():
+        case Listed() | Round() | Ended() | SetupTimingReport():
             return _rows_lines(command, result, stuck)
         case VerifiedTask() | ReleasedTask() | PublishedTask():
             return _released_lines(result)
@@ -103,9 +105,13 @@ def _path(move: Move) -> list[str]:
     return [f"  {move.detail}"] if move.word.startswith("unusable:") and move.detail else []
 
 
-def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) -> list[str]:
-    """`tl step list`: one row per task. `tl step next`: one line per move as performed, `Stopped:` when admission ended
-    early, then the guide of each distinct reported, skipped or stopping word once. `tl step rounds`: why it ended."""
+def _rows_lines(command: str, result: Listed | Round | Ended | SetupTimingReport, stuck: list[str]) -> list[str]:
+    """Render ordered rows, setup samples, or the reason rounds ended."""
+    if isinstance(result, SetupTimingReport):
+        return [f"Setup times: backlog {result.backlog}", *[
+            f"Task {row.task_id}; repo {row.repo_id}; attempt {row.attempt_id}; run {row.run}; "
+            f"{encode(row.conclusion) or 'unfinished'}; {setup_times(row.started_at, row.ended_at, row.duration_seconds)}"
+            for row in result.rows], f"Usable samples: {result.sample_count} of {len(result.rows)} displayed (at most 10)"]
     if isinstance(result, Ended):
         ended = {Reason.DRAINING: "Rounds stopped: new work is blocked by the durable drain request.",
                  Reason.DRAINED: "Idle was verified; new work remains blocked. The owner can decide whether to restart or upgrade.",

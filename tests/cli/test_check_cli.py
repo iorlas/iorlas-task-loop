@@ -46,7 +46,7 @@ VIEW = AttemptView(
     ReleaseRow(D, 1762941600.0, "kept"), PublishedRow(X, X, 6.0),
     ChecksView(ROW, RESULTS, (*(LOGS / f"check-1-{name}.log" for name in ("check", "test", "slow")), None)),
 )
-SETUP = SetupShown(SetupRow(1, X, "f" * 64, 0, None, CommandConclusion.PASSED), LOGS / "setup-1.log")
+SETUP = SetupShown(SetupRow(1, X, "f" * 64, 0, None, CommandConclusion.PASSED, 1.0, 2.0), LOGS / "setup-1.log")
 SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", EVENTS, SETUP)
 SHOW = ["step", "show", "tl-1", "--backlog", "tasks"]
 
@@ -65,7 +65,8 @@ def test_show_prints_the_checks_attempt_s_lines_in_order(capsys: pytest.CaptureF
         "Task: tl-1 (backlog tasks)", "Step: check", "Attempt: checks (run 2)", "Earlier: first re-run", "Earlier: implement advanced",
         "Slot: s1", "Phase: concluded", "Entry: gone (pid 42)", f"Commit: {X}",
         f"Required: check, test, smoke (main at {TARGET})", f"Profile: {'f' * 64} at X",
-        f"Setup: run 1 passed at {X}; log /a/c/setup-1.log",
+        f"Setup: run 1 passed at {X}; log /a/c/setup-1.log; started 1970-01-01 00:00:01 UTC; "
+        "ended 1970-01-01 00:00:02 UTC; duration 1 s",
         "Check: check passed, exit 0, 41 s; log /a/c/check-1-check.log",
         "Check: test failed, exit 1, 312 s; log /a/c/check-1-test.log (argv differs from main)",
         "Check: slow passed, exit 0, 1 s; log /a/c/check-1-slow.log (not required)",
