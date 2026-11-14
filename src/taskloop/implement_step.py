@@ -41,14 +41,23 @@ ANSWER_SCHEMA: Final = {
         "explanation": {"type": "string"},
     },
 }
-# The environment the entry prepared (S5e, design tl-8bh9.4.3.1.16.2 section 7): generic, no repository command named;
-# the agent reads `checks` in its own checkout's profile.
+# The prepared environment and editing guidance; final checks still come from the checkout's profile.
 ENVIRONMENT: Final = (
     "The factory ran this repository's `setup` before you started; there is no network now. Before answering, run every "
     "command listed under `checks` in `.task-loop.json` (while you work, a focused part such as one test file is fine) and "
     "fix what they report. Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere "
     "outside the repository. Your runs are evidence for you: after this step the checks run again outside your control, "
-    "and only those results count."
+    "and only those results count. "
+    "First confirm that `apply_patch` is offered in your implement tool set. Make every file edit with `apply_patch`, "
+    "never with a Python or sed script. This includes additions, deletions and repairs; do not rewrite repository files "
+    "with shell redirection. After an edit that touched a Python file, run nothing but the focused test or "
+    "`just check 2>&1 | tail -60` as the next command, before inspection or unrelated commands. For a focused test, "
+    "also pipe combined stdout/stderr through `tail -60`. Use shell pipefail so a failing command stays failed. "
+    "If a result is longer than 60 lines, you ran the wrong command. The project interpreter is `.venv/bin/python`; "
+    "use `uv run --frozen --no-sync python -I` for execution or inspection scripts, never for file edits. "
+    "Bare `python3` is the host's Python 3.12, not the project's Python 3.15. Only if `apply_patch` is absent, report "
+    "the tool gap in the plan and in `explanation` and retain heredoc edits with the same immediate verification and "
+    "60-line output rule."
 )
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
@@ -118,8 +127,9 @@ def repeat_instructions(number: int, *, unrecorded: bool) -> str:
     )
     return (
         "Remove every untracked file listed that you do not want committed. Restore every tracked file you changed or "
-        "deleted and do not want committed (`git show HEAD:<path> > <path>`); you cannot run `git checkout` or `git "
-        f"restore`. With `implemented`, `paths` lists every file you want committed, changed, added or deleted. {last}"
+        "deleted and do not want committed: read the original content with `git show HEAD:<path>` and restore it with "
+        "`apply_patch`, following the editing rules below. You cannot run `git checkout` or `git restore`. "
+        f"With `implemented`, `paths` lists every file you want committed, changed, added or deleted. {last}"
     )
 
 
