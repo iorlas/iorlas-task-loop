@@ -96,7 +96,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     assert attempts(agent(slot, {P: PLAN_TEXT, "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
-    admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, ids=NativeIds())
+    admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds())
     repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),
                         lambda _w: True, lambda _e: "gone", lambda: 10,
                         repeating, ids=NativeIds())

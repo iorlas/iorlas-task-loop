@@ -223,10 +223,11 @@ def open_admission(database: Path, artifacts: Path, views: GitViews, store: Stor
     )
 
 
-def open_chain(database: Path, artifacts: Path, store: Store | None = None) -> ChainAdmission:
+def open_chain(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> ChainAdmission:
     """Real wiring of the admissions that continue a task: per-thread shared writers on factory.db, wall-clock deadlines."""
     store = store if store is not None else Store(SCHEMA)
-    return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time, ids=NativeIds())
+    return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time,
+                          views.checkouts, RealSlotFiles(), ids=NativeIds())
 
 
 def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> NextAdmission:

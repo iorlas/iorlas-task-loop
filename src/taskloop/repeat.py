@@ -31,6 +31,7 @@ from taskloop.attempt_types import (
     WorkerGone,
 )
 from taskloop.discussion import RefreshDiscussion, replace_block
+from taskloop.earlier_input import without
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.ids import Ids
 from taskloop.input_context import InputError
@@ -118,7 +119,7 @@ class StepRepeat:
         """The feedback over attempt 1's input, read through its digest."""
         try:
             steps = self.store.chain(current)  # read after the verify: C's commit, if it made one, is stored now
-            task = self.files.read(steps[0].input_ref)
+            task = without(self.files.read(steps[0].input_ref))
             if self.discussion is not None:
                 root = self.store.tracker_root(current)
                 if root is None:

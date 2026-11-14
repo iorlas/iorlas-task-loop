@@ -7,9 +7,8 @@ Agent text goes to the person only, through `hold_text`."""
 from dataclasses import dataclass
 from typing import get_args
 
-from any_agent import DecodedAnswer, decode_answer
-
 from taskloop.agents.stop_store import StopStore
+from taskloop.answer_read import read as read_answer
 from taskloop.attempt_reads import AttemptRow, StoreRefused
 from taskloop.attempt_result import collect
 from taskloop.attempt_store import AttemptStore
@@ -23,7 +22,7 @@ from taskloop.hold_text import FailedCheck, HoldFacts, Kept, KeptWord, LabelsWor
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed, ReleasedTask
 from taskloop.setup_store import SetupStore
-from taskloop.steps import CHECK, is_agent, kind
+from taskloop.steps import CHECK
 
 
 @dataclass(frozen=True)
@@ -68,15 +67,11 @@ def outcome(reader: AttemptStore, agent: AttemptRow, released: ReleasedTask | Fa
 def explanation(files: EvidenceFiles, execution: StoredExecution | None, step: str, task_id: str) -> str | None:
     """The agent's explanation from its stored valid answer, by the step kind's own decoder; None without one (no valid
     answer, a checks attempt, or an answer file that no longer reads as stored)."""
-    if execution is None or execution.answer.kind != "valid" or not is_agent(step):
-        return None
-    found = kind(step)
-    rules = found.rules(task_id)
     try:
-        answer = decode_answer(files.read(execution.evidence.answer), lambda value: found.decode(value, rules))
+        answer = read_answer(files, execution, step, task_id)
     except EvidenceError:
         return None
-    return answer.value.explanation if isinstance(answer, DecodedAnswer) else None
+    return None if answer is None else answer.explanation
 
 
 def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: LabelsWord, agent: AttemptRow,
