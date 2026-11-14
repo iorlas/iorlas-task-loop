@@ -4,7 +4,9 @@
 import { initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
-import { $, COLUMNS, LAND, STEPS, callout, el, holdCallout, position, quietSpan, tag, tick } from "./ui.js";
+import {
+  $, COLUMNS, LAND, STEPS, callout, el, holdCallout, isWaiting, position, quietSpan, runningAgent, tag, tick, waitingNote,
+} from "./ui.js";
 
 const tasks = new Map(); // id -> board card
 const cards = new Map(); // id -> element
@@ -105,12 +107,13 @@ function buildBoard() {
 }
 
 const TIME = {
-  waiting: ["", " waiting"], plan: ["", " in step"], implement: ["", " in step"], checks: ["", " in step"], land: ["", " in step"],
+  plan: ["", " in step"], implement: ["", " in step"], checks: ["", " in step"], land: ["", " in step"],
   held: ["on hold ", ""], landed: ["landed ", " ago"],
 };
 
 function fillCard(node, t) {
   node.replaceChildren();
+  delete node.dataset.quietLevel;
   const top = el("div", "flex items-center gap-2");
   top.append(el("span", "font-mono text-[11px] text-slate-500 dark:text-slate-400", t.id));
   if (position(t)) top.append(el("span", "ml-auto text-[11px] text-slate-500 dark:text-slate-400", position(t)));
@@ -122,23 +125,30 @@ function fillCard(node, t) {
   }
   const hold = holdCallout(t);
   if (hold) notes.append(hold);
-  if (t.column === "waiting" && t.attempt > 0) notes.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
-  if (t.column === "land") notes.append(callout(LAND[t.land ?? "unknown"].bar,
-    LAND[t.land ?? "unknown"].label, t.status_note));
+  if (t.column === "waiting" || t.column === "land") {
+    const word = LAND[t.land ?? "unknown"];
+    const note = callout(t.column === "land" ? word.bar : "border-slate-400",
+      t.column === "land" ? word.label : t.status === "abandoned" ? "Abandoned" : "Queued");
+    if (isWaiting(t)) note.append(waitingNote(t));
+    else if (t.status_note) note.append(el("p", "text-xs", t.status_note));
+    notes.append(note);
+  }
   if (notes.children.length) node.append(notes);
   const foot = el("div", "mt-2.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400");
   const time = el("span", "whitespace-nowrap tabular-nums");
-  [time.dataset.prefix, time.dataset.suffix] = TIME[t.column];
-  time.dataset.since = t.step_started_at;
-  foot.append(time);
+  if (!isWaiting(t) && t.step_started_at) {
+    [time.dataset.prefix, time.dataset.suffix] = TIME[t.column];
+    time.dataset.since = t.step_started_at;
+    foot.append(time);
+    tick(time);
+  }
   if (t.slot && !lanes) foot.append(el("span", "ml-auto font-mono", t.slot));
   node.append(foot);
-  if (STEPS.some((s) => s.id === t.column)) {
+  if (runningAgent(t) && t.last_activity_at) {
     const quiet = quietSpan(t.last_activity_at);
     node.append(quiet);
     tick(quiet);
   }
-  tick(time);
 }
 
 function newCard(t) {
@@ -291,7 +301,7 @@ async function start() {
     onTaskMoved(msg.task);
   }, (connected) => { streamLabel.textContent = connected ? "Stream connected" : "Stream disconnected"; });
   setInterval(() => {
-    document.querySelectorAll("[data-since],[data-quiet]").forEach(tick);
+    document.querySelectorAll("[data-since],[data-quiet],[data-waiting-since]").forEach(tick);
     // A future observation may become an elapsed time once the local clock catches up.
     if (roundAt !== null) renderRound();
   }, 1000);
