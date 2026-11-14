@@ -35,6 +35,18 @@ def planned(slot: FakeWorktree) -> PlanMetadata:
     return metadata
 
 
+def test_explicit_source_is_validated_while_the_worktree_is_parked(
+    planned: PlanMetadata, slot: FakeWorktree, checkouts: PinnedViews,
+) -> None:
+    source = next(each.head for each in slot.repo.worktrees() if each.path == slot.path)
+    assert source is not None
+    slot.park(planned.prepared_commit)
+    gitdir = checkouts.common / "worktrees" / slot.path.name
+    assert evaluate(checkouts, slot.path, PLAN_PATH, git_dir=gitdir).decision is ReuseDecision.PLAN
+    result = evaluate(checkouts, slot.path, PLAN_PATH, git_dir=gitdir, source=str(source))
+    assert result.decision is ReuseDecision.REUSE and result.explanation
+
+
 @pytest.mark.parametrize("change", ["none", "unrelated", "uncommitted", "file", "folder", "deleted", "folder_deleted"])
 def test_only_committed_cited_changes_prevent_reuse_with_one_scoped_patch_free_diff(
     change: str, planned: PlanMetadata, repo: FakeRepo, slot: FakeWorktree, checkouts: PinnedViews,
@@ -72,7 +84,8 @@ def test_only_committed_cited_changes_prevent_reuse_with_one_scoped_patch_free_d
     assert result.decision is (ReuseDecision.PLAN if changed else ReuseDecision.REUSE)
     assert result.reason is (ReuseReason.CITED_PATHS_CHANGED if changed else ReuseReason.UNCHANGED)
     assert result.explanation
-    assert calls == [(planned.prepared_commit, "HEAD", planned.cited_paths, (), 0)]
+    tip = next(each.head for each in repo.worktrees() if each.path == slot.path)
+    assert calls == [(planned.prepared_commit, str(tip), planned.cited_paths, (), 0)]
     assert (repo.history(["HEAD"]), repo.worktrees(with_dirty=True)) == before
     tip = next(each.head for each in repo.worktrees() if each.path == slot.path)
     assert tip is not None

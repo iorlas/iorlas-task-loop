@@ -475,16 +475,15 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
     checks = advance is not None and advance.step == CHECK
     if advance is not None and checks:
         admitted = ports.checks.admission.admit_checks(ChecksRequest(advance.previous, request.checkout, deadline, advance.number))
+    elif advance is None:
+        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root,
+                                                    request.checkout, request.settings, deadline, request.label, request.overrides))
     else:
         try:
-            setting = apply(request.settings.for_step("plan" if advance is None else advance.step), request.overrides)
+            setting = apply(request.settings.for_step(advance.step), request.overrides)
         except ValueError as error:
             return Failed("refused", "choices", str(error))
-        if advance is None:
-            admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root,
-                                                        request.checkout, setting, deadline, request.label))
-        else:
-            admitted = ports.advance.admit_next(NextStepRequest(advance.previous, request.checkout, setting, deadline))
+        admitted = ports.advance.admit_next(NextStepRequest(advance.previous, request.checkout, setting, deadline))
     if isinstance(admitted, Admitted):
         return admitted.key, False
     if isinstance(admitted, AdmitUnavailable):

@@ -21,7 +21,7 @@ from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.agents.launch import AgentLaunch
-from taskloop.agents.settings import AgentSetting, CodexPolicy
+from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Verified
@@ -83,7 +83,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
             "tasks",
             str(root),
             main,
-            AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            StepSettings(plan=AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write"))),
             100,
             None,
         )

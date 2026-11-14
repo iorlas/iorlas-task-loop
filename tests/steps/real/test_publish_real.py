@@ -23,7 +23,7 @@ from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
 from taskloop.agents.launch import AgentLaunch
-from taskloop.agents.settings import AgentSetting, CodexPolicy
+from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
@@ -101,7 +101,7 @@ class Published:
                 "tasks",
                 str(root),
                 self.main,
-                AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+                StepSettings(plan=AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write"))),
                 100,
                 None,
             )

@@ -23,7 +23,7 @@ from sqlite_store import Store, begin_immediate
 from taskloop import prepare
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AttemptAdmission
 from taskloop.agents.launch import AgentLaunch
-from taskloop.agents.settings import AgentSetting, CodexPolicy
+from taskloop.agents.settings import AgentSetting, CodexPolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import TRAILER, AttemptKey, AttemptResult, Checkouts, FileRef, SlotFiles
@@ -362,7 +362,7 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
             "tasks",
             str(tmp_path),
             repo.path,
-            AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            StepSettings(plan=AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write"))),
             100,
             None,
         )

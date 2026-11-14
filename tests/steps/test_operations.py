@@ -17,7 +17,6 @@ from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store
 
-from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.agents.launch import AgentLaunch
 from taskloop.agents.settings import Overrides, StepSettings
@@ -186,12 +185,7 @@ def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: Attempt
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
-    assert (request.setting.model, request.setting.effort, request.setting.summary, request.deadline) == (
-        "model-m",
-        "high",
-        SANDBOX,
-        1000 + 30 * 60,
-    )
+    assert (request.settings, request.overrides, request.deadline) == (REQUEST.settings, REQUEST.overrides, 1000 + 30 * 60)
     assert (launcher.calls, launcher.minutes) == ([("tasks", "tl-1")], [30])
 
 
@@ -782,10 +776,11 @@ def test_a_rounds_end_exit_code(reason: str, code: int) -> None:
     assert exit_code(Ended("tasks", reason)) == code
 
 
-def test_a_harness_override_needs_a_matching_policy_before_admission(empty: AttemptStore) -> None:
+def test_a_harness_override_is_forwarded_for_validation_after_admission_selects_the_step(empty: AttemptStore) -> None:
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     ports = StartPorts(empty, admission, launcher, lambda: 10, Repeats(), NoAdvance(), NO_CHECKS)
     request = replace(REQUEST, overrides=Overrides(harness=HarnessKind.CLAUDE, model="opus"))
     found = start(ports, request)
-    assert isinstance(found, Failed) and found.reason == "choices" and "matching per-step" in found.detail
-    assert admission.requests == [] and launcher.calls == []
+    assert isinstance(found, Started)
+    assert admission.requests[0].overrides == request.overrides
+    assert admission.requests[0].settings == request.settings

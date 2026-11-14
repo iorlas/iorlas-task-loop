@@ -356,7 +356,7 @@ def test_an_abandoned_implement_restarts_the_task_at_plan(
             "tasks",
             "/tracker",
             slot.repo.path,
-            AgentSetting(model="chosen", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            StepSettings(plan=AgentSetting(model="chosen", effort="high", access=CodexPolicy(sandbox="workspace-write"))),
             100,
             None,
         )
