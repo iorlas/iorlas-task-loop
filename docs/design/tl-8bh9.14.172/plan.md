@@ -178,3 +178,17 @@ was committed as `9f64dab77448bc86757ff5713fd9fe30e2a0b8b7`; the later merge bro
 The current admission test double is `Tracker`. No task-local WIP commit or uncommitted edits were found. The ancestor
 WIP trailer inspected belongs to `tl-8bh9.14.160`, not this task. This revision changes only this document;
 prompt changes and durable regression tests belong to implementation.
+
+## As built
+
+The released any-agent 0.10.0 completion behavior and all dependency pins are retained. `plan_step` now owns
+one warning constant and prefixes both fresh inputs and repeat feedback with the exact required sentence.
+Existing admitted evidence remains immutable, including when dispatching a repeat.
+
+`tests/steps/test_agent_completion.py` replays phase-less Codex stdout through the released parser and
+supervisor with a clock advanced by short polls. It covers commentary followed by tools, reasoning or more
+than 120 seconds of quiet; continued work in one registered factory attempt/session without capture or
+release; completed JSON, prose and schema-invalid answers through the factory decoder; completion grace;
+the terminal answer file; failed unfinished execution; and the existing stall/silence bounds. The admission
+and repeat tests check the exact warning at byte zero of retained and launched inputs and preserve the
+original retained input when repeating. No process, model call, restart or retry of held work is needed.
