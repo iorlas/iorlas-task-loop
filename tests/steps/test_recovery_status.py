@@ -39,7 +39,7 @@ def ports(con: sqlite3.Connection, processes: Processes, now: float = 10) -> Sta
     ({7: Seen.ALIVE}, "wait"), ({8: Seen.ALIVE}, "wait"), ({30: Seen.ALIVE}, "wait"),
     ({7: Seen.UNKNOWN}, "unknown"), ({8: Seen.UNKNOWN}, "unknown"), ({30: Seen.UNKNOWN}, "unknown"),
     ({7: Seen.ALIVE, 8: Seen.UNKNOWN}, "unknown"), ({8: Seen.ALIVE, 30: Seen.UNKNOWN}, "unknown"),
-    ({}, "release"),
+    ({}, "start"),
 ])
 @pytest.mark.parametrize("expired", [False, True])
 def test_shared_gate_covers_all_status_consumers_without_writes(
