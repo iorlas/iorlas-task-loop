@@ -39,6 +39,7 @@ class Card:
     status_note: str | None = None  # the status in plain words (`task_status.words`)
     ask: bool = False
     question: str | None = None
+    hold_explanation: str | None = None
 
 
 @dataclass(frozen=True)

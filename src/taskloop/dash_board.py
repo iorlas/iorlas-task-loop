@@ -11,6 +11,7 @@ from taskloop.attempt_reads import AttemptRow, SlotUse, StoreUnavailable
 from taskloop.attempt_status import NEEDS_OWNER, AttemptView, StatusPorts, list_attempts
 from taskloop.dash_model import Board, Card, Column, DashTracker, Repeat, iso
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.hold_cause import cause as hold_cause
 from taskloop.operations import Failed
 from taskloop.task_status import FRESH, Admission, Status, TaskStatus, blocker, task_status, words
 
@@ -104,12 +105,18 @@ def card_of(
     holding = row is not None and row.held and view.release is None
     cause = view.hold.reason if view.hold is not None else view.hold_due
     rc = None if view.result.execution is None else view.result.execution.facts.rc
-    cause = stop_text(view.stop, rc) or cause
+    stopped = stop_text(view.stop, rc)
     shown = view.number if number is None else number
     ask, question = _ask(view, column, files)
+    explanation = None
+    if column == "held" and not ask:
+        known = hold_cause(cause or "unknown", None if row is None else row.deadline, view.stop, rc)
+        explanation = stopped or (known.what if known is not None else
+                                  f"The factory held this task with recorded cause: {cause or 'unknown'}.")
+    cause = stopped or cause
     return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
                 view.slot if holding else None, cause if column == "held" else None,
-                found.land if column == "land" else None, found.status.value, words(found), ask, question)
+                found.land if column == "land" else None, found.status.value, words(found), ask, question, explanation)
 
 
 def build_board(ports: BoardPorts) -> Board | Failed:

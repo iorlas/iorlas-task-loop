@@ -68,6 +68,20 @@ export function callout(barCls, head, body) {
   return node;
 }
 
+// Both the board and drawer distinguish a current agent ask from a factory hold.
+export function holdCallout(task) {
+  if (task.column !== "held") return null;
+  const ask = Boolean(task.ask);
+  const cause = task.hold_cause || "unknown";
+  const node = callout(ask ? "border-amber-500" : "border-rose-500",
+    ask ? "Needs you" : `Factory problem: ${say(cause)}`);
+  if (!ask) node.firstChild.title = cause;
+  const body = ask ? task.question || "Question unavailable: the saved agent answer could not be read."
+    : task.hold_explanation || `Explanation unavailable: the factory held this task with recorded cause: ${cause}.`;
+  node.append(el("p", "mt-0.5 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300", body));
+  return node;
+}
+
 export function fmtDur(ms) {
   if (ms < 1000) return `${Math.max(Math.round(ms), 0)}ms`;
   const s = ms / 1000;
