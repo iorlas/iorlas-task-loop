@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from taskloop.agents.stop_models import AgentStop
 from taskloop.agents.stop_text import stop_text
-from taskloop.attempt_types import MiB, PlanContentRule, StepRules
+from taskloop.attempt_types import PlanContentRule
 
 CHECK_GIT = "look at the task branch and the retained slot evidence"
 EVIDENCE = "its `stdout.txt`, `stderr.txt` and `diagnostics.txt` in the evidence directory"
@@ -18,8 +18,13 @@ RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the 
     "plan_missing": ("`plan.md` is absent from the commit (an `unchanged` answer needs an existing plan)", ""),
     "plan_encoding": ("`plan.md` is not valid UTF-8 text", ""),
     "plan_empty": ("`plan.md` is empty or only whitespace", ""),
-    "plan_size": (f"`plan.md` is over the {StepRules('').file_cap // MiB} MiB limit", ""),
-    PlanContentRule.READ_LIST: ("`plan.md` needs a `## Read list` heading followed by a nonempty Markdown bullet list", ""),
+    "plan_size": ("the plan exceeds its depth's byte cap", "remove duplicated content or split the task into bounded parts"),
+    PlanContentRule.CHANGE_MAP: ("the plan needs a Change map with a nonempty bullet list",
+                                 "add the files, symbols and changes, including producers and callers"),
+    PlanContentRule.DEPTH: ("the plan does not declare exactly one valid depth",
+                           "supply one Depth field with small, medium or large in Header"),
+    PlanContentRule.HEADING: ("the plan has a forbidden status, as built or progress heading",
+                             "remove that heading and its status, as built or progress content"),
     "paths": ("a listed path is not allowed (outside the step's folder, a Git file, or too many paths)", ""),
     "mode": ("a listed file is not a plain, non-executable file", ""),
     "file_size": ("a listed file is over the size limit", ""),

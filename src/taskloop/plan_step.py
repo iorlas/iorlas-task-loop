@@ -23,6 +23,7 @@ from taskloop.attempt_types import (
     path_allowed,
 )
 from taskloop.input_context import InputContext
+from taskloop.plan_content import PlanDepth, validate
 from taskloop.task import TaskInspection
 
 DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
@@ -62,13 +63,39 @@ DEPTH_ASSESSMENT: Final = (
     "of these causes applies. Later refusal for actual contradictions or infeasibility and the separate Size limits "
     "still apply; they are not additional early causes.\n\n"
     "If the assessment permits planning, only then read the existing plan and gather bounded evidence. Planning is "
-    "never skipped: a small task gets a short plan. The first lines of plan.md must be `# Depth` and this assessment "
-    "(depth, reason, decision/dependency status and evidence budget), followed by `## Size`. Reusing an existing plan "
-    "requires both current assessments; an existing plan without Depth needs revision, not `unchanged`. Use the "
+    "never skipped: a small task gets a short plan. Put depth, reason, decision/dependency status, evidence budget and "
+    "the Size estimate in Header; do not add separate Depth or Size sections. Reusing an existing plan requires both "
+    "current assessments in Header; an existing plan without them needs revision, not `unchanged`. Use the "
     "included glossary excerpt at every depth; collect missing terms into at most one targeted glossary read, after "
     "the assessment permits planning. Depth is plain English: add no glossary term or new stage."
 )
-ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size", PlanContentRule.READ_LIST)
+ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size", *PlanContentRule)
+TEMPLATE: Final = (
+    "Use exactly these sections in this order, with UTF-8 byte allowances (text after each colon is guidance, "
+    "not heading text):\n"
+    "# Header: task, base commit, `Depth: small|medium|large` (one value, optionally followed by a semicolon and "
+    "explanation), assessment and Size estimate; 300 bytes.\n"
+    "## Outcome and non-goals: 800 bytes.\n"
+    "## Settled decisions: one line each; a reason only when not obvious; cite the task's own decision numbers "
+    "instead of restating them; 1,500 bytes.\n"
+    "## Open decisions: list only, never answer them in the plan; any open decision requires `needs_owner`.\n"
+    "## Change map: nonempty Markdown bullet list, one line per file, symbol and change; symbol names instead of "
+    "line numbers. Find callers in one targeted search and list every caller found, including producers and callers "
+    "implementation must consult. Mark new files as new and name their existing integration points; 2,000 bytes or "
+    "more as needed within the total cap.\n"
+    "## Contract: new or changed typed names, states, stored fields and effect boundaries as intent, effect, result; "
+    "2,000 bytes or spare space within the total cap.\n"
+    "## Work packages: numbered, with files and the acceptance lines each closes.\n"
+    "## Acceptance behaviours: one line each, no test names or gate boilerplate; 1,500 bytes.\n"
+    "Forbidden in plan.md: restating task text, AGENTS.md or glossary rules; alternatives paragraphs; history or "
+    "provenance; tables repeating decisions or code; Status, As built, Progress or Implementation progress headings "
+    "and content.\n"
+    "Total caps by depth in UTF-8 bytes: "
+    + ", ".join(f"{depth.value} {depth.cap:,}" for depth in PlanDepth) + ". Equality passes. "
+    "Never grow beyond the cap: remove duplication or answer `needs_owner` with a proposed split, each part with "
+    "acceptance and dependencies (explicitly none where appropriate). A plan missing this template needs revision, "
+    "not `unchanged`."
+)
 ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
 # The structural answer contract Codex forwards as an OpenAI strict response format: a plain object at the top level (no
 # allOf/anyOf/oneOf/not/enum/if there), every property required, nullable by type list, no composition keywords at all.
@@ -133,16 +160,11 @@ def _closing_words(rules: StepRules) -> str:
     root = rules.root
     return (
         f"After the depth assessment permits planning, read `{root}{PLAN_NAME}` if it exists. "
-        "Require the literal heading `## Read list`, followed by a nonempty "
-        "Markdown bullet list with 25 entries or fewer. Each entry gives an existing file as `path:first-last` and a short "
-        "reason, covering every file implementation must edit or consult, including producers and callers. Use narrow, "
-        "useful line ranges. Identify new files as new in the implementation narrative and list their existing integration "
-        "points. Additional targeted searches are allowed for missed callers or changed source. A plan without this "
-        "section must be rewritten, not reused as `unchanged`. Before answering `planned` or `unchanged`, require a `## Size` "
-        "section with estimated changed files (including tests and artifacts), independent behaviours, and model calls "
+        f"{TEMPLATE}\n\nBefore answering `planned` or `unchanged`, require a Size estimate in Header with "
+        "estimated changed files (including tests and artifacts), independent behaviours, and model calls "
         "for one implement attempt. Each independent behaviour must have an independently testable acceptance criterion; "
         "file count alone is insufficient. An existing plan without this assessment needs revision, not `unchanged`. "
-        "Reassess an existing Size section against the current requirements and code before reusing it. "
+        "Reassess the existing Header Size estimate against the current requirements and code before reusing it. "
         "If any estimate exceeds 60 files, 3 independent behaviours or 100 model calls, answer `needs_owner`, never "
         "`planned` or `unchanged`. Equality is allowed (60 files, 3 behaviours, 100 calls); 61 files, 4 behaviours or "
         "101 calls each suffice for refusal. Low file count cannot excuse another excess. Put the reason and proposed "
@@ -222,28 +244,4 @@ def _content(data: bytes, cap: int) -> Rule | None:
         return "plan_empty"
     if len(data) > cap:
         return "plan_size"
-    return None if _read_list(text) else PlanContentRule.READ_LIST
-
-
-def _read_list(text: str) -> bool:
-    """Recognize the fixed heading and a following bullet, ignoring fenced code and blank lines."""
-    fence = ""
-    waiting = False
-    for line in text.splitlines():
-        stripped = line.strip()
-        if fence:
-            if stripped.startswith(fence) and not stripped[len(fence):].strip(fence[0]):
-                fence = ""
-            continue
-        if stripped.startswith(("```", "~~~")):
-            marker = stripped[0]
-            fence = marker * (len(stripped) - len(stripped.lstrip(marker)))
-            waiting = False
-            continue
-        if line == "## Read list":
-            waiting = True
-        elif waiting and stripped:
-            if stripped.startswith(("- ", "* ", "+ ")) and stripped[2:].strip():
-                return True
-            waiting = False
-    return False
+    return validate(text, len(data))

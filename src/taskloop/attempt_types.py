@@ -204,7 +204,9 @@ class AnswerState:
 
 # Every verdict rule word: the chain's (CHAIN_RULES, any step) and each step kind's artifact rules (`steps.RULES` has all).
 class PlanContentRule(StrEnum):
-    READ_LIST = "plan_read_list"
+    CHANGE_MAP = "plan_change_map"
+    DEPTH = "plan_depth"
+    HEADING = "plan_heading"
 
 
 type Rule = PlanContentRule | Literal[
