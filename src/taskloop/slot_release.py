@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import astuple, dataclass, field, replace
+from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal
 
@@ -45,7 +46,9 @@ ROW: Final = """SELECT p.task_id,p.repo_id,p.slot,p.phase,p.rev,p.entry_pid,p.en
 p.worker_start,p.worker_boot,p.slot_head,p.tracker_root,
 (SELECT s.path FROM reservation r JOIN slot s ON s.repo_id=r.repo_id AND s.name=r.slot
  WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id AND r.generation=p.generation),
-""" + SUCCESSOR + """,x.claim
+""" + SUCCESSOR + """,x.claim,
+EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id),
+EXISTS (SELECT 1 FROM task_hold h WHERE h.attempt_id=p.attempt_id)
 FROM attempt p LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
 WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 # Inside the write transaction: still the attempt the proof read (same rev and phase), still the task's current attempt,
@@ -121,7 +124,7 @@ def park_slot(
         return _saved(checkouts, path, state, slot_head, save)
     if state.dirty:
         left = listing(checkouts(path, git_dir=state.gitdir), path)
-        again = f"List them again with `git -C {path} status --short`; remove or restore each, then run it again. {NOTHING}"
+        again = f"The slot contains changes; its reservation remains held. {NOTHING}"
         return NotReleased("refused", "slot_dirty", "\n".join([*left, again]))
     merging = checkouts(path, git_dir=state.gitdir).worktree(path).merging()
     if state.branch is None and state.head == slot_head and not merging:
@@ -176,7 +179,27 @@ class _Row:
     slot_path: str | None  # the held reservation's slot path; None when it is not held at the key's generation
     successor: bool  # `SUCCESSOR`: a later attempt of the task, or its unabandoned latest checks attempt; no longer current
     released: Claimed | None  # the claim of an existing release row: abandoned unless `kept`
+    captured: bool
+    held: bool
     setup: OwnedProcess | None = None  # the latest setup run's unsettled command (`SetupRow.unsettled`), if any
+    reconciling: bool = False
+
+
+class ReconcileReason(StrEnum):
+    HELD = "held"
+    CAPTURED = "captured"
+    INELIGIBLE = "ineligible"
+
+
+def _reconcilable(row: _Row) -> NotReleased | None:
+    reason = None
+    if row.held:
+        reason = ReconcileReason.HELD
+    elif row.released == "kept" or (row.released is None and row.captured):
+        reason = ReconcileReason.CAPTURED
+    elif row.released is None and (row.stopping.phase not in ("dispatching", "registered") or row.stopping.entry is None):
+        reason = ReconcileReason.INELIGIBLE
+    return None if reason is None else NotReleased("refused", reason, f"The attempt is {reason}; its work stays reserved.")
 
 
 def _claim(value: object) -> Claimed:
@@ -192,7 +215,7 @@ def _row(row: tuple[object, ...], key: AttemptKey) -> _Row:
     released = None if row[16] is None else _claim(row[16])
     stopping = Stopping(as_text(row[3]), entry, worker)
     return _Row(key, as_text(row[0]), as_text(row[1]), as_text(row[2]), as_int(row[4]), stopping, as_text(row[12]), as_text(row[13]),
-                as_nullable_text(row[14]), bool(as_int(row[15])), released)
+                as_nullable_text(row[14]), bool(as_int(row[15])), released, bool(as_int(row[17])), bool(as_int(row[18])))
 
 
 @dataclass(frozen=True)
@@ -214,10 +237,19 @@ class SlotRelease:
     saved: wip.SavedLog | None = None  # the hold's record of saved commits: an abandon of a held attempt saves a dirty slot first
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+        return self._run_release(key, abandon, me)
+
+    def reconcile(self, key: AttemptKey) -> ReleaseResult:
+        """Release uncaptured lost-entry work, or finish its already recorded claim return."""
+        return self._run_release(key, True, None, reconciling=True)
+
+    def _run_release(
+        self, key: AttemptKey, abandon: bool, me: EntryIdentity | None, *, reconciling: bool = False,
+    ) -> ReleaseResult:
         try:
             with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
                            existing=lambda owner: self.store.owns_entry(key, owner)):
-                return self._release(key, abandon, me)
+                return self._release(key, abandon, me, reconciling=reconciling)
         except Fenced:
             return NotReleased("refused", Reason.DRAINING, BLOCKED)
         except Unobservable:
@@ -225,12 +257,18 @@ class SlotRelease:
         except (sqlite3.Error, StoreUnavailable):
             return NotReleased("unavailable", "store")
 
-    def _release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
+    def _release(
+        self, key: AttemptKey, abandon: bool, me: EntryIdentity | None, *, reconciling: bool,
+    ) -> ReleaseResult:
         """Release the attempt's reservation (settled) or abandon it; `me` is the calling entry's own identity."""
         try:
             row = self._read(key)
             if row is None:
                 return NotReleased("refused", "absent", f"No such attempt. {NOTHING}")
+            row = replace(row, reconciling=reconciling)
+            refused = _reconcilable(row) if reconciling else None
+            if refused is not None:
+                return refused
             if row.released is not None:
                 return self._pending(row, abandon)
             refused = self._refusal(row, abandon, me)
@@ -323,6 +361,8 @@ class SlotRelease:
 
     def _parked(self, row: _Row, path: Path, abandon: bool) -> Released | NotReleased:
         """Under the lock: the slot read and its park, then the transaction."""
+        if row.reconciling and self._read(row.key) != replace(row, reconciling=False):
+            return NotReleased("unavailable", "changed", "The attempt changed after the stop proof. Nothing changed.")
         try:
             slot = park_slot(self.checkouts, self.slot_files, path, row.repo_id, row.slot_head, task_branch(row.task_id),
                              self._saver(row, abandon))
@@ -373,6 +413,8 @@ class SlotRelease:
         """One write transaction, fenced on what the proof read: the release row in, the reservation out."""
         key = row.key
         with self._writing() as con:
+            if row.reconciling and self._read(key) != replace(row, reconciling=False):
+                return False
             if con.execute(FENCE, (*astuple(key), row.rev, row.stopping.phase)).fetchone() is None:
                 return False
             values = (*astuple(key), head, self.clock(), "unclaiming" if abandon else "kept")
@@ -386,8 +428,8 @@ class SlotRelease:
         try:
             back = self.unclaim(row.tracker_root, row.task_id)
         except BdError as error:
-            return NotReleased("unavailable", "tracker", f"Released; the tracker claim is still to be returned ({error.kind}): rerun "
-                               "`tl step release --abandon`.")
+            return NotReleased("unavailable", "tracker", f"Released; the tracker claim is still to be returned ({error.kind}). "
+                               "The claim return remains pending for reconciliation.")
         claim: Literal["unclaimed", "not_held"] = "unclaimed" if back else "not_held"
         try:
             with self._writing() as con:

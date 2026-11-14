@@ -43,12 +43,12 @@ from taskloop.hold_status import MAIN_MOVED
 from taskloop.ids import Ids
 from taskloop.operations import (
     UNKNOWN_KINDS,
+    AgentRelease,
     Failed,
     Move,
     Publish,
     PublishedTask,
     Quiet,
-    Release,
     Round,
     Started,
     StartPorts,
@@ -116,7 +116,7 @@ class RoundPorts:
     reads: StatusPorts
     starting: StartPorts
     verifier: Verify
-    releaser: Release
+    releaser: AgentRelease
     publisher: Publish
     holding: HoldPorts
     ready: ReadyRows
@@ -243,8 +243,8 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: T
             trail.add(_verified(ports, request.backlog, each))
         case "hold":
             trail.add(_held(ports.holding, each))
-        case "release" if each.checks is not None and each.checks.row.released_at is None:  # its entry is gone (`checks_next`)
-            trail.add(_checks_released(ports, each, each.checks.row.key))
+        case "release" if each.checks is None or each.checks.row.released_at is None:
+            trail.add(_released(ports, each))
         case "wait" | "land":  # `land`: passed checks, one line while unchanged (landed by `round_land` under `land: auto`)
             trail.add(Move(task, "report", "running" if each.next == "wait" else "land", attempt, step=step))
         case "publish" | "advance" | "landed" | "on_hold":
@@ -256,6 +256,22 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: T
             trail.add(Move(task, "report", word, attempt, step=step))
         case _:
             trail.add(Move(task, "report", each.next, attempt, step=step))
+
+
+def _released(ports: RoundPorts, each: AttemptView) -> Move:
+    if each.checks is not None:
+        return _checks_released(ports, each, each.checks.row.key)
+    try:
+        found = ports.starting.reader.attempt_of(each.backlog, each.task_id)
+        if found is None or found[0].attempt_id != each.attempt_id:
+            return Move(each.task_id, "release", "refused:changed", each.attempt_id,
+                        "Another attempt is current since this round read the store.", each.step)
+        released = (ports.releaser.release(found[0], False) if each.result.status == "collected" and each.release is None
+                    else ports.releaser.reconcile(found[0]))
+    except StoreUnavailable as error:
+        return Move(each.task_id, "release", "unavailable:store", each.attempt_id, str(error), each.step)
+    detail = released.detail if isinstance(released, NotReleased) else ""
+    return Move(each.task_id, "release", release_word(released), each.attempt_id, detail, each.step)
 
 
 def _resume(ports: StartPorts, backlog: str, minutes: int, each: AttemptView) -> Started | Failed:

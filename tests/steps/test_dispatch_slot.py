@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
-from any_agent import CodexHarness, RunOutcome, Summary
+from any_agent import CodexHarness, Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from git_porcelain import Repo, Sha, WorktreeInfo
@@ -78,6 +78,40 @@ def test_the_dispatch_records_the_slot_head_as_base_and_keeps_the_fenced_admissi
     assert after is not None and after.admission == before.admission  # B is not part of the fence: every later write passed
     assert after.base_commit == head(repo, slot.path) and after.phase == "captured"
     assert CountingHarness.cleanups == [1]
+
+
+@pytest.mark.parametrize("mode", ["execute", "refused", "crashed"])
+def test_worker_registration_commits_before_target_effects_and_refusal_forbids_them(
+    con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, mode: str,
+) -> None:
+    effects: list[str] = []
+
+    def gated(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
+        assert hooks is not None
+        assert hooks.started is not None
+        assert con.execute("SELECT phase,worker_pid FROM attempt").fetchone() == ("dispatching", None)
+        if mode == "refused":
+            con.execute("UPDATE attempt SET phase='admitted'")  # a callback fence changed before registration
+        hooks.started(WORKER)
+        assert not con.in_transaction
+        assert con.execute("SELECT phase,worker_pid,worker_pgid,worker_start,worker_boot FROM attempt").fetchone() == (
+            "registered", WORKER.pid, WORKER.pgid, WORKER.start, WORKER.boot,
+        )
+        if mode == "crashed":
+            raise RuntimeError("entry lost after worker registration")
+        effects.append("target executed")
+        return run()(harness, spec, timeout, hooks)
+
+    owner = attempts(con, tmp_path, run(), checkouts, slot_files)
+    owner.execution = gated
+    result = owner.execute(KEY, ENTRY)
+    assert effects == (["target executed"] if mode == "execute" else [])
+    expected = {"execute": ("pending", "verification"), "refused": ("conflict", "registration_conflict"),
+                "crashed": ("unavailable", "run_failed:RuntimeError")}
+    assert (result.status, result.reason) == expected[mode]
+    if mode == "crashed":
+        assert con.execute("SELECT phase,worker_pid FROM attempt").fetchone() == ("registered", WORKER.pid)
+        assert con.execute("SELECT * FROM execution").fetchone() is None
 
 
 def test_a_deadline_crossed_during_the_slot_read_never_dispatches(

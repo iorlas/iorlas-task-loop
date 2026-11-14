@@ -56,6 +56,7 @@ class FakeStart:
         self.mode, self.before, self.identity = mode, before, identity
         self.calls: list[dict[str, object]] = []
         self.permitted = False
+        self.after: Callable[[], object] = lambda: None
         self.child = Child()
 
     def __call__(
@@ -83,6 +84,7 @@ class FakeStart:
             raise failures[self.mode]
         self.before()
         registered(self.identity)  # a raising callback propagates: the library cleans the child, which never execs
+        self.after()
         self.permitted = True
         if self.mode == "exec_failed":
             raise OSError(errno.ENOENT, "No such file or directory", argv[0])
@@ -179,6 +181,21 @@ def test_exec_failure_after_the_commit_leaves_a_dead_entry_that_the_next_launch_
     observe, later = Observe("gone"), OwnedProcess(11, 11, "later-start", "boot")
     assert launcher(admitted, FakeStart(identity=later), observe).launch("tasks", "tl-1", 30) == Launched(KEY, (11, "later-start", "boot"))
     assert observe.seen == [NEW] and stored(admitted)[:3] == (11, "later-start", "boot")
+
+
+def test_restart_between_entry_registration_and_permission_keeps_the_durable_identity(admitted: Path) -> None:
+    start = FakeStart()
+
+    def crash() -> None:
+        assert stored(admitted)[:3] == (NEW.pid, NEW.start, NEW.boot)
+        assert not start.permitted
+        raise RuntimeError("entry registration committed; permit not sent")
+
+    start.after = crash
+    assert launcher(admitted, start).launch("tasks", "tl-1", 30) == LaunchUnavailable("exec_failed_after_commit")
+    assert not start.permitted
+    later = OwnedProcess(11, 11, "later-start", "boot")
+    assert launcher(admitted, FakeStart(identity=later)).launch("tasks", "tl-1", 30) == Launched(KEY, (11, "later-start", "boot"))
 
 
 @pytest.mark.parametrize("kind", ["gone", "different_process"])

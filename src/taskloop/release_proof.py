@@ -49,14 +49,20 @@ def entry_stopped(
 def worker_stopped(gone: WorkerGone, phase: str, worker: Worker | None) -> NotReleased | None:
     """The exact registered identity and its group must be gone; unknown counts as alive."""
     if worker is None:
-        unknown = "Dispatched with no agent recorded: it cannot be shown stopped; the whole-DB discard is the only way out."
+        unknown = "Dispatched with no agent recorded: a separate proof that its recorded entry is gone is required."
         return None if phase == "admitted" else NotReleased("unsettled", "worker_unknown", f"{unknown} {NOTHING}")
     alive = f"The agent (pid {worker.pid}, process group {worker.pgid}) or its group may run: stop it by verified pid. {NOTHING}"
     return None if gone(worker) else NotReleased("unsettled", "worker_alive", alive)
 
 
 def stop_proof(observe: Observe, gone: WorkerGone, me: EntryIdentity | None, row: Stopping) -> NotReleased | None:
-    return entry_stopped(observe, me, row.entry) or worker_stopped(gone, row.phase, row.worker)
+    refused = entry_stopped(observe, me, row.entry)
+    if refused is not None:
+        return refused
+    # Registration commits before permission. A dead external entry cannot permit an unregistered target.
+    if row.phase == "dispatching" and row.worker is None and row.entry is not None and row.entry != me:
+        return None
+    return worker_stopped(gone, row.phase, row.worker)
 
 
 def setup_stopped(seen: SetupSeen, setup: OwnedProcess | None) -> NotReleased | None:

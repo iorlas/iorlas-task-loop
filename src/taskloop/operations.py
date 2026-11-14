@@ -93,6 +93,10 @@ class Release(Protocol):
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult: ...
 
 
+class AgentRelease(Release, Protocol):
+    def reconcile(self, key: AttemptKey) -> ReleaseResult: ...
+
+
 class ChecksReleasing(Release, Protocol):
     """A checks attempt's release, and a land candidate's (`check_release.ChecksRelease`)."""
 

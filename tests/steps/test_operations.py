@@ -296,8 +296,8 @@ NEXT: list[tuple[str, EntryState, AttemptResult, bool, Next]] = [
     ("admitted", "running", AttemptResult("pending", "admitted"), False, "wait"),
     ("registered", "running", AttemptResult("pending", "registered"), False, "wait"),
     ("registered", "running", AttemptResult("pending", "registered"), True, "stuck:hung"),
-    ("dispatching", "gone", AttemptResult("pending", "dispatching"), False, "stuck:entry_lost"),
-    ("registered", "different_process", AttemptResult("pending", "registered"), True, "stuck:entry_lost"),
+    ("dispatching", "gone", AttemptResult("pending", "dispatching"), False, "release"),
+    ("registered", "different_process", AttemptResult("pending", "registered"), True, "release"),
     ("captured", "gone", AttemptResult("pending", "verification"), True, "verify"),
     ("captured", "gone", AttemptResult("pending", "session_pending"), False, "stuck:uncollected"),
     ("captured", "gone", AttemptResult("pending", "validation_pending"), False, "stuck:uncollected"),
@@ -317,7 +317,7 @@ def test_the_next_action_table(phase: str, entry: EntryState, collected: Attempt
 
 
 @pytest.mark.parametrize("phase, expected", [
-    ("admitted", "start"), ("dispatching", "stuck:entry_lost"), ("registered", "stuck:entry_lost"),
+    ("admitted", "start"), ("dispatching", "release"), ("registered", "release"),
 ])
 def test_an_entry_from_another_boot_is_relaunched_past_the_deadline_only_while_admitted(phase: str, expected: Next) -> None:
     pending = AttemptResult("pending", phase)
