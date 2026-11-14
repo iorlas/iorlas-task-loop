@@ -10,11 +10,15 @@ from pathlib import Path
 import pytest
 from doubles import FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeWorktree
+from sqlite_store import Store
 
+from taskloop.attempt_reads import StoreUnavailable
+from taskloop.attempt_types import AttemptKey
 from taskloop.cli import main
 from taskloop.cli_composition import adopt
 from taskloop.factory_schema import SCHEMA
 from taskloop.operations import Failed
+from taskloop.recovery.store import RecoveryStore
 from taskloop.slots import SlotGit
 
 BACKLOG = ["--backlog", "tasks"]
@@ -38,6 +42,12 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def database(folder: Path, version: int) -> Path:
     """A factory.db of another schema version, as another version of the code left it."""
     path = folder / "factory.db"
+    if version == SCHEMA.version:
+        complete = Store(SCHEMA).open_rw(path)
+        assert complete is not None
+        complete.execute("DROP TABLE merge_operation")
+        complete.close()
+        return path
     con = sqlite3.connect(path, isolation_level=None)
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("CREATE TABLE other_version (id INTEGER PRIMARY KEY)")
@@ -54,30 +64,47 @@ def digest(path: Path) -> str:
 
 
 @pytest.mark.parametrize("direction", list(VERSIONS))
+def test_recovery_refuses_another_version_without_modifying_it(tmp_path: Path, direction: str) -> None:
+    path = database(tmp_path, VERSIONS[direction])
+    before = digest(path)
+    con = sqlite3.connect(path, isolation_level=None)
+    with pytest.raises(StoreUnavailable):
+        RecoveryStore(lambda: con).snapshot(AttemptKey("attempt", "dispatch", 1), 10)
+    con.close()
+    assert digest(path) == before
+
+
+@pytest.mark.parametrize("direction", [*VERSIONS, "incomplete"])
 @pytest.mark.parametrize("command", list(COMMANDS))
 def test_another_schema_version_is_refused_schema_and_nothing_is_written(
         tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str, direction: str) -> None:
     folder = tmp_path / "state"
     folder.mkdir()
-    path = database(folder, VERSIONS[direction])
+    version = VERSIONS.get(direction, SCHEMA.version)
+    path = database(folder, version)
     before = digest(path)
     artifacts = [] if command == "list" else ["--artifacts", str(tmp_path / "art")]  # `step list` reads no artifacts
     assert main([*COMMANDS[command], "--db", str(path), *artifacts, "--json"]) == 1
     error = json.loads(capsys.readouterr().err)["error"]
     assert (error["kind"], error["reason"]) == ("refused", "schema")
-    assert f"records schema version {VERSIONS[direction]}" in error["message"]
+    assert f"records schema version {version}" in error["message"]
+    if direction == "incomplete":
+        assert "incompatible: missing required tables: merge_operation" in error["message"]
+        assert len(error["message"].splitlines()) == 1
     assert "Resume with matching code" in error["message"] and "owner deliberately discards" in error["message"]
     assert digest(path) == before and not (tmp_path / "art").exists()
 
 
-@pytest.mark.parametrize("direction", list(VERSIONS))
+@pytest.mark.parametrize("direction", [*VERSIONS, "incomplete"])
 def test_slot_adopt_refuses_another_schema_version_and_writes_nothing(
         tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: FakeSlotFiles, direction: str) -> None:
     folder, main_checkout = tmp_path / "state", slot.repo.path
     folder.mkdir()
     main_checkout.mkdir()
-    path = database(folder, VERSIONS[direction])
+    path = database(folder, VERSIONS.get(direction, SCHEMA.version))
     before = digest(path)
     refused = adopt(path, main_checkout, tmp_path / "slots", 1, SlotGit(checkouts, slot_files))
     assert isinstance(refused, Failed) and (refused.kind, refused.reason) == ("refused", "schema")
+    if direction == "incomplete":
+        assert "incompatible: missing required tables: merge_operation" in refused.detail
     assert digest(path) == before and not (tmp_path / "slots").exists()

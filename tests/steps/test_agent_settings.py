@@ -31,6 +31,42 @@ def test_defaults_and_individual_overrides_are_selected_for_the_actual_step() ->
         apply(settings.plan, Overrides(harness=HarnessKind.CLAUDE, model="opus"))
 
 
+@pytest.mark.parametrize("limit", [None, 1, 100000])
+def test_compaction_resolves_and_survives_flags_and_storage(limit: int | None, tmp_path: Path) -> None:
+    settings, sources = resolve_agents({"implement": {"compaction_token_limit": limit}}, tmp_path)
+    setting = settings.implement
+    assert setting.compaction_token_limit == limit
+    assert settings.plan.compaction_token_limit is None
+    assert sources["agents.implement.compaction_token_limit"] == "file"
+    overridden = apply(setting, Overrides(model="custom", effort="low"))
+    assert overridden.compaction_token_limit == limit
+    assert decode_setting(overridden.harness, overridden.provider, overridden.model, overridden.effort,
+                          encode_policy(overridden.access), limit) == overridden
+
+
+@pytest.mark.parametrize("limit", [True, False, "100000", 100000.0, 1.5, 0, -1])
+def test_compaction_rejects_coercion_and_nonpositive_counts(limit: object, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="compaction_token_limit"):
+        resolve_agents({"plan": {"compaction_token_limit": limit}}, tmp_path)
+    with pytest.raises(ValidationError, match="compaction_token_limit"):
+        AgentSetting.model_validate({"compaction_token_limit": limit})
+
+
+@pytest.mark.parametrize("harness", [HarnessKind.CLAUDE, HarnessKind.OPENCODE])
+def test_compaction_requires_codex_before_policy_io(harness: HarnessKind, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="compaction_token_limit requires codex"):
+        resolve_agents({"plan": {"harness": harness, "model": "chosen", "compaction_token_limit": 100000}}, tmp_path)
+    policy = ClaudePolicy(settings_file=tmp_path / "absent.json", settings="{}") if harness is HarnessKind.CLAUDE else OpenCodePolicy()
+    with pytest.raises(ValidationError, match="compaction_token_limit requires codex"):
+        AgentSetting(harness=harness, model="chosen", access=policy, compaction_token_limit=100000)
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_stored_compaction_passes_the_setting_validator(limit: int) -> None:
+    with pytest.raises(ValidationError, match="compaction_token_limit"):
+        decode_setting("codex", "openai", "chosen", "high", encode_policy(CodexPolicy()), limit)
+
+
 @pytest.mark.parametrize("text", ["", " ", "-model", "two words", "bad\nword", "bad\x00word"])
 def test_bad_identifiers_are_refused_at_the_typed_edge(text: str) -> None:
     with pytest.raises(ValidationError):

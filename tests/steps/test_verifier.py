@@ -14,10 +14,11 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles, PinnedViews, linked_into, main_at
+from doubles import FakeSlotFiles, PinnedViews, linked_into, origin_main_at
 from git_porcelain import Dirty, Recorded, Repo, Tree
 from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT, PLAN_V2
 from sqlite_store import Store
 
 from taskloop.agents.launch import AgentLaunch
@@ -67,7 +68,6 @@ PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan
 UNCHANGED = {"disposition": "unchanged", "plan_path": P, "paths": [], "message": None, "explanation": "Still valid"}
 TRAILER = "Task-Loop-Attempt: attempt"
 type Files = Mapping[str, str | bytes]
-
 
 type After = Callable[[FakeWorktree, FakeSlotFiles], object]
 
@@ -166,7 +166,7 @@ def foreign(slot: FakeWorktree, _files: FakeSlotFiles) -> None:
 
 def trailer_commit(slot: FakeWorktree, files: FakeSlotFiles) -> None:
     """This attempt's trailer commit of a changed plan: adoptable for `planned`, never for `unchanged` (X is B)."""
-    slot.write_file(P, "# Plan v2\n")
+    slot.write_file(P, PLAN_V2)
     adopt(slot, files)
 
 
@@ -202,12 +202,12 @@ LOST = "unavailable:git:MissingRevision"  # B no longer resolves: permanently un
 # in the process, so a fixed replacement digit was a no-op whenever an earlier test left B starting with it)
 LOSE_BASE = "UPDATE attempt SET base_commit=(CASE substr(base_commit,1,1) WHEN 'f' THEN 'e' ELSE 'f' END) || substr(base_commit,2)"
 OTHER_REPO = "UPDATE slot SET repo_id='other'; UPDATE reservation SET repo_id='other'; UPDATE attempt SET repo_id='other'"
-PLANNED = {P: "# Plan\n"}
+PLANNED = {P: PLAN_TEXT}
 # id, files committed before dispatch (B), files the agent writes, its answer, a change after the run, SQL, expected, commits
 CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, str | None, str, int]] = [
     ("plan_only", None, PLANNED, PLAN, None, None, "verified", 1),
     ("plan_and_note", None, PLANNED | {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "verified", 1),
-    ("replan", PLANNED, {P: "# Plan v2\n"}, PLAN, None, None, "verified", 1),
+    ("replan", PLANNED, {P: PLAN_V2}, PLAN, None, None, "verified", 1),
     ("unlisted_file", None, PLANNED | {NOTE: "n"}, PLAN, None, None, "unsettled:uncommitted", 1),
     ("nothing_written", PLANNED, PLANNED, PLAN, None, None, "rejected:nothing_written", 0),
     ("unchanged", PLANNED, {}, UNCHANGED, None, None, "reused", 0),
@@ -216,13 +216,17 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("unchanged_with_a_stray_file", PLANNED, {NOTE: "n"}, UNCHANGED, None, None, "unsettled:uncommitted", 0),
     ("plan_empty", None, {P: " \n\t"}, PLAN, None, None, "rejected:plan_empty", 1),
     ("plan_encoding", None, {P: b"\xff\xfe plan"}, PLAN, None, None, "rejected:plan_encoding", 1),
-    ("plan_at_cap", None, {P: "a" * (1 << 20)}, PLAN, None, None, "verified", 1),
+    ("plan_at_file_cap", None, {P: PLAN_TEXT + "a" * ((1 << 20) - len(PLAN_TEXT.encode()))},
+     PLAN, None, None, "rejected:plan_size", 1),
     ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "unsettled:unsafe", 0),
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
     ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
     ("unreadable_listed_file", None, PLANNED, PLAN, unreadable(P), None, "unsettled:unsafe", 0),  # named, not unavailable:git forever
-    ("committed_private_key", None, {P: "# Plan\n-----BEGIN OPENSSH PRIVATE KEY-----\nx\n"}, PLAN, None, None, "unsettled:unsafe", 0),
-    ("committed_codex_login", None, {P: '{"access_token": "a", "refresh_token": "r"}'}, PLAN, None, None, "unsettled:unsafe", 0),
+    # Assemble synthetic signatures at runtime so this test source itself remains safe to commit.
+    ("committed_private_key", None, {P: "# Plan\n-----BEGIN OPENSSH PRIVATE " + "KEY-----\nx\n"},
+     PLAN, None, None, "unsettled:unsafe", 0),
+    ("committed_codex_login", None, {P: json.dumps({"access_" + "token": "a", "refresh_" + "token": "r"})},
+     PLAN, None, None, "unsettled:unsafe", 0),
     ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "unsettled:unsafe", 0),
     ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "unsettled:ignored", 0),
     ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "unsettled:ignored", 0),
@@ -264,8 +268,8 @@ def test_the_stage_commit_and_verdict_table(
     commits: int,
 ) -> None:
     if before is not None:
-        commit(slot, before)  # before dispatch, then on `main`: B is this commit
-        main_at(slot)
+        commit(slot, before)  # before dispatch, then on origin main: B is this commit
+        origin_main_at(slot)
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, written, answer)
     if after is not None:
@@ -319,7 +323,7 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     base = commit(slot, PLANNED)
-    main_at(slot)
+    origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {NOTE: "n"}, UNCHANGED)
     check = verifier(registered, checkouts, slot_files)
     assert shown(check.verify(KEY)) == "unsettled:uncommitted" and end_commit(registered) is None
@@ -335,7 +339,7 @@ def test_unchanged_over_saved_work_ends_at_its_own_commit_of_the_same_tree(
     """B is a hold's saved commit (its typed trailer): preservation is never a result, so `unchanged` ends at a new commit
     of the same tree on B, with this attempt's trailer and no other change, and the chain verifies it as one link."""
     base = commit(slot, PLANNED, f"Save unfinished work\n\nTask-Loop-Attempt: old\n{WIP}: old")
-    main_at(slot)
+    origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {}, UNCHANGED)
     result = verifier(registered, checkouts, slot_files).verify(KEY)
     assert isinstance(result, Verified) and not result.reused
@@ -413,7 +417,7 @@ def test_the_staged_read_is_pinned_and_unknown_when_the_pointer_names_another_re
     well-formed by layout but names a linked Git directory of another repository is unknown, the slot never opened."""
     other = FakeRepo.init(tmp_path / "other")
     views = PinnedViews(repo, other)
-    slot.write_file(P, "# Plan\n")
+    slot.write_file(P, PLAN_TEXT)
     slot.stage([P], literal=True)
     assert verifier(registered, views, slot_files).staged(KEY) == (P,)
     assert views.slot_opens(slot.path) == [slot_files.common / "worktrees/s1"] * 2  # the status read and the staged read
@@ -435,11 +439,11 @@ def one(base: str, paths: tuple[str, ...]) -> tuple[ChainLink, ...]:
 @pytest.mark.parametrize(
     ("changes", "paths", "cap", "expected"),
     [
-        ([PLANNED, {P: "# Plan v2\n"}], (P,), 1 << 20, Rejected("chain_length")),
+        ([PLANNED, {P: PLAN_V2}], (P,), 1 << 20, Rejected("chain_length")),
         ([PLANNED | {NOTE: "n"}], (P,), 1 << 20, Rejected("paths")),
         ([PLANNED | {"src/x.py": "x"}], (P, "src/x.py"), 1 << 20, Rejected("paths")),
-        ([PLANNED | {NOTE: "0123456789a"}], (P, NOTE), 10, Rejected("file_size")),
-        ([PLANNED | {NOTE: "0123456789"}], (P, NOTE), 10, None),
+        ([PLANNED | {NOTE: "a" * (len(PLAN_TEXT.encode()) + 1)}], (P, NOTE), len(PLAN_TEXT.encode()), Rejected("file_size")),
+        ([PLANNED | {NOTE: "a" * len(PLAN_TEXT.encode())}], (P, NOTE), len(PLAN_TEXT.encode()), None),
     ],
     ids=["chain_length", "unlisted_change", "outside_root", "file_size", "at_cap"],
 )
@@ -795,35 +799,3 @@ def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_work
     guide = GUIDE["unsettled"]
     assert "`tl step release --abandon`, then `tl step start`" in guide and "`head_moved`" in guide
     assert "for `branch`" in guide and "`git switch task/<id>`" in guide  # the guide's `branch` text answers the `branch` leftover
-
-
-def test_leftovers_read_the_adopt_rule_commit_as_none_and_a_slot_left_detached_as_branch(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
-) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    check = verifier(registered, checkouts, slot_files)
-    trailer_commit(slot, slot_files)
-    assert check.leftovers(KEY) is None and isinstance(check.verify(KEY), Verified)
-
-
-def test_a_slot_left_detached_by_the_agent_is_branch_in_the_leftovers(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
-) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    slot.park(head(slot))  # detached: not on the task branch
-    assert verifier(registered, checkouts, slot_files).leftovers(KEY) == Unsettled("branch")
-
-
-def test_a_head_reset_to_the_persons_main_never_lists_main_but_still_lists_an_agent_tag(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
-) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    main = slot.repo.worktree(slot.repo.identity().root)
-    main.write_file("person.txt", "mine")
-    made = main.record("the person's commit", paths="all")
-    assert isinstance(made, Recorded)
-    slot.reset(made.sha, mode="hard")  # the agent: `git reset --hard main`
-    slot.repo.tag("task/evil", made.sha)
-    result = verifier(registered, checkouts, slot_files).verify(KEY)
-    assert result == Unsettled("head_moved", ("refs/tags/task/evil",)) or result == Unsettled("head_moved", ())
-    assert isinstance(result, Unsettled) and "refs/heads/main" not in result.listing

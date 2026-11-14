@@ -9,6 +9,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from doubles import CHECKS, ChecksBench, Command, Done, FakeSlotFiles, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from land_bench import LandBench, bench
+from plan_fixtures import PLAN_TEXT
 from round_bench import Factory, scripts, task
 from round_bench import Tracker as RoundTracker
 from sqlite_store import Store
@@ -141,10 +142,13 @@ def test_direct_registration_without_dispatch_authorization_is_fenced(admitted: 
 def test_repeat_and_failed_check_repair_cannot_create_an_attempt_behind_the_fence(
     factory: sqlite3.Connection,
     tmp_path: Path,
+    checkouts: PinnedViews,
+    slot_files: FakeSlotFiles,
 ) -> None:
     DrainStore(lambda: factory, ids=NativeIds()).request()
     key = AttemptKey("previous", "token", 1)
-    chain = ChainAdmission(lambda: factory, Store(SCHEMA).begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=NativeIds())
+    chain = ChainAdmission(lambda: factory, Store(SCHEMA).begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                           checkouts, slot_files, ids=NativeIds())
     found = chain.admit_repeat(RepeatRequest(key, "repeat", 100, "uncommitted"))
     assert isinstance(found, AdmitRefused) and found.reason is Reason.DRAINING
     source = AttemptKey("checks", "checks-token", 1)
@@ -245,7 +249,7 @@ def test_an_authorized_agent_body_can_capture_and_finalize_after_drain(
     assert me is not None
     entry = me.pid, me.start, me.boot
     registered.execute("UPDATE attempt SET entry_pid=?,entry_start=?,entry_boot=?", entry)
-    body = agent(slot, {P: "# Plan\n"})
+    body = agent(slot, {P: PLAN_TEXT})
 
     def running(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         DrainStore(lambda: registered, ids=NativeIds()).request()

@@ -16,8 +16,12 @@ from taskloop.check_repeat.feedback import FailedCheck, FeedbackReason
 from taskloop.check_repeat.store import CheckRepeatState, CheckRepeatStore
 from taskloop.check_store import CheckStore
 from taskloop.checks import argv_digest, completed
+from taskloop.discussion import RefreshDiscussion, replace_block
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.git_views import GitProfileFiles
 from taskloop.ids import Ids
+from taskloop.input_context import InputError, refresh
+from taskloop.input_context import read as read_context
 from taskloop.operations import Clock, Failed, Launch, Started, StartRequest, deadline_after, launched
 from taskloop.prepare import HEADS, REMOTES
 from taskloop.profile import PROFILE_PATH, Profile, read_profile
@@ -25,7 +29,7 @@ from taskloop.setup_store import SetupSeen, SetupStore
 from taskloop.slot_release import entry_stopped, setup_stopped
 from taskloop.slots import Probe, SlotGit
 from taskloop.steps import failed_check_feedback
-from taskloop.task import TaskInspection
+from taskloop.task import TaskInspection, TaskReference, TaskScope
 from taskloop.tracker import ACTOR
 
 
@@ -43,6 +47,7 @@ class CheckRepeat:
     seen: SetupSeen
     clock: Clock
     ids: Ids
+    discussion: RefreshDiscussion | None = None
 
     def repair(self, request: StartRequest, previous: AttemptKey, source: AttemptKey) -> Started | Failed:
         try:
@@ -55,12 +60,17 @@ class CheckRepeat:
             evidence, free = ready
             reader = AttemptStore(self.store.connect, self.store.begin)
             original = self.files.read(reader.chain(previous)[0].input_ref)
+            if self.discussion is not None:
+                reference = TaskReference(TaskScope(state.checks.backlog), state.checks.task_id)
+                original = replace_block(original, self.discussion(reference, state.checks.tracker_root))
+            context = read_context(GitProfileFiles(request.checkout, self.checkouts), evidence.commit)
+            original = refresh(original, context)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), self.store.generation(state.checks.repo_id, free))
             ref = self.files.put_input(key, failed_check_feedback(evidence, original, self.ids.token(16)))
             admitted = self.store.admit(previous, evidence, key, ref, free, deadline_after(request.minutes, self.clock))
             if isinstance(admitted, AdmitRefused):
                 return self._winner(request, previous) if admitted.reason == "task_attempted" else Failed("refused", admitted.reason)
-        except (StoreUnavailable, EvidenceError, ValidationError, GitUnavailable) as error:
+        except (StoreUnavailable, EvidenceError, InputError, ValidationError, GitUnavailable) as error:
             return Failed("unavailable", FeedbackReason.EVIDENCE, str(error))
         except StoreRefused as error:
             return Failed("refused", error.reason)

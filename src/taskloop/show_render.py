@@ -59,6 +59,10 @@ def _agent_lines(each: AttemptView) -> list[str]:
         f"Entry: {each.entry}{entry}", f"Worker: {worker}",
         *([] if last_command(each) is None else [f"Last command: {last_command(each)}"]),
         f"Result: {each.result.status} {each.result.reason}".rstrip(),
+        *([f"Preparation: {one_line(each.result.explanation)}"]
+          if each.result.explanation and each.result.reason.startswith("merge:") else []),
+        *([f"Answer: {one_line(each.result.explanation)}"]
+          if each.result.explanation and each.result.reason.startswith("answer:") else []),
         f"Succeeded: {'yes' if succeeded(each.result) else 'no'}", f"Deadline passed: {'yes' if each.deadline_passed else 'no'}",
         *released, *published,
     ]

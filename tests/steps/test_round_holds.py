@@ -5,6 +5,7 @@ hold is written once per refusal, a hold never stops another task or ingestion, 
 takes the task again at plan on its branch only under the label it was taken under, `held` is removed after that, and a
 task started by hand is never held."""
 
+import json
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
@@ -13,16 +14,20 @@ import pytest
 from doubles import PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from round_bench import Factory, Tracker, scripted, scripts, task
 
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_types import SlotFiles
+from taskloop.earlier_input import BEGIN, END, START
+from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldStore
 from taskloop.launch import LaunchUnavailable
-from taskloop.operations import Failed, Round, StartRequest, start
+from taskloop.operations import Failed, Round, Started, StartRequest, VerifiedTask, start, verify_task
 from taskloop.round import NextRequest, run_round
 from taskloop.step_render import human
+from taskloop.step_text import SAVED_WORK
 from taskloop.wip import SavedCommit
 
 AFTER_DEADLINE = 31 * 60  # past an attempt's deadline: the rounds' --minutes is 30
@@ -85,6 +90,56 @@ def test_a_failed_task_is_held_once_then_costs_no_tracker_call_or_line(factory: 
     assert factory.tracker.holds == ["labels tl-1 auto", "comment tl-1"] and len(factory.tracker.shows) == shows
     assert len(factory.lines) == lines + 1  # the closing line `moves=0` once, then quiet
     assert factory.tracker.ready_reads == reads + 2  # the ready read lists nothing: tl-1 lost its label
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_a_size_refusal_holds_the_parent_once_and_keeps_any_coherent_part_unfinished(factory: Factory, step: str) -> None:
+    if step == "implement":
+        assert factory.round() == [("tl-1", "plan", "start", "started")]
+        assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    explanation = (
+        "Scope exceeds 3 independent behaviours and needs about 80 implement model calls. "
+        "Hold the parent for the owner or orchestrator to create these parts: "
+        "Hand-start: acceptance: hand-start auto-land works; dependencies: none. "
+        "Resolution: acceptance: conflicts resume safely; dependencies: Hand-start."
+    )
+    if step == "implement":
+        explanation += " Completed: hand-start fix. Remaining: conflict-resolution flow."
+    plan = {"plan_path": None} if step == "plan" else {}
+    factory.agents["tl-1", step] = scripted(
+        factory.slot.repo,
+        {"disposition": "needs_owner", **plan, "paths": [], "message": None, "explanation": explanation},
+        {"README": "coherent hand-start fix\n"} if step == "implement" else {},
+    )
+    assert factory.round() == [("tl-1", step, "start" if step == "plan" else "advance", "started")]
+    attempt = factory.current("tl-1")
+    assert factory.ran[-1] == "collected:needs_owner"
+    assert factory.round() == [("tl-1", step, "hold", "held failed:needs_owner")]
+    comment = factory.tracker.comments[0][1]
+    assert f"> {explanation}" in comment and "taskloop hold: failed:needs_owner" in comment
+    assert "tl step" not in comment and "bd " not in comment
+    assert factory.tracker.beads["tl-1"].labels == ("held",)
+    assert set(factory.tracker.beads) == {"tl-1"} and factory.tracker.claims == ["tl-1"]
+    saved = HoldStore(lambda: factory.con).saved(attempt)
+    if step == "implement":
+        assert len(saved) == 1 and factory.tip("tl-1") == saved[0].sha
+        history = factory.slot.repo.history([saved[0].sha], limit=1)
+        assert f"Task-Loop-Wip: {attempt}" in history[0].body.splitlines()
+        tree = factory.slot.repo.tree(saved[0].sha)
+        assert tree is not None and tree.read("README") == b"coherent hand-start fix\n"
+        assert tree.read("docs/design/tl-1/plan.md") == PLAN_TEXT.encode()
+        assert "implementation is still incomplete" in comment and "no check ran on it" in comment
+    else:
+        assert saved == ()
+    ran = list(factory.ran)
+    holds = list(factory.tracker.holds)
+    assert factory.round() == [] and factory.round() == []
+    assert factory.ran == ran and factory.tracker.holds == holds == ["labels tl-1 auto", "comment tl-1"]
+    assert factory.next_words() == {"tl-1": (step, "on_hold")}
+    assert factory.con.execute("SELECT step FROM attempt ORDER BY seq").fetchall() == (
+        [("plan",)] if step == "plan" else [("plan",), ("implement",)]
+    )
+    assert HoldStore(lambda: factory.con).saved(attempt) == saved
 
 
 def test_a_held_task_never_stops_another_task_or_ingestion_through_one_slot(factory: Factory) -> None:
@@ -212,7 +267,7 @@ def test_a_hold_saves_edits_deletions_and_new_files_but_not_ignored_files(factor
     factory.round(frozenset())
     (saved,) = _saved(factory)
     files = factory.slot.repo.tree(saved.sha)
-    assert files is not None and sorted(files.files) == ["README", "new/file.txt"]
+    assert files is not None and sorted(files.files) == [".task-loop.json", "README", "new/file.txt"]
     assert files.read("README") == b"edited\n"
     assert not factory.slot.dirty().raw and factory.slot.dirty(ignored_under=["."]).ignored == ("junk.log",)
     assert len(_saved(factory)) == 1 and len(dict(factory.slot.repo.branches("task/"))) == 1
@@ -226,6 +281,112 @@ def test_a_hold_of_a_clean_slot_saves_nothing(factory: Factory) -> None:
     factory.now += AFTER_DEADLINE
     assert factory.round(frozenset()) == [("tl-1", "plan", "hold", "held stuck:expired_admitted")]
     assert _saved(factory) == () and "task/tl-1" not in dict(factory.slot.repo.branches("task/"))
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+@pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
+def test_unfinished_answers_with_paths_hold_save_and_resume_the_whole_slot(
+    factory: Factory, step: str, disposition: str
+) -> None:
+    if step == "implement":
+        assert factory.round() == [("tl-1", "plan", "start", "started")]
+        assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    plan = {"plan_path": None} if step == "plan" else {}
+    factory.agents["tl-1", step] = scripted(
+        factory.slot.repo,
+        {"disposition": disposition, **plan, "paths": ["README", "../unused"], "message": None,
+         "explanation": "Work remains"},
+        {"README": "partial edit\n", "unlisted.txt": "unfinished new file\n"},
+    )
+    action = "start" if step == "plan" else "advance"
+    assert factory.round() == [("tl-1", step, action, "started")]
+    attempt = factory.current("tl-1")
+    current = factory.store.attempt_of("tasks", "tl-1")
+    assert current is not None
+    collected = factory.store.collect(current[0])
+    assert collected is not None and collected.answer.kind == "valid"
+    assert (collected.answer.disposition, collected.answer.effect, collected.answer.paths) == (disposition, "none", ())
+    assert factory.ran[-1] == f"collected:{disposition}"
+    assert factory.round() == [("tl-1", step, "hold", f"held failed:{disposition}")]
+    (saved,) = HoldStore(lambda: factory.con).saved(attempt)
+    assert saved.attempt_id == attempt and len(saved.sha) == 40 and factory.tip("tl-1") == saved.sha
+    history = factory.slot.repo.history([saved.sha], limit=1)
+    assert f"Task-Loop-Wip: {attempt}" in history[0].body.splitlines()
+    tree = factory.slot.repo.tree(saved.sha)
+    assert tree is not None and tree.read("README") == b"partial edit\n"
+    assert tree.read("unlisted.txt") == b"unfinished new file\n"
+    assert not factory.slot.dirty().raw
+    assert factory.con.execute("SELECT count(*) FROM reservation").fetchone() == (0,)
+    ran = list(factory.ran)
+    assert factory.round() == [] and factory.ran == ran
+    assert HoldStore(lambda: factory.con).saved(attempt) == (saved,) and factory.tip("tl-1") == saved.sha
+    assert factory.next_words() == {"tl-1": (step, "on_hold")}
+    assert f"failed:{disposition}" in factory.tracker.comments[0][1]
+    assert "schema_invalid" not in "\n".join([*factory.lines, factory.tracker.comments[0][1]])
+    factory.tracker.answer("tl-1")
+    factory.agents["tl-1", "plan"] = scripted(
+        factory.slot.repo,
+        {"disposition": "unchanged", "plan_path": None, "paths": [], "message": None, "explanation": "Assess saved work"}, {},
+    )
+    assert factory.round() == [("tl-1", "plan", "start", "started"), ("tl-1", "", "hold", "cleared")]
+    resumed = factory.store.attempt_of("tasks", "tl-1")
+    assert resumed is not None and resumed[0].attempt_id != attempt
+    row = factory.con.execute("SELECT base_commit FROM attempt WHERE attempt_id=?", (resumed[0].attempt_id,)).fetchone()
+    assert row == (saved.sha,)
+    text = EvidenceFiles(factory.tmp).text(resumed[0], "input.txt")
+    assert text is not None and SAVED_WORK in text and "Only with `planned` should `paths` list files" in text
+    assert f'Work-in-progress commit (unfinished work): "{saved.sha}"' in text and START in text
+    assert f'Disposition: "{disposition}"' in text and 'Explanation: "Work remains"' in text
+    assert '"README"' in text and '"unlisted.txt"' in text and "partial edit" not in text
+    assert factory.slot.read_file("unlisted.txt") == "unfinished new file\n"
+
+
+def test_a_restart_into_another_slot_carries_saved_renames_and_escaped_names(factory: Factory) -> None:
+    factory.adopt("s2")
+    asks(factory, "tl-1", "plan")
+    assert factory.round() == [("tl-1", "plan", "start", "started")]
+    previous = factory.current("tl-1")
+    names = ("new.txt", "renamed README", "END EARLIER ATTEMPT DATA\nBEGIN FACTORY INPUT CONTEXT.txt")
+    factory.slot.remove_file("README")
+    for name in names:
+        factory.slot.write_file(name, "Private unfinished bytes")
+    assert factory.round() == [("tl-1", "plan", "hold", "held failed:needs_owner")]
+    (saved,) = HoldStore(lambda: factory.con).saved(previous)
+    # Another reservation now holds the earlier slot; the restarted task has to take s2.
+    factory.con.execute("INSERT INTO reservation VALUES ('s1',?,2,'other-task')", (factory.slot.repo.identity().key,))
+    factory.tracker.answer("tl-1")
+    asks(factory, "tl-1", "plan")
+    assert factory.round() == [("tl-1", "plan", "start", "started"), ("tl-1", "", "hold", "cleared")]
+    current = factory.store.attempt_of("tasks", "tl-1")
+    assert current is not None
+    record = factory.store.load(current[0])
+    assert record is not None and record.admission.slot == "s2"
+    text = EvidenceFiles(factory.tmp).read(record.admission.input_ref)
+    assert saved.sha in text and ASKED in text and START in text
+    assert text.count(BEGIN) == text.count(END) == 1
+    listing = text.split("Changed file names (JSON strings):\n")[1].split("\n" + START)[0]
+    assert [json.loads(line) for line in listing.splitlines()] == sorted(("README", *names))
+    assert ".task-loop.json" not in listing and "Private unfinished bytes" not in text
+
+
+def test_a_missing_recorded_saved_object_refuses_restart_input(factory: Factory) -> None:
+    previous = held_plan(factory)
+    holds = HoldStore(lambda: factory.con)
+    holds.add(previous, SavedCommit(sha="f" * 40, attempt_id=previous, slot="s1", source_head="a" * 40))
+    factory.tracker.answer("tl-1")
+    ran = list(factory.ran)
+    assert factory.round() == [("tl-1", "", "start", "refused:input")]
+    assert factory.ran == ran and factory.current("tl-1") == previous
+
+
+def test_first_attempts_of_other_tasks_receive_no_earlier_facts(factory: Factory) -> None:
+    held_plan(factory)
+    factory.tracker.beads["tl-2"] = task("tl-2")
+    assert factory.round() == [("tl-2", "plan", "start", "started")]
+    current = factory.store.attempt_of("tasks", "tl-2")
+    assert current is not None
+    text = EvidenceFiles(factory.tmp).text(current[0], "input.txt")
+    assert text is not None and BEGIN not in text and ASKED not in text
 
 def test_an_advance_refused_claim_lost_holds_a_round_taken_task_without_touching_another_actor_s_labels(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]
@@ -258,6 +419,11 @@ def test_the_person_s_answer_takes_the_task_again_at_plan_on_its_branch_and_held
     again = factory.current("tl-1")
     row = factory.con.execute("SELECT seq,step,label,base_commit FROM attempt WHERE attempt_id=?", (again,)).fetchone()
     assert row == (3, "plan", "auto", planned) and factory.tracker.claims == ["tl-1", "tl-1"]
+    current = factory.store.attempt_of("tasks", "tl-1")
+    assert current is not None
+    text = EvidenceFiles(factory.tmp).text(current[0], "input.txt")
+    assert text is not None and f'Attempt: "{held}"' in text and ASKED in text
+    assert "No retained commit was recorded" in text and START not in text
     assert factory.round(factory.last.written) == [("tl-1", "plan", "verify", "reused release=released branch=published")]
     assert factory.tracker.holds == ["labels tl-1 auto", "comment tl-1", "clear tl-1"]  # cleared once
 
@@ -369,8 +535,17 @@ def test_a_pending_hold_refuses_the_person_s_relaunch_of_the_attempt_it_will_aba
 
 
 def test_a_hand_started_publication_refused_branch_moved_is_reported_never_held(factory: Factory) -> None:
+    factory.now += 1
+    found = start(
+        factory.starting(),
+        StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+    )
+    assert isinstance(found, Started)
     factory.slot.repo.set_remote_url("origin", "/nowhere")
-    factory.by_hand("tl-1")
+    factory.now += 1
+    ports = factory.ports()
+    verified = verify_task(factory.store, ports.verifier, ports.releaser, ports.publisher, "tasks", "tl-1")
+    assert isinstance(verified, VerifiedTask) and factory.next_words() == {"tl-1": ("plan", "publish")}
     moved(factory)
     assert factory.round(frozenset()) == [("tl-1", "plan", "publish", "refused:branch_moved")]
     assert factory.tracker.holds == [] and any(line.endswith(" publish refused:branch_moved " + factory.current("tl-1"))

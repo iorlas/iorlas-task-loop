@@ -14,6 +14,7 @@ from git_porcelain import Tree
 from taskloop import implement_step, plan_step
 from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, Step, StepRules, Unsettled
 from taskloop.check_repeat.feedback import FailedCheck
+from taskloop.input_context import InputContext
 from taskloop.task import TaskInspection
 
 
@@ -34,7 +35,7 @@ class StepKind:
 
     step: Step
     rules: Callable[[str], StepRules]
-    input_text: Callable[[TaskInspection, StepRules], str]
+    input_text: Callable[[TaskInspection, StepRules, InputContext], str]
     answer_schema: Mapping[str, object]
     decode: Callable[[object, StepRules], Answer]
     artifact: Callable[[Tree, StepRules], Rejected | str | None]

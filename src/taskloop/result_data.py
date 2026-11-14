@@ -4,6 +4,7 @@ It never holds a dispatch token, a remote URL or Git output."""
 from pathlib import Path
 
 from taskloop.agents.config import display
+from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, Shown
@@ -30,7 +31,7 @@ from taskloop.operations import (
 from taskloop.publish import publish_word
 from taskloop.slot_release import Released, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
-from taskloop.task_status import task_status
+from taskloop.task_status import task_status, words
 
 # every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
 # `exit_codes`
@@ -46,9 +47,11 @@ def _show_data(each: AttemptView) -> dict[str, object]:
     return {
         "backlog": each.backlog, "task": each.task_id, "step": each.step, "attempt_id": each.attempt_id, "slot": each.slot,
         "phase": each.phase,
-        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
+        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason,
+                                       **({"explanation": each.result.explanation} if each.result.explanation else {})},
         "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
         "status": task_status(each).status.value,
+        "status_note": words(task_status(each)),
         "entry_process": _entry_data(each.entry_process),
         "worker": None if each.worker is None else {"pid": each.worker[0], "pgid": each.worker[1]},
         "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
@@ -57,6 +60,8 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "published": _published_data(each.published), "checks": _checks_data(each.checks), "land": view_data(each.land),
         "label": each.label, "hold": _hold_data(each.hold), "hold_due": each.hold_due,
         "last_command": each.last_command, "source_checks_id": each.source_checks_id,
+        "agent_stop": None if each.stop is None else each.stop.model_dump(mode="json", exclude={"dispatch_token"}),
+        "stop_cause": stop_text(each.stop, None if each.result.execution is None else each.result.execution.facts.rc),
     }
 
 

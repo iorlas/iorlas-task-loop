@@ -16,6 +16,7 @@ from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
@@ -60,15 +61,19 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     main.mkdir()
     git(main, "init", "-q", "-b", "main")
     (main / "README").write_text("one\n")
-    git(main, "add", "README")
+    (main / ".task-loop.json").write_text("{}")
+    git(main, "add", "README", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
     slot = slots / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     adopt(lambda: factory, begin_immediate, VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
-    (main / "README").write_text("two\n")
-    git(main, "commit", "-q", "-am", "main moves on")
-    m = git(main, "rev-parse", "HEAD").strip()
+    origin = root / "origin"
+    git(root, "clone", "-q", str(main), str(origin))
+    git(main, "remote", "add", "origin", str(origin))
+    (origin / "README").write_text("two\n")
+    git(origin, "commit", "-q", "-am", "origin main moves on")
+    m = git(origin, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
         lambda: factory, begin_immediate, EvidenceFiles(art), tasks, VIEWS.checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
     , ids=NativeIds())
@@ -91,7 +96,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         assert git(slot, "symbolic-ref", "--short", "HEAD").strip() == "task/tl-1"  # the agent starts on the branch, at M
         assert git(slot, "rev-parse", "HEAD").strip() == m and (slot / "README").read_text() == "two\n"
         (slot / P).parent.mkdir(parents=True)
-        (slot / P).write_text("# Plan\n")
+        (slot / P).write_text(PLAN_TEXT)
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
@@ -105,3 +110,5 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     x = git(slot, "rev-parse", "HEAD").strip()
     assert git(main, "rev-parse", "refs/heads/task/tl-1").strip() == x and git(slot, "rev-parse", "HEAD^").strip() == m != d
     assert git(slot, "status", "--porcelain").strip() == "" and lock_path(str(slot)).is_file()
+    assert git(main, "rev-parse", "main").strip() == d and (main / "README").read_text() == "one\n"
+    assert store.slot_base(admitted.key) == m

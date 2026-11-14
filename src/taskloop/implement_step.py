@@ -8,7 +8,8 @@ from typing import Final
 
 from git_porcelain import Tree
 
-from taskloop import step_text
+from taskloop import answer_decode, step_text
+from taskloop.answer_failures import AnswerFailure, AnswerRule
 from taskloop.attempt_types import (
     Answer,
     Effect,
@@ -17,11 +18,10 @@ from taskloop.attempt_types import (
     Rule,
     StepRules,
     Unsettled,
-    commit_message,
-    listed_paths,
 )
 from taskloop.check_repeat.feedback import FailedCheck, output_text
 from taskloop.command_conclusion import encode
+from taskloop.input_context import InputContext
 from taskloop.task import TaskInspection
 
 DISPOSITIONS: Final = ("implemented", "unchanged", "incomplete", "needs_owner")
@@ -42,9 +42,9 @@ ANSWER_SCHEMA: Final = {
         "explanation": {"type": "string"},
     },
 }
-# The prepared environment and bounded verification policy (design tl-8bh9.14.178).
+# The prepared environment, bounded verification policy (design tl-8bh9.14.178) and editing guidance (tl-8bh9.14.182).
 ENVIRONMENT: Final = (
-    "The factory ran this repository's `setup` before you started; there is no network now. "
+    "The factory ran this repository's `setup` before you started; uv uses the prepared cache offline. "
     "While working, run only focused test files for the code you changed. For lint and type validation, run "
     "`just check 2>&1 | tail -60` at most twice while working, in addition to the required final run. "
     "Do not run a full `just test` while working. The only direct pytest invocation permitted is "
@@ -62,17 +62,27 @@ ENVIRONMENT: Final = (
     "for the two required final checks, once each, with the stated failure exception. This narrow exception does "
     "not authorize other whole-suite or live tests. Keep line length at most 140 (`E501`), at most six returns per "
     "function (`PLR0911`), and no function-local imports (`PLC0415`). In `explanation`, name the result of each final "
-    "command. Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere "
-    "outside the repository. Your runs are evidence for you: after this step the checks run again outside your control, "
-    "and only those results count."
+    "command. Temporary files go to `$TMPDIR`; cleanup is attempted after release and required before the next agent. "
+    "Do not write elsewhere outside the repository. Your runs are evidence for you: after this step the checks run again "
+    "outside your control, "
+    "and only those results count. "
+    "First confirm that `apply_patch` is offered in your implement tool set. Make every file edit with `apply_patch`, "
+    "never with a Python or sed script. This includes additions, deletions and repairs; do not rewrite repository files "
+    "with shell redirection. The project interpreter is `.venv/bin/python`; "
+    "use `uv run --frozen --no-sync python -I` for execution or inspection scripts, never for file edits. "
+    "Bare `python3` is the host's Python 3.12, not the project's Python 3.15. Only if `apply_patch` is absent, report "
+    "the tool gap in `explanation` only and retain heredoc edits with the bounded verification above."
 )
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
-    "unsafe": "The unsafe path {path} cannot be committed: a symlink or under one, not a plain file, "
-    "executable, over 1 MiB, or a Git file.",
+    "unsafe": "These paths cannot be committed.",
     "ignored": "These paths are ignored by Git. A listed path Git ignores can never be committed, and an ignored attributes "
     "file on the way to a listed path blocks the commit.",
 }
+PLAN_HANDOFF: Final = (
+    "Do not edit plan.md; the answer's paths list must not contain any plan.md, including another task's plan or a "
+    "deletion. The handoff of what was built belongs in the one-line commit message."
+)
 
 
 def step_rules(_task_id: str) -> StepRules:
@@ -83,42 +93,68 @@ def step_rules(_task_id: str) -> StepRules:
 
 def decode(value: object, rules: StepRules) -> Answer:
     """Validate the implement answer contract, without verifying Git effects; the single owner of its cross-field rules
-    and every bound: `implemented` lists at least one path and a message, every other disposition lists none."""
-    if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
-        raise ValueError("Invalid implement answer")
-    disposition, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
-    listed = listed_paths(paths, rules)
-    if disposition == "implemented":
-        fits = bool(listed) and commit_message(message)
-    else:
-        fits = disposition in DISPOSITIONS and listed == () and message is None
-    if not fits or listed is None or not isinstance(explanation, str) or len(explanation) > 2000:
-        raise ValueError("Invalid implement answer")
-    text = message if isinstance(message, str) else None
-    return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
+    and every bound: `implemented` lists at least one path and a message, `unchanged` lists none, and unfinished
+    answers ignore structurally valid paths without requesting a commit."""
+    disposition, paths, message, explanation = answer_decode.fields(value, ANSWER_KEYS)
+    if isinstance(paths, list) and any(
+        isinstance(path, str) and path.rstrip("/").rsplit("/", 1)[-1].casefold() == "plan.md" for path in paths
+    ):
+        raise AnswerFailure(AnswerRule.PLAN_FORBIDDEN, "Do not include plan.md in paths; put the handoff in the commit message")
+    if not isinstance(disposition, str) or disposition not in DISPOSITIONS:
+        raise AnswerFailure(AnswerRule.DISPOSITION, "disposition must be one of: " + ", ".join(DISPOSITIONS))
+    listed = answer_decode.paths(paths, rules, unfinished=disposition in ("incomplete", "needs_owner"))
+    if disposition == "implemented" and not listed:
+        raise AnswerFailure(AnswerRule.PATHS_REQUIRED, "implemented paths must include at least one file")
+    if disposition == "unchanged" and listed:
+        raise AnswerFailure(AnswerRule.PATHS_COUNT, "unchanged paths must be empty")
+    text = answer_decode.message(message, committing=disposition == "implemented")
+    return Answer(disposition, EFFECT_OF[disposition], listed, text, answer_decode.explanation(explanation))
 
 
-def input_text(task: TaskInspection, rules: StepRules) -> str:
+def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
     """The implement step's admitted input: the task's own prose, then the fixed closing words. The plan is passed by
     reference: the slot starts on `task/<id>` at the published plan commit."""
-    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{_closing_words(task.reference.task_id, rules)}\n"
+    return (f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
+            f"{_closing_words(task.reference.task_id, rules)}\n")
 
 
 def _closing_words(task_id: str, rules: StepRules) -> str:
     return (
         f"The plan for this task is `docs/design/{task_id}/plan.md`, committed on this branch by the plan step. Read it "
-        "first and implement it, with tests for the behavior it adds or changes. If the code already does what the plan "
+        "first. Immediately after reading the plan, reassess scope before broad exploration or editing. "
+        "Read its `## Read list` by the stated line ranges before exploring other files. Search with `rg -n` and read "
+        "only needed ranges; targeted searches for omitted callers or source that changed after planning are allowed. "
+        "Do not `cat` a file over 300 lines. Before any "
+        "`cat` of a file over 150 lines, run `rg -n '^def |^class '` on it and use range reads, even if the symbol search "
+        "is empty. Do not batch whole-file dumps. Do not read a file again within this session unless it changed since "
+        "you last read it; then read only the changed range, including verification after an edit. Keep enough location "
+        "information from the first read to edit without reopening unchanged content. "
+        "If the work needs "
+        "more than about 60 model calls or touches more than 60 files, stop after the first coherent part, commit nothing "
+        "extra, and answer `needs_owner` with the proposed split. If the excess is evident before editing, answer then; "
+        "do not begin a part just to have something to save. If discovered during work, stop at the first coherent boundary "
+        "without proceeding into another work package. Explain completed and remaining scope and propose named parts, "
+        "each with an acceptance criterion and dependencies (explicitly none where appropriate). Partial work is unfinished: "
+        "use `needs_owner`, `paths: []`, `message: null`; the hold saves it. The owner or orchestrator creates parts in the "
+        "task tracker; do not create them or ask the owner to run a CLI command. The plan's 100 estimated model calls limit "
+        "is distinct from this implement reassessment at about 60 calls; these are scope instructions, not harness call "
+        "quotas. The 60-file stop is earlier than the existing 96-path safety ceiling. Within this scope, implement the "
+        "plan, with tests for the behavior it adds or changes. If the code already does what the plan "
         "asks, change nothing and answer `unchanged`. Otherwise change the files the plan needs and answer `implemented`. "
         f"You may add, change and delete plain files anywhere in the repository, at most {rules.max_paths} files of at most "
         f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, anything under "
-        f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. The plan's own folder may change too (for example "
-        f"an \"As built\" section). {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
+        f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. Do not edit `plan.md`, including status, progress "
+        f"or \"As built\" sections. Other artifacts in the plan's own folder may change under the same rules; add no audit "
+        f"artifact. {PLAN_HANDOFF} {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
         "`implemented`, list in `paths` every file you changed, "
-        "added or deleted and give a one-line commit `message`; the factory commits exactly those paths. Remove any other "
-        "file you created. Anything left uncommitted is reported back to you as a failed step. In `explanation`, name each "
+        "added or deleted and give a one-line commit `message`; the factory commits exactly those paths. With "
+        "`implemented`, remove any other file you created; anything left uncommitted is reported back to you as a failed "
+        "step. In `explanation`, name each "
         "command you ran and how it ended, and every test file you added. If you could not finish, answer "
         "`incomplete`; if the plan cannot be implemented as written or needs a decision, answer `needs_owner`; say why in "
-        "`explanation`. " + step_text.SAVED_WORK
+        "`explanation`. Only with `implemented` should `paths` list files; otherwise return `paths: []` and `message: null`, "
+        "and the factory saves unfinished slot work as a work-in-progress commit on the task branch when holding the "
+        "task. " + step_text.SAVED_WORK
     )
 
 
@@ -126,7 +162,7 @@ def repeat_instructions(number: int, *, unrecorded: bool) -> str:
     """A repeat's fixed instructions for the implement step. `unrecorded`: attempt `number` answered `implemented` and
     nothing of it was committed, so its files must be listed again."""
     last = (
-        f"Nothing of attempt {number} was committed, so none of its files is in Git: answer `implemented` and list in "
+        f"Nothing of attempt {number} was committed: answer `implemented` and list in "
         "`paths` again every file you want committed."
         if unrecorded
         else "If you only removed or restored files, answer `unchanged`: an `implemented` answer with nothing new to commit "
@@ -134,8 +170,10 @@ def repeat_instructions(number: int, *, unrecorded: bool) -> str:
     )
     return (
         "Remove every untracked file listed that you do not want committed. Restore every tracked file you changed or "
-        "deleted and do not want committed (`git show HEAD:<path> > <path>`); you cannot run `git checkout` or `git "
-        f"restore`. With `implemented`, `paths` lists every file you want committed, changed, added or deleted. {last}"
+        "deleted and do not want committed: read the original content with `git show HEAD:<path>` and restore it with "
+        "`apply_patch`, following the editing rules below. You cannot run `git checkout` or `git restore`. "
+        f"With `implemented`, `paths` lists every file you want committed, changed, added or deleted; "
+        f"leave files you did not change out of paths. {last} {PLAN_HANDOFF}"
     )
 
 
@@ -144,8 +182,8 @@ def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: 
     the reason, the listing, its fixed instructions, then the task. `found.reason` is one of REPEATABLE."""
     opening = next(text for reason, text in OPENING.items() if reason == found.reason)
     instructions = repeat_instructions(number, unrecorded=unrecorded)
-    path = json.dumps(found.unsafe_path or (found.listing[0] if found.listing else "(unavailable)"), ensure_ascii=True)
-    return step_text.feedback(opening.format(number=number, path=path), found.listing, instructions, task, nonce)
+    opening = step_text.unsafe_details(found) or opening.format(number=number)
+    return step_text.feedback(opening, found.listing, instructions, task, nonce)
 
 
 def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:
@@ -153,6 +191,7 @@ def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:
     return "\n".join([
         "Failed check",
         "The factory's check failed. Fix the reported failure and run the checks before answering.",
+        PLAN_HANDOFF,
         f"Check: {found.name}",
         f"Command argv: {json.dumps(list(found.argv), ensure_ascii=False)}",
         f"Result: {encode(found.result)}, exit {found.rc}",

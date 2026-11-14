@@ -43,6 +43,10 @@ WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 ENTRY = (7, "entry-start", "boot")
 P = "docs/design/tl-1/plan.md"
 PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
+PLAN_WARNING = (
+    "Your final message must be the JSON answer only; write plan.md before you answer `planned`; "
+    "a message without a tool call ends the step."
+)
 TASKS = FakeTaskReadClient(
     [
         Bead("tl-1", title="Plan it", description="Do the thing", acceptance_criteria="It is done"),
@@ -77,7 +81,10 @@ class Tracker:
         assert not self.con.in_transaction, "the claim must be outside any transaction"
         assert len(self.files.inputs) == 1 + self.calls.count("claim:" + task_id), "this admission wrote its input first"
         bead = TASKS.show(task_id)
-        assert bead is not None and self.files.read(self.files.inputs[-1]).startswith(bead.title)
+        assert bead is not None
+        prompt = self.files.read(self.files.inputs[-1])
+        assert prompt.startswith(PLAN_WARNING + "\n\nFirst assess depth from the supplied task text alone")
+        assert prompt.index("First assess depth") < prompt.index(bead.title)
         self.calls.append("claim:" + task_id)
         self.during()
         if isinstance(self.claimed, BdError):
@@ -159,17 +166,22 @@ def rows(con: sqlite3.Connection) -> tuple[int, int]:
     return con.execute("SELECT (SELECT count(*) FROM reservation),(SELECT count(*) FROM attempt)").fetchone()
 
 
+@pytest.mark.parametrize("limit", [None, 100000])
 def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    limit: int | None,
 ) -> None:
     slots(factory, repo, root, 2)
-    result = admit(factory, tmp_path, repo)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    chosen = replace(request(tmp_path, repo), setting=AgentSetting(model="chosen", compaction_token_limit=limit))
+    result = admission(factory, tmp_path, tracker, repo).admit(chosen)
     assert isinstance(result, Admitted) and result.slot == "s1" and result.key.reservation_generation == 1
     key, repo_id = result.key, repo.identity().key
     assert factory.execute("SELECT * FROM reservation").fetchall() == [("s1", repo_id, 1, key.attempt_id)]
     columns = "backlog,task_id,repo_id,slot,model,phase,entry_pid,entry_start,entry_boot"
     stored = factory.execute(f"SELECT {columns} FROM attempt").fetchone()
     assert stored == ("tasks", "tl-1", repo_id, "s1", "chosen", "admitted", None, None, None)
+    assert factory.execute("SELECT compaction_token_limit FROM attempt").fetchone() == (limit,)
     assert AttemptStore(lambda: factory).tracker_root(key) == str(tmp_path.resolve())  # the claimed root, renewed by the entry
     with pytest.raises(StoreRefused, match="unregistered_entry"):
         AttemptStore(lambda: factory).load(key)
@@ -222,9 +234,12 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     assert (collected.status, collected.reason) == ("pending", "verification") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / folder_name(repo.identity()) / "s1")
+    assert spec.stdin.startswith(PLAN_WARNING + "\n\n")
     prompt = spec.stdin + " ".join(spec.argv)
     assert "Do the thing" in prompt and "It is done" in prompt
-    closing = "First read `docs/design/tl-1/plan.md` if it exists. If it is still valid for the task and the code as they are now"
+    closing = "After the depth assessment permits planning, follow this plan-only reading order."
+    assert "Use exactly these sections in this order" in prompt
+    assert "Before answering `planned` or `unchanged`, require a Size estimate in Header" in prompt
     assert closing in prompt and "answer `unchanged`" in prompt and "do not run `git add`, `git commit`, `git push`" in prompt
     assert "list in `paths` every file you want committed and give a one-line commit `message`" in prompt
     assert prompt.index("It is done") < prompt.index(closing)  # the fixed closing words come last, in the admitted input
@@ -447,7 +462,7 @@ def test_composition_constructs_without_running_git_or_bd(tmp_path: Path) -> Non
 
 def test_two_repos_both_get_s1_and_the_fence_is_per_repo(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
     remote = FakeRemote("https://example.invalid/other.git")
-    remote.advance("main", {"README": "two"})
+    remote.advance("main", {"README": "two", ".task-loop.json": "{}"})
     other = FakeRepo.clone(remote, tmp_path / "other")
     keys: list[AttemptKey] = []
     for each, task_id in ((repo, "tl-1"), (other, "tl-2")):

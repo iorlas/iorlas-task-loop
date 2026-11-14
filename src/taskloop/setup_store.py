@@ -22,6 +22,7 @@ from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import RESULT_HELD
 from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, decode, encode
 from taskloop.drain.models import Owner, Role, owners
+from taskloop.land_conflict.reservation_store import owns
 
 FAILURES: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.FAILED, CommandConclusion.TIMED_OUT,
     CommandConclusion.LINGERING, CommandConclusion.DIRTY)  # `interrupted` is not the setup's fault
@@ -124,7 +125,7 @@ class SetupStore(AttemptReads):
             return as_int(row[0])
 
     def _held(self, con: sqlite3.Connection, key: AttemptKey) -> None:
-        if con.execute(HELD, astuple(key) * 3).fetchone() is None:
+        if con.execute(HELD, astuple(key) * 3).fetchone() is None and not owns(con, key):
             raise StoreRefused("stale_reservation")
 
     def start(self, key: AttemptKey, run: int, commit: str, digest: str, now: float) -> None:

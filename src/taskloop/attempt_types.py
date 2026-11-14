@@ -3,6 +3,7 @@
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
@@ -11,6 +12,7 @@ from any_agent.procs import Worker
 from git_porcelain import Repo
 
 from taskloop.agents.settings import AgentSetting
+from taskloop.answer_failures import AnswerFailureData
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference
 
@@ -199,10 +201,17 @@ class AnswerState:
     effect: Effect | None = None  # stored with the disposition of a valid answer; the store's fences read it
     paths: tuple[str, ...] = ()  # the files the agent asked the factory to commit, as validated
     message: str | None = None
+    failure: AnswerFailureData | None = None
 
 
 # Every verdict rule word: the chain's (CHAIN_RULES, any step) and each step kind's artifact rules (`steps.RULES` has all).
-type Rule = Literal[
+class PlanContentRule(StrEnum):
+    CHANGE_MAP = "plan_change_map"
+    DEPTH = "plan_depth"
+    HEADING = "plan_heading"
+
+
+type Rule = PlanContentRule | Literal[
     "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
     "plan_encoding", "plan_empty", "plan_size",
 ]
@@ -229,6 +238,18 @@ class Rejected:
 
 
 @dataclass(frozen=True)
+class PathExplanation:
+    """A rejected path and the owning check's explanation, without file content."""
+
+    path: str
+    explanation: str
+
+    def __post_init__(self) -> None:
+        if not self.explanation.strip():
+            raise ValueError("A refused path needs an explanation")
+
+
+@dataclass(frozen=True)
 class Unsettled:
     """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `worker_alive`, `superseded`,
     `staged`, `uncommitted`, `unsafe`, `ignored`); nothing stored, retryable. `listing` is data for a person and a repeat's
@@ -236,7 +257,7 @@ class Unsettled:
 
     reason: str
     listing: tuple[str, ...] = ()
-    unsafe_path: str | None = field(default=None, compare=False)  # diagnostic identity before the bounded display codec
+    explanations: tuple[PathExplanation, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)
@@ -333,21 +354,6 @@ def path_allowed(path: str, rules: StepRules) -> bool:
         return False
     parts = path.split("/")
     return len(path) > len(rules.root) and not any(p in ("", ".", "..") or dot_git(p) for p in parts)
-
-
-def commit_message(message: object) -> bool:
-    """An agent's one-line commit message: 1 to 500 characters, no NUL, never the factory's trailer."""
-    return (
-        isinstance(message, str) and 1 <= len(message) <= 500 and "\0" not in message and TRAILER.casefold() + ":" not in message.casefold()
-    )
-
-
-def listed_paths(paths: object, rules: StepRules) -> tuple[str, ...] | None:
-    """The answer's `paths` when it is a list of at most `max_paths` unique allowed paths; else None."""
-    if not isinstance(paths, list) or len(paths) > rules.max_paths:
-        return None
-    found = tuple(path for path in paths if isinstance(path, str) and path_allowed(path, rules))
-    return found if len(found) == len(paths) and len(set(found)) == len(found) else None
 
 
 def optional_int(value: object) -> int | None:

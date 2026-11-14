@@ -42,6 +42,9 @@ def typed_reasons() -> set[str]:
         for node in ast.walk(ast.parse((ROOT / name).read_text())):
             if isinstance(node, ast.TypeAlias) and isinstance(node.name, ast.Name) and node.name.id in names:
                 reasons.update(n.value for n in ast.walk(node.value) if isinstance(n, ast.Constant) and isinstance(n.value, str))
+            if name == "attempt_types.py" and isinstance(node, ast.ClassDef) and node.name == "PlanContentRule":
+                reasons.update(n.value for field in node.body if isinstance(field, ast.Assign)
+                               for n in ast.walk(field.value) if isinstance(n, ast.Constant) and isinstance(n.value, str))
     for name, names in fields.items():
         for node in ast.walk(ast.parse((ROOT / name).read_text())):
             if not isinstance(node, ast.ClassDef) or node.name not in names:
@@ -105,7 +108,7 @@ REVIEWED_DYNAMIC = {
     ('operations.py', 'Failed', 'result.reason'),
     ('operations.py', 'Failed', 'result.what if isinstance(result, NotApplicable) else result.reason'),
     ('plan_step.py', 'Rejected', 'broken'),
-    ('prepare.py', '_refused', "'branch_diverged' if diverged else 'branch_moved'"),
+    ('prepare.py', '_refused', "'branch_moved' if moved else 'branch_diverged'"),
     ('prepare.py', '_refused', "f'slot_{problem}'"),
     ('prepare.py', '_refused', 'found'),
     ('publish.py', 'NotPublished', "'abandoned' if gone else 'changed'"),
@@ -119,7 +122,12 @@ REVIEWED_DYNAMIC = {
     ('round.py', 'Failed', 'Reason.DRAINING'),
     ('slot_release.py', 'NotReleased', 'Reason.DRAINING'),
     ('slot_release.py', 'NotReleased', 'reason'),
-    ('slot_release.py', 'NotReleased', 'refused.reason'),
+    ('slot_release.py', 'NotReleased', 'parked.reason.value'),
+    ('slot_release.py', 'NotReleased', 'refused.reason.value'),
+    ('wip.py', 'Refused', 'SaveReason.MERGE_CHANGED'),
+    ('wip.py', 'Refused', 'SaveReason.MERGE_INPUTS'),
+    ('wip.py', 'Refused', 'SaveReason.MERGE_PENDING'),
+    ('wip.py', 'Refused', 'SaveReason.REF_MOVED'),
     ('verdict.py', 'Rejected', 'broken'),
     ('verifier.py', 'NotApplicable', 'end_word(stored)'),
     ('verifier.py', 'VerifyRefused', "'absent' if record is None else 'no_base'"),

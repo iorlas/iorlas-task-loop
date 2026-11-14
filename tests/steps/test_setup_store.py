@@ -33,6 +33,17 @@ def test_a_write_under_another_key_is_refused(registered: sqlite3.Connection, ke
     assert registered.execute("SELECT count(*) FROM setup_run").fetchone() == (0,)
 
 
+def test_an_unknown_owner_cannot_register_or_conclude_setup(registered: sqlite3.Connection) -> None:
+    setup = store(registered)
+    setup.start(KEY, 1, B, DIGEST, 10)
+    foreign = AttemptKey("unowned-conflict", KEY.dispatch_token, KEY.reservation_generation)
+    for write in (lambda: setup.start(foreign, 1, B, DIGEST, 10), lambda: setup.registered(foreign, 1, 0, ME),
+                  lambda: setup.conclude(foreign, 1, CommandConclusion.PASSED, 0, 11)):
+        with pytest.raises(StoreRefused, match="stale_reservation"):
+            write()
+    assert setup.latest(KEY) == SetupRow(1, B, DIGEST, 0, None, None)
+
+
 @pytest.mark.parametrize(
     "change", ["DELETE FROM reservation", "UPDATE attempt SET phase='dispatching',base_commit=slot_head"], ids=["released", "dispatched"]
 )

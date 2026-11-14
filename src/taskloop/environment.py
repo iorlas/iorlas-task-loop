@@ -168,6 +168,7 @@ class SetupFor:
     branch: str | None
     deadline: float
     first: bool
+    fence: Callable[[], None] = lambda: None
 
 
 @dataclass(frozen=True)
@@ -182,6 +183,7 @@ class _Run:
     deadline: float
     env: Mapping[str, str]
     log: CappedLog
+    fence: Callable[[], None]
 
 
 class Preparation:
@@ -202,6 +204,7 @@ class Preparation:
                     probe: ProbeLaunch | None) -> AttemptResult | None:
         """Both paths: `env` is the scrubbed environment setup gets with the folders; `probe` the agent's Codex and
         environment for the sandbox probe, None for no probe (a checks slot)."""
+        target.fence()
         found = folders(target.slot)
         stopped = self._ready(target.key, target.slot, slot, probe)
         if stopped is None and target.first:
@@ -209,7 +212,12 @@ class Preparation:
                 stopped = self._setup(target, slot, setup_env(env, found))
             except GitUnavailable:
                 stopped = _unavailable("git")
+        target.fence()
         return stopped or self._finish(found, renew, target.deadline)
+
+    def reconcile_for(self, key: AttemptKey) -> AttemptResult | None:
+        """Prove the previous setup stopped before its owner performs any slot effects."""
+        return self._reconcile(key)
 
     def _ready(self, key: AttemptKey, path: Path, slot: Prepared, probe: ProbeLaunch | None) -> AttemptResult | None:
         """Steps 1-4: the failure count (before the probe: a dead attempt costs nothing), the reconcile, the preflight,
@@ -297,6 +305,7 @@ class Preparation:
         reusable = latest is not None and (latest.conclusion, latest.commit, latest.digest) == (CommandConclusion.PASSED, head, digest)
         if reusable and target.commit is None:
             return None  # no agent ran since it passed: this attempt is still `admitted`
+        target.fence()
         reset = self._reset(path, slot.gitdir, folders(path), target.commit)
         if reset is not None:
             return reset
@@ -307,7 +316,8 @@ class Preparation:
             return _unavailable("log")  # the artifacts directory, not the slot's folders (`environment:files`)
         with closing(log):
             ports.store.start(key, run, head, digest, ports.clock())
-            return self._run(_Run(key, run, path, head, target.branch, target.deadline, env, log), slot.gitdir, profile.setup)
+            return self._run(_Run(key, run, path, head, target.branch, target.deadline, env, log, target.fence),
+                             slot.gitdir, profile.setup)
 
     def _reset(self, path: Path, gitdir: Path, found: Folders, commit: str | None) -> AttemptResult | None:
         """A checks slot's tracked files and index back to exactly `commit` first (`git reset --hard`, so a check killed
@@ -352,10 +362,12 @@ class Preparation:
         committed: list[OwnedProcess] = []
 
         def registered(process: OwnedProcess) -> None:
+            run.fence()
             ports.store.registered(run.key, run.run, index, process)
             committed.append(process)
 
         try:
+            run.fence()
             ended = ports.process(argv, registered=registered, cwd=str(run.slot), env=run.env, timeout=remaining, line=run.log.write)
         except OSError:
             if committed:  # the supervision failed after the command started: how it ended is unknown, its group is not

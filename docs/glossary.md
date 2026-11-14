@@ -9,6 +9,54 @@ already uses them. Literal existing identifiers may be cited when discussing tha
 cut, with no aliases or old-format readers; coordinate it with the owning redesign task rather than renaming twice.
 Ordinary verbs such as "run the checks" remain ordinary English, not additional execution entities.
 
+## Dashboard display wording
+
+Dashboard headings and controls use the terms below for factory concepts. The following are explanations of ordinary
+presentation words, not additional factory terms or states. Capitalization, plurals and grammatical inflections do not
+change a concept: “held” means on hold, “landed” means land completed, and “passed”/“succeeded” or “failed” describe
+success or failure. Explanatory sentences may use those verbs; outcome badges say **Success** or **Failure**.
+
+- **Attempt** identifies a concrete execution, including numbered attempts, repeat references and verification titles.
+  **Check** names the check step in columns and step headings. **Checks** names the collection of configured validation
+  commands, including result lists and “Checks failed” explanations. A **Check of Plan/Implement**, or **Verification**,
+  is the factory checking an agent answer and its files; it is attached to that attempt, not an extra step or column.
+  Verification marks mean success (✓), failure (✗), or no recorded conclusion yet (…). **Not reached** means a validation
+  was not executed. **Running**, **Starting**, **pending**, **unfinished** and **end not recorded** describe the recorded
+  execution or missing facts; they do not assert agent health. **Hold** names the column for a task the factory will not
+  advance until a person acts. **Needs you**/“need you” points to an agent ask; **Factory problem** introduces a hold cause.
+- **Waiting** groups tasks with no current work, including queued and abandoned tasks. It does not assert admission
+  readiness or owner approval; each card retains its status explanation. Its elapsed time says “waiting”, not “ready”.
+  **Queued** and **Abandoned** display those task statuses. Land's “waiting for the factory/person”, “landing policy
+  unavailable”, **Landing** and **Landed** describe the recorded land decision or completion. “Ready to land” describes
+  completed checks, not the Waiting column. **Restarted at plan**, **Repeat** and their reasons describe how attempts relate.
+- **Last activity … ago** is elapsed time since the recorded activity timestamp supplied for the card or selected attempt.
+  Its amber/red thresholds only emphasize age; they are not scheduling states or conclusions about an agent's health.
+  **Factory work**, **waited**, **paused**, **started**, **ran** and elapsed gaps describe recorded times or differences
+  between them; the gap tooltip explains that no individual factory operation was measured. **History N** groups earlier
+  step attempts between restarts at plan for disclosure; it is neither an attempt nor another execution entity.
+- **Task loop** is the product title. **Screens**, **Board**, **Logs**, **Steps**, **By slot**, **Board layout**, **Theme**
+  and **Close** describe navigation, grouping and appearance. “No slot” means no assigned slot. The drawer's **Task** view
+  shows tracker data; **Details**, **Description**, **Acceptance criteria**, **Notes**, **Comments**, **Priority**, **Labels**,
+  **Claim**, **Depends on**, **Created** and **Updated** label the corresponding task fields or discussion. **Reload task**
+  reads the tracker again; it does not start an attempt. Loading, unavailable, empty and error messages describe that read.
+- **Result**, **Conclusion**, **Agent answer**, **Output**, **Prompt** and **Input sent to the agent** identify an attempt's
+  saved result, answer, output or input. **Lines**, **Feed**, **Command**, **Tool**, **Agent message**, **Agent reasoning**,
+  **Reasoning**, **Error** and **Waiting** in the activity view label recorded activity kinds or their presentation.
+  **Raw**/**Formatted** switch answer rendering. Paths, characters, lines, blocks and exit codes describe the saved content.
+  **Tokens**, **fresh input**, **cached input**, **output**, **reported turns**, **effort**, **Step total** and **Task total**
+  label reported usage and execution settings; missing/incomplete reports remain explicit, and the turns tooltip names
+  harness-specific reporting. **Stream connecting/connected/disconnected**, **Reconnecting**, **Live** and **Latest**
+  describe dashboard data delivery, not factory liveness. **Last recorded round**, its age, clock discrepancy and unavailable
+  messages describe only available log observations. **Factory log**, **All moves**, **Needs attention**, **Today** and
+  **Yesterday** name the round-log view, its filters and date groups; the attention filter is a display selection, not a hold.
+
+Task titles, tracker prose and field values, agent answer fields/content, harness/model/provider/access names, check names,
+command/tool text, raw output and log move/word fields retain their owning source's wording. They are not dashboard labels
+to translate. Serialized identifiers such as `checks`, `held`, `succeeded` and `failed` remain wire codes, while the page
+uses the display labels above. Known typed codes have one wording table; raw-code hover text and unknown-code fallbacks
+preserve the original value for inspection rather than inventing a meaning. The same wording rules apply to tooltips,
+folded history and accessible names.
+
 ## Work and execution
 
 | Term | Meaning | Example / distinction |
@@ -41,7 +89,7 @@ redesign demonstrates a distinct factory concept that needs it. Do not introduce
 | Term | Meaning | Example / distinction |
 |---|---|---|
 | repo | A registered local Git repository binding, shared by its linked worktrees. | RepoId resolves canonical Git common-directory identity. Remote host/project is display/delivery information; task identity has its own configured backlog scope. Independent clones have separate local bindings. |
-| task branch | The Git reference retaining a task's committed plan and code. | Derived as task/<task-id> within its selected repository. It is not a directory, slot or execution; publishing it does not land the task. A new one is cut at the plan attempt from the person's local `main`'s tip (no fetch; refusal `target` without a local `main`); an existing one (local, else origin's remote-tracking) is resumed as it is, however far `main` moved ([.15 section 17](design/tl-8bh9.4.3.1.15/plan.md)). |
+| task branch | The Git reference retaining a task's committed plan and code. | Derived as task/<task-id> within its selected repository. It is not a directory, slot or execution; publishing it does not land the task. Admission fetches origin's main into its remote-tracking ref; a new branch starts there and the slot's release parks at that recorded commit, without moving the person's local `main` or checkout. An existing branch (local, else origin's remote-tracking) retains its work however far `main` moved; before a clean step the factory merges fetched origin main into it, independently of `land: manual` or `auto` ([.15 section 17](design/tl-8bh9.4.3.1.15/plan.md)). |
 | worktree | A Git checkout linked to a repository, sharing its commits and branches. | Committing in one linked worktree makes the commit available to the others locally; no push is needed for that sharing. |
 | workspace | An external or generic name for an execution's working directory; no separate factory entity. | Use worktree for a Git checkout and slot for a reusable managed worktree. Preserve literal names used by external APIs such as GitHub workspace. |
 | slot | A managed, reusable worktree reserved for one independently scheduled step attempt at a time. | `s1`. Internal checks may run concurrently. Reservations are local factory state in factory.db; slots are not tracker tasks. Current internal slot tasks are to be retired. |
@@ -139,7 +187,7 @@ logs; use it for nothing else. Words for owner-visible output are listed as the 
 | deadline | The instant by which an attempt must end, set by `--minutes` (`attempt.deadline`). | Renewed to now plus `--minutes` once per reboot, at relaunch. Not the claim lease. |
 | stuck | A next-action word meaning only the owner can act: `stuck:expired_admitted`, `stuck:entry_lost`, `stuck:hung`, `stuck:uncollected`, `stuck:conflict`, `stuck:setup_failed` (an admitted attempt 1 whose setup failed twice: rounds report it and never relaunch it), `stuck:checks_refused` (a checks attempt relaunched twice without concluding: each relaunchable refusal its entry counts, and each round's relaunch past the deadline, `late_relaunch`; rounds stop relaunching it, `tl step start` relaunches it by hand). Since H3 of tl-8bh9.14.9 the round holds a round-taken task at any `stuck:*` word but `stuck:hung` instead of only reporting it. | The other `Next` words are `start`, `wait`, `verify`, `repeat`, `repeats_exhausted`, `release` (also a land candidate still holding its slot after its validation), `publish`, `advance`, `done`, `unknown`, `land` (passed checks: no candidate yet, or one pending, pushable, failed, superseded, or delivered and not closed) and `landed` (delivered and closed), `hold` (a round-taken task with a hold cause: due, or recorded and not finished, the round finishes it or a slot or process keeps the claim) and `on_hold` (the hold finished: waiting for the person's answer). Rounds ignore `land` and `landed` and only report a land's `release`. `tl step list --stuck` shows `stuck:*`, `hold` and `unknown`. |
 | reserved / locked / held | `reserved`: a slot with a reservation. `locked`: its custody lock is held. `held:<reason>`: a release word (the slot stays reserved). | A slot can be reserved and not locked. Do not use "held" for the other two. A **hold** (below), the `Next` words `hold` and `on_hold` and the tracker label `held` are about a task, not a slot. |
-| hold | A task the factory will not advance until a person acts: its round-taken agent attempt's reason recorded in factory.db (`task_hold`, schema v14, written only by `hold_store`), the approval label it was taken under removed and `held` added, the attempt abandoned when the slot allows, and one comment written on the task ([tl-8bh9.14.9](design/tl-8bh9.14.9/plan.md) sections 2 and 5). An abandon plus a tracker note, never a new kind of attempt, step or wait. | As built (H1): the record and its phases (`labels`, the comment lease `commenting_at` of `COMMENT_LEASE` 120 s, `commented_at`, `cleared_at`), the tracker writes (`tracker_client.TrackerHolds`) and the comment (`hold_text`). H2: the operation `hold.hold_task` (record, labels, the abandon through `operations.release_task`, then the comment by the abandon's outcome: claim returned, or kept by a refusal only the person clears) and `hold.clear_holds` (removes `held` once the task is taken again); the cause rule `hold_status.cause` (a failed `done` or `release`, `repeats_exhausted`, every `stuck:*` but `stuck:hung`; the round passes `claim_lost` and `branch_moved`). The round calls both since H3 (section 9 of the plan). While a hold has not recorded its abandon, `tl step start` refuses `held`; a hold whose cause is gone when it acts again (the status read now) is retired (row deleted, `held` removed), never abandoning restarted work. Only a task whose agent attempt has a stored `label` is ever held (`unlabelled` otherwise). |
+| hold | A task the factory will not advance until a person acts: its round-taken agent attempt's reason recorded in factory.db (`task_hold`, schema v14, written only by `hold_store`), the approval label it was taken under removed and `held` added, the attempt abandoned when the slot allows, and one comment written on the task ([tl-8bh9.14.9](design/tl-8bh9.14.9/plan.md) sections 2 and 5). An abandon plus a tracker note, never a new kind of attempt, step or wait. | As built (H1): the record and its phases (`labels`, the comment lease `commenting_at` of `COMMENT_LEASE` 120 s, `commented_at`, `cleared_at`), the tracker writes (`tracker_client.TrackerHolds`) and the comment (`hold_text`). H2: the operation `hold.hold_task` (record, labels, the abandon through `operations.release_task`, then the comment by the abandon's outcome: claim returned, or kept by a refusal only the person clears) and `hold.clear_holds` (removes `held` once the task is taken again); the cause rule `hold_status.cause` (a failed `done` or `release`, `repeats_exhausted`, every `stuck:*` but `stuck:hung`; the round passes `claim_lost` and `branch_moved`). The round calls both since H3 (section 9 of the plan). While a hold has not recorded its abandon, `tl step start` refuses `held`; a hold whose cause is gone when it acts again (the status read now) is retired (row deleted, `held` removed), never abandoning restarted work. Ordinary failures require a stored approval label (`unlabelled` otherwise). A terminal preparation merge also holds a hand-started task, adds `held` without removing a nonexistent label, and preserves both merge inputs and working files before release. These merge holds cannot restart through generic label reingestion. |
 | label | The tracker label approving autonomous execution, `auto` (`--label`): checked only when a round ingests a new ready task, never on a claimed task's advance. Stored on the attempt (`attempt.label`, v14): written by the admission (`AdmitRequest.label`: the round's `--label` through `StartRequest.label`; None from `tl step start`), copied by an advance and a repeat. A hold removes this stored label, never the round's. | The lock label strings passed to `process_lock` (`taskloop-slot`, `taskloop-rounds`) are lock labels, not task labels. |
 
 ### Commit letters
@@ -148,8 +196,8 @@ Used in the plan documents and in code comments; read the column, not the letter
 
 | Letter | Meaning | Column / field |
 |---|---|---|
-| B | The base commit the entry reads before dispatch: for a new task branch, `main`'s tip at the take. | `attempt.base_commit` |
-| D | The slot's HEAD at admission; a released slot parks here. Never a branch start: the task branch must contain it. | `attempt.slot_head` (`slot_release.head` once parked) |
+| B | The prepared task-branch HEAD before ordinary dispatch: it retains the selected task source and recorded origin main. A new branch is initially created at local main; preparation then integrates current main. | `attempt.base_commit` |
+| D | The slot's HEAD at admission; a released slot parks here. Never a branch start: it must belong to the selected task source or origin's known main history. Different free slots may have different valid D commits. | `attempt.slot_head` (`slot_release.head` once parked) |
 | E | Where the previous attempt ended; a repeat starts here. | the previous attempt's `end_commit` |
 | X | The attempt's end commit. | `attempt.end_commit` |
 | T | The remote tip after a push (after a land's push, T is S). | `published_branch.remote_head` (with `commit_sha`, the X pushed); a land's `land_candidate.remote_head`. `main`'s commit at a checks admission is "the target" (`checks_attempt.target_commit`), never T; the M2 live-smoke runbook's shell function for `tl` is `TL` (the M1 runbook's `T` predates it, not this letter). |

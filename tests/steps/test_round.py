@@ -16,6 +16,7 @@ from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from doubles import NO_CHECKS, NoAdvance, NoChecks, ReadyTracker, no_holds
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
@@ -265,7 +266,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         outcome = RunOutcome(rc=rc, worker=worker, summary=Summary(text=text if rc == 0 else "", rc=rc, stands=True))

@@ -2,18 +2,18 @@
 tracker's titles and its ready tasks that no attempt has taken yet. Display only; the start times are the evidence
 files' (an attempt row stores none), so they are as good as a file's modification time."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from taskloop.agents.stop_text import stop_text
+from taskloop.answer_read import read as read_answer
 from taskloop.attempt_reads import AttemptRow, SlotUse, StoreUnavailable
-from taskloop.attempt_status import AttemptView, StatusPorts, list_attempts
-from taskloop.dash_model import Board, Card, Column, DashTracker, LandState, Repeat, iso
-from taskloop.evidence_files import EvidenceFiles
-from taskloop.land_status import LandView
+from taskloop.attempt_status import NEEDS_OWNER, AttemptView, StatusPorts, list_attempts
+from taskloop.dash_model import Board, Card, Column, DashTracker, Repeat, iso
+from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.hold_cause import cause as hold_cause
 from taskloop.operations import Failed
-from taskloop.profile import LandMode
-from taskloop.task_status import FRESH, Admission, Status, TaskStatus, blocker, landing, task_status, words
+from taskloop.task_status import FRESH, Admission, Status, TaskStatus, blocker, task_status, words
 
 STEP_COLUMN: dict[str, Column] = {"plan": "plan", "implement": "implement", "check": "checks"}
 
@@ -31,14 +31,6 @@ def column_of(view: AttemptView, found: TaskStatus | None = None) -> Column:
     if found.status in (Status.WAITING_FOR_LAND, Status.LANDING) or view.land is not None:
         return "land"
     return STEP_COLUMN.get(view.step, "implement")
-
-
-def land_state(land: LandView | None, mode: LandMode | None = None) -> LandState:
-    """`landing` only while a land is observed running; any other task in the land column waits: for a person only when the
-    profile says `manual`, else for the next round (also when the profile cannot be read: no policy is claimed)."""
-    if landing(land):
-        return "landing"
-    return "manual" if mode is LandMode.MANUAL else "waiting"
 
 
 def admission_of(reads: StatusPorts, approved: frozenset[str], use: SlotUse | None = None) -> Admission:
@@ -77,7 +69,6 @@ class BoardPorts:
     reads: StatusPorts
     files: EvidenceFiles
     tracker: DashTracker
-    mode: Callable[[], LandMode | None] = lambda: None  # the profile's `land`, read only for a task in the land column
 
 
 def tries(rows: tuple[AttemptRow, ...]) -> dict[str, int]:
@@ -90,20 +81,67 @@ def tries(rows: tuple[AttemptRow, ...]) -> dict[str, int]:
     return found
 
 
+def _ask(view: AttemptView, column: Column, files: EvidenceFiles) -> tuple[bool, str | None]:
+    cause = view.hold.reason if view.hold is not None else view.hold_due
+    current = view.hold is None or view.hold.cause_id == view.attempt_id
+    if (column != "held" or not current or view.stop is not None or cause != f"failed:{NEEDS_OWNER}"
+            or view.result.status != "collected" or view.result.reason != NEEDS_OWNER):
+        return False, None
+    try:
+        answer = read_answer(files, view.result.execution, view.step, view.task_id)
+    except EvidenceError:
+        answer = None
+    return True, None if answer is None else answer.explanation
+
+
 def card_of(
     view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float, number: int | None = None,
-    admission: Admission | None = None, mode: Callable[[], LandMode | None] = lambda: None,
+    admission: Admission | None = None,
 ) -> Card:
     found = task_status(view, admission)
     column = column_of(view, found)
     started = _started(view, row, files, column)
-    quiet = now - view.last_command if isinstance(view.last_command, int) and column != "waiting" else None
+    activity = None
+    if found.status is Status.RUNNING and column in ("plan", "implement"):
+        activity = now - view.last_command if isinstance(view.last_command, int) else started
     holding = row is not None and row.held and view.release is None
+    slot = view.slot if holding else None
+    if view.land is not None:
+        slot = view.land.row.slot if view.land.row.holds_slot else None
+    elif view.checks is not None:
+        slot = view.checks.row.slot if view.checks.row.released_at is None else None
     cause = view.hold.reason if view.hold is not None else view.hold_due
+    rc = None if view.result.execution is None else view.result.execution.facts.rc
+    stopped = stop_text(view.stop, rc)
     shown = view.number if number is None else number
-    return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
-                view.slot if holding else None, cause if column == "held" else None,
-                land_state(view.land, mode()) if column == "land" else None, found.status.value, words(found))
+    ask, question = _ask(view, column, files)
+    explanation = None
+    if column == "held" and not ask:
+        known = hold_cause(cause or "unknown", None if row is None else row.deadline, view.stop, rc)
+        explanation = stopped or (known.what if known is not None else
+                                  f"The factory held this task with recorded cause: {cause or 'unknown'}.")
+    cause = stopped or cause
+    return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(activity),
+                slot, cause if column == "held" else None,
+                found.land if column == "land" else None, found.status.value, words(found), ask, question, explanation,
+                iso(_waiting_since(view, found.status)))
+
+
+def _waiting_since(view: AttemptView, status: Status) -> float | None:
+    """Date only the current wait, from its owning transition rather than a previous step's start."""
+    if status is Status.WAITING_FOR_LAND and view.checks is not None:
+        return view.checks.row.released_at
+    if status is Status.HELD and view.hold is not None:
+        return view.hold.held_at
+    if status is Status.ABANDONED and view.release is not None:
+        return view.release.released_at
+    return None
+
+
+def queued_card(task_id: str, title: str, admission: Admission) -> Card:
+    found = TaskStatus(Status.QUEUED, wait=admission.wait)
+    return Card(task_id, title, "waiting", 0, None, None, None, None, None,
+                status=found.status.value, status_note=words(found))
 
 
 def build_board(ports: BoardPorts) -> Board | Failed:
@@ -125,11 +163,8 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     ready = tuple(each for each in listed_ready if each.task_id not in taken)
     titles = ports.tracker.titles(tuple(sorted(taken)))
     cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now,
-             numbers.get(view.attempt_id), admission, ports.mode)
+             numbers.get(view.attempt_id), admission)
              for view in listed.attempts]
-    queued = TaskStatus(Status.QUEUED, wait=admission.wait)
-    note = words(queued)
-    cards += [Card(each.task_id, each.title, "waiting", 0, None, each.since, each.since, None, None, None, queued.status.value, note)
-              for each in ready]
+    cards += [queued_card(each.task_id, each.title, admission) for each in ready]
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return Board(stamp, slots, tuple(cards), ports.tracker.notice())

@@ -2,7 +2,8 @@
 
 This branch is the curated successor foundation. The reference implementation is commit
 `731b7c76ef214ce35229f77814f98b6e1d6d5c0f`; its source remains in Git history and the original review worktree.
-Read `docs/design/tl-8bh9.8.7/plan.md` and `docs/glossary.md`. Only implemented commands are available;
+A factory attempt's input text is its whole spec: read `docs/glossary.md` only for a term the text does not explain,
+and `docs/design/tl-8bh9.8.7/plan.md` only when the task's own plan cites it. Only implemented commands are available;
 foundation completion is not completion of the task factory. Carry retained behavior in bounded tasks, not
 whole old packages, test bootstraps or unused abstractions. No baseline runtime imports or fallback.
 
@@ -21,11 +22,15 @@ Never kill processes by name; act only on a confirmed owned process identity.
 
 ## Build and verification
 
-Python 3.15+. `just check` and `just test` are the required focused gates. Read the justfile before running them.
+Python 3.15+. `just check` and `just test` are the required focused gates. `just check` = install (rebuilds the package), ruff,
+pyrefly, import contracts; `just test` = tests/cli, tests/steps, tests/rules. Run gates as `just check 2>&1 | tail -60` and
+`just test 2>&1 | tail -40`. Never run ruff or pytest directly except
+`uv run --frozen --no-sync python -I -m pytest -q <file> --tb=short | tail -40`.
 The successor has its own declared environment and installed package; baseline editable installs or PYTHONPATH
 must not supply missing code. Do not copy the old conftest/runners: they load the old application and kernel.
 Run the code under test with `uv run --frozen --no-sync python -I -m taskloop ...` after `just install`, or through the tests.
-Do not run whole-suite/live tests as an agent. Use focused behavior/contract tests; new tests are pytest functions
+No live tests. A factory attempt runs `just check` and `just test` once each, last, as its step text says; a session
+runs them once before a pull request. Use focused behavior/contract tests; new tests are pytest functions
 or classes, never unittest. No test for every private helper or a test that merely repeats its implementation.
 Retain caps: 400 source lines per file, 80 per function and 800 per test file. No new Any, cast or ignore escape.
 
@@ -56,9 +61,16 @@ Retain caps: 400 source lines per file, 80 per function and 800 per test file. N
   Explicitly held work stays held. Do not carry adapter behavior until its deletion consequences are assessed.
 - Runtime version stays fixed until restart. Skills are lightweight explicit helpers, not another scheduler,
   policy/state owner or a prerequisite for factory correctness.
-- Names: a new term borrows GitHub's word first; otherwise it chains defined terms (retry attempt, check suite).
+- Names: a new term borrows the industry-standard word for the same concept first (GitHub; OpenTelemetry GenAI
+  conventions; the Claude Agent SDK and OpenAI Agents SDK: a turn is one request to the model and its reply, an
+  agent invocation is one whole run); otherwise it chains defined terms (retry attempt, check suite). Where a
+  vendor's word differs from the standard (Codex calls the whole run a turn), the glossary states both.
   Before a term enters the glossary or the code, put the options and reasons to a human and wait for the decision.
   Delete a term that is plain English or derivable from defined terms.
+- Decide every name, meaning and structure as if starting from scratch. An existing column, name, code or earlier
+  work is never a reason to keep a wrong name or meaning (sunk cost): rename or redefine and delete the old, as
+  'No backward compatibility' requires. Example: execution.turns stayed 1 because it stored the harness's whole
+  run; the fix is to redefine turns as the model-request count, not to add 'model_calls' beside it (tl-8bh9.14.187).
 - Closed vocabularies (outcomes, phases, reasons, step and check names) are enums or classes, never string literals.
   A string appears only at the edge that stores or prints it, through one codec per vocabulary.
 - A backend's (task tracker, Git, harness) tool names, commands, error text and types stay inside its adapter. The
@@ -78,6 +90,19 @@ Retain caps: 400 source lines per file, 80 per function and 800 per test file. N
 - Test impact is a design goal: a use case's test imports only its slice and the small shared kernel, so a change runs
   only the tests its import closure reaches.
 - Run commands non-interactively. AGENTS.md is the only instruction file; there is no CLAUDE.md.
+
+## Environment facts
+
+- Flat layout: `src/taskloop/*.py` plus `agents/`, `drain/`, `check_repeat/`, `dash/`; tests in `tests/steps`, `tests/cli`, `tests/rules`.
+- Test helper modules live in `tests/steps` (pytest pythonpath, importlib mode).
+- Ruff limits: 140 columns, at most 6 returns, no function-local imports.
+- Project interpreter: `.venv/bin/python` or `uv run --frozen --no-sync python -I`; bare `python3` is the host's 3.12.
+- shelf (pinned in pyproject.toml/uv.lock) is read-only for agents: read it at `~/Workspaces/shelf` with
+  `git -C ~/Workspaces/shelf show <sha>:<path>` (sha from uv.lock) or in `.venv`. A need for a shelf change means stop and
+  answer needs_owner with a shelf proposal.
+- Make edits with apply_patch, not scripts.
+
+Factory attempts have no bd and no beads skill: ignore the Beads sections below; the task text in your input is complete.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
 ## Beads Issue Tracker

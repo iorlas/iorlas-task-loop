@@ -63,6 +63,19 @@ def test_caps_cannot_be_relaxed() -> None:
 
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
+    ("CREATE TABLE", "recovery_intent"): "factory_schema.py",
+    ("CREATE INDEX", "recovery_intent"): "factory_schema.py",
+    ("INSERT", "recovery_intent"): "recovery/state_store.py",
+    ("UPDATE", "recovery_intent"): "recovery/state_store.py",
+    ("CREATE TABLE", "agent_stop"): "factory_schema.py",
+    ("INSERT", "agent_stop"): "agents/stop_store.py",
+    ("UPDATE", "agent_stop"): "agents/stop_store.py",
+    ("CREATE TABLE", "merge_operation"): "factory_schema.py",
+    ("CREATE TABLE", "land_conflict"): "factory_schema.py",
+    ("INSERT", "land_conflict"): "land_conflict/store.py",
+    ("UPDATE", "land_conflict"): "land_conflict/store.py",
+    ("INSERT", "merge_operation"): "merge/store.py",
+    ("UPDATE", "merge_operation"): "merge/store.py",
     ("CREATE TABLE", "drain_state"): "factory_schema.py",
     ("CREATE TABLE", "drain_action"): "factory_schema.py",
     ("CREATE INDEX", "drain_action"): "factory_schema.py",
@@ -153,6 +166,7 @@ def test_write_pattern_catches_spelling_variants(statement: str, write: tuple[st
 GIT_WRITES = frozenset({
     "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
     "push_request", "push_lease", "delete_branch", "clean", "reset", "squash",
+    "start_merge", "finish_merge", "abort_merge", "commit_tree", "update_ref",
 })
 
 
@@ -179,7 +193,8 @@ def git_names(tree: ast.AST) -> set[str]:
 
 def git_writers() -> set[tuple[str, str]]:
     """Every use of a Git write in the factory source, by module (`git_names`)."""
-    return {(name, path.name) for path in (ROOT / "src" / "taskloop").glob("*.py") for name in git_names(ast.parse(path.read_text()))}
+    root = ROOT / "src" / "taskloop"
+    return {(name, str(path.relative_to(root))) for path in root.rglob("*.py") for name in git_names(ast.parse(path.read_text()))}
 
 
 @pytest.mark.parametrize(("source", "names"), [
@@ -194,10 +209,21 @@ def test_the_git_write_matcher_sees_uses_and_not_words(source: str, names: set[s
 def test_only_the_commit_prepare_release_publish_environment_and_land_modules_write_git() -> None:
     """`clean` is the environment reset's (the slot's ignored files and nested repositories, before each setup); `reset`
     too (a checks slot's tracked files back to exactly X, tl-8bh9.14.6 section 8). The checks block writes no Git. The
-    land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s."""
+    land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s.
+    Admission's bounded fetch of origin main is `prepare`'s."""
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
+        ("fetch", "prepare.py"),
         ("park", "slot_release.py"), ("park", "wip.py"), ("reset", "wip.py"),
+        ("stage", "wip.py"), ("commit_tree", "wip.py"), ("update_ref", "wip.py"), ("abort_merge", "slot_release.py"),
+        ("park", "merge/start.py"), ("start_merge", "merge/start.py"), ("finish_merge", "merge/start.py"),
+        ("fetch", "merge/start.py"),
+        ("stage", "merge/start.py"), ("stage", "merge/git.py"), ("update_ref", "merge/git.py"), ("take_branch", "merge/git.py"),
+        ("stage", "land_conflict/preserve.py"), ("commit_tree", "land_conflict/preserve.py"),
+        ("update_ref", "land_conflict/preserve.py"),
+        ("reset", "land_conflict/cleanup.py"), ("park", "land_conflict/cleanup.py"),
+        ("park", "land_conflict/release.py"),
+            ("abort_merge", "land_conflict/abort.py"),
             ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
         ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }
@@ -362,10 +388,9 @@ def _imported(tree: ast.Module) -> list[str]:
     return found
 
 
-def test_only_the_dashboard_server_imports_the_http_server() -> None:
-    """The one allowed importer of the standard library's HTTP code (`.importlinter` ignores exactly `dash_server -> http.server`),
-    and the tests that use a client or a URL parser, are pinned here."""
+def test_http_and_url_parsing_imports_have_explicit_owners() -> None:
+    """Pin the HTTP server, digest URL parser and test consumers; import contracts restrict the precise modules."""
     importers = {str(path.relative_to(ROOT)) for path in FILES
                  if any(name.split(".")[0] in {"http", "urllib", "socketserver"} for name in _imported(ast.parse(path.read_text())))}
     assert importers == {"src/taskloop/dash_server.py", "tests/cli/test_dash_server.py", "tests/cli/test_dash_composition.py",
-                         "tests/rules/test_isolation.py"}
+                         "tests/rules/test_isolation.py", "src/taskloop/shelf_digest/identities.py"}

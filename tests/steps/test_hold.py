@@ -56,7 +56,7 @@ class Tracker:
     texts: list[str] = field(default_factory=list)
     during_comment: list[object] = field(default_factory=list)
 
-    def labels(self, root: str, task: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(self, root: str, task: str, label: str | None) -> HoldAnswer[LabelStep]:
         self.calls.append(f"labels {root} {task} {label}")
         detail = "lock" if self.labelled == "unavailable" else self.assignee if self.labelled in ("moved", "absent") else ""
         return HoldAnswer(self.labelled, detail)

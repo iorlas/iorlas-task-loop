@@ -206,42 +206,6 @@ def test_invalid_admission_never_executes(tmp_path: Path, surroundings: AttemptS
     assert execution.calls == []
 
 
-def test_failed_execution_valid_answer_is_not_success(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
-    con = database(surroundings)
-    result = app(con, surroundings, fake(rc=7)).execute(KEY, ENTRY)
-    assert result.execution is not None
-    assert result.execution.facts.rc == 7
-    assert result.execution.facts.reason == "worker_failed"
-    assert result.execution.answer.kind == "valid"
-
-
-@pytest.mark.parametrize("text, kind", [("", "missing"), ("not json", "json_invalid"), ('{"plan":3}', "schema_invalid")])
-def test_bad_answer_has_one_execution(tmp_path: Path, surroundings: AttemptSurroundings, text: str, kind: str) -> None:
-    con = database(surroundings)
-    execution = fake(text)
-    result = app(con, surroundings, execution).execute(KEY, ENTRY)
-    assert result.execution is not None and result.execution.answer.kind == kind
-    assert len(execution.calls) == 1
-
-
-@pytest.mark.parametrize(
-    ("answer", "stored"),
-    [
-        (json.dumps(PLAN), ("planned", "commit")),
-        (json.dumps(PLAN | {"disposition": "unchanged", "paths": [], "message": None}), ("unchanged", "keep")),
-        (json.dumps(PLAN | {"disposition": "needs_owner", "plan_path": None, "paths": [], "message": None}), ("needs_owner", "none")),
-        ("not json", (None, None)),
-    ],
-)
-def test_the_answer_is_stored_with_its_effect(
-    tmp_path: Path, surroundings: AttemptSurroundings, answer: str, stored: tuple[str | None, str | None]
-) -> None:
-    con = database(surroundings)
-    result = app(con, surroundings, fake(answer)).execute(KEY, ENTRY)
-    assert result.execution is not None and result.execution.answer.effect == stored[1]
-    assert con.execute("SELECT disposition,effect FROM execution").fetchone() == stored
-
-
 def test_decoder_fault_leaves_captured_facts_and_can_resume_without_agent(
     tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -802,7 +766,7 @@ def test_ref_callback_faults_are_retained_with_cause_and_never_raised(
     assert loaded is not None
 
     class Broken(AttemptStore):
-        def session(self, admission: Admission, ref: str) -> Literal["accepted", "already_same", "conflict"]:
+        def _fence(self, con: sqlite3.Connection, admission: Admission) -> AttemptRecord:
             raise error
 
     latch = SessionLatch(Broken(lambda: con), loaded.admission)

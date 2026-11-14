@@ -18,7 +18,8 @@ from beads_client import BdError
 from beads_client.testing import Script
 from doubles import FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRemote, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
@@ -141,7 +142,7 @@ def executed(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
 
 def verified(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles) -> str:
     """The registered attempt run and verified: X, on `task/tl-1`."""
-    assert executed(con, tmp_path, slot, checkouts, files, {P: "# Plan\n"}) == "verification"
+    assert executed(con, tmp_path, slot, checkouts, files, {P: PLAN_TEXT}) == "verification"
     store = AttemptStore(lambda: con)
     assert isinstance(Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).verify(KEY), Verified)
     return head(slot)
@@ -178,6 +179,37 @@ def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then
     assert (ports.opens, ports.holds, len(ports.emptied)) == (0, 0, 1)
 
 
+def test_interrupted_release_converges_on_recorded_origin_tip_without_refreshing(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    x = verified(registered, tmp_path, slot, checkouts, slot_files)
+    repo = slot.repo
+    original = dict(repo.branches())["main"]
+    origin = FakeRemote("https://example.invalid/current.git")
+    repo.add_remote("origin", origin)
+    repo.worktree(repo.path).push("main")
+    target = origin.advance("main", {"other": "Admitted destination\n"})
+    assert repo.fetch().ok
+    registered.execute("UPDATE attempt SET slot_head=?", (target,))
+    origin.advance("main", {"later": "Leave the destination alone\n"})
+    release = Ports(registered, checkouts, slot_files).releaser()
+    record = SlotRelease._record
+
+    def interrupted(*_args: object, **_kwargs: object) -> NoReturn:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(repo, "fetch", lambda *_args, **_kwargs: pytest.fail("release fetched"))
+    monkeypatch.setattr(SlotRelease, "_record", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        release.release(KEY, False)
+    assert head(slot) == target and slot.branch() is None and tip(slot) == x
+    monkeypatch.setattr(SlotRelease, "_record", record)
+    assert isinstance(release.release(KEY, False), Released)
+    assert isinstance(release.release(KEY, False), AlreadyReleased)
+    assert head(slot) == target and tip(slot) == x and dict(repo.branches())["main"] == original
+
+
 @pytest.mark.parametrize("phase", ["admitted", "registered", "captured"])
 def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, phase: str
@@ -186,7 +218,7 @@ def test_settled_before_the_step_ended_is_not_terminal_and_changes_nothing(
         registered.execute("UPDATE attempt SET phase='registered',base_commit=?,worker_pid=42,worker_pgid=42,worker_start='s',"
                            "worker_boot='b'", (head(slot),))
     elif phase == "captured":  # pending verification
-        assert executed(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"}) == "verification"
+        assert executed(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT}) == "verification"
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     found = ports.releaser().release(KEY, False)
     assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("refused", "not_terminal")
@@ -371,7 +403,8 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     with pytest.raises(StoreRefused, match="stale_reservation"):
         store.load(KEY)
     assert store.register_entry(KEY, (8, "later", "boot"), 10) == "refused"
-    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=NativeIds())
+    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                               checkouts, slot_files, ids=NativeIds())
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
 

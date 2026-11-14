@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final, Literal
 
+from taskloop.agents.stop_models import AgentStop
 from taskloop.evidence_files import TERMINATED
 from taskloop.hold_cause import cause, next_step
 from taskloop.printable import one_line
@@ -69,7 +70,7 @@ class HoldFacts:
     """Everything the comment says, as the hold read it."""
 
     task_id: str
-    label: str  # the approval label the task was taken under (`attempt.label`)
+    label: str | None  # None for a hand-started task held during preparation
     labels: LabelsWord
     reason: str
     step: str
@@ -85,6 +86,8 @@ class HoldFacts:
     entry: str | None = None  # the entry log's last line of fixed words (`Last entry result`), None when there is none
     deadline: float | None = None  # the attempt's deadline, epoch seconds
     saved: tuple[str, ...] = ()  # the full ids of the commits the hold saved the slot's unfinished work in, in order
+    stop: AgentStop | None = None
+    rc: int | None = None
 
 
 def explained(text: str) -> str:
@@ -105,9 +108,8 @@ def _details(facts: HoldFacts) -> list[str]:
     at = f"{branch} at {one_line(facts.published)}" if facts.published else f"{branch} is not published"
     lines = [f"taskloop hold: {one_line(facts.reason)}",
              f"Step {one_line(facts.step)}, attempt {facts.number} ({one_line(facts.attempt_id)}), {when}; {at}."]
-    if facts.entry is not None and facts.entry.endswith(TERMINATED):
-        lines.append("The attempt's entry was terminated by a signal; its agent was stopped with it and its session was not "
-                     "continued.")
+    if facts.stop is None and facts.entry is not None and facts.entry.endswith(TERMINATED):
+        lines.append("The attempt's entry was terminated by a signal; its sender is unknown.")
     if facts.explanation and (text := explained(facts.explanation)):
         lines.extend(["The agent explained:", text])
     shown, more = _listed(facts.checks, CHECKS)
@@ -126,7 +128,9 @@ def _details(facts: HoldFacts) -> list[str]:
 
 
 def _labelled(facts: HoldFacts) -> str:
-    label = one_line(facts.label, 200)
+    if facts.label is None and facts.labels in ("moved", "absent"):
+        return "The factory added `held` without removing an approval label"
+    label = one_line(facts.label or "", 200)
     return {"moved": f"The factory removed `{label}` and added `held`",
             "absent": f"The factory added `held` (`{label}` is no longer on the task)",
             "not_ours": "The factory changed no label (another actor holds this task)"}[facts.labels]
@@ -161,11 +165,16 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
 
 def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     """The cause's own line, then its one next step: an owner's answer only for a cause an answer fixes."""
-    task, found = one_line(facts.task_id), cause(facts.reason, facts.deadline)
+    task, found = one_line(facts.task_id), cause(facts.reason, facts.deadline, facts.stop, facts.rc)
+    if facts.reason.startswith("merge:"):
+        return ["Main's merge stopped for a decision. The retained task work and resolution evidence remain available. "
+                "The task stays held; approval labels do not restart its plan or reset the resolution limit."]
     if facts.labels == "not_ours":
         retry = "resolve its ownership with the current actor: rounds do not take it again"
+    elif facts.label is None:
+        retry = "decide whether to restart this task; it stays held until a person approves a fresh attempt"
     else:
-        retry = (f"restore the approval label `{one_line(facts.label, 200)}`: "
+        retry = (f"restore the approval label `{one_line(facts.label or '', 200)}`: "
                  f"the next round starts it again at plan on task/{task} as it is")
     edit = "edit this task's description or acceptance criteria (the agent reads those, not comments)"
     lines = [] if found is None else [found.what]

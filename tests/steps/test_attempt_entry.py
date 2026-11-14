@@ -15,6 +15,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from git_porcelain import Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store
 from stream_proc import ProcessObservation, inspect_process
 
@@ -29,6 +30,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
 from taskloop.ids import NativeIds
+from taskloop.recovery.execution_models import Callback
 from taskloop.slot_lock import SlotBusy, acquire, lock_path
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -50,11 +52,11 @@ class FlakyFiles(EvidenceFiles):
         super().__init__(root)
         self.failures, self.captures = failures, 0
 
-    def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
+    def capture(self, key: AttemptKey, raw: RunOutcome, execution: Callback | None = None) -> Evidence:
         self.captures += 1
         if self.captures <= self.failures:
             raise EvidenceError("Cannot capture artifact")
-        return super().capture(key, raw)
+        return super().capture(key, raw, execution)
 
 
 class Stop:
@@ -181,9 +183,9 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released branch=published", 0, 16),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 16),
-        ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
+            ({P: PLAN_TEXT}, "collected verified verify=verified claim=held release=released branch=published", 0, 17),
+            ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 17),
+        ({P: PLAN_TEXT, NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
         ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 9),
     ],
     ids=["verified", "rejected", "uncommitted", "unsafe"],
@@ -195,13 +197,13 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert entry() == code
     assert entry.lines == [line] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
-    # six Git opens before dispatch (the slot read: root, slot; the branch rule: root; take_branch: slot; the slot read
-    # again: root, slot); the one verification: four to commit (the staged set read before the
+    # Three context reads (profile, glossary and paths) plus six Git opens before dispatch (slot: root, slot; branch rule: root;
+    # take_branch: slot; slot read again: root, slot); the one verification: four to commit (the staged set read before the
     # record), two for the clean check, one
     # to judge or list; a collected step's release: the slot read (root, slot) and the park (slot). The worker is observed
     # right before each Git write (stage, record), never when the paths are unsafe, and once more by the release's stop proof
     collected = line.startswith("collected")
-    assert entry.waits == [] and entry.git_opens == opens and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
+    assert entry.waits == [] and entry.git_opens == opens + 3 and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
     assert (slot.branch(), entry.unclaimed) == (None if collected else "task/tl-1", [])  # parked at D; the claim kept
     assert (entry.remote_opens > 0) == (code == 0)  # only a verified plan is published; its Git views are the publication's
 
@@ -214,7 +216,8 @@ INCOMPLETE = "collected incomplete verify=not_applicable claim=held release=rele
     [
         (1, "", "collected run:vendor_blip verify=not_applicable claim=held release=released"),
         (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable claim=held release=released"),
-        (0, "not json", "collected answer:json_invalid verify=not_applicable claim=held release=released"),
+        (0, "not json", "collected answer:json_invalid: json: Answer must be one complete strict JSON value: "
+         "Expecting value: line 1 column 1 (char 0) verify=not_applicable claim=held release=released"),
         (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
     ],
     ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete"],
@@ -275,7 +278,7 @@ def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
     waits: int,
     captures: int,
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), failures, wait_to, written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), failures, wait_to, written=(slot, {P: PLAN_TEXT}, [P]))
     assert entry() == (0 if failures < 9 and wait_to < 100 else 1)
     assert entry.lines == [line] and len(entry.waits) == waits and entry.files.captures == captures
     assert len(entry.run.calls) == 1
@@ -285,7 +288,7 @@ def test_capture_is_retried_only_while_unavailable_and_the_agent_never_again(
 def test_a_claim_found_lost_before_the_agent_refuses_and_runs_nothing(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]), beats=("lost", "held"), rounds=3)
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=("lost", "held"), rounds=3)
     assert entry() == 1
     assert entry.lines == ["refused claim_lost"] and entry.renewed == [("/tracker", "tl-1")]
     assert entry.run.calls == [] and entry.credential_calls == 0 and entry.git_opens == 0 and entry.stop.waits == 0
@@ -298,7 +301,7 @@ def test_a_held_or_unlockable_slot_refuses_the_entry_before_anything_is_read_or_
 ) -> None:
     """Held by another entry or verify: `refused slot_busy`. A lock file that cannot be made (here `.locks` is a file):
     `refused lock`."""
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     path = lock_path(str(slot.path))
     if not held:
         path.parent.parent.mkdir(parents=True, exist_ok=True)
@@ -314,7 +317,7 @@ def test_the_entry_holds_the_slot_while_it_runs_and_frees_it_when_it_ends_or_rai
 ) -> None:
     """The verify and the release inside the entry run under the lock the entry holds (their holds are no-ops)."""
     seen: list[bool] = []
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     gone, heartbeat_for = entry.gone, entry.heartbeat_for
 
     def broken(tracker_root: str, task_id: str) -> Heartbeat:
@@ -342,7 +345,7 @@ def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_al
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
     """Another entry, verify or release may take the slot while the push runs: the publication pins no slot."""
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     seen: list[int] = []
 
     def free() -> None:
@@ -358,7 +361,7 @@ def test_a_verified_plan_is_published_after_the_lock_is_released_and_the_keep_al
 def test_a_publication_that_raises_keeps_the_log_line_and_the_verified_exit_0(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
 
     def broken() -> None:
         raise OSError("cannot open the checkout")
@@ -371,7 +374,7 @@ def test_a_publication_that_raises_keeps_the_log_line_and_the_verified_exit_0(
 def test_an_unreachable_origin_is_only_the_branch_word_and_the_verified_plan_still_exits_0(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree, repo: FakeRepo
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]))
     repo.set_remote_url("origin", "https://example.invalid/moved.git")
     assert entry() == 0
     assert entry.lines == ["collected verified verify=verified claim=held release=released branch=unavailable:remote"]
@@ -392,7 +395,7 @@ def test_a_claim_lost_or_faulted_while_the_step_runs_is_only_recorded(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree,
     beats: tuple[Beat | Exception, ...], rounds: int, word: str, renewals: int,
 ) -> None:
-    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: "# Plan\n"}, [P]), beats=beats, rounds=rounds)
+    entry = Entry(admitted, checkouts, slot_files, me(), written=(slot, {P: PLAN_TEXT}, [P]), beats=beats, rounds=rounds)
     assert entry() == 0  # the step completes, publishes and verifies; nothing is released or re-claimed
     assert entry.lines == [f"collected verified verify=verified claim={word} release=released branch=published"]
     assert len(entry.run.calls) == 1
@@ -403,7 +406,7 @@ def test_a_failed_run_that_left_files_keeps_its_slot_held_and_the_claim(
     admitted: Path, checkouts: Checkouts, slot_files: SlotFiles, slot: FakeWorktree
 ) -> None:
     """Release never resets work: the run's leftovers keep the slot reserved (`Next: release` once the person tidies)."""
-    entry = Entry(admitted, checkouts, slot_files, me(), rc=1, written=(slot, {P: "# Plan\n"}, [P]))
+    entry = Entry(admitted, checkouts, slot_files, me(), rc=1, written=(slot, {P: PLAN_TEXT}, [P]))
     assert entry() == 1
     assert entry.lines == ["collected run:vendor_blip verify=not_applicable claim=held release=held:slot_dirty"]
     con = Store(SCHEMA).open_ro(admitted)

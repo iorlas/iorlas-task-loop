@@ -2,11 +2,14 @@
 // it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, position, quietSpan, stepInfo, tag } from "./ui.js";
+import {
+  $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, holdCallout, isWaiting, position, quietSpan, stepInfo, tag, waitingNote,
+} from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
 import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
+import { usageNode } from "./usage.js";
 
 let source = null;
 let tasks = null;
@@ -21,10 +24,18 @@ export function initDrawer(src, taskMap) {
 
 const attemptOf = () => open.detail?.attempts.find((a) => a.step === open.step && a.n === open.n);
 const tabOf = (a) => (a.step === VERIFY.id ? "result" : open.tab ?? (a.state === "running" ? "lines" : "result")); // a verification has only its result
-const signature = (t) => JSON.stringify([t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.land, t.status]); // what changes the attempts
+const signature = (t) => JSON.stringify([
+  t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.hold_explanation, t.ask, t.question, t.land, t.status,
+]); // what changes the attempts or their presentation
 
 // Select an attempt: the given one, else the last of the step, else the last of the task.
 function select(step, n) {
+  if (step === "land") {
+    open.step = "land";
+    open.n = null;
+    render();
+    return;
+  }
   const list = open.detail.attempts;
   const a = n != null ? list.find((x) => x.step === step && x.n === n) : list.findLast((x) => !step || x.step === step) ?? list.at(-1);
   open.step = a?.step;
@@ -135,8 +146,8 @@ const VIEWS = [["attempts", "Steps"], ["task", "Task"]];
 function placeOf(t) {
   const col = COLUMNS.find((c) => c.id === t.column);
   if (t.column !== "land") return { label: `${col.emoji} ${col.label}`, help: col.help };
-  const word = LAND[t.land ?? "waiting"];
-  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.land === "landing" ? "A land is putting the checked change on main now." : t.land === "manual" ? "Checked and ready; the profile says land: manual, so it waits for a person." : "Checked and ready; the next round lands it." };
+  const word = LAND[t.land ?? "unknown"];
+  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.status_note };
 }
 
 function head(t) {
@@ -170,19 +181,30 @@ function render() {
   drawer.replaceChildren();
   if (!t) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", `Loading ${open.id}…`));
   drawer.append(head(t));
-  if (t.hold_cause) {
+  if (detail) {
+    const total = el("div", "px-6 pb-3");
+    total.append(usageNode(detail.usage, "Task total", true));
+    drawer.append(total);
+  }
+  const notice = holdCallout(t);
+  if (notice) {
     const hold = el("div", "px-6 pb-3");
-    hold.append(callout("border-rose-500", "Held", t.hold_cause));
+    hold.append(notice);
     drawer.append(hold);
   }
-  if (t.column === "waiting" && t.attempt > 0) {
+  if (t.column === "waiting") {
     const fresh = el("div", "px-6 pb-3");
-    fresh.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
+    const note = callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued");
+    note.append(waitingNote(t));
+    fresh.append(note);
     drawer.append(fresh);
   }
-  if (t.column === "land" && t.land === "manual") {
+  if (t.column === "land") {
     const waiting = el("div", "px-6 pb-3");
-    waiting.append(callout(LAND.manual.bar, "Waiting for a person to land it", "The profile (.task-loop.json on main) says land: manual. Set it to auto and rounds land checked tasks by themselves."));
+    const word = LAND[t.land ?? "unknown"];
+    const note = callout(word.bar, word.label, isWaiting(t) ? null : t.status_note);
+    if (isWaiting(t)) note.append(waitingNote(t));
+    waiting.append(note);
     drawer.append(waiting);
   }
   if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));
@@ -198,10 +220,10 @@ function render() {
   }
   drawer.append(bar);
 
-  if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }));
+  if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }, detail.usage));
   if (!detail.attempts.length) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
   const body = el("div", "flex min-h-0 flex-1");
-  body.append(rail(detail.attempts, t, open, select), pane());
+  body.append(rail(detail.attempts, t, open, select, detail.step_usage), open.step === "land" ? deliveryPane() : pane());
   drawer.append(body);
   if ($("rail") && railTop) $("rail").scrollTop = railTop;
   else body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
@@ -210,6 +232,53 @@ function render() {
 }
 
 // ---------- selected attempt ----------
+
+function loadDelivery(mine) {
+  const own = {};
+  mine.delivery = own;
+  source.delivery(mine.id).then(
+    (detail) => { own.detail = detail; },
+    (error) => { own.error = error.message ?? String(error); },
+  ).then(() => { if (open === mine && mine.delivery === own && mine.step === "land") render(); });
+}
+
+function deliveryPane() {
+  const wrap = el("section", "min-w-0 flex-1 overflow-y-auto px-6 py-4");
+  wrap.append(el("h3", "text-sm font-semibold", "Land · Pending delivery"));
+  if (!open.delivery) loadDelivery(open);
+  const kept = open.delivery;
+  if (kept.error) {
+    wrap.append(el("p", "py-3 text-sm text-rose-700 dark:text-rose-300", `Delivery details cannot be read: ${kept.error}`));
+    const retry = el("button", "rounded border px-2 py-1 text-sm", "Retry");
+    retry.type = "button";
+    retry.addEventListener("click", () => { delete open.delivery; render(); });
+    wrap.append(retry);
+    return wrap;
+  }
+  if (!kept.detail) {
+    wrap.append(el("p", "py-3 text-sm text-slate-500", "Loading delivery details…"));
+    return wrap;
+  }
+  const detail = kept.detail;
+  wrap.append(el("h4", "mt-4 text-sm font-medium", "Intended actions"));
+  const actions = el("ul", "list-disc pl-5 text-sm");
+  for (const action of detail.actions) actions.append(el("li", "py-1", action));
+  wrap.append(actions, el("h4", "mt-4 text-sm font-medium", "Diff summary"));
+  wrap.append(el("p", "py-2 text-sm", detail.diff_files == null ? "Diff totals unavailable for this delivery."
+    : `${detail.diff_files} files changed (+${detail.added} −${detail.deleted})`));
+  wrap.append(el("pre", "overflow-x-auto whitespace-pre-wrap break-words text-xs", detail.summary.join("\n")));
+  for (const [label, command] of [["Diff command", detail.diff_command], ["Land command reference", detail.command]]) {
+    wrap.append(el("h4", "mt-4 text-sm font-medium", label), el("pre", "overflow-x-auto whitespace-pre-wrap break-words py-2 text-xs", command));
+  }
+  if (/^https?:\/\//i.test(detail.pr_url ?? "")) {
+    const link = el("a", "mt-3 inline-block text-sm underline", "View pull request");
+    link.href = detail.pr_url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    wrap.append(link);
+  }
+  return wrap;
+}
 
 // The Result and Prompt tabs read files, so they load when first shown (and again when the attempt has ended since).
 function bodyTab(a, tab) {
@@ -235,7 +304,7 @@ const nameOf = stepInfo;
 function began(a) {
   const list = open.detail.attempts;
   const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
-  const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`;
+  const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, attempt ${prev.n}` : ""}`;
   const what = a.after === "repeat" ? `a repeat of ${at}` : `a restart at plan (after ${at})`;
   const line = el("p", `w-full text-xs ${JUMP[a.after].text}`);
   line.append(el("span", "font-medium", `Began after ${what}`), el("span", "text-slate-500 dark:text-slate-400", ` · ${changeReason(a)}`));
@@ -250,10 +319,13 @@ function pane() {
   const tab = tabOf(a);
   const wrap = el("section", "flex min-w-0 flex-1 flex-col");
   const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
-  top.append(el("h3", "text-sm font-semibold", a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}` : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
+  const title = a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}`
+    : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, attempt ${a.n}`;
+  top.append(el("h3", "text-sm font-semibold", title), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
   if (a.step !== VERIFY.id) top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
-  if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) {
+  if (a.usage) top.append(usageNode(a.usage));
+  if (a.state === "running" && ["plan", "implement"].includes(a.step) && (a.feed.at(-1)?.at ?? a.started_at)) {
     const quiet = quietSpan(a.feed.at(-1)?.at ?? a.started_at);
     quiet.id = "quiet";
     top.append(quiet);
@@ -273,7 +345,7 @@ function pane() {
   return wrap;
 }
 
-// A card moved. The drawer reloads the task's steps only when they can have changed (a step or try began or ended, a hold, a land);
+// A card moved. The drawer reloads the task's steps only when they can have changed (an attempt began or ended, a hold, a land);
 // a card that only shows newer activity changes nothing here, and never moves the tab, the selection or the scroll place.
 export async function onTaskMoved(task) {
   if (open?.id !== task.id || !open.detail || signature(task) === open.sig) return;
@@ -285,10 +357,12 @@ export async function onTaskMoved(task) {
     for (const a of fresh.attempts) if (open.bodies.get(`${a.step}/${a.n}`)?.state !== a.state) open.bodies.delete(`${a.step}/${a.n}`);
     open.detail = fresh;
   } catch (error) {
-    return showError(open.id, error);
+    if (open === mine) showError(mine.id, error);
+    return;
   }
   open.sig = signature(task);
-  if (following || !attemptOf()) select();
+  delete open.delivery;
+  if (open.step !== "land" && (following || !attemptOf())) select();
   else render();
   follow();
 }

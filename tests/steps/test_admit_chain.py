@@ -15,8 +15,9 @@ from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from doubles import NO_CHECKS, Environment, FixedIds, PinnedViews
-from git_porcelain import Sha
+from git_porcelain import Pushed, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, Admitted, AttemptAdmission
@@ -27,6 +28,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileRef, SlotFiles
+from taskloop.earlier_input import START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
@@ -113,7 +115,7 @@ def tip(repo: FakeRepo) -> str:
 def planned(registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles) -> str:
     """The registered plan attempt ran, was verified, released settled and published: its X."""
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}
-    assert execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, "# Plan\n")), checkouts, slot_files) == (
+    assert execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, PLAN_TEXT)), checkouts, slot_files) == (
         "verification")
     assert finish(registered, checkouts, slot_files).published == "published"
     return tip(slot.repo)
@@ -145,23 +147,38 @@ def test_a_done_plan_advances_to_implement_attempt_one_after_its_commit(
     assert row[:8] == ("implement", 1, 2, planned, None, "/tracker", '{"harness":"codex","sandbox":"workspace-write"}', d)
     text = (tmp_path / row[8]).read_text()
     assert text.startswith("Add a widget\n\nIt must do X") and f"`{PLAN}`" in text
+    assert f"Source commit: {planned}" in text
+    assert f'Recorded result commit: "{planned}"' in text and START in text
+    assert 'Disposition: "planned"' in text and 'Explanation: "done"' in text
+    assert f'"{PLAN}"' in text and "BEGIN EARLIER ATTEMPT DATA" in text
     assert registered.execute("SELECT attempt_id FROM reservation").fetchone() == (admitted.key.attempt_id,)
 
 
 @pytest.mark.parametrize("landed", [True, False])
-def test_with_no_task_branch_left_the_advance_starts_from_main_which_must_hold_the_previous_commit(
+@pytest.mark.parametrize("local_ahead", [True, False])
+def test_with_no_task_branch_left_the_advance_requires_origin_main_to_hold_the_previous_commit(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
-    landed: bool,
+    remote: FakeRemote, landed: bool, local_ahead: bool,
 ) -> None:
-    """The local and remote-tracking `task/tl-1` deleted: the slot would start at `main`'s tip (as a new branch does),
-    never at its own D, so only a `main` holding the plan's X advances."""
+    """Without task refs, fetched origin main must contain the plan's X, independently of the person's local main."""
     repo = slot.repo
+    if landed:
+        integrator = FakeRepo.clone(remote, tmp_path / "integrator")
+        main = integrator.worktree(integrator.path)
+        main.merge_ff(planned)
+        assert isinstance(main.push("main"), Pushed)
+    if local_ahead:
+        repo.worktree(repo.identity().root).merge_ff(planned)
+    local_main = dict(repo.branches())["main"]
     repo.delete_branch("task/tl-1", expected=Sha(planned))
     repo.plumbing().delete_ref_at(repo.path, "refs/remotes/origin/task/tl-1", planned)
-    if landed:
-        repo.worktree(repo.identity().root).merge_ff(planned)
     found = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(repo))
     assert isinstance(found, Admitted) if landed else isinstance(found, AdmitRefused) and found.reason == "branch_moved"
+    assert dict(repo.branches())["main"] == local_main
+    if isinstance(found, Admitted):
+        assert AttemptStore(lambda: registered).slot_base(found.key) == planned
+    else:
+        assert registered.execute("SELECT count(*) FROM reservation").fetchone() == (0,)
 
 
 @pytest.mark.parametrize("bead", [replace(CLAIMED, status="open"), replace(CLAIMED, assignee="someone"), replace(CLAIMED, status="closed")])
@@ -186,7 +203,7 @@ def test_only_a_verified_settled_published_current_attempt_advances(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles, case: str
 ) -> None:
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}
-    execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, "# Plan\n")), checkouts, slot_files)
+    execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, PLAN_TEXT)), checkouts, slot_files)
     finish(registered, checkouts, slot_files, publish=case != "unpublished")
     if case == "published_elsewhere":
         registered.execute("UPDATE published_branch SET commit_sha=?", ("f" * 40,))
@@ -214,7 +231,7 @@ def test_a_superseded_or_racing_advance_is_task_attempted_and_one_attempt_is_adm
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     """A second advance wins between the first one's read and its transaction: the first finds another current attempt."""
-    other = advancing(registered, tmp_path / "other", checkouts, slot_files)
+    other = advancing(registered, tmp_path, checkouts, slot_files)
     files = Racing(tmp_path, lambda: other.admit_next(request(slot.repo)))
     racing = NextAdmission(lambda: registered, begin_immediate, files, tasks(CLAIMED), checkouts, lambda: 10,
         lambda _p: True, slot_files, ids=NativeIds())
@@ -253,7 +270,7 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_t
     assert finish(registered, checkouts, slot_files) == VerifiedTask("verified", "tasks", "tl-1", key.attempt_id, "released", "published")
     x = tip(slot.repo)
     tree = slot.repo.tree(x)
-    assert tree is not None and set(tree.files) == {PLAN, "src/widget.py", "tests/test_widget.py"}
+    assert tree is not None and set(tree.files) == {PLAN, "src/widget.py", "tests/test_widget.py", ".task-loop.json"}
     assert slot.repo.is_ancestor(planned, x) and [entry.sha for entry in slot.repo.history([x], not_on=[planned])] == [x]
     reads = StatusPorts(AttemptStore(lambda: registered), lambda _entry: "gone", lambda: 10, lambda _key: None, lambda: "boot")
     shown = show_attempt(reads, tmp_path, "tasks", "tl-1")
@@ -266,6 +283,7 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
+    registered.execute("UPDATE attempt SET compaction_token_limit=100000 WHERE attempt_id=?", (key.attempt_id,))
     answer = {"disposition": "implemented", "paths": ["src/a.py"], "message": "A", "explanation": "x"}
 
     def change() -> None:
@@ -274,14 +292,32 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
 
     execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files)
     ids = FixedIds()
-    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=ids).admit_repeat(
+    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                              checkouts, slot_files, ids=ids).admit_repeat(
         RepeatRequest(key, "feedback", 100, "uncommitted"))
     assert isinstance(repeated, Admitted)
     assert repeated.key.attempt_id == ids.fresh[0] and repeated.key.dispatch_token == ids.tokens[0][1]
     assert [size for size, _ in ids.tokens] == [16]
-    row = registered.execute("SELECT step,number,after_commit,previous_attempt_id FROM attempt WHERE attempt_id=?",
+    row = registered.execute("SELECT step,number,after_commit,previous_attempt_id,compaction_token_limit FROM attempt WHERE attempt_id=?",
                              (repeated.key.attempt_id,)).fetchone()
-    assert row == ("implement", 2, None, key.attempt_id)
+    assert row == ("implement", 2, None, key.attempt_id, 100000)
+
+
+def test_advancement_captures_the_next_step_compaction_choice(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+) -> None:
+    registered.execute("UPDATE attempt SET compaction_token_limit=100000")
+    settings = StepSettings(plan=AgentSetting(compaction_token_limit=100000),
+                            implement=AgentSetting(compaction_token_limit=120000))
+    selected = settings.overridden(Overrides(effort="low")).implement
+    next_request = replace(request(slot.repo), setting=selected)
+    admitted = advancing(registered, tmp_path, checkouts, slot_files).admit_next(next_request)
+    assert isinstance(admitted, Admitted)
+    rows = registered.execute("SELECT step,compaction_token_limit FROM attempt ORDER BY seq").fetchall()
+    assert rows == [("plan", 100000), ("implement", 120000)]
+    assert AttemptStore(lambda: registered).register_entry(admitted.key, ENTRY, 10) == "accepted"
+    loaded = AttemptStore(lambda: registered).load(admitted.key)
+    assert loaded is not None and loaded.admission.setting == selected
 
 
 @pytest.mark.parametrize("label", ["auto", None])
@@ -298,7 +334,8 @@ def test_the_advance_and_the_repeat_copy_the_label_the_task_was_taken_under(
         slot.write_file("scratch.log", "left over\n")
 
     execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files)
-    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=NativeIds()).admit_repeat(
+    repeated = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                              checkouts, slot_files, ids=NativeIds()).admit_repeat(
         RepeatRequest(key, "feedback", 100, "uncommitted"))
     assert isinstance(repeated, Admitted)
     found = registered.execute("SELECT attempt_id,label FROM attempt ORDER BY seq").fetchall()

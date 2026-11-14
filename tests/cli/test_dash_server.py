@@ -4,12 +4,13 @@ when a read fails, a page goes away or too many connect."""
 import json
 import time
 from collections.abc import Iterator
+from dataclasses import replace
 from http.client import HTTPConnection, HTTPResponse
 from pathlib import Path
 
 import pytest
 
-from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail
+from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, LandDetail, Outcome, TaskDetail, TrackerDetail, Usage
 from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
@@ -33,8 +34,18 @@ class Ports:
     def __init__(self, static: Path, max_streams: int = 16, queue_depth: int = 256) -> None:
         self.cards, self.mode = [card()], "ok"
         self.rows: tuple[LogRow, ...] = (row(),)
-        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, "tl", static, 0.03, 0.05,
+        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, self.delivery,
+                               "tl", static, 0.03, 0.05,
                                max_streams, queue_depth)
+
+    def delivery(self, task_id: str) -> LandDetail | Failed | None:
+        if task_id == "broken":
+            return Failed("unavailable", "git", "Delivery facts are temporarily unavailable.")
+        if task_id != "tl-1":
+            return None
+        return LandDetail(actions=("Integrate changes.",), summary=("One changed file.",), diff_files=1, added=2, deleted=1,
+                          diff_command="git diff a..b", command="tl step land tl-1 --backlog tl --checkout /repo",
+                          pr_url="https://example.invalid/pull/1")
 
     def board(self) -> Board | Failed:
         if self.mode == "raise":
@@ -51,7 +62,8 @@ class Ports:
         return FeedPage((line,), "7:42", replaced=False, available=True) if cursor is None else FeedPage((), cursor, False, True)
 
     def task(self, task_id: str) -> TaskDetail | Failed:
-        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), ())
+        usage = Usage(16, 13, 7, 1, 1, 1)
+        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), (), {"plan": usage}, usage)
 
     def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
         return AttemptBody("prompt", Outcome("verified", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
@@ -120,6 +132,9 @@ def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served
     assert json.loads(get(server, "/api/log")[1])["rows"][0]["move"] == "admit"
     assert get(server, "/") == (200, b"<html>page</html>")
     assert get(server, "/api/tasks/unknown")[0] == 200 and get(server, "/api/tasks/broken")[0] == 503
+    detail = json.loads(get(server, "/api/tasks/tl-1")[1])
+    assert detail["step_usage"]["plan"] == detail["usage"] == {
+        "fresh": 16, "cached": 13, "output": 7, "turns": 1, "attempts": 1, "complete": 1}
     assert get(server, "/secret.txt")[0] == 404 and get(server, "/../secret.txt")[0] == 404 and get(server, "/api/tasks/a%2F..")[0] == 404
 
 
@@ -150,6 +165,18 @@ def test_a_title_with_markup_is_data_and_the_page_never_builds_html_from_data() 
         assert not any(word in script.read_text() for word in unsafe), script
 
 
+def test_delivery_details_are_selected_by_task_and_preserve_failure_explanations(served: tuple[Ports, DashServer]) -> None:
+    _fake, server = served
+    status, body = get(server, "/api/tasks/tl-1/delivery")
+    found = json.loads(body)
+    assert status == 200 and found["actions"] == ["Integrate changes."]
+    assert (found["diff_files"], found["added"], found["deleted"]) == (1, 2, 1)
+    assert found["diff_command"] == "git diff a..b" and found["pr_url"] == "https://example.invalid/pull/1"
+    assert get(server, "/api/tasks/missing/delivery")[0] == 404
+    status, body = get(server, "/api/tasks/broken/delivery")
+    assert status == 503 and json.loads(body) == {"error": "Delivery facts are temporarily unavailable."}
+
+
 def test_a_connected_page_is_told_of_a_moved_card_a_vanished_one_and_every_new_log_line(served: tuple[Ports, DashServer]) -> None:
     fake, server = served
     stream = Stream(server)
@@ -171,6 +198,34 @@ def test_the_first_moves_after_connecting_are_not_lost(served: tuple[Ports, Dash
     stream = Stream(server)  # the baseline was taken before the first byte came back
     fake.cards = [card(column="implement")]
     assert part(stream.kinds({"task"})[-1]["task"])["column"] == "implement"
+    stream.close()
+
+
+def test_agent_question_fields_reach_snapshots_and_question_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
+    fake, server = served
+    fake.cards = [replace(card(), column="held", ask=True, question="Which database?\nUse <primary>?")]
+    status, body = get(server, "/api/board")
+    found = json.loads(body)["tasks"][0]
+    assert status == 200 and found["ask"] is True and found["question"] == "Which database?\nUse <primary>?"
+    stream = Stream(server)
+    fake.cards = [replace(fake.cards[0], question="Which region?")]
+    changed = part(stream.kinds({"task"})[-1]["task"])
+    assert changed["ask"] is True and changed["question"] == "Which region?" and changed["column"] == "held"
+    stream.close()
+
+
+def test_factory_explanations_reach_snapshots_and_explanation_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
+    fake, server = served
+    fake.cards = [replace(card(), column="held", hold_cause="branch_moved", hold_explanation="The checked branch moved.")]
+    status, body = get(server, "/api/board")
+    found = json.loads(body)["tasks"][0]
+    assert status == 200 and found["hold_explanation"] == "The checked branch moved."
+    assert found["ask"] is False and found["question"] is None
+    stream = Stream(server)
+    fake.cards = [replace(fake.cards[0], hold_explanation="The checked branch moved.\nAnother <commit> is there.")]
+    changed = part(stream.kinds({"task"})[-1]["task"])
+    assert changed["hold_explanation"] == fake.cards[0].hold_explanation
+    assert changed["hold_cause"] == "branch_moved" and changed["ask"] is False and changed["question"] is None
     stream.close()
 
 

@@ -13,7 +13,7 @@ from functools import partial
 from pathlib import Path
 
 from git_porcelain import GitUnavailable, NotARepo
-from sqlite_store import SchemaError, Store
+from sqlite_store import Store
 
 from taskloop.attempt_reads import SlotUse, StoreUnavailable
 from taskloop.attempt_status import StatusPorts, current_view
@@ -30,6 +30,7 @@ from taskloop.composition import (
     open_checks_admission,
     open_checks_launcher,
     open_checks_releaser,
+    open_discussion,
     open_launcher,
     open_publisher,
     open_releaser,
@@ -40,7 +41,8 @@ from taskloop.drain.models import Boundary, Conclusion, Reason, Result, State
 from taskloop.drain.restart import restart
 from taskloop.drain.store import DrainStore
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.factory_schema import SCHEMA, refusal
+from taskloop.factory_schema import SCHEMA
+from taskloop.factory_store import open_ro
 from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
@@ -48,14 +50,14 @@ from taskloop.ids import NativeIds
 from taskloop.interrupts import Interrupts, installed
 from taskloop.land import How, Landed, LandRequest, land
 from taskloop.land_check import LandPorts
-from taskloop.land_mode import land_mode
+from taskloop.land_mode import known_slot_mode, land_mode
 from taskloop.land_store import LandStore
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.operations import Adoption, ChecksPorts, Ended, Failed, Quiet, Round, StartPorts, require_database
 from taskloop.owned_processes import current_boot, entry_seen, setup_seen, this_process, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
-from taskloop.round import NextRequest, RoundPorts, run_round
+from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
 from taskloop.round_land import Landing
 from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
@@ -89,16 +91,9 @@ def load_config(config: str | None, flags: Flags, home: Callable[[], Path] = Pat
     return settings if isinstance(settings, ConfigRefused) else Loaded(path, text is not None, settings)
 
 
-def _open_ro(database: Path) -> sqlite3.Connection | None:
-    try:
-        return Store(SCHEMA).open_ro(database)
-    except SchemaError as error:
-        raise SchemaError(refusal(error, database)) from error
-
-
 @contextmanager
 def _read_only(database: Path) -> Generator[sqlite3.Connection | Failed]:
-    found = require_database(lambda: _open_ro(database))
+    found = require_database(lambda: open_ro(database))
     try:
         yield found
     finally:
@@ -122,7 +117,8 @@ def open_reads(database: Path, artifacts: Path, views: GitViews) -> Generator[St
             verifier = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused,
                 ids=NativeIds())  # never verifies
             seen = EvidenceFiles(artifacts).last_command
-            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen, seen)
+            yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen, seen,
+                              known_slot_mode(views.checkouts, RealSlotFiles()))
 
 
 @contextmanager
@@ -141,15 +137,16 @@ def open_start(database: Path, artifacts: Path, views: GitViews) -> Generator[St
 
 
 def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Store, views: GitViews) -> StartPorts:
-    admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, store)
+    admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, views, store)
     launcher = open_launcher(database, artifacts, views)
     repeat = StepRepeat(reader, open_verifier(database, store, views), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
-                        time.time, repeating, ids=NativeIds())
+                        time.time, repeating, ids=NativeIds(), discussion=open_discussion(database, store).for_task)
     releaser = open_checks_releaser(database, store, views)
     checks = ChecksPorts(open_checks_admission(database, views, store), open_checks_launcher(database, artifacts, views), releaser)
     repair = CheckRepeat(CheckRepeatStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
                          inspect_tracker_task, views.checkouts, RealSlotFiles(), probe,
-                         partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time, ids=NativeIds())
+                         partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time, ids=NativeIds(),
+                         discussion=open_discussion(database, store).for_task)
     return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store), checks, repair)
 
 
@@ -174,7 +171,8 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                 return
             reader = _reader(con)
             leftovers = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused, ids=NativeIds()).leftovers
-            reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen)
+            reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen,
+                                policy=known_slot_mode(views.checkouts, RealSlotFiles()))
             releaser = open_releaser(database, store, views)
             holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
                                 open_checks_releaser(database, store, views), time.time, EvidenceFiles(artifacts),
@@ -183,7 +181,8 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                 landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
                 yield RoundPorts(reads, _starting(reader, database, artifacts, store, views), open_verifier(database, store, views),
                                  releaser, open_publisher(database, store, views), holding, ready, EvidenceFiles(artifacts).log_round,
-                                 landing=landing, drain_store=DrainStore(lambda: store.shared_rw(database),
+                                 repository=partial(repository_of, views.checkouts), landing=landing,
+                                 drain_store=DrainStore(lambda: store.shared_rw(database),
                                      ids=NativeIds()), ids=NativeIds())
         finally:
             if owned:

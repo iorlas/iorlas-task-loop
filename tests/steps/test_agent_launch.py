@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from any_agent import RunOutcome, Summary
+from any_agent import LaunchInputs, LaunchSpec, OpenCodeHarness, RunOutcome, Summary
 from any_agent.access import CodexSandbox
 from any_agent.testing import FakeRun
 from doubles import FixedIds
@@ -15,9 +15,17 @@ from test_attempt import surroundings as attempt_surroundings
 from taskloop.agent_credentials import machine_credentials
 from taskloop.agents.launch import AgentLaunch, CredentialReason, CredentialsUnavailable, LaunchedAgent, LaunchFailure
 from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, encode_policy
+from taskloop.attempt_types import AttemptKey, Unsettled
+from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HarnessKind
 from taskloop.ids import NativeIds
+from taskloop.input_context import InputContext
+from taskloop.step_text import SAVED_WORK
+from taskloop.steps import failed_check_feedback, kind
+from taskloop.task import TaskInspection, TaskReference, TaskScope
+
+SAVED_SESSION = "saved-session-reference"
 
 
 def setting(harness: HarnessKind, tmp_path: Path) -> AgentSetting:
@@ -64,19 +72,244 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
         result.harness.cleanup()
 
 
-def test_codex_full_access_asks_for_no_sandbox_and_no_probe(tmp_path: Path) -> None:
+def assert_disposition_guidance(text: str, step: str, success: str) -> None:
+    assert f"answer `{success}`" in text
+    assert f"With `{success}`, list in `paths` every file" in text
+    assert "one-line commit `message`; the factory commits exactly those paths." in text
+    assert f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`" in text
+    assert SAVED_WORK in text
+    if step == "plan":
+        assert "`docs/design/tl-1/plan.md`" in text
+        assert ("If the assessed plan is still valid for the task and code as they are now, "
+                "change nothing and answer `unchanged`") in text
+        assert "If you could not finish planning, answer `incomplete` and explain why in `explanation`" in text
+        assert "If the task cannot be planned as written" in text
+        assert "answer `needs_owner` and say in `explanation` what the owner must decide" in text
+        assert "the expected or null `plan_path`" in text
+    else:
+        assert "If the code already does what the plan asks, change nothing and answer `unchanged`" in text
+        assert "If you could not finish, answer `incomplete`" in text
+        assert "if the plan cannot be implemented as written or needs a decision, answer `needs_owner`; say why" in text
+        assert "In `explanation`, name each command you ran and how it ended, and every test file you added." in text
+        assert "the answer's paths list must not contain any plan.md" in text
+
+
+@pytest.mark.parametrize("harness", list(HarnessKind))
+@pytest.mark.parametrize(("step", "unrecorded", "failed_check"), [
+    pytest.param("plan", None, False, id="plan-initial"),
+    pytest.param("plan", False, False, id="plan-recorded-leftovers"),
+    pytest.param("plan", True, False, id="plan-unrecorded-leftovers"),
+    pytest.param("implement", None, False, id="implement-initial"),
+    pytest.param("implement", False, False, id="implement-recorded-leftovers"),
+    pytest.param("implement", True, False, id="implement-unrecorded-leftovers"),
+    pytest.param("implement", None, True, id="implement-failed-check"),
+])
+def test_dispatched_step_inputs_carry_their_answer_contract(
+    tmp_path: Path, harness: HarnessKind, step: str, unrecorded: bool | None, failed_check: bool,
+) -> None:
+    task = TaskInspection(TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "Persist widgets.",
+                          "Widgets survive restart.", (), "in_progress", "taskloop")
+    context = InputContext("a" * 40, ("just check", "just test"), "task: Work to accomplish.", ())
+    operation = kind(step)
+    rules = operation.rules(task.reference.task_id)
+    initial = operation.input_text(task, rules, context)
+    prompt = initial
+    if failed_check:
+        found = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
+                            argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
+        prompt = failed_check_feedback(found, initial, "nonce")
+    elif unrecorded is not None:
+        prompt = operation.feedback(Unsettled("uncommitted", ("?? widget.txt",)), rules, 1, initial, "nonce",
+                                    unrecorded=unrecorded)
+        assert ("Nothing of attempt 1 was committed" in prompt) is unrecorded
+    assert prompt.endswith(initial)
     files = EvidenceFiles(tmp_path)
-    schema, out = files.prepare(KEY, {"type": "object", "properties": {}})
-    full = AgentSetting(model="chosen", access=CodexPolicy(sandbox=CodexSandbox.DANGER_FULL_ACCESS))
-    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", {"HOME": str(tmp_path)}), ids=NativeIds())
-    result = adapter.build(full, tmp_path / "slot", True, files.launch_root(KEY), schema, out, "Task input")
+    schema, out = files.prepare(KEY, operation.answer_schema)
+    result = AgentLaunch(lambda _kind: (f"/bin/{harness}", {"HOME": str(tmp_path)}), ids=FixedIds()).build(
+        setting(harness, tmp_path), tmp_path / "slot", operation.environment, files.launch_root(KEY), schema, out, prompt,
+    )
+    assert isinstance(result, LaunchedAgent)
+    try:
+        delimiter = "\nReturn exactly one JSON object satisfying this answer schema:\n"
+        dispatched = result.spec.stdin
+        assert dispatched.count(delimiter) == 1
+        original, _, appendix = dispatched.rpartition(delimiter)
+        assert original == prompt
+        contract = json.loads(appendix)
+        assert contract == json.loads(Path(schema).read_text()) == operation.answer_schema
+        keys = {"disposition", "paths", "message", "explanation"}
+        success = "planned" if step == "plan" else "implemented"
+        if step == "plan":
+            keys.add("plan_path")
+        assert set(contract["properties"]) == set(contract["required"]) == keys
+        assert contract["properties"]["disposition"]["enum"] == [success, "unchanged", "incomplete", "needs_owner"]
+        assert_disposition_guidance(original, step, success)
+    finally:
+        result.harness.cleanup()
+
+
+@pytest.mark.parametrize("harness", list(HarnessKind))
+@pytest.mark.parametrize("prepared", [False, True])
+def test_native_continuation_keeps_the_saved_session(tmp_path: Path, harness: HarnessKind, prepared: bool) -> None:
+    files = EvidenceFiles(tmp_path)
+    contract = {"type": "object", "properties": {}}
+    schema, out = files.prepare(KEY, contract)
+    root = files.launch_root(KEY)
+    slot = tmp_path / "slot"
+    credentials = (f"/bin/{harness}", {"HOME": str(tmp_path)})
+    ids = FixedIds()
+    result = AgentLaunch(lambda _kind: credentials, ids=ids).build(
+        setting(harness, tmp_path), slot, prepared, root, schema, out, "Continue task", resume=SAVED_SESSION,
+    )
     assert isinstance(result, LaunchedAgent)
     try:
         argv = result.spec.argv
-        assert result.probe is None and argv[argv.index("-s") + 1] == "danger-full-access"
-        assert 'approval_policy="never"' in argv and not any("sandbox_workspace_write" in item for item in argv)
+        assert ids.sessions == [] and result.harness.evidence.ref == SAVED_SESSION
+        assert result.credentials == credentials and result.spec.cwd == str(slot)
+        expected = "Continue task\nReturn exactly one JSON object satisfying this answer schema:\n" + Path(schema).read_text()
+        assert result.spec.stdin == expected
+        assert argv[0] == credentials[0] and "chosen" in argv
+        if harness is HarnessKind.CODEX:
+            assert argv[1:3] == ["exec", "resume"] and argv[-2:] == [SAVED_SESSION, "-"]
+            assert argv[argv.index("--output-schema") + 1] == schema and argv[argv.index("-o") + 1] == out
+            assert 'model_reasoning_effort="medium"' in argv and (result.probe is not None) is prepared
+            result.harness.parse_line(json.dumps({"type": "thread.started", "thread_id": SAVED_SESSION}))
+        elif harness is HarnessKind.CLAUDE:
+            assert argv[argv.index("--resume") + 1] == SAVED_SESSION and "--session-id" not in argv
+            assert argv[argv.index("--permission-mode") + 1] == "dontAsk" and "--json-schema" in argv
+            assert json.loads(argv[argv.index("--settings") + 1]) == {"env": {"OPAQUE": "value"}}
+        else:
+            assert argv[argv.index("--session") + 1] == SAVED_SESSION
+            assert Path(result.spec.env["SHELL"]) == root / f"opencode-shell-{SAVED_SESSION[:8]}.sh"
+            assert "edit" not in json.loads(result.spec.env["OPENCODE_CONFIG_CONTENT"])["permission"]
+        assert result.harness.summary(0, "", "", None, False).res["ref"] == SAVED_SESSION
     finally:
         result.harness.cleanup()
+
+
+@pytest.mark.parametrize("harness", list(HarnessKind))
+def test_ordinary_builds_allocate_fresh_sessions(tmp_path: Path, harness: HarnessKind) -> None:
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, {"type": "object"})
+    ids = FixedIds()
+    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", {"HOME": str(tmp_path)}), ids=ids)
+    for _ in range(2):
+        result = adapter.build(setting(harness, tmp_path), tmp_path, False, files.launch_root(KEY), schema, out, "Task")
+        assert isinstance(result, LaunchedAgent)
+        try:
+            assert not {"resume", "--resume", "--session"}.intersection(result.spec.argv)
+            expected_ref = ids.sessions[-1] if harness is HarnessKind.CLAUDE else None
+            assert result.harness.evidence.ref == expected_ref
+        finally:
+            result.harness.cleanup()
+    assert len(ids.sessions) == len(set(ids.sessions)) == 2
+
+
+@pytest.mark.parametrize("sandbox", [CodexSandbox.WORKSPACE_WRITE, CodexSandbox.DANGER_FULL_ACCESS])
+@pytest.mark.parametrize("prepared", [False, True])
+@pytest.mark.parametrize("host_tmp", [None, "/host/scratch"], ids=["unset", "conflicting_host"])
+@pytest.mark.parametrize("resume", [None, SAVED_SESSION])
+@pytest.mark.parametrize("limit", [None, 100000])
+def test_codex_launch_limits_automatic_context_and_preserves_access(
+    tmp_path: Path, sandbox: CodexSandbox, prepared: bool, host_tmp: str | None, resume: str | None,
+    limit: int | None,
+) -> None:
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, {"type": "object", "properties": {}})
+    chosen = AgentSetting(model="chosen", access=CodexPolicy(sandbox=sandbox), compaction_token_limit=limit)
+    credentials = {"HOME": str(tmp_path)}
+    if host_tmp is not None:
+        credentials["TMPDIR"] = host_tmp
+    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", credentials), ids=NativeIds())
+    slot = tmp_path / "slots" / "repo" / "s1"
+    result = adapter.build(chosen, slot, prepared, files.launch_root(KEY), schema, out, "Task input", resume=resume)
+    assert isinstance(result, LaunchedAgent)
+    try:
+        argv = result.spec.argv
+        settings = dict(item.split("=", 1) for index, item in enumerate(argv) if index and argv[index - 1] == "-c")
+        compaction = [item for item in argv if item.startswith("model_auto_compact_token_limit=")]
+        assert compaction == ([] if limit is None else [f"model_auto_compact_token_limit={limit}"])
+        assert settings["skills.include_instructions"] == "false"
+        assert settings["features.multi_agent"] == "false"
+        assert settings["features.recommended_plugins"] == "false"
+        prefix = "shell_environment_policy.set."
+        shell_env = {key.removeprefix(prefix): json.loads(value) for key, value in settings.items() if key.startswith(prefix)}
+        expected = {"TMPDIR": str(slot.parent / ".t" / "s1"),
+                    "UV_CACHE_DIR": str(slot.parent / ".env" / "s1" / "uv-cache"),
+                    "UV_TOOL_DIR": str(slot.parent / ".env" / "s1" / "uv-tools"), "UV_OFFLINE": "1"}
+        assert shell_env == (expected if prepared else {})
+        assert result.spec.env == credentials
+        if resume is None:
+            assert argv[argv.index("-s") + 1] == sandbox
+        else:
+            assert json.loads(settings["sandbox_mode"]) == sandbox and "-s" not in argv
+        assert 'approval_policy="never"' in argv and "tool_output_token_limit=3000" in argv
+        assert "--ignore-user-config" in argv and "--ignore-rules" in argv
+        if sandbox is CodexSandbox.DANGER_FULL_ACCESS:
+            assert result.probe is None and not any("sandbox_workspace_write" in item for item in argv)
+        else:
+            assert (result.probe is not None) is prepared
+            assert json.loads(settings["sandbox_workspace_write.writable_roots"]) == (list(expected.values())[:3] if prepared else [])
+            assert settings["sandbox_workspace_write.network_access"] == "false"
+            assert settings["sandbox_workspace_write.exclude_slash_tmp"] == "true"
+            assert settings["sandbox_workspace_write.exclude_tmpdir_env_var"] == "true"
+    finally:
+        result.harness.cleanup()
+
+
+def test_consecutive_compaction_overrides_are_isolated_and_leave_user_config_untouched(tmp_path: Path) -> None:
+    user_config = tmp_path / ".codex" / "config.toml"
+    user_config.parent.mkdir()
+    original = "model_auto_compact_token_limit = 250000\n"
+    user_config.write_text(original)
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, {"type": "object"})
+    adapter = AgentLaunch(lambda _kind: ("/bin/codex", {"HOME": str(tmp_path)}), ids=NativeIds())
+    for limit in (100000, 120000, None):
+        chosen = AgentSetting(compaction_token_limit=limit)
+        result = adapter.build(chosen, tmp_path / "slot", False, files.launch_root(KEY), schema, out, "Task input")
+        assert isinstance(result, LaunchedAgent)
+        try:
+            overrides = [item for item in result.spec.argv if item.startswith("model_auto_compact_token_limit=")]
+            assert overrides == ([] if limit is None else [f"model_auto_compact_token_limit={limit}"])
+            assert user_config.read_text() == original
+        finally:
+            result.harness.cleanup()
+
+
+@pytest.mark.parametrize("harness", list(HarnessKind))
+@pytest.mark.parametrize("resume", ["", " ", "saved session", "saved\n", "\tsaved", "--last", "-session"])
+def test_invalid_continuation_is_explained_without_allocating_a_session(
+    tmp_path: Path, harness: HarnessKind, resume: str,
+) -> None:
+    ids = FixedIds()
+    result = AgentLaunch(lambda kind: (f"/bin/{kind}", {}), ids=ids).build(
+        setting(harness, tmp_path), tmp_path, False, tmp_path, "unused", "unused", "Task", resume=resume,
+    )
+    assert isinstance(result, LaunchFailure) and result.reason == "launch:ValueError"
+    assert "session reference" in result.explanation and ids.sessions == []
+
+
+@pytest.mark.parametrize("resume", [None, SAVED_SESSION])
+def test_failed_preparation_cleans_up_harness_resources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, resume: str | None) -> None:
+    launch_spec = OpenCodeHarness.launch_spec
+    shells: list[Path] = []
+
+    def fail_after_preparation(harness: OpenCodeHarness, inputs: LaunchInputs) -> LaunchSpec:
+        spec = launch_spec(harness, inputs)
+        shell = Path(spec.env["SHELL"])
+        assert shell.exists()
+        shells.append(shell)
+        raise ValueError("preparation failed")
+
+    monkeypatch.setattr(OpenCodeHarness, "launch_spec", fail_after_preparation)
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, {"type": "object"})
+    result = AgentLaunch(lambda _kind: ("/bin/opencode", {"HOME": str(tmp_path)}), ids=FixedIds()).build(
+        setting(HarnessKind.OPENCODE, tmp_path), tmp_path, False, files.launch_root(KEY), schema, out, "Task", resume=resume,
+    )
+    assert isinstance(result, LaunchFailure) and result.reason == "launch:ValueError" and result.explanation
+    assert len(shells) == 1 and not shells[0].exists()
 
 
 @pytest.mark.parametrize("harness", [HarnessKind.CLAUDE, HarnessKind.OPENCODE])

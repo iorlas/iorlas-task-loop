@@ -14,13 +14,18 @@ from any_agent import (
     RunOutcome,
     decode_answer,
 )
+from git_porcelain import Repo
 
 from taskloop.agents.launch import AgentLaunch, LaunchFailure
+from taskloop.agents.stop import AgentStops
+from taskloop.agents.stop_store import StopStore
+from taskloop.answer_failures import AnswerFailure, AnswerFailureData, AnswerRule
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_result import collect, report
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     Admission,
+    Answer,
     AnswerState,
     AttemptKey,
     AttemptRecord,
@@ -38,8 +43,13 @@ from taskloop.attempt_types import (
 from taskloop.command_sink import CommandSink, WatchedHooks
 from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.git_views import GitProfileFiles
+from taskloop.input_context import InputError, refresh
+from taskloop.input_context import read as read_context
+from taskloop.merge.prepare import SourcePreparation
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
+from taskloop.recovery.execution_models import Callback
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
 from taskloop.steps import kind
 
@@ -59,6 +69,7 @@ class Attempts:
         slot_files: SlotFiles,
         registration_store: AttemptStore | None = None,
         environment: Preparation | None = None,
+        source_preparation: SourcePreparation | None = None,
     ) -> None:
         """`registration_store` serves only the harness registration write (composition bounds its busy wait); default `store`.
         `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot. `environment`
@@ -68,6 +79,7 @@ class Attempts:
         self.execution, self.clock, self.checkouts, self.slot_files = execution, clock, checkouts, slot_files
         self.registration_store = store if registration_store is None else registration_store
         self.environment = environment
+        self.source_preparation = source_preparation
 
     def collect(self, key: AttemptKey) -> AttemptResult:
         return collect(self.store, key)
@@ -90,13 +102,13 @@ class Attempts:
         except StoreRefused as error:
             return AttemptResult("refused", str(error))
 
-    def capture(self, pending: PendingResult) -> CaptureResult:
+    def capture(self, pending: PendingResult, callback: Callback | None = None) -> CaptureResult:
         """Retry the unfinished DB capture of returned facts; never runs the agent."""
-        result, pending = self._capture(pending)
+        result, pending = self._capture(pending, callback)
         if result.status in ACCEPTED:
             # on failure the captured facts stay validation_pending; a later execute finishes the phase without the agent
             with suppress(StoreUnavailable, StoreRefused):
-                self._validate(pending.admission, pending.evidence, pending.raw.summary.text)
+                self._validate(pending.admission, pending.evidence, pending.raw.summary.text, callback)
         return result
 
     def _resume(self, key: AttemptKey, stored: StoredExecution) -> AttemptResult:
@@ -105,28 +117,29 @@ class Attempts:
         record = self.store.load(key)
         if record is None:
             return AttemptResult("refused", "absent")
+        callback = self.store.callback(key)
         if stored.session_state in ("pending", "fault"):
-            stored = self._refresh(record, stored)
+            stored = self._refresh(record, stored, callback)
         if stored.answer.kind != "validation_pending":
             return report(stored)
         try:
             text = self.files.read(stored.evidence.answer)
         except EvidenceError:
             return AttemptResult("unavailable", "evidence", stored)
-        return self._answered(record.admission, stored.evidence, text)
+        return self._answered(record.admission, stored.evidence, text, callback)
 
-    def _refresh(self, record: AttemptRecord, stored: StoredExecution) -> StoredExecution:
+    def _refresh(self, record: AttemptRecord, stored: StoredExecution, callback: Callback | None = None) -> StoredExecution:
         """Upgrade a stored pending/fault session state only on evidence: a recorded conflict, a reported session that is
         now recorded, or a session already accepted on the attempt. Otherwise it stays as it was."""
         if record.session_conflict:
             session_state = "conflict"
         elif stored.facts.session is not None:
-            session_state = reconcile(self.store, record.admission, SessionInput(), stored.facts)
+            session_state = reconcile(self.store, record.admission, SessionInput(), stored.facts, callback)
         elif record.session_ref is not None:
             session_state = "complete"
         else:
             return stored
-        self.store.capture(record.admission, None, stored.facts, stored.evidence, session_state)
+        self.store.capture(record.admission, None, stored.facts, stored.evidence, session_state, callback)
         return self.store.collect(record.admission.key) or stored
 
     def _refusal(self, admission: Admission, me: EntryIdentity) -> str | None:
@@ -158,21 +171,46 @@ class Attempts:
             base = self._prepared(record, renew, credentials, probe)
             if isinstance(base, AttemptResult):
                 return base
-            self.registration_store.warm()  # the first registration open runs here, never inside the harness registration window
-            if self.store.dispatch(record, base.head) == "conflict":
-                return AttemptResult("pending", "dispatching")
+            spec = self._context(admission, base, spec)
+            if isinstance(spec, AttemptResult):
+                return spec
             running = True
-            return self._run(admission, harness, spec)
+            return self._dispatch(record, base, harness, spec)
         finally:
             if not running:
                 harness.cleanup()
+
+    def _dispatch(self, record: AttemptRecord, base: Prepared, harness: Harness, spec: LaunchSpec) -> AttemptResult:
+        running = False
+        try:
+            self.registration_store.warm()
+            if self.store.dispatch(record, base.head) == "conflict":
+                return AttemptResult("pending", "dispatching")
+            running = True
+            return self._run(record.admission, harness, spec)
+        finally:
+            if not running:
+                harness.cleanup()
+
+    def _context(self, admission: Admission, base: Prepared, spec: LaunchSpec) -> LaunchSpec | AttemptResult:
+        try:
+            path = Path(admission.slot_path)
+            def pinned(root: Path, /, *, git_dir: Path | None = None) -> Repo:
+                return self.checkouts(root, git_dir=base.gitdir)
+            context = read_context(GitProfileFiles(path, pinned), base.head)
+            spec = replace(spec, stdin=refresh(spec.stdin, context))
+            self.files.put_launched_input(admission.key, spec.stdin)
+            return spec
+        except (InputError, EvidenceError, OSError) as error:
+            return AttemptResult("refused", "input", explanation=str(error))
 
     def _prepared(
         self, record: AttemptRecord, renew: Renew | None, credentials: Launch, probe: tuple[str, ...] | None
     ) -> Prepared | AttemptResult:
         """The slot on its branch (`prepare.base`), then, for a kind with `environment`, its setup sequence with the
         credentials' executable and scrubbed environment."""
-        base = prepared_base(self.checkouts, self.slot_files, record, self.clock)
+        base = (prepared_base(self.checkouts, self.slot_files, record, self.clock) if self.source_preparation is None else
+                self.source_preparation.prepare(record, renew, credentials, probe))
         if isinstance(base, AttemptResult) or not kind(record.admission.step).environment:
             return base
         if self.environment is None or renew is None:
@@ -209,7 +247,9 @@ class Attempts:
         self, admission: Admission, harness: Harness, spec: LaunchSpec, remaining: float
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
         latch = SessionLatch(self.store, admission)
+        stops = AgentStops(StopStore(self.registration_store.connect, self.registration_store.begin), admission, self.clock)
         hooks = WatchedHooks(started=registration_hook(self.registration_store, admission, self.clock), ref=latch.observe, unattended=False,
+                             before_stop=stops.before, after_stop=stops.after,
                              live=CommandSink(self.files, admission.key, self.clock))
         try:
             return self.execution(harness, spec, remaining, hooks), latch.snapshot()
@@ -224,47 +264,63 @@ class Attempts:
         finally:
             harness.cleanup()
 
-    def _capture(self, pending: PendingResult) -> tuple[CaptureResult, PendingResult]:
+    def _capture(self, pending: PendingResult, callback: Callback | None = None) -> tuple[CaptureResult, PendingResult]:
         """Capture evidence files, then facts with answer=validation_pending, before any answer decoding."""
         admission, evidence = pending.admission, pending.evidence
         if evidence is None:
             try:
-                evidence = self.files.capture(admission.key, pending.raw)
+                evidence = (self.files.capture(admission.key, pending.raw) if callback is None
+                            else self.files.capture(admission.key, pending.raw, callback))
             except EvidenceError:
                 return CaptureResult("unavailable", "evidence"), pending
             pending = replace(pending, evidence=evidence)
+        if callback is not None and evidence != self.files.capture_refs(admission.key, pending.raw, callback):
+            return CaptureResult("conflict", "evidence"), pending
         try:
             facts = pending.facts or execution_facts(pending.raw)
         except Exception as error:  # a projection fault must not lose the returned outcome: its evidence is already written
             return CaptureResult("unavailable", "projection:" + type(error).__name__), pending
         pending = replace(pending, facts=facts)
-        session_state = reconcile(self.store, admission, pending.sessions, facts)
+        session_state = reconcile(self.store, admission, pending.sessions, facts, callback)
         try:
-            status = self.store.capture(admission, pending.raw.worker, facts, evidence, session_state)
+            status = self.store.capture(admission, pending.raw.worker, facts, evidence, session_state, callback)
         except StoreUnavailable:
             return CaptureResult("unavailable", "store"), pending
         except StoreRefused as error:
             return CaptureResult("conflict", str(error)), pending
         return CaptureResult(status), pending
 
-    def _answered(self, admission: Admission, evidence: Evidence | None, text: str) -> AttemptResult:
-        if self._validate(admission, evidence, text) == "conflict":
+    def _answered(self, admission: Admission, evidence: Evidence | None, text: str, callback: Callback | None = None) -> AttemptResult:
+        if self._validate(admission, evidence, text, callback) == "conflict":
             return AttemptResult("conflict", "answer")
         stored = self.store.collect(admission.key)
         return AttemptResult("unavailable", "collect") if stored is None else report(stored)
 
-    def _validate(self, admission: Admission, evidence: Evidence | None, text: str) -> str:
+    def _validate(self, admission: Admission, evidence: Evidence | None, text: str, callback: Callback | None = None) -> str:
         """The released strict decoder plus the step kind's pure decoder; decoder faults propagate."""
         if evidence is None:
             return "conflict"
         step = kind(admission.step)
         rules = step.rules(admission.task.task_id)
-        answer = decode_answer(text, lambda value: step.decode(value, rules))
+
+        def validate(value: object) -> Answer | AnswerFailure:
+            try:
+                return step.decode(value, rules)
+            except AnswerFailure as failure:
+                return failure
+
+        answer = decode_answer(text, validate)
         if isinstance(answer, DecodedAnswer):
             value = answer.value
-            state = AnswerState("valid", value.disposition, value.effect, value.paths, value.message)
+            if isinstance(value, AnswerFailure):
+                state = AnswerState("schema_invalid", failure=value.data)
+            else:
+                state = AnswerState("valid", value.disposition, value.effect, value.paths, value.message)
         elif isinstance(answer, InvalidAnswer):
-            state = AnswerState("json_invalid" if answer.kind == "json" else "schema_invalid")
+            if answer.kind != "json":
+                raise ValueError("Unexpected answer decoder failure: " + answer.reason)
+            failure = AnswerFailureData(rule=AnswerRule.JSON, explanation="Answer must be one complete strict JSON value: " + answer.reason)
+            state = AnswerState("json_invalid", failure=failure)
         else:
-            state = AnswerState("missing")
-        return self.store.answer(admission, evidence, state)
+            state = AnswerState("missing", failure=AnswerFailureData(rule=AnswerRule.MISSING, explanation="Answer must not be empty"))
+        return self.store.answer(admission, evidence, state, callback)

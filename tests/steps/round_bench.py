@@ -16,6 +16,7 @@ from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from doubles import Environment, NoChecks, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitResult, AttemptAdmission
@@ -32,9 +33,10 @@ from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
 from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
+from taskloop.merge.prepare import SourcePreparation
 from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, start, verify_task
 from taskloop.publish import BranchPublish
-from taskloop.round import NextRequest, RoundPorts, run_round
+from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import SlotRelease
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
@@ -75,7 +77,7 @@ class Tracker:
         self.comments: list[tuple[str, str]] = []
         self.holds: list[str] = []
 
-    def labels(self, _root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(self, _root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         """5.2: nothing written for a missing or closed task or another actor's; else `held` added and `label` removed."""
         self.holds.append(f"labels {task_id} {label}")
         found = self.beads.get(task_id)
@@ -144,8 +146,9 @@ class Factory:
     once; `failing` answers the next launch instead, with nothing run (an entry that never started)."""
 
     def __init__(self, con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, files: SlotFiles,
-                 tracker: Tracker) -> None:
-        con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.repo.identity().key, str(slot.path)))
+                 tracker: Tracker, *, adopted: bool = False) -> None:
+        if not adopted:
+            con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.repo.identity().key, str(slot.path)))
         self.root = slot.path.parent
         self.con, self.tmp, self.slot, self.checkouts, self.files, self.tracker = con, tmp_path, slot, checkouts, files, tracker
         self.store = AttemptStore(lambda: con)
@@ -156,6 +159,7 @@ class Factory:
         self.last = Round("tasks", ())
         self.during: Callable[[], object] = lambda: None
         self.ran: list[str] = []  # each launched body's result
+        self.merge_before_dispatch = False
 
     def adopt(self, name: str) -> None:
         """One more slot, made and adopted as a person does: detached at the repository's HEAD."""
@@ -171,15 +175,21 @@ class Factory:
         key = found[0]
         self.store.register_entry(key, ENTRY, self.now)  # a relaunch keeps the identity registered first
         step = self.store.step_of(key.attempt_id)
+        evidence, agent = EvidenceFiles(self.tmp), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds())
+        environment = self.environment.preparation()
+        preparation = (SourcePreparation(self.store, self.checkouts, self.checkouts, self.files, lambda: self.now,
+                                        environment, agent, evidence, self.agents[task_id, step or ""], lambda _worker: True)
+                       if self.merge_before_dispatch else None)
         attempts = Attempts(
             self.store,
-            EvidenceFiles(self.tmp),
-            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            evidence,
+            agent,
             self.agents[task_id, step or ""],
             lambda: self.now,
             self.checkouts,
             self.files,
-            environment=self.environment.preparation(),
+            environment=environment,
+            source_preparation=preparation,
         )
         found = attempts.execute(key, ENTRY, lambda: "held")
         self.ran.append(f"{found.status}:{found.reason}")
@@ -220,7 +230,7 @@ class Factory:
         publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds())
         holding = self.holding(reads)
         return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker,
-            self.lines.append, ids=NativeIds())
+            self.lines.append, repository=partial(repository_of, self.checkouts), ids=NativeIds())
 
     def round(
         self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto", running: int = 10
@@ -293,7 +303,7 @@ def scripts(factory: Factory, slot: FakeWorktree, *task_ids: str) -> None:
         plan, code, test = f"docs/design/{task_id}/plan.md", f"src/{task_id}.py", f"tests/test_{task_id}.py"
         factory.agents[task_id, "plan"] = scripted(
             slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
-            {plan: "# Plan\n"})
+            {plan: PLAN_TEXT})
         factory.agents[task_id, "implement"] = scripted(
             slot.repo, {"disposition": "implemented", "paths": [code, test], "message": "Add it", "explanation": "ran just check"},
             {code: "X = 1\n", test: "def test_x() -> None: ...\n"})

@@ -5,6 +5,7 @@ next round, a refusal only a person decides is reported and leaves the task wait
 
 import json
 from collections.abc import Generator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ from test_checks_round import LAND_LINE, Checking, implemented
 from taskloop.attempt_types import SlotFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.land import How, LandRequest
-from taskloop.land_mode import cached_mode, known_mode, land_mode
+from taskloop.land_mode import known_mode, land_mode
 from taskloop.operations import Failed
 from taskloop.profile import PROFILE_PATH, LandMode
 from taskloop.round_land import Landing
@@ -30,6 +31,7 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(PROFILE_PATH, json.dumps(MAIN_PROFILE))
     assert isinstance(root.record("profile", paths="all"), Recorded)
+    root.push("main")
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
@@ -98,8 +100,14 @@ def test_an_unreadable_profile_lands_nothing_and_says_why_once(rig: Checking) ->
 
 
 @pytest.mark.parametrize("reason", ["conflict", "checks_failed", "remote_rejected", "branch_moved", "claim_lost"])
-def test_a_refusal_about_the_change_holds_the_task_once_with_the_cause_and_never_tries_it_again(rig: Checking, reason: str) -> None:
+@pytest.mark.parametrize("label", [None, "auto"])
+def test_a_refusal_about_the_change_holds_the_task_once_with_the_cause_and_never_tries_it_again(
+    rig: Checking, reason: str, label: str | None,
+) -> None:
     passed(rig)
+    rig.con.execute("UPDATE attempt SET label=?", (label,))
+    if label is None:
+        rig.tracker.beads["tl-1"] = replace(rig.tracker.beads["tl-1"], labels=())
     lands = Lands(LandMode.AUTO, Failed("refused", reason))
     rig.landing = lands.landing()
     assert rig.round(rig.last.written) == [LAND_LINE, ("tl-1", "check", "hold", f"held land:{reason}")]
@@ -138,8 +146,10 @@ def test_a_refusal_only_a_person_decides_is_reported_and_leaves_the_task_waiting
     assert rig.next_words() == {"tl-1": ("check", "land")} and rig.tracker.holds == []
 
 
-def test_one_land_per_round_the_oldest_passed_task_first(rig: Checking) -> None:
+@pytest.mark.parametrize("label", [None, "auto"])
+def test_one_land_per_round_the_oldest_passed_task_first(rig: Checking, label: str | None) -> None:
     passed(rig)
+    rig.con.execute("UPDATE attempt SET label=?", (label,))
     rig.adopt("s2")
     rig.tracker.beads["tl-2"] = task("tl-2")
     rig.bodies = ["passed"]
@@ -174,16 +184,3 @@ def test_the_mode_is_the_land_key_at_origin_main_fetched_now_and_manual_without_
     remote.advance("main", {PROFILE_PATH: profile("auto")})
     assert read(repo.path) is LandMode.AUTO  # a fetch each time: a landed change of the profile counts at once
     assert known_mode(views)(repo.path) is LandMode.AUTO  # the dashboard's local read of the same tracking ref
-
-
-def test_the_dashboard_asks_the_profile_again_only_after_the_cache_runs_out() -> None:
-    now, asked = [0.0], list[str]()
-
-    def read(_checkout: Path) -> LandMode | None:
-        asked.append("read")
-        return LandMode.AUTO
-
-    mode = cached_mode(read, Path("/checkout"), lambda: now[0], 30.0)
-    assert [mode(), mode()] == [LandMode.AUTO, LandMode.AUTO] and len(asked) == 1
-    now[0] = 31.0
-    assert mode() is LandMode.AUTO and len(asked) == 2

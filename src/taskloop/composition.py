@@ -24,12 +24,13 @@ from taskloop.agents.launch import AgentLaunch, Credentials
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import AttemptReads, StoreConnection
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
-from taskloop.attempt_types import Checkouts, Observe, SlotFiles
+from taskloop.attempt_types import Admission, Checkouts, Observe, SlotFiles
 from taskloop.check_admit import ChecksAdmission
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts
 from taskloop.command_sink import WatchedHooks
+from taskloop.discussion import Discussion
 from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
@@ -37,14 +38,21 @@ from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids, NativeIds
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
+from taskloop.merge.prepare import SourcePreparation
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
+from taskloop.recovery.continue_attempt import Continuation
+from taskloop.recovery.models import Claim
+from taskloop.recovery.native import NativeContinuation
+from taskloop.recovery.observe import NativeProcesses
+from taskloop.recovery.recover import Recovery
+from taskloop.recovery.store import RecoveryStore
 from taskloop.setup_store import SetupSeen, SetupStore
 from taskloop.slot_env import RealEnvFiles, sandbox_probe, setup_process
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_release import Scratch, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
-from taskloop.tracker_client import inspect_tracker_task, tracker_claims
+from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_discussion
 from taskloop.verifier import Verifier
 
 
@@ -71,9 +79,27 @@ def _environment(setup: SetupStore, database: Path, artifacts: Path, views: GitV
     ))
 
 
+def open_recovery_registration(database: Path) -> RecoveryStore:
+    """The bounded registration writer for a caller holding a durable recovery execution intent."""
+    registration, bounded = _registration(database)
+    return RecoveryStore(bounded, registration.begin_immediate)
+
+
 def _run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
     """The shelf's `run`, with the live sink the attempt's hooks carry (`command_sink.WatchedHooks`)."""
     return run(harness, spec, timeout, hooks, live=hooks.live if isinstance(hooks, WatchedHooks) else None)
+
+
+def open_continuation(
+    database: Path, artifacts: Path, views: GitViews, claim: Callable[[Admission], Claim],
+    credentials: Credentials = machine_credentials,
+) -> Continuation:
+    """Saved-session continuation with native observations and an injected, read-only claim observation."""
+    store = Store(SCHEMA)
+    recovery = Recovery(RecoveryStore(lambda: store.shared_rw(database), store.begin_immediate), NativeProcesses(), claim,
+                        slot_lock.hold, time.time, NativeIds())
+    attempts = open_attempts(database, artifacts, views, credentials)
+    return Continuation(recovery, attempts, NativeContinuation(attempts, open_recovery_registration(database)))
 
 
 def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials: Credentials = machine_credentials) -> Attempts:
@@ -82,16 +108,21 @@ def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials:
     The harness registration write goes through its own store's bounded connections (`_registration`)."""
     store, (registration, bounded) = Store(SCHEMA), _registration(database)
     setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
+    attempts = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
+    environment = _environment(setup, database, artifacts, views)
+    agent, evidence = AgentLaunch(credentials, ids=NativeIds()), EvidenceFiles(artifacts)
     return Attempts(
-        AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
-        EvidenceFiles(artifacts),
-        AgentLaunch(credentials, ids=NativeIds()),
+        attempts,
+        evidence,
+        agent,
         _run,
         time.time,
         views.checkouts,
         RealSlotFiles(),
         registration_store=AttemptStore(bounded, registration.begin_immediate),
-        environment=_environment(setup, database, artifacts, views),
+        environment=environment,
+        source_preparation=SourcePreparation(attempts, views.checkouts, views.remotes, RealSlotFiles(), time.time,
+                                             environment, agent, evidence, _run, worker_gone),
     )
 
 
@@ -191,6 +222,11 @@ def adopt_slots(
         store.close_shared()
 
 
+def open_discussion(database: Path, store: Store) -> Discussion:
+    holds = HoldStore(lambda: store.shared_rw(database), store.begin_immediate)
+    return Discussion(tracker_discussion, holds.latest, inspect_tracker_task)
+
+
 def open_admission(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> AttemptAdmission:
     """Real wiring: per-thread shared writers on factory.db, the tracker claim, the real Git boundary, wall-clock deadlines."""
     store = store if store is not None else Store(SCHEMA)
@@ -206,14 +242,16 @@ def open_admission(database: Path, artifacts: Path, views: GitViews, store: Stor
         time.time,
         slot_lock.probe,
         RealSlotFiles(),
+        discussion=open_discussion(database, store).collect,
         ids=NativeIds(),
     )
 
 
-def open_chain(database: Path, artifacts: Path, store: Store | None = None) -> ChainAdmission:
+def open_chain(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> ChainAdmission:
     """Real wiring of the admissions that continue a task: per-thread shared writers on factory.db, wall-clock deadlines."""
     store = store if store is not None else Store(SCHEMA)
-    return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time, ids=NativeIds())
+    return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time,
+                          views.checkouts, RealSlotFiles(), ids=NativeIds())
 
 
 def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> NextAdmission:
@@ -223,6 +261,7 @@ def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store 
     return NextAdmission(
         lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), inspect_tracker_task, views.checkouts,
         time.time, slot_lock.probe, RealSlotFiles(),
+        discussion=open_discussion(database, store).collect,
         ids=NativeIds(),
     )
 

@@ -10,10 +10,11 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from check_repeat_bench import ASSERTION, Repairing
 from doubles import MAIN_PROFILE, FixedIds, PinnedViews
 from git_porcelain import Recorded
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRemote, FakeWorktree
 from round_bench import Tracker, scripted, scripts, task
 from sqlite_store import Store
 from test_checks_round import implemented
+from test_input_context import GLOSSARY
 
 from taskloop.admit import AdmitRefused, Admitted, Free
 from taskloop.agents.config import resolve_agents
@@ -27,9 +28,13 @@ from taskloop.check_repeat.repair import CheckRepeat
 from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_repeat.store import CheckRepeatStore
 from taskloop.command_conclusion import CommandConclusion
+from taskloop.discussion import BEGIN as DISCUSSION_BEGIN
+from taskloop.discussion import frame
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.glossary_extract import HEADING
 from taskloop.harness_choice import HarnessKind
+from taskloop.input_context import BEGIN, END
 from taskloop.launch import LaunchUnavailable
 from taskloop.operations import Failed, Round, Started, release_task, start
 from taskloop.round import NextRequest, run_round
@@ -41,7 +46,9 @@ from taskloop.steps import kind
 def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: SlotFiles) -> Generator[Repairing]:
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    root.write_file("docs/glossary.md", GLOSSARY.decode())
     assert isinstance(root.record("profile", paths="all"), Recorded)
+    root.push("main")
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
@@ -57,6 +64,21 @@ def failed(rig: Repairing, body: str = "failed") -> tuple[AttemptKey, AttemptKey
     rig.bodies = [body]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     return previous, rig.key("tl-1")
+
+
+def test_repair_sends_fresh_discussion_once_alongside_check_feedback(rig: Repairing) -> None:
+    failed(rig)
+    specs = repair_agent(rig)
+    ports = rig.starting()
+    assert isinstance(ports.check_repeat, CheckRepeat)
+    block = frame(["Author: owner; time: 2026-11-13T12:00:00Z", "Decision after failed checks"])
+    repair = replace(ports.check_repeat, discussion=lambda _reference, _root: block)
+    result = start(replace(ports, check_repeat=repair), rig.request())
+    assert isinstance(result, Started)
+    text = specs[0].stdin
+    assert text.splitlines().count(DISCUSSION_BEGIN) == text.splitlines().count(BEGIN) == 1
+    assert text.count("Decision after failed checks") == 1 and "Failed check\n" in text
+    assert "No tracker discussion." not in text
 
 
 def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
@@ -95,6 +117,16 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert 'Command argv: ["just", "test"]' in spec.stdin and all(line in spec.stdin for line in ASSERTION.splitlines())
     assert "Widget tl-1" in spec.stdin and "docs/design/tl-1/plan.md" in spec.stdin
     assert "List only your new changes" in spec.stdin
+    assert spec.stdin.count(BEGIN) == spec.stdin.count(END) == spec.stdin.count(HEADING) == 1
+    assert spec.stdin.splitlines().count("CODE MAP") == 1
+    block = spec.stdin.split(BEGIN)[1].split(END)[0]
+    glossary, code_map = block.split("\nCODE MAP\n")
+    assert "task: Work to accomplish." in glossary
+    assert code_map.splitlines().count("docs/design/tl-1/plan.md") == 1
+    assert f"Source commit: {x}" in spec.stdin and "task: Work to accomplish." in spec.stdin
+    assert "- just check\n- just test" in spec.stdin
+    assert (rig.tmp / EvidenceFiles(rig.tmp).directory(rig.store.attempts("tasks", "tl-1")[0].key) /
+            "launched-input.txt").read_text() == spec.stdin
     assert "--resume" not in spec.argv and "changed-model" not in spec.argv
     row = rig.store.attempts("tasks", "tl-1")[0]
     assert (row.number, row.previous_attempt_id, row.source_checks_id) == (2, previous.attempt_id, source.attempt_id)
@@ -252,6 +284,24 @@ def test_no_clean_slot_is_transient_and_does_not_hold_the_task(rig: Repairing) -
     assert rig.round() == [("tl-1", "implement", "repeat", "started")]
 
 
+def test_failed_check_repair_refreshes_origin_and_records_its_park_destination(rig: Repairing) -> None:
+    failed(rig)
+    repair_agent(rig)
+    repo = rig.slot.repo
+    original = dict(repo.branches())["main"]
+    origin = FakeRemote("https://example.invalid/current.git")
+    repo.add_remote("origin", origin)
+    repo.worktree(repo.path).push("main")
+    target = origin.advance("main", {"other": "New landing\n"})
+    result = start(rig.starting(), rig.request())
+    assert isinstance(result, Started)
+    row = rig.store.attempts("tasks", "tl-1")[0]
+    assert rig.store.slot_base(row.key) == target and dict(repo.branches())["main"] == original
+    assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    assert rig.slot.branch() is None
+    assert next(info.head for info in repo.worktrees() if info.path == rig.slot.path) == target
+
+
 @pytest.mark.parametrize("after", [False, True])
 def test_crash_before_or_after_admission_continues_without_spending_an_extra_attempt(
     rig: Repairing, monkeypatch: pytest.MonkeyPatch, after: bool
@@ -335,7 +385,7 @@ def test_unsafe_feedback_names_a_nearby_git_file_even_when_not_listed_in_the_ans
     rig.round()
     row = rig.store.attempts("tasks", "tl-1")[0]
     found = rig.ports().verifier.verify(row.key)
-    assert isinstance(found, Unsettled) and found.reason == "unsafe" and found.unsafe_path == path
+    assert isinstance(found, Unsettled) and found.reason == "unsafe" and found.explanations[0].path == path
     step = kind("implement")
     text = step.feedback(found, step.rules("tl-1"), 1, "Task", "NONCE", unrecorded=True)
     assert json.dumps(path, ensure_ascii=True) in text.splitlines()[0] and "\x1b" not in text
@@ -351,20 +401,23 @@ def test_status_and_dashboard_reads_only_describe_the_repeat(rig: Repairing) -> 
     assert rig.con.total_changes == before and not rig.tracker.holds
 
 
-@pytest.mark.parametrize("harness", [HarnessKind.CLAUDE, HarnessKind.OPENCODE])
+@pytest.mark.parametrize("harness", list(HarnessKind))
 def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_reopening(rig: Repairing, harness: HarnessKind) -> None:
     policy = rig.tmp / "machine-policy.json"
     policy.write_text('{"env":{"CAPTURED":"first"}}' if harness is HarnessKind.CLAUDE else '{"scratch":".kept"}')
     field = "settings_file" if harness is HarnessKind.CLAUDE else "sandbox_file"
-    settings, _sources = resolve_agents({"plan": {"model": "plan-model"}, "implement": {
-        "harness": harness.value, "model": "chosen-model", "access": {field: str(policy)}}}, rig.tmp)
+    access = {"sandbox": "workspace-write"} if harness is HarnessKind.CODEX else {field: str(policy)}
+    settings, _sources = resolve_agents({"plan": {"model": "plan-model", "compaction_token_limit": 90000}, "implement": {
+        "harness": harness.value, "model": "chosen-model", "access": access,
+        "compaction_token_limit": 100000 if harness is HarnessKind.CODEX else None}}, rig.tmp)
     request = NextRequest("tasks", "/tracker", rig.slot.repo.path, "auto", settings, Overrides(), 30)
     for _turn in range(4):
         rig.now += 1
         assert isinstance(run_round(rig.ports(), request), Round)
     rows = rig.store.attempts("tasks", "tl-1")
     assert rows[0].step == "implement" and rows[0].run == settings.implement
-    assert rows[1].run == settings.plan and not rig.environment.probes
+    assert rows[1].run == settings.plan
+    assert bool(rig.environment.probes) is (harness is HarnessKind.CODEX)
     rig.bodies = ["failed"]
     rig.now += 1
     assert isinstance(run_round(rig.ports(), request), Round)
@@ -384,6 +437,8 @@ def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_
     assert len(specs) == 1 and "chosen-model" in specs[0].argv and "changed-model" not in specs[0].argv
     if harness is HarnessKind.CLAUDE:
         assert json.loads(specs[0].argv[specs[0].argv.index("--settings") + 1]) == {"env": {"CAPTURED": "first"}}
+    if harness is HarnessKind.CODEX:
+        assert "model_auto_compact_token_limit=100000" in specs[0].argv
     assert rig.store.attempts("tasks", "tl-1")[0].run == settings.implement
 
 

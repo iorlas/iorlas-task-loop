@@ -18,7 +18,7 @@ from doubles import Environment, FakeSlotFiles, PinnedViews
 from git_porcelain import BranchHeld, GitReadFailure, Recorded, Repo, Sha
 from git_porcelain.api import TakeResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
-from sqlite_store import begin_immediate
+from sqlite_store import Store, begin_immediate
 
 from taskloop import prepare
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AttemptAdmission
@@ -28,6 +28,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import TRAILER, AttemptKey, AttemptResult, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.factory_schema import SCHEMA
 from taskloop.ids import NativeIds
 from taskloop.prepare import UNPUBLISHED, Branch, BranchRefusal, branch_refusal, named
 from taskloop.slots import SlotGit, adopt, folder_name
@@ -53,7 +54,7 @@ class CountingHarness(CodexHarness):
 @pytest.fixture
 def remote() -> FakeRemote:
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "one"})
+    found.advance("main", {"README": "one", ".task-loop.json": "{}"})
     return found
 
 
@@ -93,11 +94,11 @@ def leave(repo: FakeRepo, tmp_path: Path, name: str, start: str = "HEAD", *, ext
     return tip
 
 
-def pushed(repo: FakeRepo, tmp_path: Path) -> Sha:
+def pushed(repo: FakeRepo, tmp_path: Path, *, own: bool = False) -> Sha:
     """origin's `task/tl-1`, one commit on the current HEAD, fetched as a remote-tracking ref with no local branch."""
     other = repo.add_worktree(tmp_path / "pusher", "HEAD")
     other.checkout_new(BRANCH)
-    tip = advance(other)
+    tip = advance(other, f"Plan\n\n{TRAILER}: a1" if own else "someone's commit")
     other.push(BRANCH)
     other.park("HEAD")
     repo.drop_worktree(other.path)
@@ -106,13 +107,15 @@ def pushed(repo: FakeRepo, tmp_path: Path) -> Sha:
     return tip
 
 
-def execute(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles) -> tuple[str, str, FakeRun]:
+def execute(
+    con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, key: AttemptKey = KEY,
+) -> tuple[str, str, FakeRun]:
     agent = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
     store = AttemptStore(lambda: con)
     environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096).preparation()  # an implement attempt's setup passes
     result = Attempts(store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}),
         ids=NativeIds()), agent, lambda: 10, checkouts, files,
-                      environment=environment).execute(KEY, ENTRY, lambda: "held")
+                      environment=environment).execute(key, ENTRY, lambda: "held")
     return result.status, result.reason, agent
 
 
@@ -139,14 +142,15 @@ def test_a_ref_that_collides_with_the_branch_is_branch_name(repo: FakeRepo, tmp_
 @pytest.mark.parametrize("where", ["absent", "local", "remote"])
 def test_attempt_one_takes_its_branch_and_starts_from_what_it_holds(
     con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
-    where: Literal["absent", "local", "remote"],
+    where: Literal["absent", "local", "remote"], remote: FakeRemote,
 ) -> None:
-    """`main` moved on after the slot was parked at D. Absent: created at `main`'s tip, never at D. An existing local
+    """Origin main moved after the slot was parked at D. Absent: created at its fetched tip, never at D. An existing local
     branch that contains D is checked out as it is; a remote-tracking tip that contains D (and no local branch) is where
     the new branch starts; neither follows `main`. B is the HEAD read on the branch."""
     made = {"local": lambda: leave(repo, tmp_path, BRANCH, extra=True), "remote": lambda: pushed(repo, tmp_path)}
     existing = made[where]() if where in made else None
-    moved = on_main(repo)
+    moved = remote.advance("main", {"other": "landed"})
+    assert repo.fetch().ok
     tip = existing or moved
     status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
     assert (status, reason, len(agent.calls)) == ("pending", "verification", 1)
@@ -154,13 +158,12 @@ def test_attempt_one_takes_its_branch_and_starts_from_what_it_holds(
     assert dict(repo.branches("task/"))[BRANCH] == head(repo, slot.path)
 
 
-def test_a_new_branch_without_a_local_main_is_target_and_an_existing_one_needs_none(
+def test_new_and_existing_branches_need_no_local_main(
     con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     d = head(repo, slot.path) or ""
     repo.rename_branch("main", "trunk")
-    assert branch_refusal(repo, "tl-1", (d,)) == "target"
-    refused_untouched(con, tmp_path, checkouts, slot_files, "target")
+    assert branch_refusal(repo, "tl-1", (d,)) == Branch((d,), None, None, d)
     assert slot.branch() is None
     tip = leave(repo, tmp_path, BRANCH, extra=True)
     assert branch_refusal(repo, "tl-1", (d,)) == Branch((d,), tip, None, tip)
@@ -372,6 +375,64 @@ def slots(factory: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -
     return made
 
 
+@pytest.mark.parametrize("eligible", [True, False], ids=["resume", "refuse"])
+def test_owned_remote_work_without_rows_survives_restart_and_reevaluation(
+    repo: FakeRepo, remote: FakeRemote, root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, eligible: bool,
+) -> None:
+    """A published task survives a crash before admission commits any rows. Reopening resumes its retained tip once,
+    or refuses before claiming anything; neither path changes unrelated branches or deletes the published work."""
+    monkeypatch.setattr("taskloop.agents.launch.CodexHarness", CountingHarness)
+    monkeypatch.setattr(CountingHarness, "cleanups", [])
+    path = tmp_path / "factory.db"
+    original = Store(SCHEMA).open_rw(path)
+    assert original is not None
+    try:
+        slot, = slots(original, repo, root, 1)
+        tip = pushed(repo, tmp_path, own=True)
+        leave(repo, tmp_path, "task/tl-2", extra=True, own=False)
+        remote.advance("task/tl-3", {"user": "unrelated remote work"})
+        assert repo.fetch().ok
+        if not eligible:
+            advance(slot)  # neither the retained task source nor origin main contains this slot's base
+        assert original.execute("SELECT (SELECT count(*) FROM attempt),(SELECT count(*) FROM reservation)").fetchone() == (0, 0)
+        local = dict(repo.branches())
+        tracking = repo.refs(["refs/remotes/origin/task"])
+        published = remote.branches()
+        assert BRANCH not in local and published[BRANCH] == tip
+    finally:
+        original.close()
+
+    reopened = Store(SCHEMA).open_rw(path)
+    assert reopened is not None
+    try:
+        result, claims = admitted(reopened, repo, root, tmp_path)
+        if eligible:
+            assert isinstance(result, Admitted) and claims.calls == ["input", "claim:tl-1"]
+            key = result.key
+            assert AttemptStore(lambda: reopened).register_entry(key, ENTRY, 10) == "accepted"
+            status, reason, agent = execute(reopened, tmp_path / "artifacts", PinnedViews(repo), FakeSlotFiles(repo), key)
+            assert (status, reason, len(agent.calls)) == ("pending", "verification", 1)
+            assert slot.branch() == BRANCH and head(repo, slot.path) == tip
+            assert reopened.execute("SELECT base_commit FROM attempt").fetchall() == [(tip,)]
+            assert reopened.execute("SELECT attempt_id,generation FROM reservation").fetchall() == [
+                (key.attempt_id, key.reservation_generation)]
+            again, repeated = admitted(reopened, repo, root, tmp_path)
+            assert isinstance(again, AdmitRefused) and again.reason == "task_attempted" and repeated.calls == []
+            status, reason, agent = execute(reopened, tmp_path / "artifacts", PinnedViews(repo), FakeSlotFiles(repo), key)
+            assert (status, reason, agent.calls) == ("pending", "verification", [])
+        else:
+            for refused, refused_claims in ((result, claims), admitted(reopened, repo, root, tmp_path)):
+                assert isinstance(refused, AdmitRefused) and refused.reason == "branch_diverged"
+                assert not refused.claim_leaked and refused_claims.calls == []
+            assert reopened.execute("SELECT (SELECT count(*) FROM attempt),(SELECT count(*) FROM reservation)").fetchone() == (0, 0)
+            assert slot.branch() is None
+        assert dict(repo.branches()) == (local | {BRANCH: tip} if eligible else local)
+        assert repo.refs(["refs/remotes/origin/task"]) == tracking
+        assert remote.branches() == published
+    finally:
+        reopened.close()
+
+
 @pytest.mark.parametrize("case", ["name", "held", "diverged"])
 def test_admission_refuses_a_branch_before_its_input_claim_or_rows(
     factory: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote, root: Path, tmp_path: Path, case: str
@@ -384,7 +445,7 @@ def test_admission_refuses_a_branch_before_its_input_claim_or_rows(
         repo.fetch()
     result, claims = admitted(factory, repo, root, tmp_path, "tl..1" if case == "name" else "tl-1")
     assert isinstance(result, AdmitRefused) and result.reason == f"branch_{case}"
-    assert ("git branch -m task/tl-1 old/task/tl-1" in result.detail) is (case == "diverged")
+    assert "git branch -m" not in result.detail and "origin --delete" not in result.detail
     assert (result.slots == () and "not a slot" in result.detail) is (case == "held")  # outside the slots folder: no `adopt` advice
     assert claims.calls == [] and factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
 
@@ -436,18 +497,18 @@ def test_with_no_task_branch_a_slot_outside_mains_history_is_skipped_or_diverged
     assert isinstance(result, Admitted) and result.slot == "s2"
     advance(second)
     result, claims = admitted(factory, repo, root, tmp_path, "tl-2")
-    assert isinstance(result, AdmitRefused) and result.reason == "branch_diverged" and "your local main" in result.detail
+    assert isinstance(result, AdmitRefused) and result.reason == "branch_diverged" and "fetched origin main" in result.detail
     assert claims.calls == []
 
 
-def test_admission_without_a_local_main_is_target_before_its_input_claim_or_rows(
+def test_admission_without_a_local_main_uses_origin(
     factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
 ) -> None:
     slots(factory, repo, root, 1)
     repo.rename_branch("main", "trunk")
     result, claims = admitted(factory, repo, root, tmp_path)
-    assert isinstance(result, AdmitRefused) and result.reason == "target" and "refs/heads/main" in result.detail
-    assert claims.calls == [] and factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
+    assert isinstance(result, Admitted) and claims.calls == ["input", "claim:tl-1"]
+    assert factory.execute("SELECT slot_head FROM attempt").fetchone() == (head(repo, repo.path),)
 
 
 def on_main(repo: FakeRepo) -> Sha:

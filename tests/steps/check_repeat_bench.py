@@ -33,7 +33,7 @@ class Repairing(Checking):
         verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold, ids=NativeIds())
         repeat = StepRepeat(self.store, verifier, EvidenceFiles(self.tmp),
                             ChainAdmission(lambda: self.con, self.store.begin, EvidenceFiles(self.tmp),
-                                lambda: self.now, ids=NativeIds()), self,
+                                lambda: self.now, self.checkouts, self.files, ids=NativeIds()), self,
                             lambda _worker: True, self.observe, lambda: self.now, repeating, ids=NativeIds())
         return replace(super().starting(), check_repeat=repair, repeat=repeat)
 

@@ -139,9 +139,9 @@ def test_an_unknown_slot_or_pid_is_named_neutrally(outcome: Kept, says: str) -> 
     assert says in line and "None" not in line and "slot  " not in line
 
 
-def test_an_entry_ended_by_a_signal_is_said_so_and_its_agent_session_is_not_continued() -> None:
+def test_an_entry_signal_log_does_not_prove_its_sender_or_an_agent_stop() -> None:
     found = lines(replace(FACTS, reason="stuck:entry_lost", entry="failed terminated_by_signal"))
-    assert found[2] == "The attempt's entry was terminated by a signal; its agent was stopped with it and its session was not continued."
+    assert found[2] == "The attempt's entry was terminated by a signal; its sender is unknown."
     assert not any("terminated" in line for line in lines(replace(FACTS, entry="collected valid verify=verified")))
 
 
@@ -157,7 +157,10 @@ def test_an_entry_ended_by_a_signal_is_said_so_and_its_agent_session_is_not_cont
     ("failed:answer:schema_invalid", "did not fit the answer contract", "To try again, restore"),
     ("failed:rejected:plan_encoding", "`plan.md` is not valid UTF-8 text", "To try again, restore"),
     ("failed:rejected:plan_empty", "`plan.md` is empty", "To try again, restore"),
-    ("failed:rejected:plan_size", "over the 1 MiB limit", "To try again, restore"),
+    ("failed:rejected:plan_change_map", "Change map with a nonempty bullet list", "add the files, symbols and changes"),
+    ("failed:rejected:plan_depth", "exactly one valid depth", "one line in Header that is only"),
+    ("failed:rejected:plan_heading", "forbidden status, as built or progress heading", "remove that heading and its"),
+    ("failed:rejected:plan_size", "depth's byte cap", "remove duplicated content or split the task"),
     ("failed:rejected:plan_missing", "an `unchanged` answer needs an existing plan", "To try again, restore"),
     ("failed:rejected:commit_absent", "commit is not in the slot's repository", "To fix it, look at the task branch "
      "and the retained slot evidence"),
