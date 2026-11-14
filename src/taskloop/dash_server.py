@@ -14,6 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import override
 
+from pydantic import BaseModel
+
 from taskloop.dash_model import AttemptBody, Board, Card, FeedPage, LandDetail, TaskDetail, TrackerDetail
 from taskloop.operations import Failed
 from taskloop.round_log import IDENT
@@ -47,7 +49,13 @@ class DashPorts:
 
 
 def _message(kind: str, **fields: object) -> str:
-    return "data: " + json.dumps({"kind": kind, **fields}) + "\n\n"
+    return "data: " + json.dumps({"kind": kind, **fields}, default=_json_model) + "\n\n"
+
+
+def _json_model(value: object) -> object:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    raise TypeError(f"Cannot serialize {type(value).__name__}")
 
 
 class Channel:
@@ -160,7 +168,7 @@ def _json(found: Board | TaskDetail | TrackerDetail | AttemptBody | FeedPage | L
     if found is None:
         return NOT_FOUND
     data = found.model_dump(mode="json") if isinstance(found, LandDetail) else asdict(found)
-    return Reply(200, json.dumps(data).encode(), JSON)
+    return Reply(200, json.dumps(data, default=_json_model).encode(), JSON)
 
 
 FEED = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})/feed")

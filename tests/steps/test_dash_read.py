@@ -329,6 +329,14 @@ def test_a_command_still_running_in_an_ended_attempt_is_shown_unfinished(checkin
     assert isinstance(found, TaskDetail)
     agent = next(each for each in found.attempts if each.step == "implement")
     assert agent.state != "running" and [line.state for line in agent.feed if line.type == "command"] == ["unfinished"]
+    ports = TaskPorts(reads_of(checking), files, Tracker())
+    page = build_feed(ports, "tasks", "tl-1", "implement", 1, None)
+    assert isinstance(page, FeedPage) and [line.state for line in page.events] == ["unfinished"]
+    sink = CommandSink(files, key, lambda: 200)
+    sink.feed(events.Cmd(id="c2", text="later"))
+    follow = build_feed(ports, "tasks", "tl-1", "implement", 1, page.cursor)
+    assert isinstance(follow, FeedPage) and [line.state for line in follow.events] == ["unfinished"]
+    assert follow.cursor != page.cursor and not follow.replaced
 
 
 @pytest.mark.parametrize("released", [False, True])
@@ -419,6 +427,11 @@ def test_each_check_carries_the_end_of_its_log_passed_or_failed_and_none_when_th
     body = build_body(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1", "checks", 1)
     assert isinstance(body, AttemptBody)
     lint, test, types = body.result.checks
+    assert all(each.duration_ms is None for each in body.result.checks)
+    detail = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task.duration is None
+    checks = next(each for each in detail.attempts if each.step == "checks")
+    assert checks.duration is None and all(each.duration_ms is None for each in checks.feed)
     assert (lint.passed, lint.output, lint.block) == (True, "all clean\n", 1)
     assert not test.passed and test.output is not None and test.output.endswith("1 failed\n") and len(test.output) <= 8192
     assert types.passed and types.output is None  # its log file is gone: unavailable, never a made-up empty output

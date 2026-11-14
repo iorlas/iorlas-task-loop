@@ -9,6 +9,8 @@ from taskloop.agents.stop_text import stop_text
 from taskloop.answer_read import read as read_answer
 from taskloop.attempt_reads import AttemptRow, SlotUse, StoreUnavailable
 from taskloop.attempt_status import NEEDS_OWNER, AttemptView, StatusPorts, list_attempts
+from taskloop.dash_duration import Duration
+from taskloop.dash_duration import read as read_duration
 from taskloop.dash_model import Board, Card, Column, DashTracker, Repeat, iso
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.hold_cause import cause as hold_cause
@@ -96,7 +98,7 @@ def _ask(view: AttemptView, column: Column, files: EvidenceFiles) -> tuple[bool,
 
 def card_of(
     view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float, number: int | None = None,
-    admission: Admission | None = None,
+    admission: Admission | None = None, duration: Duration | None = None,
 ) -> Card:
     found = task_status(view, admission)
     column = column_of(view, found)
@@ -124,7 +126,13 @@ def card_of(
     return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(activity),
                 slot, cause if column == "held" else None,
                 found.land if column == "land" else None, found.status.value, words(found), ask, question, explanation,
-                iso(_waiting_since(view, found.status)))
+                iso(_waiting_since(view, found.status)), duration)
+
+
+def duration_of(view: AttemptView, row: AttemptRow | None, reads: StatusPorts, files: EvidenceFiles) -> Duration | None:
+    if row is None or view.checks is not None or view.land is not None or view.step not in ("plan", "implement"):
+        return None
+    return read_duration(reads.store, files, row, view.result)
 
 
 def _waiting_since(view: AttemptView, status: Status) -> float | None:
@@ -163,7 +171,7 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     ready = tuple(each for each in listed_ready if each.task_id not in taken)
     titles = ports.tracker.titles(tuple(sorted(taken)))
     cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now,
-             numbers.get(view.attempt_id), admission)
+             numbers.get(view.attempt_id), admission, duration_of(view, rows.get(view.attempt_id), ports.reads, ports.files))
              for view in listed.attempts]
     cards += [queued_card(each.task_id, each.title, admission) for each in ready]
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")

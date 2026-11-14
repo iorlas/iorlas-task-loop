@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from taskloop.dash_duration import Duration
 from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, LandDetail, Outcome, TaskDetail, TrackerDetail, Usage
 from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
 from taskloop.operations import Failed
@@ -59,11 +60,13 @@ class Ports:
         if (task_id, step, number) != ("tl-1", "implement", 2):
             return None
         line = FeedEvent("command", "2026-11-12T10:00:00Z", id="c1", state="running", cmd="ls")
-        return FeedPage((line,), "7:42", replaced=False, available=True) if cursor is None else FeedPage((), cursor, False, True)
+        return (FeedPage((line,), "7:42", replaced=False, available=True, duration=self.cards[0].duration) if cursor is None
+                else FeedPage((), cursor, False, True, self.cards[0].duration))
 
     def task(self, task_id: str) -> TaskDetail | Failed:
         usage = Usage(16, 13, 7, 1, 1, 1)
-        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), (), {"plan": usage}, usage)
+        return (Failed("unavailable", "store") if task_id == "broken"
+                else TaskDetail(replace(card(task_id), duration=self.cards[0].duration), (), {"plan": usage}, usage))
 
     def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
         return AttemptBody("prompt", Outcome("verified", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
@@ -214,6 +217,25 @@ def test_agent_question_fields_reach_snapshots_and_question_only_stream_updates(
     stream.close()
 
 
+def test_duration_values_reach_http_and_duration_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
+    fake, server = served
+    assert json.loads(get(server, "/api/board")[1])["tasks"][0]["duration"] is None
+    assert json.loads(get(server, "/api/tasks/tl-1")[1])["task"]["duration"] is None
+    measured = Duration(execution="initial", number=3, elapsed_ms=12500, quiet_ms=2000, frozen=False)
+    fake.cards = [replace(card(), duration=measured)]
+    assert json.loads(get(server, "/api/board")[1])["tasks"][0]["duration"] == measured.model_dump()
+    assert json.loads(get(server, "/api/tasks/tl-1")[1])["task"]["duration"] == measured.model_dump()
+    for query in ("", "?after=7:42"):
+        page = json.loads(get(server, "/api/tasks/tl-1/attempts/implement/2/feed" + query)[1])
+        assert page["duration"] == measured.model_dump()
+    stream = Stream(server)
+    frozen = measured.model_copy(update={"number": 4, "quiet_ms": None, "frozen": True})
+    fake.cards = [replace(fake.cards[0], duration=frozen)]
+    changed = part(stream.kinds({"task"})[-1]["task"])
+    assert changed["duration"] == frozen.model_dump()
+    stream.close()
+
+
 def test_factory_explanations_reach_snapshots_and_explanation_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
     fake, server = served
     fake.cards = [replace(card(), column="held", hold_cause="branch_moved", hold_explanation="The checked branch moved.")]
@@ -278,7 +300,7 @@ def test_the_feed_endpoint_answers_the_tail_then_a_follow_and_refuses_a_bad_curs
     status, body = get(server, "/api/tasks/tl-1/attempts/implement/2/feed")
     assert status == 200 and json.loads(body)["cursor"] == "7:42" and json.loads(body)["events"][0]["cmd"] == "ls"
     assert json.loads(get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=7:42")[1]) == {
-        "events": [], "cursor": "7:42", "replaced": False, "available": True}
+        "events": [], "cursor": "7:42", "replaced": False, "available": True, "duration": None}
     assert get(server, "/api/tasks/tl-1/attempts/implement/2/feed?after=junk")[0] == 400
     assert get(server, "/api/tasks/tl-1/attempts/implement/9/feed")[0] == 404
 
