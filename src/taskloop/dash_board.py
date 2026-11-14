@@ -103,6 +103,11 @@ def card_of(
     started = _started(view, row, files, column)
     quiet = now - view.last_command if isinstance(view.last_command, int) and column != "waiting" else None
     holding = row is not None and row.held and view.release is None
+    slot = view.slot if holding else None
+    if view.land is not None:
+        slot = view.land.row.slot if view.land.row.holds_slot else None
+    elif view.checks is not None:
+        slot = view.checks.row.slot if view.checks.row.released_at is None else None
     cause = view.hold.reason if view.hold is not None else view.hold_due
     rc = None if view.result.execution is None else view.result.execution.facts.rc
     stopped = stop_text(view.stop, rc)
@@ -115,7 +120,7 @@ def card_of(
                                   f"The factory held this task with recorded cause: {cause or 'unknown'}.")
     cause = stopped or cause
     return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
-                view.slot if holding else None, cause if column == "held" else None,
+                slot, cause if column == "held" else None,
                 found.land if column == "land" else None, found.status.value, words(found), ask, question, explanation)
 
 

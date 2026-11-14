@@ -304,6 +304,51 @@ def test_a_command_still_running_in_an_ended_attempt_is_shown_unfinished(checkin
     assert agent.state != "running" and [line.state for line in agent.feed if line.type == "command"] == ["unfinished"]
 
 
+@pytest.mark.parametrize("released", [False, True])
+def test_checks_cards_show_only_the_current_checks_slot(
+    checking: sqlite3.Connection, tmp_path: Path, released: bool,
+) -> None:
+    for statement in DONE:
+        checking.execute(statement)
+    checking.execute("INSERT INTO published_branch VALUES ('implement','implement-token',1,?,?,6)", (D, D))
+    checking.execute("UPDATE checks_attempt SET deadline=2000 WHERE attempt_id='checks'")
+    if released:
+        checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
+                         "WHERE attempt_id='checks'", (D,))
+        checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")
+    files = EvidenceFiles(tmp_path)
+    card, = board_of(checking, files, Tracker()).tasks
+    detail = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task == card
+    assert (card.column, card.slot) == (("land", None) if released else ("checks", "s2"))
+
+
+@pytest.mark.parametrize("assigned,released", [(True, False), (True, True), (False, False)])
+def test_land_cards_show_only_the_current_land_slot(
+    landing: sqlite3.Connection, tmp_path: Path, assigned: bool, released: bool,
+) -> None:
+    for statement in DONE:
+        landing.execute(statement)
+    landing.execute("INSERT INTO published_branch VALUES ('implement','implement-token',1,?,?,6)", (D, D))
+    landing.execute("DELETE FROM reservation WHERE attempt_id='candidate'")
+    if assigned:
+        landing.execute("INSERT INTO slot (repo_id,name,path) VALUES ('r','s3','/slots/s3')")
+        landing.execute("UPDATE land_candidate SET slot='s3' WHERE candidate_id='candidate'")
+        if released:
+            landing.execute("UPDATE land_candidate SET validation='passed',validated_at=15,released_at=16,parked=? "
+                            "WHERE candidate_id='candidate'", (D,))
+        else:
+            landing.execute("INSERT INTO reservation VALUES ('s3','r',1,'candidate')")
+    else:
+        landing.execute("UPDATE land_candidate SET slot=NULL,slot_head=NULL,deadline=NULL,validation='same_tree',validated_at=15 "
+                        "WHERE candidate_id='candidate'")
+    files = EvidenceFiles(tmp_path)
+    card, = board_of(landing, files, Tracker()).tasks
+    detail = build_task(TaskPorts(reads_of(landing), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task == card
+    assert (card.column, card.slot) == ("land", "s3" if assigned and not released else None)
+
+
 def land_of(con: sqlite3.Connection, seen: Seen) -> LandView | None:
     """The checks attempt's land as `attempt_status` reads it, its land process observed as `seen`."""
     store = AttemptStore(lambda: con)
