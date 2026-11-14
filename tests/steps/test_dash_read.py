@@ -1,14 +1,18 @@
 """The dashboard's read model (board and task detail) over the same factory.db reads as `tl step list`: display only."""
 
+import json
 import sqlite3
+from dataclasses import astuple
 from pathlib import Path
 
-from any_agent import events
+import pytest
+from any_agent import RunOutcome, Summary, events
 from conftest import DONE
 from doubles import CHECKS, REQUIRED, TARGET, D
 from sqlite_store import begin_immediate
 
 from taskloop import check_store
+from taskloop.agents.stop_models import AgentStop, Identity, StopCause, encode
 from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Seen
@@ -19,6 +23,7 @@ from taskloop.dash_board import BoardPorts, build_board
 from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, Ready, Run, TaskDetail
 from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.hold_store import HoldInsert, HoldStore
 from taskloop.land_status import LandView, land_state, land_view
 from taskloop.profile import LandMode
 
@@ -56,6 +61,97 @@ def board_of(con: sqlite3.Connection, files: EvidenceFiles, tracker: Tracker) ->
     return found
 
 
+def saved_ask(con: sqlite3.Connection, files: EvidenceFiles, key: AttemptKey = KEY, step: str = "plan",
+              text: str = "Which database?\nUse <primary>?") -> None:
+    answer = {"disposition": "needs_owner", "paths": [], "message": None, "explanation": text}
+    if step == "plan":
+        answer["plan_path"] = None
+    evidence = files.capture(key, RunOutcome(rc=0, summary=Summary(text=json.dumps(answer))))
+    refs = tuple(value for ref in astuple(evidence) for value in ref)
+    con.execute("""UPDATE attempt SET phase='captured',base_commit=?,step=?,after_commit=?,label='auto'
+        WHERE attempt_id=?""", (D, step, D if step == "implement" else None, key.attempt_id))
+    con.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,
+        disposition,effect,session_state) VALUES (?,?,?,0,0,1,1,?,?,?,?,?,?,?,?,'valid','needs_owner','none','complete')""",
+        (*astuple(key), *refs))
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+@pytest.mark.parametrize("released", [False, True])
+def test_current_agent_questions_agree_on_board_and_detail(
+    registered: sqlite3.Connection, tmp_path: Path, step: str, released: bool,
+) -> None:
+    files = EvidenceFiles(tmp_path)
+    saved_ask(registered, files, step=step)
+    if released:
+        store = HoldStore(lambda: registered)
+        hold = store.insert(HoldInsert("attempt", "attempt", "failed:needs_owner", 10))
+        store.labelled("attempt", hold.rev, "moved", 11)
+        registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,12,'unclaimed')", (D,))
+        registered.execute("UPDATE task_hold SET commenting_at=12,commented_at=13 WHERE attempt_id='attempt'")
+    card, = board_of(registered, files, Tracker()).tasks
+    detail = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task == card
+    assert (card.column, card.ask, card.question) == ("held", True, "Which database?\nUse <primary>?")
+    assert (card.slot is None) == released
+
+
+@pytest.mark.parametrize("damage", ["missing", "changed", "invalid"])
+def test_damaged_question_evidence_preserves_the_ask(
+    registered: sqlite3.Connection, tmp_path: Path, damage: str,
+) -> None:
+    files = EvidenceFiles(tmp_path)
+    saved_ask(registered, files)
+    path = files.root / files.directory(KEY) / "answer.txt"
+    if damage == "missing":
+        path.unlink()
+    else:
+        path.write_text("invalid json")
+        if damage == "invalid":
+            ref = files.capture_refs(KEY, RunOutcome(rc=0, summary=Summary(text="invalid json"))).answer
+            registered.execute("UPDATE execution SET answer_digest=?", (ref.digest,))
+    card, = board_of(registered, files, Tracker()).tasks
+    assert card.ask and card.question is None
+    detail = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task == card
+
+
+@pytest.mark.parametrize("reason", ["branch_moved", "failed:run:timeout"])
+def test_factory_holds_do_not_reuse_an_agent_question(
+    registered: sqlite3.Connection, tmp_path: Path, reason: str,
+) -> None:
+    files = EvidenceFiles(tmp_path)
+    saved_ask(registered, files)
+    HoldStore(lambda: registered).insert(HoldInsert("attempt", "attempt", reason, 10))
+    card, = board_of(registered, files, Tracker()).tasks
+    assert (card.column, card.ask, card.question, card.hold_cause) == ("held", False, None, reason)
+
+
+def test_checks_hold_does_not_reuse_its_agents_question(checking: sqlite3.Connection, tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    saved_ask(checking, files, AttemptKey("implement", "implement-token", 1), "implement")
+    HoldStore(lambda: checking).insert(HoldInsert("implement", "checks", "failed:needs_owner", 10))
+    card, = board_of(checking, files, Tracker()).tasks
+    detail = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task == card
+    assert (card.column, card.ask, card.question) == ("held", False, None)
+
+
+def test_stop_explanation_takes_precedence_over_an_agent_question(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    saved_ask(registered, files)
+    stop = AgentStop(attempt_id="attempt", dispatch_token="dispatch", generation=1,
+                     entry=Identity(pid=7, pgid=7, start="entry-start", boot="boot"),
+                     agent=Identity(pid=8, pgid=8, start="agent-start", boot="boot"),
+                     cause=StopCause.DEADLINE, requested_signal=15, requested_at=10)
+    registered.execute("INSERT INTO agent_stop VALUES (?,?)", ("attempt", encode(stop)))
+    card, = board_of(registered, files, Tracker()).tasks
+    detail = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task == card
+    assert (card.column, card.ask, card.question) == ("held", False, None)
+    assert card.hold_cause is not None and "deadline expired" in card.hold_cause
+
+
 def test_the_board_has_a_card_for_each_attempted_task_and_each_ready_task_without_one(
     registered: sqlite3.Connection, tmp_path: Path,
 ) -> None:
@@ -67,6 +163,7 @@ def test_the_board_has_a_card_for_each_attempted_task_and_each_ready_task_withou
     assert sorted(cards) == ["tl-1", "tl-2"] and board.slots == ("s1",)
     assert (cards["tl-1"].column, cards["tl-1"].title, cards["tl-1"].slot, cards["tl-1"].attempt) == ("plan", "Title of tl-1", "s1", 1)
     assert cards["tl-1"].step_started_at is not None and cards["tl-1"].repeat is None and cards["tl-1"].hold_cause is None
+    assert not cards["tl-1"].ask and cards["tl-1"].question is None
     assert (cards["tl-2"].column, cards["tl-2"].title, cards["tl-2"].attempt, cards["tl-2"].slot) == ("waiting", "Second", 0, None)
     assert cards["tl-2"].step_started_at == "2026-11-12T09:30:00Z"
 

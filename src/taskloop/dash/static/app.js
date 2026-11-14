@@ -18,6 +18,7 @@ let source = null;
 const rects = () => new Map([...cards].map(([id, node]) => [id, node.getBoundingClientRect()]));
 const laneIds = () => (lanes ? [...slotNames, "none"] : ["all"]);
 const laneOf = (t) => (lanes ? t.slot || "none" : "all");
+const isAsk = (t) => t.column === "held" && Boolean(t.ask);
 
 function buildBoard() {
   const board = $("board");
@@ -64,7 +65,12 @@ function fillCard(node, t) {
     const restart = t.repeat.kind === "restart_at_plan";
     notes.append(callout(restart ? "border-violet-500" : "border-amber-500", restart ? "↩ Restarted at plan" : "↻ Repeat", t.repeat.reason));
   }
-  if (t.hold_cause) notes.append(callout("border-rose-500", "Held", t.hold_cause));
+  if (isAsk(t)) {
+    const ask = callout("border-amber-500", "Needs you");
+    ask.append(el("p", "mt-0.5 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300",
+      t.question || "Question unavailable: the saved agent answer could not be read."));
+    notes.append(ask);
+  } else if (t.hold_cause) notes.append(callout("border-rose-500", "Held", t.hold_cause));
   if (t.column === "waiting" && t.attempt > 0) notes.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
   if (t.column === "land") notes.append(callout(LAND[t.land ?? "unknown"].bar,
     LAND[t.land ?? "unknown"].label, t.status_note));
@@ -98,7 +104,7 @@ function renderBoard(first = rects()) {
     for (const col of COLUMNS) {
       const cell = cells.get(`${lane}|${col.id}`);
       all.filter((t) => t.column === col.id && laneOf(t) === lane)
-        .sort((a, b) => Date.parse(b.last_activity_at) - Date.parse(a.last_activity_at))
+        .sort((a, b) => Number(isAsk(b)) - Number(isAsk(a)) || Date.parse(b.last_activity_at) - Date.parse(a.last_activity_at))
         .forEach((t, i) => {
           if (!cards.has(t.id)) cards.set(t.id, newCard(t));
           const node = cards.get(t.id);
@@ -124,7 +130,9 @@ function renderBoard(first = rects()) {
     }
   }
   const running = all.filter((t) => STEPS.some((s) => s.id === t.column)).length;
-  $("summary").textContent = `${all.length} tasks · ${running} running · ${all.filter((t) => t.column === "held").length} held${notice ? ` · ${notice}` : ""}`;
+  const held = all.filter((t) => t.column === "held").length;
+  const attention = `${all.filter(isAsk).length} need you`;
+  $("summary").textContent = `${all.length} tasks · ${running} running · ${attention} · ${held} held${notice ? ` · ${notice}` : ""}`;
 }
 
 const viewButton = (on) => `rounded px-2.5 py-1 text-xs font-medium ${on ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`;
