@@ -78,6 +78,22 @@ class Recovery:
         self.store, self.processes, self.claim = store, processes, claim
         self.custody, self.clock, self.ids = custody, clock, ids
 
+    def observe(
+        self, key: AttemptKey, *, custody: AbstractContextManager[None] | None = None, allow_expired: bool = False,
+    ) -> Observations | Result:
+        """Read consistent world facts under custody, without granting or renewing authority."""
+        try:
+            snapshot = self.store.snapshot(key, self.clock(), allow_expired=allow_expired)
+            if isinstance(snapshot, Result):
+                return snapshot
+            with self.custody(snapshot.attempt.admission) if custody is None else custody:
+                return self._observations(snapshot, allow_expired=allow_expired)
+        except SlotBusy:
+            return Result(outcome=Outcome.CUSTODY_BUSY, explanation="The slot's custody is held by another operation.")
+        except (StoreUnavailable, ValueError, TypeError, SlotLockUnavailable) as error:
+            return Result(outcome=Outcome.UNAVAILABLE,
+                          explanation=f"Recovery observations or storage are unavailable ({type(error).__name__}).")
+
     def authorize(
         self, key: AttemptKey, owner: Identity, *, token: str | None = None,
         custody: AbstractContextManager[None] | None = None, deadline: float | None = None,
@@ -90,7 +106,9 @@ class Recovery:
             previous = snapshot.intent
             selected = token or (previous.token if previous is not None and previous.owner == owner else self.ids.hex())
             with self.custody(snapshot.attempt.admission) if custody is None else custody:
-                observed = self._observe(snapshot)
+                observed = self._observations(snapshot, allow_expired=deadline is not None)
+                if isinstance(observed, Result):
+                    return observed
                 return self.store.authorize(observed, owner, selected, self.clock, deadline=deadline)
         except SlotBusy:
             return Result(outcome=Outcome.CUSTODY_BUSY, explanation="The slot's custody is held by another operation.")
@@ -115,19 +133,25 @@ class Recovery:
                           explanation=f"Recovery observations or storage are unavailable ({type(error).__name__}).")
 
     def _reconcile(self, expected: Intent, initial: Snapshot) -> Reconciliation | Result:
-        snapshot = self.store.compare(initial, self.clock)
-        if isinstance(snapshot, Result):
-            return captured(expected.key, snapshot)
-        if not matches(expected, snapshot):
-            return Result(outcome=Outcome.CHANGED, explanation="The saved authorization or execution registration changed.")
-        observed = self._observe(snapshot)
-        compared = self.store.compare(snapshot, self.clock)
-        if isinstance(compared, Result):
-            return captured(expected.key, compared)
+        observed = self._observations(initial, expected=expected)
+        if isinstance(observed, Result):
+            return captured(expected.key, observed)
         if observed.claim.state is not ClaimState.OWNED:
             outcome = Outcome.CLAIM_LOST if observed.claim.state is ClaimState.LOST else Outcome.CLAIM_UNKNOWN
             return Result(outcome=outcome, explanation=observed.claim.explanation)
         return classify(observed)
+
+    def _observations(
+        self, initial: Snapshot, *, allow_expired: bool = False, expected: Intent | None = None,
+    ) -> Observations | Result:
+        snapshot = self.store.compare(initial, self.clock, allow_expired=allow_expired)
+        if isinstance(snapshot, Result):
+            return snapshot
+        if expected is not None and not matches(expected, snapshot):
+            return Result(outcome=Outcome.CHANGED, explanation="The saved authorization or execution registration changed.")
+        observed = self._observe(snapshot)
+        compared = self.store.compare(snapshot, self.clock, allow_expired=allow_expired)
+        return compared if isinstance(compared, Result) else observed
 
     def _observe(self, snapshot: Snapshot) -> Observations:
         record = snapshot.attempt

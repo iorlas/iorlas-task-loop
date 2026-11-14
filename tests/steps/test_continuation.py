@@ -15,13 +15,14 @@ from test_recovery_registration import intended
 from test_recovery_store import CHANGES, KEY, OWNED, OWNER, database
 
 from taskloop import attempt
+from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import Admission
-from taskloop.drain.models import Seen
+from taskloop.attempt_types import Admission, AttemptKey
+from taskloop.drain.models import Identity, Seen
 from taskloop.recovery.callbacks import PendingExecution
 from taskloop.recovery.continuation_models import State
 from taskloop.recovery.continue_attempt import Continuation
-from taskloop.recovery.models import Claim, ClaimState, Outcome
+from taskloop.recovery.models import Claim, ClaimState, Outcome, Result
 from taskloop.recovery.native import NativeContinuation
 from taskloop.recovery.store import RecoveryStore
 
@@ -75,6 +76,131 @@ def test_crash_reopen_observes_before_execution(
     else:
         assert result.state is State.REFUSED and execution.permits == before
     assert execution.permits <= (2 if boundary == "after_register" and seen is Seen.GONE else 1)
+    con.close()
+
+
+@pytest.mark.parametrize("staged", [False, True])
+def test_preauthorized_renewal_uses_current_admission_without_authorizing_again(
+    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, staged: bool,
+) -> None:
+    con = database(tmp_path / "factory.db")
+    execution = NativeRun()
+    attempts = prepared(con, surroundings, execution)
+    recovery_app = recovery(con)
+    recovery_app.clock = attempts.clock = lambda: 100
+    renewed = recovery_app.authorize(KEY, OWNER, token="renewed", deadline=200)
+    assert renewed.intent is not None
+    if staged:
+        assert recovery_app.store.execute(renewed.intent, recovery_app.clock).outcome is Outcome.INTENDED
+
+    def forbidden(*_args: object, **_kwargs: object) -> Result:
+        raise AssertionError("Saved authorization must be consumed without granting it again")
+
+    monkeypatch.setattr(recovery_app, "authorize", forbidden)
+    app = Continuation(recovery_app, attempts, NativeContinuation(attempts, recovery_app.store))
+    result = app(KEY, OWNER, intent=renewed.intent)
+    assert result.state is State.COMPLETED and execution.permits == 1
+    assert execution.calls[0][2] == 100
+    current = attempts.store.load(KEY)
+    assert current is not None and current.admission.key == KEY and current.admission.deadline == 200
+    assert current.session_ref == renewed.intent.session == "saved"
+    assert app(KEY, OWNER, intent=renewed.intent).state is State.COMPLETED and execution.permits == 1
+    con.close()
+
+
+@pytest.mark.parametrize("field", ["key", "owner", "generation", "token", "session"])
+def test_preauthorization_requires_exact_attempt_owner_and_authority(
+    tmp_path: Path, surroundings: AttemptSurroundings, field: str,
+) -> None:
+    con = database(tmp_path / "factory.db")
+    execution = NativeRun()
+    attempts = prepared(con, surroundings, execution)
+    recovery_app = recovery(con)
+    authorized = recovery_app.authorize(KEY, OWNER)
+    assert authorized.intent is not None
+    expected = authorized.intent.model_copy(update={field: {
+        "key": AttemptKey("other", "dispatch", 1), "owner": Identity(pid=40, pgid=40, start="other", boot="boot"),
+        "generation": 2, "token": "other", "session": "other",
+    }[field]})
+    before = list(con.iterdump())
+    result = Continuation(recovery_app, attempts, NativeContinuation(attempts, recovery_app.store))(KEY, OWNER, intent=expected)
+    assert result.refusal is not None and result.refusal.outcome is Outcome.CHANGED
+    assert result.explanation and execution.calls == [] and list(con.iterdump()) == before
+    con.close()
+
+
+@pytest.mark.parametrize("seen", [Seen.ALIVE, Seen.GONE, Seen.UNKNOWN])
+def test_registered_preauthorization_never_launches_another_worker(
+    tmp_path: Path, surroundings: AttemptSurroundings, seen: Seen,
+) -> None:
+    con = database(tmp_path / "factory.db")
+    execution = NativeRun()
+    attempts = prepared(con, surroundings, execution)
+    processes = Processes()
+    recovery_app = recovery(con, processes)
+    expected = intended(recovery_app.store)
+    native = NativeContinuation(attempts, recovery_app.store)
+    record = attempts.store.load(KEY)
+    assert record is not None and isinstance(native(record.admission, expected), PendingExecution)
+    processes.states[WORKER.pid] = seen
+    before = list(con.iterdump())
+    result = Continuation(recovery_app, attempts, native)(KEY, OWNER, intent=expected)
+    assert result.state is (State.LIVE if seen is Seen.ALIVE else State.REFUSED)
+    assert execution.permits == 1 and len(execution.calls) == 1 and list(con.iterdump()) == before
+    if result.refusal is not None:
+        assert result.refusal.outcome is (Outcome.CHANGED if seen is Seen.GONE else Outcome.UNRESOLVED)
+    con.close()
+
+
+@pytest.mark.parametrize("state", [ClaimState.LOST, ClaimState.UNKNOWN])
+def test_preauthorization_rechecks_claim_without_permitting_execution(
+    tmp_path: Path, surroundings: AttemptSurroundings, state: ClaimState,
+) -> None:
+    con = database(tmp_path / "factory.db")
+    execution = NativeRun()
+    attempts = prepared(con, surroundings, execution)
+    recovery_app = recovery(con)
+    authorized = recovery_app.authorize(KEY, OWNER)
+    assert authorized.intent is not None
+    recovery_app.claim = lambda _admission: Claim(state=state, explanation="The claim is no longer confirmed.")
+    before = list(con.iterdump())
+    result = Continuation(recovery_app, attempts, NativeContinuation(attempts, recovery_app.store))(
+        KEY, OWNER, intent=authorized.intent,
+    )
+    assert result.refusal is not None and result.refusal.outcome is (
+        Outcome.CLAIM_LOST if state is ClaimState.LOST else Outcome.CLAIM_UNKNOWN)
+    assert result.explanation and execution.calls == [] and list(con.iterdump()) == before
+    con.close()
+
+
+def test_renewed_continuation_fences_old_callbacks_and_pending_capture(
+    tmp_path: Path, surroundings: AttemptSurroundings,
+) -> None:
+    con = database(tmp_path / "factory.db")
+    execution = NativeRun()
+    attempts = prepared(con, surroundings, execution)
+    recovery_app = recovery(con)
+    expected = intended(recovery_app.store)
+    record = attempts.store.load(KEY)
+    assert record is not None
+    native = NativeContinuation(attempts, recovery_app.store)
+    old = native(record.admission, expected)
+    assert isinstance(old, PendingExecution)
+    recovery_app.clock = attempts.clock = lambda: 100
+    renewed = recovery_app.authorize(KEY, OWNER, token="renewed", deadline=200)
+    assert renewed.intent is not None
+    current = attempts.store.load(KEY)
+    assert current is not None
+    for admission in (record.admission, current.admission):
+        with pytest.raises(StoreRefused):
+            attempts.store.session(admission, "saved", old.identity)
+    app = Continuation(recovery_app, attempts, native)
+    stale = app.capture(old)
+    assert stale.refusal is not None and stale.refusal.outcome is Outcome.CONFLICT
+    assert app(KEY, OWNER, intent=renewed.intent).state is State.COMPLETED and execution.permits == 2
+    assert execution.calls[-1][2] == 100
+    saved = attempts.store.collect(KEY)
+    assert app.capture(old).state is State.REFUSED and attempts.store.collect(KEY) == saved
     con.close()
 
 
