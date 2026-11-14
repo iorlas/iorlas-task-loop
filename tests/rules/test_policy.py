@@ -81,6 +81,7 @@ WRITERS = {
     ("CREATE TABLE", "checks_attempt"): "factory_schema.py",
     ("CREATE TABLE", "check_result"): "factory_schema.py",
     ("CREATE TABLE", "land_candidate"): "factory_schema.py",
+    ("CREATE INDEX", "attempt"): "factory_schema.py",
     ("CREATE INDEX", "land_candidate"): "factory_schema.py",  # `land_delivered`: at most one delivered candidate per checks attempt
     ("CREATE TABLE", "task_hold"): "factory_schema.py",
     ("INSERT", "task_hold"): "hold_store.py",  # a hold's record, fenced on its attempt and cause being current

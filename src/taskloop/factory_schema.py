@@ -19,6 +19,7 @@ verification's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.prov
 under and the provider of its model (`harness_choice`), shown on the dashboard. v19 (tl-8bh9.14.148): `task_hold.saved`, the JSON
 array of the commits a hold saved on the task branch (`wip.SavedCommit`), written only by `hold_store`.
 No migration: an older factory.db is refused (`schema`).
+v21 (tl-8bh9.14.109): covering whole-task step counts for current-card reads.
 v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbox column.
 """
 
@@ -37,7 +38,7 @@ _PROVIDERS = ",".join(f"'{each}'" for each in Provider)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=20,
+    version=21,
     name="factory",
     steps={},
     ddl=f"""
@@ -93,6 +94,7 @@ CREATE TABLE attempt (
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id, seq)
 );
+CREATE INDEX attempt_step_count ON attempt(adapter,backlog,task_id,step,seq);
 CREATE TABLE execution (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  rc INTEGER, timed_out INTEGER NOT NULL, stop TEXT, watch TEXT, work INTEGER NOT NULL, stands INTEGER NOT NULL,

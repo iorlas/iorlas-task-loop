@@ -139,25 +139,27 @@ def open_start(database: Path, artifacts: Path, views: GitViews) -> Generator[St
 
 
 def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Store, views: GitViews) -> StartPorts:
-    admission, chain = open_admission(database, artifacts, views), open_chain(database, artifacts)
+    admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, store)
     launcher = open_launcher(database, artifacts, views)
     repeat = StepRepeat(reader, open_verifier(database, store, views), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
                         time.time, repeating)
     releaser = open_checks_releaser(database, store, views)
-    checks = ChecksPorts(open_checks_admission(database, views), open_checks_launcher(database, artifacts, views), releaser)
+    checks = ChecksPorts(open_checks_admission(database, views, store), open_checks_launcher(database, artifacts, views), releaser)
     repair = CheckRepeat(CheckRepeatStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
                          inspect_tracker_task, views.checkouts, RealSlotFiles(), probe,
                          partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time)
-    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views), checks, repair)
+    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store), checks, repair)
 
 
 @contextmanager
-def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: str) -> Generator[RoundPorts | Failed]:
+def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: str,
+              store: Store | None = None, registration: Store | None = None) -> Generator[RoundPorts | Failed]:
     """`tl step next`: the database guard first, then the tracker's read port at the explicit root (an unusable root
     refuses `tracker_root`), the start, verify, release, publish and hold ports on one shared writer (closed here; the
     hold's abandon uses the release ports `tl step release --abandon` uses, its tracker writes `tracker_holds`), the reads
     the round log appended under the artifacts root, and the land's ports and profile reader (`land: auto`, `round_land`)."""
-    store = Store(SCHEMA)
+    owned = store is None
+    store = store if store is not None else Store(SCHEMA)
     with _read_only(database) as con:
         try:
             if isinstance(con, Failed):
@@ -175,13 +177,14 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
             holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
                                 open_checks_releaser(database, store, views), time.time, EvidenceFiles(artifacts),
                                 partial(current_view, reads))
-            with open_land(database, artifacts, views) as lands:  # the land's ports, the ones `tl step land` opens
+            with open_land(database, artifacts, views, store, registration) as lands:  # the land's ports, the ones `tl step land` opens
                 landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
                 yield RoundPorts(reads, _starting(reader, database, artifacts, store, views), open_verifier(database, store, views),
                                  releaser, open_publisher(database, store, views), holding, ready, EvidenceFiles(artifacts).log_round,
                                  landing=landing, drain_store=DrainStore(lambda: store.shared_rw(database)))
         finally:
-            store.close_shared()
+            if owned:
+                store.close_shared()
 
 
 def _landed(ports: LandPorts, request: LandRequest) -> How | Failed:
@@ -194,13 +197,14 @@ def _landed(ports: LandPorts, request: LandRequest) -> How | Failed:
 
 def one_round(
     database: Path, artifacts: Path, views: GitViews, request: NextRequest, stopping: Callable[[], bool], generation: int | None = None,
+    store: Store | None = None, registration: Store | None = None,
 ) -> Callable[[Quiet], Round | Failed]:
     """One `tl step rounds` round: `open_next`'s fresh ports, its `stopping` the rounds process's flag. A factory.db
     that exists but cannot be opened now (locked, busy) is `unavailable:store`, so the rounds back off; an absent one stays
     `refused:database` (a deliberate discard ends the rounds)."""
 
     def once(quiet: Quiet) -> Round | Failed:
-        with open_next(database, artifacts, views, request.tracker_root) as ports:
+        with open_next(database, artifacts, views, request.tracker_root, store, registration) as ports:
             if isinstance(ports, Failed):
                 return _transient(ports, database)
             return run_round(replace(ports, stopping=stopping, generation=generation), replace(request, quiet=quiet))
@@ -267,6 +271,7 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
     if isinstance(release, Failed):
         yield release
         return
+    store, registration = Store(SCHEMA), Store(SCHEMA)
     log, pid = EvidenceFiles(artifacts).log_round, os.getpid()
     try:
         with open_drain(database) as draining:
@@ -285,10 +290,12 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
                 current = draining.store.boundary()
                 return current.state is not State.OPEN or current.generation != started.generation
             with install(_say) as interrupts:
-                rounding = one_round(database, artifacts, views, request, interrupts.stopping, started.generation)
+                rounding = one_round(database, artifacts, views, request, interrupts.stopping, started.generation, store, registration)
                 yield RoundsPorts(rounding, _slot_use(database), time.time, time.monotonic,
                              time.sleep, log, _unlogged(artifacts), interrupts.stopping, pid, not interrupts.ignored, fenced)
     finally:
+        registration.close_shared()
+        store.close_shared()
         release()
 
 
@@ -354,7 +361,8 @@ def adopt(database: Path, checkout: Path, root: Path, count: int, git: SlotGit) 
 
 
 @contextmanager
-def open_land(database: Path, artifacts: Path, views: GitViews) -> Generator[LandPorts | Failed]:
+def open_land(database: Path, artifacts: Path, views: GitViews, store: Store | None = None,
+              registration: Store | None = None) -> Generator[LandPorts | Failed]:
     """`tl step land` (tl-8bh9.14.8): the database guard first, then the land's ports over `composition.open_checking`'s
     real wiring (the validation's), the candidates' store on its connections, the person's checkout through the
     remote-capable view (`remotes`: hooks off, bounded transport, the person's credentials), the tracker read and claim
@@ -365,8 +373,18 @@ def open_land(database: Path, artifacts: Path, views: GitViews) -> Generator[Lan
         if isinstance(con, Failed):
             yield con
             return
-        work = open_checking(database, artifacts, views)
-        profiles = partial(GitProfileFiles, repos=views.remotes)  # the target profile at O, from Git objects on the person's checkout
-        claims = tracker_claims()
-        yield LandPorts(work, LandStore(work.store.connect, work.store.begin), views.remotes, profiles, inspect_tracker_task,
-                        claims.heartbeat_for, threading.Event, this_process, probe, landing, os.environ, claims.close)
+        owned = store is None
+        store = store if store is not None else Store(SCHEMA)
+        owns_registration = registration is None
+        registration = registration if registration is not None else Store(SCHEMA)
+        try:
+            work = open_checking(database, artifacts, views, store, registration)
+            profiles = partial(GitProfileFiles, repos=views.remotes)
+            claims = tracker_claims()
+            yield LandPorts(work, LandStore(work.store.connect, work.store.begin), views.remotes, profiles, inspect_tracker_task,
+                            claims.heartbeat_for, threading.Event, this_process, probe, landing, os.environ, claims.close)
+        finally:
+            if owns_registration:
+                registration.close_shared()
+            if owned:
+                store.close_shared()
