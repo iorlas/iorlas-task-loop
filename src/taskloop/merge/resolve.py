@@ -119,6 +119,7 @@ class Resolution:
         return result.model_copy(update={"capturing": False})
 
     def _execution(self, work: Work, execution: Execution) -> Work:
+        self.fence()
         return self.store.put(work, work.model_copy(update={"executions": (*work.executions[:-1], execution)}))
 
     def _register(self, attempt_id: str, number: int, worker: Worker) -> None:

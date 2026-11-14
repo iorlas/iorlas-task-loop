@@ -145,6 +145,13 @@ def test_detached_continuation_retains_the_original_task_ref(clean: Bench, monke
     assert dict(clean.repo.branches())["task/tl-1"] == clean.work.source
 
 
+def test_ordinary_preparation_does_not_accept_the_detached_consumers_base(clean: Bench) -> None:
+    clean.slot.park(clean.work.base)
+    result = clean.operation().resume(clean.work)
+    assert isinstance(result, Terminal) and result.reason is Reason.SLOT and not clean.calls
+    assert head(clean.slot) == clean.work.base
+
+
 def test_merging_saved_work_keeps_its_ordinary_review_requirement(clean: Bench, registered: sqlite3.Connection) -> None:
     saved = clean.slot.record("Save work\n\nTask-Loop-Attempt: prior\nTask-Loop-Wip: prior", paths="all", allow_empty=True)
     assert isinstance(saved, Recorded)

@@ -8,9 +8,10 @@ from git_porcelain import Repo
 from taskloop.admit import AdmitUnavailable, free_slots
 from taskloop.admit_rows import reserve
 from taskloop.attempt_loads import retained_on
-from taskloop.attempt_reads import StoreConnection, StoreUnavailable, as_int, as_text
+from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_text
 from taskloop.attempt_types import AttemptKey
 from taskloop.land_conflict.models import AdmissionRefused, Outcome, Record, Request, Slot
+from taskloop.land_conflict.reservation_store import owns
 from taskloop.land_store import require_checked
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
@@ -27,6 +28,15 @@ def existing(con: sqlite3.Connection, request: Request) -> Record | None:
 
 
 class ConflictStore(StoreConnection):
+    def load(self, key: AttemptKey) -> Record:
+        with self._connection() as con:
+            if not owns(con, key):
+                raise StoreRefused("stale_reservation")
+            row = con.execute("SELECT data FROM land_conflict WHERE operation_id=?", (key.attempt_id,)).fetchone()
+        if row is None:
+            raise StoreRefused("stale_reservation")
+        return Record.model_validate_json(as_text(row[0]))
+
     def find(self, request: Request) -> Record | None:
         with self._connection() as con:
             return existing(con, request)
