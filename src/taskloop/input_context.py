@@ -15,7 +15,7 @@ END = "END FACTORY INPUT CONTEXT"
 ORIENTATION = (
     "AGENTS.md is already in context: follow it without reading it again. These attempt-specific directions replace "
     "its general orientation-file read instructions. The supplied task text is the complete task specification. "
-    "You have no task tracker: bd and the beads skill are unavailable. Do not invoke bd (including bd prime or bd show) "
+    "No task tracker lookup is required: use the supplied task text. Do not invoke bd (including bd prime or bd show) "
     "or load the beads SKILL.md. Do not search git log with the task id as a grep pattern: it supplies no further spec. "
     "Do not read the justfile or .task-loop.json: the check commands below replace instructions to read those files. Listing checks "
     "does not require a plan attempt to run implementation checks. Use the included glossary definitions; read the full "
