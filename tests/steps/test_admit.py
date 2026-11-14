@@ -447,7 +447,7 @@ def test_composition_constructs_without_running_git_or_bd(tmp_path: Path) -> Non
 
 def test_two_repos_both_get_s1_and_the_fence_is_per_repo(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path) -> None:
     remote = FakeRemote("https://example.invalid/other.git")
-    remote.advance("main", {"README": "two"})
+    remote.advance("main", {"README": "two", ".task-loop.json": "{}"})
     other = FakeRepo.clone(remote, tmp_path / "other")
     keys: list[AttemptKey] = []
     for each, task_id in ((repo, "tl-1"), (other, "tl-2")):

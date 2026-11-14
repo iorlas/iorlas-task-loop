@@ -145,6 +145,7 @@ def test_a_done_plan_advances_to_implement_attempt_one_after_its_commit(
     assert row[:8] == ("implement", 1, 2, planned, None, "/tracker", '{"harness":"codex","sandbox":"workspace-write"}', d)
     text = (tmp_path / row[8]).read_text()
     assert text.startswith("Add a widget\n\nIt must do X") and f"`{PLAN}`" in text
+    assert f"Source commit: {planned}" in text
     assert registered.execute("SELECT attempt_id FROM reservation").fetchone() == (admitted.key.attempt_id,)
 
 
@@ -253,7 +254,7 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_t
     assert finish(registered, checkouts, slot_files) == VerifiedTask("verified", "tasks", "tl-1", key.attempt_id, "released", "published")
     x = tip(slot.repo)
     tree = slot.repo.tree(x)
-    assert tree is not None and set(tree.files) == {PLAN, "src/widget.py", "tests/test_widget.py"}
+    assert tree is not None and set(tree.files) == {PLAN, "src/widget.py", "tests/test_widget.py", ".task-loop.json"}
     assert slot.repo.is_ancestor(planned, x) and [entry.sha for entry in slot.repo.history([x], not_on=[planned])] == [x]
     reads = StatusPorts(AttemptStore(lambda: registered), lambda _entry: "gone", lambda: 10, lambda _key: None, lambda: "boot")
     shown = show_attempt(reads, tmp_path, "tasks", "tl-1")

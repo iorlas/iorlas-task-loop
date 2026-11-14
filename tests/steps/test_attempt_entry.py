@@ -195,13 +195,13 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert entry() == code
     assert entry.lines == [line] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
-    # six Git opens before dispatch (the slot read: root, slot; the branch rule: root; take_branch: slot; the slot read
-    # again: root, slot); the one verification: four to commit (the staged set read before the
+    # Two context reads (profile and glossary) plus six Git opens before dispatch (slot: root, slot; branch rule: root;
+    # take_branch: slot; slot read again: root, slot); the one verification: four to commit (the staged set read before the
     # record), two for the clean check, one
     # to judge or list; a collected step's release: the slot read (root, slot) and the park (slot). The worker is observed
     # right before each Git write (stage, record), never when the paths are unsafe, and once more by the release's stop proof
     collected = line.startswith("collected")
-    assert entry.waits == [] and entry.git_opens == opens and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
+    assert entry.waits == [] and entry.git_opens == opens + 2 and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
     assert (slot.branch(), entry.unclaimed) == (None if collected else "task/tl-1", [])  # parked at D; the claim kept
     assert (entry.remote_opens > 0) == (code == 0)  # only a verified plan is published; its Git views are the publication's
 

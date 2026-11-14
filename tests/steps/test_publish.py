@@ -82,7 +82,7 @@ class Pushing(FakeWorktree):
 def remote(request: pytest.FixtureRequest) -> FakeRemote:
     """origin; `indirect` parametrization adds files to main's first commit (a plan already at D)."""
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "one", **getattr(request, "param", {})})
+    found.advance("main", {"README": "one", ".task-loop.json": "{}", **getattr(request, "param", {})})
     return found
 
 

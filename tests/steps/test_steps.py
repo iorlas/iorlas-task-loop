@@ -6,9 +6,12 @@ from taskloop.admit import task_text
 from taskloop.attempt_types import AttemptKey, StepRules, Unsettled
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.factory_commit import attributes
+from taskloop.input_context import InputContext
 from taskloop.step_text import GIT_WRITES, SAVED_WORK
 from taskloop.steps import IMPLEMENT, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
+
+CONTEXT = InputContext("a" * 40, ("just check", "just test"), "Partial glossary: task: Work.\n")
 
 TASK = TaskInspection(
     TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.\nAnd Y.", "- X works\n- Y works", (), "in_progress",
@@ -39,9 +42,9 @@ def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
 def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environment() -> None:
     """The task's own prose first, then the plan by reference and the rules' scope, then the environment the entry
     prepared: offline setup, `$TMPDIR`, and that only the checks run afterwards count."""
-    text = task_text(TASK, "implement")
-    assert text.startswith("Add a widget\n\nIt must do X.\nAnd Y.\n\n- X works\n- Y works\n\nThe plan for this task is "
-                           "`docs/design/tl-1/plan.md`, committed on this branch by the plan step.")
+    text = task_text(TASK, "implement", CONTEXT)
+    assert text.startswith("Add a widget\n\nIt must do X.\nAnd Y.\n\n- X works\n- Y works\n\n")
+    assert "`docs/design/tl-1/plan.md`, committed on this branch by the plan step." in text
     assert "at most 96 files of at most 1 MiB each" in text and "anything under `.beads/`" in text and GIT_WRITES in text
     assert "The factory ran this repository's `setup` before you started; there is no network now." in text
     assert "Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere outside the repository." in text
@@ -58,7 +61,7 @@ def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environm
 
 
 def test_the_implement_input_bounds_working_and_final_checks_without_hiding_failures() -> None:
-    text = task_text(TASK, "implement")
+    text = task_text(TASK, "implement", CONTEXT)
     assert "While working, run only focused test files for the code you changed." in text
     assert "`just check 2>&1 | tail -60` at most twice while working, in addition to the required final run." in text
     assert "Do not run a full `just test` while working." in text
@@ -90,12 +93,12 @@ def test_the_implement_input_bounds_working_and_final_checks_without_hiding_fail
     assert "no function-local imports (`PLC0415`)" in text
     assert "In `explanation`, name the result of each final command." in text
     assert "run every command" not in text
-    assert "at most twice while working" not in task_text(TASK, "plan")
+    assert "at most twice while working" not in task_text(TASK, "plan", CONTEXT)
 
 
 def test_an_implement_repeat_frames_the_listing_with_its_own_words() -> None:
     found = Unsettled("ignored", ("!! .venv/x",))
-    original = task_text(TASK, "implement")
+    original = task_text(TASK, "implement", CONTEXT)
     text = IMPLEMENT.feedback(found, IMPLEMENT.rules("tl-1"), 2, original, "abcd", unrecorded=True)
     assert text.startswith("These paths are ignored by Git. A listed path Git ignores can never be committed")
     assert "BEGIN SLOT STATUS abcd\n!! .venv/x\nEND SLOT STATUS abcd" in text and "Nothing of attempt 2 was committed" in text
@@ -111,14 +114,14 @@ def test_the_attributes_files_follow_the_step_root_and_the_listed_paths() -> Non
 
 
 def test_the_plan_input_sends_an_infeasible_or_empty_task_to_needs_owner_at_plan() -> None:
-    text = PLAN.input_text(TASK, StepRules("docs/design/tl-1/"))
+    text = PLAN.input_text(TASK, StepRules("docs/design/tl-1/"), CONTEXT)
     assert "answer `needs_owner`" in text and "write no plan" in text
 
 
 @pytest.mark.parametrize(("step", "success"), [("plan", "planned"), ("implement", "implemented")])
 def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(step: str, success: str) -> None:
     operation = kind(step)
-    text = task_text(TASK, step)
+    text = task_text(TASK, step, CONTEXT)
     guidance = (
         f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`, and the factory "
         "saves unfinished slot work as a work-in-progress commit on the task branch when holding the task."
@@ -133,7 +136,7 @@ def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(s
 
 
 def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
-    text = task_text(TASK, "implement")
+    text = task_text(TASK, "implement", CONTEXT)
     failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
                          argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
     feedback = failed_check_feedback(failed, text, "nonce")

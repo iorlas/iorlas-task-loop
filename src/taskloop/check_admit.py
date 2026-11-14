@@ -275,5 +275,5 @@ def heads(repo: Repo, views: tuple[SlotView, ...]) -> tuple[Free, ...] | AdmitRe
         heads = {info.path: info.head for info in repo.worktrees()}
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
-    found = tuple(Free(view.name, head) for view in views if (head := heads.get(view.path)) is not None)
+    found = tuple(Free(view.name, head, head) for view in views if (head := heads.get(view.path)) is not None)
     return found or AdmitRefused("no_free_slot")
