@@ -1,18 +1,66 @@
 """Shared observation is fenced and read-only, including expired renewal candidates."""
 
+import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import pytest
-from test_recovery import recovery
+from test_recovery import Processes, recovery
 from test_recovery_registration import WORKER, intended
 from test_recovery_snapshot import capture
 from test_recovery_store import CHANGES, KEY, OWNED, database, observed
 
-from taskloop.attempt_types import Admission
-from taskloop.recovery.models import Claim, Observations, Outcome, Result
+from taskloop.attempt_types import Admission, EntryIdentity
+from taskloop.recovery.models import Claim, ClaimState, Observations, Outcome, ProcessObservation, Result
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
+
+
+@pytest.mark.parametrize("expired", [False, True])
+def test_status_reopens_read_only_without_authority_effects(tmp_path: Path, expired: bool) -> None:
+    path = tmp_path / "factory.db"
+    con = database(path)
+    intended(recovery(con).store)
+    before = list(con.iterdump())
+    con.close()
+    con = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, isolation_level=None)
+    app = recovery(con)
+    app.clock = lambda: 100 if expired else 10
+
+    def forbidden(_admission: Admission) -> Claim:
+        raise AssertionError("Status must not check claims")
+
+    @contextmanager
+    def custody(_admission: Admission) -> Generator[None]:
+        raise AssertionError("Status must not acquire custody")
+        yield
+
+    app.claim, app.custody = forbidden, custody
+    for _ in range(2):
+        result = app.status(KEY)
+        assert isinstance(result, Observations) and result.claim.state is ClaimState.UNKNOWN
+        assert result.claim.explanation and result.owner is not None
+        assert not con.in_transaction and list(con.iterdump()) == before
+    con.close()
+
+
+@pytest.mark.parametrize(("change", "outcome"), CHANGES)
+def test_status_detects_snapshot_drift_outside_read_transactions(tmp_path: Path, change: str, outcome: Outcome) -> None:
+    path = tmp_path / "factory.db"
+    writer = database(path)
+    con = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, isolation_level=None)
+
+    class Changing(Processes):
+        def entry(self, identity: EntryIdentity) -> ProcessObservation:
+            assert not con.in_transaction
+            writer.execute(change)
+            return super().entry(identity)
+
+    result = recovery(con, Changing()).status(KEY)
+    expected = Outcome.CHANGED if outcome is Outcome.EXPIRED else outcome
+    assert isinstance(result, Result) and result.outcome is expected and result.explanation
+    con.close()
+    writer.close()
 
 
 @pytest.mark.parametrize("supplied", [False, True])

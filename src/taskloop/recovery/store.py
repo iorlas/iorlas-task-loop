@@ -98,7 +98,8 @@ class RecoveryStore(StoreConnection):
         return Snapshot(attempt=record, drain=boundary(con), intent=read_intent(con, key))
 
     def snapshot(self, key: AttemptKey, now: float, *, allow_expired: bool = False) -> Snapshot | Result:
-        with self._connection(write=True) as con:
+        with self._connection() as con, con:
+            con.execute("BEGIN")
             return self._snapshot(con, key, now, allow_expired=allow_expired)
 
     def _compare(
@@ -114,7 +115,8 @@ class RecoveryStore(StoreConnection):
         self, expected: Snapshot, clock: Callable[[], float], *, allow_expired: bool = False,
     ) -> Snapshot | Result:
         """Revalidate every local fact without granting or changing authorization."""
-        with self._connection(write=True) as con:
+        with self._connection() as con, con:
+            con.execute("BEGIN")
             return self._compare(con, expected, clock(), allow_expired=allow_expired)
 
     def authorize(
