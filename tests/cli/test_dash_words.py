@@ -36,12 +36,15 @@ def test_the_page_prints_its_codes_through_the_table() -> None:
 
 
 @pytest.mark.parametrize("code,expected", [
+    ("needs_owner", "The agent needs your decision"),
+    ("failed:test:failed", "Checks failed: test"),
+    ("answer:schema_invalid", "The agent's answer was in the wrong format"),
     ("verification", "The factory's check of the answer failed"),
     ("unsafe", "A listed path is unsafe"),
     ("unsettled:unsafe", "Not committed: a listed path is unsafe"),
     ("unsettled:rejected", "Not committed: the commit broke a rule"),
 ])
-def test_repeat_causes_and_verification_failures_have_readable_words(code: str, expected: str) -> None:
+def test_outcomes_repeat_causes_and_verification_failures_have_readable_words(code: str, expected: str) -> None:
     assert table()[code] == expected
 
 
