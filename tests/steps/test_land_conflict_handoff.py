@@ -1,4 +1,4 @@
-"""Ordinary land retains conflict execution, but never promotes its resolution into delivery."""
+"""Ordinary land retains conflict execution and consumes only durably accepted completion."""
 
 from collections.abc import Iterator
 from dataclasses import replace
@@ -6,28 +6,23 @@ from pathlib import Path
 
 import pytest
 from git_porcelain import Repo
-from land_bench import LandBench, bench
+from land_bench import LandBench, bench, executing
 from land_conflict_bench import ExecutionCase
 from sqlite_store import Store
 
-from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt_types import AttemptKey
 from taskloop.dash_land import build_land
 from taskloop.dash_model import LandDetail
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
-from taskloop.ids import NativeIds
 from taskloop.land import LandRequest, land
-from taskloop.land_check import LandPorts
 from taskloop.land_conflict.admit import Ports, admit
 from taskloop.land_conflict.composition import conflict_handoff
 from taskloop.land_conflict.execute import Ports as ExecutionPorts
 from taskloop.land_conflict.execute import execute
 from taskloop.land_conflict.handoff import request_for
-from taskloop.land_conflict.models import Record
 from taskloop.land_summary import LandSummary
-from taskloop.merge.models import Phase, Result
-from taskloop.merge.store import MergeStore
+from taskloop.merge.models import Completed, Phase, Result
 from taskloop.operations import Failed
 
 
@@ -45,25 +40,6 @@ def unchanged_input(b: LandBench, target: str) -> None:
     assert b.remote.branches()["task/tl-1"] == b.x
     assert b.con.execute("SELECT end_commit FROM attempt").fetchall() == [(b.x,)]
     assert b.con.execute("SELECT target_commit FROM checks_attempt").fetchall() == [(b.base,)]
-
-
-def executing(b: LandBench, *, interrupt: bool = False) -> tuple[LandPorts, list[ExecutionCase]]:
-    ports, cases = b.ports(), list[ExecutionCase]()
-
-    def execution(repo: Repo, record: Record) -> Result:
-        if not cases:
-            work = b.checking()
-            dependencies = ExecutionPorts(ports.conflicts.store, MergeStore(lambda: b.con), repo,
-                b.views, b.views, b.files, work.files, AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
-                lambda *_args: pytest.fail("unwired agent"), lambda _worker: True, lambda: b.now,
-                work.preparation, lambda: "held", ("/bin/codex", {}), ("probe",))
-            case = ExecutionCase(b.root / "factory.db", b.con, record, dependencies, b.slot, b.environment,
-                                 interrupt=interrupt)
-            case.ports = replace(case.ports, run=case.run, gone=lambda _worker: case.gone)
-            cases.append(case)
-        return cases[0].resume()
-
-    return replace(ports, conflicts=replace(ports.conflicts, execution=execution)), cases
 
 
 def test_new_conflict_needs_minutes_before_admission_and_other_modes_never_execute(b: LandBench) -> None:
@@ -141,12 +117,15 @@ def test_a_racing_admission_is_resumed_with_its_own_deadline(b: LandBench) -> No
     assert record.request.deadline == 111.0 and b.reservations() == [("s1", record.key.attempt_id)]
 
 
-def test_completed_resolution_and_repeated_reads_never_validate_or_deliver(b: LandBench) -> None:
+def test_completed_resolution_and_repeated_reads_preserve_content_without_minutes(b: LandBench) -> None:
     target = b.advance({"README": "current main\n"})
     ports, cases = executing(b)
-    request = LandRequest("tasks", "tl-1", b.repo.path, 5)
-    first = land(ports, request)
-    assert isinstance(first, Failed) and first.word == "refused:conflict" and "retained for review" in first.detail
+    request = LandRequest("tasks", "tl-1", b.repo.path, 5, accept=True)
+    b.land()  # admit the conflict before completing it through the real execution adapter
+    checks = ports.work.store.row(AttemptKey("checks", "checks-token", 1))
+    assert checks is not None
+    first = ports.conflicts.resume(b.repo, AttemptKey("implement", "implement-token", 1), checks)
+    assert isinstance(first, Completed)
     [case] = cases
     work = case.ports.merges.get(case.record.key.attempt_id)
     saved = ports.conflicts.store.completed(case.record.key)
@@ -174,7 +153,8 @@ def test_completed_resolution_and_repeated_reads_never_validate_or_deliver(b: La
             assert b.reservations() == reservations and ports.conflicts.store.completed(case.record.key) == saved
             assert case.ports.merges.get(case.record.key.attempt_id) == work
             unchanged_input(b, target)
-        assert land(ports, replace(request, minutes=None)) == first
+        stopped = land(ports, replace(request, minutes=None))
+        assert isinstance(stopped, Failed) and stopped.word == ("refused:conflict" if clean else "refused:minutes")
         assert case.calls == 1 and b.environment.events == before
         assert b.reservations() == reservations and ports.conflicts.store.completed(case.record.key) == saved
         assert case.ports.merges.get(case.record.key.attempt_id) == work
@@ -184,7 +164,7 @@ def test_completed_resolution_and_repeated_reads_never_validate_or_deliver(b: La
 def test_running_resolution_is_retryable_and_restart_keeps_its_original_admission(b: LandBench) -> None:
     target = b.advance({"README": "current main\n"})
     ports, cases = executing(b, interrupt=True)
-    request = LandRequest("tasks", "tl-1", b.repo.path, 5)
+    request = LandRequest("tasks", "tl-1", b.repo.path, 5, accept=True)
     with pytest.raises(KeyboardInterrupt):
         land(ports, request)
     [case] = cases
@@ -200,7 +180,7 @@ def test_running_resolution_is_retryable_and_restart_keeps_its_original_admissio
     finished = land(resumed, replace(request, minutes=None))
     assert isinstance(finished, Failed) and finished.word == "unavailable:running" and case.calls == 1
     finished = land(resumed, replace(request, minutes=None))
-    assert isinstance(finished, Failed) and finished.word == "refused:conflict"
+    assert isinstance(finished, Failed) and finished.word == "refused:minutes"
     work = case.ports.merges.get(record.key.attempt_id)
     assert work is not None and work.phase is Phase.COMPLETE and case.calls == 2
     assert case.record == record and b.reservations() == []
@@ -228,7 +208,9 @@ def test_production_handoff_wiring_executes_over_the_existing_adapters(b: LandBe
     monkeypatch.setattr("taskloop.land_conflict.composition.worker_gone", lambda _worker: True)
     monkeypatch.setattr("taskloop.land_conflict.composition.execute", execution)
     ports = replace(b.ports(), conflicts=conflict_handoff(work, GitViews(5), b.heartbeat_for))
-    result = land(ports, LandRequest("tasks", "tl-1", b.repo.path, None))
-    assert isinstance(result, Failed) and result.word == "refused:conflict" and "retained for review" in result.detail
+    result = land(ports, LandRequest("tasks", "tl-1", b.repo.path, None, accept=True))
+    assert isinstance(result, Failed) and result.word == "refused:minutes"
     assert len(cases) == 1 and cases[0].calls == 1
+    monkeypatch.setattr("taskloop.land_conflict.composition.machine_credentials", lambda _h: pytest.fail("reacquired credentials"))
+    assert land(ports, LandRequest("tasks", "tl-1", b.repo.path, None, accept=True)) == result
     unchanged_input(b, target)

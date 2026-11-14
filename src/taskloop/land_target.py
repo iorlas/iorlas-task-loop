@@ -41,9 +41,9 @@ def fetched_target(profiles: Profiles, origin: Origin) -> tuple[str, Required] |
     return required if isinstance(required, Failed) else (o, required)
 
 
-def made_s(origin: Origin, checks: ChecksRow, title: str, o: str) -> Squashed | Conflicted | Failed:
+def made_s(origin: Origin, checks: ChecksRow, title: str, o: str, source: str | None = None) -> Squashed | Conflicted | Failed:
     """S made in Git objects only, with section 9's message."""
-    x = checks.commit
+    x = source or checks.commit
     try:
         return origin.repo.squash(o, x, message_at(origin.repo, title, checks, o))
     except MissingRevision:
@@ -60,9 +60,10 @@ def _files(repo: Repo, rev: str) -> Files:
     return dict(tree.files)
 
 
-def squashed_onto(origin: Origin, checks: ChecksRow, title: str, o: str) -> tuple[str, Files, Files, Files] | Conflicted | Failed:
+def squashed_onto(origin: Origin, checks: ChecksRow, title: str, o: str,
+                  source: str | None = None) -> tuple[str, Files, Files, Files] | Conflicted | Failed:
     """S, with the tree listings of S, X and O, or the typed conflict for ordinary land's handoff."""
-    x, made = checks.commit, made_s(origin, checks, title, o)
+    x, made = checks.commit, made_s(origin, checks, title, o, source)
     if isinstance(made, (Conflicted, Failed)):
         return made
     try:

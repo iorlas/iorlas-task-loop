@@ -9,19 +9,22 @@ import json
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, override
 
+import pytest
 from beads_client import Bead
 from doubles import CHECKS, Environment, FakeProfiles, FakeSlotFiles, PinnedViews
 from git_porcelain import Pushed, Recorded, RemoteRefs, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
+from land_conflict_bench import ExecutionCase
 from merge_bench import MergeRepo
 from sqlite_store import Store, begin_immediate
 
 from taskloop import check_store
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt_loads import AttemptLoads
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_store import CheckStore
@@ -35,11 +38,13 @@ from taskloop.ids import NativeIds
 from taskloop.land import LandRequest, LandResult, land
 from taskloop.land_check import LandPorts
 from taskloop.land_conflict.admit import Ports as ConflictPorts
+from taskloop.land_conflict.execute import Ports as ExecutionPorts
 from taskloop.land_conflict.handoff import Handoff
 from taskloop.land_conflict.models import Record
 from taskloop.land_conflict.store import ConflictStore
 from taskloop.land_store import LandRow, LandStore
 from taskloop.merge.models import Reason, Result, Terminal
+from taskloop.merge.store import MergeStore
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import landing
 from taskloop.slots import SlotGit, folder_name
@@ -243,6 +248,26 @@ class LandBench:
         assert tree is not None
         return {path: (tree.read(path) or b"").decode() for path in tree.files}
 
+
+def executing(b: LandBench, *, interrupt: bool = False,
+              edit: Callable[[FakeWorktree], None] | None = None) -> tuple[LandPorts, list[ExecutionCase]]:
+    """Drive conflict execution and its durable release with the same Git, database and slot as land."""
+    ports, cases = b.ports(), list[ExecutionCase]()
+
+    def execution(repo: Repo, record: Record) -> Result:
+        if not cases:
+            work = b.checking()
+            dependencies = ExecutionPorts(ports.conflicts.store, MergeStore(lambda: b.con), repo,
+                b.views, b.views, b.files, work.files, AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()),
+                lambda *_args: pytest.fail("unwired agent"), lambda _worker: True, lambda: b.now,
+                work.preparation, lambda: "held", ("/bin/codex", {}), ("probe",))
+            case = ExecutionCase(b.root / "factory.db", b.con, record, dependencies, b.slot, b.environment,
+                                 interrupt=interrupt, edit=edit)
+            case.ports = replace(case.ports, run=case.run, gone=lambda _worker: case.gone)
+            cases.append(case)
+        return cases[0].resume()
+
+    return replace(ports, conflicts=replace(ports.conflicts, execution=execution)), cases
 
 def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) -> sqlite3.Connection:
     """`path`: tl-1's done implement attempt (B its base, X its commit, released `kept` from slot s0, published), its checks
