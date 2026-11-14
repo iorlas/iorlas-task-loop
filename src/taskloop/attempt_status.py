@@ -7,7 +7,7 @@ of tl-8bh9.14.6): the view's step, attempt, slot, phase, entry, result, deadline
 then that checks attempt's (`check_status`); the backlog, task, order and publication stay the implement attempt's."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import pairwise
 from pathlib import Path
@@ -117,6 +117,7 @@ class Shown:
 @dataclass(frozen=True)
 class Listed:
     attempts: tuple[AttemptView, ...]
+    rows: tuple[AttemptRow, ...] = field(default=(), compare=False, repr=False)
 
 
 def next_action(phase: str, entry: EntryState, result: AttemptResult, expired: bool, *, rebooted: bool = False) -> Next:
@@ -338,13 +339,11 @@ def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed
     """Every task's current attempt (one row per task: its highest `seq`; its latest checks attempt once its implement
     attempt is done), or (`stuck`) only those whose next action is `stuck:*`, `hold` or `unknown`."""
     try:
-        every = reads.store.attempts()
+        rows = reads.store.current_attempts()
+        found = _holding(reads, tuple(_show(reads, row, probe=not stuck or row.label is not None) for row in rows))
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
-    rows = [row for before, row in zip((None, *every), every, strict=False) if before is None or before.task_id != row.task_id
-            or before.backlog != row.backlog]
-    found = _holding(reads, tuple(_show(reads, row, probe=not stuck or row.label is not None) for row in rows))
-    return Listed(tuple(each for each in found if not stuck or each.next in ("unknown", "hold") or each.next.startswith("stuck:")))
+    return Listed(tuple(each for each in found if not stuck or each.next in ("unknown", "hold") or each.next.startswith("stuck:")), rows)
 
 
 def current_view(reads: StatusPorts, backlog: str, task_id: str) -> AttemptView | None:

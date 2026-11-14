@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from taskloop.attempt_reads import AttemptRow, StoreUnavailable
+from taskloop.attempt_reads import AttemptRow, SlotUse, StoreUnavailable
 from taskloop.attempt_status import AttemptView, StatusPorts, list_attempts
 from taskloop.dash_model import Board, Card, Column, DashTracker, LandState, Repeat, iso
 from taskloop.evidence_files import EvidenceFiles
@@ -41,11 +41,11 @@ def land_state(land: LandView | None, mode: LandMode | None = None) -> LandState
     return "manual" if mode is LandMode.MANUAL else "waiting"
 
 
-def admission_of(reads: StatusPorts, approved: frozenset[str]) -> Admission:
+def admission_of(reads: StatusPorts, approved: frozenset[str], use: SlotUse | None = None) -> Admission:
     """What the board knows of admission: the tasks the tracker lists ready, and whether a slot is free (the round's bound and label
     are its own: the board assumes none)."""
     try:
-        free = reads.store.slot_use().free
+        free = reads.store.slot_use().free if use is None else use.free
     except StoreUnavailable:
         return Admission(approved, "")
     return Admission(approved, "", blocker(free, 0, 0, 1))
@@ -112,12 +112,16 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     if isinstance(listed, Failed):
         return listed
     now = ports.reads.clock()
-    every = ports.reads.store.attempts()
-    rows = {row.key.attempt_id: row for row in every}
-    numbers = tries(every)
+    rows = {row.key.attempt_id: row for row in listed.rows}
+    numbers = {row.key.attempt_id: row.try_number for row in listed.rows}
+    try:
+        slots = ports.reads.store.slot_names()
+        use = ports.reads.store.slot_use()
+    except StoreUnavailable as error:
+        return Failed("unavailable", "store", str(error))
     taken = {view.task_id for view in listed.attempts}
     listed_ready = ports.tracker.ready()
-    admission = admission_of(ports.reads, frozenset(each.task_id for each in listed_ready))
+    admission = admission_of(ports.reads, frozenset(each.task_id for each in listed_ready), use)
     ready = tuple(each for each in listed_ready if each.task_id not in taken)
     titles = ports.tracker.titles(tuple(sorted(taken)))
     cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now,
@@ -128,4 +132,4 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     cards += [Card(each.task_id, each.title, "waiting", 0, None, each.since, each.since, None, None, None, queued.status.value, note)
               for each in ready]
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return Board(stamp, ports.reads.store.slot_names(), tuple(cards), ports.tracker.notice())
+    return Board(stamp, slots, tuple(cards), ports.tracker.notice())

@@ -1,6 +1,6 @@
 # Growth and read performance
 
-Task: `tl-8bh9.14.109`. Status: planned; no implementation or performance results yet.
+Task: `tl-8bh9.14.109`. Status: implemented; see [measurements and as-built decisions](measurements.md).
 Prepared against `99655d38c09be07198ad0f5c0876d3d25a559a65` on 2026-11-14.
 
 The owner approved synthetic measurements and read optimizations on 2026-11-13.
@@ -232,3 +232,22 @@ samples, query plans, costs and remaining limits; identify any optimization
 rejected by measurement. Evidence and table growth, retained finished holds,
 uv policy and complete board visibility are accepted decisions, not unimplemented
 cleanup tasks. This plan alone is not implementation completion.
+
+## As built, 2026-11-14
+
+Sections 1–3 are implemented. Current attempts and whole-task step counts are
+selected in one SQL snapshot and passed through the shared status operation to
+the board. Scoped history predicates expose the existing task index. Grouped
+maximum and a covering step-count index won the synthetic comparison; primary-key
+slot joins removed the need for a repository index. The new index requires schema
+21, with refusal of version 20 and no migration or running-database operation.
+
+Ordinary and bounded registration writers remain separate and now survive across
+rounds; nested land and start operations borrow the owning writers. Automatic
+integrity checking and file-identity invalidation remain in shelf. The residual
+measured startup cost motivates a shelf proposal only, recorded in the report.
+
+Q2–Q6 remain exactly the final decisions above. Evidence, history, finished holds,
+cache policy and every landed/held card are retained. Reproducible drivers, raw
+samples, limitations, index/write/startup costs and validation are in
+[measurements.md](measurements.md) and [samples/](samples/).

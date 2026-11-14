@@ -47,10 +47,10 @@ from taskloop.tracker_client import inspect_tracker_task, tracker_claims
 from taskloop.verifier import Verifier
 
 
-def _registration(database: Path) -> tuple[Store, Callable[[], sqlite3.Connection | None]]:
+def _registration(database: Path, store: Store | None = None) -> tuple[Store, Callable[[], sqlite3.Connection | None]]:
     """The registration store, whose connections wait at most REGISTRATION_BUSY_MS for the write lock (every other write
     keeps the library's 5 s), and its connection."""
-    registration = Store(SCHEMA)
+    registration = store if store is not None else Store(SCHEMA)
 
     def bounded() -> sqlite3.Connection | None:
         con = registration.shared_rw(database)
@@ -117,10 +117,12 @@ class Checking:
     environ: Callable[[], Mapping[str, str]]
 
 
-def open_checking(database: Path, artifacts: Path, views: GitViews) -> Checking:
+def open_checking(database: Path, artifacts: Path, views: GitViews, store: Store | None = None,
+                  registration: Store | None = None) -> Checking:
     """Real wiring of the checks entry: per-thread shared writers on factory.db (each command's identity through the
     bounded registration connections), real Git, files and processes, wall clock, this process's scrubbed environment."""
-    store, (registration, bounded) = Store(SCHEMA), _registration(database)
+    store = store if store is not None else Store(SCHEMA)
+    registration, bounded = _registration(database, registration)
     registering = StoreConnection(bounded, registration.begin_immediate)
     setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
     return Checking(
@@ -186,9 +188,9 @@ def adopt_slots(
         store.close_shared()
 
 
-def open_admission(database: Path, artifacts: Path, views: GitViews) -> AttemptAdmission:
+def open_admission(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> AttemptAdmission:
     """Real wiring: per-thread shared writers on factory.db, the tracker claim, the real Git boundary, wall-clock deadlines."""
-    store = Store(SCHEMA)
+    store = store if store is not None else Store(SCHEMA)
     claims = tracker_claims()
     return AttemptAdmission(
         lambda: store.shared_rw(database),
@@ -204,27 +206,27 @@ def open_admission(database: Path, artifacts: Path, views: GitViews) -> AttemptA
     )
 
 
-def open_chain(database: Path, artifacts: Path) -> ChainAdmission:
+def open_chain(database: Path, artifacts: Path, store: Store | None = None) -> ChainAdmission:
     """Real wiring of the admissions that continue a task: per-thread shared writers on factory.db, wall-clock deadlines."""
-    store = Store(SCHEMA)
+    store = store if store is not None else Store(SCHEMA)
     return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time)
 
 
-def open_advance(database: Path, artifacts: Path, views: GitViews) -> NextAdmission:
+def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> NextAdmission:
     """Real wiring of a step's advance: per-thread shared writers on factory.db, the task read (status and assignee),
     the real Git boundary and slot lock probe, wall-clock deadlines; no claim."""
-    store = Store(SCHEMA)
+    store = store if store is not None else Store(SCHEMA)
     return NextAdmission(
         lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), inspect_tracker_task, views.checkouts,
         time.time, slot_lock.probe, RealSlotFiles(),
     )
 
 
-def open_checks_admission(database: Path, views: GitViews) -> ChecksAdmission:
+def open_checks_admission(database: Path, views: GitViews, store: Store | None = None) -> ChecksAdmission:
     """Real wiring of a checks attempt's admission (an advance to the check step, or a re-run): per-thread shared writers
     on factory.db, the task read, the real Git boundary and slot lock probe, the profile read on the person's checkout,
     wall-clock deadlines; no claim, no input file."""
-    store = Store(SCHEMA)
+    store = store if store is not None else Store(SCHEMA)
     return ChecksAdmission(lambda: store.shared_rw(database), store.begin_immediate, inspect_tracker_task, views.checkouts, time.time,
                            slot_lock.probe, RealSlotFiles(), partial(GitProfileFiles, repos=views.checkouts))
 
