@@ -7,9 +7,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.cli_composition import open_reads
+from taskloop.cli_composition import open_land, open_reads
 from taskloop.dash_board import BoardPorts, build_board
-from taskloop.dash_model import AttemptBody, Board, FeedPage, TaskDetail, TrackerDetail
+from taskloop.dash_land import build_land
+from taskloop.dash_model import AttemptBody, Board, FeedPage, LandDetail, TaskDetail, TrackerDetail
 from taskloop.dash_server import DashPorts, DashServer
 from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
 from taskloop.dash_tracker import CachedTracker
@@ -65,7 +66,11 @@ def _ports(request: DashRequest, views: GitViews) -> DashPorts:
     def log() -> tuple[LogRow, ...]:
         return read_round_log(files, LOG_LINES)
 
-    return DashPorts(board, task, tracker_of, body, log, feed, request.backlog, STATIC)
+    def delivery(task_id: str) -> LandDetail | Failed:
+        with open_land(request.db, request.artifacts, views) as ports:
+            return ports if isinstance(ports, Failed) else build_land(ports, request.backlog, task_id, request.checkout)
+
+    return DashPorts(board, task, tracker_of, body, log, feed, delivery, request.backlog, STATIC)
 
 
 @contextmanager

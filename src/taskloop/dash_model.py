@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
+from pydantic import BaseModel, ConfigDict
+
 from taskloop.land_status import LandState
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
@@ -218,6 +220,21 @@ class TrackerDetail:
 
     fields: Fields
     comments: tuple[Comment, ...]
+
+
+class LandDetail(BaseModel):
+    """Pending delivery facts, loaded on selection through the shared land summary operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    actions: tuple[str, ...]
+    summary: tuple[str, ...]
+    diff_files: int | None
+    added: int | None
+    deleted: int | None
+    diff_command: str
+    command: str
+    pr_url: str | None = None
 
 
 @dataclass(frozen=True)

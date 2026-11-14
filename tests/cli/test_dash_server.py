@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail, Usage
+from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, LandDetail, Outcome, TaskDetail, TrackerDetail, Usage
 from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
@@ -34,8 +34,18 @@ class Ports:
     def __init__(self, static: Path, max_streams: int = 16, queue_depth: int = 256) -> None:
         self.cards, self.mode = [card()], "ok"
         self.rows: tuple[LogRow, ...] = (row(),)
-        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, "tl", static, 0.03, 0.05,
+        self.ports = DashPorts(self.board, self.task, self.tracker, self.body, lambda: self.rows, self.feed, self.delivery,
+                               "tl", static, 0.03, 0.05,
                                max_streams, queue_depth)
+
+    def delivery(self, task_id: str) -> LandDetail | Failed | None:
+        if task_id == "broken":
+            return Failed("unavailable", "git", "Delivery facts are temporarily unavailable.")
+        if task_id != "tl-1":
+            return None
+        return LandDetail(actions=("Integrate changes.",), summary=("One changed file.",), diff_files=1, added=2, deleted=1,
+                          diff_command="git diff a..b", command="tl step land tl-1 --backlog tl --checkout /repo",
+                          pr_url="https://example.invalid/pull/1")
 
     def board(self) -> Board | Failed:
         if self.mode == "raise":
@@ -153,6 +163,18 @@ def test_a_title_with_markup_is_data_and_the_page_never_builds_html_from_data() 
     unsafe = ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function")
     for script in page.glob("*.js"):
         assert not any(word in script.read_text() for word in unsafe), script
+
+
+def test_delivery_details_are_selected_by_task_and_preserve_failure_explanations(served: tuple[Ports, DashServer]) -> None:
+    _fake, server = served
+    status, body = get(server, "/api/tasks/tl-1/delivery")
+    found = json.loads(body)
+    assert status == 200 and found["actions"] == ["Integrate changes."]
+    assert (found["diff_files"], found["added"], found["deleted"]) == (1, 2, 1)
+    assert found["diff_command"] == "git diff a..b" and found["pr_url"] == "https://example.invalid/pull/1"
+    assert get(server, "/api/tasks/missing/delivery")[0] == 404
+    status, body = get(server, "/api/tasks/broken/delivery")
+    assert status == 503 and json.loads(body) == {"error": "Delivery facts are temporarily unavailable."}
 
 
 def test_a_connected_page_is_told_of_a_moved_card_a_vanished_one_and_every_new_log_line(served: tuple[Ports, DashServer]) -> None:

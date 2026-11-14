@@ -4,7 +4,8 @@ import { say, wordNode } from "../../src/taskloop/dash/static/words.js";
 import { COLUMNS, STATE, el, position, quietSpan, tick as updateTime } from "../../src/taskloop/dash/static/ui.js";
 import { result } from "../../src/taskloop/dash/static/result.js";
 import { lines, setNote } from "../../src/taskloop/dash/static/lines.js";
-import { initDrawer, openDrawer, closeDrawer } from "../../src/taskloop/dash/static/drawer.js";
+import { initDrawer, openDrawer, closeDrawer, onTaskMoved } from "../../src/taskloop/dash/static/drawer.js";
+import { apiSource } from "../../src/taskloop/dash/static/api.js";
 import { taskView } from "../../src/taskloop/dash/static/taskview.js";
 import { usageText } from "../../src/taskloop/dash/static/usage.js";
 
@@ -209,6 +210,85 @@ async function drawerSelection() {
   closeDrawer();
 }
 
+const landButton = (root) => [...root.querySelectorAll("#rail button")].find((b) => b.textContent.endsWith("Land"));
+const delivery = (extra = {}) => ({ actions: ["Integrate the task's changes.", "Mark the task complete."],
+  summary: ["src/change.py +2 -1"], diff_files: 1, added: 2, deleted: 1,
+  diff_command: "git diff base..task", command: "tl step land tl-test --backlog tasks --checkout /repo", pr_url: null, ...extra });
+
+async function landSelection() {
+  const pending = { ...task, column: "land", land: "manual", status_note: "Awaiting your delivery decision" };
+  let resolve, calls = 0;
+  const source = {
+    detail: async () => ({ task: pending, attempts: healthy() }), tracker: async () => tracked,
+    body: async () => ({ result: { summary: "passed", checks: [] } }),
+    delivery: () => { calls++; return new Promise((done) => { resolve = done; }); },
+  };
+  initDrawer(source, new Map([[task.id, pending]]));
+  await openDrawer(task.id); await tick();
+  const drawer = document.getElementById("drawer");
+  assert(calls === 0, "summary is not read until Land selection");
+  landButton(drawer).focus();
+  assert(document.activeElement === landButton(drawer), "Land is independently focusable");
+  landButton(drawer).click();
+  assert(drawer.textContent.includes("Loading delivery details"), "delivery loads on selection");
+  assert(landButton(drawer).getAttribute("aria-pressed") === "true", "Land selection has accessible state");
+  resolve(delivery({ pr_url: "https://example.invalid/pull/17" })); await tick();
+  assert(drawer.textContent.includes("Intended actions") && drawer.textContent.includes("Mark the task complete"), "actions shown");
+  assert(drawer.textContent.includes("1 files changed (+2 −1)") && drawer.textContent.includes("src/change.py"), "diff totals and files shown");
+  assert(drawer.textContent.includes("git diff base..task") && drawer.textContent.includes("tl step land"), "command references shown");
+  assert(drawer.querySelector('a[href="https://example.invalid/pull/17"]')?.rel.includes("noopener"), "available PR linked");
+  assert(drawer.textContent.includes("Awaiting your delivery decision"), "waiting notes survive Land selection");
+  button(drawer, "Task").click(); button(drawer, "Steps 5").click();
+  assert(landButton(drawer).getAttribute("aria-pressed") === "true", "selection survives task view navigation");
+  button(drawer, "Implement—").click(); await tick();
+  assert(drawer.querySelector("section h3").textContent.includes("Implement, attempt 1"), "Land returns to attempt navigation");
+  landButton(drawer).click(); await tick();
+  assert(calls === 1, "navigation reuses the selected summary");
+  source.delivery = async () => { calls++; throw new Error("Delivery temporarily unavailable"); };
+  await onTaskMoved({ ...pending, land: "waiting" }); await tick();
+  assert(drawer.textContent.includes("Delivery temporarily unavailable") && calls === 2, "task change refreshes Land and explains failure");
+  source.delivery = async () => delivery({ summary: ["<img src=x onerror=bad>"], pr_url: "javascript:bad()" });
+  button(drawer, "Retry").click(); await tick();
+  assert(!drawer.querySelector("section a") && !drawer.querySelector("img"), "unsafe PR omitted and summary rendered as text");
+  assert(drawer.textContent.includes("<img src=x onerror=bad>"), "outside summary is retained as text");
+  closeDrawer();
+}
+
+async function landStaleReplies() {
+  let resolve, calls = 0;
+  const source = {
+    detail: async (id) => ({ task: { ...task, id }, attempts: healthy() }), tracker: async () => tracked,
+    body: async () => ({ result: { summary: "passed", checks: [] } }),
+    delivery: () => { calls++; return new Promise((done) => { resolve = done; }); },
+  };
+  initDrawer(source, new Map());
+  await openDrawer("first"); await tick();
+  const drawer = document.getElementById("drawer");
+  landButton(drawer).click();
+  const stale = resolve;
+  await onTaskMoved({ ...task, id: "first", column: "land", land: "manual" });
+  assert(calls === 2, "changed task refreshes an unfinished summary");
+  stale(delivery({ actions: ["STALE"] })); await tick();
+  assert(drawer.textContent.includes("Loading delivery details") && !drawer.textContent.includes("STALE"), "stale refresh is ignored");
+  resolve(delivery({ actions: ["Current delivery"] })); await tick();
+  assert(drawer.textContent.includes("Current delivery"), "fresh delivery fills the selected pane");
+  await onTaskMoved({ ...task, id: "first", column: "land", land: "waiting" });
+  const otherTask = resolve;
+  await openDrawer("second"); await tick();
+  otherTask(delivery({ actions: ["WRONG TASK"] })); await tick();
+  assert(!drawer.textContent.includes("WRONG TASK") && drawer.textContent.includes("second"), "previous task cannot replace the drawer");
+  landButton(drawer).click();
+  closeDrawer();
+  resolve(delivery()); await tick();
+  assert(drawer.classList.contains("translate-x-full"), "a late response cannot reopen the drawer");
+  const fetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (path) => { assert(path === "/api/tasks/task%3Aid/delivery", "delivery route encodes the task id");
+      return { ok: true, json: async () => delivery() }; };
+    assert((await apiSource().delivery("task:id")).pr_url === null, "missing PR stays absent");
+  } finally { globalThis.fetch = fetch; }
+}
+
 function words() {
   for (const [code, expected] of [
     ["needs_owner", "The agent needs your decision"],
@@ -367,7 +447,7 @@ async function usage() {
 
 try {
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
-    drawerSelection, words, vocabulary, waitingRows, usage]) {
+    drawerSelection, landSelection, landStaleReplies, words, vocabulary, waitingRows, usage]) {
     await test();
   }
   for (const dark of [false, true]) {
@@ -378,7 +458,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 10 browser contracts, both themes";
+  results.textContent = "PASS: 12 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;

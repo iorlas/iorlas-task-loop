@@ -194,11 +194,17 @@ function pastGroup(entries, n, selected, select, stepUsage) {
   return details;
 }
 
-function landRow(t) {
+function landRow(t, selected, select) {
   const here = t.column === "land" || t.column === "landed";
   const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "unknown"] : null;
   const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
-  li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), el("span", `text-[13px] ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`));
+  const on = selected.step === "land";
+  const button = el("button", `w-full rounded px-2 py-1 text-left text-[13px] ${on ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"} ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`);
+  button.type = "button";
+  button.setAttribute("aria-pressed", String(on));
+  if (on) button.dataset.selected = "1";
+  button.addEventListener("click", () => select("land"));
+  li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), button);
   if (here && isWaiting(t)) li.append(waitingNote(t));
   else if (word) li.append(el("span", `block text-[11px] ${word.text}`, t.status_note ?? word.row));
   else li.append(el("span", "ml-2 text-[11px]", "pending"));
@@ -226,6 +232,6 @@ export function rail(list, t, selected, select, stepUsage = {}) {
     li.append(marker("border-slate-300 dark:border-slate-600"), `${s.emoji} ${s.label}`, el("span", "ml-2 text-[11px]", "pending"));
     current.append(li);
   }
-  current.append(landRow(t));
+  current.append(landRow(t, selected, select));
   return wrap;
 }
