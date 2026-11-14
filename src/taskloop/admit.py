@@ -37,8 +37,8 @@ from taskloop.drain.observe import identity
 from taskloop.drain.store import DrainStore, blocked
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import current
-from taskloop.ids import Ids
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import Ids
 from taskloop.input_context import InputContext, InputError
 from taskloop.input_context import read as read_context
 from taskloop.prepare import branch_refusal, held_refusal, refusal_detail

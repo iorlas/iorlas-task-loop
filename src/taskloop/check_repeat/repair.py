@@ -17,8 +17,8 @@ from taskloop.check_repeat.store import CheckRepeatState, CheckRepeatStore
 from taskloop.check_store import CheckStore
 from taskloop.checks import argv_digest, completed
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.ids import Ids
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import Ids
 from taskloop.input_context import InputError, refresh
 from taskloop.input_context import read as read_context
 from taskloop.operations import Clock, Failed, Launch, Started, StartRequest, deadline_after, launched

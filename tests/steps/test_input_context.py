@@ -21,6 +21,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import TRAILER, Checkouts, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.glossary_extract import BUDGET, HEADING, MAX_BYTES, PRIORITY, extract
+from taskloop.ids import NativeIds
 from taskloop.input_context import BEGIN, END, InputContext, InputError, read
 from taskloop.operations import Started
 from taskloop.profile import NoCommit, NotAFile, Unavailable
@@ -203,7 +204,8 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     current = store.attempt_of("tasks", "tl-1")
     assert current is not None
     run = fake()
-    attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {})), run, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
+                       run, lambda: 10, checkouts, slot_files)
     assert attempts.execute(current[0], SECOND).reason == "verification"
     text = run.calls[0][1].stdin
     record = store.load(current[0])
