@@ -10,7 +10,6 @@ from git_porcelain import Conflicted, GitUnavailable, MissingRevision, Repo, Sha
 from taskloop.check_admit import named
 from taskloop.check_store import ChecksRow, Required
 from taskloop.land_gate import gate_of
-from taskloop.land_guide import restart
 from taskloop.land_push import Origin, fetched
 from taskloop.land_summary import gate_lines, message_at
 from taskloop.operations import Failed
@@ -61,14 +60,10 @@ def _files(repo: Repo, rev: str) -> Files:
     return dict(tree.files)
 
 
-def squashed_onto(origin: Origin, checks: ChecksRow, title: str, o: str) -> tuple[str, Files, Files, Files] | Failed:
-    """S, with the tree listings of S, X and O; a conflict is refused with its first paths."""
+def squashed_onto(origin: Origin, checks: ChecksRow, title: str, o: str) -> tuple[str, Files, Files, Files] | Conflicted | Failed:
+    """S, with the tree listings of S, X and O, or the typed conflict for ordinary land's handoff."""
     x, made = checks.commit, made_s(origin, checks, title, o)
-    if isinstance(made, Conflicted):
-        shown = ", ".join(made.paths[:20])
-        return Failed("refused", "conflict", f"X does not merge onto origin's main at {o} ({len(made.paths)} paths: "
-                      f"{shown}). Nothing was recorded. To land it, {restart(checks.task_id, x)}")
-    if isinstance(made, Failed):
+    if isinstance(made, (Conflicted, Failed)):
         return made
     try:
         return made.sha, _files(origin.repo, made.sha), _files(origin.repo, x), _files(origin.repo, o)

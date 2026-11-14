@@ -65,8 +65,8 @@ LAND_GUIDE: Final = {
     "files, weakened tests), and the factory never accepts that by itself: the task waits until a person decides. To accept it, "
     "run `tl step land TASK --accept-gate-changes` (read the diff with `--summary` first); otherwise fix the task branch "
     "(abandon and restart).",
-    "conflict": "X does not merge onto origin's main, because main moved: the task has to start again on the current main (the "
-    "detail above says how). Under `land: auto` the factory has held the task and said so on it.",
+    "conflict": "Conflict work has stopped delivery. Review the retained work and its explanation before deciding how the task "
+    "continues. A retained resolution is not checked or delivered work. Under `land: auto` the factory holds the task.",
     "checks_failed": "A check failed on S, the change as squashed onto the current main (the `Land check:` lines and logs say "
     "which). Under `land: auto` the factory has held the task; to retry a flaky check by hand, rerun `tl step land`; "
     f"otherwise {restart()} "
@@ -100,7 +100,7 @@ LAND_GUIDE: Final = {
     "--force`; a rerun then closes or records it. The code is already on main.",
     "task": "The tracker has no such task: inspect the attempt's tracker root (`bd show <task>`).",
     "checkout": "--checkout is not a checkout of the task's repository: pass your own checkout of it.",
-    "minutes": "S needs validating (main moved or its required names changed): rerun with `--minutes N`, the validation's deadline.",
+    "minutes": "Land needs a time limit for validation or conflict resolution. Choose a duration before starting this work.",
     "choices": "Fix the flags: `--minutes` from 1 to the maximum; `--summary`, `--withdraw` and `--no-change` exclude each other.",
     "slot_busy": "Another land or entry holds the candidate's slot: wait for it, then rerun.",
     "no_free_slot": "No slot is free (reserved, or unusable: see the detail) and S needs one: rerun when one is, or stop `tl step rounds`.",

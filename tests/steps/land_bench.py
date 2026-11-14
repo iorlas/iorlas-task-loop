@@ -15,13 +15,15 @@ from typing import Literal, override
 
 from beads_client import Bead
 from doubles import CHECKS, Environment, FakeProfiles, FakeSlotFiles, PinnedViews
-from git_porcelain import Pushed, Recorded, RemoteRefs, Sha
+from git_porcelain import Pushed, Recorded, RemoteRefs, Repo, Sha
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
+from merge_bench import MergeRepo
 from sqlite_store import Store, begin_immediate
 
 from taskloop import check_store
-from taskloop.attempt_types import EntryIdentity, Seen
+from taskloop.attempt_loads import AttemptLoads
+from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_store import CheckStore
 from taskloop.checks import Block, BlockPorts, argv_digest
 from taskloop.claim_lease import Beat, Heartbeat
@@ -32,10 +34,15 @@ from taskloop.git_views import GitProfileFiles
 from taskloop.ids import NativeIds
 from taskloop.land import LandRequest, LandResult, land
 from taskloop.land_check import LandPorts
+from taskloop.land_conflict.admit import Ports as ConflictPorts
+from taskloop.land_conflict.handoff import Handoff
+from taskloop.land_conflict.models import Record
+from taskloop.land_conflict.store import ConflictStore
 from taskloop.land_store import LandRow, LandStore
+from taskloop.merge.models import Reason, Result, Terminal
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import landing
-from taskloop.slots import folder_name
+from taskloop.slots import SlotGit, folder_name
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import CloseAnswer
@@ -55,7 +62,7 @@ DONE = (
 )
 
 
-class Racing(FakeRepo):
+class Racing(MergeRepo):
     """The person's clone: `after_ls` runs one step after each `ls_remote` in turn (None: nothing), as another actor
     racing on origin; `answer` replaces the next push's result; `pushes` counts the pushes made."""
 
@@ -136,12 +143,17 @@ class LandBench:
     closing: list[CloseAnswer] = field(default_factory=list)
     tracker: list[tuple[str, str]] = field(default_factory=list)
     on_close: Callable[[], object] = lambda: None
+    conflict_runs: list[Record] = field(default_factory=list)
+    conflict_result: Result = field(default_factory=lambda: Terminal(reason=Reason.OWNER,
+                                    explanation="The checked conflict is retained; review is required before delivery."))
 
     def __post_init__(self) -> None:
         self.views, self.files = PinnedViews(self.repo), FakeSlotFiles(self.repo)
         self.environment = Environment(self.con, self.views, self.root / "art", tmp_bytes=4096)
         self.environment.clock = lambda: self.now
         self.environment.profiles = FakeProfiles(blob=json.dumps(PROFILE).encode())
+        ref = EvidenceFiles(self.root / "art").put_input(AttemptKey("implement", "implement-token", 1), "It must do X")
+        self.con.execute("UPDATE attempt SET input_path=?,input_digest=?", (ref.path, ref.digest))
         self.d = self.slot_head()
         self.lands = LandStore(lambda: self.con, self.begin)
 
@@ -189,7 +201,20 @@ class LandBench:
     def ports(self) -> LandPorts:
         return LandPorts(self.checking(), self.lands, self.views, lambda path: GitProfileFiles(path, self.views), self.inspect,
                          self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing,
-                             self.environ, self.close, ids=NativeIds())
+                             self.environ, self.close, self.conflicts(), ids=NativeIds())
+
+    def conflicts(self) -> Handoff:
+        store = ConflictStore(lambda: self.con)
+
+        def admission(_repo: Repo) -> ConflictPorts:
+            return ConflictPorts(store, AttemptLoads(lambda: self.con), EvidenceFiles(self.root / "art"), self.repo,
+                                 SlotGit(self.views, self.files), lambda _path: True, lambda: self.now, NativeIds())
+
+        def execution(_repo: Repo, record: Record) -> Result:
+            self.conflict_runs.append(record)
+            return self.conflict_result
+
+        return Handoff(store, admission, execution)
 
     def land(self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None,
              accept: bool = False) -> LandResult:

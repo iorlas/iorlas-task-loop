@@ -32,6 +32,7 @@ from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.ids import NativeIds
 from taskloop.land import Landed, LandRequest, LandResult, land
 from taskloop.land_check import LandPorts
+from taskloop.land_conflict.composition import conflict_handoff
 from taskloop.land_store import LandStore
 from taskloop.operations import Failed
 from taskloop.owned_processes import entry_seen, setup_seen, this_process
@@ -129,7 +130,7 @@ class Real:
                         RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(environ), ids=NativeIds())
         return LandPorts(work, LandStore(lambda: con), VIEWS.remotes, lambda path: GitProfileFiles(path, VIEWS.remotes),
                          self.tasks, heartbeat_for, NoBeats, this_process, lambda _path: True, landing,
-                             dict(os.environ), self.close, ids=NativeIds())
+                             dict(os.environ), self.close, conflict_handoff(work, VIEWS, heartbeat_for), ids=NativeIds())
 
     def tasks(self, task_id: str, backlog: str, root: str) -> TaskInspection:
         return inspect_task(TaskBinding(TaskScope(backlog), Path(root)), self.tracker, task_id)

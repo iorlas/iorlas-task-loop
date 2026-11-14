@@ -106,21 +106,23 @@ def test_a_failed_validation_pushes_nothing_and_leaves_its_slot_released(b: Land
 def test_an_artifacts_directory_that_cannot_be_written_is_unavailable_log_naming_it_and_the_rerun_lands(b: LandBench) -> None:
     """tl-8bh9.14.41: not a failed setup: no branch advice, the directory named, a rerun after the fix pushes."""
     b.advance({"OTHER": "another task\n"})
-    blocked = b.root / "art" / "attempts"
+    blocked = b.root / "unwritable" / "attempts"
+    b.environment.artifacts = blocked.parent
     blocked.parent.mkdir(parents=True, exist_ok=True)
     blocked.write_text("a file where the folder belongs")
     found = b.land()
-    assert isinstance(found, Failed) and (found.kind, found.reason) == ("unavailable", "log") and str(b.root / "art") in found.detail
+    assert isinstance(found, Failed) and (found.kind, found.reason) == ("unavailable", "log") and str(blocked.parent) in found.detail
     assert b.repo.pushes == 0 and b.execs() == []
     blocked.unlink()
     assert isinstance(b.land(), Landed)
 
 
-def test_a_conflict_is_refused_with_its_paths_and_nothing_recorded(b: LandBench) -> None:
+def test_a_conflict_hands_off_checked_work_and_stops_before_delivery(b: LandBench) -> None:
     main = b.advance({"src/x.py": "X = 2\n"})
     found = b.land()
-    assert failed(found) == ("refused", "conflict") and isinstance(found, Failed) and "src/x.py" in found.detail
-    nothing_changed(b, main)
+    assert failed(found) == ("refused", "conflict") and isinstance(found, Failed) and "retained" in found.detail
+    assert len(b.conflict_runs) == 1 and b.reservations() == [("s1", b.conflict_runs[0].key.attempt_id)]
+    assert b.rows() == () and b.repo.pushes == 0 and b.origin_main() == main and b.execs() == []
 
 
 def test_main_already_holding_x_s_changes_is_no_change_until_accepted(b: LandBench) -> None:
