@@ -256,7 +256,7 @@ def test_unfinished_answers_with_paths_are_collected_without_commit_or_repeat(
         answer["plan_path"] = None
     execution = fake(json.dumps(answer))
     attempts = Attempts(
-        AttemptStore(lambda: con), EvidenceFiles(surroundings.tmp), AgentLaunch(codex), execution, lambda: 10,
+        AttemptStore(lambda: con), EvidenceFiles(surroundings.tmp), AgentLaunch(codex, ids=NativeIds()), execution, lambda: 10,
         surroundings.checkouts, surroundings.files,
         environment=Environment(con, surroundings.checkouts, surroundings.tmp, tmp_bytes=4096).preparation(),
     )
