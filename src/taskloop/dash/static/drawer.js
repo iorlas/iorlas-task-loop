@@ -3,13 +3,15 @@
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
 import {
-  $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, holdCallout, isWaiting, position, quietSpan, stepInfo, tag, waitingNote,
+  $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, elapsedSpan, holdCallout, isWaiting, position, quietSpan, stepInfo,
+  tag, tick, waitingNote,
 } from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
 import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 import { usageNode } from "./usage.js";
+import { receiveDuration } from "./duration.js";
 
 let source = null;
 let tasks = null;
@@ -64,6 +66,8 @@ export async function openDrawer(id) {
     return;
   }
   if (open !== mine) return;
+  receiveDuration(mine.detail.task.duration);
+  mine.detail.attempts.forEach((a) => receiveDuration(a.duration));
   mine.sig = signature(tasks.get(id) || mine.detail.task);
   select();
   follow();
@@ -104,12 +108,16 @@ function follow() {
     try {
       const page = await source.feed(mine.id, a.step, a.n, a.feed_cursor ?? "0:0"); // a file not there yet follows from its start
       if (open !== mine || attemptOf() !== a) return;
+      receiveDuration(page.duration);
+      const changed = page.duration && page.duration.execution !== a.duration?.execution;
+      a.duration = page.duration ?? a.duration;
+      $("drawer").querySelectorAll("[data-duration]").forEach(tick);
       a.feedError = null;
       setNote(a);
       a.feed_cursor = page.cursor ?? a.feed_cursor;
       if (page.replaced) a.feed = a.feed.filter((e) => e.type === "step");
       for (const e of page.events) apply(a, e);
-      if (page.replaced) render();
+      if (page.replaced || changed) render();
       else page.events.forEach((e) => show(a, e));
       touchQuiet(a);
     } catch (error) {
@@ -323,10 +331,15 @@ function pane() {
     : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, attempt ${a.n}`;
   top.append(el("h3", "text-sm font-semibold", title), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
-  if (a.step !== VERIFY.id) top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
+  if (a.state === "running" && a.duration && !a.duration.frozen) {
+    top.append(elapsedSpan(a.duration, "text-xs text-slate-500 dark:text-slate-400", "", " in step, still running"));
+  } else if (a.step !== VERIFY.id) {
+    top.append(el("span", "text-xs text-slate-500 dark:text-slate-400",
+      `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
+  }
   if (a.usage) top.append(usageNode(a.usage));
-  if (a.state === "running" && ["plan", "implement"].includes(a.step) && (a.feed.at(-1)?.at ?? a.started_at)) {
-    const quiet = quietSpan(a.feed.at(-1)?.at ?? a.started_at);
+  if (a.state === "running" && ["plan", "implement"].includes(a.step) && a.duration && !a.duration.frozen) {
+    const quiet = quietSpan(a.duration);
     quiet.id = "quiet";
     top.append(quiet);
   }
@@ -346,9 +359,19 @@ function pane() {
 }
 
 // A card moved. The drawer reloads the task's steps only when they can have changed (an attempt began or ended, a hold, a land);
-// a card that only shows newer activity changes nothing here, and never moves the tab, the selection or the scroll place.
+// Newer measurements refresh the live nodes without moving the tab, the selection or the scroll place.
 export async function onTaskMoved(task) {
-  if (open?.id !== task.id || !open.detail || signature(task) === open.sig) return;
+  if (open?.id !== task.id || !open.detail) return;
+  receiveDuration(task.duration);
+  if (signature(task) === open.sig) {
+    const a = open.detail.attempts.at(-1);
+    if (a?.state === "running" && a.step === task.column && task.duration && !a.duration) {
+      a.duration = task.duration;
+      render();
+    }
+    $("drawer").querySelectorAll("[data-duration],[data-quiet]").forEach(tick);
+    return;
+  }
   const mine = open;
   const following = attemptOf()?.state === "running" && attemptOf() === open.detail.attempts.at(-1);
   try {
@@ -356,6 +379,8 @@ export async function onTaskMoved(task) {
     if (open !== mine) return;
     for (const a of fresh.attempts) if (open.bodies.get(`${a.step}/${a.n}`)?.state !== a.state) open.bodies.delete(`${a.step}/${a.n}`);
     open.detail = fresh;
+    receiveDuration(fresh.task.duration);
+    fresh.attempts.forEach((a) => receiveDuration(a.duration));
   } catch (error) {
     if (open === mine) showError(mine.id, error);
     return;

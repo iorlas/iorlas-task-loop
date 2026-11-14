@@ -44,12 +44,11 @@ export function setNote(a) {
     : `Latest ${FEED_LIMIT} lines${a.state === "running" ? ", live" : ""}`;
 }
 
-// The attempt's quiet time counts from its latest line.
+// Feed display timestamps never establish the attempt's quiet age.
 export function touchQuiet(a) {
   const node = $("quiet");
-  const latest = a.feed.at(-1)?.at;
-  if (!node || !latest) return;
-  node.dataset.quiet = latest;
+  if (!node || !a.duration) return;
+  node.dataset.quiet = a.duration.execution;
   tick(node);
 }
 

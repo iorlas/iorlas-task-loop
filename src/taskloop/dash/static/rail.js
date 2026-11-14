@@ -1,6 +1,7 @@
 // One row per step attempt, with the factory's verification attached to its agent answer.
 // Past history is folded for display only; selection still uses the original (step, n).
-import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, fmtDur, isWaiting, since, stepInfo, waitingNote } from "./ui.js";
+import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, elapsedSpan, fmtDur, isWaiting, since, stepInfo, waitingNote } from "./ui.js";
+import { elapsedDuration } from "./duration.js";
 import { say, wordNode } from "./words.js";
 import { usageNode, usageText } from "./usage.js";
 
@@ -10,6 +11,7 @@ const chosen = (a, selected) => a && selected.step === a.step && selected.n === 
 const marker = (cls) => el("span", `absolute -left-[3px] top-[0.8rem] h-1.5 w-1.5 rounded-full border ${cls}`);
 
 export function lasted(a) {
+  if (a.state === "running" && a.duration && !a.duration.frozen) return fmtDur(elapsedDuration(a.duration.execution));
   if (a.step === VERIFY.id || !a.started_at) return "—";
   const end = a.ended_at ? Date.parse(a.ended_at) : a.state === "running" ? Date.now() : NaN;
   const ms = end - Date.parse(a.started_at);
@@ -130,7 +132,9 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
       + (a.reason ? ` (${a.reason})` : "") + (gap === null ? "" : ` · ${gapWords(gap)}`);
     top.append(tag);
   }
-  top.append(el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
+  top.append(a.state === "running" && a.duration && !a.duration.frozen
+    ? elapsedSpan(a.duration, `ml-auto text-[11px] tabular-nums ${muted}`)
+    : el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
   btn.append(top);
   const covered = verification && (a.summary === "verification" || a.summary === verification.summary);
   if (a.state === "failed" && !covered) btn.append(wordNode(el, a.summary, `mt-0.5 block truncate text-[11px] ${muted}`));

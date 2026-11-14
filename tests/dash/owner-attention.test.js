@@ -13,12 +13,15 @@ const mixed = [card("hold-old", "03"), card("hold-new", "04", {
 }),
   card("ask-old", "01", { ask: true, question }),
   card("ask-new", "02", { ask: true, question: "Which region?\nChoose one." }),
-  card("running", "05", { column: "implement", status: "running", ask: true })];
+  card("running", "05", { column: "implement", status: "running", ask: true,
+    duration: { execution: "running", number: 1, elapsed_ms: 7200000, quiet_ms: 900000, frozen: false } })];
 let snapshot = { slots: ["s1", "s2"], tasks: mixed };
 const backlog = "fixture/main";
 const round = (at, extra = {}) => ({ at, backlog, move: "round", task: null, step: null, words: ["moves=0"], ...extra });
 let now = Date.parse("2026-11-14T12:00:00Z");
 Date.now = () => now;
+let monotonic = 0;
+Object.defineProperty(performance, "now", { value: () => monotonic, configurable: true });
 const timers = [];
 const interval = window.setInterval;
 window.setInterval = (callback, ms) => {
@@ -26,7 +29,7 @@ window.setInterval = (callback, ms) => {
   timers.push(callback);
   return 0;
 };
-const advance = (ms) => { now += ms; timers.forEach((callback) => callback()); };
+const advance = (ms) => { now += ms; monotonic += ms; timers.forEach((callback) => callback()); };
 let logSnapshot = { backlog, rows: [round("2026-11-14T10:00:00Z")] };
 let logResponse = () => logSnapshot;
 let boardError = null;
@@ -182,6 +185,42 @@ async function waitingStates() {
   }
   send({ kind: "task", task: mixed.at(-1) });
   assert(node("running").querySelector("[data-quiet]"), "returning to running restores activity age");
+}
+
+async function liveDurations() {
+  const sample = { execution: "board-duration", number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
+  const live = card("duration", "00", { column: "plan", status: "running", step_started_at: null, duration: sample });
+  const publish = (duration) => send({ kind: "task", task: { ...live, duration } });
+  publish(sample);
+  const elapsed = () => node(live.id).querySelector("[data-duration]").textContent;
+  const quiet = () => node(live.id).querySelector("[data-quiet]");
+  assert(elapsed() === "1m 59s in step" && quiet().hidden, "projection works without a start timestamp; quiet below 120s");
+  const savedWall = now;
+  now += 86400000;
+  advance(1);
+  assert(elapsed() === "2m 00s in step" && node(live.id).dataset.quietLevel === "slow", "forward wall jump keeps amber threshold");
+  assert(quiet().querySelector(".bg-amber-500"), "card amber dot");
+  now -= 172800000;
+  advance(1000);
+  publish(sample);
+  document.getElementById("view-lanes").click();
+  assert(elapsed() === "2m 01s in step", "backward wall jump, duplicate and layout redraw keep progress");
+  await resync([...mixed, { ...live, duration: { ...sample, number: 0, elapsed_ms: 0, quiet_ms: 0 } }]);
+  assert(elapsed() === "2m 01s in step", "stale snapshot cannot restart receipt time");
+  advance(778999);
+  assert(node(live.id).dataset.quietLevel === "slow", "card stays amber at 899999ms");
+  advance(1);
+  assert(node(live.id).dataset.quietLevel === "long" && quiet().querySelector(".bg-rose-500"), "card turns red at 900000ms");
+  publish({ ...sample, number: 2, elapsed_ms: 500000, quiet_ms: 500000 });
+  assert(elapsed() === "15m 00s in step" && node(live.id).dataset.quietLevel === "long", "newer delayed sample preserves progress");
+  publish({ ...sample, number: 3, elapsed_ms: 900000, quiet_ms: 0 });
+  assert(quiet().hidden && !node(live.id).dataset.quietLevel, "new command evidence clears card severity");
+  publish(sample);
+  assert(quiet().hidden, "stale command evidence cannot restore severity");
+  publish({ ...sample, execution: "board-next", elapsed_ms: 3000, quiet_ms: 0 });
+  assert(elapsed() === "3.0s in step" && quiet().hidden, "new execution has its own receipt base");
+  now = savedWall;
+  await resync(mixed);
 }
 
 const healthText = () => document.getElementById("mode").textContent;
@@ -383,6 +422,7 @@ try {
   await import("../../src/taskloop/dash/static/app.js");
   for (let n = 0; !stream && n < 100; n++) await tick();
   assert(stream, "App subscribed to stream");
+  await liveDurations();
   health("Stream connecting");
   health("Last recorded round 2h 00m ago");
   for (const theme of ["light", "dark"]) {

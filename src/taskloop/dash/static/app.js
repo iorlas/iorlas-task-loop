@@ -4,6 +4,7 @@
 import { initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
+import { receiveDuration } from "./duration.js";
 import {
   $, COLUMNS, LAND, STEPS, callout, el, holdCallout, isWaiting, position, quietSpan, runningAgent, tag, tick, waitingNote,
 } from "./ui.js";
@@ -169,16 +170,17 @@ function fillCard(node, t) {
   if (notes.children.length) node.append(notes);
   const foot = el("div", "mt-2.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400");
   const time = el("span", "whitespace-nowrap tabular-nums");
-  if (!isWaiting(t) && t.step_started_at) {
+  if (!isWaiting(t) && (t.step_started_at || (runningAgent(t) && t.duration && !t.duration.frozen))) {
     [time.dataset.prefix, time.dataset.suffix] = TIME[t.column];
-    time.dataset.since = t.step_started_at;
+    if (runningAgent(t) && t.duration && !t.duration.frozen) time.dataset.duration = t.duration.execution;
+    else time.dataset.since = t.step_started_at;
     foot.append(time);
     tick(time);
   }
   if (t.slot && !lanes) foot.append(el("span", "ml-auto font-mono", t.slot));
   node.append(foot);
-  if (runningAgent(t) && t.last_activity_at) {
-    const quiet = quietSpan(t.last_activity_at);
+  if (runningAgent(t) && t.duration && !t.duration.frozen) {
+    const quiet = quietSpan(t.duration);
     node.append(quiet);
     tick(quiet);
   }
@@ -282,7 +284,11 @@ async function resyncBoard() {
   const ids = new Set(snap.tasks.map((t) => t.id));
   for (const id of [...cards.keys()]) if (!ids.has(id)) drop(id);
   slotNames = snap.slots;
-  for (const t of snap.tasks) tasks.set(t.id, t);
+  for (const t of snap.tasks) {
+    receiveDuration(t.duration);
+    tasks.set(t.id, t);
+    onTaskMoved(t);
+  }
   notice = snap.notice;
   if (lanes) buildBoard();
   renderBoard();
@@ -329,12 +335,13 @@ async function start() {
       observeRound(msg.row);
       return onLog(msg.row);
     }
+    receiveDuration(msg.task.duration);
     tasks.set(msg.task.id, msg.task);
     renderBoard();
     onTaskMoved(msg.task);
   }, (connected) => { streamLabel.textContent = connected ? "Stream connected" : "Stream disconnected"; });
   setInterval(() => {
-    document.querySelectorAll("[data-since],[data-quiet],[data-waiting-since]").forEach(tick);
+    document.querySelectorAll("[data-since],[data-duration],[data-quiet],[data-waiting-since]").forEach(tick);
     // A future observation may become an elapsed time once the local clock catches up.
     if (roundAt !== null) renderRound();
   }, 1000);
