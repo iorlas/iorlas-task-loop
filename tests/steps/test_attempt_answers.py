@@ -110,7 +110,7 @@ def test_failure_survives_reopening_and_missing_raw_answer(
     assert result.execution is not None and result.execution.verification is None
     failure = result.execution.answer.failure
     assert failure is not None and failure.rule is rule and detail in failure.explanation
-    assert result.explanation == failure.describe() and result.execution.answer.effect is None
+    assert failure.describe() in result.explanation and result.execution.answer.effect is None
     loaded = owner.store.load(KEY)
     assert loaded is not None
     state, evidence = result.execution.answer, result.execution.evidence

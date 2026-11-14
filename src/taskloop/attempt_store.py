@@ -55,6 +55,7 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
         *(facts.cumulative or (None, None, None)),
         facts.turns,
         facts.session,
+        facts.usage_incomplete,
     )
 
 

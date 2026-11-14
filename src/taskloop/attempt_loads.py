@@ -205,18 +205,19 @@ class AttemptLoads(AttemptReads):
             cumulative,
             as_nullable_int(row[15]),
             as_nullable_text(row[16]),
+            None if row[17] is None else bool(row[17]),
         )
-        evidence = Evidence(*(FileRef(as_text(row[i]), as_text(row[i + 1])) for i in (17, 19, 21, 23)))
-        kind, session_state = as_text(row[25]), as_text(row[31])
+        evidence = Evidence(*(FileRef(as_text(row[i]), as_text(row[i + 1])) for i in (18, 20, 22, 24)))
+        kind, session_state = as_text(row[26]), as_text(row[32])
         if kind not in ("validation_pending", "valid", "missing", "json_invalid", "schema_invalid"):
             raise StoreUnavailable("Invalid answer phase")
         if session_state not in ("complete", "pending", "conflict", "fault"):
             raise StoreUnavailable("Invalid session state")
         answer = AnswerState(
-            kind, as_nullable_text(row[26]), stored_effect(row[27]), as_listed(row[28]), as_nullable_text(row[29]),
-            answer_failures.decode(row[30], kind),
+            kind, as_nullable_text(row[27]), stored_effect(row[28]), as_listed(row[29]), as_nullable_text(row[30]),
+            answer_failures.decode(row[31], kind),
         )
-        return StoredExecution(key, facts, evidence, answer, session_state, verdict_of(row[32:36]))
+        return StoredExecution(key, facts, evidence, answer, session_state, verdict_of(row[33:37]))
 
     def collect(self, key: AttemptKey) -> StoredExecution | None:
         with self._connection() as con:
