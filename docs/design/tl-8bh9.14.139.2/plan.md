@@ -1,18 +1,21 @@
 # Header
-Task: tl-8bh9.14.139.2; base: 6f368af9b52430f2ca01fc6ac44244776d1e79b5. Depth: small; one dashboard behaviour. No missing decision; .139.1 landed. Evidence budget: 6 model calls. Size: 12 changed files including tests/plan, 1 independent behaviour, 70 implement model calls.
+Task: tl-8bh9.14.139.2; base: 4bb9f830a272640ebfc700dc595a53e2b6c25b7b
+Depth: small
+Reason: one dashboard interaction. Decisions: none missing. Dependencies: landed. Evidence budget: 6 model calls.
+Size: 12 changed files including tests/plan; 1 independent behaviour; 70 implement model calls.
 
 ## Outcome and non-goals
-Waiting notes exist; Land selection/content remain. Exclude slot labels, outcome wording, PR discovery and delivery controls.
+Waiting notes exist; Land selection/content remain. Exclude slot/outcome wording, PR discovery and delivery controls.
 
 ## Settled decisions
 Use shared summary mode on selection, outside board polling.
-Commands are reference text. PR URL is nullable; publication currently supplies none.
+Commands are reference text. PR URL is nullable; use available structured data, without discovery.
 
 ## Open decisions
 - None.
 
 ## Change map
-Source paths below are relative to src/taskloop/.
+Source paths relative to src/taskloop/.
 - dash_land.py (new): reader integrated by _ports.
 - dash_model.py: Pydantic delivery response.
 - dash_composition.py: _ports callback.
@@ -34,6 +37,7 @@ Source paths below are relative to src/taskloop/.
 - result_data.py: consult LandSummary dispatch.
 - step_render.py: consult LandSummary dispatch.
 - land_render.py: consult land_lines, summary_lines consumers.
+- tests/cli/test_land_cli.py: consult summary consumer.
 
 ## Read list
 - src/taskloop/dash/static/rail.js:197-231 — row.
@@ -47,7 +51,7 @@ Source paths below are relative to src/taskloop/.
 - src/taskloop/land.py:361-404 — effects.
 - src/taskloop/land_summary.py:77-166 — producer.
 - src/taskloop/land_data.py:50-89 — consumers.
-- src/taskloop/publish.py:1-16 — publication.
+- tests/cli/test_land_cli.py:170-176 — summary consumer.
 - src/taskloop/cli_composition.py:170-197 — caller.
 - src/taskloop/cli_step.py:245-267 — caller.
 - src/taskloop/round_land.py:45-65 — caller.
@@ -63,11 +67,11 @@ Source paths below are relative to src/taskloop/.
 - src/taskloop/dash/static/app.js:313-316 — source caller.
 
 ## Contract
-Intent: select Land without an attempt number. Effect: shared summary fetch/Git objects and operation bookkeeping; no push, close, claim, delivery reservation or checks. Result: typed actions, diff totals/command, land command, optional PR URL or explained failure. Serialize Pydantic at HTTP edge; no schema change. Ignore stale replies; refresh changed tasks.
+Intent: select Land without an attempt number. Effect: shared summary fetch/Git objects and operation bookkeeping; no push, close, claim, delivery reservation or checks. Result: typed actions, diff totals/command, land command, optional PR URL or explained failure. Derive from typed facts. Serialize Pydantic at HTTP edge; no schema change. Ignore stale replies; refresh changed tasks.
 
 ## Work packages
 1. Backend/Python tests: projection/effect boundary; closes A.
 2. Client/browser contracts: selection/content/retry; closes A. Exercise mocked fixture. Last, once each: `just check 2>&1 | tail -60`, `just test 2>&1 | tail -40`.
 
 ## Acceptance behaviours
-A. Land selection displays actions, diff summary/command and any available PR link; loading/failure/retry and task switching preserve attempt navigation and waiting notes without delivering.
+A. Land shows actions, diff summary/command and any available PR link; loading/failure/retry and task switching preserve attempt navigation and waiting notes without delivering.
