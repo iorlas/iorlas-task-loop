@@ -14,6 +14,7 @@ from pathlib import Path
 
 from git_porcelain import NothingToRecord, Recorded, Repo
 
+from taskloop import wip
 from taskloop.attempt_types import (
     MODE,
     TRAILER,
@@ -96,11 +97,27 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     if head is None or state.branch != task_branch(admission.task.task_id):
         return Unsettled("unborn" if head is None else "branch")
     if answer.effect == "keep":  # X is B: a `keep` step never adopts a commit
-        return Committed(base) if head == base else _moved(checkouts(state.root), head, base, admission)
+        if head != base:
+            return _moved(checkouts(state.root), head, base, admission)
+        return _reviewed(checkouts, files, admission, state, base, quiet) if wip.is_saved(checkouts(state.root), base) else Committed(base)
     if head != base:
         view = checkouts(state.root)
         return Committed(head) if _ours(view, head, base, admission) else _moved(view, head, base, admission)
     return _commit(checkouts, files, admission, state, base, answer, quiet)
+
+
+def _reviewed(checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, quiet: GitQuiet) -> Settled:
+    """A `keep` answer over a base that is saved work: B is preservation, never a result, so the step ends at its own commit
+    of the same tree (parent B, this attempt's trailer), made only for this valid answer: the hold never made it."""
+    blocked = _blocked(quiet, files, admission, state)
+    if blocked is not None:
+        return blocked
+    path = Path(admission.slot_path)
+    made = checkouts(path, git_dir=state.gitdir).worktree(path).record(
+        f"Review saved work of {admission.task.task_id}\n\n{trailer(admission)}", paths="staged", hooks=False, allow_empty=True)
+    if isinstance(made, Recorded):
+        return Committed(made.sha)
+    raise NotSettled("git:HookRejected")
 
 
 def _commit(

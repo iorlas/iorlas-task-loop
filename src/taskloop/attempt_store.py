@@ -207,7 +207,8 @@ class AttemptStore(AttemptLoads):
             return "accepted"
 
     def end_commit(self, admission: Admission, commit: str) -> str:
-        """Write once the commit the step ends at: X != B for effect `commit`, B itself for `keep`, only for a captured,
+        """Write once the commit the step ends at: X != B for effect `commit`, B itself for `keep` (over saved work: the step's own
+        commit of that tree), only for a captured,
         clean valid answer with its session complete, with no verdict stored yet (a `nothing_written` verdict has no commit and
         is never contradicted afterwards). Returns the value now stored: another one than `commit` is the caller's
         `inconsistent`; a refused registration write is StoreRefused."""
@@ -217,7 +218,7 @@ class AttemptStore(AttemptLoads):
                 """UPDATE attempt SET end_commit=?1,rev=rev+1 WHERE attempt_id=?2 AND end_commit IS NULL AND phase='captured'
                 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=?2 AND e.answer_kind='valid' AND e.rc=0
                 AND e.timed_out=0 AND e.session_state='complete' AND ((e.effect='commit' AND ?1<>attempt.base_commit)
-                OR (e.effect='keep' AND ?1=attempt.base_commit)))
+                OR e.effect='keep'))
                 AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=?2)""",
                 (commit, admission.key.attempt_id),
             )

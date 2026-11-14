@@ -15,8 +15,10 @@ close; `check_result.attempt_id` names a checks attempt or a land candidate, so 
 `task_hold`, a hold of a round-taken task's agent attempt with its tracker writes' phases (written only by `hold_store`).
 v15 (tl-8bh9.14.134): `attempt.repeat_listing`, the JSON array of paths the failed verification listed (the unsafe path,
 the leftovers, the ignored paths) that a repeat attempt answers; NULL for attempt 1. The dashboard shows it as the
-verification's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.provider`, the agent harness the step ran under and the
-provider of its model (`harness_choice`), shown on the dashboard. No migration: an older factory.db is refused (`schema`)."""
+verification's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.provider`, the agent harness the step ran
+under and the provider of its model (`harness_choice`), shown on the dashboard. v19 (tl-8bh9.14.148): `task_hold.saved`, the JSON
+array of the commits a hold saved on the task branch (`wip.SavedCommit`), written only by `hold_store`.
+No migration: an older factory.db is refused (`schema`)."""
 
 import sqlite3
 from pathlib import Path
@@ -33,7 +35,7 @@ _PROVIDERS = ",".join(f"'{each}'" for each in Provider)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=18,
+    version=19,
     name="factory",
     steps={},
     ddl=f"""
@@ -210,6 +212,7 @@ CREATE TABLE task_hold (
  commenting_at REAL, commented_at REAL,
  cleared_at REAL,
  rev INTEGER NOT NULL DEFAULT 0,
+ saved TEXT NOT NULL DEFAULT '[]',
  CHECK((labels IS NULL) = (labelled_at IS NULL)),
  CHECK(commented_at IS NULL OR commenting_at IS NOT NULL),
  CHECK(commented_at IS NULL OR (labels IS NOT NULL AND labels IN ('moved','absent','not_ours'))),

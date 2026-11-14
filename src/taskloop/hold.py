@@ -211,7 +211,8 @@ def _comment(ports: HoldPorts, row: HoldRow, agent: AttemptRow, found: Returned 
     labels = None if leased is None else leased.labels
     if leased is None or labels not in COMMENTING:
         return "refused:leased"
-    text = comment(facts(ports.files, ports.reader, leased, labels, agent, leftovers), found)
+    saved = tuple(each.sha for each in ports.store.saved(leased.attempt_id))
+    text = comment(replace(facts(ports.files, ports.reader, leased, labels, agent, leftovers), saved=saved), found)
     answer = ports.tracker.comment(leased.tracker_root, leased.task_id, text)
     if answer.word == "unavailable":  # one capped try failed: the lease is given back, so the next round retries at once
         ports.store.uncommenting(leased.attempt_id, leased.rev)

@@ -76,7 +76,8 @@ def test_another_actor_s_task_is_answered_by_a_hand_start() -> None:
 
 
 @pytest.mark.parametrize(("reason", "line"), [
-    ("branch_moved", f"Restore task/tl-1 to contain {'c' * 40}, or delete it locally and on origin, before adding the label."),
+    ("branch_moved", f"Restore task/tl-1 to contain {'c' * 40}, or rename it aside (`old/tl-1-` and the first 12 characters of its tip), "
+                       "before adding the label."),
     ("claim_lost", "Someone else changed this task's claim while the factory worked on it."),
 ])
 def test_a_branch_moved_or_claim_lost_hold_adds_its_reason_line(reason: str, line: str) -> None:

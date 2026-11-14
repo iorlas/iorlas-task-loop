@@ -93,7 +93,7 @@ def _closing_words(rules: StepRules) -> str:
         "one-line commit `message`; the factory commits exactly those paths. Remove any other file you created. Anything "
         "left uncommitted is reported back to you as a failed step. If the task cannot be planned as written (it contradicts "
         "itself or the code, is empty or too vague to act on), write no plan: answer `needs_owner` and say in `explanation` "
-        "what the owner must decide."
+        "what the owner must decide. " + step_text.SAVED_WORK
     )
 
 

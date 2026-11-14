@@ -102,7 +102,7 @@ def _closing_words(task_id: str, rules: StepRules) -> str:
         "file you created. Anything left uncommitted is reported back to you as a failed step. In `explanation`, name each "
         "command you ran and how it ended, and every test file you added. If you could not finish, answer "
         "`incomplete`; if the plan cannot be implemented as written or needs a decision, answer `needs_owner`; say why in "
-        "`explanation`."
+        "`explanation`. " + step_text.SAVED_WORK
     )
 
 

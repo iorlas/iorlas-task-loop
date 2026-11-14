@@ -196,7 +196,8 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
     land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s."""
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
-        ("park", "slot_release.py"), ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
+        ("park", "slot_release.py"), ("park", "wip.py"), ("reset", "wip.py"),
+            ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
         ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }
     assert git_writers() == expected

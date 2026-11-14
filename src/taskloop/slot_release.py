@@ -28,9 +28,10 @@ from typing import Final, Literal
 
 from any_agent.procs import Worker
 from beads_client import BdError
-from git_porcelain import GitUnavailable
+from git_porcelain import GitUnavailable, Repo, Worktree
 from stream_proc import OwnedProcess
 
+from taskloop import wip
 from taskloop.admit import Unclaim
 from taskloop.attempt_reads import StoreUnavailable, as_int, as_nullable_text, as_text
 from taskloop.attempt_result import collect
@@ -42,7 +43,7 @@ from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks
 from taskloop.prepare import task_branch
 from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
-from taskloop.slot_state import listing, observe_slot
+from taskloop.slot_state import SlotState, listing, observe_slot
 
 type ParkHold = Callable[[str, str], AbstractContextManager[None]]  # (slot path, attempt id): the slot's lock, never waiting
 type Scratch = Callable[[Path], bool]  # the slot's `.t/<slot>` emptied when it resolves where it belongs; False otherwise
@@ -180,8 +181,12 @@ def setup_stopped(seen: SetupSeen, setup: OwnedProcess | None) -> NotReleased | 
     return NotReleased("unsettled", "setup_running", alive)
 
 
+type Saver = Callable[[Repo, Worktree, SlotState], wip.Refused | None]  # a hold's save of the slot's work, under the lock
+
+
 def park_slot(
-    checkouts: Checkouts, slot_files: SlotFiles, path: Path, repo_id: str, slot_head: str, branch: str | None
+    checkouts: Checkouts, slot_files: SlotFiles, path: Path, repo_id: str, slot_head: str, branch: str | None,
+    save: Saver | None = None,
 ) -> tuple[str, str | None] | NotReleased:
     """The release's one Git write, shared with the checks release (under the slot's lock): the slot on its own hardened
     view, the pointer first (`redirected` makes no Git call); on exactly `branch` (the implement attempt's `task/<id>`;
@@ -190,11 +195,10 @@ def park_slot(
     transaction) when it is at D, else parked at D. Dirty, on another branch, redirected or unborn refuses: it never
     resets work. Returns where the slot is left and the park."""
     state = observe_slot(checkouts, slot_files, str(path), repo_id)
-    if isinstance(state, str):
-        reason = "slot_redirected" if state == "redirected" else state
-        return NotReleased("refused" if state == "redirected" else "unavailable", reason, f"Inspect the slot. {NOTHING}")
-    if state.head is None:
-        return NotReleased("refused", "slot_unborn", f"The slot has no commit. {NOTHING}")
+    if isinstance(state, str) or state.head is None:
+        return _unreadable(state)
+    if save is not None and state.branch in (None, branch):
+        return _saved(checkouts, path, state, slot_head, save)
     if state.dirty:
         left = listing(checkouts(path, git_dir=state.gitdir), path)
         again = f"List them again with `git -C {path} status --short`; remove or restore each, then run it again. {NOTHING}"
@@ -204,6 +208,26 @@ def park_slot(
     if state.branch not in (None, branch):
         return NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}")
     return slot_head, str(checkouts(path, git_dir=state.gitdir).worktree(path).park(slot_head))
+
+
+def _unreadable(state: SlotState | str) -> NotReleased:
+    """The refusal of a slot that cannot be read (a word) or has no commit."""
+    if isinstance(state, str):
+        reason = "slot_redirected" if state == "redirected" else state
+        return NotReleased("refused" if state == "redirected" else "unavailable", reason, f"Inspect the slot. {NOTHING}")
+    return NotReleased("refused", "slot_unborn", f"The slot has no commit. {NOTHING}")
+
+
+def _saved(checkouts: Checkouts, path: Path, state: SlotState, slot_head: str, save: Saver) -> tuple[str, str | None] | NotReleased:
+    """A hold's park: the slot's work saved on the task branch first (`wip.save`), then detached at D with its ignored files
+    kept; a slot already at D, clean, is left as it is."""
+    view = checkouts(path, git_dir=state.gitdir)
+    slot = view.worktree(path)
+    if state.dirty or state.branch is not None or state.head != slot_head:
+        refused = save(view, slot, state)
+        if refused is not None:
+            return NotReleased("unavailable", refused.reason, refused.detail)
+    return slot_head, wip.park(slot, slot_head)
 
 
 def free(con: sqlite3.Connection, repo_id: str, slot: str, attempt_id: str, generation: int) -> None:
@@ -260,6 +284,7 @@ class SlotRelease:
     clock: Callable[[], float]
     setup_seen: SetupSeen
     scratch: Scratch  # empties the slot's `.t/<slot>` after a release (`RealEnvFiles.empty_scratch`)
+    saved: wip.SavedLog | None = None  # the hold's record of saved commits: an abandon of a held attempt saves a dirty slot first
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         try:
@@ -358,7 +383,8 @@ class SlotRelease:
     def _parked(self, row: _Row, path: Path, abandon: bool) -> Released | NotReleased:
         """Under the lock: the slot read and its park, then the transaction."""
         try:
-            slot = park_slot(self.checkouts, self.slot_files, path, row.repo_id, row.slot_head, task_branch(row.task_id))
+            slot = park_slot(self.checkouts, self.slot_files, path, row.repo_id, row.slot_head, task_branch(row.task_id),
+                             self._saver(row, abandon))
         except GitUnavailable as error:
             return NotReleased("unavailable", "git", f"Git could not read or park the slot ({type(error).__name__}: {error}): "
                                "it may be half checked out; inspect it, then rerun. Nothing was recorded.")
@@ -374,6 +400,22 @@ class SlotRelease:
             return NotReleased("unavailable", "changed", f"The attempt changed after the stop proof. {where}; nothing was recorded.")
         self.scratch(path)  # best effort: the next preparation empties it again before any agent
         return Released(row.slot, parked, True, "kept", abandon)
+
+    def _saver(self, row: _Row, abandon: bool) -> Saver | None:
+        """The save of a hold's abandon (only an attempt that has a hold saves; a person's release keeps its refusals)."""
+        log = self.saved
+        if not abandon or log is None or not log.held(row.key.attempt_id):
+            return None
+        source = wip.Source(row.task_id, row.key.attempt_id, row.slot, row.slot_head)
+
+        def save(view: Repo, slot: Worktree, state: SlotState) -> wip.Refused | None:
+            head = state.head or row.slot_head
+            if not state.dirty:
+                wip.adopt(view, head, source, log)
+                return None
+            return wip.save(view, slot, source, head, int(self.clock()), log)
+
+        return save
 
     def _record(self, row: _Row, head: str, abandon: bool) -> bool:
         """One write transaction, fenced on what the proof read: the release row in, the reservation out."""

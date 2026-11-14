@@ -33,6 +33,7 @@ from taskloop.environment import EnvironmentPorts, Preparation, SlotProfiles
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles, GitViews
+from taskloop.hold_store import HoldStore
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
@@ -147,7 +148,8 @@ def open_releaser(database: Path, store: Store, views: GitViews) -> SlotRelease:
     tracker's fenced unclaim, wall clock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
     return SlotRelease(writer, views.checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim,
-                       time.time, setup_seen, RealEnvFiles().empty_scratch)
+                       time.time, setup_seen, RealEnvFiles().empty_scratch,
+                       HoldStore(lambda: store.shared_rw(database), store.begin_immediate))
 
 
 def open_publisher(database: Path, store: Store, views: GitViews) -> BranchPublish:

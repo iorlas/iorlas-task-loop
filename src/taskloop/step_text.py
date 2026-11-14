@@ -27,3 +27,9 @@ def feedback(opening: str, listing: Sequence[str], instructions: str, task: str,
         "",
         task,
     ])
+
+SAVED_WORK: Final = (
+    "A commit on this branch whose message has a `Task-Loop-Wip:` trailer is unfinished work an earlier attempt of this task "
+    "left when it was held: it is not a result. Read it (`git log`, `git show`), judge it against the task as it stands now, "
+    "and keep, change or remove what it holds; nothing on the branch is finished until you answer for it."
+)
