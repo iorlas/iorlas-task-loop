@@ -1,7 +1,7 @@
 // The Lines tab of one attempt: the agent's latest actions as a grid, kept where the person scrolled it.
 // Shapes: docs/design/dashboard-ui.md (*Live event*).
 
-import { $, FEED_LIMIT, clock, el, fmtDur, tick } from "./ui.js";
+import { $, FEED_LIMIT, STATE, clock, el, fmtDur, stepInfo, tick } from "./ui.js";
 
 const offset = (e, a) => (a.started_at ? clock(Date.parse(e.at) - Date.parse(a.started_at)) : "");
 
@@ -40,7 +40,8 @@ export function setNote(a) {
   const note = $("feednote");
   if (!note) return;
   note.className = `mb-1 text-[11px] ${a.feedError ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"}`;
-  note.textContent = a.feedError ? `Feed stopped: ${a.feedError}. Trying again.` : `Latest ${FEED_LIMIT} lines${a.state === "running" ? ", live" : ""}`;
+  note.textContent = a.feedError ? `Feed stopped: ${a.feedError}. Reconnecting.`
+    : `Latest ${FEED_LIMIT} lines${a.state === "running" ? ", live" : ""}`;
 }
 
 // The attempt's quiet time counts from its latest line.
@@ -97,10 +98,12 @@ function fill(e, content, right) {
     content.className += e.type === "error" ? " font-medium text-rose-600 dark:text-rose-400" : " text-amber-600 dark:text-amber-400";
     content.textContent = e.text;
   } else if (e.type === "check") {
-    content.append(el("span", "font-mono text-[12px]", e.name), "  ", el("span", `font-medium ${e.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`, e.passed ? "passed" : "failed"));
+    const color = e.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
+    content.append(el("span", "font-mono text-[12px]", e.name), "  ",
+      el("span", `font-medium ${color}`, e.passed ? STATE.succeeded.label : STATE.failed.label));
     right.textContent = fmtDur(e.duration_ms);
   } else {
-    content.append(el("span", "text-slate-500 dark:text-slate-400", `try ${e.attempt} of ${e.step} started`));
+    content.append(el("span", "text-slate-500 dark:text-slate-400", `${stepInfo(e.step)?.label ?? e.step} attempt ${e.attempt} started`));
   }
 }
 

@@ -50,3 +50,28 @@ def test_rejected_rules_and_check_repeat_reasons_keep_their_specific_tail() -> N
     families = dict(re.findall(r'\["([^"\n]+)", "([^"\n]+)"\]', source))
     assert families["rejected:"] == families["failed:rejected:"] == "Not committed: the commit broke a rule: "
     assert families["test:"] == families["failed:test:"] == "Checks failed: "
+    assert families["run:"] == families["failed:run:"] == "The agent attempt failed: "
+
+
+@pytest.mark.parametrize("code,label", [
+    ("waiting", "Waiting"), ("checks", "Check"), ("held", "Hold"),
+    ("succeeded", "Success"), ("failed", "Failure"),
+])
+def test_serialized_states_keep_their_codes_and_use_glossary_labels(code: str, label: str) -> None:
+    source = (PAGE / "ui.js").read_text()
+    assert re.search(rf'(?:id: "{code}",|{code}: \{{) label: "{label}"', source)
+
+
+@pytest.mark.parametrize("name", ["ui.js", "app.js", "drawer.js", "rail.js", "result.js", "taskview.js", "lines.js"])
+def test_owned_labels_do_not_use_the_retired_execution_and_status_words(name: str) -> None:
+    source = (PAGE / name).read_text()
+    assert not re.search(r'\b(?:try \$\{|Try again|Trying again|Quiet \$\{)', source), name
+    assert not re.search(r'label: "(?:Ready|Checks|Held|Succeeded|Failed)"', source), name
+
+
+def test_waiting_and_activity_labels_describe_observations_rather_than_readiness_or_health() -> None:
+    source = (PAGE / "ui.js").read_text()
+    assert "Tasks with no current work, including queued and abandoned tasks." in source
+    assert "Last activity ${fmtDur(s * 1000)} ago" in source
+    assert 'waiting: ["", " waiting"]' in (PAGE / "app.js").read_text()
+    assert '"Reload task"' in (PAGE / "taskview.js").read_text()
