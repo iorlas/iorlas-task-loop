@@ -37,6 +37,7 @@ from taskloop.composition import (
     open_verifier,
 )
 from taskloop.drain.composition import open_drain
+from taskloop.drain.drain import reconcile_claims
 from taskloop.drain.models import Boundary, Conclusion, Reason, Result, State
 from taskloop.drain.restart import restart
 from taskloop.drain.store import DrainStore
@@ -279,6 +280,11 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
     try:
         with open_drain(database) as draining:
             started = draining if isinstance(draining, Result) else restart(draining)
+            if isinstance(started, Boundary):
+                assert not isinstance(draining, Result)
+                claims = reconcile_claims(draining)
+                if claims.conclusion is not Conclusion.COMPLETE:
+                    started = claims
             if not isinstance(started, Boundary):
                 if started.conclusion is Conclusion.COMPLETE:
                     yield Ended(request.backlog, Reason.DRAINED, "Idle was verified; new work remains blocked.")
