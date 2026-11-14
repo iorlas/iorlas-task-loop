@@ -77,11 +77,12 @@ class AttemptSurroundings:
         *,
         credentials: Credentials = codex,
         clock: Callable[[], float] = lambda: 10,
+        monotonic: Callable[[], float] = lambda: 10,
         registration_store: AttemptStore | None = None,
     ) -> Attempts:
         return Attempts(
             store, EvidenceFiles(self.tmp), AgentLaunch(credentials, ids=NativeIds()), execution, clock, self.checkouts, self.files,
-            registration_store=registration_store,
+            registration_store=registration_store, monotonic=monotonic,
         )
 
 
@@ -358,11 +359,11 @@ def test_registration_hook_refuses_before_ref_or_result(tmp_path: Path, surround
     inner = fake(refs=("s",))
 
     def late(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        now[0] = 500.0  # the deadline passes between the launch decision and the registration
+        now[0] = 500.0  # runtime allowance is consumed between the launch decision and registration
         return inner(harness, spec, timeout, hooks)
 
     attempts = app(con, surroundings, late)
-    attempts.clock = lambda: now[0]
+    attempts.monotonic = lambda: now[0]
     result = attempts.execute(KEY, ENTRY)
     assert result.status == "refused" and result.reason == "expired"
     assert con.execute("SELECT phase,worker_pid,session_ref FROM attempt").fetchone() == ("dispatching", None, None)

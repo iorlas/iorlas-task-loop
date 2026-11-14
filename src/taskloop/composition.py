@@ -103,7 +103,7 @@ def open_continuation(
 
 
 def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials: Credentials = machine_credentials) -> Attempts:
-    """Real wiring: released run, per-thread shared writers on factory.db, wall-clock deadlines.
+    """Real wiring: released run, per-thread shared writers on factory.db, monotonic execution allowance.
 
     The harness registration write goes through its own store's bounded connections (`_registration`)."""
     store, (registration, bounded) = Store(SCHEMA), _registration(database)
@@ -119,6 +119,7 @@ def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials:
         time.time,
         views.checkouts,
         RealSlotFiles(),
+        monotonic=time.monotonic,
         registration_store=AttemptStore(bounded, registration.begin_immediate),
         environment=environment,
         source_preparation=SourcePreparation(attempts, views.checkouts, views.remotes, RealSlotFiles(), time.time,
