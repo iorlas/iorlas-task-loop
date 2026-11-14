@@ -17,8 +17,11 @@ fixing the behavior. A negative return code alone cannot identify the original s
 
 ## Current evidence
 
-The plan was absent at branch HEAD `99655d38`. The task branch has no commits beyond
-`main`, including no unfinished task commit with a `Task-Loop-Wip:` trailer.
+Revalidated against source commit `62f5ba3541e8cd440cac96093d45da911cdada1d`.
+The existing plan was committed at `e951881d` and then merged with current main.
+There is no unfinished commit for this task on the branch. An inherited main commit
+contains a squashed `Task-Loop-Wip:` message for a different task; it is not this
+task's unfinished implementation.
 
 The current source establishes these paths; it does not establish the historical sender:
 
@@ -28,17 +31,24 @@ The current source establishes these paths; it does not establish the historical
 - `interrupts.py` stops only the rounds process. `rounds.py` stops scheduling; neither
   signals entries. `slots.adopt` inserts missing slot rows after Git validation and leaves
   known slots alone. `owned_processes.py` performs observations, not termination.
-- `any-agent==0.9.0` and `stream-proc==0.7.0` are both pinned to shelf commit
-  `c9b8e2a32e1a66e8d62f4335e6cbec0a715af292`. In `any_agent.supervisor`, deadline
+- `any-agent==0.10.0` and `stream-proc==0.8.0` are both pinned to shelf commit
+  `c88be700bb482b4c01fde43093eafc5e0bab701b`, through tag `any-agent-v0.10.0`.
+  The installed packages' provenance matches the lockfile. In `any_agent.supervisor`, deadline
   expiry sets `timed_out` and calls `_stop`; watchers and policy can also stop an agent.
   `_wait` handles entry SIGTERM/SIGHUP by raising `SystemExit`, stopping the agent's tree,
   then re-raising. Parent disappearance stops an agent only with unattended supervision.
-  `any_agent.procs.kill_tree` delegates to `stream_proc.stop_tree`, which sends SIGTERM
-  first and escalates to SIGKILL when needed.
-- `RunHooks.stops` retains stop reports in memory, without their initiating causes;
-  `RunOutcome` has several separate reason fields. `execution_facts` projects only part
-  of that information. `EvidenceFiles.capture` does not persist those stop reports.
-  An interrupted supervisor can raise before the normal execution capture occurs.
+  `any_agent.procs.kill_tree` delegates to `stream_proc.stop_tree_report`, which sends
+  SIGTERM first and escalates to SIGKILL when needed.
+- `RunHooks.before_stop` now receives a reason, but only a string, and its exceptions
+  are suppressed. `RunHooks.stops` now retains reports with initiating reasons and
+  `term_delivered`/`kill_delivered` facts in memory. Exceptional exits still collapse
+  to `caller`; there is no after-stop callback. `any_agent.procs.stop` still defaults
+  `term_sent=True` and can infer `kill_sent` from elapsed grace or survivors, whereas
+  `stream_proc.StopReport.kill_sent` records an actual attempt. Delivery means a kernel
+  signal call succeeded, not proof that the signal caused the observed exit.
+- `RunOutcome` has several separate reason fields. `execution_facts` projects only part
+  of that information; neither `Attempts._call` nor `EvidenceFiles.capture` persists
+  the hook's stop reports. An interrupted supervisor can raise before normal capture.
 - `attempt_entry.main` then prints `failed terminated_by_signal`, without storing a
   structured cause. `hold_facts` reads execution facts and entry evidence, but
   `hold_cause.RUN['killed']` supplies only “The agent process was killed by a signal.”
@@ -57,15 +67,25 @@ The current source establishes these paths; it does not establish the historical
    a sender from proximity to an adopt or restart, parse logs to drive state transitions,
    or operate on the historical processes/worktrees. Retain the findings in this directory.
 
-2. **Expose structured causes at the signal owner.** Add the smallest needed API to the
-   owning shelf agent/process libraries, release it there, and update the factory's paired
-   pins and lockfile to the same shelf revision. A before-stop callback must identify the
+2. **Complete the existing stop hooks at the signal owner.** Reuse the pinned shelf's
+   `before_stop`, reason-bearing reports and delivery fields; do not duplicate them in
+   a factory process wrapper. The current best-effort hook is insufficient for durable
+   intent. Extend the owning shelf agent/process APIs only for the remaining contract,
+   release that change there, and update the factory's paired pins and lockfile to the
+   same shelf revision. This shelf release is an implementation prerequisite, not an
+   assumption that the current pinned callback already meets the contract.
+   A before-stop callback must identify the
    initiating condition and exact owned target before a tree stop; an after-stop callback
    supplies the actual signal report and survivors. Both must run on exceptional exits as
    well as ordinary returns. Cover deadline, watchdog/turn/policy stops, entry interruption,
    parent loss when enabled, and exceptional cleanup. Preserve the triggering entry signal
-   separately from the signal sent to the agent. Do not infer actual signal delivery from
-   elapsed grace time or from the existing report's default `term_sent=True`.
+   separately from the signal sent to the agent, rather than projecting all exceptional
+   exits to `caller`. Carry the process library's actual attempt/delivery facts through
+   unchanged; remove the agent wrapper's elapsed-time inference for `kill_sent`. Do not
+   infer actual signal delivery from grace time or the default `term_sent=True`.
+   A refused intent callback must propagate without a secondary `caller` cleanup
+   issuing the same unrecorded stop. Serialize competing stop initiators so the stored
+   first cause is also the initiating condition for the owned action.
 
    Translate library types inside the factory's agent adapter into generic typed values.
    Use stdlib enums for cause, initiating operation and record phase, and pydantic v2 for
@@ -132,6 +152,11 @@ Use focused pytest behavior/contract tests and owning shelf semantic fakes. Cove
 - Crash after intent and after action, failed/busy writes, duplicate/racing callbacks,
   stale generations, PID reuse/other boot, unknown observations and surviving descendants.
   Confirm no signal action runs inside a write transaction and no recovery kill occurs.
+  At the shelf boundary, a refused intent must cause neither the original stop nor an
+  exception-cleanup stop. Test actual attempted/delivered flags independently of elapsed
+  grace, including ESRCH/EPERM and an error before any signal call. Cover distinct entry
+  SIGTERM, SIGHUP, Ctrl-C and exceptional caller exits rather than accepting `caller`
+  as their only attribution.
 - A live registered entry and agent surviving graceful/abrupt rounds stop and restart,
   repeated reconciliation, and `slot adopt --count 5` while other attempts run. Preserve
   their identities, claims, reservations, session and working files; launch no duplicate.
@@ -151,7 +176,7 @@ entry processes from writing the new schema, and discarding the old factory data
 Use the existing drain/version-refusal machinery; add no migration or compatibility
 reader. Draining/upgrading a live installation is not part of this planning step.
 
-Read the justfile, run `just install`, then focused tests through
+For implementation, run `just install`, then focused tests through
 `uv run --frozen --no-sync python -I -m pytest ...`. Finish implementation with passing
 `just check` and `just test` (the declared focused successor gates), without adding
 whole-suite/live testing. Completion requires the incident findings, durable attribution,
