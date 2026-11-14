@@ -1,7 +1,11 @@
 """The digest's committed-source adapter over the owning Git API."""
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from hashlib import sha256
+from types import MappingProxyType
+from typing import Protocol
 
 from git_porcelain import GitUnavailable, Repo, Tree
 
@@ -26,6 +30,39 @@ class SourceEntry:
     path: str
     mode: str
     object_id: str
+
+
+class Source(Protocol):
+    @property
+    def commit(self) -> str: ...
+
+    def entries(self) -> tuple[SourceEntry, ...] | ReadFailure: ...
+
+    def read(self, path: str) -> bytes | ReadFailure: ...
+
+
+type SourceOpener = Callable[[str], Source | ReadFailure]
+
+
+@dataclass(frozen=True, init=False)
+class SourceSnapshot:
+    commit: str
+    _files: Mapping[str, bytes]
+
+    def __init__(self, commit: str, files: Mapping[str, bytes]) -> None:
+        object.__setattr__(self, "commit", commit)
+        object.__setattr__(self, "_files", MappingProxyType(dict(sorted(files.items()))))
+
+    def entries(self) -> tuple[SourceEntry, ...]:
+        return tuple(SourceEntry(path, "100644", sha256(data).hexdigest()) for path, data in self._files.items())
+
+    def read(self, path: str) -> bytes | ReadFailure:
+        if not relative_path(path):
+            return ReadFailure(ReadFailureReason.INVALID_PATH, f"Invalid relative source path: {path} at {self.commit}")
+        data = self._files.get(path)
+        if data is None:
+            return ReadFailure(ReadFailureReason.NO_PATH, f"No source path {path} at {self.commit}")
+        return data
 
 
 def relative_path(path: str) -> bool:

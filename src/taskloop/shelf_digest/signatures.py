@@ -2,13 +2,11 @@
 
 import ast
 
-from git_porcelain import Repo
-
 from taskloop.shelf_digest.declarations import canonical_declaration, declaration_kind
 from taskloop.shelf_digest.exports import Binding, PackageExports
 from taskloop.shelf_digest.identities import Identities, PackageIdentity
 from taskloop.shelf_digest.models import ExtractionError, Signature, SignatureFailure, SignatureFailureReason, SignatureKind
-from taskloop.shelf_digest.source import ReadFailure, open_source
+from taskloop.shelf_digest.source import ReadFailure, SourceOpener
 
 
 def _signature(identity: PackageIdentity, public_name: str, binding: Binding) -> Signature:
@@ -52,12 +50,12 @@ def _collect(identity: PackageIdentity, package: PackageExports) -> tuple[Signat
     return tuple(signatures[name] for name in sorted(signatures))
 
 
-def extract_signatures(identities: Identities, shelf: Repo) -> tuple[Signature, ...] | SignatureFailure | ReadFailure:
+def extract_signatures(identities: Identities, opener: SourceOpener) -> tuple[Signature, ...] | SignatureFailure | ReadFailure:
     """Return all public records in identity/name order, or an explained failure; never execute source."""
     results: list[Signature] = []
     try:
         for identity in sorted(identities.packages, key=lambda item: (item.name, item.commit, item.subdirectory)):
-            source = open_source(shelf, identity.commit)
+            source = opener(identity.commit)
             if isinstance(source, ReadFailure):
                 raise ExtractionError(source)
             results.extend(_collect(identity, PackageExports(source, identity.subdirectory)))

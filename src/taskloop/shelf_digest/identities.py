@@ -16,6 +16,7 @@ PACKAGES = ("any-agent", "beads-client", "git-porcelain", "process-lock", "sqlit
 
 class IdentityFailureReason(StrEnum):
     INVALID_MANIFEST = "invalid_manifest"
+    INVALID_METADATA = "invalid_metadata"
     MISMATCH = "mismatch"
 
 
@@ -211,8 +212,8 @@ def _validate_package(identity: PackageIdentity, shelf: Repo) -> IdentityFailure
     return None
 
 
-def extract_identities(source: CommittedSource, shelf: Repo) -> Identities | IdentityFailure | ReadFailure:
-    """Return all six identities, or one explained failure with no partial collection."""
+def reconcile_manifests(source: CommittedSource) -> Identities | IdentityFailure | ReadFailure:
+    """Reconcile task-loop's committed manifests without opening shelf source."""
     project = _manifest(source, "pyproject.toml", _ProjectManifest)
     if isinstance(project, (ReadFailure, IdentityFailure)):
         return project
@@ -223,8 +224,16 @@ def extract_identities(source: CommittedSource, shelf: Repo) -> Identities | Ide
         identities = _reconcile(project, lock)
     except _Invalid as error:
         return IdentityFailure(IdentityFailureReason.MISMATCH, f"Task-loop source at {source.commit}: {error}")
-    for identity in identities:
+    return Identities(source.commit, identities)
+
+
+def extract_identities(source: CommittedSource, shelf: Repo) -> Identities | IdentityFailure | ReadFailure:
+    """Return all six identities, validating each pinned shelf manifest."""
+    identities = reconcile_manifests(source)
+    if isinstance(identities, (IdentityFailure, ReadFailure)):
+        return identities
+    for identity in identities.packages:
         failure = _validate_package(identity, shelf)
         if failure is not None:
             return failure
-    return Identities(source.commit, identities)
+    return identities
