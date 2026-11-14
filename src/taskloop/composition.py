@@ -43,7 +43,8 @@ from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.recovery.complete_attempt import CapturedCompletion
 from taskloop.recovery.continue_attempt import Continuation
-from taskloop.recovery.models import Claim
+from taskloop.recovery.launch import RecoveryLaunch
+from taskloop.recovery.models import Claim, ClaimState
 from taskloop.recovery.native import NativeContinuation
 from taskloop.recovery.observe import NativeProcesses
 from taskloop.recovery.recover import Recovery
@@ -53,7 +54,7 @@ from taskloop.slot_env import RealEnvFiles, sandbox_probe, setup_process
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_release import Scratch, SlotRelease
 from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt
-from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_discussion
+from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_discussion, tracker_recovery_claim
 from taskloop.verifier import Verifier
 
 
@@ -92,15 +93,26 @@ def _run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | N
 
 
 def open_continuation(
-    database: Path, artifacts: Path, views: GitViews, claim: Callable[[Admission], Claim],
+    database: Path, artifacts: Path, views: GitViews, claim: Callable[[Admission], Claim] | None = None,
     credentials: Credentials = machine_credentials,
 ) -> Continuation:
     """Saved-session continuation with native observations and an injected, read-only claim observation."""
     store = Store(SCHEMA)
-    recovery = Recovery(RecoveryStore(lambda: store.shared_rw(database), store.begin_immediate), NativeProcesses(), claim,
-                        slot_lock.hold, time.time, NativeIds())
     attempts = open_attempts(database, artifacts, views, credentials)
+    recovery = Recovery(RecoveryStore(lambda: store.shared_rw(database), store.begin_immediate), NativeProcesses(),
+                        claim or _recovery_claim(attempts.store),
+                        slot_lock.hold, time.time, NativeIds())
     return Continuation(recovery, attempts, NativeContinuation(attempts, open_recovery_registration(database)))
+
+
+def _recovery_claim(attempts: AttemptStore) -> Callable[[Admission], Claim]:
+    def claim(admission: Admission) -> Claim:
+        root = attempts.tracker_root(admission.key)
+        if root is None:
+            return Claim(state=ClaimState.UNKNOWN, explanation="The saved attempt has no bound task tracker.")
+        return tracker_recovery_claim(Path(root))(admission)
+
+    return claim
 
 
 def open_completion(database: Path, artifacts: Path, views: GitViews) -> CapturedCompletion:
@@ -208,8 +220,10 @@ def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
     """Real wiring: the released registered start and owned-process observation, this interpreter, wall-clock deadlines.
 
     The database path is made absolute here: the entry refuses a relative one, after its registration would commit."""
+    registration = open_recovery_registration(database.absolute())
+    recovery = Recovery(registration, NativeProcesses(), _recovery_claim(registration.attempts), slot_lock.hold, time.time, NativeIds())
     return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable,
-                    read_seconds=views.read_seconds, ids=NativeIds())
+                    read_seconds=views.read_seconds, ids=NativeIds(), recovery=RecoveryLaunch(recovery))
 
 
 def open_checks_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:

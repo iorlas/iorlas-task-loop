@@ -1,12 +1,15 @@
 """Production continuation connects native observations, bounded registration and shared custody."""
 
+from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
+from stream_proc import OwnedProcess
 from test_attempt import AttemptSurroundings, codex
 from test_attempt import surroundings as attempt_surroundings
 from test_continuation import captured_work as captured_attempt
+from test_launch import FakeStart
 from test_native_continuation import NativeRun, prepared
 from test_recovery import Processes
 from test_recovery_store import KEY, OWNED, OWNER, database
@@ -15,17 +18,56 @@ from taskloop import composition, slot_lock
 from taskloop.attempt import Attempts
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Admission
 from taskloop.git_views import GitViews
+from taskloop.launch import Launched
 from taskloop.recovery.continuation_models import State
-from taskloop.recovery.models import Claim
+from taskloop.recovery.entry import RecoveryEntry
+from taskloop.recovery.models import Claim, Intent
 from taskloop.recovery.native import NativeContinuation
 
 surroundings = attempt_surroundings
 captured_work = captured_attempt
 
 
+def test_production_launch_and_entry_share_the_saved_authorization(
+    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "factory.db"
+    con = database(path)
+    con.execute("PRAGMA journal_mode=WAL")
+    execution = NativeRun()
+    prepared(con, surroundings, execution)
+    con.close()
+    processes = Processes()
+    start = FakeStart(identity=OwnedProcess(OWNER.pid, OWNER.pgid, OWNER.start, OWNER.boot))
+    roots: list[Path] = []
+
+    def bound(root: Path) -> Callable[[Admission], Claim]:
+        roots.append(root)
+        return lambda _admission: OWNED
+
+    monkeypatch.setattr(composition, "NativeProcesses", lambda: processes)
+    monkeypatch.setattr(composition, "tracker_recovery_claim", bound)
+    monkeypatch.setattr(composition, "popen_registered", start)
+    monkeypatch.setattr(composition.time, "time", lambda: 10)
+    monkeypatch.setattr(composition, "run", lambda harness, spec, timeout, hooks, **_kwargs: execution(harness, spec, timeout, hooks))
+    views = GitViews(DEFAULT_GIT_READ_SECONDS)
+    assert isinstance(composition.open_launcher(path, tmp_path, views).launch("tasks", "tl-1", 30), Launched)
+    app = composition.open_continuation(path, tmp_path, views, credentials=codex)
+    entry = RecoveryEntry(app)
+    intent = entry.registered(KEY, (OWNER.pid, OWNER.start, OWNER.boot))
+    assert isinstance(intent, Intent)
+    record = app.attempts.store.load(KEY)
+    assert record is not None and record.admission.deadline == 1810
+    with slot_lock.hold(record.admission):
+        result = entry.run(intent, OWNER, lambda: 10, lambda _seconds: None, 2)
+    assert result.state is State.COMPLETED and execution.permits == 1 and roots == [Path("/tracker"), Path("/tracker")]
+    assert intent.entry == record.admission.entry == (7, "entry", "boot") and "saved" in execution.calls[0][1].argv
+
+
 @pytest.mark.parametrize("already_held", [False, True])
+@pytest.mark.parametrize("bound_claim", [False, True])
 def test_real_composition_retains_custody_through_native_execution(
-    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, already_held: bool,
+    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, already_held: bool, bound_claim: bool,
 ) -> None:
     path = tmp_path / "factory.db"
     con = database(path)
@@ -45,12 +87,18 @@ def test_real_composition_retains_custody_through_native_execution(
         claims.append(value)
         return OWNED
 
+    def bound(root: Path) -> Callable[[Admission], Claim]:
+        assert root == Path("/tracker")
+        return claim
+
+    monkeypatch.setattr(composition, "tracker_recovery_claim", bound)
+
     def held_during_execution() -> None:
         with pytest.raises(slot_lock.SlotBusy), slot_lock.hold(admission):
             raise AssertionError("Slot custody was released before execution returned")
 
     execution.after_start = held_during_execution
-    app = composition.open_continuation(path, tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS), claim, codex)
+    app = composition.open_continuation(path, tmp_path, GitViews(DEFAULT_GIT_READ_SECONDS), None if bound_claim else claim, codex)
     assert isinstance(app.native, NativeContinuation)
     registration = app.native.registration.connect()
     normal = app.recovery.store.connect()
