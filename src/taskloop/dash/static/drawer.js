@@ -7,6 +7,7 @@ import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
 import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
+import { usageNode } from "./usage.js";
 
 let source = null;
 let tasks = null;
@@ -170,6 +171,11 @@ function render() {
   drawer.replaceChildren();
   if (!t) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", `Loading ${open.id}…`));
   drawer.append(head(t));
+  if (detail) {
+    const total = el("div", "px-6 pb-3");
+    total.append(usageNode(detail.usage, "Task total", true));
+    drawer.append(total);
+  }
   if (t.hold_cause) {
     const hold = el("div", "px-6 pb-3");
     hold.append(callout("border-rose-500", "Held", t.hold_cause));
@@ -198,10 +204,10 @@ function render() {
   }
   drawer.append(bar);
 
-  if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }));
+  if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }, detail.usage));
   if (!detail.attempts.length) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
   const body = el("div", "flex min-h-0 flex-1");
-  body.append(rail(detail.attempts, t, open, select), pane());
+  body.append(rail(detail.attempts, t, open, select, detail.step_usage), pane());
   drawer.append(body);
   if ($("rail") && railTop) $("rail").scrollTop = railTop;
   else body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
@@ -253,6 +259,7 @@ function pane() {
   top.append(el("h3", "text-sm font-semibold", a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}` : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
   if (a.step !== VERIFY.id) top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
+  if (a.usage) top.append(usageNode(a.usage));
   if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) {
     const quiet = quietSpan(a.feed.at(-1)?.at ?? a.started_at);
     quiet.id = "quiet";

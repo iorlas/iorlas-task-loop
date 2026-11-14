@@ -3,6 +3,8 @@ import { rail, changeReason, lasted } from "../../src/taskloop/dash/static/rail.
 import { say, wordNode } from "../../src/taskloop/dash/static/words.js";
 import { el } from "../../src/taskloop/dash/static/ui.js";
 import { initDrawer, openDrawer, closeDrawer } from "../../src/taskloop/dash/static/drawer.js";
+import { taskView } from "../../src/taskloop/dash/static/taskview.js";
+import { usageText } from "../../src/taskloop/dash/static/usage.js";
 
 const fixture = document.getElementById("fixture");
 const results = document.getElementById("results");
@@ -191,8 +193,52 @@ function words() {
   assert(wordNode(el, "unsafe").title === "unsafe", "raw code hover retained");
 }
 
+async function usage() {
+  const counts = { fresh: 49773, cached: 496768, output: 2375, turns: 1, attempts: 1, complete: 1 };
+  const sum = { ...counts, attempts: 2, complete: 1 };
+  const text = usageText(counts);
+  for (const value of ["fresh input 49,773", "cached input 496,768", "output 2,375", "reported turns 1"]) {
+    assert(text.includes(value), `exact reported count: ${value}`);
+  }
+  assert(usageText({ fresh: 0, cached: 0, output: 0, turns: 0 }).includes("output 0"), "reported zero stays zero");
+  assert(usageText({}).includes("not reported"), "absent attempt usage");
+  assert(usageText({ ...counts, turns: null }).includes("reported turns not reported"), "missing turns independent of tokens");
+  const list = [attempt("plan", 1, { usage: counts }), repeat("plan", 2, { usage: {} })];
+  const node = rail(list, task, {}, () => {}, { plan: sum });
+  fixture.replaceChildren(node);
+  assert(node.textContent.includes("Step total") && node.textContent.includes("reported values only"), "partial step total visible");
+  assert(primary(node)[0].title.includes(text) && primary(node)[0].title.includes("1/2 attempts complete"), "hover has attempt and step total");
+  assert(primary(node)[1].title.includes("not reported"), "missing report in attempt hover");
+  assert(node.querySelector("span[title*='Repeat of']").title.includes("unsafe"), "repeat explanation retained with usage");
+  for (const tracker of [{ state: "loading" }, { state: "failed", error: "offline" }, { state: "none" }]) {
+    const view = taskView(tracker, () => {}, sum);
+    assert(view.textContent.includes("Task total") && view.textContent.includes("1/2 attempts complete"), "tracker-independent task total");
+  }
+  const run = { harness: "Codex", provider: "OpenAI", model: "chosen", effort: "high", access: "full access" };
+  const source = {
+    detail: async () => ({ task, attempts: [attempt("plan", 1, { usage: counts, run })], step_usage: { plan: counts }, usage: counts }),
+    tracker: async () => ({ fields: null, comments: [] }),
+    body: async () => ({ input: "Plan", result: { summary: "passed", checks: [] } }),
+  };
+  initDrawer(source, new Map([[task.id, task]]));
+  await openDrawer(task.id); await tick();
+  const drawer = document.getElementById("drawer");
+  const header = drawer.querySelector("section > div");
+  assert(header.textContent.includes(text) && header.textContent.includes("end not recorded"), "attempt counts beside timing");
+  assert(header.querySelector("span[title*='Codex completed turns']"), "reported turns explained in hover");
+  assert(drawer.textContent.includes("Codex · OpenAI · chosen · high effort · full access"), "run context retained");
+  assert(drawer.textContent.includes("Task total"), "task context total visible while inspecting attempt");
+  button(drawer, "Task").click(); await tick();
+  assert(drawer.textContent.includes("Task total") && !drawer.textContent.includes("not reported"), "task view retains total");
+  closeDrawer();
+  source.detail = async () => ({ task, attempts: [attempt("plan", 1, { usage: {}, run })], usage: {} });
+  await openDrawer(task.id); await tick();
+  assert(drawer.querySelector("section > div").textContent.includes("Tokens · not reported"), "missing attempt report in header");
+  closeDrawer();
+}
+
 try {
-  for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns, drawerSelection, words]) await test();
+  for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns, drawerSelection, words, usage]) await test();
   for (const dark of [false, true]) {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.classList.toggle("light", !dark);
@@ -201,7 +247,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 7 browser contracts, both themes";
+  results.textContent = "PASS: 8 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;
