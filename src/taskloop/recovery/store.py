@@ -98,19 +98,27 @@ class RecoveryStore(StoreConnection):
         with self._connection(write=True) as con:
             return self._snapshot(con, key, now)
 
+    def _compare(self, con: sqlite3.Connection, expected: Snapshot, now: float) -> Snapshot | Result:
+        current = self._snapshot(con, expected.attempt.admission.key, now)
+        if isinstance(current, Snapshot) and current != expected:
+            return Result(outcome=Outcome.CHANGED, explanation="Recovery facts or ownership changed after observation.",
+                          intent=current.intent)
+        return current
+
+    def compare(self, expected: Snapshot, clock: Callable[[], float]) -> Snapshot | Result:
+        """Revalidate every local fact without granting or changing authorization."""
+        with self._connection(write=True) as con:
+            return self._compare(con, expected, clock())
+
     def authorize(self, observed: Observations, owner: Identity, token: str, clock: Callable[[], float]) -> Result:
         refusal = permitted(observed, owner, token)
         if refusal is not None:
             return refusal
         expected = observed.snapshot
-        key = expected.attempt.admission.key
         with self._connection(write=True) as con:
-            current = self._snapshot(con, key, clock())
+            current = self._compare(con, expected, clock())
             if isinstance(current, Result):
                 return current
-            if current != expected:
-                return Result(outcome=Outcome.CHANGED, explanation="Recovery facts or ownership changed after observation.",
-                              intent=current.intent)
             return self._authorize(con, current, owner, token)
 
     def _authorize(self, con: sqlite3.Connection, snapshot: Snapshot, owner: Identity, token: str) -> Result:
