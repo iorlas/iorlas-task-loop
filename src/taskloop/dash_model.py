@@ -7,6 +7,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from taskloop.dash_duration import Duration
 from taskloop.land_status import LandState
 
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
@@ -43,6 +44,7 @@ class Card:
     question: str | None = None
     hold_explanation: str | None = None
     waiting_since: str | None = None
+    duration: Duration | None = None
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,7 @@ class Comment:
 class CheckLine:
     name: str
     passed: bool
-    duration_ms: int
+    duration_ms: int | None
     output: str | None  # the tail of the check's log, passed or failed; None: the log is gone or unreadable
     block: int = 1
 
@@ -149,6 +151,7 @@ class FeedPage:
     cursor: str | None
     replaced: bool
     available: bool
+    duration: Duration | None = None
 
 
 @dataclass(frozen=True)
@@ -180,6 +183,7 @@ class AttemptDetail:
     past: bool = False  # belongs to a chain a person abandoned: history, not the task's current steps
     run: Run | None = None  # an agent attempt's: what ran it; None for a check or a verification
     usage: Usage | None = None  # None for checks/verification; an agent with no report has empty counts
+    duration: Duration | None = None
 
 
 @dataclass(frozen=True)

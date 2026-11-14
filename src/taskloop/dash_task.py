@@ -18,7 +18,9 @@ from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, wi
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion
-from taskloop.dash_board import admission_of, card_of, queued_card, tries
+from taskloop.dash_board import admission_of, card_of, duration_of, queued_card, tries
+from taskloop.dash_duration import Duration
+from taskloop.dash_duration import read as read_duration
 from taskloop.dash_model import (
     Answer,
     AttemptBody,
@@ -74,24 +76,28 @@ def feed_event(a: Activity) -> FeedEvent | None:
     return FeedEvent(a.kind, at, text=a.text, waited_ms=a.waited_ms)
 
 
-def _page(page: ActivityPage, ended: bool = False) -> FeedPage:
+def _page(page: ActivityPage, ended: bool = False, duration: Duration | None = None) -> FeedPage:
     """`ended`: the attempt is over, so a command or tool still running in its file never finished (its worker went away)."""
     lines = (feed_event(each) for each in page.events)
     shown = tuple(replace(line, state="unfinished") if ended and line.state == "running" else line for line in lines if line is not None)
-    return FeedPage(shown, page.cursor, page.replaced, page.available)
+    return FeedPage(shown, page.cursor, page.replaced, page.available, duration)
 
 
 def build_feed(ports: TaskPorts, backlog: str, task_id: str, step: str, number: int, cursor: str | None) -> FeedPage | Failed | None:
     """The agent's lines of one attempt of the task: its latest, or what came after `cursor`. None: no such agent attempt."""
     try:
         rows = ports.reads.store.attempts(backlog, task_id)
+        numbers = tries(rows)
+        row = next((row for row in rows if row.step == step and numbers[row.key.attempt_id] == number), None)
+        if row is None:
+            return None
+        result = collect(ports.reads.store, row.key)
+        duration = read_duration(ports.reads.store, ports.files, row, result)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
-    numbers = tries(rows)
-    key = next((row.key for row in rows if row.step == step and numbers[row.key.attempt_id] == number), None)
-    if key is None:
-        return None
-    return _page(ports.files.activity_tail(key, FEED_LINES) if cursor is None else ports.files.activity_after(key, cursor, FOLLOW_LINES))
+    page = (ports.files.activity_tail(row.key, FEED_LINES) if cursor is None
+            else ports.files.activity_after(row.key, cursor, FOLLOW_LINES))
+    return _page(page, ended=result.status == "collected" or not row.held, duration=duration)
 
 
 def _agent(
@@ -107,7 +113,8 @@ def _agent(
     summary = result.explanation or result.reason or result.status
     return AttemptDetail(row.step, number, state, iso(started), iso(ended), summary, after, reason,
                          previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None,
-                         run=_run(row), usage=project(None if result.execution is None else result.execution.facts))
+                         run=_run(row), usage=project(None if result.execution is None else result.execution.facts),
+                         duration=read_duration(ports.reads.store, ports.files, row, result))
 
 
 def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
@@ -142,12 +149,8 @@ def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: 
     return AttemptBody(shown, Outcome(result.explanation or result.reason or result.status, answer, (), None), added)
 
 
-def _took(result: ResultRow) -> int:
-    return 0 if result.ended_at is None else int((result.ended_at - result.started_at) * 1000)
-
-
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:
-    return CheckLine(result.name, result.conclusion == CommandConclusion.PASSED, _took(result),
+    return CheckLine(result.name, result.conclusion == CommandConclusion.PASSED, None,
                      ports.files.check_tail(row.key, result.block, result.name), result.block)
 
 
@@ -161,8 +164,7 @@ def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: str | None)
     state, summary = _checks_state(row)
     started = min((each.started_at for each in results), default=None)
     feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name,
-        passed=each.conclusion == CommandConclusion.PASSED,
-                           duration_ms=_took(each)) for each in results if each.conclusion is not None)
+        passed=each.conclusion == CommandConclusion.PASSED) for each in results if each.conclusion is not None)
     return AttemptDetail("checks", number, state, iso(started), iso(row.concluded_at), summary, "repeat" if earlier is not None else None,
                          earlier, number - 1 if earlier is not None else None, feed)
 
@@ -284,7 +286,7 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
     admission = admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready()))
     card = queued_card(task_id, title, admission) if view is None else card_of(
         view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
-        admission)
+        admission, duration_of(view, rows[0], ports.reads, ports.files))
     step_usage, usage = totals(attempts)
     return TaskDetail(card, attempts, step_usage, usage)
 

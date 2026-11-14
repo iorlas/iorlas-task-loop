@@ -2,7 +2,7 @@
 
 import sqlite3
 
-from taskloop.attempt_reads import StoreRefused, StoreUnavailable
+from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey
 from taskloop.recovery.execution_models import Callback, Phase
 from taskloop.recovery.models import Intent
@@ -16,6 +16,13 @@ def intent(con: sqlite3.Connection, key: AttemptKey) -> Intent | None:
     if found.key != key:
         raise StoreUnavailable("Recovery record does not match the attempt key")
     return found
+
+
+class RecoveryReads(StoreConnection):
+    def execution(self, key: AttemptKey) -> Intent | None:
+        """The selected execution identity, without recovery admission or liveness checks."""
+        with self._connection() as con:
+            return intent(con, key)
 
 
 def save(con: sqlite3.Connection, value: Intent, previous: Intent | None) -> None:
