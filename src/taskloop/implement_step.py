@@ -128,8 +128,9 @@ def _closing_words(task_id: str, rules: StepRules) -> str:
     return (
         f"The plan for this task is `docs/design/{task_id}/plan.md`, committed on this branch by the plan step. Read it "
         "first. Immediately after reading the plan, reassess scope before broad exploration or editing. "
-        "Read the files and symbols in its Change map before exploring other files. Search with `rg -n` and read "
-        "only needed ranges; searching for an omitted caller is allowed. Do not `cat` a file over 300 lines. Before any "
+        "Read its `## Read list` by the stated line ranges before exploring other files. Search with `rg -n` and read "
+        "only needed ranges; targeted searches for omitted callers or source that changed after planning are allowed. "
+        "Do not `cat` a file over 300 lines. Before any "
         "`cat` of a file over 150 lines, run `rg -n '^def |^class '` on it and use range reads, even if the symbol search "
         "is empty. Do not batch whole-file dumps. Do not read a file again within this session unless it changed since "
         "you last read it; then read only the changed range, including verification after an edit. Keep enough location "

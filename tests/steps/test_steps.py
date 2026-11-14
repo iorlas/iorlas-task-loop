@@ -312,7 +312,7 @@ def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -
     if repeat:
         text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
     headings = ("# Header:", "## Outcome and non-goals:", "## Settled decisions:", "## Open decisions:",
-                "## Change map:", "## Contract:", "## Work packages:", "## Acceptance behaviours:")
+                "## Change map:", "## Read list:", "## Contract:", "## Work packages:", "## Acceptance behaviours:")
     assert [text.index(heading) for heading in headings] == sorted(text.index(heading) for heading in headings)
     for phrase in ("300 bytes", "800 bytes", "1,500 bytes", "2,000 bytes", "small 4,000, medium 8,000, large 12,000",
                    "symbol names instead of line numbers", "list every caller found", "producers and callers",
@@ -323,7 +323,23 @@ def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -
                    "restating task text, AGENTS.md or glossary rules", "history or provenance", "tables repeating decisions or code",
                    "Status, As built, Progress or Implementation progress headings and content"):
         assert phrase in text
-    assert "## Read list" not in text and "## Size" not in text
+    assert "## Size" not in text
+
+
+@pytest.mark.parametrize("repeat", [False, True])
+def test_plan_requires_bounded_read_ranges_and_revises_plans_missing_them(repeat: bool) -> None:
+    text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
+    if repeat:
+        text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+    read_list = text[text.index("## Read list:"):text.index("## Contract:")]
+    for phrase in ("nonempty Markdown bullet list of at most 25 entries", "Each entry names an existing file as",
+                   "`path:first-last`", "a short reason", "a narrow, useful line range",
+                   "Cover every file implementation must edit or consult, including producers and callers",
+                   "For new files, mark them as new in the implementation narrative",
+                   "list their existing integration points here", "never invent ranges in nonexistent files",
+                   "Targeted searches for omitted callers or source that changed after planning are allowed"):
+        assert phrase in read_list
+    assert "An existing plan missing `## Read list` needs revision before answering `planned` or `unchanged`" in text
 
 
 @pytest.mark.parametrize("route", ["initial", "repeat", "failed_check"])
@@ -336,8 +352,9 @@ def test_implement_reading_directions_survive_both_retry_routes(route: str) -> N
         failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
                              argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
         text = failed_check_feedback(failed, text, "nonce")
-    for phrase in ("Read the files and symbols in its Change map before exploring other files", "Search with `rg -n`",
-                   "omitted caller is allowed", "Do not `cat` a file over 300 lines", "file over 150 lines",
+    for phrase in ("Read its `## Read list` by the stated line ranges before exploring other files", "Search with `rg -n`",
+                   "targeted searches for omitted callers or source that changed after planning are allowed",
+                   "Do not `cat` a file over 300 lines", "file over 150 lines",
                    "`rg -n '^def |^class '`", "even if the symbol search is empty", "Do not batch whole-file dumps",
                    "Do not read a file again within this session unless it changed", "read only the changed range",
                    "including verification after an edit", "edit without reopening unchanged content",
