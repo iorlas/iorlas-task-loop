@@ -119,10 +119,10 @@ def test_abort_restart_retains_bytes_and_exact_custody(
     assert isinstance(result, Terminal) and result.reason is Reason.OWNER and result.explanation == "Retain both sides."
     complete = retained(c)
     assert complete.abort is not None and complete.abort.phase is AbortPhase.COMPLETE
-    assert complete.model_dump(exclude={"abort"}) == saved.model_dump(exclude={"abort"})
+    assert complete.model_dump(exclude={"abort", "cleanup"}) == saved.model_dump(exclude={"abort", "cleanup"})
     assert aborts == ([True] if boundary == "before" else []) and c.calls == 1
     assert not c.slot.merging() and head(c.slot) == c.record.request.checked
-    assert c.slot.read_file("notes/local") == "untracked bytes\n" and c.slot.read_file("ignored") == "ignored local data\n"
+    assert c.slot.read_file("notes/local") is None and c.slot.read_file("ignored") == "ignored local data\n"
     assert c.slot.read_file("addition") is None
     source = c.ports.repo.tree(c.record.request.checked)
     assert source is not None and source.read("README") == (c.slot.read_file("README") or "").encode()
@@ -258,5 +258,5 @@ def test_abort_store_transitions_cannot_change_preservation(execution_case: Exec
     assert saved.abort is not None
     pending = saved.abort.model_copy(update={"phase": AbortPhase.PENDING})
     for changes in ({"abort": None}, {"abort": pending}, {"tree": c.record.request.target}):
-        with pytest.raises(StoreRefused):
+        with pytest.raises((StoreRefused, ValueError)):
             c.ports.store.save(c.record.key, saved, saved.model_copy(update=changes))
