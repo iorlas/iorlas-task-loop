@@ -35,7 +35,7 @@ class AbortMerge:
         p.fence()
         if not p.verified(saved):
             raise AbortRefused("The retained conflict object or ref changed.")
-        current = self._observe(record, work)
+        current = self.observe(record, work)
         if saved.abort is None:
             if (current.head, current.branch, current.merging, current.merge_head) != (
                     saved.head, None, True, f"{saved.target}\n".encode().hex()):
@@ -43,7 +43,7 @@ class AbortMerge:
             slot = p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot)
             if str(slot.capture()) != saved.tree:
                 raise AbortRefused("The checkout changed after preservation.")
-            after = self._expected(work, current)
+            after = self.expected(work, current)
             pending = Abort(work=work, before=current, after=after)
             p.fence()
             saved = p.store.save(record.key, saved, saved.model_copy(update={"abort": pending}))
@@ -52,24 +52,24 @@ class AbortMerge:
         if abort.work != work:
             raise AbortRefused("The recorded resolution process identity changed.")
         p.fence()
-        current = self._observe(record, work)
+        current = self.observe(record, work)
         if current != abort.after:
             if abort.phase is AbortPhase.COMPLETE or current != abort.before:
                 raise AbortRefused("The checkout matches neither the recorded abort input nor its expected result.")
             p.fence()
-            if p.stopped(work) is not None or not p.verified(saved) or self._observe(record, work) != abort.before:
+            if p.stopped(work) is not None or not p.verified(saved) or self.observe(record, work) != abort.before:
                 raise AbortRefused("The abort precondition changed before the effect.")
             p.fence()
             p.checkouts(work.slot, git_dir=work.gitdir).worktree(work.slot).abort_merge()
         p.fence()
-        if p.stopped(work) is not None or not p.verified(saved) or self._observe(record, work) != abort.after:
+        if p.stopped(work) is not None or not p.verified(saved) or self.observe(record, work) != abort.after:
             raise AbortRefused("The checkout does not match the recorded abort result.")
         if abort.phase is AbortPhase.PENDING:
             complete = abort.model_copy(update={"phase": AbortPhase.COMPLETE})
             p.store.save(record.key, saved, saved.model_copy(update={"abort": complete}))
         return result
 
-    def _observe(self, record: Record, work: Work) -> Checkout:
+    def observe(self, record: Record, work: Work) -> Checkout:
         p = self.preservation
         state = observe_slot(p.checkouts, p.files, record.slot_path, record.request.repo_id)
         if (not isinstance(state, SlotState) or state.head is None
@@ -88,7 +88,7 @@ class AbortMerge:
                         index=index_status(p.repo, work.slot),
                         files={path: (mode, str(blob)) for path, (mode, blob) in tree.files.items()})
 
-    def _expected(self, work: Work, before: Checkout) -> Checkout:
+    def expected(self, work: Work, before: Checkout) -> Checkout:
         p = self.preservation
         source = p.repo.tree(work.source)
         if source is None:
