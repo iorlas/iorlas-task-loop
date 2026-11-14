@@ -1,43 +1,54 @@
 # Header
-tl-8bh9.14.107.4; base f99143708fba9163ea75f95a8facb62c2e8fe507. Depth: small; one evidence-reconciliation behaviour. No missing owner decision or stated unlanded dependency. Evidence budget: 6 model calls. Size: 2 changed files including this plan, 1 independent behaviour, 35 implement model calls.
+tl-8bh9.14.107.4; base 1793cc8b08c882ee83229efa62bb435ee84d8274. Depth: small; one admission-evidence behaviour. No missing decision or stated unlanded dependency. Evidence budget: 6 model calls. Size: 2 changed files, 1 independent behaviour, 45 implement model calls.
 
 ## Outcome and non-goals
-Existing immutable writes and database-owned reservations already permit release by retaining unreferenced evidence. The gap is crash/restart coverage. Exclude directory sweeping, claim recovery, session continuation and remote-branch recovery.
+Cover restart after input writes before admission commits. Immutable writes and fresh keys permit reevaluation with unreferenced bytes retained. Exclude sweeping, claim recovery, session continuation and remote-branch recovery.
 
 ## Settled decisions
-- Release unreferenced evidence by retaining its bytes and allowing reevaluation with a fresh key.
-- A failed repeat or advance leaves the previous reservation authoritative.
-- Artifact paths authorize neither deletion nor state reconstruction.
-- Keep the schema and production contracts; close the observed gap with behaviour tests.
+- Release unreferenced evidence by retaining bytes and permitting fresh-key admission.
+- Rows and reservations own state; artifact paths confer no ownership.
+- Rollback preserves prior reservation state.
+- Keep production contracts and schema; test existing guarantees.
 
 ## Open decisions
 - None.
 
 ## Change map
-- `tests/steps/test_evidence_restart.py` (new): crash/reopen scenarios for `AttemptAdmission.admit`, `ChainAdmission.admit_repeat` and `admit_next`; use `test_admit.py` fixtures and `test_restart.py`'s restart pattern.
-- `src/taskloop/admit.py`: consult `AttemptAdmission.admit`, `_claimed` and `_commit`, the initial input producer and row-commit boundary; no planned edit.
-- `src/taskloop/admit_chain.py`: consult `ChainAdmission.admit_repeat`, `_takeover` and `admit_next`, both other `put_input` callers; no planned edit.
-- `src/taskloop/evidence_files.py`: consult `EvidenceFiles.put_input`, `directory` and `_write`, the shared producer; no edit.
+- `tests/steps/test_evidence_restart.py` (new): crash/reopen cases using admission fixtures.
+- `src/taskloop/evidence_files.py`: consult `put_input`, `_write`, `directory`; immutable producer.
+- `src/taskloop/admit.py`: consult `AttemptAdmission.admit`, `_claimed`, `_commit`; initial producer.
+- `src/taskloop/admit_chain.py`: consult `ChainAdmission.admit_repeat`, `_takeover`, `NextAdmission.admit_next`, `_advance`; chain producers.
+- `src/taskloop/check_repeat/repair.py`: consult `put_input` and `store.admit` caller; repair producer.
+- `src/taskloop/merge/resolve.py`: consult `Resolution.__call__`; input caller with existing merge work.
+- `src/taskloop/operations.py`: consult `ports.admission.admit`, `ports.advance.admit_next` callers.
+- `src/taskloop/repeat.py`: consult `_takeover`, the `admit_repeat` caller.
+- `src/taskloop/composition.py`: consult `open_admission`, `open_chain`, `open_advance` wiring.
 
 ## Read list
-- `src/taskloop/admit.py:152-178` — initial input before admission.
-- `src/taskloop/admit.py:213-317` — claim intent and transactional reservation/attempt writes.
-- `src/taskloop/admit_chain.py:102-170` — repeat input and fenced takeover.
-- `src/taskloop/admit_chain.py:239-337` — next-step input and commit boundary.
-- `src/taskloop/evidence_files.py:66-108` — file confinement, immutability and key-derived directory.
-- `src/taskloop/evidence_files.py:273-275` — shared admitted-input producer.
-- `src/taskloop/admit_rows.py:1-28` — reservation, attempt insertion and generation writes.
-- `src/taskloop/attempt_types.py:107-134` — keys, references and admission contract.
-- `tests/steps/test_admit.py:59-67` — file-effect interception pattern.
-- `tests/steps/test_admit.py:134-177` — admission fixtures and evidence assertions.
-- `tests/steps/test_restart.py:1-90` — fresh-runtime intact-database coverage.
+- `src/taskloop/evidence_files.py:66-108` — immutable storage and key isolation.
+- `src/taskloop/evidence_files.py:273-275` — input producer.
+- `src/taskloop/admit.py:152-178` — input before claim.
+- `src/taskloop/admit.py:213-317` — claim and commit.
+- `src/taskloop/admit_chain.py:102-170` — repeat transaction.
+- `src/taskloop/admit_chain.py:239-337` — advance transaction.
+- `src/taskloop/admit_rows.py:12-28` — shared row writes.
+- `src/taskloop/check_repeat/repair.py:45-78` — repair admission.
+- `src/taskloop/merge/resolve.py:32-78` — existing-work caller.
+- `src/taskloop/operations.py:478-488` — initial and advance callers.
+- `src/taskloop/repeat.py:156-166` — repeat caller.
+- `src/taskloop/composition.py:213-255` — runtime construction.
+- `tests/steps/test_admit.py:59-177` — input spy and admission helpers.
+- `tests/steps/test_repeat.py:112-179` — repeat helpers.
+- `tests/steps/test_advance.py:21-50` — advance fixture.
+- `tests/steps/test_check_repeat.py:1-90` — repair setup.
+- `tests/steps/test_restart.py:24-90` — intact-state restart pattern.
 
 ## Contract
-No new types, fields or states. Intent: admission selects a fresh `AttemptKey`. Effect: `put_input` precedes the row transaction. Result: without a committed row, retained bytes are inert and reevaluation uses another key; with a row, its `FileRef` and reservation remain authoritative. Release never deletes, renames or adopts evidence. Inject crashes outside ordinary exception compensation; reopen the same database with fresh operations.
+No new types, fields or states. Intent: fresh `AttemptKey`. Effect: immutable `put_input` before the row transaction. Result: absent rows leave inert bytes; retry selects another key. Committed `FileRef` and reservations remain authoritative. Interrupt after input creation before claim, and at chain/repair commit boundaries; retain files, close connections and reconstruct ports before retry. Avoid ordinary compensation as a crash simulation. Merge inputs belong to existing work, outside fresh admission.
 
 ## Work packages
-1. Add the new test module: interrupt initial admission immediately after input creation and before claim, reopen, then admit successfully with a distinct key. Check the first input and unrelated sentinel files byte for byte. Closes A.
-2. Extend that module to failed repeat and next-step transactions, and a committed-row control. Reopen before retrying; verify reservation ownership, input references and retained bytes. Closes A. Finish with `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40`, once each, last.
+1. Add initial, repeat, advance and check-repair interruption cases plus committed-row controls in the new test module. Compare prior rows, evidence and unrelated sentinels across restart. Closes A.
+2. Run `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40` once each, last.
 
 ## Acceptance behaviours
-A. Across initial admission, repeat and step advance, restart after input creation without a committed new row permits reevaluation with a fresh key, preserves the prior reservation where present, and leaves both unreferenced evidence and unrelated data intact; a committed-row control retains its original evidence reference and reservation.
+A. Intact-state restart after input creation without a new committed row permits fresh-key reevaluation across admission paths, preserves prior ownership and evidence/user bytes, and keeps committed-row references and reservations authoritative.
