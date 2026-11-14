@@ -147,6 +147,8 @@ or additional design authority. Prototype documents describe historical experime
 | [dashboard/dash-round-9.html](dashboard/dash-round-9.html) | Round 9 Phone — historical visual specimen | evidence: historical mockup, not operator instructions |
 | [dashboard/dash-spec.md](dashboard/dash-spec.md) | task-loop dashboard: implementation spec | design |
 | [execution-terms.md](execution-terms.md) | Execution terms: steps, actions and attempts | design |
+| [factory-on-sol/design.md](factory-on-sol/design.md) | The factory on the sol devbox, driven from the phone (revision 2, 2026-11-14) | design: proposal; owner answers pending in part |
+| [factory-on-sol/supervisor-brief.md](factory-on-sol/supervisor-brief.md) | Brief for the session that supervises the factory on sol: paths, loop, hard-won rules | design: operating notes, 2026-11-14 |
 | [layers.md](layers.md) | Layers: which software manages which | design |
 | [merge-queue.md](merge-queue.md) | Merge queue (MQUEUE): speculative, serial in meaning, parallel in execution (design only, 2026-11-07) | design |
 | [roadmap.md](roadmap.md) | Roadmap: speed and less code (2026-11-06) | design |
