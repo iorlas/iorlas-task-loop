@@ -231,10 +231,10 @@ def moves(found: Round) -> list[tuple[str, str, str]]:
     ("admitted", ENTRY, "matching", 10, None, ("report", "running"), 0),
     ("admitted", ENTRY, "gone", 200, None, ("report", "stuck:expired_admitted"), 0),
     ("admitted", BEFORE_REBOOT, "different_process", 200, None, ("relaunch", "relaunched"), 1),
-    ("dispatching", BEFORE_REBOOT, "different_process", 200, None, ("release", "released"), 0),
+    ("dispatching", BEFORE_REBOOT, "different_process", 200, None, ("report", "unknown"), 0),
     ("admitted", ENTRY, "unknown", 10, None, ("report", "unknown"), 0),
-    ("dispatching", ENTRY, "gone", 10, None, ("release", "released"), 0),
-    ("registered", ENTRY, "matching", 200, None, ("report", "stuck:hung"), 0),
+    ("dispatching", ENTRY, "gone", 10, None, ("report", "unknown"), 0),
+    ("registered", ENTRY, "matching", 200, None, ("report", "unknown"), 0),
     ("admitted", None, "gone", 10, "unclaimed", None, 0),
     ("admitted", None, "gone", 10, "unclaiming", ("release", "released"), 0),
 ])

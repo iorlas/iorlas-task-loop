@@ -57,6 +57,7 @@ from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, r
 from taskloop.operations import Adoption, ChecksPorts, Ended, Failed, Quiet, Round, StartPorts, require_database
 from taskloop.owned_processes import current_boot, entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
+from taskloop.recovery.status import reader as recovery_reader
 from taskloop.repeat import StepRepeat
 from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
 from taskloop.round_land import Landing
@@ -119,7 +120,8 @@ def open_reads(database: Path, artifacts: Path, views: GitViews) -> Generator[St
                 ids=NativeIds())  # never verifies
             seen = EvidenceFiles(artifacts).last_command
             yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen, seen,
-                              known_slot_mode(views.checkouts, RealSlotFiles()))
+                              recovery=recovery_reader(reader, time.time),
+                              policy=known_slot_mode(views.checkouts, RealSlotFiles()))
 
 
 @contextmanager
@@ -173,6 +175,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
             reader = _reader(con)
             leftovers = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused, ids=NativeIds()).leftovers
             reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen,
+                                recovery=recovery_reader(reader, time.time),
                                 policy=known_slot_mode(views.checkouts, RealSlotFiles()))
             releaser = open_releaser(database, store, views)
             holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
