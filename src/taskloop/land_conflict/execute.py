@@ -11,7 +11,7 @@ from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles, WorkerGone
 from taskloop.environment import Launch, Preparation, Renew, SetupFor
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.land_conflict.abort import AbortMerge
+from taskloop.land_conflict.cleanup import CleanupSaved
 from taskloop.land_conflict.models import Record, SavePhase
 from taskloop.land_conflict.preserve import Preservation
 from taskloop.land_conflict.store import ConflictStore
@@ -119,12 +119,12 @@ def _saved_result(ports: Ports, record: Record, work: Work, fence: Callable[[], 
         return Unavailable(reason=Reason.UNKNOWN, explanation="The pending conflict save has no matching terminal merge record.")
     preservation = Preservation(ports.store, ports.repo, ports.checkouts, ports.files, ports.gone, ports.clock, owned)
     saved = ports.store.saved(record.key)
-    if saved is not None and saved.abort is not None and isinstance(result, Terminal):
-        return AbortMerge(preservation)(record, work, saved, result)
+    if saved is not None and (saved.cleanup is not None or saved.abort is not None) and isinstance(result, Terminal):
+        return CleanupSaved(preservation)(record, work, saved, result)
     retained = preservation(record, work, result)
     saved = ports.store.saved(record.key)
-    if isinstance(retained, Terminal) and saved is not None and saved.merging:
-        return AbortMerge(preservation)(record, work, saved, retained)
+    if isinstance(retained, Terminal) and saved is not None and not saved.accepted and saved.phase is SavePhase.COMPLETE:
+        return CleanupSaved(preservation)(record, work, saved, retained)
     return retained
 
 
