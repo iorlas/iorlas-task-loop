@@ -159,14 +159,14 @@ def _checks_state(row: ChecksRow) -> tuple[State, str]:
     return state, row.reason or row.conclusion or ("running" if state == "running" else row.phase)
 
 
-def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: str | None) -> AttemptDetail:
+def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: int | None) -> AttemptDetail:
     results = store.results(row.key)
     state, summary = _checks_state(row)
     started = min((each.started_at for each in results), default=None)
     feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name,
         passed=each.conclusion == CommandConclusion.PASSED) for each in results if each.conclusion is not None)
     return AttemptDetail("checks", number, state, iso(started), iso(row.concluded_at), summary, "repeat" if earlier is not None else None,
-                         earlier, number - 1 if earlier is not None else None, feed)
+                         "The factory restarted" if earlier is not None else None, earlier, feed)
 
 
 def _checks_body(ports: TaskPorts, store: CheckStore, row: ChecksRow) -> AttemptBody:
@@ -233,12 +233,12 @@ def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[Atte
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     numbers = tries(rows)
     found: list[tuple[AttemptDetail, str]] = []
-    earlier: str | None = None
+    earlier: dict[str, int] = {}
     led: dict[str, int] = {}  # agent attempt id -> the try of its verification
     for link in _chain(ports, rows):
         if link.checks is not None:
-            found.append((_checks(store, link.checks, link.number, earlier), link.checks.after))
-            earlier = found[-1][0].summary
+            found.append((_checks(store, link.checks, link.number, earlier.get(link.checks.after)), link.checks.after))
+            earlier[link.checks.after] = link.number
         elif link.verifies and link.agent is not None:
             found.append((_verification(link)[0], link.agent.key.attempt_id))
             led[link.agent.key.attempt_id] = link.number
