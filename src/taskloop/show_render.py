@@ -8,7 +8,7 @@ only: its stored start is a clock-tick token that proves identity (JSON keeps it
 from datetime import UTC, datetime
 from pathlib import Path
 
-from taskloop.attempt_result import succeeded
+from taskloop.attempt_result import succeeded, usage_explanation
 from taskloop.attempt_status import AttemptView, SetupShown, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.check_status import ChecksView
@@ -59,6 +59,7 @@ def _agent_lines(each: AttemptView) -> list[str]:
         f"Entry: {each.entry}{entry}", f"Worker: {worker}",
         *([] if last_command(each) is None else [f"Last command: {last_command(each)}"]),
         f"Result: {each.result.status} {each.result.reason}".rstrip(),
+        *([] if each.result.execution is None or not (usage := usage_explanation(each.result.execution.facts)) else [usage]),
         *([f"Preparation: {one_line(each.result.explanation)}"]
           if each.result.explanation and each.result.reason.startswith("merge:") else []),
         *([f"Answer: {one_line(each.result.explanation)}"]

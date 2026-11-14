@@ -107,7 +107,8 @@ class Entry:
             assert AttemptStore(lambda: con, store.begin_immediate).register_entry(KEY, entry, 10) == "accepted"
             con.close()
         self.files = FlakyFiles(db.parent, failures)
-        summary = Summary(text=text or json.dumps(PLAN), rc=rc, stands=True, vendor="request failed SECRET=credential" if rc else "")
+        summary = Summary(text=text or json.dumps(PLAN), rc=rc, stands=True, vendor="request failed SECRET=credential" if rc else "",
+                          res={"tokens": {"in": 8, "cached": 2, "out": 3}, "requests": 1})
         self.outcome = RunOutcome(rc=rc, worker=WORKER, summary=summary, out="agent says SECRET=credential")
         self.run = FakeRun(self.outcome)
         self.credential_calls = 0
