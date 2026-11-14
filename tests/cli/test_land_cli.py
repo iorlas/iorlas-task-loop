@@ -278,7 +278,7 @@ AGENT_ONLY = {"worker_alive", "worker_unknown", "task_attempted"}
 def _words() -> set[str]:
     """Every refusal or unknown word a land answers, written by its modules or passed through from its collaborators."""
     written = _literals(LANDS, "Failed", 1)
-    released = _literals(("slot_release", "check_release"), "NotReleased", 1)
+    released = _literals(("slot_release", "slot_park", "check_release"), "NotReleased", 1)
     fenced = _literals(("land_store", "check_store", "setup_store"), "StoreRefused", 0)
     return (written | released | fenced | PASSED | set(RELAUNCHED)) - AGENT_ONLY
 

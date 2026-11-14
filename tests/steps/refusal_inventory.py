@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 
 from taskloop.recovery.models import Outcome
+from taskloop.release_proof import RecoveryReason
 
 ROOT = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 # Argument carrying a refusal reason, including helpers that construct owning results.
@@ -55,7 +56,7 @@ def typed_reasons() -> set[str]:
             for field in node.body:
                 if isinstance(field, ast.AnnAssign) and isinstance(field.target, ast.Name) and field.target.id == "reason":
                     reasons.update(n.value for n in ast.walk(field.annotation) if isinstance(n, ast.Constant) and isinstance(n.value, str))
-    return reasons
+    return reasons | {reason.value for reason in RecoveryReason}
 
 
 # Forwarded values originate in admission, launch, store, verification, publication,
@@ -128,8 +129,11 @@ REVIEWED_DYNAMIC = {
     ('round.py', 'Failed', 'Reason.DRAINING'),
     ('slot_release.py', 'NotReleased', 'Reason.DRAINING'),
     ('slot_release.py', 'NotReleased', 'reason'),
-    ('slot_release.py', 'NotReleased', 'parked.reason.value'),
-    ('slot_release.py', 'NotReleased', 'refused.reason.value'),
+    ('slot_park.py', 'NotReleased', 'reason'),
+    ('slot_park.py', 'NotReleased', 'parked.reason.value'),
+    ('slot_park.py', 'NotReleased', 'refused.reason.value'),
+    ('release_proof.py', 'NotReleased', 'RecoveryReason.RUNNING'),
+    ('release_proof.py', 'NotReleased', 'RecoveryReason.UNKNOWN'),
     ('wip.py', 'Refused', 'SaveReason.MERGE_CHANGED'),
     ('wip.py', 'Refused', 'SaveReason.MERGE_INPUTS'),
     ('wip.py', 'Refused', 'SaveReason.MERGE_PENDING'),

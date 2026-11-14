@@ -1,15 +1,45 @@
 """Observe a release's registered processes. No stop action is authorized by a liveness observation."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Literal
 
 from any_agent.procs import Worker
 from stream_proc import OwnedProcess
 
 from taskloop.attempt_types import EntryIdentity, Observe, WorkerGone
+from taskloop.drain.models import Seen
+from taskloop.recovery.models import Intent
 from taskloop.setup_store import SetupSeen
 
 NOTHING = "Nothing changed."
+
+
+class RecoveryReason(StrEnum):
+    RUNNING = "recovery_running"
+    UNKNOWN = "recovery_unknown"
+
+
+def recovery_stopped(seen: SetupSeen, intent: Intent | None) -> NotReleased | None:
+    """Every saved recovery identity and its group must be gone, including the caller."""
+    if intent is None:
+        return None
+    identities = [intent.owner, intent.worker]
+    if intent.execution is not None and intent.execution.worker is not None:
+        identities.append(intent.execution.worker)
+    checked: list[OwnedProcess] = []
+    for identity in identities:
+        process = identity.owned()
+        if process in checked:
+            continue
+        checked.append(process)
+        found = Seen(seen(process))
+        if found is Seen.UNKNOWN:
+            return NotReleased("unavailable", RecoveryReason.UNKNOWN, f"A recovery process or group could not be observed. {NOTHING}")
+        if found is Seen.ALIVE:
+            return NotReleased("unsettled", RecoveryReason.RUNNING,
+                               f"A recovery process (pid {process.pid}, group {process.pgid}) still runs. {NOTHING}")
+    return None
 
 
 @dataclass(frozen=True)

@@ -329,17 +329,18 @@ def test_a_held_slot_lock_is_slot_busy(
     assert (stored(registered), ports.opens, ports.unclaimed) == (before, 0, [])
 
 
-def test_an_attempt_changed_after_the_proof_records_nothing_and_says_it_parked(
+def test_an_attempt_changed_after_the_proof_refuses_before_parking(
     registered: sqlite3.Connection, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
-    """A relaunch registers another entry while the release holds the lock: the fence on `rev` refuses the transaction."""
+    """A changed entry at custody acquisition invalidates the proof before any Git write."""
     d = head(slot)
     slot.take_branch("task/tl-1", "HEAD", mode="resume")
     before, ports = stored(registered), Ports(registered, checkouts, slot_files)
     ports.inside = lambda: registered.execute("UPDATE attempt SET entry_pid=8,rev=rev+1")
     found = ports.releaser().release(KEY, True)
     assert isinstance(found, NotReleased) and (found.kind, found.reason) == ("unavailable", "changed")
-    assert f"parked at {d}" in found.detail and stored(registered) == before and ports.unclaimed == []
+    assert found.detail.endswith("Nothing changed.") and stored(registered) == before and ports.unclaimed == []
+    assert (head(slot), slot.branch()) == (d, "task/tl-1") and ports.opens == 0
 
 
 def test_the_claim_is_returned_once_retried_while_bd_fails_and_reported_when_not_ours(

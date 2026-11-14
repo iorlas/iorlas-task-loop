@@ -45,6 +45,7 @@ from taskloop.ids import Ids
 from taskloop.land_store import LandRow, LandStore
 from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
+from taskloop.slot_park import park_slot
 from taskloop.slot_release import (
     NOTHING,
     AlreadyReleased,
@@ -55,7 +56,6 @@ from taskloop.slot_release import (
     Scratch,
     entry_stopped,
     free,
-    park_slot,
     setup_stopped,
 )
 from taskloop.slot_state import SlotState, observe_slot

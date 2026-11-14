@@ -216,8 +216,8 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
         ("fetch", "prepare.py"),
-        ("park", "slot_release.py"), ("park", "wip.py"), ("reset", "wip.py"),
-        ("stage", "wip.py"), ("commit_tree", "wip.py"), ("update_ref", "wip.py"), ("abort_merge", "slot_release.py"),
+        ("park", "slot_park.py"), ("park", "wip.py"), ("reset", "wip.py"),
+        ("stage", "wip.py"), ("commit_tree", "wip.py"), ("update_ref", "wip.py"), ("abort_merge", "slot_park.py"),
         ("park", "merge/start.py"), ("start_merge", "merge/start.py"), ("finish_merge", "merge/start.py"),
         ("fetch", "merge/start.py"),
         ("stage", "merge/start.py"), ("stage", "merge/git.py"), ("update_ref", "merge/git.py"), ("take_branch", "merge/git.py"),
