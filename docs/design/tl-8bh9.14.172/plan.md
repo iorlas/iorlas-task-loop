@@ -9,7 +9,7 @@ ended**. They do not support reading (b), a completed turn with a prose answer. 
 prove completion. The second transcript records a reasoning item immediately after the commentary. Completion
 must be established by the harness protocol, never inferred from silence or a message's prose.
 
-The concrete defect is in the released **any-agent 0.9.0 Codex adapter and its interaction with the supervisor**:
+The concrete defect was in the **any-agent 0.9.0 Codex adapter and its interaction with the supervisor**:
 
 1. `any_agent/harnesses/codex.py:CodexHarness._item` translates every completed `agent_message` into
    `events.Msg(text=...)`. `Msg.final` defaults to `True`. The retained `codex exec --json` messages contain
@@ -44,11 +44,11 @@ and `rollout-2026-11-14T08-02-42-01a1d914-7f4a-7871-83dc-29454ee2823c.jsonl`, un
 `~/.codex/sessions/2026/11/14/`. The last message of the first has commentary phase at 07:07:09.631; the second
 has commentary at 08:05:56.766 followed by reasoning at 08:05:56.769. Neither has a task/turn completion record.
 
-A process-free replay against the installed release reproduced the mechanism: a raw completed `agent_message`
-parses as `Msg(final=True)`; advancing an injected clock to 121 seconds produces `Turn.verdict == "answer"`
-and summary `answered=True` without `TurnDone`. Replaying a following tool event clears the verdict. This is
-evidence of the current defect, not verification of the proposed fix. An activity record's `s: finished` means
-that the message was emitted; it does not mean that the agent turn finished.
+The cached 0.9.0 source confirms that a raw completed `agent_message` parses as `Msg(final=True)` and arms
+that timer without `TurnDone`. An activity record's `s: finished` means that the message was emitted; it does
+not mean that the agent turn finished. These observations establish a premature answer stop, not whether a
+particular model call remained active throughout the quiet interval. They do not justify treating silence as
+reading (b).
 
 The measured cost remains **2.53M input tokens, 2 of 10 plan attempts, 4.9% of the 51.4M-token window**, using
 the owner's measurements (1.79M and 0.74M). The known redo `4ba6f6f69511425298185507b3f2c5f9` added 0.81M.
@@ -74,35 +74,38 @@ one for an unplannable task.
 
 ## Implementation
 
-### 1. Correct completion in the owning agent library
+### 1. Retain the released completion fix already on this branch
 
-Implement and test a bounded fix in shelf's `packages/any-agent`, then consume its released version here.
-`taskloop.composition._run` delegates execution to this library; the factory must not copy the parser,
-read Codex rollout files for control, monkeypatch the installed dependency or implement another process owner.
-An upstream release containing this behavior is an implementation prerequisite, not something this plan claims
-already exists. Its publication follows the shelf owner's workflow and authority.
+The previous plan predates two merged dependency updates. Commit `dbc2b265d19125fc0cb026acb8268ee85c8bd862`
+adopted any-agent 0.9.1, whose Codex parser emits every completed `agent_message` as `Msg(final=False)`.
+Commit `a66a610b90c09c258e2d9f463111c1c36005bad1` subsequently pinned **any-agent 0.10.0 and stream-proc
+0.8.0**, both from shelf commit `c88be700bb482b4c01fde43093eafc5e0bab701b`. Those pins are present in
+`pyproject.toml`, `uv.lock` and the installed environment at the task's source commit.
 
-- In the Codex parser, emit completed message items as non-final activity and retain the most recent candidate
-  answer for the current turn. The phase-less stdout format in these failures must work; optional phase metadata
-  must never be required to recognize commentary safely.
-- Confirm completion from `turn.completed`. Emit the existing typed `TurnDone` even if usage is absent, with
-  optional usage rather than suppressing completion. At that point the last message is eligible as the final
-  answer. Keep terminal confirmation and candidate text distinct so a later tool/turn cannot reuse stale text.
-- In the Codex summary, remove the circular inference that `stop == "answer"` proves `e.last` was final.
-  Select answer text only from confirmed completion or the current execution's successfully written terminal answer file.
-  A partial/error exit with only commentary must not expose that commentary as an answer or set `answered` or
-  `stands`. Preserve genuine process failures and the normal missing-answer result.
-- The existing supervisor may apply its answer grace after confirmed turn completion. No longer grace interval,
-  JSON sniffing, phrase matching or prompt-only mitigation can substitute for this fix. Do not require valid JSON
-  to recognize a completed turn: a completed prose answer must still reach the strict decoder.
-- Keep backend event details inside the adapter. Reuse existing typed events and injected clocks; add no factory
-  vocabulary, schema, signals, subprocess calls or state inferred from logs. Leave other harness protocols with
-  their existing completion semantics and run their relevant library contract tests.
+The core termination fix is therefore already implemented. Do not repeat the upstream work or downgrade the
+dependency. `CodexHarness._item` now emits non-final message activity even for the phase-less stdout format in
+the failures. `turn.completed` with its normal usage object emits `TurnDone`, which arms the supervisor's
+answer grace. A successful terminal `-o` file also establishes a final answer when the worker exits normally.
+The supervisor no longer interprets commentary as completion. Its independent execution, stall and silence
+limits still bound an unfinished execution.
 
-Update `pyproject.toml`'s dependency/source pin and `uv.lock` to the released fix. Preserve the documented
-any-agent/stream-proc source-commit alignment, updating the companion pin if required by the release. Record
-the actual release version and commit during implementation; do not invent a future tag or use a local override.
-No unrelated shelf upgrades belong in this change.
+A process-free planning replay against installed 0.10.0 routed a phase-less commentary through the real
+`CodexHarness.parse_line` and `Supervisor.feed`, then polled at half-second intervals on an injected clock for
+121 seconds: no stop occurred and the summary reported `answered=False`. A subsequent tool, final prose and
+`turn.completed` produced the final prose as an answered, standing summary on normal exit. The shelf release
+also contains `TestCodexMessageIsNotTheAnswerUntilTheTurnEnds` in `tests/test_codex_events.py`, covering the
+message-only and completed-turn timer cases. These facts replace the former unfulfilled release prerequisite;
+the factory tests below still need to demonstrate continued work and strict answer decoding together.
+
+`taskloop.composition._run` continues to delegate execution to the released library. No factory parser,
+rollout-file reader for control, process owner, signals, schema change or dependency upgrade is needed.
+Keep backend event interpretation inside the owning adapter. Do not lengthen the grace, inspect prose or
+require valid JSON to decide completion. Retain other harnesses' existing completion protocols.
+
+The release still suppresses `TurnDone` when usage is absent and retains the last message as diagnostic text
+even when `answered=False` and `stands=False`. Neither behavior authorizes an answer stop for commentary.
+Do not present those as new fixes already supplied by 0.10.0 or expand this task into unrelated adapter
+hardening. Cover the actual retained wire format, terminal completion and normal final-answer file path.
 
 ### 2. Put the warning first in plan inputs
 
@@ -119,9 +122,11 @@ already admitted inputs remain their original immutable evidence. Runtime versio
 
 ### 3. Verify through the production boundaries
 
-Add focused pytest behavior tests in the owning library and the factory. Use public parser/supervisor entry
-points with an injected clock, plus the released semantic execution fake where appropriate. Do not create a
-fake that simply returns the desired answer and call that proof that commentary is safe.
+Add focused pytest behavior tests in the factory, consuming the released library. Use its public
+parser/supervisor entry points with an injected clock, plus the released semantic execution fake for worker
+registration and the factory's existing execution port. Do not create a fake that simply returns the desired
+answer and call that proof that commentary is safe. Keep imports limited to this behavior and its small
+supporting boundary; factory source and tests must not import or invoke subprocess or signal APIs.
 
 1. Replay a minimal structured stdout sequence matching the failures: start, tool completion, commentary,
    **more than 120 seconds of quiet**, then another tool, another message and a confirmed final JSON answer.
@@ -131,8 +136,10 @@ fake that simply returns the desired answer and call that proof that commentary 
    promptly by tools to explain the original earlier-message behavior.
 2. Cover commentary followed by reasoning, and commentary with no further stdout for the same quiet interval.
    Both must remain unfinished. Include the phase-less wire format, rather than testing only an explicit
-   `Msg(final=False)` constructed by a test. Assert partial/error exit without terminal confirmation does not
-   promote commentary to an answer. Keep existing timeout/stall tests passing so unfinished work remains bounded.
+   `Msg(final=False)` constructed by a test. At a partial/error exit without terminal confirmation, assert
+   `answered=False`, `stands=False` and preservation of the execution failure; retained diagnostic text is not
+   proof of completion. Keep existing timeout/stall behavior so unfinished work remains bounded. Also cover a
+   completed execution's terminal answer file through the real adapter summary, using a temporary file.
 3. Complete a turn with prose, finish normally with `rc=0`, and send its real harness summary through the
    factory's existing strict answer path. Assert `answer.kind == json_invalid` and `answer:json_invalid`, without
    an automatic repeat from commentary. Also retain valid JSON acceptance and schema-invalid rejection. Existing
@@ -142,26 +149,32 @@ fake that simply returns the desired answer and call that proof that commentary 
    and process effects behind the existing semantic fakes. A small regression file such as
    `tests/steps/test_agent_completion.py` can hold this contract without broadening unrelated test imports.
 5. Extend `tests/steps/test_admit.py` and `tests/steps/test_repeat.py` to check the exact warning at byte zero in
-   retained fresh and repeat input and in the launched prompt. Update `TrackingTaskAdapter.claim`'s current
+   retained fresh and repeat input and in the launched prompt. Update `Tracker.claim`'s current
    `startswith(bead.title)` assumption to check the warning followed by the title. Preserve existing assertions
    for task content, safe status blocks, repeat semantics and unchanged implementation-step prompts.
 
-Before implementation gates, read the current justfile and run `just install`. Run the owning library's focused
-parser/supervisor tests, then `just check` and `just test` in the successor worktree (the current `just test`
-explicitly selects `tests/cli tests/steps tests/rules`). Use the installed environment and frozen isolated Python
-for additional selected tests: `uv run --frozen --no-sync python -I -m pytest ...`. Run no whole-suite/live agent
-tests, baseline imports, editable overrides or real model calls. Maintain the existing file/function/test size
-caps, import contracts and typing policy.
+For implementation, install the successor environment with `just install`, then run the supplied gates
+`just check` and `just test` once after the changes. Use the installed environment and frozen isolated Python
+for any necessary selected regression: `uv run --frozen --no-sync python -I -m pytest ...`. The task's supplied
+commands replace reading the justfile. No implementation gates are needed to write this plan. Run no
+whole-suite/live agent tests, baseline imports, editable overrides or real model calls. Maintain existing
+file/function/test size caps, import contracts and typing policy.
 
 ## Completion and rollout
 
-Completion requires the root-cause regression to fail against 0.9.0 and pass with the released fix, factory
-completion/decoder tests passing, and both fresh and repeated plan inputs beginning with the exact warning.
-Prompt text alone does not complete this task. This change needs no database migration and no historical
-execution reclassification. Restart the factory to adopt the new installed runtime; retain existing evidence,
+Completion requires the regression to exercise the real released parser/supervisor, survive commentary plus
+more than 120 seconds of quiet, continue tools in the same attempt/session, and expose only the completed
+final answer to successful answer handling. The original 0.9.0 parser's `Msg(final=True)` explains why that
+regression would fail before the released fix; do not install the old runtime to prove it. Factory
+completion/decoder tests must pass, including final prose as `json_invalid`, and both fresh and repeated plan
+inputs must begin with the exact warning. Prompt text alone does not complete this task. This change needs
+no database migration and no historical execution reclassification. Restart the factory to adopt the new
+installed runtime; retain existing evidence,
 claims and explicitly held tasks. Do not restart the two held tasks automatically or spend tokens retrying them
 as validation. Assess subsequent token savings separately from this task's deterministic acceptance tests.
 
-Planning baseline: `99655d38c09be07198ad0f5c0876d3d25a559a65` on the assigned task worktree. No existing plan or
-task-local WIP commit was found; the ancestor WIP trailer inspected belongs to `tl-8bh9.14.160`, not this task.
-This planning change contains only this document; code changes and their gates belong to implementation.
+Planning baseline: `1f5a5d838c3ae688affdc1852deccc07e965c778` on the assigned task worktree. The previous plan
+was committed as `9f64dab77448bc86757ff5713fd9fe30e2a0b8b7`; the later merge brought in the dependency fix.
+The current admission test double is `Tracker`. No task-local WIP commit or uncommitted edits were found. The ancestor
+WIP trailer inspected belongs to `tl-8bh9.14.160`, not this task. This revision changes only this document;
+prompt changes and durable regression tests belong to implementation.
