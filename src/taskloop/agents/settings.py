@@ -109,11 +109,14 @@ class AgentSetting(Input):
     model: str = "gpt-6.1-sol"
     effort: str = "high"
     access: Policy = CodexPolicy()
+    compaction_token_limit: int | None = Field(default=None, strict=True, gt=0)
 
     _identifiers = field_validator("model", "effort")(identifier)
 
     @model_validator(mode="after")
     def matching(self) -> Self:
+        if self.compaction_token_limit is not None and self.harness is not HarnessKind.CODEX:
+            raise ValueError("compaction_token_limit requires codex")
         if self.harness is not self.access.harness:
             raise ValueError("access policy must match harness")
         if self.harness is not HarnessKind.CODEX and "model" not in self.model_fields_set:
@@ -160,15 +163,17 @@ def apply(setting: AgentSetting, flags: Overrides) -> AgentSetting:
     if flags.harness is not None and flags.harness is not setting.harness:
         raise ValueError(f"{flags.harness} needs matching per-step model and access configuration")
     return AgentSetting(harness=setting.harness, model=flags.model or setting.model, effort=flags.effort or setting.effort,
-                        access=setting.access)
+                        access=setting.access, compaction_token_limit=setting.compaction_token_limit)
 
 
 def encode_policy(policy: Policy) -> str:
     return POLICY.dump_json(policy).decode()
 
 
-def decode_setting(harness: str, provider: str, model: str, effort: str, policy: str) -> AgentSetting:
-    setting = AgentSetting(harness=HarnessKind(harness), model=model, effort=effort, access=POLICY.validate_json(policy))
+def decode_setting(harness: str, provider: str, model: str, effort: str, policy: str,
+                   compaction_token_limit: int | None = None) -> AgentSetting:
+    setting = AgentSetting(harness=HarnessKind(harness), model=model, effort=effort, access=POLICY.validate_json(policy),
+                           compaction_token_limit=compaction_token_limit)
     if setting.provider != provider:
         raise ValueError("stored provider does not match harness and model")
     return setting

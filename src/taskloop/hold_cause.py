@@ -22,7 +22,7 @@ RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the 
     PlanContentRule.CHANGE_MAP: ("the plan needs a Change map with a nonempty bullet list",
                                  "add the files, symbols and changes, including producers and callers"),
     PlanContentRule.DEPTH: ("the plan does not declare exactly one valid depth",
-                           "supply one Depth field with small, medium or large in Header"),
+                           "put one line in Header that is only `Depth: small`, `Depth: medium` or `Depth: large`, not inside a sentence"),
     PlanContentRule.HEADING: ("the plan has a forbidden status, as built or progress heading",
                              "remove that heading and its status, as built or progress content"),
     "paths": ("a listed path is not allowed (outside the step's folder, a Git file, or too many paths)", ""),

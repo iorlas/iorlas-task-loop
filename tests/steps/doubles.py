@@ -10,7 +10,7 @@ from pathlib import Path
 
 from beads_client import BdError, Bead
 from beads_client.testing import FakeTaskReadClient
-from git_porcelain import GitUnavailable, Recorded, Repo
+from git_porcelain import GitUnavailable, Pushed, Recorded, Repo
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess
@@ -51,12 +51,14 @@ MAIN_PROFILE = {"setup": [["just", "bootstrap"]], "required": ["check", "test"],
     {"name": "slow", "argv": ["sleep", "1"], "timeout": 60}]}
 
 
-def main_at(slot: FakeWorktree) -> str:
-    """The person's `main` fast-forwarded to the slot's detached HEAD (a commit made there before dispatch): a new task
-    branch starts at `main`'s tip, so this is where B is."""
+def origin_main_at(slot: FakeWorktree) -> str:
+    """Seed origin main with the slot's pre-dispatch commit and refresh its remote-tracking ref for preparation."""
     found = next(info.head for info in slot.repo.worktrees() if info.path == slot.path)
     assert found is not None
-    slot.repo.worktree(slot.repo.identity().root).merge_ff(found)
+    person = slot.repo.worktree(slot.repo.identity().root)
+    person.merge_ff(found)
+    assert isinstance(person.push("main"), Pushed)
+    assert slot.repo.fetch("origin", refspecs=["+refs/heads/main:refs/remotes/origin/main"]).ok
     return found
 
 

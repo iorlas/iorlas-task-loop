@@ -166,17 +166,22 @@ def rows(con: sqlite3.Connection) -> tuple[int, int]:
     return con.execute("SELECT (SELECT count(*) FROM reservation),(SELECT count(*) FROM attempt)").fetchone()
 
 
+@pytest.mark.parametrize("limit", [None, 100000])
 def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
+    limit: int | None,
 ) -> None:
     slots(factory, repo, root, 2)
-    result = admit(factory, tmp_path, repo)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    chosen = replace(request(tmp_path, repo), setting=AgentSetting(model="chosen", compaction_token_limit=limit))
+    result = admission(factory, tmp_path, tracker, repo).admit(chosen)
     assert isinstance(result, Admitted) and result.slot == "s1" and result.key.reservation_generation == 1
     key, repo_id = result.key, repo.identity().key
     assert factory.execute("SELECT * FROM reservation").fetchall() == [("s1", repo_id, 1, key.attempt_id)]
     columns = "backlog,task_id,repo_id,slot,model,phase,entry_pid,entry_start,entry_boot"
     stored = factory.execute(f"SELECT {columns} FROM attempt").fetchone()
     assert stored == ("tasks", "tl-1", repo_id, "s1", "chosen", "admitted", None, None, None)
+    assert factory.execute("SELECT compaction_token_limit FROM attempt").fetchone() == (limit,)
     assert AttemptStore(lambda: factory).tracker_root(key) == str(tmp_path.resolve())  # the claimed root, renewed by the entry
     with pytest.raises(StoreRefused, match="unregistered_entry"):
         AttemptStore(lambda: factory).load(key)

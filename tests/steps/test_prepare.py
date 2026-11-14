@@ -139,14 +139,15 @@ def test_a_ref_that_collides_with_the_branch_is_branch_name(repo: FakeRepo, tmp_
 @pytest.mark.parametrize("where", ["absent", "local", "remote"])
 def test_attempt_one_takes_its_branch_and_starts_from_what_it_holds(
     con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles,
-    where: Literal["absent", "local", "remote"],
+    where: Literal["absent", "local", "remote"], remote: FakeRemote,
 ) -> None:
-    """`main` moved on after the slot was parked at D. Absent: created at `main`'s tip, never at D. An existing local
+    """Origin main moved after the slot was parked at D. Absent: created at its fetched tip, never at D. An existing local
     branch that contains D is checked out as it is; a remote-tracking tip that contains D (and no local branch) is where
     the new branch starts; neither follows `main`. B is the HEAD read on the branch."""
     made = {"local": lambda: leave(repo, tmp_path, BRANCH, extra=True), "remote": lambda: pushed(repo, tmp_path)}
     existing = made[where]() if where in made else None
-    moved = on_main(repo)
+    moved = remote.advance("main", {"other": "landed"})
+    assert repo.fetch().ok
     tip = existing or moved
     status, reason, agent = execute(con, tmp_path, checkouts, slot_files)
     assert (status, reason, len(agent.calls)) == ("pending", "verification", 1)
@@ -154,13 +155,12 @@ def test_attempt_one_takes_its_branch_and_starts_from_what_it_holds(
     assert dict(repo.branches("task/"))[BRANCH] == head(repo, slot.path)
 
 
-def test_a_new_branch_without_a_local_main_is_target_and_an_existing_one_needs_none(
+def test_new_and_existing_branches_need_no_local_main(
     con: sqlite3.Connection, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     d = head(repo, slot.path) or ""
     repo.rename_branch("main", "trunk")
-    assert branch_refusal(repo, "tl-1", (d,)) == "target"
-    refused_untouched(con, tmp_path, checkouts, slot_files, "target")
+    assert branch_refusal(repo, "tl-1", (d,)) == Branch((d,), None, None, d)
     assert slot.branch() is None
     tip = leave(repo, tmp_path, BRANCH, extra=True)
     assert branch_refusal(repo, "tl-1", (d,)) == Branch((d,), tip, None, tip)
@@ -436,18 +436,18 @@ def test_with_no_task_branch_a_slot_outside_mains_history_is_skipped_or_diverged
     assert isinstance(result, Admitted) and result.slot == "s2"
     advance(second)
     result, claims = admitted(factory, repo, root, tmp_path, "tl-2")
-    assert isinstance(result, AdmitRefused) and result.reason == "branch_diverged" and "your local main" in result.detail
+    assert isinstance(result, AdmitRefused) and result.reason == "branch_diverged" and "fetched origin main" in result.detail
     assert claims.calls == []
 
 
-def test_admission_without_a_local_main_is_target_before_its_input_claim_or_rows(
+def test_admission_without_a_local_main_uses_origin(
     factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
 ) -> None:
     slots(factory, repo, root, 1)
     repo.rename_branch("main", "trunk")
     result, claims = admitted(factory, repo, root, tmp_path)
-    assert isinstance(result, AdmitRefused) and result.reason == "target" and "refs/heads/main" in result.detail
-    assert claims.calls == [] and factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
+    assert isinstance(result, Admitted) and claims.calls == ["input", "claim:tl-1"]
+    assert factory.execute("SELECT slot_head FROM attempt").fetchone() == (head(repo, repo.path),)
 
 
 def on_main(repo: FakeRepo) -> Sha:

@@ -1,5 +1,5 @@
 """Admit a task into a free slot after the branch rule, with the tracker claim taken outside the transaction.
-Admission records the resolved tracker root, original park point, and a never-reused reservation generation.
+Admission records the resolved tracker root, fetched origin main park point, and a never-reused reservation generation.
 An abandoned task restarts at attempt 1; its task-wide seq and stored earlier-answer context continue.
 The entry must register before dispatch. Repeats and advances use the shared row writes through admit_chain.
 """
@@ -35,7 +35,7 @@ from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids
 from taskloop.input_context import InputContext, InputError
 from taskloop.input_context import read as read_context
-from taskloop.prepare import branch_refusal, held_refusal, refusal_detail
+from taskloop.prepare import held_refusal, refreshed_sources, refusal_detail
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
 from taskloop.steps import STEPS, kind
@@ -95,11 +95,12 @@ type AdmitResult = Admitted | AdmitRefused | AdmitUnavailable
 
 @dataclass(frozen=True)
 class Free:
-    """An observed-free slot whose HEAD (D) passed the branch rule."""
+    """An observed-free slot's HEAD, selected task source and recorded park destination."""
 
     name: str
     head: str
     source: str
+    park_commit: str
 
 
 @dataclass(frozen=True)
@@ -298,10 +299,9 @@ class AttemptAdmission:
                     "input_path": ref.path,
                     "input_digest": ref.digest,
                     "schema_version": 1,
-                    "model": request.setting.model,
-                    "effort": request.setting.effort,
+                    "model": request.setting.model, "effort": request.setting.effort,
+                    "compaction_token_limit": request.setting.compaction_token_limit, "deadline": request.deadline,
                     "access_policy": encode_policy(request.setting.access),
-                    "deadline": request.deadline,
                     "number": 1,
                     "previous_attempt_id": None,
                     "repeat_reason": None,
@@ -372,23 +372,21 @@ def free_slots(
 
 
 def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free, ...] | AdmitRefused | AdmitUnavailable:
-    """The task branch rule, read-only, before any file, claim or row: the free slots whose HEAD (D) it passes. The
-    entry checks it again before it creates the branch (`prepare`)."""
+    """Refresh origin main before any file, claim or row, then select eligible free slots and their park destination."""
     try:
-        heads = {info.path: info.head for info in repo.worktrees()}
-        found = branch_refusal(repo, task_id, tuple(head for view in free if (head := heads.get(view.path)) is not None))
+        heads, found, park_commit = refreshed_sources(repo, task_id, tuple(view.path for view in free))
     except GitUnavailable as error:
         return AdmitUnavailable("git", detail=why(error))
     if isinstance(found, str):
         held, detail = held_refusal(repo, task_id, free) if found == "branch_held" else ((), refusal_detail(found, task_id))
         return AdmitRefused(found, held, detail=detail)
-    passing = tuple(Free(view.name, head, found.start) for view in free
-                    if (head := heads.get(view.path)) is not None and head in found.passing)
+    passing = tuple(Free(view.name, head, found.start, park_commit) for view in free
+                    if park_commit is not None and (head := heads.get(view.path)) is not None and head in found.passing)
     return passing or AdmitRefused("no_free_slot")
 
 
 def unheld(con: sqlite3.Connection, repo_id: RepoId, free: Free, generation: int) -> tuple[str, str] | None:
-    """The slot's name with its D, when it is unreserved and its counter is below `generation`."""
+    """The slot's name and park destination, when unreserved with its counter below `generation`."""
     row: tuple[object, ...] | None = con.execute(
         "SELECT name FROM slot s WHERE repo_id=? AND name=? AND generation<? AND NOT EXISTS "
         "(SELECT 1 FROM reservation r WHERE r.repo_id=s.repo_id AND r.slot=s.name)",
@@ -398,4 +396,4 @@ def unheld(con: sqlite3.Connection, repo_id: RepoId, free: Free, generation: int
         return None
     if not isinstance(row[0], str):
         raise sqlite3.DatabaseError("Malformed slot row")
-    return row[0], free.head
+    return row[0], free.park_commit

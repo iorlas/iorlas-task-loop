@@ -13,7 +13,7 @@ const mixed = [card("hold-old", "03"), card("hold-new", "04", {
 }),
   card("ask-old", "01", { ask: true, question }),
   card("ask-new", "02", { ask: true, question: "Which region?\nChoose one." }),
-  card("running", "05", { column: "implement", ask: true })];
+  card("running", "05", { column: "implement", status: "running", ask: true })];
 let snapshot = { slots: ["s1", "s2"], tasks: mixed };
 const backlog = "fixture/main";
 const round = (at, extra = {}) => ({ at, backlog, move: "round", task: null, step: null, words: ["moves=0"], ...extra });
@@ -40,7 +40,10 @@ window.fetch = async (url) => {
   } else if (url === "/api/log") {
     logReads++;
     data = await logResponse();
-  } else if (url.endsWith("/tracker")) data = null;
+  } else if (url.endsWith("/tracker")) data = { fields: {
+    description: "Fixture task", labels: [], depends_on: [],
+    created_at: "2026-11-14T10:00:00Z", updated_at: "2026-11-14T10:00:00Z",
+  }, comments: [] };
   else if (url.startsWith("/api/tasks/")) {
     const task = snapshot.tasks.find((t) => t.id === url.split("/").at(-1));
     data = { task, attempts: [], step_usage: {}, usage: {} };
@@ -121,7 +124,7 @@ async function boardWords() {
     send({ kind: "task", task });
     const article = node(task.id);
     assert(article.textContent.includes(status === "queued" ? "Queued" : "Abandoned"), "waiting retains status explanation");
-    assert(article.querySelector("[data-since]").textContent.endsWith(" waiting"), "waiting duration does not claim ready");
+    assert(article.textContent.includes("Waiting since not recorded"), "unknown waiting start is explicit");
     assert(!article.querySelector("[data-quiet]"), "waiting adds no running-activity observation");
     article.click(); await tick();
     assert(document.getElementById("drawer").textContent.includes("Waiting"), "drawer shares Waiting label");
@@ -137,6 +140,50 @@ async function boardWords() {
   assert(activity.textContent !== previous && activity.textContent.endsWith(" ago"), "activity age still updates");
 }
 
+async function waitingStates() {
+  const stamp = "2026-11-14T11:00:00Z";
+  const waiting = [
+    card("new-queued", "00", { column: "waiting", attempt: 0, status_note: "queued to start: no free slot" }),
+    card("abandoned", "00", { column: "waiting", status: "abandoned", waiting_since: stamp,
+      status_note: "abandoned: waits for approval" }),
+    ...["manual", "waiting", "unknown"].map((land) => card(`land-${land}`, "00", {
+      column: "land", land, waiting_since: stamp, status_note: `Awaiting land: ${land}`,
+    })),
+    card("checking", "00", { column: "checks" }),
+    card("landing", "00", { column: "land", land: "landing" }),
+  ];
+  await resync([...mixed, ...waiting]);
+  for (const task of waiting) {
+    const article = node(task.id);
+    assert(!article.querySelector("[data-quiet]"), `${task.id} has no agent quiet duration`);
+    if (["checking", "landing"].includes(task.id)) {
+      assert(!article.textContent.includes("Waiting since"), `${task.id} is active work`);
+      continue;
+    }
+    assert(article.textContent.includes(task.status_note), `${task.id} names what it awaits`);
+    article.click(); await tick();
+    const drawer = document.getElementById("drawer");
+    assert(drawer.textContent.includes(task.status_note), `${task.id} drawer explains wait`);
+    if (task.waiting_since) {
+      const time = article.querySelector("[data-waiting-since]");
+      assert(time.title === stamp && time.textContent.startsWith("Waiting since"), "recorded start is visible");
+      assert(drawer.querySelector("[data-waiting-since]").title === stamp, "drawer shares wait start");
+      const before = time.textContent;
+      advance(60000);
+      assert(time.textContent !== before, "waiting age updates");
+    } else assert(drawer.textContent.includes("Waiting since not recorded"), "new queued start is unknown");
+    document.getElementById("backdrop").click();
+  }
+  assert(node("running").dataset.quietLevel === "long", "running warning is present before transition");
+  for (const next of [waiting[0], mixed[0], waiting[2], waiting[5]]) {
+    send({ kind: "task", task: { ...next, id: "running" } });
+    assert(!node("running").querySelector("[data-quiet]") && !node("running").dataset.quietLevel,
+      "leaving a running agent clears activity and warning border");
+  }
+  send({ kind: "task", task: mixed.at(-1) });
+  assert(node("running").querySelector("[data-quiet]"), "returning to running restores activity age");
+}
+
 const healthText = () => document.getElementById("mode").textContent;
 const health = (text) => assert(healthText().includes(text), `Expected ${text}: ${healthText()}`);
 const transport = (kind) => stream.dispatchEvent(new Event(kind));
@@ -147,6 +194,99 @@ const deferred = () => {
   const promise = new Promise((done) => { resolve = done; });
   return { promise, resolve };
 };
+
+const lifecycle = (word, extra = {}) => round("2026-11-14T12:00:00Z", { move: "rounds", words: [word], ...extra });
+const stoppedNote = "Rounds last recorded as stopped; automatic landing awaits rounds resuming.";
+const stopped = (expected) => assert(node("land-waiting").textContent.includes(stoppedNote) === expected,
+  `Stopped explanation should be ${expected}: ${node("land-waiting").textContent}`);
+
+async function stoppedRounds() {
+  const waiting = ["waiting", "manual", "unknown", "landing"].map((land) => card(`land-${land}`, "00", {
+    column: "land", land, status_note: `Awaiting land: ${land}`,
+  }));
+  logSnapshot.rows = [lifecycle("started"), lifecycle("stopped", { words: ["stopped", "interrupted"] })];
+  await resync([...mixed, ...waiting]);
+  stopped(true);
+  health("No round in available log");
+  for (const task of waiting.slice(1)) {
+    assert(!node(task.id).textContent.includes(stoppedNote), `${task.land} explanation remains authoritative`);
+    assert(node(task.id).textContent.includes(task.status_note), `${task.land} retains its explanation`);
+  }
+  for (const layout of ["view-lanes", "view-columns"]) {
+    document.getElementById(layout).click();
+    stopped(true);
+  }
+  for (const row of [lifecycle("started", { backlog: "other" }), lifecycle("wait", { at: "invalid" }),
+    lifecycle("started", { at: "2026-02-30T12:00:00Z" }), lifecycle("warn"), round("2026-11-14T12:01:00Z")]) {
+    logEvent(row);
+    stopped(true);
+  }
+  for (const word of ["started", "wait"]) {
+    logEvent(lifecycle(word));
+    stopped(false);
+    logEvent(lifecycle("stopped", { words: ["stopped", "abrupt"] }));
+    stopped(true);
+  }
+  logEvent(lifecycle("started", { at: "2026-11-14T11:59:59Z" }));
+  stopped(true);
+  send({ kind: "task", task: { ...waiting[0], title: "Updated waiting task" } });
+  stopped(true);
+  send({ kind: "gone", id: "land-waiting" });
+  send({ kind: "task", task: waiting[0] });
+  stopped(true);
+  logSnapshot.rows = [lifecycle("stopped"), lifecycle("started")];
+  transport("open"); await tick();
+  stopped(false);
+  logSnapshot.rows = [lifecycle("stopped", { words: ["stopped", "abrupt"] })];
+  await reload();
+  stopped(true);
+  for (const rows of [[], [lifecycle("stopped", { backlog: "other" })], [round("2026-11-14T12:01:00Z")]]) {
+    logSnapshot.rows = rows;
+    await reload();
+    stopped(false);
+  }
+  logEvent(lifecycle("stopped"));
+  logResponse = () => { throw new Error("fixture log failed"); };
+  await reload();
+  stopped(false);
+  logResponse = () => logSnapshot;
+}
+
+async function stoppedRaces() {
+  for (const word of ["started", "wait", "stopped"]) {
+    const old = deferred();
+    logResponse = () => old.promise;
+    send({ kind: "resync" });
+    logEvent(lifecycle(word));
+    old.resolve({ backlog, rows: [lifecycle(word === "stopped" ? "started" : "stopped")] });
+    await tick();
+    stopped(word === "stopped");
+  }
+  const old = deferred();
+  logResponse = () => old.promise;
+  send({ kind: "resync" });
+  logSnapshot.rows = [lifecycle("wait")];
+  logResponse = () => logSnapshot;
+  await reload();
+  old.resolve({ backlog, rows: [lifecycle("stopped")] });
+  await tick();
+  stopped(false);
+  const empty = deferred();
+  logResponse = () => empty.promise;
+  send({ kind: "resync" });
+  logEvent(lifecycle("stopped"));
+  empty.resolve({ backlog, rows: [] });
+  await tick();
+  stopped(true);
+  const failed = deferred();
+  logResponse = async () => { await failed.promise; throw new Error("fixture log failed"); };
+  send({ kind: "resync" });
+  logEvent(lifecycle("started"));
+  failed.resolve();
+  await tick();
+  stopped(false);
+  logResponse = () => logSnapshot;
+}
 
 async function healthStates() {
   now = Date.parse("2026-11-14T12:00:00Z");
@@ -249,6 +389,8 @@ try {
     document.documentElement.className = theme;
     await healthStates();
     await healthRaces();
+    await stoppedRounds();
+    await stoppedRaces();
     await resync(mixed);
     for (const layout of ["view-columns", "view-lanes"]) {
       document.getElementById(layout).click();
@@ -257,6 +399,7 @@ try {
       questions();
       await drawers();
       await boardWords();
+      await waitingStates();
       await resync(mixed);
       if (layout === "view-lanes") {
         assert(node("running").parentNode !== node("ask-old").parentNode, "Slot cells preserve step columns");
@@ -278,7 +421,8 @@ try {
     summary(2, 4);
     placement();
   }
-  results.textContent = "PASS: stream state and round age, reload races, owner attention and factory faults, both layouts and themes";
+  results.textContent = "PASS: stopped rounds, stream state and round age, reload races, owner attention and factory faults, "
+    + "both layouts and themes";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack ?? error}`;
   throw error;

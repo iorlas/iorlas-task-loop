@@ -14,6 +14,10 @@ const assert = (condition, message) => { if (!condition) throw new Error(message
 const attempt = (step, n = 1, extra = {}) => ({ step, n, state: "succeeded", summary: "collected", started_at: null, ended_at: null, feed: [], ...extra });
 const verify = (n = 37, extra = {}) => attempt("verification", n, { summary: "verified", ...extra });
 const task = { id: "tl-test", title: "Compact rail fixture", column: "landed", attempt: 1 };
+const tracked = { fields: {
+  description: "Fixture task", labels: [], depends_on: [],
+  created_at: "2026-11-14T10:00:00Z", updated_at: "2026-11-14T10:00:00Z",
+}, comments: [] };
 const healthy = () => [attempt("plan"), verify(), attempt("implement"), verify(38), attempt("checks", 1, { summary: "passed" })];
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const button = (root, text) => [...root.querySelectorAll("button")].find((b) => b.textContent === text);
@@ -173,7 +177,7 @@ async function drawerSelection() {
   const verification = { of_step: "implement", of: 2, listed: ["src/link.py"], listing: ["src/link.py"], result: "unsettled:unsafe", checks: [{ name: "Path must be a plain file", state: "failed" }] };
   const source = {
     detail: async () => ({ task, attempts: list }),
-    tracker: async () => ({ fields: null, comments: [] }),
+    tracker: async () => tracked,
     body: async (id, step, n) => {
       requested.push(`${step}/${n}`);
       return { input: "Implement the task", added: [], result: { summary: step === "verification" ? "unsettled:unsafe" : "passed", checks: [], verification: step === "verification" ? verification : null } };
@@ -206,6 +210,32 @@ async function drawerSelection() {
 }
 
 function words() {
+  for (const [code, expected] of [
+    ["needs_owner", "The agent needs your decision"],
+    ["failed:test:failed", "Checks failed: test"],
+    ["answer:schema_invalid", "The agent's answer was in the wrong format"],
+  ]) {
+    assert(say(code) === expected, `${code} exact label`);
+    const word = wordNode(el, code);
+    assert(word.textContent === expected && word.title === code, `${code} label and raw-code hover`);
+    const item = attempt("implement", 1, { state: "failed", summary: code });
+    const node = mount([item]);
+    const summary = node.querySelector(`button span[title="${code}"]`);
+    assert(summary?.textContent === expected, `${code} failed rail label and raw-code hover`);
+    const body = { result: { summary: code, checks: [] } };
+    const view = result(item, body, { key: "implement/1", opened: new Map() });
+    fixture.replaceChildren(view);
+    const conclusion = view.querySelector(`p[title="${code}"]`);
+    assert(conclusion?.textContent === expected, `${code} conclusion label and raw-code hover`);
+  }
+  const item = attempt("implement", 1, { state: "failed", summary: "needs_owner" });
+  const body = { result: { summary: "needs_owner", checks: [], answer: {
+    disposition: "needs_owner", text: '{"explanation":"Owner decision required"}', truncated: false,
+  } } };
+  const view = result(item, body, { key: "implement/1", opened: new Map() });
+  fixture.replaceChildren(view);
+  const disposition = view.querySelector('span[title="needs_owner"]');
+  assert(disposition?.textContent === "The agent needs your decision", "answer badge label and raw-code hover");
   for (const code of ["verification", "unsafe", "ignored", "uncommitted", "failed_check", "test:lint"]) assert(say(code) !== code, `${code} readable`);
   assert(say("unknown:new") === "unknown:new" && say("Owner changed scope") === "Owner changed scope", "unknown codes/prose preserved");
   assert(wordNode(el, "unsafe").title === "unsafe", "raw code hover retained");
@@ -262,6 +292,35 @@ function vocabulary() {
   }
 }
 
+async function waitingRows() {
+  for (const land of ["manual", "waiting", "unknown"]) {
+    for (const stamp of [null, "2026-11-14T10:00:06Z"]) {
+      const node = mount(healthy(), { ...task, column: "land", land, waiting_since: stamp,
+        status_note: `Awaiting ${land}` });
+      assert(node.textContent.includes(`Awaiting ${land}`), "Land row explains awaited action");
+      assert(stamp ? node.querySelector("[data-waiting-since]")?.title === stamp
+        : node.textContent.includes("Waiting since not recorded"), "Land row wait start");
+      assert(!node.querySelector("[data-quiet]"), "Land row has no quiet observation");
+    }
+  }
+  const node = mount(healthy(), { ...task, column: "land", land: "landing" });
+  assert(!node.textContent.includes("Waiting since"), "active land has no waiting clock");
+  for (const step of ["plan", "implement", "checks"]) {
+    const source = {
+      detail: async () => ({ task, attempts: [attempt(step, 1, {
+        state: "running", started_at: "2026-11-14T10:00:00Z",
+      })], usage: {} }),
+      tracker: async () => tracked,
+      body: async () => ({ input: "Input", result: { summary: "pending", checks: [] } }),
+    };
+    initDrawer(source, new Map([[task.id, task]]));
+    await openDrawer(task.id); await tick();
+    assert(Boolean(document.querySelector("#drawer [data-quiet]")) === (step !== "checks"),
+      "drawer activity belongs only to running agents");
+    closeDrawer();
+  }
+}
+
 async function usage() {
   const counts = { fresh: 49773, cached: 496768, output: 2375, turns: 1, attempts: 1, complete: 1 };
   const sum = { ...counts, attempts: 2, complete: 1 };
@@ -286,7 +345,7 @@ async function usage() {
   const run = { harness: "Codex", provider: "OpenAI", model: "chosen", effort: "high", access: "full access" };
   const source = {
     detail: async () => ({ task, attempts: [attempt("plan", 1, { usage: counts, run })], step_usage: { plan: counts }, usage: counts }),
-    tracker: async () => ({ fields: null, comments: [] }),
+    tracker: async () => tracked,
     body: async () => ({ input: "Plan", result: { summary: "passed", checks: [] } }),
   };
   initDrawer(source, new Map([[task.id, task]]));
@@ -307,7 +366,8 @@ async function usage() {
 }
 
 try {
-  for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns, drawerSelection, words, vocabulary, usage]) {
+  for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
+    drawerSelection, words, vocabulary, waitingRows, usage]) {
     await test();
   }
   for (const dark of [false, true]) {
@@ -318,7 +378,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 9 browser contracts, both themes";
+  results.textContent = "PASS: 10 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;

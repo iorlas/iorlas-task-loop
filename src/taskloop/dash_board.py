@@ -101,8 +101,15 @@ def card_of(
     found = task_status(view, admission)
     column = column_of(view, found)
     started = _started(view, row, files, column)
-    quiet = now - view.last_command if isinstance(view.last_command, int) and column != "waiting" else None
+    activity = None
+    if found.status is Status.RUNNING and column in ("plan", "implement"):
+        activity = now - view.last_command if isinstance(view.last_command, int) else started
     holding = row is not None and row.held and view.release is None
+    slot = view.slot if holding else None
+    if view.land is not None:
+        slot = view.land.row.slot if view.land.row.holds_slot else None
+    elif view.checks is not None:
+        slot = view.checks.row.slot if view.checks.row.released_at is None else None
     cause = view.hold.reason if view.hold is not None else view.hold_due
     rc = None if view.result.execution is None else view.result.execution.facts.rc
     stopped = stop_text(view.stop, rc)
@@ -114,9 +121,27 @@ def card_of(
         explanation = stopped or (known.what if known is not None else
                                   f"The factory held this task with recorded cause: {cause or 'unknown'}.")
     cause = stopped or cause
-    return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
-                view.slot if holding else None, cause if column == "held" else None,
-                found.land if column == "land" else None, found.status.value, words(found), ask, question, explanation)
+    return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(activity),
+                slot, cause if column == "held" else None,
+                found.land if column == "land" else None, found.status.value, words(found), ask, question, explanation,
+                iso(_waiting_since(view, found.status)))
+
+
+def _waiting_since(view: AttemptView, status: Status) -> float | None:
+    """Date only the current wait, from its owning transition rather than a previous step's start."""
+    if status is Status.WAITING_FOR_LAND and view.checks is not None:
+        return view.checks.row.released_at
+    if status is Status.HELD and view.hold is not None:
+        return view.hold.held_at
+    if status is Status.ABANDONED and view.release is not None:
+        return view.release.released_at
+    return None
+
+
+def queued_card(task_id: str, title: str, admission: Admission) -> Card:
+    found = TaskStatus(Status.QUEUED, wait=admission.wait)
+    return Card(task_id, title, "waiting", 0, None, None, None, None, None,
+                status=found.status.value, status_note=words(found))
 
 
 def build_board(ports: BoardPorts) -> Board | Failed:
@@ -140,9 +165,6 @@ def build_board(ports: BoardPorts) -> Board | Failed:
     cards = [card_of(view, rows.get(view.attempt_id), titles.get(view.task_id, view.task_id), ports.files, now,
              numbers.get(view.attempt_id), admission)
              for view in listed.attempts]
-    queued = TaskStatus(Status.QUEUED, wait=admission.wait)
-    note = words(queued)
-    cards += [Card(each.task_id, each.title, "waiting", 0, None, each.since, each.since, None, None, None, queued.status.value, note)
-              for each in ready]
+    cards += [queued_card(each.task_id, each.title, admission) for each in ready]
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return Board(stamp, slots, tuple(cards), ports.tracker.notice())

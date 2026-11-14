@@ -107,9 +107,11 @@ def as_text(value: object) -> str:
     raise StoreUnavailable("Malformed stored text")
 
 
-def stored_setting(harness: object, provider: object, model: object, effort: object, policy: object) -> AgentSetting:
+def stored_setting(harness: object, provider: object, model: object, effort: object, policy: object,
+                   compaction_token_limit: object) -> AgentSetting:
     try:
-        return decode_setting(as_text(harness), as_text(provider), as_text(model), as_text(effort), as_text(policy))
+        return decode_setting(as_text(harness), as_text(provider), as_text(model), as_text(effort), as_text(policy),
+                              as_nullable_int(compaction_token_limit))
     except ValueError as error:
         raise StoreUnavailable("Malformed stored agent setting") from error
 
@@ -305,7 +307,8 @@ class AttemptReads(StoreConnection):
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
                  AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step,
                 p.label,p.end_commit,p.repeat_listing,
-                p.harness,p.provider,p.model,p.effort,p.access_policy,p.source_checks_id,{count},p.repo_id FROM {source}
+                p.harness,p.provider,p.model,p.effort,p.access_policy,p.source_checks_id,{count},p.repo_id,p.compaction_token_limit
+                FROM {source}
                 LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
                 WHERE {' AND '.join(predicates)}
@@ -324,7 +327,8 @@ class AttemptReads(StoreConnection):
                            as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[25]),
                            as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]),
                            as_nullable_text(row[26]), as_nullable_text(row[27]), as_listed(row[28]), _source(row[34], row[15]),
-                           stored_setting(*row[29:34]), as_nullable_int(row[35]), as_text(row[36]))
+                           stored_setting(row[29], row[30], row[31], row[32], row[33], row[37]),
+                           as_nullable_int(row[35]), as_text(row[36]))
             )
         return tuple(found)
 

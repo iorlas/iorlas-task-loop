@@ -47,8 +47,11 @@ class LaunchedAgent:
     probe: tuple[str, ...] | None
 
 
+@dataclass(frozen=True, kw_only=True)
 class FactoryCodexAccess(CodexAccess):
     """Limit automatic factory context and override inherited sandbox roots, including empty roots."""
+
+    compaction_token_limit: int | None = None
 
     @override
     def config(self) -> list[str]:
@@ -60,19 +63,23 @@ class FactoryCodexAccess(CodexAccess):
                    "-c", "features.recommended_plugins=false"]
         if self.sandbox is CodexSandbox.WORKSPACE_WRITE and not self.writable_roots:
             config += ["-c", "sandbox_workspace_write.writable_roots=[]"]
+        if self.compaction_token_limit is not None:
+            config += ["-c", f"model_auto_compact_token_limit={self.compaction_token_limit}"]
         return config
 
 
-def codex_access(policy: CodexPolicy, found: Folders | None = None) -> CodexAccess:
+def codex_access(policy: CodexPolicy, found: Folders | None = None, *, compaction_token_limit: int | None = None) -> CodexAccess:
     shell_env = () if found is None else tuple(agent_env(found).items())
     if policy.sandbox is not CodexSandbox.WORKSPACE_WRITE:
         return FactoryCodexAccess(sandbox=policy.sandbox, approval=CodexApproval.NEVER, tool_output_token_limit=3000,
-                                  shell_env=shell_env, ignore_user_config=True, ignore_rules=True)
+                                  shell_env=shell_env, ignore_user_config=True, ignore_rules=True,
+                                  compaction_token_limit=compaction_token_limit)
     return FactoryCodexAccess(
         sandbox=policy.sandbox, network=False, writable_roots=() if found is None else tuple(str(p) for p in found.roots),
         exclude_slash_tmp=True, exclude_tmpdir=True,
         shell_env=shell_env, approval=CodexApproval.NEVER,
         tool_output_token_limit=3000, ignore_user_config=True, ignore_rules=True,
+        compaction_token_limit=compaction_token_limit,
     )
 
 
@@ -99,7 +106,7 @@ class AgentLaunch:
         found = folders(slot) if prepared else None
         if isinstance(policy, CodexPolicy):
             harness = CodexHarness(resume=resume)
-            access = codex_access(policy, found)
+            access = codex_access(policy, found, compaction_token_limit=setting.compaction_token_limit)
             if found is not None and policy.sandbox is CodexSandbox.WORKSPACE_WRITE:  # full access asks for no sandbox to prove
                 command = ["/bin/sh", "-c", PROBE, "sh", *(str(p) for p in found.roots)]
                 probe = tuple(access.sandbox_argv(exe, command))

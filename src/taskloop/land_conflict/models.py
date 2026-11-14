@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from taskloop.attempt_loads import RetainedInputs
 from taskloop.attempt_types import AttemptKey
-from taskloop.land_conflict.abort_models import Abort
+from taskloop.land_conflict.abort_models import Abort, AbortPhase
+from taskloop.land_conflict.cleanup_models import Cleanup, CleanupPhase
 
 
 class Value(BaseModel):
@@ -105,9 +106,22 @@ class Save(Value):
     tree: str | None = Field(default=None, min_length=40, max_length=64)
     commit: str | None = Field(default=None, min_length=40, max_length=64)
     abort: Abort | None = None
+    cleanup: Cleanup | None = None
 
     @model_validator(mode="after")
     def consistent(self) -> Self:
+        if self.cleanup is not None:
+            cleanup = self.cleanup
+            if self.phase is not SavePhase.COMPLETE or self.accepted:
+                raise ValueError("cleanup requires completely retained unfinished work")
+            if ((cleanup.work.attempt_id, cleanup.work.dispatch_token, cleanup.work.generation)
+                    != (self.key.attempt_id, self.key.dispatch_token, self.key.reservation_generation)
+                    or (cleanup.work.repo_id, cleanup.work.slot, cleanup.work.gitdir, cleanup.work.source, cleanup.work.target)
+                    != (self.repo_id, self.slot_path, self.gitdir, self.source, self.target)):
+                raise ValueError("cleanup must retain the exact saved merge identity")
+            if self.merging and cleanup.phase is not CleanupPhase.EXCLUDE and (
+                    self.abort is None or self.abort.phase is not AbortPhase.COMPLETE):
+                raise ValueError("cleanup parking requires a completed abort")
         if self.abort is not None and (self.phase is not SavePhase.COMPLETE or self.accepted or not self.merging):
             raise ValueError("abort requires a completely retained unfinished merge")
         if self.abort is not None and (

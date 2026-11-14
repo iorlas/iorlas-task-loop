@@ -36,12 +36,15 @@ def test_the_page_prints_its_codes_through_the_table() -> None:
 
 
 @pytest.mark.parametrize("code,expected", [
+    ("needs_owner", "The agent needs your decision"),
+    ("failed:test:failed", "Checks failed: test"),
+    ("answer:schema_invalid", "The agent's answer was in the wrong format"),
     ("verification", "The factory's check of the answer failed"),
     ("unsafe", "A listed path is unsafe"),
     ("unsettled:unsafe", "Not committed: a listed path is unsafe"),
     ("unsettled:rejected", "Not committed: the commit broke a rule"),
 ])
-def test_repeat_causes_and_verification_failures_have_readable_words(code: str, expected: str) -> None:
+def test_outcomes_repeat_causes_and_verification_failures_have_readable_words(code: str, expected: str) -> None:
     assert table()[code] == expected
 
 
@@ -73,5 +76,6 @@ def test_waiting_and_activity_labels_describe_observations_rather_than_readiness
     source = (PAGE / "ui.js").read_text()
     assert "Tasks with no current work, including queued and abandoned tasks." in source
     assert "Last activity ${fmtDur(s * 1000)} ago" in source
-    assert 'waiting: ["", " waiting"]' in (PAGE / "app.js").read_text()
+    assert "Waiting since not recorded" in source
+    assert "Waiting since${startedAt(node.dataset.waitingSince)}" in source
     assert '"Reload task"' in (PAGE / "taskview.js").read_text()

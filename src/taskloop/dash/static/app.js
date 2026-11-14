@@ -4,7 +4,9 @@
 import { initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
-import { $, COLUMNS, LAND, STEPS, callout, el, holdCallout, position, quietSpan, tag, tick } from "./ui.js";
+import {
+  $, COLUMNS, LAND, STEPS, callout, el, holdCallout, isWaiting, position, quietSpan, runningAgent, tag, tick, waitingNote,
+} from "./ui.js";
 
 const tasks = new Map(); // id -> board card
 const cards = new Map(); // id -> element
@@ -20,11 +22,19 @@ let backlog = null;
 let roundAt = null;
 let logReload = 0;
 let roundRevision = 0;
+let roundsState = null;
+let roundsRevision = 0;
 
-// Only the owning reader's round summaries for this dashboard's backlog can advance this observation.
-function roundTime(row, label) {
-  if (row.backlog !== label || row.move !== "round" || !Number.isFinite(Date.parse(row.at))) return null;
+// Only the owning reader's rows for this dashboard's backlog can advance these observations.
+function roundTime(row, label, move = "round") {
+  if (row.backlog !== label || row.move !== move || !Number.isFinite(Date.parse(row.at))) return null;
   return new Date(row.at).toISOString().replace(".000Z", "Z") === row.at ? row.at : null;
+}
+
+function recordedRounds(row, label) {
+  const at = roundTime(row, label, "rounds");
+  const word = row.words?.[0];
+  return at !== null && ["started", "wait", "stopped"].includes(word) ? { at, word } : null;
 }
 
 function renderRound() {
@@ -45,16 +55,30 @@ function renderRound() {
 async function reloadRound() {
   const reload = ++logReload;
   const revision = roundRevision;
+  const stateRevision = roundsRevision;
   try {
     const log = await source.logs();
     if (reload !== logReload) return;
+    const streamed = backlog === log.backlog && roundsRevision !== stateRevision ? roundsState : null;
     backlog = log.backlog;
+    roundsState = null;
+    for (const row of log.rows) {
+      const state = recordedRounds(row, backlog);
+      if (state && (roundsState === null || state.at >= roundsState.at)) roundsState = state;
+    }
+    if (streamed && (roundsState === null || streamed.at >= roundsState.at)) roundsState = streamed;
     const times = log.rows.map((row) => roundTime(row, backlog)).filter((at) => at !== null);
     if (roundRevision !== revision && roundAt !== null) times.push(roundAt);
     roundAt = times.sort().at(-1) ?? null;
     renderRound();
+    renderBoard();
   } catch {
-    if (reload !== logReload || revision !== roundRevision) return;
+    if (reload !== logReload) return;
+    if (stateRevision === roundsRevision) {
+      roundsState = null;
+      renderBoard();
+    }
+    if (revision !== roundRevision) return;
     roundAt = null;
     delete roundLabel.dataset.since;
     roundLabel.title = "";
@@ -64,10 +88,18 @@ async function reloadRound() {
 
 function observeRound(row) {
   const at = roundTime(row, backlog);
-  if (at === null) return;
-  roundRevision++;
-  if (roundAt === null || at > roundAt) roundAt = at;
-  renderRound();
+  if (at !== null) {
+    roundRevision++;
+    if (roundAt === null || at > roundAt) roundAt = at;
+    renderRound();
+  }
+  const state = recordedRounds(row, backlog);
+  if (state === null) return;
+  roundsRevision++;
+  if (roundsState === null || state.at >= roundsState.at) {
+    roundsState = state;
+    renderBoard();
+  }
 }
 
 const rects = () => new Map([...cards].map(([id, node]) => [id, node.getBoundingClientRect()]));
@@ -105,12 +137,13 @@ function buildBoard() {
 }
 
 const TIME = {
-  waiting: ["", " waiting"], plan: ["", " in step"], implement: ["", " in step"], checks: ["", " in step"], land: ["", " in step"],
+  plan: ["", " in step"], implement: ["", " in step"], checks: ["", " in step"], land: ["", " in step"],
   held: ["on hold ", ""], landed: ["landed ", " ago"],
 };
 
 function fillCard(node, t) {
   node.replaceChildren();
+  delete node.dataset.quietLevel;
   const top = el("div", "flex items-center gap-2");
   top.append(el("span", "font-mono text-[11px] text-slate-500 dark:text-slate-400", t.id));
   if (position(t)) top.append(el("span", "ml-auto text-[11px] text-slate-500 dark:text-slate-400", position(t)));
@@ -122,23 +155,33 @@ function fillCard(node, t) {
   }
   const hold = holdCallout(t);
   if (hold) notes.append(hold);
-  if (t.column === "waiting" && t.attempt > 0) notes.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
-  if (t.column === "land") notes.append(callout(LAND[t.land ?? "unknown"].bar,
-    LAND[t.land ?? "unknown"].label, t.status_note));
+  if (t.column === "waiting" || t.column === "land") {
+    const word = LAND[t.land ?? "unknown"];
+    const note = callout(t.column === "land" ? word.bar : "border-slate-400",
+      t.column === "land" ? word.label : t.status === "abandoned" ? "Abandoned" : "Queued");
+    if (isWaiting(t)) note.append(waitingNote(t));
+    else if (t.status_note) note.append(el("p", "text-xs", t.status_note));
+    if (t.column === "land" && t.land === "waiting" && roundsState?.word === "stopped") {
+      note.append(el("p", "text-xs", "Rounds last recorded as stopped; automatic landing awaits rounds resuming."));
+    }
+    notes.append(note);
+  }
   if (notes.children.length) node.append(notes);
   const foot = el("div", "mt-2.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400");
   const time = el("span", "whitespace-nowrap tabular-nums");
-  [time.dataset.prefix, time.dataset.suffix] = TIME[t.column];
-  time.dataset.since = t.step_started_at;
-  foot.append(time);
+  if (!isWaiting(t) && t.step_started_at) {
+    [time.dataset.prefix, time.dataset.suffix] = TIME[t.column];
+    time.dataset.since = t.step_started_at;
+    foot.append(time);
+    tick(time);
+  }
   if (t.slot && !lanes) foot.append(el("span", "ml-auto font-mono", t.slot));
   node.append(foot);
-  if (STEPS.some((s) => s.id === t.column)) {
+  if (runningAgent(t) && t.last_activity_at) {
     const quiet = quietSpan(t.last_activity_at);
     node.append(quiet);
     tick(quiet);
   }
-  tick(time);
 }
 
 function newCard(t) {
@@ -291,7 +334,7 @@ async function start() {
     onTaskMoved(msg.task);
   }, (connected) => { streamLabel.textContent = connected ? "Stream connected" : "Stream disconnected"; });
   setInterval(() => {
-    document.querySelectorAll("[data-since],[data-quiet]").forEach(tick);
+    document.querySelectorAll("[data-since],[data-quiet],[data-waiting-since]").forEach(tick);
     // A future observation may become an elapsed time once the local clock catches up.
     if (roundAt !== null) renderRound();
   }, 1000);

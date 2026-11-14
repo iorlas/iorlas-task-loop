@@ -24,7 +24,7 @@ from taskloop.agents.launch import AgentLaunch, Credentials
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import AttemptReads, StoreConnection
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
-from taskloop.attempt_types import Checkouts, Observe, SlotFiles
+from taskloop.attempt_types import Admission, Checkouts, Observe, SlotFiles
 from taskloop.check_admit import ChecksAdmission
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
@@ -41,6 +41,11 @@ from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.merge.prepare import SourcePreparation
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
+from taskloop.recovery.continue_attempt import Continuation
+from taskloop.recovery.models import Claim
+from taskloop.recovery.native import NativeContinuation
+from taskloop.recovery.observe import NativeProcesses
+from taskloop.recovery.recover import Recovery
 from taskloop.recovery.store import RecoveryStore
 from taskloop.setup_store import SetupSeen, SetupStore
 from taskloop.slot_env import RealEnvFiles, sandbox_probe, setup_process
@@ -83,6 +88,18 @@ def open_recovery_registration(database: Path) -> RecoveryStore:
 def _run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
     """The shelf's `run`, with the live sink the attempt's hooks carry (`command_sink.WatchedHooks`)."""
     return run(harness, spec, timeout, hooks, live=hooks.live if isinstance(hooks, WatchedHooks) else None)
+
+
+def open_continuation(
+    database: Path, artifacts: Path, views: GitViews, claim: Callable[[Admission], Claim],
+    credentials: Credentials = machine_credentials,
+) -> Continuation:
+    """Saved-session continuation with native observations and an injected, read-only claim observation."""
+    store = Store(SCHEMA)
+    recovery = Recovery(RecoveryStore(lambda: store.shared_rw(database), store.begin_immediate), NativeProcesses(), claim,
+                        slot_lock.hold, time.time, NativeIds())
+    attempts = open_attempts(database, artifacts, views, credentials)
+    return Continuation(recovery, attempts, NativeContinuation(attempts, open_recovery_registration(database)))
 
 
 def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials: Credentials = machine_credentials) -> Attempts:

@@ -37,9 +37,14 @@ def factory() -> Generator[sqlite3.Connection]:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> FakeRepo:
+def remote() -> FakeRemote:
     remote = FakeRemote("https://example.invalid/repo.git")
     remote.advance("main", {"README": "one", ".task-loop.json": "{}"})
+    return remote
+
+
+@pytest.fixture
+def repo(tmp_path: Path, remote: FakeRemote) -> FakeRepo:
     return FakeRepo.clone(remote, tmp_path / "main")
 
 

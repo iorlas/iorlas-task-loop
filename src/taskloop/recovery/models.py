@@ -85,3 +85,26 @@ class Observations(Model):
     worker: ProcessObservation
     owner: ProcessObservation | None = None
     claim: Claim
+
+
+class ReconciliationState(StrEnum):
+    LIVE = "live"
+    GONE = "gone"
+    UNKNOWN = "unknown"
+    CAPTURED = "captured"
+
+
+class Reconciliation(Model):
+    key: AttemptKey
+    state: ReconciliationState
+    explanation: str = Field(min_length=1)
+    snapshot: Snapshot | None = None
+    owner: ProcessObservation | None = None
+
+    @model_validator(mode="after")
+    def consistent(self) -> Reconciliation:
+        if (self.state is ReconciliationState.CAPTURED) != (self.snapshot is None):
+            raise ValueError("Only captured reconciliation omits its snapshot")
+        if self.snapshot is not None and self.snapshot.attempt.admission.key != self.key:
+            raise ValueError("Reconciliation snapshot does not match the attempt key")
+        return self
