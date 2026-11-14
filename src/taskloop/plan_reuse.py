@@ -63,16 +63,20 @@ class ReuseResult:
     explanation: str
 
 
-def evaluate(checkouts: Checkouts, root: Path, plan_path: str, *, git_dir: Path | None = None) -> ReuseResult:
-    """Read the plan and metadata at HEAD; a later admission owns acting on this observation."""
+def evaluate(
+    checkouts: Checkouts, root: Path, plan_path: str, *, git_dir: Path | None = None, source: str | None = None,
+) -> ReuseResult:
+    """Read committed evidence at the selected source, defaulting to this worktree's HEAD."""
     location = PurePosixPath(plan_path)
     if (len(location.parts) != 4 or location.parts[:2] != ("docs", "design")
             or location.name != "plan.md" or str(location) != plan_path):
         return ReuseResult(ReuseDecision.PLAN, ReuseReason.INVALID_PLAN, "The committed plan location is invalid.")
     try:
         repo = checkouts(root, git_dir=git_dir)
-        selected = next((each for each in repo.worktrees() if each.path == root), None)
-        tip = None if selected is None or selected.head is None else repo.tree(f"{selected.head}^{{commit}}")
+        if source is None:
+            selected = next((each for each in repo.worktrees() if each.path == root), None)
+            source = None if selected is None else selected.head
+        tip = None if source is None else repo.tree(f"{source}^{{commit}}")
         if tip is None:
             return ReuseResult(ReuseDecision.PLAN, ReuseReason.MISSING_COMMIT, "The plan's current commit is absent.")
         return _evaluate(repo, repo.worktree(root), tip, PLAN.rules(location.parts[2]))
@@ -110,7 +114,7 @@ def _evaluate(repo: Repo, wt: Worktree, tip: Tree, rules: StepRules) -> ReuseRes
         return ReuseResult(ReuseDecision.PLAN, ReuseReason.MISSING_COMMIT, "The plan's preparation commit is absent.")
     if wip.saved_since(repo, metadata.prepared_commit, str(tip.sha)):
         return ReuseResult(ReuseDecision.PLAN, ReuseReason.SAVED_WORK, "Newer saved unfinished work requires planning.")
-    changed = wt.diff(metadata.prepared_commit, "HEAD", include=metadata.cited_paths, cap=0).changes
+    changed = wt.diff(metadata.prepared_commit, str(tip.sha), include=metadata.cited_paths, cap=0).changes
     if changed:
         return ReuseResult(ReuseDecision.PLAN, ReuseReason.CITED_PATHS_CHANGED, "Paths cited by the committed plan have changed.")
     return ReuseResult(

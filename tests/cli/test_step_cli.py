@@ -15,7 +15,6 @@ from sqlite_store import Store, begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop import cli_composition, cli_step, rounds_lock, step_guide
-from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
@@ -150,12 +149,8 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     assert opened == [(tmp_path / "file.db", tmp_path / "flag-art")]
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
-    assert (request.setting.model, request.setting.effort, request.setting.summary, request.deadline) == (
-        "m",
-        "high",
-        SANDBOX,
-        1000 + 30 * 60,
-    )
+    assert (request.overrides, request.settings, request.deadline) == (
+        Overrides(model="m", effort="high"), StepSettings(), 1000 + 30 * 60)
     output = capsys.readouterr()
     assert json.loads(output.out) == {
         "status": "started", "backlog": "tasks", "task": "tl-1", "step": None, "attempt_id": "attempt", "existing": False,

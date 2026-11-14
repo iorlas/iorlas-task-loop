@@ -3,12 +3,37 @@ slot's counter (`generation`, the last reservation generation issued for it)."""
 
 import sqlite3
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, marks
 from taskloop.repo import RepoId
 from taskloop.task_content import TaskContentDigest
 from taskloop.task_content_store import TaskContentStore
+
+
+@dataclass(frozen=True)
+class Free:
+    """An observed-free slot's HEAD, selected task source and recorded park destination."""
+
+    name: str
+    head: str
+    source: str
+    park_commit: str
+
+
+def unheld(con: sqlite3.Connection, repo_id: RepoId, free: Free, generation: int) -> tuple[str, str] | None:
+    """The slot's name and park destination, when unreserved with its counter below `generation`."""
+    row: tuple[object, ...] | None = con.execute(
+        "SELECT name FROM slot s WHERE repo_id=? AND name=? AND generation<? AND NOT EXISTS "
+        "(SELECT 1 FROM reservation r WHERE r.repo_id=s.repo_id AND r.slot=s.name)",
+        (repo_id, free.name, generation),
+    ).fetchone()
+    if row is None:
+        return None
+    if not isinstance(row[0], str):
+        raise sqlite3.DatabaseError("Malformed slot row")
+    return row[0], free.park_commit
 
 
 def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey) -> None:

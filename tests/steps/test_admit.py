@@ -20,7 +20,7 @@ from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
 from taskloop.agents.launch import AgentLaunch
-from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy
+from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
@@ -116,7 +116,7 @@ def request(tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str
         "tasks",
         str(tmp_path),
         repo.path,
-        AgentSetting(model=model, effort="high", access=CodexPolicy(sandbox="workspace-write")),
+        StepSettings(plan=AgentSetting(model=model, effort="high", access=CodexPolicy(sandbox="workspace-write"))),
         deadline,
         label,
     )
@@ -173,7 +173,7 @@ def test_admitted_rows_are_what_the_body_loads_and_stay_unregistered(
 ) -> None:
     slots(factory, repo, root, 2)
     tracker = Tracker(factory, tmp_path / "artifacts")
-    chosen = replace(request(tmp_path, repo), setting=AgentSetting(model="chosen", compaction_token_limit=limit))
+    chosen = replace(request(tmp_path, repo), settings=StepSettings(plan=AgentSetting(model="chosen", compaction_token_limit=limit)))
     result = admission(factory, tmp_path, tracker, repo).admit(chosen)
     assert isinstance(result, Admitted) and result.slot == "s1" and result.key.reservation_generation == 1
     key, repo_id = result.key, repo.identity().key
@@ -214,7 +214,7 @@ def test_the_admission_stores_the_harness_and_the_provider_derived_from_it_and_t
     tracker = Tracker(factory, tmp_path / "artifacts")
     policy = (CodexPolicy() if harness is HarnessKind.CODEX else
               ClaudePolicy(settings_file=tmp_path / "policy.json", settings="{}") if harness is HarnessKind.CLAUDE else OpenCodePolicy())
-    wanted = replace(request(tmp_path, repo), setting=AgentSetting(harness=harness, model=model, access=policy))
+    wanted = replace(request(tmp_path, repo), settings=StepSettings(plan=AgentSetting(harness=harness, model=model, access=policy)))
     assert isinstance(admission(factory, tmp_path, tracker, repo).admit(wanted), Admitted)
     assert factory.execute("SELECT harness,provider,model FROM attempt").fetchall() == [(harness, provider, model)]
 
@@ -421,7 +421,7 @@ def test_invalid_request_or_store_refuses_before_any_claim(
             "tasks",
             str(tmp_path),
             repo.path / "subdir",
-            AgentSetting(model="chosen", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            StepSettings(plan=AgentSetting(model="chosen", effort="high", access=CodexPolicy(sandbox="workspace-write"))),
             100,
             None,
         )

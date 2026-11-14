@@ -56,6 +56,16 @@ class RetainedInputs(BaseModel):
     setting: AgentSetting
 
 
+class PlanEvidence(BaseModel):
+    """The latest plan's verified committed artifact, scoped to one repository and tracker task."""
+
+    model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
+    key: AttemptKey
+    revision: int
+    end_commit: str
+    blob: str
+
+
 def retained_on(con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | None:
     row = con.execute(
         "SELECT repo_id,backlog,task_id,tracker_root,end_commit,input_path,input_digest,harness,provider,model,effort,access_policy,"
@@ -96,6 +106,34 @@ class AttemptLoads(AttemptReads):
     def retained(self, key: AttemptKey) -> RetainedInputs | None:
         with self._connection() as con:
             return retained_on(con, key)
+
+    def latest_plan(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> PlanEvidence | None:
+        """Never fall back past a newer unsuccessful plan; later implementation attempts do not hide this plan."""
+        with self._connection() as con:
+            row = con.execute(
+                "SELECT p.attempt_id,p.dispatch_token,p.generation,p.rev,p.end_commit,v.blob,v.verdict "
+                "FROM attempt p LEFT JOIN verification v ON v.attempt_id=p.attempt_id "
+                "AND v.dispatch_token=p.dispatch_token AND v.generation=p.generation "
+                "WHERE p.repo_id=? AND p.adapter='beads' AND p.backlog=? AND p.task_id=? AND p.tracker_root=? "
+                "AND p.step='plan' ORDER BY p.seq DESC LIMIT 1", (repo_id, backlog, task_id, tracker_root),
+            ).fetchone()
+        if row is None or row[6] != "verified" or row[4] is None or row[5] is None:
+            return None
+        return PlanEvidence(key=AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), revision=as_int(row[3]),
+                            end_commit=as_text(row[4]), blob=as_text(row[5]))
+
+    def previous_abandoned(self, key: AttemptKey) -> bool:
+        """Distinguish fresh admission after abandonment from ordinary step advancement, across restarts."""
+        with self._connection() as con:
+            row = con.execute(
+                "SELECT q.attempt_id,q.dispatch_token,q.generation FROM attempt p JOIN attempt q "
+                "ON q.repo_id=p.repo_id AND q.adapter=p.adapter "
+                "AND q.backlog=p.backlog AND q.task_id=p.task_id AND q.tracker_root=p.tracker_root AND q.seq<p.seq "
+                "WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=? "
+                "ORDER BY q.seq DESC LIMIT 1", astuple(key),
+            ).fetchone()
+        released = None if row is None else self.release_of(AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])))
+        return released is not None and released.abandoned
 
     def earlier(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> EarlierAttempt | None:
         """Latest agent attempt for exactly this registered repo and tracker task; checks have their own table."""

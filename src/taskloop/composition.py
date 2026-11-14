@@ -129,6 +129,7 @@ def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials:
         monotonic=time.monotonic,
         registration_store=AttemptStore(bounded, registration.begin_immediate),
         environment=environment,
+        discussion=open_discussion(database, store).for_task,
         source_preparation=SourcePreparation(attempts, views.checkouts, views.remotes, RealSlotFiles(), time.time,
                                              environment, agent, evidence, _run, worker_gone),
     )

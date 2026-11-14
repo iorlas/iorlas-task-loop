@@ -14,7 +14,7 @@ from test_repeat import CONTENT_DIGEST
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest
-from taskloop.agents.settings import AgentSetting
+from taskloop.agents.settings import AgentSetting, StepSettings
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, FileRef
 from taskloop.check_repeat.repair import CheckRepeat
@@ -84,7 +84,8 @@ def initial(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin, bench: 
 
 
 def request(bench: Repairing, task_id: str = "tl-1") -> AdmitRequest:
-    return AdmitRequest(task_id, "tasks", "/tracker", bench.slot.repo.path, AgentSetting(model="m", effort="high"), 1000, "auto")
+    return AdmitRequest(task_id, "tasks", "/tracker", bench.slot.repo.path,
+                        StepSettings(plan=AgentSetting(model="m", effort="high")), 1000, "auto")
 
 
 def protect(bench: Repairing) -> tuple[dict[Path, bytes], AttemptKey]:

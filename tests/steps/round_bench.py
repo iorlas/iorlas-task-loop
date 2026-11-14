@@ -28,6 +28,7 @@ from taskloop.attempt_status import Listed, StatusPorts, current_view, list_atte
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksRequest
+from taskloop.discussion import Discussion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
@@ -193,6 +194,7 @@ class Factory:
             self.files,
             environment=environment,
             source_preparation=preparation,
+            discussion=Discussion(lambda _task, _root: (), HoldStore(lambda: self.con).latest, self.tracker.inspect).for_task,
         )
         found = attempts.execute(key, ENTRY, lambda: "held")
         self.ran.append(f"{found.status}:{found.reason}")

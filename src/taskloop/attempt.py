@@ -43,6 +43,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.clock_jumps import ClockContext, ClockJumps
 from taskloop.command_sink import CommandSink, WatchedHooks
+from taskloop.discussion import RefreshDiscussion
 from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.git_views import GitProfileFiles
@@ -52,6 +53,7 @@ from taskloop.merge.prepare import SourcePreparation
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
 from taskloop.recovery.execution_models import Callback
+from taskloop.resume_plan import ResumePlans
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
 from taskloop.steps import kind
 
@@ -73,6 +75,7 @@ class Attempts:
         environment: Preparation | None = None,
         source_preparation: SourcePreparation | None = None,
         monotonic: Callable[[], float] = monotonic,
+        discussion: RefreshDiscussion | None = None,
     ) -> None:
         """`registration_store` serves only the harness registration write (composition bounds its busy wait); default `store`.
         `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot. `environment`
@@ -84,6 +87,7 @@ class Attempts:
         self.environment = environment
         self.source_preparation = source_preparation
         self.monotonic = monotonic
+        self.discussion = discussion
 
     def collect(self, key: AttemptKey) -> AttemptResult:
         return collect(self.store, key)
@@ -220,10 +224,21 @@ class Attempts:
     ) -> Prepared | AttemptResult:
         """The slot on its branch (`prepare.base`), then, for a kind with `environment`, its setup sequence with the
         credentials' executable and scrubbed environment."""
+        validation = ResumePlans(self.store, self.checkouts)
+        if validation.required(record):
+            original = prepared_base(self.checkouts, self.slot_files, record, self.clock)
+            if isinstance(original, AttemptResult):
+                return original
+            refused = validation.entry(record, original, self.discussion)
+            if refused is not None:
+                return refused
         base = (prepared_base(self.checkouts, self.slot_files, record, self.clock) if self.source_preparation is None else
                 self.source_preparation.prepare(record, renew, credentials, probe))
         if isinstance(base, AttemptResult) or not kind(record.admission.step).environment:
             return base
+        refused = validation.entry(record, base, self.discussion)
+        if refused is not None:
+            return refused
         if self.environment is None or renew is None:
             return AttemptResult("unavailable", "environment:unwired")
         return self.environment.prepare(record, base, renew, credentials, probe) or base
