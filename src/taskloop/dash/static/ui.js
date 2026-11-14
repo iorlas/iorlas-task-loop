@@ -81,6 +81,7 @@ export function holdCallout(task) {
   const body = ask ? task.question || "Question unavailable: the saved agent answer could not be read."
     : task.hold_explanation || `Explanation unavailable: the factory held this task with recorded cause: ${cause}.`;
   node.append(el("p", "mt-0.5 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300", body));
+  node.append(waitingNote(task));
   return node;
 }
 
@@ -104,6 +105,22 @@ export const ago = (iso) => `${since(iso)} ago`;
 export const startedAt = (iso) => (iso ? ` ${new Date(iso).toLocaleString([], { hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}, ${ago(iso)}` : "");
 export const clock = (ms) => `+${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
+export const isWaiting = (t) => ["waiting", "held"].includes(t.column) || (t.column === "land" && t.land !== "landing");
+export const runningAgent = (t) => ["plan", "implement"].includes(t.column) && t.status === "running";
+export function waitingNote(t) {
+  const fallback = t.column === "held" ? "Waiting for a person" : t.column === "land"
+    ? LAND[t.land ?? "unknown"].label : "Queued to start: waiting for the factory";
+  const note = el("span", "block text-[11px]", t.status_note || fallback);
+  const time = el("span", "block tabular-nums", "Waiting since not recorded");
+  if (t.waiting_since) {
+    time.dataset.waitingSince = t.waiting_since;
+    time.title = t.waiting_since;
+    tick(time);
+  }
+  note.append(time);
+  return note;
+}
+
 // Age of recorded activity: nothing under 2 minutes, then amber, red from 15 minutes. Display only.
 const QUIET_AFTER_S = 120;
 const QUIET_LONG_S = 900;
@@ -118,6 +135,10 @@ function tickQuiet(node) {
 }
 export function tick(node) {
   if (node.dataset.quiet) return tickQuiet(node);
+  if (node.dataset.waitingSince) {
+    node.textContent = `Waiting since${startedAt(node.dataset.waitingSince)}`;
+    return;
+  }
   node.textContent = `${node.dataset.prefix || ""}${since(node.dataset.since)}${node.dataset.suffix || ""}`;
 }
 export function quietSpan(sinceIso) {

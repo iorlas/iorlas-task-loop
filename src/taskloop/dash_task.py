@@ -18,12 +18,11 @@ from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, wi
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion
-from taskloop.dash_board import admission_of, card_of, tries
+from taskloop.dash_board import admission_of, card_of, queued_card, tries
 from taskloop.dash_model import (
     Answer,
     AttemptBody,
     AttemptDetail,
-    Card,
     CheckLine,
     DashTracker,
     FeedEvent,
@@ -282,9 +281,10 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
-    card = Card(task_id, title, "waiting", 0, None, None, None, None, None) if view is None else card_of(
+    admission = admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready()))
+    card = queued_card(task_id, title, admission) if view is None else card_of(
         view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
-        admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready())))
+        admission)
     step_usage, usage = totals(attempts)
     return TaskDetail(card, attempts, step_usage, usage)
 
