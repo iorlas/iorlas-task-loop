@@ -383,10 +383,9 @@ def _imported(tree: ast.Module) -> list[str]:
     return found
 
 
-def test_only_the_dashboard_server_imports_the_http_server() -> None:
-    """The one allowed importer of the standard library's HTTP code (`.importlinter` ignores exactly `dash_server -> http.server`),
-    and the tests that use a client or a URL parser, are pinned here."""
+def test_http_and_url_parsing_imports_have_explicit_owners() -> None:
+    """Pin the HTTP server, digest URL parser and test consumers; import contracts restrict the precise modules."""
     importers = {str(path.relative_to(ROOT)) for path in FILES
                  if any(name.split(".")[0] in {"http", "urllib", "socketserver"} for name in _imported(ast.parse(path.read_text())))}
     assert importers == {"src/taskloop/dash_server.py", "tests/cli/test_dash_server.py", "tests/cli/test_dash_composition.py",
-                         "tests/rules/test_isolation.py"}
+                         "tests/rules/test_isolation.py", "src/taskloop/shelf_digest/identities.py"}
