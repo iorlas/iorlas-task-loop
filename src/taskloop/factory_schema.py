@@ -42,10 +42,11 @@ _COMMAND_CONCLUSIONS = ",".join(repr(encode(each)) for each in CommandConclusion
 _SETUP_CONCLUSIONS = ",".join(repr(encode(each)) for each in SETUP_CONCLUSIONS)
 _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 
-# This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
+# Every DDL change requires a version bump, pinned by tests/steps/test_factory_schema.py.
+# This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=25,
+    version=26,
     name="factory",
     steps={},
     ddl=f"""
@@ -353,6 +354,8 @@ def refusal(error: SchemaError, path: Path) -> str:
     found = _recorded(path)
     diagnosis = (f"its recorded schema version could not be read ({error})" if found is None else
                  f"it records schema version {found}" + (" (no schema version recorded)" if found == 0 else ""))
+    if found == SCHEMA.version:
+        diagnosis += f"; the database is incompatible: {' '.join(str(error).splitlines())}"
     return (f"Restart refused: factory.db at {path.resolve()}: {diagnosis}; this runtime expects schema version {SCHEMA.version}. "
             "The database has been preserved. Resume with matching code to keep unfinished work. For an incompatible "
             "upgrade, first stop admitting work and let running attempts and their entry processes finish under the "

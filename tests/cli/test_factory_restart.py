@@ -27,6 +27,8 @@ def incompatible(tmp_path: Path, version: int) -> Path:
     con.execute("INSERT INTO slot VALUES ('repo','s1','/slots/s1',1)")
     con.execute("INSERT INTO reservation VALUES ('s1','repo',1,'unfinished')")
     con.execute(f"PRAGMA user_version={version}")
+    if version == SCHEMA.version:
+        con.execute("DROP TABLE merge_operation")
     con.close()
     return path
 
@@ -45,9 +47,12 @@ def recovery_words(detail: str, path: Path, version: int) -> None:
     assert "before initializing the new runtime" in detail
     assert "Discard loses local execution progress and session references" in detail
     assert "tl " not in detail
+    if version == SCHEMA.version:
+        assert "incompatible: missing required tables: merge_operation" in detail
+        assert len(detail.strip().splitlines()) == 1
 
 
-@pytest.mark.parametrize("version", VERSIONS)
+@pytest.mark.parametrize("version", [*VERSIONS, SCHEMA.version])
 @pytest.mark.parametrize("as_json", [False, True])
 def test_rounds_restart_reports_the_same_recovery_in_human_and_json_and_preserves_rows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], version: int, as_json: bool,
@@ -68,7 +73,7 @@ def test_rounds_restart_reports_the_same_recovery_in_human_and_json_and_preserve
             detail = error["message"]
         else:
             detail = output.err.removeprefix("tl step rounds: refused:schema\n")
-        recovery_words(detail, path, version)
+        recovery_words(detail.splitlines()[0], path, version)
         assert path.read_bytes() == before
     with sqlite3.connect(path) as con:
         assert con.execute("PRAGMA user_version").fetchone() == (version,)
@@ -77,7 +82,7 @@ def test_rounds_restart_reports_the_same_recovery_in_human_and_json_and_preserve
     assert not (tmp_path / "art").exists()
 
 
-@pytest.mark.parametrize("version", VERSIONS)
+@pytest.mark.parametrize("version", [*VERSIONS, SCHEMA.version])
 def test_incompatible_rounds_reaches_no_lock_handler_or_round(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: int,
 ) -> None:
@@ -113,8 +118,9 @@ def test_unreadable_version_diagnosis_never_invents_a_recorded_version(tmp_path:
     assert "owner deliberately discards" in detail and path.read_bytes() == b"unreadable metadata"
 
 
-def test_refusal_preserves_uncheckpointed_rows_sidecars_and_evidence(tmp_path: Path) -> None:
-    path = incompatible(tmp_path, SCHEMA.version - 1)
+@pytest.mark.parametrize("version", [SCHEMA.version - 1, SCHEMA.version])
+def test_refusal_preserves_uncheckpointed_rows_sidecars_and_evidence(tmp_path: Path, version: int) -> None:
+    path = incompatible(tmp_path, version)
     evidence = tmp_path / "entry.log"
     evidence.write_text("retained execution evidence")
     writer = sqlite3.connect(path, isolation_level=None)
@@ -142,3 +148,16 @@ def test_temporary_open_failure_keeps_existing_database_handling_and_state(tmp_p
     with cli_composition.open_rounds(path, tmp_path / "art", GitViews(30), REQUEST) as ports:
         assert isinstance(ports, Failed) and ports.reason == "database"
     assert path.read_bytes() == before and not (tmp_path / "art").exists()
+
+
+def test_incomplete_database_is_not_a_transient_round_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = incompatible(tmp_path, SCHEMA.version)
+
+    def unexpected(*args: object, **kwargs: object) -> Never:
+        pytest.fail("incomplete database reached a round")
+
+    monkeypatch.setattr(cli_composition, "run_round", unexpected)
+    found = cli_composition.one_round(path, tmp_path / "art", GitViews(30), REQUEST, lambda: False)(frozenset())
+    assert isinstance(found, Failed) and found.word == "refused:schema"
+    recovery_words(found.detail, path, SCHEMA.version)
+    assert not (tmp_path / "art").exists()

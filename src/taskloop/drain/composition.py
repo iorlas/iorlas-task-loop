@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from beads_client import BdError
-from sqlite_store import SchemaError, Store
+from sqlite_store import SchemaError
 
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_store import AttemptStore
@@ -18,7 +18,8 @@ from taskloop.drain.models import Action, Conclusion, Owner, Result
 from taskloop.drain.observe import observe
 from taskloop.drain.reconcile import Reconcile
 from taskloop.drain.store import DrainStore
-from taskloop.factory_schema import SCHEMA, current, refusal
+from taskloop.factory_schema import current, refusal
+from taskloop.factory_store import open_ro, validate_tables
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
 from taskloop.land_store import LandStore
@@ -52,7 +53,7 @@ def open_drain(database: Path, report: Callable[[Result], None] = lambda _result
     reader = writer = None
     opened: Ports | Result
     try:
-        reader = Store(SCHEMA).open_ro(database)
+        reader = open_ro(database)
         if reader is None:
             try:
                 database.stat()
@@ -67,6 +68,10 @@ def open_drain(database: Path, report: Callable[[Result], None] = lambda _result
             writer = sqlite3.connect(database.absolute().as_uri() + "?mode=rw", uri=True, isolation_level=None)
             if not current(writer):
                 raise sqlite3.DatabaseError("The database changed after its compatibility check")
+            try:
+                validate_tables(writer)
+            except SchemaError as error:
+                raise SchemaError(refusal(error, database)) from error
             attempts = AttemptStore(lambda: writer)
             reconcile = Reconcile(
                 attempts,
@@ -78,7 +83,7 @@ def open_drain(database: Path, report: Callable[[Result], None] = lambda _result
             )
             opened = Ports(DrainStore(lambda: writer, ids=NativeIds()), lambda: _owners(attempts), observe, reconcile, time.sleep, report)
     except SchemaError as error:
-        opened = Result(conclusion=Conclusion.REFUSED, detail=refusal(error, database))
+        opened = Result(conclusion=Conclusion.REFUSED, detail=str(error))
     except (sqlite3.Error, OSError, StoreUnavailable) as error:
         opened = Result(
             conclusion=Conclusion.UNAVAILABLE,

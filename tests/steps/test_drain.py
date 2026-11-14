@@ -13,6 +13,7 @@ from test_admit import tasks
 from test_round import held, seed
 
 from taskloop.attempt_store import AttemptStore
+from taskloop.drain import composition
 from taskloop.drain.composition import open_drain
 from taskloop.drain.drain import Ports, drain, inspect
 from taskloop.drain.models import Action, ActionKind, Boundary, Conclusion, Identity, Result, Role, Seen, State
@@ -20,6 +21,7 @@ from taskloop.drain.reconcile import Reconcile
 from taskloop.drain.restart import restart
 from taskloop.drain.store import DrainStore
 from taskloop.factory_schema import SCHEMA
+from taskloop.factory_store import open_ro
 from taskloop.ids import NativeIds
 from taskloop.land_store import LandStore
 
@@ -39,6 +41,41 @@ def opened(path: Path) -> Generator[Ports]:
     with open_drain(path) as ports:
         assert isinstance(ports, Ports)
         yield ports
+
+
+@pytest.mark.parametrize("missing", ["merge_operation", "drain_action"])
+def test_direct_drain_refuses_incomplete_state_before_writes(
+    database: tuple[Path, sqlite3.Connection], missing: str,
+) -> None:
+    path, con = database
+    con.execute("INSERT INTO slot VALUES ('repo','s1','/slots/s1',1)")
+    con.execute("INSERT INTO reservation VALUES ('s1','repo',1,'unfinished')")
+    con.execute(f'DROP TABLE "{missing}"')
+    retained = list(con.iterdump())
+    with open_drain(path) as result:
+        assert isinstance(result, Result) and result.conclusion is Conclusion.REFUSED
+        assert f"incompatible: missing required tables: {missing}" in result.detail
+        assert len(result.detail.splitlines()) == 1
+    assert list(con.iterdump()) == retained
+    assert con.execute("SELECT * FROM drain_state").fetchall() == []
+
+
+def test_drain_writer_rechecks_tables_after_the_reader_gate(
+    database: tuple[Path, sqlite3.Connection], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, con = database
+
+    def changed(database_path: Path) -> sqlite3.Connection | None:
+        reader = open_ro(database_path)
+        con.execute("DROP TABLE merge_operation")
+        return reader
+
+    monkeypatch.setattr(composition, "open_ro", changed)
+    with open_drain(path) as result:
+        assert isinstance(result, Result) and result.conclusion is Conclusion.REFUSED
+        assert "incompatible: missing required tables: merge_operation" in result.detail
+        assert result.detail.count("Restart refused:") == 1
+    assert con.execute("SELECT * FROM drain_state").fetchall() == []
 
 
 def test_idle_includes_held_and_reserved_unlaunched_work(database: tuple[Path, sqlite3.Connection]) -> None:
