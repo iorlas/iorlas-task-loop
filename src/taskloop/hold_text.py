@@ -69,7 +69,7 @@ class HoldFacts:
     """Everything the comment says, as the hold read it."""
 
     task_id: str
-    label: str  # the approval label the task was taken under (`attempt.label`)
+    label: str | None  # None for a hand-started task held during preparation
     labels: LabelsWord
     reason: str
     step: str
@@ -126,7 +126,9 @@ def _details(facts: HoldFacts) -> list[str]:
 
 
 def _labelled(facts: HoldFacts) -> str:
-    label = one_line(facts.label, 200)
+    if facts.label is None and facts.labels in ("moved", "absent"):
+        return "The factory added `held` without removing an approval label"
+    label = one_line(facts.label or "", 200)
     return {"moved": f"The factory removed `{label}` and added `held`",
             "absent": f"The factory added `held` (`{label}` is no longer on the task)",
             "not_ours": "The factory changed no label (another actor holds this task)"}[facts.labels]
@@ -164,10 +166,14 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
 def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     """The cause's own line, then its one next step: an owner's answer only for a cause an answer fixes."""
     task, found = one_line(facts.task_id), cause(facts.reason, facts.deadline)
+    if facts.reason.startswith("merge:"):
+        return ["Main's merge stopped for a decision. The retained task work and resolution evidence remain available. "
+                "The task stays held; approval labels do not restart its plan or reset the resolution limit."]
     if facts.labels == "not_ours":
         retry = f"start it by hand (`tl step start {task}`): rounds do not take it again"
     else:
-        retry = f"run `bd label add {task} {one_line(facts.label, 200)}`: the next round starts it again at plan on task/{task} as it is"
+        retry = (f"run `bd label add {task} {one_line(facts.label or '', 200)}`: "
+                 f"the next round starts it again at plan on task/{task} as it is")
     edit = "edit this task's description or acceptance criteria (the agent reads those, not comments)"
     lines = [] if found is None else [found.what]
     lines.append(next_step(found, retry, edit))

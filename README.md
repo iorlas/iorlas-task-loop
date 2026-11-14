@@ -41,8 +41,14 @@ Review remains future work; the retained designs describe more than the implemen
   changes to what decides a pass require `--accept-gate-changes` when reported by land. Tracker synchronization remains
   the person's responsibility. Publishing a task branch does not land it.
 
-A required check that exits nonzero can repeat implementation after its checks slot is released. The next agent starts
-at the checked commit in a free clean slot, with the first failed required check's name, exact argv and bounded output
+Before a clean step starts, the factory brings its retained task branch onto fetched origin main. Main advancing does
+not replay the plan. Textual conflicts use up to three separately recorded resolution executions; unsupported or
+ambiguous conflicts hold the task with its work preserved. Preparation also runs under `land: manual`: that policy
+controls delivery. Free slots may park at different commits belonging to main or the selected task history.
+
+A required check that exits nonzero can repeat implementation after its checks slot is released. Preparation first
+validates the exact checked source, then integrates current main. The next agent starts in a free clean slot with
+the first failed required check's name, exact argv and bounded output
 tail in its prompt. Path repeats and check-driven repeats share the three-attempt implement limit; an unchanged answer
 also receives fresh checks. Infrastructure failures and optional failures alone do not trigger repair. Unsafe-path
 feedback names the actual unsafe file, including a nearby Git file omitted from the answer.

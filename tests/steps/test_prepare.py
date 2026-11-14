@@ -382,7 +382,7 @@ def test_admission_refuses_a_branch_before_its_input_claim_or_rows(
         repo.fetch()
     result, claims = admitted(factory, repo, root, tmp_path, "tl..1" if case == "name" else "tl-1")
     assert isinstance(result, AdmitRefused) and result.reason == f"branch_{case}"
-    assert ("git branch -m task/tl-1 old/task/tl-1" in result.detail) is (case == "diverged")
+    assert "git branch -m" not in result.detail and "origin --delete" not in result.detail
     assert (result.slots == () and "not a slot" in result.detail) is (case == "held")  # outside the slots folder: no `adopt` advice
     assert claims.calls == [] and factory.execute("SELECT count(*) FROM attempt").fetchone() == (0,)
 

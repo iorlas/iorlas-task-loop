@@ -133,6 +133,8 @@ class FakeSlotFiles:
             }
             if path in pointers:
                 return pointers[path]
+            if path == self._gitdir(slot) / "MERGE_HEAD" and slot.state().merge_head is not None:
+                return f"{slot.state().merge_head}\n".encode()
             if path.is_relative_to(slot.path) and path != slot.path:
                 return self._files(slot).get(path.relative_to(slot.path).as_posix())
         return None
@@ -225,7 +227,7 @@ class NoChecks:
 def no_holds() -> TrackerHolds:
     """The tracker's hold writes of a round that never holds a task nor clears a hold."""
 
-    def refuse(*args: str) -> HoldAnswer[LabelStep]:
+    def refuse(*args: str | None) -> HoldAnswer[LabelStep]:
         raise AssertionError(f"no hold tracker write expected: {args}")
 
     def unexpected(*args: str) -> HoldAnswer[HoldWrite]:

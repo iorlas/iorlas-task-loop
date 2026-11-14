@@ -36,6 +36,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.hold_store import HoldStore
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
+from taskloop.merge.prepare import SourcePreparation
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.setup_store import SetupSeen, SetupStore
@@ -81,16 +82,21 @@ def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials:
     The harness registration write goes through its own store's bounded connections (`_registration`)."""
     store, (registration, bounded) = Store(SCHEMA), _registration(database)
     setup = SetupStore(lambda: store.shared_rw(database), store.begin_immediate, AttemptReads(bounded, registration.begin_immediate))
+    attempts = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
+    environment = _environment(setup, database, artifacts, views)
+    agent, evidence = AgentLaunch(credentials), EvidenceFiles(artifacts)
     return Attempts(
-        AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
-        EvidenceFiles(artifacts),
-        AgentLaunch(credentials),
+        attempts,
+        evidence,
+        agent,
         _run,
         time.time,
         views.checkouts,
         RealSlotFiles(),
         registration_store=AttemptStore(bounded, registration.begin_immediate),
-        environment=_environment(setup, database, artifacts, views),
+        environment=environment,
+        source_preparation=SourcePreparation(attempts, views.checkouts, views.remotes, RealSlotFiles(), time.time,
+                                             environment, agent, evidence, _run, worker_gone),
     )
 
 

@@ -18,6 +18,7 @@ from taskloop.check_store import CheckStore
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.hold_store import HoldRow
 from taskloop.hold_text import FailedCheck, HoldFacts, Kept, KeptWord, LabelsWord, Leftovers, Returned
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed, ReleasedTask
 from taskloop.setup_store import SetupStore
 from taskloop.steps import CHECK, is_agent, kind
@@ -98,5 +99,7 @@ def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: Labe
                          str(files.root / files.directory(checks.key)), files.last_entry(checks.key), checks.deadline)
     left = Leftovers(leftovers[0], leftovers[1:]) if leftovers and row.reason.startswith("repeats_exhausted") else None
     told = explanation(files, collect(reader, agent.key).execution, agent.step, agent.task_id)
+    merge = MergeStore(reader.connect, reader.begin).get(agent.key.attempt_id) if row.reason.startswith("merge:") else None
+    told = told if merge is None else merge.explanation
     return HoldFacts(*head, agent.step, agent.number, agent.key.attempt_id, row.held_at, published, agent.end_commit, told, (),
                      left, str(files.root / files.directory(agent.key)), files.last_entry(agent.key), agent.deadline)

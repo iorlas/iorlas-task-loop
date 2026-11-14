@@ -45,7 +45,8 @@ def _show_data(each: AttemptView) -> dict[str, object]:
     return {
         "backlog": each.backlog, "task": each.task_id, "step": each.step, "attempt_id": each.attempt_id, "slot": each.slot,
         "phase": each.phase,
-        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
+        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason,
+                                       **({"explanation": each.result.explanation} if each.result.explanation else {})},
         "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
         "status": task_status(each).status.value,
         "entry_process": _entry_data(each.entry_process),

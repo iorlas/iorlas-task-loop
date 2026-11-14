@@ -20,6 +20,7 @@ under and the provider of its model (`harness_choice`), shown on the dashboard. 
 array of the commits a hold saved on the task branch (`wip.SavedCommit`), written only by `hold_store`.
 No migration: an older factory.db is refused (`schema`).
 v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbox column.
+v21: durable preparation merges. Drain old entries before discarding an older database.
 """
 
 import sqlite3
@@ -37,10 +38,13 @@ _PROVIDERS = ",".join(f"'{each}'" for each in Provider)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=20,
+    version=21,
     name="factory",
     steps={},
     ddl=f"""
+CREATE TABLE merge_operation (
+ attempt_id TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data))
+);
 CREATE TABLE drain_state (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL CHECK(generation>=1),
  state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in State)}))

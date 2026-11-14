@@ -179,8 +179,8 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released branch=published", 0, 16),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 16),
+            ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released branch=published", 0, 17),
+            ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 17),
         ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
         ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 9),
     ],

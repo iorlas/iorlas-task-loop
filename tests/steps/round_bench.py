@@ -31,6 +31,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
 from taskloop.launch import Launched, LaunchResult
+from taskloop.merge.prepare import SourcePreparation
 from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, start, verify_task
 from taskloop.publish import BranchPublish
 from taskloop.round import NextRequest, RoundPorts, run_round
@@ -74,7 +75,7 @@ class Tracker:
         self.comments: list[tuple[str, str]] = []
         self.holds: list[str] = []
 
-    def labels(self, _root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(self, _root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         """5.2: nothing written for a missing or closed task or another actor's; else `held` added and `label` removed."""
         self.holds.append(f"labels {task_id} {label}")
         found = self.beads.get(task_id)
@@ -155,6 +156,7 @@ class Factory:
         self.last = Round("tasks", ())
         self.during: Callable[[], object] = lambda: None
         self.ran: list[str] = []  # each launched body's result
+        self.merge_before_dispatch = False
 
     def adopt(self, name: str) -> None:
         """One more slot, made and adopted as a person does: detached at the repository's HEAD."""
@@ -170,15 +172,21 @@ class Factory:
         key = found[0]
         self.store.register_entry(key, ENTRY, self.now)  # a relaunch keeps the identity registered first
         step = self.store.step_of(key.attempt_id)
+        evidence, agent = EvidenceFiles(self.tmp), AgentLaunch(lambda _harness: ("/bin/codex", {}))
+        environment = self.environment.preparation()
+        preparation = (SourcePreparation(self.store, self.checkouts, self.checkouts, self.files, lambda: self.now,
+                                        environment, agent, evidence, self.agents[task_id, step or ""], lambda _worker: True)
+                       if self.merge_before_dispatch else None)
         attempts = Attempts(
             self.store,
-            EvidenceFiles(self.tmp),
-            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            evidence,
+            agent,
             self.agents[task_id, step or ""],
             lambda: self.now,
             self.checkouts,
             self.files,
-            environment=self.environment.preparation(),
+            environment=environment,
+            source_preparation=preparation,
         )
         found = attempts.execute(key, ENTRY, lambda: "held")
         self.ran.append(f"{found.status}:{found.reason}")
