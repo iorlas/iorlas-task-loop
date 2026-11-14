@@ -48,6 +48,11 @@ class RecoveryStore(StoreConnection):
         super().__init__(connect, begin)
         self.attempts = AttemptStore(connect, begin)
 
+    def release_intent(self, key: AttemptKey) -> Intent | None:
+        """Read saved process ownership even after capture, expiry, hold or release."""
+        with self._connection() as con:
+            return read_intent(con, key)
+
     def execute(self, expected: Intent, clock: Callable[[], float]) -> Result:
         """Record launch intent before a caller performs an external launch."""
         with self._connection(write=True) as con:

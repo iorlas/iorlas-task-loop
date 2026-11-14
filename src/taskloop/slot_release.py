@@ -13,7 +13,7 @@ from typing import Final, Literal
 
 from any_agent.procs import Worker
 from beads_client import BdError
-from git_porcelain import GitUnavailable, Repo, Worktree
+from git_porcelain import GitUnavailable
 from stream_proc import OwnedProcess
 
 from taskloop import wip
@@ -30,10 +30,12 @@ from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks
 from taskloop.ids import Ids
 from taskloop.merge.store import MergeStore
 from taskloop.prepare import task_branch
-from taskloop.release_proof import NotReleased, Stopping, entry_stopped, setup_stopped, stop_proof, worker_stopped
+from taskloop.recovery.models import Intent
+from taskloop.recovery.store import RecoveryStore
+from taskloop.release_proof import NotReleased, Stopping, entry_stopped, recovery_stopped, setup_stopped, stop_proof, worker_stopped
 from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
-from taskloop.slot_state import SlotState, listing, observe_slot
+from taskloop.slot_park import Saver, park_slot, saver
 
 __all__ = ["NotReleased", "Stopping", "entry_stopped", "setup_stopped", "stop_proof", "worker_stopped"]
 
@@ -104,60 +106,6 @@ def release_word(result: ReleaseResult) -> str:
     return result.word
 
 
-type Saver = Callable[[Repo, Worktree, SlotState], wip.Refused | None]  # a hold's save of the slot's work, under the lock
-
-
-def park_slot(
-    checkouts: Checkouts, slot_files: SlotFiles, path: Path, repo_id: str, slot_head: str, branch: str | None,
-    save: Saver | None = None,
-) -> tuple[str, str | None] | NotReleased:
-    """The release's one Git write, shared with the checks release (under the slot's lock): the slot on its own hardened
-    view, the pointer first (`redirected` makes no Git call); on exactly `branch` (the implement attempt's `task/<id>`;
-    None for a checks slot, which is only ever detached) and clean it is parked at D (the branch keeps its tip);
-    detached and clean it is left where it is (never prepared, or parked by an earlier call that died before its
-    transaction) when it is at D, else parked at D. Dirty, on another branch, redirected or unborn refuses: it never
-    resets work. Returns where the slot is left and the park."""
-    state = observe_slot(checkouts, slot_files, str(path), repo_id)
-    if isinstance(state, str) or state.head is None:
-        return _unreadable(state)
-    if save is not None and state.branch in (None, branch):
-        return _saved(checkouts, path, state, slot_head, save)
-    if state.dirty:
-        left = listing(checkouts(path, git_dir=state.gitdir), path)
-        again = f"The slot contains changes; its reservation remains held. {NOTHING}"
-        return NotReleased("refused", "slot_dirty", "\n".join([*left, again]))
-    merging = checkouts(path, git_dir=state.gitdir).worktree(path).merging()
-    if state.branch is None and state.head == slot_head and not merging:
-        return state.head, None
-    if merging or state.branch not in (None, branch):
-        return (NotReleased("unavailable", "merge_pending", "An active merge needs owning preservation before the slot can be parked.")
-                if merging else NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}"))
-    return slot_head, str(checkouts(path, git_dir=state.gitdir).worktree(path).park(slot_head))
-
-
-def _unreadable(state: SlotState | str) -> NotReleased:
-    """The refusal of a slot that cannot be read (a word) or has no commit."""
-    if isinstance(state, str):
-        reason = "slot_redirected" if state == "redirected" else state
-        return NotReleased("refused" if state == "redirected" else "unavailable", reason, f"Inspect the slot. {NOTHING}")
-    return NotReleased("refused", "slot_unborn", f"The slot has no commit. {NOTHING}")
-
-
-def _saved(checkouts: Checkouts, path: Path, state: SlotState, slot_head: str, save: Saver) -> tuple[str, str | None] | NotReleased:
-    """A hold's park: the slot's work saved on the task branch first (`wip.save`), then detached at D with its ignored files
-    kept; a slot already at D, clean, is left as it is."""
-    view = checkouts(path, git_dir=state.gitdir)
-    slot = view.worktree(path)
-    if state.dirty or state.branch is not None or state.head != slot_head or slot.merging():
-        refused = save(view, slot, state)
-        if refused is not None:
-            return NotReleased("unavailable", refused.reason.value, refused.detail)
-    parked = wip.park(slot, slot_head)
-    if isinstance(parked, wip.Refused):
-        return NotReleased("unavailable", parked.reason.value, parked.detail)
-    return slot_head, parked
-
-
 def free(con: sqlite3.Connection, repo_id: str, slot: str, attempt_id: str, generation: int) -> int:
     """The one deletion of a reservation, inside the caller's release transaction after its fenced record (an agent
     attempt's release row, a checks attempt's `check_store.record_release`, or a completed conflict release).
@@ -183,6 +131,7 @@ class _Row:
     held: bool
     setup: OwnedProcess | None = None  # the latest setup run's unsettled command (`SetupRow.unsettled`), if any
     reconciling: bool = False
+    recovery: Intent | None = None
 
 
 class ReconcileReason(StrEnum):
@@ -295,20 +244,25 @@ class SlotRelease:
         with self.store.begin(con):
             yield con
 
-    def _read(self, key: AttemptKey) -> _Row | None:
+    def _read(self, key: AttemptKey, con: sqlite3.Connection | None = None) -> _Row | None:
         """The release's own fenced read: `AttemptStore.load` refuses an admitted attempt that never registered its entry."""
-        con = self.store.connect()
+        con = self.store.connect() if con is None else con
         if con is None or not current(con):
             raise StoreUnavailable("Factory database unavailable or incompatible")
         row: tuple[object, ...] | None = con.execute(ROW, astuple(key)).fetchone()
         if row is None:
             return None
-        return replace(_row(row, key), setup=running(con, key.attempt_id))
+        found = _row(row, key)
+        recovery = None if found.released is not None else RecoveryStore(lambda: con, self.store.begin).release_intent(key)
+        return replace(found, setup=running(con, key.attempt_id), recovery=recovery)
 
     def _refusal(self, row: _Row, abandon: bool, me: EntryIdentity | None) -> NotReleased | None:
         """Read before anything changes: the reservation held, the result collected (settled only), the stop proof."""
         if row.slot_path is None or row.successor:
             return NotReleased("unavailable", "changed", f"The attempt no longer holds its reservation. {NOTHING}")
+        recovery = recovery_stopped(self.setup_seen, row.recovery)
+        if recovery is not None:
+            return recovery
         if not abandon:
             result = collect(self.store, row.key)
             if result.status == "unavailable":
@@ -359,10 +313,23 @@ class SlotRelease:
         except SlotLockUnavailable:
             return NotReleased("unavailable", "lock", f"The slot's lock file cannot be opened. {NOTHING}")
 
+    def _custody_proof(self, row: _Row) -> NotReleased | None:
+        """Reread and observe under custody, outside any write transaction, then compare."""
+        expected = replace(row, reconciling=False)
+        if self._read(row.key) != expected:
+            return NotReleased("unavailable", "changed", "The attempt changed after the stop proof. Nothing changed.")
+        refused = recovery_stopped(self.setup_seen, row.recovery)
+        if refused is not None:
+            return refused
+        if self._read(row.key) != expected:
+            return NotReleased("unavailable", "changed", "Recovery facts changed after observation. Nothing changed.")
+        return None
+
     def _parked(self, row: _Row, path: Path, abandon: bool) -> Released | NotReleased:
         """Under the lock: the slot read and its park, then the transaction."""
-        if row.reconciling and self._read(row.key) != replace(row, reconciling=False):
-            return NotReleased("unavailable", "changed", "The attempt changed after the stop proof. Nothing changed.")
+        refused = self._custody_proof(row)
+        if refused is not None:
+            return refused
         try:
             slot = park_slot(self.checkouts, self.slot_files, path, row.repo_id, row.slot_head, task_branch(row.task_id),
                              self._saver(row, abandon))
@@ -391,29 +358,13 @@ class SlotRelease:
         inputs = None if work is None or work.target is None else (work.source, work.target)
         source = wip.Source(row.task_id, row.key.attempt_id, row.slot, row.slot_head, inputs)
 
-        def save(view: Repo, slot: Worktree, state: SlotState) -> wip.Refused | None:
-            head = state.head or row.slot_head
-            if slot.merging() and source.merge is not None:
-                target = self.slot_files.read(state.gitdir / "MERGE_HEAD", 256)
-                if target != f"{source.merge[1]}\n".encode("ascii"):
-                    return wip.Refused(wip.SaveReason.MERGE_CHANGED,
-                                       "The active merge's target changed or cannot be read; work stays reserved.")
-            saved_head = any(each.source_head == head for each in log.saved(row.key.attempt_id))
-            if not state.dirty and not slot.merging() and (source.merge is None or saved_head):
-                wip.adopt(view, head, source, log)
-                return None
-            refused = wip.save(view, slot, source, head, int(self.clock()), log)
-            if refused is None and slot.merging() and source.merge is not None:
-                slot.abort_merge()  # preservation and its durable record precede the abort
-            return refused
-
-        return save
+        return saver(log, self.slot_files, self.clock, source)
 
     def _record(self, row: _Row, head: str, abandon: bool) -> bool:
         """One write transaction, fenced on what the proof read: the release row in, the reservation out."""
         key = row.key
         with self._writing() as con:
-            if row.reconciling and self._read(key) != replace(row, reconciling=False):
+            if self._read(key, con) != replace(row, reconciling=False):
                 return False
             if con.execute(FENCE, (*astuple(key), row.rev, row.stopping.phase)).fetchone() is None:
                 return False
