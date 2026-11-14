@@ -5,6 +5,7 @@ import json
 import sys
 from collections.abc import Callable
 from dataclasses import replace
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Literal
 
@@ -96,8 +97,10 @@ def register(commands: Parsers) -> None:
     rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
+    rounds.add_argument("--dash-host", type=ip_address, metavar="ADDRESS", default="127.0.0.1",
+                        help="Dashboard bind address: IPv4 or IPv6 literal (default 127.0.0.1)")
     rounds.add_argument("--dash-port", type=int, metavar="PORT", default=DASH_PORT, help="Serve the read-only dashboard on "
-                        f"127.0.0.1:PORT while the rounds run (default {DASH_PORT}; 0 picks a free port)")
+                        f"--dash-host:PORT while the rounds run (default {DASH_PORT}; 0 picks a free port)")
     rounds.add_argument("--no-dashboard", action="store_true", help="Serve no dashboard (for a second rounds on one machine)")
     _round_flags(rounds)
     rounds.epilog = ("--json prints JSON Lines: one start record and one end record on a graceful stop; "
@@ -191,8 +194,19 @@ def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_composition.DashRequest | None:
     if arguments.no_dashboard:
         return None
-    return dash_composition.DashRequest(arguments.backlog, arguments.tracker_root, arguments.label, arguments.dash_port,
+    return dash_composition.DashRequest(arguments.backlog, arguments.tracker_root, arguments.label,
+                                        arguments.dash_host, arguments.dash_port,
                                         settings.db.value, settings.artifacts.value, Path(arguments.checkout))
+
+
+def _dashboard_notice(address: tuple[str, int]) -> str:
+    host, port = address
+    literal = ip_address(host)
+    authority = f"[{host}]" if literal.version == 6 else host
+    notice = f"Dashboard: http://{authority}:{port}/ (read-only, unauthenticated)"
+    if not literal.is_loopback:
+        notice += "; non-loopback exposure is your explicit choice; use a proxy with sign-in"
+    return notice
 
 
 def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -219,7 +233,7 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                 if isinstance(address, Failed):
                     print(f"Dashboard not started ({address.detail}); the rounds go on without it", file=sys.stderr, flush=True)
                 elif address is not None:
-                    print(f"Dashboard: http://{address[0]}:{address[1]}/",
+                    print(_dashboard_notice(address),
                           file=sys.stderr if arguments.json_output else sys.stdout, flush=True)
                 return run_rounds(ports, request)
     except KeyboardInterrupt:

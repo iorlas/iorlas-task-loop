@@ -5,6 +5,7 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 
 from taskloop.cli_composition import open_land, open_reads
@@ -28,6 +29,7 @@ class DashRequest:
     backlog: str
     tracker_root: str
     label: str
+    host: IPv4Address | IPv6Address
     port: int
     db: Path
     artifacts: Path
@@ -75,15 +77,15 @@ def _ports(request: DashRequest, views: GitViews) -> DashPorts:
 
 @contextmanager
 def serving(request: DashRequest | None, views: GitViews) -> Generator[tuple[str, int] | Failed | None]:
-    """The dashboard for the length of the block, on 127.0.0.1; nothing when `request` is None (no `--dash-port`), and a
-    Failed (the block still runs, without it) when the port cannot be taken."""
+    """The dashboard for the length of the block; nothing when `request` is None, and a Failed (the block still runs,
+    without it) when the requested address or port cannot be bound."""
     if request is None:
         yield None
         return
     try:
-        server = DashServer(_ports(request, views), request.port)
+        server = DashServer(_ports(request, views), request.host, request.port)
     except OSError as error:
-        yield Failed("unavailable", "dashboard_port", f"Port {request.port} on 127.0.0.1: {error.strerror or error}")
+        yield Failed("unavailable", "dashboard_port", f"Port {request.port} on {request.host}: {error.strerror or error}")
         return
     server.start()
     try:

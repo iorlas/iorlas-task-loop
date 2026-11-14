@@ -5,7 +5,9 @@ import json
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import replace
 from http.client import HTTPConnection
+from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
 
 import pytest
@@ -21,7 +23,8 @@ from taskloop.operations import Failed
 
 
 def request(tmp_path: Path, port: int) -> DashRequest:
-    return DashRequest("tl", str(tmp_path), "auto", port, tmp_path / "factory.db", tmp_path / "artifacts", tmp_path)
+    return DashRequest("tl", str(tmp_path), "auto", ip_address("127.0.0.1"), port,
+                       tmp_path / "factory.db", tmp_path / "artifacts", tmp_path)
 
 
 def board_answer(address: tuple[str, int]) -> tuple[int, dict[str, str]]:
@@ -48,7 +51,7 @@ def test_a_taken_port_is_a_failed_the_rounds_go_on_without_and_no_dashboard_is_l
     nothing = Failed("refused", "x")
     ports = DashPorts(lambda: nothing, lambda _id: nothing, lambda _id: None, lambda *_: None, tuple,
                       lambda *_: None, lambda _id: nothing, "tl", tmp_path)
-    busy = DashServer(ports, 0)
+    busy = DashServer(ports, ip_address("127.0.0.1"), 0)
     try:
         with serving(request(tmp_path, busy.address[1]), GitViews(5)) as address:
             assert isinstance(address, Failed) and address.reason == "dashboard_port" and str(busy.address[1]) in address.detail
@@ -67,7 +70,7 @@ def test_selected_delivery_uses_the_registered_checkout_and_shared_land_reader(t
         yield world.ports()
 
     monkeypatch.setattr(dash_composition, "open_land", open_land)
-    requested = DashRequest("tasks", str(tmp_path), "auto", 0, tmp_path / "factory.db", tmp_path / "artifacts", world.repo.path)
+    requested = replace(request(tmp_path, 0), backlog="tasks", checkout=world.repo.path)
     try:
         ports = dash_composition._ports(requested, views)
         assert opened == []
@@ -83,3 +86,42 @@ def test_selected_delivery_uses_the_registered_checkout_and_shared_land_reader(t
 def test_without_a_dash_port_nothing_is_served(tmp_path: Path) -> None:
     with serving(None, GitViews(5)) as address:
         assert address is None
+
+
+@pytest.mark.parametrize("host", ["192.0.2.4", "::"])
+def test_unavailable_address_reports_the_selected_address_and_port(
+    host: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selected = replace(request(tmp_path, 8123), host=ip_address(host))
+
+    def unavailable(_ports: DashPorts, given_host: IPv4Address | IPv6Address, given_port: int) -> DashServer:
+        assert (given_host, given_port) == (selected.host, selected.port)
+        raise OSError(99, "Address unavailable")
+
+    monkeypatch.setattr(dash_composition, "DashServer", unavailable)
+    with serving(selected, GitViews(5)) as result:
+        assert isinstance(result, Failed) and result.reason == "dashboard_port"
+        assert result.detail == f"Port 8123 on {host}: Address unavailable"
+
+
+def test_selected_address_is_forwarded_and_server_stops_on_block_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+    selected = replace(request(tmp_path, 0), host=ip_address("::1"))
+
+    class Server:
+        address = ("::1", 8123)
+
+        def __init__(self, _ports: DashPorts, host: IPv4Address | IPv6Address, port: int) -> None:
+            assert (host, port) == (selected.host, 0)
+
+        def start(self) -> None:
+            events.append("started")
+
+        def stop(self) -> None:
+            events.append("stopped")
+
+    monkeypatch.setattr(dash_composition, "DashServer", Server)
+    with pytest.raises(RuntimeError, match="block failed"), serving(selected, GitViews(5)) as address:
+        assert address == ("::1", 8123)
+        raise RuntimeError("block failed")
+    assert events == ["started", "stopped"]

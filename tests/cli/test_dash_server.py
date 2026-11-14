@@ -2,14 +2,18 @@
 when a read fails, a page goes away or too many connect."""
 
 import json
+import socket
 import time
 from collections.abc import Iterator
 from dataclasses import replace
 from http.client import HTTPConnection, HTTPResponse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import ip_address
 from pathlib import Path
 
 import pytest
 
+from taskloop import dash_server
 from taskloop.dash_duration import Duration
 from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, LandDetail, Outcome, TaskDetail, TrackerDetail, Usage
 from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
@@ -88,9 +92,9 @@ def part(value: object) -> dict[str, object]:
 class Stream:
     """One page on `/api/events`: its messages as they come."""
 
-    def __init__(self, server: DashServer) -> None:
+    def __init__(self, server: DashServer, host: str | None = None) -> None:
         self.connection = HTTPConnection(*server.address, timeout=5)
-        self.connection.request("GET", "/api/events")
+        self.connection.request("GET", "/api/events", headers={} if host is None else {"Host": host})
         self.response: HTTPResponse = self.connection.getresponse()
 
     def close(self) -> None:
@@ -112,7 +116,7 @@ def served(tmp_path: Path, require_loopback: None) -> Iterator[tuple[Ports, Dash
     (tmp_path / "index.html").write_text("<html>page</html>")
     (tmp_path / "secret.txt").write_text("not served")
     fake = Ports(tmp_path)
-    server = DashServer(fake.ports, 0)
+    server = DashServer(fake.ports, ip_address("127.0.0.1"), 0)
     server.start()
     yield fake, server
     server.stop()
@@ -126,6 +130,63 @@ def get(server: DashServer, path: str, host: str | None = None) -> tuple[int, by
     connection.endheaders()
     response = connection.getresponse()
     return response.status, response.read()
+
+
+@pytest.mark.parametrize(("host", "family", "authority"), [
+    ("127.0.0.2", socket.AF_INET, "127.0.0.2:8123"), ("::1", socket.AF_INET6, "[::1]:8123"),
+    ("192.0.2.4", socket.AF_INET, None), ("0.0.0.0", socket.AF_INET, None), ("::", socket.AF_INET6, None),
+])
+def test_listener_uses_the_selected_literal_family_and_allocated_port(
+    host: str, family: int, authority: str | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bound: list[tuple[str, int]] = []
+
+    def listener(server: ThreadingHTTPServer, address: tuple[str, int], _handler: type[BaseHTTPRequestHandler]) -> None:
+        bound.append(address)
+        assert server.address_family == family
+        server.server_address = (address[0], 8123, 0, 0) if family == socket.AF_INET6 else (address[0], 8123)
+
+    monkeypatch.setattr(ThreadingHTTPServer, "__init__", listener)
+    server = DashServer(Ports(tmp_path).ports, ip_address(host), 0)
+    assert bound == [(host, 0)] and server.address == (host, 8123)
+    assert (server.hosts is None) == (authority is None)
+    if authority is not None:
+        assert server.hosts is not None and authority in server.hosts
+
+
+def test_explicit_non_loopback_allows_proxy_hosts_for_page_api_and_events(
+    tmp_path: Path, require_loopback: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def local_listener(address: tuple[str, int], handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
+        assert address == ("192.0.2.4", 0)
+        return ThreadingHTTPServer(("127.0.0.1", 0), handler)
+
+    monkeypatch.setattr(dash_server, "_HTTPServer", local_listener)
+    (tmp_path / "index.html").write_text("<html>page</html>")
+    server = DashServer(Ports(tmp_path).ports, ip_address("192.0.2.4"), 0)
+    server.start()
+    try:
+        assert get(server, "/", "dashboard.example") == (200, b"<html>page</html>")
+        assert get(server, "/api/board", "dashboard.example")[0] == 200
+        stream = Stream(server, "dashboard.example")
+        try:
+            assert stream.response.status == 200 and stream.response.readline() == b": open\n"
+        finally:
+            stream.close()
+    finally:
+        server.stop()
+
+
+def test_binding_a_literal_performs_no_dns_lookup(tmp_path: Path, require_loopback: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unexpected_lookup(_host: str) -> str:
+        pytest.fail("a literal bind address must not trigger DNS lookup")
+
+    monkeypatch.setattr(socket, "getfqdn", unexpected_lookup)
+    server = DashServer(Ports(tmp_path).ports, ip_address("127.0.0.1"), 0)
+    try:
+        assert server.address[0] == "127.0.0.1" and server.address[1] > 0
+    finally:
+        server.http.server_close()
 
 
 def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served: tuple[Ports, DashServer]) -> None:
