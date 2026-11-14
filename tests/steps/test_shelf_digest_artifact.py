@@ -10,7 +10,7 @@ from taskloop.shelf_digest.render import TOKEN_LIMIT
 from taskloop.shelf_digest.source import relative_path
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE_COMMIT = "937dcc5c46e49eaee42865c3063f56874b1e9108"
+SOURCE_COMMIT = "9c93e77e742a18d63616cd44e53ded71bf6f204b"
 
 
 def test_artifact_decodes_all_six_manifest_identities() -> None:
