@@ -57,7 +57,8 @@ class Handoff:
         match found:
             case models.Result(record=Record() as record):
                 return stopped(self.execution(repo, record))
-        return refused(found.outcome)
+            case models.Result():
+                return refused(found.outcome)
 
     def conflicted(self, repo: Repo, request: Request, minutes: int | None, no_change: bool,
                    clock: Callable[[], float]) -> Failed:

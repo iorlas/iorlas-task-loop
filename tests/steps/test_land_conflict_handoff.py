@@ -12,6 +12,8 @@ from sqlite_store import Store
 
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt_types import AttemptKey
+from taskloop.dash_land import build_land
+from taskloop.dash_model import LandDetail
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
@@ -23,6 +25,7 @@ from taskloop.land_conflict.execute import Ports as ExecutionPorts
 from taskloop.land_conflict.execute import execute
 from taskloop.land_conflict.handoff import request_for
 from taskloop.land_conflict.models import Record
+from taskloop.land_summary import LandSummary
 from taskloop.merge.models import Phase, Result
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
@@ -148,10 +151,34 @@ def test_completed_resolution_and_repeated_reads_never_validate_or_deliver(b: La
     work = case.ports.merges.get(case.record.key.attempt_id)
     saved = ports.conflicts.store.saved(case.record.key)
     assert work is not None and work.phase is Phase.COMPLETE and saved is not None and saved.accepted
+    assert case.record.request.target == target and case.record.request.deadline == b.now + 300
+    assert case.record.request.checked == b.x
+    reservations = b.reservations()
+    assert reservations == [("s1", case.record.key.attempt_id)]
     before = list(b.environment.events)
-    assert land(ports, replace(request, minutes=None)) == first
-    assert case.calls == 1 and b.environment.events == before
-    unchanged_input(b, target)
+    for clean in (False, True):
+        if clean:
+            b.now += 100
+            target = b.advance({"README": "the task\n"})
+        for _ in range(2):
+            summary = land(ports, replace(request, minutes=None, mode="summary"))
+            assert isinstance(summary, LandSummary)
+            assert summary.origin == target and summary.x == b.x
+            assert (summary.state, summary.conflicts) == (("no_change", ()) if clean else ("conflict", ("README",)))
+            dashboard = build_land(ports, "tasks", "tl-1", b.repo.path)
+            assert isinstance(dashboard, LandDetail)
+            action = "main already contains" if clean else "blocked by conflicts"
+            assert any(action in each for each in dashboard.actions)
+            assert dashboard.command.endswith("--no-change") is clean
+            assert case.calls == 1 and b.environment.events == before
+            assert b.reservations() == reservations and ports.conflicts.store.saved(case.record.key) == saved
+            assert case.ports.merges.get(case.record.key.attempt_id) == work
+            unchanged_input(b, target)
+        assert land(ports, replace(request, minutes=None)) == first
+        assert case.calls == 1 and b.environment.events == before
+        assert b.reservations() == reservations and ports.conflicts.store.saved(case.record.key) == saved
+        assert case.ports.merges.get(case.record.key.attempt_id) == work
+        unchanged_input(b, target)
 
 
 def test_running_resolution_is_retryable_and_restart_keeps_its_original_admission(b: LandBench) -> None:
