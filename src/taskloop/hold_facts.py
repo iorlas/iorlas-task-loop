@@ -5,20 +5,25 @@ the agent's explanation from its stored valid answer (decoded by the step kind's
 Agent text goes to the person only, through `hold_text`."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import get_args
 
 from taskloop.agents.stop_store import StopStore
 from taskloop.answer_read import read as read_answer
-from taskloop.attempt_reads import AttemptRow, StoreRefused
+from taskloop.attempt_reads import AttemptRow, StoreRefused, StoreUnavailable
 from taskloop.attempt_result import collect
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import StoredExecution
 from taskloop.check_status import latest
-from taskloop.check_store import CheckStore
+from taskloop.check_store import ChecksRow, CheckStore
 from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.hold_cause import TerminalCause, terminal_cause
 from taskloop.hold_store import HoldRow
 from taskloop.hold_text import FailedCheck, HoldFacts, Kept, KeptWord, LabelsWord, Leftovers, Returned
+from taskloop.land_conflict.models import AdmissionRefused, Request
+from taskloop.land_conflict.store import ConflictStore
+from taskloop.merge.models import Phase
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed, ReleasedTask
 from taskloop.setup_store import SetupStore
@@ -74,11 +79,36 @@ def explanation(files: EvidenceFiles, execution: StoredExecution | None, step: s
     return None if answer is None else answer.explanation
 
 
+def land_explanation(reader: AttemptStore, agent: AttemptRow, checks: ChecksRow) -> str | None:
+    """Read only the terminal decision belonging to this exact retained admission, even after its release."""
+    request = Request(source=agent.key, checks=checks.key, repo_id=checks.repo_id, backlog=checks.backlog,
+                      task_id=checks.task_id, tracker_root=checks.tracker_root, checked=checks.commit,
+                      target=checks.commit, deadline=0.0)
+    try:
+        record = ConflictStore(reader.connect, reader.begin).find(request)
+    except (AdmissionRefused, ValueError) as error:
+        raise StoreUnavailable("The retained conflict admission cannot be verified") from error
+    if record is None:
+        return None
+    work = MergeStore(reader.connect, reader.begin).get(record.key.attempt_id)
+    if work is None:
+        return None
+    if ((work.attempt_id, work.dispatch_token, work.generation) !=
+            (record.key.attempt_id, record.key.dispatch_token, record.key.reservation_generation)
+            or (work.task_id, work.repo_id, work.source, work.target, work.deadline, work.branch) !=
+            (request.task_id, request.repo_id, request.checked, record.request.target, record.request.deadline, None)
+            or (work.base, work.slot, work.setting, work.input_path, work.input_digest) !=
+            (record.base, Path(record.slot_path), record.inputs.setting, record.inputs.input_ref.path, record.inputs.input_ref.digest)
+            or work.phase is not Phase.TERMINAL or not work.explanation.strip()):
+        raise StoreUnavailable("The retained terminal conflict decision cannot be verified")
+    return work.explanation
+
+
 def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: LabelsWord, agent: AttemptRow,
           leftovers: tuple[str, ...]) -> HoldFacts:
     """The comment's facts, from the stored hold, never from whichever view the caller has now (after the abandon a
     checks cause's task shows its implement attempt): a checks cause (`cause_id` is not A) is that checks attempt, its
-    latest block's failed checks with their logs and its evidence directory, with no agent explanation; an agent cause
+    latest block's failed checks with their logs and its evidence directory, plus a verified terminal land explanation; an agent cause
     is A with its stored answer's explanation and (`repeats_exhausted`) the `leftovers` the caller read. A's X and
     publication either way. StoreRefused `changed` when the checks cause is no longer stored."""
     published = None if agent.published is None else agent.published.commit
@@ -92,7 +122,8 @@ def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: Labe
             FailedCheck(each.name, encode(each.conclusion) or "unfinished",
                         "" if each.conclusion == CommandConclusion.UNDEFINED else str(files.check_path(checks.key, each.block, each.name)))
             for each in store.results(checks.key) if each.conclusion != CommandConclusion.PASSED)
-        return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit, None, failed, None,
+        told = land_explanation(reader, agent, checks) if terminal_cause(row.reason) is TerminalCause.LAND_CONFLICT else None
+        return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit, told, failed, None,
                          str(files.root / files.directory(checks.key)), files.last_entry(checks.key), checks.deadline)
     left = Leftovers(leftovers[0], leftovers[1:]) if leftovers and row.reason.startswith("repeats_exhausted") else None
     if agent.key.attempt_id != row.cause_id:

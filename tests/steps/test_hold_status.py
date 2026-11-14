@@ -19,7 +19,7 @@ from taskloop.attempt_types import AttemptResult, Unsettled
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold_guide import HOLD
+from taskloop.hold_guide import HOLD, hold_guide
 from taskloop.hold_status import cause, finished, reingests
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
 from taskloop.operations import Failed
@@ -88,6 +88,25 @@ def test_the_hold_decides_the_word_after_every_rule_but_unknown(view: AttemptVie
 ])
 def test_only_a_hold_that_removed_the_round_s_own_label_is_taken_again(word: str, row: HoldRow | None, label: str, taken: bool) -> None:
     assert reingests(word, row, label) is taken
+
+
+@pytest.mark.parametrize(("reason", "retry"), [
+    ("land:conflict", False), ("merge:needs_owner", False), ("land:checks_failed", True),
+    ("land:remote_rejected", True), ("land:branch_moved", True), ("land:claim_lost", True),
+])
+def test_terminal_decisions_resist_restored_approval_labels(reason: str, retry: bool) -> None:
+    assert reingests("on_hold", replace(ROW, reason=reason), "auto") is retry
+
+
+@pytest.mark.parametrize("pending", [True, False])
+def test_terminal_land_guidance_preserves_work_without_restart_advice(pending: bool) -> None:
+    row = replace(ROW, reason="land:conflict")
+    view = replace(VIEW, next="hold" if pending else "on_hold", hold=None if pending else row,
+                   hold_due=row.reason if pending else None)
+    text = hold_guide(view)
+    assert "retained task work" in text and "stays held" in text
+    assert "do not restart" in text and "resolution limit" in text
+    assert "To answer" not in text and "`bd" not in text and "`tl" not in text
 
 
 def plan(con: sqlite3.Connection, *, label: str | None = "auto", released: str | None = None) -> None:

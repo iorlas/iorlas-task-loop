@@ -11,6 +11,7 @@ from typing import Final, Literal, Protocol
 from taskloop.attempt_reads import ReleaseRow
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_types import AttemptResult
+from taskloop.hold_cause import terminal_cause
 from taskloop.hold_store import HoldRow
 from taskloop.merge.models import PREFIX as MERGE
 
@@ -83,5 +84,5 @@ def reingests(word: str, row: HoldRow | None, label: str) -> bool:
     """Section 7.2: an `on_hold` task is taken again by a round under `label` only when its hold removed (or found absent)
     the very label the task was taken under and that label is the round's: a later ready read with it is the person's
     answer. Any other abandon (another labels word, a hand abandon, another round label) keeps the `abandoned` skip."""
-    return (word == "on_hold" and row is not None and not row.reason.startswith(MERGE)
+    return (word == "on_hold" and row is not None and terminal_cause(row.reason) is None
             and row.labels in ANSWERED and row.label == label)

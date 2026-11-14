@@ -14,7 +14,7 @@ from typing import Final, Literal
 
 from taskloop.agents.stop_models import AgentStop
 from taskloop.evidence_files import TERMINATED
-from taskloop.hold_cause import cause, next_step
+from taskloop.hold_cause import cause, next_step, terminal_cause
 from taskloop.printable import one_line
 
 EXPLANATION: Final = 2000
@@ -166,9 +166,9 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
 def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     """The cause's own line, then its one next step: an owner's answer only for a cause an answer fixes."""
     task, found = one_line(facts.task_id), cause(facts.reason, facts.deadline, facts.stop, facts.rc)
-    if facts.reason.startswith("merge:"):
-        return ["Main's merge stopped for a decision. The retained task work and resolution evidence remain available. "
-                "The task stays held; approval labels do not restart its plan or reset the resolution limit."]
+    terminal = terminal_cause(facts.reason)
+    if terminal is not None:
+        return [terminal.explanation]
     if facts.labels == "not_ours":
         retry = "resolve its ownership with the current actor: rounds do not take it again"
     elif facts.label is None:
