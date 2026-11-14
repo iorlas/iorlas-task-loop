@@ -8,7 +8,8 @@ from pathlib import Path
 from git_porcelain import GitUnavailable
 
 from taskloop.git_views import GitViews
-from taskloop.shelf_digest.generate import Digest, generate_digest
+from taskloop.shelf_digest.generate import Digest, generate_installed_digest
+from taskloop.shelf_digest.installed import InstalledDistributions
 from taskloop.shelf_digest.render import render_digest
 
 
@@ -16,12 +17,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m taskloop.shelf_digest", allow_abbrev=False)
     parser.add_argument("--checkout", type=Path, default=Path("."), metavar="PATH", help="Task-loop checkout (default: .)")
     parser.add_argument("--at", default="HEAD", metavar="REV", help="Task-loop revision (default: HEAD)")
-    parser.add_argument("--shelf", type=Path, required=True, metavar="PATH", help="Shelf checkout containing the pinned objects")
     arguments = parser.parse_args(argv)
     try:
         views = GitViews(30)
-        result = generate_digest(views.checkouts(arguments.checkout.expanduser().resolve()), arguments.at,
-                                 views.checkouts(arguments.shelf.expanduser().resolve()))
+        result = generate_installed_digest(views.checkouts(arguments.checkout.expanduser().resolve()), arguments.at,
+                                           InstalledDistributions())
         if not isinstance(result, Digest):
             print(result.explanation, file=sys.stderr)
             return 1
