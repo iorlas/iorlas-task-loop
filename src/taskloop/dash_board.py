@@ -10,6 +10,7 @@ from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, StatusPorts, list_attempts
 from taskloop.dash_model import Board, Card, Column, DashTracker, LandState, Repeat, iso
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.land_policy import LandPolicy, decision
 from taskloop.land_status import LandView
 from taskloop.operations import Failed
 from taskloop.profile import LandMode
@@ -34,11 +35,8 @@ def column_of(view: AttemptView, found: TaskStatus | None = None) -> Column:
 
 
 def land_state(land: LandView | None, mode: LandMode | None = None) -> LandState:
-    """`landing` only while a land is observed running; any other task in the land column waits: for a person only when the
-    profile says `manual`, else for the next round (also when the profile cannot be read: no policy is claimed)."""
-    if landing(land):
-        return "landing"
-    return "manual" if mode is LandMode.MANUAL else "waiting"
+    """The same landing decision used by CLI status; an unknown policy promises no action."""
+    return decision(LandPolicy(mode), running=landing(land), delivered=land is not None and land.row.delivery is not None)
 
 
 def admission_of(reads: StatusPorts, approved: frozenset[str]) -> Admission:
@@ -94,7 +92,8 @@ def card_of(
     view: AttemptView, row: AttemptRow | None, title: str, files: EvidenceFiles, now: float, number: int | None = None,
     admission: Admission | None = None, mode: Callable[[], LandMode | None] = lambda: None,
 ) -> Card:
-    found = task_status(view, admission)
+    policy = view.policy if view.policy.commit is not None else LandPolicy(mode())
+    found = task_status(view, admission, policy)
     column = column_of(view, found)
     started = _started(view, row, files, column)
     quiet = now - view.last_command if isinstance(view.last_command, int) and column != "waiting" else None
@@ -103,7 +102,8 @@ def card_of(
     shown = view.number if number is None else number
     return Card(view.task_id, title, column, shown, _repeat(view), iso(started), iso(quiet if quiet is not None else started),
                 view.slot if holding else None, cause if column == "held" else None,
-                land_state(view.land, mode()) if column == "land" else None, found.status.value, words(found))
+                (found.landing or land_state(view.land, policy.mode)) if column == "land" else None,
+                found.status.value, words(found), found.policy_commit)
 
 
 def build_board(ports: BoardPorts) -> Board | Failed:

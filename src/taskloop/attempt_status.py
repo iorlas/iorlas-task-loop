@@ -7,7 +7,7 @@ of tl-8bh9.14.6): the view's step, attempt, slot, phase, entry, result, deadline
 then that checks attempt's (`check_status`); the backlog, task, order and publication stay the implement attempt's."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import pairwise
 from pathlib import Path
@@ -26,6 +26,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_facts import explanation
 from taskloop.hold_status import cause, hold_next
 from taskloop.hold_store import HoldRow, HoldStore
+from taskloop.land_policy import LandPolicy
 from taskloop.land_status import LandView, land_next, land_view, with_logs
 from taskloop.operations import Clock, Failed
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
@@ -54,6 +55,7 @@ class StatusPorts:
     boot: Callable[[], str | None]  # this machine's boot id, None when unknown (then no attempt counts as rebooted)
     commands: SetupSeen = lambda _process: "gone"  # a checks attempt's registered commands (the CLI: `setup_seen`)
     last_command: Callable[[AttemptKey], float | Literal["none", "unreadable"]] = lambda _key: "none"  # wall time of its latest command
+    policy: Callable[[Path, str], LandPolicy] = lambda _path, _repo: LandPolicy()
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,8 @@ class AttemptView:
     # `none`: no command noted yet, `unreadable`: the evidence is; None unless the agent can be running (entry `running`)
     check_repeat_eligible: bool = False
     source_checks_id: str | None = None
+    policy: LandPolicy = field(default_factory=LandPolicy)
+    repo_id: str = ""
     hold_due: str | None = None  # `Next: hold` with no hold recorded yet: the reason the next round holds it for
 
 NEEDS_OWNER = "needs_owner"  # the answer's disposition (and the collected result's reason) of a step that needs a decision
@@ -186,8 +190,10 @@ def _swapped(
     next_word = land_next(checks_next(latest, entry, expired, commands), latest, land)
     if repeat is CheckRepeatDecision.REPEAT:
         next_word = "wait" if entry == "running" else "unknown" if entry == "unknown" else "repeat"
+    path = reads.store.slot_path(latest.key.attempt_id)
+    policy = reads.policy(Path(path), view.repo_id) if path is not None else LandPolicy()
     return replace(
-        view, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
+        view, policy=policy, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
         result=checks_result(latest),
         deadline_passed=expired if latest.concluded_at is None else latest.concluded_at >= latest.deadline,
         next=next_word, check_repeat_eligible=repeat in (CheckRepeatDecision.RELEASE, CheckRepeatDecision.REPEAT),
@@ -208,7 +214,8 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
     left = reads.leftovers(row.key) if probe and next_word == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
     ended = {"seq": row.seq, "release": row.release, "published": row.published, "label": row.label,
-             "last_command": _idle(reads, row.key) if entry == "running" else None, "source_checks_id": row.source_checks_id}
+             "last_command": _idle(reads, row.key) if entry == "running" else None, "source_checks_id": row.source_checks_id,
+             "repo_id": row.repo_id}
     late = expired if row.phase != "captured" or result.execution is None else result.execution.facts.timed_out
     if left is None or left.reason not in REPEATABLE:
         shown = (left.reason, *left.listing) if left is not None and left.reason in SHOWN else ()  # `head_moved`: the agent's refs

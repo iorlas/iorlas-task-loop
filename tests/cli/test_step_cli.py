@@ -58,6 +58,7 @@ ERROR = {"kind", "reason", "message"}  # every refusal or unknown but an admissi
 ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step start`
 STATUS_KEYS = {
     "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "status",
+    "status_note", "landing",
     "entry_process", "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release",
     "published", "checks", "land", "label", "hold", "hold_due", "last_command", "source_checks_id",
 }
@@ -591,7 +592,7 @@ def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_pa
         found = run_round(
             ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
         )
-    assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
+    assert isinstance(found, Failed) and found.word == "refused:checkout"
 
 
 ROUNDS = ["step", "rounds", "--no-dashboard", *NEXT[2:]]

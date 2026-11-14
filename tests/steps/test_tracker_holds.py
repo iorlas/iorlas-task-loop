@@ -157,3 +157,10 @@ def test_the_unclaim_of_a_closed_or_deleted_task_is_not_held(tmp_path: Path, rep
 def test_any_other_unclaim_failure_still_raises_and_stays_unclaiming(tmp_path: Path, reply: tuple[str, str, int]) -> None:
     with pytest.raises(BdError):
         tracker_claims(Script().say(*reply)).unclaim(str(tmp_path), "tl-1")
+
+
+
+def test_a_hand_started_land_hold_adds_held_without_removing_any_label(tmp_path: Path) -> None:
+    script = Script().say(show(labels=("other",)))
+    assert tracker_holds(script).labels(str(tmp_path), "tl-1", None) == HoldAnswer("absent", "taskloop")
+    assert calls(script) == [SHOW, fence("taskloop"), ADD]

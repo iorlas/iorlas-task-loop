@@ -256,3 +256,23 @@ Completion requires the reported hand-start reproduction to land automatically,
 truthful policy/status in all consumers, a textual conflict to finish without
 replanning, and crash/hold/validation tests proving that delivery safety remains
 owned by the existing land operation.
+
+
+## Implementation progress (unfinished)
+
+This attempt implements the selection/presentation portion: rounds select released
+passing checks without requiring an admission label, scope existing work to the
+checkout repository and backlog, and refresh landing views after settlement.
+CLI, board and drawer share a typed landing decision including unknown policy and
+the immutable policy commit. Land refusals about unlabelled work can be held once;
+the tracker adds `held` without removing another label. The schema interpretation
+version is 21 because older readers cannot read these unlabelled holds; the
+existing guard requires drain under matching code before database discard. Focused tests exercise
+single delivery/close, the policy matrix, isolation, newly released checks and holds.
+
+The conflict-resolution portion is **not implemented**. In particular there is no
+persisted land agent attempt, merge preparation/acceptance, three-execution bound,
+resolution reconciliation, preservation/release integration or continuation after
+an owner answer. Existing conflicts still follow the old refusal/restart route.
+The decisions above remain the intended implementation; these partial changes do
+not complete this task and must not be reported as an implemented result.

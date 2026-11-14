@@ -69,7 +69,7 @@ class HoldFacts:
     """Everything the comment says, as the hold read it."""
 
     task_id: str
-    label: str  # the approval label the task was taken under (`attempt.label`)
+    label: str | None  # the approval label the task was taken under (`attempt.label`)
     labels: LabelsWord
     reason: str
     step: str
@@ -126,6 +126,8 @@ def _details(facts: HoldFacts) -> list[str]:
 
 
 def _labelled(facts: HoldFacts) -> str:
+    if facts.label is None:
+        return "The factory added `held`" if facts.labels != "not_ours" else "The factory changed no label (another actor holds this task)"
     label = one_line(facts.label, 200)
     return {"moved": f"The factory removed `{label}` and added `held`",
             "absent": f"The factory added `held` (`{label}` is no longer on the task)",
@@ -164,7 +166,9 @@ def claim_line(facts: HoldFacts, outcome: Returned | Kept) -> str:
 def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     """The cause's own line, then its one next step: an owner's answer only for a cause an answer fixes."""
     task, found = one_line(facts.task_id), cause(facts.reason, facts.deadline)
-    if facts.labels == "not_ours":
+    if facts.label is None:
+        retry = "explicitly approve another attempt after addressing this hold"
+    elif facts.labels == "not_ours":
         retry = f"start it by hand (`tl step start {task}`): rounds do not take it again"
     else:
         retry = f"run `bd label add {task} {one_line(facts.label, 200)}`: the next round starts it again at plan on task/{task} as it is"

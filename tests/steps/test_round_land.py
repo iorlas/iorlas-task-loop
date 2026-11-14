@@ -5,6 +5,7 @@ next round, a refusal only a person decides is reported and leaves the task wait
 
 import json
 from collections.abc import Generator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -187,3 +188,39 @@ def test_the_dashboard_asks_the_profile_again_only_after_the_cache_runs_out() ->
     assert [mode(), mode()] == [LandMode.AUTO, LandMode.AUTO] and len(asked) == 1
     now[0] = 31.0
     assert mode() is LandMode.AUTO and len(asked) == 2
+
+
+@pytest.mark.parametrize("reason", ["conflict", "checks_failed", "remote_rejected", "branch_moved", "claim_lost"])
+def test_an_unlabelled_land_refusal_is_held_once_and_preserves_other_labels(rig: Checking, reason: str) -> None:
+    passed(rig)
+    rig.con.execute("UPDATE attempt SET label=NULL")
+    rig.tracker.beads["tl-1"] = replace(rig.tracker.beads["tl-1"], labels=("other",))
+    lands = Lands(LandMode.AUTO, Failed("refused", reason))
+    rig.landing = lands.landing()
+    rig.round(rig.last.written)
+    assert rig.next_words()["tl-1"] == ("implement", "on_hold")
+    rig.round(rig.last.written)
+    assert len(lands.requests) == 1 and len(rig.tracker.comments) == 1
+    assert rig.tracker.beads["tl-1"].labels == ("other", "held")
+    [(_, text)] = rig.tracker.comments
+    assert "The factory added `held`" in text and "removed" not in text and "`None`" not in text
+    assert "tl step" not in text
+
+
+def test_round_ignores_another_repository_in_the_same_backlog(rig: Checking) -> None:
+    passed(rig)
+    rig.con.execute("UPDATE attempt SET repo_id='another-repository'")
+    lands = Lands(LandMode.AUTO, "pushed")
+    rig.landing = lands.landing()
+    rig.round(rig.last.written)
+    assert lands.requests == [] and lands.reads == 0
+
+
+def test_newly_released_checks_can_land_in_the_same_round(rig: Checking) -> None:
+    implemented(rig)
+    rig.bodies = ["unreleased"]
+    rig.round()
+    lands = Lands(LandMode.AUTO, "pushed")
+    rig.landing = lands.landing()
+    rig.round(rig.last.written)
+    assert [request.task_id for request in lands.requests] == ["tl-1"]

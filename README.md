@@ -6,7 +6,10 @@ read-only dashboard. It admits approved tasks into free slots, publishes verifie
 environment and runs the profile's `setup` (Linux only); Codex agents work offline with that environment.
 Rounds advance tasks through checks. Land defaults to `manual`: the person delivers a checked task with `tl step land`.
 With `land: auto` in the target profile read from origin's `main`, a round runs the same land operation for at most
-one task per round. Refusals about the task's change hold it with the recorded cause, preventing repeated attempts
+one task per round, oldest released checks first, including tasks started by hand without an admission label.
+Selection is limited to the chosen repository and backlog. Status uses the known origin main policy: automatic
+delivery waits for the factory, manual delivery waits for a person, and unavailable policy promises no automatic delivery.
+Refusals about the task's change hold it with the recorded cause, preventing repeated attempts
 until the person answers. Other refusals leave it waiting; unavailable results can be retried.
 Review remains future work; the retained designs describe more than the implemented factory.
 

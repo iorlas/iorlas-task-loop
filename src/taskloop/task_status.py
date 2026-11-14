@@ -15,14 +15,17 @@ from typing import Final
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView
 from taskloop.hold_status import RETURNED, reingests
+from taskloop.land_policy import LandPolicy, LandState, decision
+from taskloop.land_policy import words as land_words
 from taskloop.land_status import LandView
+from taskloop.profile import LandMode
 
 
 class Status(StrEnum):
     RUNNING = "running"  # an agent step runs (plan, implement)
     CHECKING = "checking"  # the check step runs
     SETTLING = "settling"  # the factory moves it: starting, verifying, repeating, releasing, publishing, advancing
-    WAITING_FOR_LAND = "waiting_for_land"  # checked and passed: the person's `tl step land`
+    WAITING_FOR_LAND = "waiting_for_land"  # checked and passed: the landing decision says who delivers
     LANDING = "landing"  # a land is observed running
     LANDED = "landed"
     HELD = "held"  # a hold, due or recorded: waits for a person (its reason is the hold's)
@@ -61,6 +64,8 @@ class TaskStatus:
     reason: str | None = None  # the stored typed reason: a hold's, a failed result's, a `stuck:*` word, a setting's `Next` word
     wait: Wait | None = None  # QUEUED only
     skip: str | None = None  # QUEUED with `Wait.SKIPPED`: the selection rule's word
+    landing: LandState | None = None
+    policy_commit: str | None = None
 
 
 def blocker(free: int, reserve: int, running: int, bound: int) -> Wait:
@@ -74,6 +79,14 @@ def blocker(free: int, reserve: int, running: int, bound: int) -> Wait:
 
 def skipped(rule: str) -> TaskStatus:
     return TaskStatus(Status.QUEUED, rule, Wait.SKIPPED, rule)
+
+
+def waiting_for_land(view: AttemptView) -> bool:
+    """Released passing checks eligible for land, independently of the admission label."""
+    checks = view.checks
+    return (view.next == "land" and checks is not None and checks.row.conclusion == "passed"
+            and checks.row.released_at is not None and not checks.row.abandoned
+            and view.hold is None and not (view.release is not None and view.release.abandoned))
 
 
 def landing(land: LandView | None) -> bool:
@@ -100,20 +113,24 @@ def _stopped(view: AttemptView) -> TaskStatus | None:
     return TaskStatus(Status.ABANDONED, view.next) if view.release is not None and view.release.abandoned else None
 
 
-def _moving(view: AttemptView) -> TaskStatus | None:
+def _moving(view: AttemptView, policy: LandPolicy) -> TaskStatus | None:
     if view.next == "land":
-        return TaskStatus(Status.LANDING if landing(view.land) else Status.WAITING_FOR_LAND)
+        known = policy if policy.mode is not LandMode.AUTO or waiting_for_land(view) else LandPolicy(commit=policy.commit)
+        state = decision(known, running=landing(view.land),
+                         delivered=view.land is not None and view.land.row.delivery is not None)
+        return TaskStatus(Status.LANDING if landing(view.land) else Status.WAITING_FOR_LAND,
+                          landing=state, policy_commit=policy.commit)
     if view.next == "wait":
         return TaskStatus(Status.CHECKING if view.step == "check" else Status.RUNNING)
     return TaskStatus(Status.SETTLING, view.next) if view.next in SETTLING else None
 
 
-def task_status(view: AttemptView, admission: Admission | None = None) -> TaskStatus:
+def task_status(view: AttemptView, admission: Admission | None = None, policy: LandPolicy | None = None) -> TaskStatus:
     """The status of the task whose current view this is. Without `admission` a task that waits for a new attempt is `ABANDONED`
     (or held): the reader does not know the approval label."""
     if admission is not None and restartable(view, admission):
         return TaskStatus(Status.QUEUED, view.next, admission.wait)
-    found = _stopped(view) or _moving(view)
+    found = _stopped(view) or _moving(view, view.policy if policy is None else policy)
     if found is not None:
         return found
     if view.next == "done" and succeeded(view.result):
@@ -129,6 +146,8 @@ def in_flight(views: tuple[AttemptView, ...]) -> frozenset[str]:
 
 def words(found: TaskStatus) -> str:
     """The status in plain words, for a list row, a card and a round's skip line."""
+    if found.landing is not None:
+        return land_words(found.landing)
     reason = "" if found.reason is None else f" ({found.reason})"
     waits: Mapping[Wait, str] = {
         Wait.READY: "queued to start: the next round starts it", Wait.NO_FREE_SLOT: "queued to start: no free slot",

@@ -152,6 +152,8 @@ class Bench:
             con.execute("INSERT OR IGNORE INTO slot (repo_id,name,path) VALUES ('other','s1','/other/s1')")
         self.store, self.ready = AttemptStore(lambda: con), ready or ReadyTracker()
         self.admission, self.launcher, self.repeats, self.recorded = admission or Admission(), FakeLauncher(), Repeats(), Recorded()
+        repository = con.execute("SELECT repo_id FROM attempt LIMIT 1").fetchone()
+        self.repo_id = str(repository[0]) if repository is not None else "repo"
         self.now = 10.0
         self.during: Callable[[], object] = lambda: None
         self.seen: Seen = "gone"
@@ -177,7 +179,8 @@ class Bench:
         starting = StartPorts(self.store, self.admission, self.launcher, lambda: self.now, self.repeats, self.advance, NO_CHECKS)
         holding = HoldPorts(HoldStore(self.store.connect), self.store, no_holds(), self.releaser, NoChecks(), lambda: self.now,
                             EvidenceFiles(Path("/artifacts")), lambda _backlog, _task: None)  # no label here: nothing is held
-        return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, holding, self.ready, self.log, self.stopping)
+        return RoundPorts(reads, starting, self.verifier, self.releaser, self.publisher, holding, self.ready, self.log,
+                          lambda _path: self.repo_id, self.stopping)
 
     def round(self, request: NextRequest = REQUEST) -> Round:
         found = run_round(self.ports(), request)
@@ -381,6 +384,7 @@ def test_with_every_slot_reserved_a_done_step_waits_without_a_tracker_read(
     store = verified_released(registered, tmp_path, slot, checkouts, slot_files)
     assert isinstance(BranchPublish(store, checkouts, slot_files, lambda: 40).publish(KEY), BranchPublished)
     seed(registered, "tl-2", "other", entry=ENTRY)
+    registered.execute("UPDATE attempt SET repo_id=? WHERE attempt_id='other'", (slot.repo.identity().key,))
     registered.execute("INSERT INTO reservation VALUES ('s1',?,2,'other')", (slot.repo.identity().key,))
     bench = Bench(registered, free=False)
     bench.seen, bench.advance = "matching", (advances := Advances(AdmitRefused("claim_lost")))

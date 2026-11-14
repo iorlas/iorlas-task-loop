@@ -47,7 +47,8 @@ def _when(at: float) -> str:
 def _tracker(row: HoldRow) -> str:
     if row.labels is None:
         return "Hold tracker: labels not yet, not commented"
-    written = LABELS[row.labels].format(label=one_line(row.label, 200))
+    written = ("added `held`" if row.label is None and row.labels == "absent"
+               else LABELS[row.labels].format(label=one_line(row.label or "", 200)))
     said = "commented" if row.commented_at is not None else "no comment" if row.labels in ("closed", "missing") else "not commented yet"
     return f"Hold tracker: {written}, {said}{'' if row.cleared_at is None else ', `held` cleared'}"
 
@@ -79,12 +80,14 @@ def hold_guide(view: AttemptView) -> str:
         return ON_HOLD
     if row.labels in ("closed", "missing"):
         return "Held: the task is closed or gone in the tracker; nothing to answer."
-    task, label = view.task_id, one_line(row.label, 200)
+    task, label = view.task_id, one_line(row.label or "", 200)
     found, ours = cause(row.reason), row.labels != "not_ours"
     edit = "edit the task's description or acceptance criteria (the agent reads those, not comments)"
     again = f"the next round under that label starts it again at plan on task/{task} as it is"
     back = (f"add back the label the task was taken under (`bd label add {task} {label}`): {again}" if ours
             else f"start it by hand (`tl step start {task}`): rounds do not take it again")
+    if row.label is None:
+        back = "explicitly approve another attempt after addressing this hold"
     what = "" if found is None else " " + found.what
     answer = f"{LEAD}{what} {next_step(found, back, edit)} To give up, `bd close {task}`."
     if row.reason == "branch_moved":

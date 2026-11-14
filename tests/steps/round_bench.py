@@ -74,7 +74,7 @@ class Tracker:
         self.comments: list[tuple[str, str]] = []
         self.holds: list[str] = []
 
-    def labels(self, _root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(self, _root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         """5.2: nothing written for a missing or closed task or another actor's; else `held` added and `label` removed."""
         self.holds.append(f"labels {task_id} {label}")
         found = self.beads.get(task_id)
@@ -218,7 +218,8 @@ class Factory:
         reads = StatusPorts(self.store, self.observe, lambda: self.now, verifier.leftovers, lambda: "boot")
         publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now)
         holding = self.holding(reads)
-        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker, self.lines.append)
+        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker, self.lines.append,
+                          lambda _path: self.slot.repo.identity().key)
 
     def round(
         self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto", running: int = 10

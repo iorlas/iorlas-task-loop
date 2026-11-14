@@ -135,8 +135,8 @@ const VIEWS = [["attempts", "Steps"], ["task", "Task"]];
 function placeOf(t) {
   const col = COLUMNS.find((c) => c.id === t.column);
   if (t.column !== "land") return { label: `${col.emoji} ${col.label}`, help: col.help };
-  const word = LAND[t.land ?? "waiting"];
-  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.land === "landing" ? "A land is putting the checked change on main now." : t.land === "manual" ? "Checked and ready; the profile says land: manual, so it waits for a person." : "Checked and ready; the next round lands it." };
+  const word = LAND[t.land ?? "unknown"];
+  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.land === "landing" ? "A land is putting the checked change on main now." : t.land === "manual" ? "Checked and ready; the profile says land: manual, so it waits for a person." : t.land === "waiting" ? "Waiting for the factory to land it." : t.land === "finishing" ? "The factory is finishing delivery." : "Landing policy is unavailable; no automatic delivery is promised." };
 }
 
 function head(t) {
@@ -182,7 +182,7 @@ function render() {
   }
   if (t.column === "land" && t.land === "manual") {
     const waiting = el("div", "px-6 pb-3");
-    waiting.append(callout(LAND.manual.bar, "Waiting for a person to land it", "The profile (.task-loop.json on main) says land: manual. Set it to auto and rounds land checked tasks by themselves."));
+    waiting.append(callout(LAND.manual.bar, "Waiting for a person to approve delivery", "The known origin main profile says land: manual."));
     drawer.append(waiting);
   }
   if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));

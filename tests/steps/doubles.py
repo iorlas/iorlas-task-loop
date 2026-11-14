@@ -225,7 +225,7 @@ class NoChecks:
 def no_holds() -> TrackerHolds:
     """The tracker's hold writes of a round that never holds a task nor clears a hold."""
 
-    def refuse(*args: str) -> HoldAnswer[LabelStep]:
+    def refuse(*args: str | None) -> HoldAnswer[LabelStep]:
         raise AssertionError(f"no hold tracker write expected: {args}")
 
     def unexpected(*args: str) -> HoldAnswer[HoldWrite]:

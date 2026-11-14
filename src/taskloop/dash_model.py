@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
+from taskloop.land_policy import LandState
+
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
-type LandState = Literal["waiting", "manual", "landing"]
 
 
 def iso(epoch: float | None) -> str | None:
@@ -36,6 +37,7 @@ class Card:
     land: LandState | None = None
     status: str | None = None  # `task_status.Status`: the one status of the task, for every reader
     status_note: str | None = None  # the status in plain words (`task_status.words`)
+    policy_commit: str | None = None
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,8 @@ is refused `claim_lost` or `branch_moved` is held), then admit eligible ready ta
 free, storing the round's label on each fresh attempt (an `on_hold` task whose hold removed this very label is eligible
 again: `hold_status.reingests`), then publish the verified, released, unpublished results read at the start (a
 round-taken `branch_moved` is held), then remove `held` from held tasks taken again (`hold.clear_holds`). Under the profile's
-`land: auto` it first lands the oldest passed task it took (`round_land`: `land.land`, as `tl step land` runs it). It adds no
+`land: auto` it first lands the oldest passed task in the selected repository and backlog
+(`round_land`: `land.land`, as `tl step land` runs it). It adds no
 state, lock, Git write, tracker write or process of its own beyond the hold's and the land's: its only other output is one
 append-only round-log line per move, never read back. No per-task hold word stops admission.
 
@@ -28,12 +29,13 @@ from functools import partial
 from pathlib import Path
 from typing import Final
 
+from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey
+from taskloop.attempt_types import AttemptKey, Checkouts
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.drain.store import DrainStore
@@ -119,6 +121,7 @@ class RoundPorts:
     holding: HoldPorts
     ready: ReadyRows
     log: Callable[[str], None]
+    repository: Callable[[Path], str | Failed]
     stopping: Callable[[], bool] = never
     drain_store: DrainStore | None = None
     generation: int | None = None  # captured at explicit rounds startup; older loops cannot schedule after reopening
@@ -173,20 +176,27 @@ def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     listed = list_attempts(ports.reads)
     if isinstance(listed, Failed):
         return listed
-    current = _backlog(listed, request.backlog)
+    repo_id = ports.repository(request.checkout)
+    if isinstance(repo_id, Failed):
+        return repo_id
+    current = _backlog(listed, request.backlog, repo_id)
     trail = Trail(ports.log, ports.reads.clock, request.backlog, request.quiet)
     for each in current:
         if ports.stopping():
-            return trail.close(INTERRUPTED)
+            break
         if each.next != "repeat" or each.checks is None:
             _settle(ports, request, each, trail)
+    refreshed = list_attempts(ports.reads) if ports.landing is not None else listed
+    if isinstance(refreshed, Failed):
+        return refreshed
+    for_land = _backlog(refreshed, request.backlog, repo_id)
     finished = frozenset() if ports.stopping() else land_passed(
-        ports.landing, request.backlog, request.checkout, request.minutes, current, trail, partial(_held, ports.holding))
-    reserve = int(any(each.next == "land" and each.task_id not in finished for each in current))
+        ports.landing, request.backlog, request.checkout, request.minutes, for_land, trail, partial(_held, ports.holding))
+    reserve = int(any(each.next == "land" and each.task_id not in finished for each in for_land))
     waiting = tuple(each for each in current if each.next == "advance" or _rerun(each)
                     or (each.next == "repeat" and each.checks is not None))
     stopped = _advance(ports, request, waiting, trail, reserve)
-    stopped = stopped or _admit(ports, request, current, trail, reserve)
+    stopped = stopped or _admit(ports, request, tuple(each for each in for_land if each.task_id not in finished), trail, reserve)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
     if stopped != INTERRUPTED and not ports.stopping():
@@ -200,8 +210,15 @@ def _rerun(each: AttemptView) -> bool:
     return each.next == "done" and each.label is not None and each.checks is not None and each.result.reason == MAIN_MOVED
 
 
-def _backlog(listed: Listed, backlog: str) -> tuple[AttemptView, ...]:
-    return tuple(each for each in listed.attempts if each.backlog == backlog)
+def repository_of(checkouts: Checkouts, checkout: Path) -> str | Failed:
+    found = checkout_repo(checkouts, checkout)
+    if isinstance(found, (AdmitRefused, AdmitUnavailable)):
+        return Failed("refused" if isinstance(found, AdmitRefused) else "unavailable", "checkout", found.detail)
+    return found[1]
+
+
+def _backlog(listed: Listed, backlog: str, repo_id: str) -> tuple[AttemptView, ...]:
+    return tuple(each for each in listed.attempts if each.backlog == backlog and each.repo_id == repo_id)
 
 
 def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: Trail) -> None:
