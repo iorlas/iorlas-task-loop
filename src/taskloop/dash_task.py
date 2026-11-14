@@ -106,6 +106,8 @@ def _agent(
     state: State = "running" if result.status != "collected" and row.held else "succeeded" if succeeded(result) else "failed"
     started = ports.files.started_at(row.key)
     ended = None if state == "running" or row.release is None else row.release.released_at
+    if state != "running" and ended is None and result.execution is not None:
+        ended = ports.files.captured_at(result.execution.evidence.diagnostics)
     after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == "plan" and row.seq > 1 else None
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)

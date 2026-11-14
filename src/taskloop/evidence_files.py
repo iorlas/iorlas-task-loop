@@ -234,6 +234,13 @@ class EvidenceFiles:
         except (OSError, EvidenceError):
             return None
 
+    def captured_at(self, ref: FileRef) -> float | None:
+        """Display-only end time from captured evidence; unknown when its file is unavailable."""
+        try:
+            return self._path(ref.path).stat().st_mtime
+        except (OSError, EvidenceError):
+            return None
+
     def text(self, key: AttemptKey, name: Literal["input.txt", "answer.txt"], cap: int = 65536) -> str | None:
         """Read-only: the first `cap` bytes of the attempt's input or answer file, None when absent or unreadable. Display
         only (the dashboard's prompt and agent answer); never control state."""
