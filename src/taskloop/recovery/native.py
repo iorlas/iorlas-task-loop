@@ -67,14 +67,17 @@ class NativeContinuation:
             callbacks.observe(value)
 
         stops = AgentStops(StopStore(app.registration_store.connect, app.registration_store.begin), admission, app.clock)
+        duration = app.files.observe_duration(admission.key, app.monotonic, intent)
         hooks = WatchedHooks(started=started, ref=ref, unattended=False, before_stop=stops.before, after_stop=stops.after,
-                             live=CommandSink(app.files, admission.key, app.clock))
+                             live=CommandSink(app.files, admission.key, app.clock, duration=duration))
         try:
             raw = app.execution(harness, spec, remaining, hooks)
         except (RegistrationRefused, StoreUnavailable):
             return Result(outcome=Outcome.UNAVAILABLE, explanation="Registration was not acknowledged; reconciliation is required.")
         except Exception as error:
             return Result(outcome=Outcome.UNAVAILABLE, explanation=f"Continuation execution ended unexpectedly ({type(error).__name__}).")
+        finally:
+            duration.seal()
         if callbacks is None:
             return Result(outcome=Outcome.UNRESOLVED, explanation="Execution returned without accepted worker registration.")
         return callbacks.returned(raw)

@@ -17,6 +17,8 @@ from test_recovery_store import KEY, OWNER, database
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
 from taskloop.command_sink import WatchedHooks
+from taskloop.duration_evidence import DurationSample, DurationState
+from taskloop.evidence_files import EvidenceFiles
 from taskloop.recovery.callbacks import PendingExecution
 from taskloop.recovery.continuation_models import State
 from taskloop.recovery.continue_attempt import Continuation
@@ -95,12 +97,33 @@ def test_native_result_is_bound_before_capture(tmp_path: Path, surroundings: Att
     assert intended.intent is not None
     record = attempts.store.load(KEY)
     assert record is not None
+    now = [1000.0]
+    attempts.monotonic = lambda: now[0]
+    ordinary = attempts.files.observe_duration(KEY, attempts.monotonic)
+    now[0] += 4
+    ordinary.seal()
+    earlier = attempts.files.duration(KEY)
+    now[0] = 9000  # continuation gets its own origin, without restart downtime
+
+    def advanced() -> None:
+        now[0] += 3
+
+    execution.after_start = advanced
     result = NativeContinuation(attempts, app.store)(record.admission, intended.intent)
     assert isinstance(result, PendingExecution)
     snapshot = app.store.snapshot(KEY, 10)
     assert isinstance(snapshot, Snapshot) and snapshot.intent is not None
     assert result.identity == callback(snapshot.intent)
     assert result.result.sessions.fault is None and attempts.store.collect(KEY) is None
+    duration = EvidenceFiles(tmp_path).duration(KEY, result.identity)
+    assert duration is not None and duration.state is DurationState.SEALED
+    assert duration.elapsed == 3 and duration.command_offset is None
+    assert attempts.files.duration(KEY) == earlier
+    next_execution = intended.intent.model_copy(update={"generation": 2, "token": "new-token"})
+    assert attempts.files.duration(KEY, next_execution) is None
+    attempts.files.observe_duration(KEY, attempts.monotonic, next_execution).seal()
+    assert attempts.files.duration(KEY, next_execution) != duration
+    assert attempts.files.duration(KEY, result.identity) == duration
     con.close()
 
 
@@ -126,4 +149,50 @@ def test_registration_revalidates_before_permit_and_cleans_on_refusal(
     assert result.refusal is not None and result.refusal.outcome is Outcome.UNAVAILABLE
     assert len(execution.calls) == 1 and execution.permits == 0 and len(cleanups) == 1
     assert attempts.store.collect(KEY) is None
+    con.close()
+
+
+@pytest.mark.parametrize("failure", ["write", "invalid_clock", "execution"])
+def test_continuation_duration_failures_preserve_execution_and_cleanup(
+    tmp_path: Path, surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, failure: str,
+) -> None:
+    con = database(tmp_path / "factory.db")
+    execution = NativeRun()
+    attempts = prepared(con, surroundings, execution)
+    app = recovery(con)
+    authorized = app.authorize(KEY, OWNER)
+    assert authorized.intent is not None
+    intended = app.store.execute(authorized.intent, lambda: 10)
+    assert intended.intent is not None
+    record = attempts.store.load(KEY)
+    assert record is not None
+    now = [1000.0]
+    attempts.monotonic = lambda: now[0]
+    cleanups: list[Harness] = []
+
+    def cleaned(harness: Harness) -> None:
+        cleanups.append(harness)
+
+    def write(_files: EvidenceFiles, _key: object, _sample: DurationSample, _execution: object = None) -> None:
+        raise OSError("duration evidence full")
+
+    def finished() -> None:
+        now[0] = float("nan") if failure == "invalid_clock" else 1003
+        if failure == "execution":
+            raise RuntimeError("execution lost without live callbacks")
+
+    monkeypatch.setattr(CodexHarness, "cleanup", cleaned)
+    if failure == "write":
+        monkeypatch.setattr(EvidenceFiles, "write_duration", write)
+    execution.after_start = finished
+    result = NativeContinuation(attempts, app.store)(record.admission, intended.intent)
+    assert execution.permits == 1 and len(execution.calls) == len(cleanups) == 1
+    assert attempts.store.collect(KEY) is None
+    if failure == "execution":
+        assert not isinstance(result, PendingExecution) and result.outcome is Outcome.UNAVAILABLE
+        duration = attempts.files.duration(KEY, intended.intent)
+        assert duration is not None and duration.state is DurationState.SEALED and duration.elapsed == 3
+    else:
+        assert isinstance(result, PendingExecution) and result.result.sessions.fault is None
+        assert attempts.files.duration(KEY, intended.intent) is None
     con.close()
