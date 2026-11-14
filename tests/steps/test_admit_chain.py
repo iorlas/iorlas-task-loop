@@ -15,7 +15,7 @@ from any_agent.testing import FakeRun
 from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from doubles import NO_CHECKS, Environment, FixedIds, PinnedViews
-from git_porcelain import Sha
+from git_porcelain import Pushed, Sha
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
@@ -155,19 +155,30 @@ def test_a_done_plan_advances_to_implement_attempt_one_after_its_commit(
 
 
 @pytest.mark.parametrize("landed", [True, False])
-def test_with_no_task_branch_left_the_advance_starts_from_main_which_must_hold_the_previous_commit(
+@pytest.mark.parametrize("local_ahead", [True, False])
+def test_with_no_task_branch_left_the_advance_requires_origin_main_to_hold_the_previous_commit(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
-    landed: bool,
+    remote: FakeRemote, landed: bool, local_ahead: bool,
 ) -> None:
-    """The local and remote-tracking `task/tl-1` deleted: the slot would start at `main`'s tip (as a new branch does),
-    never at its own D, so only a `main` holding the plan's X advances."""
+    """Without task refs, fetched origin main must contain the plan's X, independently of the person's local main."""
     repo = slot.repo
+    if landed:
+        integrator = FakeRepo.clone(remote, tmp_path / "integrator")
+        main = integrator.worktree(integrator.path)
+        main.merge_ff(planned)
+        assert isinstance(main.push("main"), Pushed)
+    if local_ahead:
+        repo.worktree(repo.identity().root).merge_ff(planned)
+    local_main = dict(repo.branches())["main"]
     repo.delete_branch("task/tl-1", expected=Sha(planned))
     repo.plumbing().delete_ref_at(repo.path, "refs/remotes/origin/task/tl-1", planned)
-    if landed:
-        repo.worktree(repo.identity().root).merge_ff(planned)
     found = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(repo))
     assert isinstance(found, Admitted) if landed else isinstance(found, AdmitRefused) and found.reason == "branch_moved"
+    assert dict(repo.branches())["main"] == local_main
+    if isinstance(found, Admitted):
+        assert AttemptStore(lambda: registered).slot_base(found.key) == planned
+    else:
+        assert registered.execute("SELECT count(*) FROM reservation").fetchone() == (0,)
 
 
 @pytest.mark.parametrize("bead", [replace(CLAIMED, status="open"), replace(CLAIMED, assignee="someone"), replace(CLAIMED, status="closed")])

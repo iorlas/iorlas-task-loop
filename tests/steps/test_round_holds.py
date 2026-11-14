@@ -24,7 +24,7 @@ from taskloop.earlier_input import BEGIN, END, START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldStore
 from taskloop.launch import LaunchUnavailable
-from taskloop.operations import Failed, Round, StartRequest, start
+from taskloop.operations import Failed, Round, Started, StartRequest, VerifiedTask, start, verify_task
 from taskloop.round import NextRequest, run_round
 from taskloop.step_render import human
 from taskloop.step_text import SAVED_WORK
@@ -535,8 +535,17 @@ def test_a_pending_hold_refuses_the_person_s_relaunch_of_the_attempt_it_will_aba
 
 
 def test_a_hand_started_publication_refused_branch_moved_is_reported_never_held(factory: Factory) -> None:
+    factory.now += 1
+    found = start(
+        factory.starting(),
+        StartRequest("tl-1", "tasks", "/tracker", factory.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+    )
+    assert isinstance(found, Started)
     factory.slot.repo.set_remote_url("origin", "/nowhere")
-    factory.by_hand("tl-1")
+    factory.now += 1
+    ports = factory.ports()
+    verified = verify_task(factory.store, ports.verifier, ports.releaser, ports.publisher, "tasks", "tl-1")
+    assert isinstance(verified, VerifiedTask) and factory.next_words() == {"tl-1": ("plan", "publish")}
     moved(factory)
     assert factory.round(frozenset()) == [("tl-1", "plan", "publish", "refused:branch_moved")]
     assert factory.tracker.holds == [] and any(line.endswith(" publish refused:branch_moved " + factory.current("tl-1"))

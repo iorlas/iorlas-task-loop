@@ -95,7 +95,7 @@ type AdmitResult = Admitted | AdmitRefused | AdmitUnavailable
 
 @dataclass(frozen=True)
 class Free:
-    """An observed-free slot whose HEAD (D) passed the branch rule."""
+    """An observed-free slot's HEAD, selected task source and recorded park destination."""
 
     name: str
     head: str
