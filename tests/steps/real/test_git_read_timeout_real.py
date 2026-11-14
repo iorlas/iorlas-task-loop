@@ -16,7 +16,7 @@ from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.composition import real_slots
 from taskloop.git_views import GitViews
 from taskloop.operations import Adoption
-from taskloop.slots import Adopted, NotAdopted
+from taskloop.slots import Adopted, NotAdopted, folder_name
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -31,7 +31,7 @@ def test_a_blocked_status_is_git_unavailable_and_the_slot_adopts_once_it_clears(
     git(main, "add", "a.txt")
     git(main, "commit", "-q", "-m", "base")
     slots = root / "slots"
-    slot = slots / VIEWS.checkouts(main).identity().key / "s1"
+    slot = slots / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     exclude = main / ".git" / "info" / "exclude"
     exclude.parent.mkdir(exist_ok=True)

@@ -19,7 +19,7 @@ from git_porcelain.testing import FakeWorktree
 from sqlite_store import Store
 from stream_proc import OwnedProcess, ProcessObservation, inspect_process
 
-from taskloop.attempt import CredentialsUnavailable
+from taskloop.agents.launch import CredentialReason, CredentialsUnavailable
 from taskloop.attempt_entry import EntryArgs
 from taskloop.attempt_types import AttemptResult, EntryIdentity
 from taskloop.check_entry import Verdict, concluded, enter
@@ -31,6 +31,7 @@ from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import custody
 
@@ -120,7 +121,8 @@ class Bench:
         env = self.environment
         block = Block(BlockPorts(env.process, env.process.lingering, self.clock))
         return Checking(self.store, SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files, env.profiles,
-                        env.preparation(), block, env.observe, lambda _entry: "gone", self.scratch, self.clock, self.environ)
+                        env.preparation(), block, env.observe, lambda _entry: "gone", self.scratch,
+                            self.clock, self.environ, ids=NativeIds())
 
     def __call__(self, inspect: object = inspect_process) -> int:
         observe = inspect_process if inspect is inspect_process else self.other
@@ -398,7 +400,7 @@ def test_a_completed_block_is_not_concluded_once_main_moved(bench: Bench) -> Non
 
 
 def test_a_fault_of_the_environment_is_counted_once_the_attempt_is_the_entry_s_own(bench: Bench) -> None:
-    bench.credentials = CredentialsUnavailable("home")
+    bench.credentials = CredentialsUnavailable(CredentialReason.HOME, "Local login home is missing.")
     assert bench() == 1 and bench() == 1
     assert bench.lines == ["unavailable fault:CredentialsUnavailable"] * 2
     assert bench.attempt()[:5] == ("admitted", None, None, "fault:CredentialsUnavailable", 2)

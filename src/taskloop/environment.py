@@ -34,19 +34,21 @@ from stream_proc import OwnedProcess
 
 from taskloop.access import TMP_BYTES, Folders, folders
 from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Checkouts
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import CappedLog, EvidenceFiles
 from taskloop.prepare import Prepared, task_branch
 from taskloop.profile import ProfileFiles, Refused, Unavailable, read_profile
-from taskloop.setup_store import SETUP_RUNS, Conclusion, SetupSeen, SetupStore
+from taskloop.setup_store import SETUP_RUNS, SetupSeen, SetupStore
 
 type Renewal = Literal["held", "unrenewed", "lost"]
 type Renew = Callable[[], Renewal]  # one claim renewal, now (the entry's keep-alive)
 type GroupAlive = Callable[[int], bool]  # any process left in a process group
 type SlotProfiles = Callable[[Path, Path], ProfileFiles]  # (slot, its verified Git directory): the profile at a commit
-type Launch = tuple[str, Mapping[str, str]]  # the agent's Codex executable and its scrubbed environment (the credentials)
+type Launch = tuple[str, Mapping[str, str]]  # the selected agent's executable and scrubbed environment (the credentials)
 # Whether the implement agent's sandbox works here: `codex sandbox` (exe) with the agent's environment and keys, run in the
 # freshly emptied scratch, gives the shell its variables and writes each folder and not /tmp.
-type SandboxProbe = Callable[[str, Mapping[str, str], Folders], bool]
+type SandboxProbe = Callable[[Sequence[str], Mapping[str, str], Folders], bool]
+type ProbeLaunch = tuple[Sequence[str], Mapping[str, str]]
 
 
 @dataclass(frozen=True)
@@ -186,16 +188,18 @@ class Preparation:
     def __init__(self, ports: EnvironmentPorts) -> None:
         self.ports = ports
 
-    def prepare(self, record: AttemptRecord, slot: Prepared, renew: Renew, launch: Launch) -> AttemptResult | None:
+    def prepare(
+        self, record: AttemptRecord, slot: Prepared, renew: Renew, launch: Launch, command: Sequence[str] | None
+    ) -> AttemptResult | None:
         """Section 4's order; None when the agent may be dispatched. `launch`: the agent's executable and the credentials'
         scrubbed environment (setup gets it with the folders, the probe with the agent's additions)."""
         admission = record.admission
         target = SetupFor(admission.key, Path(admission.slot_path), None, task_branch(admission.task.task_id),
-                          admission.deadline, admission.number == 1)
-        return self.prepare_for(target, slot, renew, launch[1], probe=launch)
+                          admission.deadline, admission.number == 1 or admission.source_checks_id is not None)
+        return self.prepare_for(target, slot, renew, launch[1], probe=None if command is None else (command, launch[1]))
 
     def prepare_for(self, target: SetupFor, slot: Prepared, renew: Renew, env: Mapping[str, str], *,
-                    probe: Launch | None) -> AttemptResult | None:
+                    probe: ProbeLaunch | None) -> AttemptResult | None:
         """Both paths: `env` is the scrubbed environment setup gets with the folders; `probe` the agent's Codex and
         environment for the sandbox probe, None for no probe (a checks slot)."""
         found = folders(target.slot)
@@ -207,7 +211,7 @@ class Preparation:
                 stopped = _unavailable("git")
         return stopped or self._finish(found, renew, target.deadline)
 
-    def _ready(self, key: AttemptKey, path: Path, slot: Prepared, probe: Launch | None) -> AttemptResult | None:
+    def _ready(self, key: AttemptKey, path: Path, slot: Prepared, probe: ProbeLaunch | None) -> AttemptResult | None:
         """Steps 1-4: the failure count (before the probe: a dead attempt costs nothing), the reconcile, the preflight,
         the scratch emptied, then the sandbox probe in it (never in the slot, whose ignored files are not reset yet)."""
         if self.ports.store.failures(key) >= SETUP_RUNS:
@@ -220,8 +224,8 @@ class Preparation:
             return _unavailable("environment:files")
         if probe is None:
             return None
-        exe, env = probe
-        return None if self.ports.probe(exe, env, found) else _refused("environment:sandbox")
+        argv, env = probe
+        return None if self.ports.probe(argv, env, found) else _refused("environment:sandbox")
 
     def _finish(self, found: Folders, renew: Renew, deadline: float) -> AttemptResult | None:
         """Steps 9-11: the scratch emptied again (setup's temporary files never reach the agent), one claim renewal, the
@@ -246,7 +250,7 @@ class Preparation:
         if seen == "unknown":
             return _unavailable("environment:unknown")
         if latest.conclusion is None:
-            self.ports.store.conclude(key, latest.run, "interrupted", None, self.ports.clock())
+            self.ports.store.conclude(key, latest.run, CommandConclusion.INTERRUPTED, None, self.ports.clock())
         return None
 
     def _preflight(self, path: Path, slot: Prepared, found: Folders) -> AttemptResult | None:
@@ -264,7 +268,7 @@ class Preparation:
 
     def _apart(self, path: Path, slot: Prepared, found: Folders) -> bool:
         """Resolved, each root is exactly where `folders` puts it beside the resolved slot (no link anywhere below
-        `<slots_root>/<repo_id>/`, so never a sibling slot, `.locks/` or another root), and none equals, holds or sits
+        `<slots_root>/<repo name>/`, so never a sibling slot, `.locks/` or another root), and none equals, holds or sits
         inside the slot, its Git directory G, the common one C, the person's checkout, the evidence root or factory.db's
         folder."""
         resolve = self.ports.files.resolve
@@ -290,7 +294,7 @@ class Preparation:
             return _unavailable("environment:profile")
         digest = setup_digest(profile.setup)
         latest = ports.store.latest(key)
-        reusable = latest is not None and (latest.conclusion, latest.commit, latest.digest) == ("passed", head, digest)
+        reusable = latest is not None and (latest.conclusion, latest.commit, latest.digest) == (CommandConclusion.PASSED, head, digest)
         if reusable and target.commit is None:
             return None  # no agent ran since it passed: this attempt is still `admitted`
         reset = self._reset(path, slot.gitdir, folders(path), target.commit)
@@ -333,16 +337,16 @@ class Preparation:
         view = self.ports.checkouts(run.slot, git_dir=gitdir)
         listed = next((info for info in view.worktrees() if info.path == run.slot), None)
         if listed is None or (listed.head, listed.branch) != (run.head, run.branch):
-            return self._concluded(run, "dirty", None, _refused("environment:moved"))
+            return self._concluded(run, CommandConclusion.DIRTY, None, _refused("environment:moved"))
         if view.worktree(run.slot).dirty().raw:
-            return self._concluded(run, "dirty", None, _refused("environment:dirty"))
-        return self._concluded(run, "passed", 0, None)
+            return self._concluded(run, CommandConclusion.DIRTY, None, _refused("environment:dirty"))
+        return self._concluded(run, CommandConclusion.PASSED, 0, None)
 
     def _command(self, run: _Run, index: int, argv: Sequence[str]) -> AttemptResult | None:
         ports = self.ports
         remaining = run.deadline - ports.clock()
         if remaining <= 0:
-            return self._concluded(run, "timed_out", None, _refused("expired"))
+            return self._concluded(run, CommandConclusion.TIMED_OUT, None, _refused("expired"))
         run.log.write(f"$ {shlex.join(argv)}\n".encode())
 
         committed: list[OwnedProcess] = []
@@ -369,13 +373,13 @@ class Preparation:
         stopped by the deadline, then a failed or never-run command."""
         if not ended.exec_failed and (ended.survivors or self.ports.lingering(ended.pgid)):
             run.log.write(b"lingering\n")
-            return self._concluded(run, "lingering", ended.rc, _unavailable("environment:lingering"))
+            return self._concluded(run, CommandConclusion.LINGERING, ended.rc, _unavailable("environment:lingering"))
         if ended.timed_out:
-            return self._concluded(run, "timed_out", ended.rc, _refused("expired"))
+            return self._concluded(run, CommandConclusion.TIMED_OUT, ended.rc, _refused("expired"))
         if ended.exec_failed or ended.rc != 0:
-            return self._concluded(run, "failed", ended.rc, _unavailable("environment:exit"))
+            return self._concluded(run, CommandConclusion.FAILED, ended.rc, _unavailable("environment:exit"))
         return None
 
-    def _concluded(self, run: _Run, conclusion: Conclusion, rc: int | None, result: AttemptResult | None) -> AttemptResult | None:
+    def _concluded(self, run: _Run, conclusion: CommandConclusion, rc: int | None, result: AttemptResult | None) -> AttemptResult | None:
         self.ports.store.conclude(run.key, run.run, conclusion, rc, self.ports.clock())
         return result

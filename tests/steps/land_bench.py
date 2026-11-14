@@ -29,11 +29,13 @@ from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import NativeIds
 from taskloop.land import LandRequest, LandResult, land
 from taskloop.land_check import LandPorts
 from taskloop.land_store import LandRow, LandStore
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import landing
+from taskloop.slots import folder_name
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import CloseAnswer
@@ -182,11 +184,12 @@ class LandBench:
         block = Block(BlockPorts(env.process, env.process.lingering, lambda: self.now))
         return Checking(CheckStore(lambda: self.con), SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files,
                         env.profiles, env.preparation(), block, env.observe, lambda entry: self.seen.get(entry, "gone"),
-                        lambda _path: True, lambda: self.now, lambda: {"HOME": "/home/p"})
+                        lambda _path: True, lambda: self.now, lambda: {"HOME": "/home/p"}, ids=NativeIds())
 
     def ports(self) -> LandPorts:
         return LandPorts(self.checking(), self.lands, self.views, lambda path: GitProfileFiles(path, self.views), self.inspect,
-                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing, self.environ, self.close)
+                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing,
+                             self.environ, self.close, ids=NativeIds())
 
     def land(self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None,
              accept: bool = False) -> LandResult:
@@ -226,9 +229,10 @@ def database(path: Path, repo_id: str, slot: Path, base: str, x: str, d: str) ->
                     (repo_id, repo_id, str(slot)))
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
             after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, base, x, d, base))
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?)""", (repo_id,
+            base, x, d, base))
         for statement in DONE:
             con.execute(statement)
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,4,'kept')", (d,))
@@ -245,7 +249,7 @@ def bench(tmp_path: Path, x_files: dict[str, str] | None = None) -> LandBench:
     remote = FakeRemote("https://example.invalid/repo.git")
     base = remote.advance("main", {"README": "one\n", ".task-loop.json": json.dumps(PROFILE)}, "base")
     repo = Racing(FakeRepo.clone(remote, where / "main"))
-    slot = repo.add_worktree(where / "slots" / repo.identity().key / "s1", "HEAD")
+    slot = repo.add_worktree(where / "slots" / folder_name(repo.identity()) / "s1", "HEAD")
     root = repo.worktree(repo.identity().root)
     root.checkout_new("task/tl-1")
     for path, text in (x_files or {"src/x.py": "X = 1\n"}).items():

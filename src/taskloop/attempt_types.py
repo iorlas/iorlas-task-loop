@@ -2,7 +2,8 @@
 
 import unicodedata
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
@@ -10,6 +11,7 @@ from any_agent import RunOutcome, classify
 from any_agent.procs import Worker
 from git_porcelain import Repo
 
+from taskloop.agents.settings import AgentSetting
 from taskloop.repo import RepoId
 from taskloop.task import TaskReference
 
@@ -123,14 +125,13 @@ class Admission:
     slot: str
     slot_path: str
     input_ref: FileRef
-    model: str
-    effort: str
-    sandbox: str
+    setting: AgentSetting
     deadline: float
     entry: EntryIdentity
     number: int  # the attempt's number in its step (1, 2, 3), admitted with it
     step: str  # the step the attempt belongs to (`plan`, `implement`), admitted with it
     after_commit: str | None = None  # attempt 1 of a later step: the previous step's published X, which it starts from
+    source_checks_id: str | None = None  # a clean-slot repeat after failed checks; never a dirty-slot takeover
 
 
 @dataclass(frozen=True)
@@ -202,7 +203,13 @@ class AnswerState:
 
 
 # Every verdict rule word: the chain's (CHAIN_RULES, any step) and each step kind's artifact rules (`steps.RULES` has all).
-type Rule = Literal[
+class PlanContentRule(StrEnum):
+    CHANGE_MAP = "plan_change_map"
+    DEPTH = "plan_depth"
+    HEADING = "plan_heading"
+
+
+type Rule = PlanContentRule | Literal[
     "commit_absent", "not_descendant", "chain_length", "paths", "mode", "file_size", "nothing_written", "plan_missing",
     "plan_encoding", "plan_empty", "plan_size",
 ]
@@ -229,6 +236,18 @@ class Rejected:
 
 
 @dataclass(frozen=True)
+class PathExplanation:
+    """A rejected path and the owning check's explanation, without file content."""
+
+    path: str
+    explanation: str
+
+    def __post_init__(self) -> None:
+        if not self.explanation.strip():
+            raise ValueError("A refused path needs an explanation")
+
+
+@dataclass(frozen=True)
 class Unsettled:
     """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `worker_alive`, `superseded`,
     `staged`, `uncommitted`, `unsafe`, `ignored`); nothing stored, retryable. `listing` is data for a person and a repeat's
@@ -236,6 +255,7 @@ class Unsettled:
 
     reason: str
     listing: tuple[str, ...] = ()
+    explanations: tuple[PathExplanation, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)
@@ -299,6 +319,7 @@ class AttemptResult:
     reason: str = ""
     execution: StoredExecution | None = None
     pending: PendingResult | None = None
+    explanation: str = ""
 
 
 @dataclass(frozen=True)

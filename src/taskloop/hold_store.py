@@ -18,9 +18,13 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_text
+from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_nullable_text, as_text
 from taskloop.check_store import stored_nullable_real, stored_real, stored_word
 from taskloop.factory_schema import HOLD, LATER, LATEST_CHECKS, SUCCESSOR, marks, prefixed
+from taskloop.hold_cause import LAND_CAUSE
+from taskloop.merge.models import PREFIX as MERGE
+from taskloop.task import TaskReference
+from taskloop.wip import SavedCommit, decode, encode
 
 type Labels = Literal["moved", "absent", "not_ours", "closed", "missing", "superseded"]
 type Labelled = Literal["moved", "absent", "not_ours", "closed", "missing"]  # the label step's own words (5.2)
@@ -77,7 +81,7 @@ class HoldRow:
     backlog: str
     task_id: str
     tracker_root: str
-    label: str
+    label: str | None
 
 
 @dataclass(frozen=True)
@@ -92,12 +96,24 @@ def _row(row: tuple[object, ...]) -> HoldRow:
     return HoldRow(
         as_text(row[0]), as_text(row[1]), as_text(row[2]), stored_real(row[3]), stored_word(row[4], LABELS),
         stored_nullable_real(row[5]), stored_nullable_real(row[6]), stored_nullable_real(row[7]), stored_nullable_real(row[8]),
-        as_int(row[9]), as_text(row[10]), as_text(row[11]), as_text(row[12]), as_text(row[13]),
+        as_int(row[9]), as_text(row[10]), as_text(row[11]), as_text(row[12]), as_nullable_text(row[13]),
     )
+
+
+def recovery_held(con: sqlite3.Connection, attempt_id: str) -> bool:
+    """Transaction-local hold fence for recovery; a hold is never cleared by recovery."""
+    return con.execute("SELECT 1 FROM task_hold WHERE attempt_id=?", (attempt_id,)).fetchone() is not None
 
 
 class HoldStore(StoreConnection):
     """The fenced writes and the reads of holds."""
+
+    def latest(self, task: TaskReference) -> HoldRow | None:
+        """Most recent recorded hold, including holds whose tracker label has been cleared."""
+        with self._connection() as con:
+            found = con.execute(LOADED + """ WHERE p.adapter=? AND p.backlog=? AND p.task_id=?
+             ORDER BY h.held_at DESC,p.seq DESC LIMIT 1""", (task.scope.adapter, task.scope.backlog, task.task_id)).fetchone()
+        return None if found is None else _row(found)
 
     def of_attempts(self, ids: tuple[str, ...]) -> dict[str, HoldRow]:
         """The holds of the given agent attempts, by attempt id (one query for a listing; absent ids have none)."""
@@ -106,6 +122,27 @@ class HoldStore(StoreConnection):
         with self._connection() as con:
             found = con.execute(LOADED + f" WHERE h.attempt_id IN ({','.join('?' * len(ids))})", ids).fetchall()
         return {each.attempt_id: each for each in map(_row, found)}
+
+    def held(self, attempt_id: str) -> bool:
+        """Whether the agent attempt has a hold (only a hold saves its slot's work)."""
+        with self._connection() as con:
+            return con.execute("SELECT 1 FROM task_hold WHERE attempt_id=?", (attempt_id,)).fetchone() is not None
+
+    def saved(self, attempt_id: str) -> tuple[SavedCommit, ...]:
+        """The commits the hold saved on the task branch, in the order they were made."""
+        with self._connection() as con:
+            found = con.execute("SELECT saved FROM task_hold WHERE attempt_id=?", (attempt_id,)).fetchone()
+        return () if found is None else decode(as_text(found[0]))
+
+    def add(self, attempt_id: str, commit: SavedCommit) -> None:
+        """Record one more saved commit before the slot is parked; recorded once (the same commit again changes nothing)."""
+        with self._connection(write=True) as con:
+            found = con.execute("SELECT saved FROM task_hold WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if found is None:
+                raise StoreRefused("changed")
+            have = decode(as_text(found[0]))
+            if commit.sha not in {each.sha for each in have}:
+                con.execute("UPDATE task_hold SET saved=? WHERE attempt_id=?", (encode((*have, commit)), attempt_id))
 
     def uncleared(self, backlog: str) -> tuple[Uncleared, ...]:
         """Holds of `backlog` whose task was taken again (A not current) and whose `held` may still be on the task:
@@ -124,11 +161,11 @@ class HoldStore(StoreConnection):
         return None if found is None else _row(found)
 
     def insert(self, hold: HoldInsert) -> HoldRow:
-        """The hold's record (5.1 step 1): `unlabelled` when A was started by hand (no label: never held), `changed`
+        """The hold's record: hand-started attempts may be held for merge or land refusals; otherwise `unlabelled`. `changed`
         when A or its cause is no longer current or A already has a hold (a concurrent caller recorded it)."""
         with self._connection(write=True) as con:
             fenced = con.execute(FENCE, (hold.cause_id, hold.cause_id, hold.attempt_id)).fetchone()
-            if fenced is not None and not fenced[0]:
+            if fenced is not None and not fenced[0] and not hold.reason.startswith((MERGE, LAND_CAUSE)):
                 raise StoreRefused("unlabelled")
             if fenced is None or not fenced[1] or fenced[2]:
                 raise StoreRefused("changed")

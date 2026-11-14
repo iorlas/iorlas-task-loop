@@ -18,7 +18,7 @@ from taskloop.attempt_types import AttemptResult, Unsettled
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold_guide import HOLD, KEPT_ACTIONS
+from taskloop.hold_guide import HOLD
 from taskloop.hold_status import cause, finished, reingests
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
 from taskloop.operations import Failed
@@ -94,8 +94,8 @@ def plan(con: sqlite3.Connection, *, label: str | None = "auto", released: str |
     with begin_immediate(con):
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,label) VALUES
-            ('a','a-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','workspace-write',100,1,1,?,?)""",
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label) VALUES
+            ('a','a-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?,?)""",
             (D, label))
         if released is not None:
             con.execute("INSERT INTO slot_release VALUES ('a','a-token',1,?,5,?)", (D, released))
@@ -163,8 +163,8 @@ def test_a_task_taken_again_shows_its_new_attempt_without_the_old_hold(factory: 
     recorded(factory)
     with begin_immediate(factory):
         factory.execute("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,
-            repo_id,slot,input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,label) VALUES
-            ('b','b-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','workspace-write',900,1,2,?,'auto')""",
+            repo_id,slot,input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label) VALUES
+            ('b','b-token',1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',900,1,2,?,'auto')""",
             (D,))
     (view,) = listed(factory)
     assert (view.attempt_id, view.next, view.hold) == ("b", "start", None)
@@ -218,7 +218,7 @@ def test_show_of_a_pending_hold_names_each_action_and_the_claim_kept(factory: sq
     lines = human("show", shown, tmp_path / "factory.db")
     assert "Hold tracker: `auto` removed, `held` added, not commented yet" in lines
     assert "Hold claim: kept: the abandon has not finished" in lines
-    assert lines[-1] == HOLD and "hold pending <step> <word>" in HOLD and not any(word in HOLD for word in KEPT_ACTIONS)
+    assert lines[-1] == HOLD and "hold pending <step> <word>" in HOLD and "`tl " not in HOLD
 
 
 def test_list_prints_the_hold_word_and_its_guide_once_and_json_says_due(factory: sqlite3.Connection) -> None:
@@ -255,9 +255,9 @@ def test_list_stuck_reads_the_leftovers_of_a_round_taken_attempt_so_a_due_repeat
             previous, why = (None, None) if number == 1 else (f"a{number - 1}", "uncommitted")
             factory.execute(
                 """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-                input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,number,seq,slot_head,
+                input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,number,seq,slot_head,
                 previous_attempt_id,repeat_reason,label) VALUES (?,?,1,'plan','beads','tasks','tl-1','/tracker','r','s1','i','d',1,
-                'm','e','workspace-write',100,'captured',?,?,?,?,?,?,'auto')""",
+                'm','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,?,?,?,?,'auto')""",
                 (f"a{number}", f"a{number}-token", D, number, number, D, previous, why))
         factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
             stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,

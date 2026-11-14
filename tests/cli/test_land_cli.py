@@ -124,7 +124,8 @@ def test_the_help_names_the_flags_and_exit_codes(capsys: pytest.CaptureFixture[s
         main(["step", "land", "-h"])
     text = " ".join(capsys.readouterr().out.split())
     assert all(flag in text for flag in ("--summary", "--withdraw", "--no-change", "--minutes", "--checkout", "--backlog"))
-    assert "never forced" in text and "rounds never land" in text and "Exit 0 landed (or already), 1 refused, 3 unknown" in text
+    assert "never forced" in text and "a round runs this same land by itself" in text
+    assert "Exit 0 landed (or already), 1 refused, 3 unknown" in text
 
 
 def test_a_land_prints_what_it_did_the_close_and_the_tracker_line(
@@ -239,7 +240,7 @@ def test_a_moved_main_or_a_remote_refusal_says_the_fact_then_a_guide_that_adds_t
     detail, guide = err.splitlines()[1:3]
     row = b.rows()[0]
     assert row.commit in detail and detail.endswith("nothing was pushed." if reason == "target_moved" else "stays validated.")
-    assert guide == LAND_GUIDE[reason] and guide.startswith(("Rerun `tl step land`", "Push S by hand"))
+    assert guide == LAND_GUIDE[reason] and guide.startswith(("Rerun `tl step land`", "Origin refused the push"))
     assert not {each.strip(" .").lower() for each in detail.split(";")} & {each.strip(" .").lower() for each in guide.split(";")}
     assert "protected branch" not in err  # origin's own text is never printed (`land_push`)
 

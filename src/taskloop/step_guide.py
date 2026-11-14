@@ -3,10 +3,13 @@ them to do, and the whole-DB discard steps. Text only; `step_render` places it, 
 
 from pathlib import Path
 
+from taskloop.hold_cause import RULES, RUN
 from taskloop.hold_guide import HOLD, ON_HOLD
 from taskloop.land_guide import LAND_GUIDE, LAND_NEXT
+from taskloop.step_refusal_guide import REFUSALS
 
-STEP_ONLY = "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round"
+STEP_ONLY = ("steps built: plan, implement, check; publishes task/<id>; lands under the profile's `land` "
+             "(`auto`: a round, `manual`: `tl step land`)")
 PUBLISH = ("The step's result is verified but not on `origin` yet: `tl step publish`. A `refused` word names what to fix; "
            "`unavailable:remote` is often credentials: check that `git push` works from this shell. After `refused:diverged`, "
            "`remote_moved` or `remote_ahead` (the entry log's `branch=` word or the last `tl step publish`), rerunning does not "
@@ -22,13 +25,16 @@ ROUNDS = ("Run scheduling rounds until stopped (Ctrl-C): a round at once, then e
           "each round holds the tasks it took that stopped (`bd list --label held`), advances claimed tasks whose step is "
           "done to their next step, then starts approved ready tasks while fewer than --max-running (default 3) "
           "of this backlog are in flight (`max_running`); "
-          "the tracker is read only when a slot is free; while a passed task waits for `tl step land`, the last free slot is left "
-          "to that land (`slot_for_land`); writes `<artifacts>/rounds.log` (a passed task: `report land`). Runs in this "
+          "under the profile's `land: auto` (read from origin's main) a round first lands one passed task it took, as `tl step land` "
+          "does (a conflict or a failed re-check holds the task); the tracker is read only when a slot is free; while a passed task "
+          "waits to be landed, the last free slot is left to that land (`slot_for_land`); writes `<artifacts>/rounds.log` (a passed "
+          "task: `report land`, then `land landed` or the hold). Runs in this "
           "terminal until stopped: Ctrl-C once stops after the current move, twice exits at once; launched steps keep "
           "running; started with Ctrl-C ignored (`nohup`, `&`), only SIGTERM stops it. "
           "A move in flight finishes first: a verify waits for its publish push (up to Git's timeout). While every slot is held "
           "no candidate is tried, so a wrong --checkout is refused only once a slot frees.")
 GUIDE = {
+    **REFUSALS,
     "start": "Re-run `tl step start` to relaunch its entry (each `tl step next` round relaunches it until its deadline; an "
     "entry registered before a reboot is relaunched with its deadline renewed from --minutes, once per reboot). "
     "If the last entry says `claim_lost`, the tracker claim is gone (reverted, taken by another actor, or the task closed): "
@@ -42,8 +48,8 @@ GUIDE = {
     "release": "The step ended; its slot is still held. Remove the listed files if any, then `tl step release`; `--abandon` also "
     "gives the task back (not once a land's S is, or may be, on origin's main: then `tl step land`, which retries its "
     "candidate's release first).",
-    "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). `tl step start` admits a fresh "
-    "attempt.",
+    "abandoned": "Abandoned: the slot is free and the claim was returned (`Claim:` says if not). A round starts a fresh "
+    "attempt once the task carries the approval label (the one restart route).",
     "publish": PUBLISH,
     "advance": "The step is verified and on `origin`. The next `tl step next` round (or `tl step rounds`) starts the next step "
     "once a slot is free, before any new task, oldest first; by hand, `tl step start <task>`. Either way one tracker read "
@@ -62,16 +68,17 @@ GUIDE = {
     "running": "Its entry runs; the round leaves it alone.",
     "attempted": "Open in the tracker while factory.db holds its attempt: the claim was returned or lapsed. `tl step show` it; "
     "rounds never take it again.",
-    "abandoned_skip": "Abandoned here: rounds never re-admit it; `tl step start` admits a fresh attempt.",
+    "abandoned_skip": "Abandoned here, not restarted: a hold's abandon is answered by adding the label back; a half-done one is finished "
+    "by `tl step release --abandon`.",
     "no_free_slot": "No slot is free: each one is reserved, or unusable (missing, dirty, on another branch: the detail and the round log's "
     "`unusable` lines name it and why; fix it or `tl slot adopt`). `tl step rounds` fills a freed slot seconds after.",
     "unusable": "A slot no attempt holds cannot be used (missing, dirty, redirected or on a branch: `unusable:<slot>:<why>`, its "
     "path printed under the line): put it right (`git worktree add --detach`, `git switch --detach`, a clean tree) or `tl slot adopt`.",
-    "slot_for_land": "One slot is free and kept for `tl step land`: a passed task waits for it, so rounds start nothing into the "
-    "last free slot. Run `tl step land` (or release the task); rounds go on as soon as it is landed.",
-    "max_running": "This backlog has as many tasks in flight (a step running, or a passed task waiting for `tl step land`) as "
-    "`--max-running` allows, so rounds start no new one. A waiting task counts until it is landed: `tl step land` frees one; a "
-    "failed, stuck or held task does not count. Rounds go on at once.",
+    "slot_for_land": "One slot is free and kept for a passed task's land, so rounds start nothing into the last free slot. Under "
+    "`land: auto` the next round lands it; under `manual` it waits for a person to land it. Rounds go on as soon as it is landed.",
+    "max_running": "This backlog has as many tasks in flight (a step running, or a passed task waiting to be landed) as "
+    "`--max-running` allows, so rounds start no new one. A waiting task counts until it is landed (by a round under `land: "
+    "auto`, else by a person); a failed, stuck or held task does not count. Rounds go on at once.",
     "rounds_running": "Another `tl step rounds` runs for this backlog (the pid is its lock record's, informational): use its "
     "terminal, or stop it there with Ctrl-C first. `tl step next` runs beside it.",
     "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5; "
@@ -219,6 +226,39 @@ NEEDS_OWNER = (
     "before this step can succeed. A hand-started step is never held, so nothing is written to the task and its claim lapses unrenewed. "
     "Answer by editing the task's description, then `tl step release --abandon` and `tl step start` to run the step again."
 )
+
+
+# Commit rules and classified execution failures already have an owning explanation.
+GUIDE.update({word: f"Verification refused: {what}. Inspect the retained evidence and resolve this before continuing."
+              for word, (what, _fix) in RULES.items()})
+GUIDE.update({f"run:{word}": f"{what} The owner must resolve this before new work is approved."
+              for word, (what, _fix) in RUN.items()})
+GUIDE.update({
+    "run:timeout": "The agent exceeded its deadline. Inspect its retained work and evidence before deciding on another attempt.",
+    "incomplete": "The agent reported incomplete work. Inspect its answer and evidence before deciding how to continue.",
+    "needs_owner": NEEDS_OWNER,
+    "run": "The agent execution failed. Inspect its retained stdout, stderr and diagnostics before deciding on another attempt.",
+    "answer": "The agent answer did not meet the answer contract. Inspect diagnostics.txt and the retained answer before "
+    "deciding on another attempt.",
+})
+
+
+def refusal_guide(reason: str, *, checks: bool = False, land: bool = False) -> str:
+    """Resolve a reason, never a failure-kind catch-all. Compound domains keep their owning guide."""
+    if land and reason in LAND_GUIDE:
+        return LAND_GUIDE[reason]
+    domain = reason.split(":", maxsplit=1)[0]
+    if land and domain in LAND_GUIDE:
+        return LAND_GUIDE[domain]
+    if reason in GUIDE:
+        return guide(reason, checks=checks)
+    domain = reason.split(":", maxsplit=1)[0]
+    if domain == "git":
+        return GUIDE[domain]
+    key = "expired" if reason.startswith("expired:") else reason
+    if reason.startswith("slot:"):
+        key = {"branch": "slot_branch", "moved": "head_moved", "redirected": "slot_redirected"}[reason.split(":")[1]]
+    return GUIDE[key]  # A new public reason needs an explicit guide and coverage case.
 
 
 def guide(word: str, *, checks: bool, land: bool = False) -> str:

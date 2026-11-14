@@ -1,3 +1,5 @@
+Status: **evidence**. Historical architecture-review format/opinion specimen; its proposals are not adopted system authority.
+
 
 =============== 00-README.md ===============
 # task-loop docs ontology (a2kay-format, temporary checker on shelf libs)

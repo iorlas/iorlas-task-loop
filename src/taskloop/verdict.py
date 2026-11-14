@@ -25,7 +25,7 @@ def judge(repo: Repo, root: Path, commit: str, step: StepKind, rules: StepRules,
         return Rejected("commit_absent")
     *earlier, last = steps
     chain = [(each.end_commit, each.paths) for each in earlier if each.effect == "commit" and each.end_commit is not None]
-    chain += [(commit, last.paths)] if last.effect == "commit" else []
+    chain += [(commit, last.paths)] if last.effect == "commit" or commit != last.base_commit else []  # a keep over saved work
     if not chain:
         return _artifact(step, tip, rules, reused=True)
     parent = steps[0].base_commit

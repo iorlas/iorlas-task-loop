@@ -10,7 +10,7 @@ owner's decisions below stand. What slice 1 cannot show yet is under *Not in sli
 - Read-only: no buttons that change anything, no auth, no charts, no history pages. The controls are the theme switch,
   the board layout switch and drawer navigation.
 - One board on one screen. A card is a task, newest activity first in its column. Columns: Ready, Plan, Implement,
-  Checks, Land, Held, Landed. The Land column is the person's: a card there says *Waiting for you* with the command (`tl step land <id>`, rounds never land) and says *Landing* only while a land process is observed running (tl-8bh9.14.72; the glossary's word is land, never "delivering"). (The glossary says *ready* for a task not yet admitted; the interview said "Waiting").
+  Checks, Land, Held, Landed. A card in the Land column says *Landing next round* (the profile's `land` is `auto` or unreadable: a round lands it), *Waiting for a person* (the profile says `land: manual`, said in words, no command) and *Landing* only while a land process is observed running (tl-8bh9.14.72, tl-8bh9.14.136; the glossary's word is land, never "delivering"). (The glossary says *ready* for a task not yet admitted; the interview said "Waiting").
 - Two layouts of the same board: **Steps** (one column per step) and **By slot** (swim lanes: one row per slot, plus
   "no slot" for tasks holding none). Switching animates the cards into place.
 - A card shows task id and title, where the task is (`step 2 of 4 · try 1`: a step and a try are different things; a repeat is a new try of the same step), a *repeat* or *restarted at plan* badge with its reason, time in the
@@ -128,8 +128,17 @@ number of the current or last attempt of the step (0 before any). `repeat` is `n
 new attempt of the same step, `restart_at_plan` is a task sent back to plan. `step_started_at` starts "time in step"
 (for Landed: time since landing). `last_activity_at` is the sort key (newest first): the last step change or live
 event. `slot` is `null` when the task holds none. `hold_cause` is the sentence the hold owner already shows, only in
-`held`. `land` is `null` outside the `land` column; in it `waiting` (the person has to run `tl step land`) or `landing` (a land
-process is observed running).
+`held`. `land` is `null` outside the `land` column; in it `waiting` (a round lands it), `manual` (the profile says `land: manual`: a person lands it) or `landing` (a land
+process is observed running). `status` is the task's one status (`task_status.Status`: `running checking settling waiting_for_land
+landing landed held stuck finished abandoned queued`) and `status_note` says it in plain words; both come from the same function
+`tl step list`, the drawer and the round's admission call (tl-8bh9.14.143). A task with no current attempt (`abandoned`, or
+`queued` to start: a person abandoned its attempt and the tracker lists it ready under the approval label, a ready task no attempt
+has taken) is in the `waiting` column with a note saying why it does not start yet (no free slot, the last slot is kept for a
+land, the in-flight bound, or a selection rule); its old attempts are not its current steps. **Restart rule (decided
+2026-11-13):** a task a person abandoned (`tl step release --abandon`, claim returned, no hold) that carries the approval label is
+restarted fresh by the next round, one restart route, no `tl step start` by hand; removing the label is how a person keeps it
+stopped. A hold's abandon stays held until the person's answer (the label added back). Attempt rows of the abandoned chain carry
+`past: true`: the drawer shows them dimmed and shows no pending steps or Land row after them.
 
 ### Board snapshot: `GET /api/board`
 

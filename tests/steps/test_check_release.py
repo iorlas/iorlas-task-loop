@@ -21,6 +21,7 @@ from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen
 from taskloop.check_release import CandidateTarget, ChecksRelease
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.factory_schema import SCHEMA
+from taskloop.ids import NativeIds
 from taskloop.land_store import LandStore
 from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody, lock_path
@@ -76,11 +77,13 @@ class Bench:
         return True
 
     def release(self, abandon: bool = False, me: EntryIdentity | None = None, key: AttemptKey = CHECKS) -> ReleaseResult:
-        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30, self.setup_seen, self.scratch)
+        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30,
+            self.setup_seen, self.scratch, ids=NativeIds())
         return released.release(key, abandon, me)
 
     def candidate(self, abandon: bool = False, me: EntryIdentity | None = None) -> ReleaseResult:
-        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30, self.setup_seen, self.scratch)
+        released = ChecksRelease(self.store, self.views, self.files, self.observe, self.hold, lambda: 30,
+            self.setup_seen, self.scratch, ids=NativeIds())
         return released.release_of(CandidateTarget(LandStore(lambda: self.con)), CANDIDATE, abandon, me)
 
     def implement(self) -> ReleaseResult:
@@ -93,7 +96,7 @@ class Bench:
             raise AssertionError("an implement attempt released before needs no lock")
 
         released = SlotRelease(AttemptStore(lambda: self.con), self.views, self.files, self.observe, lambda _w: True, nowhere, unclaim,
-                               lambda: 40, self.setup_seen, self.scratch)
+                               lambda: 40, self.setup_seen, self.scratch, ids=NativeIds())
         return released.release(IMPLEMENT, True)
 
     def at_x(self) -> None:

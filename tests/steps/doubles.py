@@ -25,6 +25,7 @@ from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import ChecksPorts
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
@@ -133,6 +134,8 @@ class FakeSlotFiles:
             }
             if path in pointers:
                 return pointers[path]
+            if path == self._gitdir(slot) / "MERGE_HEAD" and slot.state().merge_head is not None:
+                return f"{slot.state().merge_head}\n".encode()
             if path.is_relative_to(slot.path) and path != slot.path:
                 return self._files(slot).get(path.relative_to(slot.path).as_posix())
         return None
@@ -225,7 +228,7 @@ class NoChecks:
 def no_holds() -> TrackerHolds:
     """The tracker's hold writes of a round that never holds a task nor clears a hold."""
 
-    def refuse(*args: str) -> HoldAnswer[LabelStep]:
+    def refuse(*args: str | None) -> HoldAnswer[LabelStep]:
         raise AssertionError(f"no hold tracker write expected: {args}")
 
     def unexpected(*args: str) -> HoldAnswer[HoldWrite]:
@@ -352,7 +355,7 @@ class FakeEnvFiles:
 
 @dataclass(frozen=True)
 class ProbeCall:
-    exe: str
+    exe: Sequence[str]
     env: Mapping[str, str]
     folders: Folders
 
@@ -381,7 +384,7 @@ class Environment:
         self.process = FakeSetupProcess(self.events)
         self.files = FakeEnvFiles(self.events)
 
-    def probe(self, exe: str, env: Mapping[str, str], found: Folders) -> bool:
+    def probe(self, exe: Sequence[str], env: Mapping[str, str], found: Folders) -> bool:
         self.events.append("probe")
         self.probes.append(ProbeCall(exe, dict(env), found))
         return self.sandbox
@@ -434,7 +437,7 @@ class ChecksBench:
 
     def admission(self) -> ChecksAdmission:
         return ChecksAdmission(lambda: self.con, self.begin, self.inspect, self.views, lambda: self.now, lambda _p: True, self.files,
-                               lambda path: GitProfileFiles(path, self.views))
+                               lambda path: GitProfileFiles(path, self.views), ids=NativeIds())
 
     def admit(self, number: int = 1, checkout: Path | None = None) -> AdmitResult:
         return self.admission().admit_checks(ChecksRequest(self.done.implement, checkout or self.repo.path, 100.0, number))
@@ -473,3 +476,25 @@ class ReadyTracker(FakeTaskReadClient):
 
     def find(self, status: str = "", label: str = "", *, include_closed: bool = False) -> list[Bead]:
         return [each for each in self.records if each.status == status and (not label or label in each.labels)]
+
+
+class FixedIds:
+    def __init__(self) -> None:
+        self.fresh: list[str] = []
+        self.tokens: list[tuple[int, str]] = []
+        self.sessions: list[str] = []
+
+    def hex(self) -> str:
+        value = f"{len(self.fresh) + 1:032x}"
+        self.fresh.append(value)
+        return value
+
+    def token(self, nbytes: int) -> str:
+        value = f"{len(self.tokens) + 1:0{2 * nbytes}x}"
+        self.tokens.append((nbytes, value))
+        return value
+
+    def session(self) -> str:
+        value = f"00000000-0000-4000-8000-{len(self.sessions) + 1:012x}"
+        self.sessions.append(value)
+        return value

@@ -16,10 +16,13 @@ from any_agent.testing import FakeRun
 from beads_client import BdError, Bead
 from doubles import Environment, NoChecks, PinnedViews
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitResult, AttemptAdmission
 from taskloop.admit_chain import NextAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import Listed, StatusPorts, current_view, list_attempts
 from taskloop.attempt_store import AttemptStore
@@ -28,10 +31,12 @@ from taskloop.check_admit import ChecksRequest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
+from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
+from taskloop.merge.prepare import SourcePreparation
 from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, start, verify_task
 from taskloop.publish import BranchPublish
-from taskloop.round import NextRequest, RoundPorts, run_round
+from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import SlotRelease
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
@@ -72,7 +77,7 @@ class Tracker:
         self.comments: list[tuple[str, str]] = []
         self.holds: list[str] = []
 
-    def labels(self, _root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(self, _root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         """5.2: nothing written for a missing or closed task or another actor's; else `held` added and `label` removed."""
         self.holds.append(f"labels {task_id} {label}")
         found = self.beads.get(task_id)
@@ -141,8 +146,9 @@ class Factory:
     once; `failing` answers the next launch instead, with nothing run (an entry that never started)."""
 
     def __init__(self, con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, files: SlotFiles,
-                 tracker: Tracker) -> None:
-        con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.repo.identity().key, str(slot.path)))
+                 tracker: Tracker, *, adopted: bool = False) -> None:
+        if not adopted:
+            con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.repo.identity().key, str(slot.path)))
         self.root = slot.path.parent
         self.con, self.tmp, self.slot, self.checkouts, self.files, self.tracker = con, tmp_path, slot, checkouts, files, tracker
         self.store = AttemptStore(lambda: con)
@@ -153,6 +159,7 @@ class Factory:
         self.last = Round("tasks", ())
         self.during: Callable[[], object] = lambda: None
         self.ran: list[str] = []  # each launched body's result
+        self.merge_before_dispatch = False
 
     def adopt(self, name: str) -> None:
         """One more slot, made and adopted as a person does: detached at the repository's HEAD."""
@@ -168,8 +175,22 @@ class Factory:
         key = found[0]
         self.store.register_entry(key, ENTRY, self.now)  # a relaunch keeps the identity registered first
         step = self.store.step_of(key.attempt_id)
-        attempts = Attempts(self.store, EvidenceFiles(self.tmp), lambda: ("/bin/codex", {}), self.agents[task_id, step or ""],
-                            lambda: self.now, self.checkouts, self.files, environment=self.environment.preparation())
+        evidence, agent = EvidenceFiles(self.tmp), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds())
+        environment = self.environment.preparation()
+        preparation = (SourcePreparation(self.store, self.checkouts, self.checkouts, self.files, lambda: self.now,
+                                        environment, agent, evidence, self.agents[task_id, step or ""], lambda _worker: True)
+                       if self.merge_before_dispatch else None)
+        attempts = Attempts(
+            self.store,
+            evidence,
+            agent,
+            self.agents[task_id, step or ""],
+            lambda: self.now,
+            self.checkouts,
+            self.files,
+            environment=environment,
+            source_preparation=preparation,
+        )
         found = attempts.execute(key, ENTRY, lambda: "held")
         self.ran.append(f"{found.status}:{found.reason}")
         return Launched(key, ENTRY)
@@ -177,14 +198,15 @@ class Factory:
     def starting(self) -> StartPorts:
         files, clock = EvidenceFiles(self.tmp), lambda: self.now
         fresh = AttemptAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, self.tracker.claim,
-                                 self.tracker.unclaim, clock, lambda _p: True, self.files)
+                                 self.tracker.unclaim, clock, lambda _p: True, self.files, ids=NativeIds())
         advance = NextAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, clock, lambda _p: True,
-                                self.files)
+                                self.files, ids=NativeIds())
         return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks(), NoChecks()))
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(self.store, self.checkouts, self.files, lambda _entry: "gone", lambda _worker: True, custody,
-                           self.tracker.unclaim, lambda: self.now, lambda _setup: "gone", lambda _scratch: True)
+                           self.tracker.unclaim, lambda: self.now, lambda _setup: "gone", lambda _scratch: True,
+                           HoldStore(lambda: self.con), ids=NativeIds())
 
     def observe(self, _entry: EntryIdentity) -> Seen:
         """Called while the round reads its snapshot: `during` is another actor acting once, right after that read."""
@@ -203,17 +225,28 @@ class Factory:
 
     def ports(self) -> RoundPorts:
         """Fresh ports over the same factory.db each round, as each `tl step rounds` round opens them (a restart too)."""
-        verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold)
+        verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold, ids=NativeIds())
         reads = StatusPorts(self.store, self.observe, lambda: self.now, verifier.leftovers, lambda: "boot")
-        publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now)
+        publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds())
         holding = self.holding(reads)
-        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker, self.lines.append)
+        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker,
+            self.lines.append, repository=partial(repository_of, self.checkouts), ids=NativeIds())
 
     def round(
         self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto", running: int = 10
     ) -> list[tuple[str, str, str, str]]:
         self.now += 1
-        request = NextRequest("tasks", "/tracker", self.slot.repo.path, label, "m", "high", 30, quiet, max_running=running)
+        request = NextRequest(
+            "tasks",
+            "/tracker",
+            self.slot.repo.path,
+            label,
+            StepSettings(),
+            Overrides(model="m", effort="high"),
+            30,
+            quiet,
+            max_running=running,
+        )
         found = run_round(self.ports(), request)
         assert isinstance(found, Round)
         self.last = found
@@ -222,10 +255,17 @@ class Factory:
     def by_hand(self, task_id: str) -> None:
         """`tl step start` then `tl step verify` (its release and publication), as the person runs them."""
         self.now += 1
-        assert isinstance(start(self.starting(), StartRequest(task_id, "tasks", "/tracker", self.slot.repo.path, "m", "high", 30)), Started)
+        assert isinstance(
+            start(
+                self.starting(),
+                StartRequest(task_id, "tasks", "/tracker", self.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+            ),
+            Started,
+        )
         self.now += 1
-        verify_task(self.store, Verifier(self.store, self.checkouts, self.files, lambda _w: True, lambda: self.now, hold), self.releaser(),
-                    BranchPublish(self.store, self.checkouts, self.files, lambda: self.now), "tasks", task_id)
+        verify_task(self.store, Verifier(self.store, self.checkouts, self.files, lambda _w: True,
+            lambda: self.now, hold, ids=NativeIds()), self.releaser(),
+                    BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds()), "tasks", task_id)
 
     def next_words(self) -> dict[str, tuple[str, str]]:
         listed = list_attempts(StatusPorts(self.store, lambda _entry: "gone", lambda: self.now, lambda _key: None, lambda: "boot"))
@@ -263,7 +303,7 @@ def scripts(factory: Factory, slot: FakeWorktree, *task_ids: str) -> None:
         plan, code, test = f"docs/design/{task_id}/plan.md", f"src/{task_id}.py", f"tests/test_{task_id}.py"
         factory.agents[task_id, "plan"] = scripted(
             slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
-            {plan: "# Plan\n"})
+            {plan: PLAN_TEXT})
         factory.agents[task_id, "implement"] = scripted(
             slot.repo, {"disposition": "implemented", "paths": [code, test], "message": "Add it", "explanation": "ran just check"},
             {code: "X = 1\n", test: "def test_x() -> None: ...\n"})

@@ -13,6 +13,8 @@ from git_porcelain import Tree
 
 from taskloop import implement_step, plan_step
 from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, Step, StepRules, Unsettled
+from taskloop.check_repeat.feedback import FailedCheck
+from taskloop.input_context import InputContext
 from taskloop.task import TaskInspection
 
 
@@ -33,7 +35,7 @@ class StepKind:
 
     step: Step
     rules: Callable[[str], StepRules]
-    input_text: Callable[[TaskInspection, StepRules], str]
+    input_text: Callable[[TaskInspection, StepRules, InputContext], str]
     answer_schema: Mapping[str, object]
     decode: Callable[[object, StepRules], Answer]
     artifact: Callable[[Tree, StepRules], Rejected | str | None]
@@ -54,6 +56,10 @@ CHECK: Final = "check"  # the checks step: no kind, its own tables (`check_store
 ORDER: Final = (PLAN.step, IMPLEMENT.step, CHECK)  # every built step, in the fixed order
 # every verdict word a stored verdict may hold
 RULES: Final[tuple[Rule, ...]] = CHAIN_RULES + plan_step.ARTIFACT_RULES + implement_step.ARTIFACT_RULES
+
+
+def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:
+    return implement_step.failed_check_feedback(found, task, nonce)
 
 
 def kind(step: str) -> StepKind:

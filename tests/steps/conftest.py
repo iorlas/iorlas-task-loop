@@ -20,6 +20,7 @@ from sqlite_store import Store, begin_immediate
 from taskloop import check_store, land_store
 from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import SCHEMA
+from taskloop.slots import folder_name
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ def factory() -> Generator[sqlite3.Connection]:
 @pytest.fixture
 def repo(tmp_path: Path) -> FakeRepo:
     remote = FakeRemote("https://example.invalid/repo.git")
-    remote.advance("main", {"README": "one"})
+    remote.advance("main", {"README": "one", ".task-loop.json": "{}"})
     return FakeRepo.clone(remote, tmp_path / "main")
 
 
@@ -49,8 +50,8 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def slot(repo: FakeRepo, root: Path) -> FakeWorktree:
-    """What a person does before adoption: `git worktree add --detach <root>/<repo_id>/s1`, born, detached and clean."""
-    return repo.add_worktree(root.resolve() / repo.identity().key / "s1", "HEAD")
+    """What a person does before adoption: `git worktree add --detach <root>/<repo name>/s1`, born, detached and clean."""
+    return repo.add_worktree(root.resolve() / folder_name(repo.identity()) / "s1", "HEAD")
 
 
 @pytest.fixture
@@ -87,9 +88,9 @@ def admitted(tmp_path: Path, slot: FakeWorktree) -> Path:
         con.execute(
             """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+             schema_version,model,effort,access_policy,deadline,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,1,1,?)""",
+            '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,?)""",
             (repo_id, hashlib.sha256(text.encode()).hexdigest(), head(slot)),
         )
     con.close()
@@ -108,9 +109,9 @@ def registered(factory: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path) 
         factory.execute(
             """INSERT INTO attempt
             (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
-             schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
+             schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,7,'entry-start','boot',1,1,?)""",
+            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?)""",
             (repo_id, hashlib.sha256(b"Plan the actual task").hexdigest(), head(slot)),
         )
     (tmp_path / "input.txt").write_text("Plan the actual task")
@@ -125,9 +126,9 @@ def checking(factory: sqlite3.Connection) -> sqlite3.Connection:
         factory.execute("INSERT INTO slot (repo_id,name,path) VALUES ('r','s1','/slots/s1'),('r','s2','/slots/s2')")
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
             after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker','r','s1','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", ("b" * 40, X, D, "a" * 40))
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?)""", ("b" * 40, X, D, "a" * 40))
         factory.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (D,))
         factory.execute("INSERT INTO reservation VALUES ('s2','r',1,'checks')")
         check_store.insert(factory, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s2", D, TARGET, REQUIRED, 100.0))
@@ -164,9 +165,10 @@ def on_slot(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Path:
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot.path)))
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
             after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, "b" * 40, made.sha, d, "a" * 40))
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?)""", (repo_id,
+            "b" * 40, made.sha, d, "a" * 40))
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,1,'kept')", (d,))
         con.execute("INSERT INTO reservation VALUES ('s1',?,1,'checks')", (repo_id,))
         check_store.insert(con, check_store.ChecksAdmitted(CHECKS, "implement", 1, "s1", d, made.sha, REQUIRED, 100.0))
@@ -224,9 +226,10 @@ def done(tmp_path: Path, repo: FakeRepo, slot: FakeWorktree) -> Done:
         con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s0','/elsewhere/s0'),(?,'s1',?)", (repo_id, repo_id, str(slot.path)))
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,number,seq,slot_head,
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,number,seq,slot_head,
             after_commit) VALUES ('implement','implement-token',1,'implement','beads','tasks','tl-1','/tracker',?,'s0','input.txt',
-            'digest',1,'m','e','workspace-write',100,'captured',?,?,1,2,?,?)""", (repo_id, target.sha, x.sha, d, target.sha))
+            'digest',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,1,2,?,?)""", (repo_id,
+            target.sha, x.sha, d, target.sha))
         for statement in DONE:
             con.execute(statement)
         con.execute("INSERT INTO slot_release VALUES ('implement','implement-token',1,?,4,'kept')", (d,))

@@ -1,3 +1,5 @@
+Status: **evidence**. Historical architecture-review format/opinion specimen; its proposals are not adopted system authority.
+
 # storage
 R1 SQL and sqlite3.Connection MUST appear only in a slice's store.py. [sqlite-only-in-store]
 R2 Each table MUST have exactly one writing slice. [table-ownership]

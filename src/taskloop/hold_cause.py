@@ -8,15 +8,23 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from taskloop.attempt_types import MiB, StepRules
+from taskloop.agents.stop_models import AgentStop
+from taskloop.agents.stop_text import stop_text
+from taskloop.attempt_types import PlanContentRule
 
-CHECK_GIT = "look at the task branch and the slot (`tl step show` names them)"
+CHECK_GIT = "look at the task branch and the retained slot evidence"
 EVIDENCE = "its `stdout.txt`, `stderr.txt` and `diagnostics.txt` in the evidence directory"
 RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the fix ("" = retry as it is)
     "plan_missing": ("`plan.md` is absent from the commit (an `unchanged` answer needs an existing plan)", ""),
     "plan_encoding": ("`plan.md` is not valid UTF-8 text", ""),
     "plan_empty": ("`plan.md` is empty or only whitespace", ""),
-    "plan_size": (f"`plan.md` is over the {StepRules('').file_cap // MiB} MiB limit", ""),
+    "plan_size": ("the plan exceeds its depth's byte cap", "remove duplicated content or split the task into bounded parts"),
+    PlanContentRule.CHANGE_MAP: ("the plan needs a Change map with a nonempty bullet list",
+                                 "add the files, symbols and changes, including producers and callers"),
+    PlanContentRule.DEPTH: ("the plan does not declare exactly one valid depth",
+                           "supply one Depth field with small, medium or large in Header"),
+    PlanContentRule.HEADING: ("the plan has a forbidden status, as built or progress heading",
+                             "remove that heading and its status, as built or progress content"),
     "paths": ("a listed path is not allowed (outside the step's folder, a Git file, or too many paths)", ""),
     "mode": ("a listed file is not a plain, non-executable file", ""),
     "file_size": ("a listed file is over the size limit", ""),
@@ -33,7 +41,7 @@ RUN = {  # the run's classified end words the shelf names: what happened, and th
                     "correct `--model` or `--effort`"),
     "hung": ("The agent printed nothing for too long and was stopped.", ""),
     "crash": ("The agent process crashed.", ""),
-    "killed": ("The agent process was killed by a signal.", ""),
+    "killed": ("The agent process was killed by a signal. The factory has no recorded sender or stop cause.", ""),
     "secrets": ("A command of the agent exposed a secret, so the run was stopped.",
                 f"find what printed it in {EVIDENCE} and remove that source"),
     "exit": (f"The agent exited with an error and no answer; see {EVIDENCE}.", "read it and fix what it names"),
@@ -91,6 +99,26 @@ def _repeats(_rest: str) -> Cause:
                  "(`Left in the slot` names them).")
 
 
+LAND_CAUSE = "land:"  # the prefix of a land refusal's hold reason (`round_land`)
+ASIDE = ("set the task's old branch aside (rename it to `old/<id>-` and the first 12 characters of its tip, saved work "
+         "included: nothing is deleted) so the work starts again on the current "
+         "`main`")
+LAND = {  # a land refusal about the task's own change: what happened and the fix ("" = the same work may be tried again)
+    "conflict": ("The checked change no longer merges onto `main`: newer changes on `main` conflict with it.", ASIDE),
+    "checks_failed": ("The checks failed on the change as squashed onto the current `main`, though they passed on the task's own "
+                      "commit (the land's check logs say which).", ASIDE),
+    "remote_rejected": ("Origin refused the push to `main` by its own policy (for example a protected branch), not because `main` "
+                        "moved.", "lift what blocks the push to `main`, or land the change by hand"),
+    "branch_moved": ("The task branch no longer holds exactly the commit that was checked.", None),
+    "claim_lost": ("Someone else changed this task's claim while it waited to land.", None),
+}
+
+
+def _land(rest: str) -> Cause:
+    what, fix = LAND.get(rest, (f"The factory could not land the change ({rest}).", None))
+    return Cause(f"The factory tried to land this task by itself and was refused: {what}", fix)
+
+
 OWNER = {
     "needs_owner": Cause("The agent needs a decision only the owner can give (its explanation is quoted above)."),
     "main_moved": Cause("`main` moved while each of the last checks runs ran (more landing or pushing than the checks take), so "
@@ -98,16 +126,21 @@ OWNER = {
     "incomplete": Cause("The agent stopped without finishing (its explanation is quoted above)."),
 }
 BY_PREFIX: tuple[tuple[str, Callable[[str], Cause]], ...] = (  # the first prefix of the word that fits builds the cause
-    ("run:", _run), ("answer:", _answer), ("rejected:", _rejected), ("repeats_exhausted", _repeats), ("stuck:", _stuck),
+    ("land:", _land), ("run:", _run), ("answer:", _answer), ("rejected:", _rejected), ("repeats_exhausted", _repeats), ("stuck:", _stuck),
 )
 
 
-def cause(reason: str, deadline: float | None = None) -> Cause | None:
+def cause(reason: str, deadline: float | None = None, stop: AgentStop | None = None, rc: int | None = None) -> Cause | None:
     """The cause line and fix of a hold's `reason`, None for a reason without one of its own (the owner's answer then)."""
     word = reason.removeprefix("failed:")
     if word == "run:timeout":
-        return Cause(f"The agent did not finish before its deadline{_at(deadline)}.", "raise `--minutes` for the next run")
-    return OWNER.get(word) or next((build(word.removeprefix(prefix)) for prefix, build in BY_PREFIX if word.startswith(prefix)), None)
+        found = Cause(f"The agent did not finish before its deadline{_at(deadline)}.", "raise `--minutes` for the next run")
+    else:
+        found = OWNER.get(word) or next((build(word.removeprefix(prefix)) for prefix, build in BY_PREFIX if word.startswith(prefix)), None)
+    attribution = stop_text(stop, rc) if word.startswith("run:") or word == "stuck:entry_lost" else None
+    if attribution is not None:
+        return Cause(attribution, found.fix if found is not None else "")
+    return found
 
 
 def next_step(found: Cause | None, back: str, owner: str) -> str:

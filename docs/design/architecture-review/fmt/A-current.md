@@ -1,3 +1,5 @@
+Status: **evidence**. Historical architecture-review format/opinion specimen; its proposals are not adopted system authority.
+
 ## Model
 | thing | owner | tables | writes | reads |
 |---|---|---|---|---|

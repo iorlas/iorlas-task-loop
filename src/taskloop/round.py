@@ -7,9 +7,10 @@ claimed task whose step is done (`Next: advance`) to its next step, oldest relea
 is refused `claim_lost` or `branch_moved` is held), then admit eligible ready tasks in priority order into the slots left
 free, storing the round's label on each fresh attempt (an `on_hold` task whose hold removed this very label is eligible
 again: `hold_status.reingests`), then publish the verified, released, unpublished results read at the start (a
-round-taken `branch_moved` is held), then remove `held` from held tasks taken again (`hold.clear_holds`). It adds no
-state, lock, Git write, tracker write or process of its own beyond the hold operation's: its only other output is one
-append-only round-log line per move, never read back. No per-task hold word stops admission. Nothing merges or lands.
+round-taken `branch_moved` is held), then remove `held` from held tasks taken again (`hold.clear_holds`). Under the profile's
+`land: auto` it first lands the oldest passed task in the repository (`round_land`: the shared `land.land`). It adds no
+state, lock, Git write, tracker write or process of its own beyond the hold's and the land's: its only other output is one
+append-only round-log line per move, never read back. No per-task hold word stops admission.
 
 Claimed work goes before new work (.16 3.6): the advance takes free slots before admission. The label is ingestion's only:
 admission's ready read carries it; an advance checks no label, takes no claim, and reads the tracker once per task (still
@@ -20,18 +21,26 @@ lines of an admission that did not read the ready rows this round stay quiet too
 move (the graceful stop: no further move, `stopped=interrupted`).
 """
 
+import sqlite3
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import Final
 
+from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey
+from taskloop.attempt_types import AttemptKey, Checkouts
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import BLOCKED, ActionKind, Reason
+from taskloop.drain.store import DrainStore
 from taskloop.hold import HoldPorts, clear_holds, hold_task
-from taskloop.hold_status import MAIN_MOVED, reingests
+from taskloop.hold_status import MAIN_MOVED
+from taskloop.ids import Ids
 from taskloop.operations import (
     UNKNOWN_KINDS,
     Failed,
@@ -46,7 +55,6 @@ from taskloop.operations import (
     StartRequest,
     VerifiedTask,
     Verify,
-    choices_refused,
     launched,
     minutes_refused,
     publish_task,
@@ -55,11 +63,13 @@ from taskloop.operations import (
     verify_task,
 )
 from taskloop.publish import publish_word
+from taskloop.round_land import Landing, land_passed
 from taskloop.round_log import INTERRUPTED
 from taskloop.round_trail import Trail
 from taskloop.selection import order
 from taskloop.slot_release import NotReleased, release_word
 from taskloop.task import TaskInspectionError
+from taskloop.task_status import Admission, Status, in_flight, restartable, skipped, task_status, words
 from taskloop.tracker import ACTOR, ReadyRows, TaskRow, ancestry, leaked_claim, ready_rows
 
 # A refusal that stops admission for the round: no slot is free, or the round's own inputs or the store are wrong. Any
@@ -89,8 +99,8 @@ class NextRequest:
     tracker_root: str
     checkout: Path
     label: str
-    model: str
-    effort: str
+    settings: StepSettings
+    overrides: Overrides
     minutes: int
     quiet: Quiet | None = None
     max_running: int = 3  # in-flight tasks of the backlog (`in_flight`) at which nothing new starts
@@ -111,7 +121,12 @@ class RoundPorts:
     holding: HoldPorts
     ready: ReadyRows
     log: Callable[[str], None]
+    ids: Ids = field(kw_only=True)
     stopping: Callable[[], bool] = never
+    drain_store: DrainStore | None = None
+    generation: int | None = None  # captured at explicit rounds startup; older loops cannot schedule after reopening
+    landing: Landing | None = None  # `land: auto` lands through it; None: rounds land nothing
+    repository: Callable[[Path], str | Failed] = lambda _path: Failed("unavailable", "checkout")
 
 
 def _word(result: Started | Failed) -> str:
@@ -120,32 +135,40 @@ def _word(result: Started | Failed) -> str:
 
 def _request(request: NextRequest, task_id: str) -> StartRequest:
     """The start of one task under the round's choices and label (stored only by a fresh admission)."""
-    return StartRequest(task_id, request.backlog, request.tracker_root, request.checkout, request.model, request.effort, request.minutes,
-                        request.label)
+    return StartRequest(
+        task_id,
+        request.backlog,
+        request.tracker_root,
+        request.checkout,
+        request.settings,
+        request.overrides,
+        request.minutes,
+        request.label,
+    )
 
 
 def max_running_refused(count: int) -> Failed | None:
     return None if count >= 1 else Failed("refused", "max_running", "`--max-running` is at least 1 (tasks in flight before nothing starts)")
 
 
-IN_FLIGHT: Final = frozenset({"start", "wait", "verify", "repeat", "release", "publish", "advance", "land"})
-
-
-def in_flight(current: Iterable[AttemptView]) -> frozenset[str]:
-    """The backlog's tasks with work that goes on without the person: a step starting, running, verified, repeated,
-    released, published or advanced, or a passed task waiting for `tl step land` (counted until landed). Failed (`done`),
-    `repeats_exhausted`, `stuck:*`, `unknown`, held, landed and abandoned ones need the person: not counted."""
-    return frozenset(e.task_id for e in current if e.next in IN_FLIGHT and not (e.release is not None and e.release.abandoned))
-
-
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
+    try:
+        with operation(ports.drain_store or ports.starting.reader, ActionKind.ROUND, ids=ports.ids, generation=ports.generation):
+            return _run_round(ports, request)
+    except Fenced:
+        return Failed("refused", Reason.DRAINING, BLOCKED)
+    except Unobservable:
+        return Failed("unavailable", "observe", "The calling process cannot be observed.")
+    except (sqlite3.Error, StoreUnavailable):
+        return Failed("unavailable", "store", "The factory database is unavailable.")
+
+
+def _run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     """One round: settle, advance, admit (while fewer than `max_running` tasks are in flight), publish, clear. A
     whole-round refusal (empty label, unreadable store) is `Failed`."""
     label = request.label.strip()
-    if not label:
-        return Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
-    refused = (choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
-               or max_running_refused(request.max_running))
+    refused = (Failed("refused", "label", "An approval label is required (`--label auto`); a round never takes every ready task")
+               if not label else minutes_refused(request.minutes) or max_running_refused(request.max_running))
     if refused is not None:
         return refused
     request = replace(request, label=label)
@@ -157,10 +180,24 @@ def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     for each in current:
         if ports.stopping():
             return trail.close(INTERRUPTED)
-        _settle(ports, request, each, trail)
-    reserve = int(any(each.next == "land" for each in current))
-    stopped = _advance(ports, request, tuple(each for each in current if each.next == "advance" or _rerun(each)), trail, reserve)
-    stopped = stopped or _admit(ports, request, current, trail, reserve)
+        if each.next != "repeat" or each.checks is None:
+            _settle(ports, request, each, trail)
+    refreshed = list_attempts(ports.reads) if ports.landing is not None else listed
+    if isinstance(refreshed, Failed):
+        return refreshed
+    after_settle = _backlog(refreshed, request.backlog)
+    needs_land = ports.landing is not None and any(each.next == "land" for each in after_settle)
+    repo_id = ports.repository(request.checkout) if needs_land else None
+    if isinstance(repo_id, Failed):
+        return repo_id
+    for_land = tuple(each for each in after_settle if repo_id is None or each.repo_id == repo_id)
+    finished = frozenset() if ports.stopping() else land_passed(
+        ports.landing, request.backlog, request.checkout, request.minutes, for_land, trail, partial(_held, ports.holding))
+    reserve = int(any(each.next == "land" and each.task_id not in finished for each in for_land))
+    waiting = tuple(each for each in current if each.next == "advance" or _rerun(each)
+                    or (each.next == "repeat" and each.checks is not None))
+    stopped = _advance(ports, request, waiting, trail, reserve)
+    stopped = stopped or _admit(ports, request, after_settle, trail, reserve, finished)
     if stopped != INTERRUPTED:
         stopped = _publish(ports, request.backlog, (each for each in current if each.next == "publish"), trail) or stopped
     if stopped != INTERRUPTED and not ports.stopping():
@@ -178,8 +215,16 @@ def _backlog(listed: Listed, backlog: str) -> tuple[AttemptView, ...]:
     return tuple(each for each in listed.attempts if each.backlog == backlog)
 
 
+def repository_of(checkouts: Checkouts, checkout: Path) -> str | Failed:
+    found = checkout_repo(checkouts, checkout)
+    if isinstance(found, (AdmitRefused, AdmitUnavailable)):
+        return Failed("refused" if isinstance(found, AdmitRefused) else "unavailable", "checkout", found.detail)
+    return found[1]
+
+
 def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: Trail) -> None:
-    """One existing attempt by its `Next` word: an abandoned one is never re-admitted; `advance` waits for the advance
+    """One existing attempt by its `Next` word: an abandoned one is restarted only by admission
+    (`task_status.restartable`); `advance` waits for the advance
     phase, `publish` for the last one; `hold` is the hold operation (due, or not finished), `on_hold` nothing at all."""
     task, attempt, step = each.task_id, each.attempt_id, each.step
     abandoned = each.release is not None and each.release.abandoned
@@ -200,9 +245,9 @@ def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: T
             trail.add(_held(ports.holding, each))
         case "release" if each.checks is not None and each.checks.row.released_at is None:  # its entry is gone (`checks_next`)
             trail.add(_checks_released(ports, each, each.checks.row.key))
-        case "wait" | "land":  # `land`: passed checks, one line while unchanged: the person's sign to run `tl step land`
+        case "wait" | "land":  # `land`: passed checks, one line while unchanged (landed by `round_land` under `land: auto`)
             trail.add(Move(task, "report", "running" if each.next == "wait" else "land", attempt, step=step))
-        case "publish" | "advance" | "landed" | "on_hold":  # only the person's `tl step land` lands (`rounds-never-land`)
+        case "publish" | "advance" | "landed" | "on_hold":
             return
         case "done" if succeeded(each.result) or _rerun(each):  # a re-run is the advance phase's
             return
@@ -315,7 +360,8 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
         done = each.attempt_id if each.checks is None else each.checks.row.after  # a re-run follows the implement attempt
         result = start(ports.starting, _request(request, each.task_id), advancing=done, rerun=each.checks is not None)
         if isinstance(result, Started):
-            trail.add(Move(each.task_id, "advance", result.status, result.attempt_id, step=result.step or ""))
+            trail.add(Move(each.task_id, "repeat" if each.next == "repeat" else "advance", result.status, result.attempt_id,
+                           step=result.step or ""))
             continue
         trail.unusable(each.task_id, result)  # the slots the refusal names: no_free_slot's, the one holding a held branch
         if result.reason == "no_free_slot":
@@ -332,29 +378,35 @@ def _advance(ports: RoundPorts, request: NextRequest, waiting: tuple[AttemptView
     return ""
 
 
-def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: Trail, reserve: int) -> str:
+def _admit(ports: RoundPorts, request: NextRequest, current: tuple[AttemptView, ...], trail: Trail, reserve: int,
+           finished: frozenset[str]) -> str:
     """Eligible ready tasks in priority order, one start each, until a slot, the in-flight bound (`max_running`) or the
     round's inputs run out; the word that stopped admission early ("" when the candidates ran out). With every slot
     reserved (`no_free_slot`, `slot_for_land`) or the bound reached (`max_running`): no tracker call."""
     if ports.stopping():
         return INTERRUPTED
-    if word := _full(ports.reads.store, reserve) or ("max_running" if len(in_flight(current)) >= request.max_running else ""):
+    running = len(in_flight(current) - finished)
+    if word := _full(ports.reads.store, reserve) or ("max_running" if running >= request.max_running else ""):
         return word
     try:
         rows = ready_rows(ports.ready, request.label, ports.reads.clock(), request.retake)
     except TaskInspectionError as error:
         return "refused:tracker" if error.kind == "malformed" else "unavailable:tracker"
-    # abandoned once its claim is no longer kept: a half-done checks abandon (claim still kept) is `attempted`; a finished
-    # hold that removed this round's label is left out: the label in this ready read is the person's answer (7.2)
-    again = frozenset(each.task_id for each in current if reingests(each.next, each.hold, request.label))
+    # A task a person abandoned (or a hold the person answered) that the tracker lists ready under this label restarts fresh
+    # (`task_status.restartable`): the one restart route. Any other abandoned one is skipped, and the skip is the status's words.
+    admission = Admission(frozenset(row.task_id for row in rows), request.label)
+    again = frozenset(each.task_id for each in current if restartable(each, admission))
     attempts = {each.task_id: each.release is not None and each.release.claim != "kept" for each in current if each.task_id not in again}
-    ordered, skipped = order(rows, ancestry(ports.ready, rows), attempts, ACTOR, again)
+    ordered, skipped_by = order(rows, ancestry(ports.ready, rows), attempts, ACTOR, again)
     trail.ranked = True
     ids = {each.task_id: (each.attempt_id, each.step) for each in current}
-    for task_id, reason in skipped:
+    states = {each.task_id: task_status(each, admission) for each in current}
+    for task_id, reason in skipped_by:
         attempt, step = ids.get(task_id, ("", ""))
-        trail.add(Move(task_id, "skip", reason, attempt, step=step))  # attempted/abandoned: the attempt that holds it
-    return _start_each(ports, request, ordered, trail, reserve, len(in_flight(current)))
+        found = states.get(task_id)
+        explained = words(found) if found is not None and found.status is Status.ABANDONED else words(skipped(reason))
+        trail.add(Move(task_id, "skip", reason, attempt, explained, step))  # attempted/abandoned: the attempt that holds it
+    return _start_each(ports, request, ordered, trail, reserve, running)
 
 
 def _start_each(ports: RoundPorts, request: NextRequest, ordered: tuple[TaskRow, ...], trail: Trail, reserve: int, running: int) -> str:

@@ -14,6 +14,7 @@ from taskloop.attempt_types import ATTEMPTS
 from taskloop.check_status import ChecksView
 from taskloop.check_store import Required, ResultRow
 from taskloop.checks import differs
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.hold_guide import hold_lines
 from taskloop.hold_text import explained
 from taskloop.land_close import NOT_SYNCED
@@ -53,10 +54,13 @@ def _agent_lines(each: AttemptView) -> list[str]:
     return [
         f"Task: {each.task_id} (backlog {each.backlog})", f"Step: {each.step}",
         f"Attempt: {each.attempt_id} ({each.number} of at most {ATTEMPTS}{repeats})", *earlier,
+        *([] if each.source_checks_id is None else [f"Source checks: {each.source_checks_id}"]),
         f"Slot: {each.slot}", f"Phase: {each.phase}",
         f"Entry: {each.entry}{entry}", f"Worker: {worker}",
         *([] if last_command(each) is None else [f"Last command: {last_command(each)}"]),
         f"Result: {each.result.status} {each.result.reason}".rstrip(),
+        *([f"Preparation: {one_line(each.result.explanation)}"]
+          if each.result.explanation and each.result.reason.startswith("merge:") else []),
         f"Succeeded: {'yes' if succeeded(each.result) else 'no'}", f"Deadline passed: {'yes' if each.deadline_passed else 'no'}",
         *released, *published,
     ]
@@ -67,16 +71,16 @@ def setup_line(found: SetupShown | None) -> str:
     if found is None:
         return "Setup: none"
     row, whose = found.row, "" if found.attempt_id is None else f" (attempt {found.attempt_id}'s, which this repeat keeps)"
-    return f"Setup: run {row.run} {row.conclusion or 'unfinished'} at {row.commit}{whose}; log {found.log}"
+    return f"Setup: run {row.run} {encode(row.conclusion) or 'unfinished'} at {row.commit}{whose}; log {found.log}"
 
 
 def check_line(row: ResultRow, log: Path | None, required: Required, prefix: str = "Check") -> str:
     """One latest-block result: its conclusion, exit and whole seconds, the process group of a command not proven gone,
     its log, and whether `main` requires it (a required one whose argv at X differs from the one stored from `main` says
     so)."""
-    if row.conclusion == "undefined":
+    if row.conclusion == CommandConclusion.UNDEFINED:
         return f"{prefix}: {row.name} undefined (required by main, not defined at X)"
-    state = "unfinished" if row.conclusion is None else row.conclusion
+    state = "unfinished" if row.conclusion is None else encode(row.conclusion)
     state += "" if row.rc is None else f", exit {row.rc}"
     state += "" if row.ended_at is None else f", {round(row.ended_at - row.started_at)} s"
     state += f", process group {row.process.pgid}" if row.process is not None and row.unsettled else ""  # to verify before a stop

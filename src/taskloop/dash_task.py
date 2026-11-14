@@ -6,15 +6,19 @@ behind the evidence files; a checks attempt's are its results."""
 from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
 
+from any_agent.access import CodexSandbox
 from any_agent.activity import Activity
 
+from taskloop.access import SANDBOX
 from taskloop.activity_file import ActivityPage
+from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
-from taskloop.dash_board import card_of, tries
+from taskloop.command_conclusion import CommandConclusion
+from taskloop.dash_board import admission_of, card_of, tries
 from taskloop.dash_model import (
     Answer,
     AttemptBody,
@@ -25,16 +29,21 @@ from taskloop.dash_model import (
     FeedEvent,
     FeedPage,
     Outcome,
+    Run,
     State,
     TaskDetail,
     TrackerDetail,
     Verification,
     iso,
 )
+from taskloop.dash_usage import project, totals
 from taskloop.dash_verify import STEP as VERIFICATION
 from taskloop.dash_verify import applies, verification
-from taskloop.evidence_files import EvidenceFiles
+from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS
 from taskloop.hold_store import HoldStore
+from taskloop.merge.status import result as merge_result
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
 
 
@@ -96,8 +105,10 @@ def _agent(
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
     page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
-    return AttemptDetail(row.step, number, state, iso(started), iso(ended), result.reason or result.status, after, reason,
-                         previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None)
+    summary = result.explanation or result.reason or result.status
+    return AttemptDetail(row.step, number, state, iso(started), iso(ended), summary, after, reason,
+                         previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None,
+                         run=_run(row), usage=project(None if result.execution is None else result.execution.facts))
 
 
 def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
@@ -106,15 +117,30 @@ def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
     return tuple((start, end) for kind, _a, _b, start, end in found if kind in ("insert", "replace"))
 
 
-def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody:
+SANDBOX_WORDS = {SANDBOX: "can write its own workspace only, no network",
+                 CodexSandbox.DANGER_FULL_ACCESS.value: "full access: the container is the boundary"}
+
+
+def _run(row: AttemptRow) -> Run | None:
+    choices = row.run
+    if choices is None:
+        return None
+    return Run(HARNESS_WORDS[choices.harness], PROVIDER_WORDS[choices.provider], choices.model, choices.effort,
+               SANDBOX_WORDS.get(choices.summary, choices.summary))
+
+
+def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody | Failed:
     shown = ports.files.text_bounded(row.key, "answer.txt")
     disposition = None if result.execution is None else result.execution.answer.disposition
     answer = None if shown is None else Answer(disposition or "none", shown[0], shown[1])
-    shown = ports.files.text(row.key, "input.txt")
     earlier = next((each for each in rows if each.key.attempt_id == row.previous_attempt_id), None)
-    before = None if earlier is None else ports.files.text(earlier.key, "input.txt")
-    added = () if shown is None or before is None else added_lines(before, shown)
-    return AttemptBody(shown, Outcome(result.reason or result.status, answer, (), None), added)
+    try:
+        shown = ports.files.read(ports.reads.store.input_ref(row.key))
+        before = None if earlier is None else ports.files.read(ports.reads.store.input_ref(earlier.key))
+    except EvidenceError as error:
+        return Failed("unavailable", "input", str(error))
+    added = () if before is None else added_lines(before, shown)
+    return AttemptBody(shown, Outcome(result.explanation or result.reason or result.status, answer, (), None), added)
 
 
 def _took(result: ResultRow) -> int:
@@ -122,7 +148,7 @@ def _took(result: ResultRow) -> int:
 
 
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:
-    return CheckLine(result.name, result.conclusion == "passed", _took(result),
+    return CheckLine(result.name, result.conclusion == CommandConclusion.PASSED, _took(result),
                      ports.files.check_tail(row.key, result.block, result.name), result.block)
 
 
@@ -135,7 +161,8 @@ def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: str | None)
     results = store.results(row.key)
     state, summary = _checks_state(row)
     started = min((each.started_at for each in results), default=None)
-    feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name, passed=each.conclusion == "passed",
+    feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name,
+        passed=each.conclusion == CommandConclusion.PASSED,
                            duration_ms=_took(each)) for each in results if each.conclusion is not None)
     return AttemptDetail("checks", number, state, iso(started), iso(row.concluded_at), summary, "repeat" if earlier is not None else None,
                          earlier, number - 1 if earlier is not None else None, feed)
@@ -169,6 +196,9 @@ def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
     verified = checked = 0
     for row in reversed(rows):
         result = collect(ports.reads.store, row.key)
+        if row.phase == "admitted" and row.release is None:
+            result = merge_result(MergeStore(ports.reads.store.connect, ports.reads.store.begin), row.key.attempt_id,
+                                  ports.reads.clock()) or result
         found.append(Link(numbers[row.key.attempt_id], agent=row, result=result))
         if applies(result):
             verified += 1
@@ -190,22 +220,31 @@ def _verification(link: Link) -> tuple[AttemptDetail, Verification]:
 
 
 def history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[AttemptDetail, ...]:
-    """Oldest first: each agent attempt, its verification, then the checks attempts after an implement attempt."""
+    """Oldest first: each agent attempt, its verification, then the checks attempts after an implement attempt. Every entry up to
+    the latest abandoned attempt (the chain boundary) is `past`: a person gave that chain up, it is not the task's current steps."""
+    cut = max((each.seq for each in rows if each.release is not None and each.release.abandoned), default=0)
+    past = {each.key.attempt_id for each in rows if each.seq <= cut}
+    return tuple(replace(each, past=owner in past) for each, owner in _history(ports, rows))
+
+
+def _history(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[tuple[AttemptDetail, str], ...]:
+    """Each entry with the agent attempt it belongs to (a checks attempt: the implement attempt it follows)."""
     store = CheckStore(ports.reads.store.connect, ports.reads.store.begin)
     numbers = tries(rows)
-    found: list[AttemptDetail] = []
+    found: list[tuple[AttemptDetail, str]] = []
     earlier: str | None = None
     led: dict[str, int] = {}  # agent attempt id -> the try of its verification
     for link in _chain(ports, rows):
         if link.checks is not None:
-            found.append(_checks(store, link.checks, link.number, earlier))
-            earlier = found[-1].summary
+            found.append((_checks(store, link.checks, link.number, earlier), link.checks.after))
+            earlier = found[-1][0].summary
         elif link.verifies and link.agent is not None:
-            found.append(_verification(link)[0])
+            found.append((_verification(link)[0], link.agent.key.attempt_id))
             led[link.agent.key.attempt_id] = link.number
         elif link.agent is not None and link.result is not None:
             previous = link.agent.previous_attempt_id or ""
-            found.append(_agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous)))
+            found.append((_agent(ports, link.agent, link.number, link.result, numbers.get(previous), led.get(previous)),
+                          link.agent.key.attempt_id))
     return tuple(found)
 
 
@@ -237,13 +276,17 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
         if view is not None:
             holds = HoldStore(ports.reads.store.connect, ports.reads.store.begin).of_attempts((agent_attempt(view),))
             view = with_hold(view, holds.get(agent_attempt(view)))
+            view = replace(view, stop=StopStore(ports.reads.store.connect).get(
+                view.attempt_id if view.hold is None else view.hold.cause_id))
         attempts = history(ports, rows)
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
     card = Card(task_id, title, "waiting", 0, None, None, None, None, None) if view is None else card_of(
-        view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id))
-    return TaskDetail(card, attempts)
+        view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
+        admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready())))
+    step_usage, usage = totals(attempts)
+    return TaskDetail(card, attempts, step_usage, usage)
 
 
 def build_tracker(tracker: DashTracker, task_id: str) -> TrackerDetail | None:

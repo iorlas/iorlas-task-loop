@@ -25,20 +25,21 @@ from stream_proc import OwnedProcess
 
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced
+from taskloop.command_conclusion import CommandConclusion, decode, encode
+from taskloop.drain.models import ActionKind, Identity, Owner, Role, owners
+from taskloop.drain.store import blocked, pending
 from taskloop.factory_schema import CANDIDATE_HELD, CHECK_RESULT, CHECKS_ADMITTED, CHECKS_LOADED, CLOSED, LANDED, LANDING, marks, prefixed
 
 type Outcome = Literal["passed", "failed"]
-type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted"]
 # An abandon's record: `abandoned`, or refused by `factory_schema.LANDING` (`landed`: a candidate delivered, its close still
 # to come; `closed`: delivered and closed; `landing`: one holds its slot or is pushable), or `changed` (off the fence). A
 # settled release records `released`.
 type Recorded = Literal["released", "abandoned", "landed", "closed", "landing", "changed"]
 type Required = tuple[tuple[str, str], ...]  # each required name with its check's argv digest at the target, in its order
 OUTCOMES: Final[tuple[Outcome, ...]] = ("passed", "failed")
-CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted")
 # Unfinished or so concluded, a result names a command whose group must be proven empty before the slot is reset, set up,
 # relaunched or released (`interrupted`: its entry died, and nothing proved the command's group gone).
-LIVE_AFTER: Final[tuple[Conclusion, ...]] = ("lingering", "timed_out", "interrupted")
+LIVE_AFTER: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.LINGERING, CommandConclusion.TIMED_OUT, CommandConclusion.INTERRUPTED)
 REQUIRED_MAX: Final = 32
 JOINED: Final = """FROM checks_attempt c JOIN attempt a ON a.attempt_id=c.after_attempt_id
 JOIN reservation r ON r.repo_id=a.repo_id AND r.slot=c.slot AND r.attempt_id=c.attempt_id AND r.generation=c.generation"""
@@ -113,7 +114,7 @@ class ResultRow:
     started_at: float
     ended_at: float | None
     rc: int | None
-    conclusion: Conclusion | None
+    conclusion: CommandConclusion | None
 
     @property
     def unsettled(self) -> bool:
@@ -135,6 +136,13 @@ def stored_word[W: str](value: object, words: tuple[W, ...]) -> W | None:
     if (found is None) != (value is None):
         raise StoreUnavailable("Malformed stored conclusion")
     return found
+
+
+def _conclusion(value: object) -> CommandConclusion | None:
+    try:
+        return decode(value)
+    except ValueError as error:
+        raise StoreUnavailable("Malformed stored conclusion") from error
 
 
 def required_json(required: Required) -> str:
@@ -196,7 +204,7 @@ def _checks(row: tuple[object, ...]) -> ChecksRow:
 
 def _result(row: tuple[object, ...]) -> ResultRow:
     return ResultRow(as_int(row[0]), as_int(row[1]), as_text(row[2]), as_nullable_text(row[3]), as_nullable_int(row[4]), _process(row[5:9]),
-                     stored_real(row[9]), stored_nullable_real(row[10]), as_nullable_int(row[11]), stored_word(row[12], CONCLUSIONS))
+                     stored_real(row[9]), stored_nullable_real(row[10]), as_nullable_int(row[11]), _conclusion(row[12]))
 
 
 def latest_results(con: sqlite3.Connection, attempt_id: str) -> tuple[ResultRow, ...]:
@@ -257,6 +265,20 @@ class CheckStore(StoreConnection):
     through `registering` (composition's bounded connection); every other read and write through the store's own
     connection."""
 
+    def owns_entry(self, key: AttemptKey, identity: Identity) -> bool:
+        """Whether this process is the registered entry of this exact attempt; no unrelated execution reads."""
+        with self._connection() as con:
+            return con.execute("SELECT 1 FROM checks_attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? "
+                               "AND entry_pid=? AND entry_start=? AND entry_boot=?",
+                               (*astuple(key), identity.pid, identity.start, identity.boot)).fetchone() is not None
+
+    def drain_processes(self) -> tuple[Owner, ...]:
+        """Every recorded execution identity, including historical and already concluded work."""
+        with self._connection() as con:
+            entries = con.execute("SELECT attempt_id,entry_pid,entry_start,entry_boot FROM checks_attempt").fetchall()
+            checks = con.execute("SELECT attempt_id,pid,pgid,proc_start,boot FROM check_result").fetchall()
+        return owners(entries, Role.ENTRY, group=False) + owners(checks, Role.CHECK, group=True)
+
     def __init__(
         self,
         connect: Callable[[], sqlite3.Connection | None],
@@ -308,6 +330,9 @@ class CheckStore(StoreConnection):
         without its deadline refusal: an entry past the deadline runs nothing and concludes `expired`. `now` is unused."""
         del now
         with self._connection(write=True) as con:
+            if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id
+                                        for action in pending(con)):
+                return "refused"
             row = con.execute("SELECT c.phase,c.deadline,c.entry_pid,c.entry_start,c.entry_boot " + RESERVED, astuple(key)).fetchone()
             if row is None:
                 return "refused"
@@ -359,7 +384,7 @@ class CheckStore(StoreConnection):
 
     def undefined(self, key: AttemptKey, block: int, position: int, name: str, now: float) -> None:
         """A stored required name the profile at X does not define: its result, with no process and no argv."""
-        self._new(key, (block, position, name, None, None, now, now, "undefined"))
+        self._new(key, (block, position, name, None, None, now, now, encode(CommandConclusion.UNDEFINED)))
 
     def _new(self, key: AttemptKey, values: tuple[object, ...]) -> None:
         block, position, name = values[0], values[1], values[2]
@@ -380,13 +405,13 @@ class CheckStore(StoreConnection):
             self._changed(con, key, block, position, "pid=?,pgid=?,proc_start=?,boot=?",
                           (process.pid, process.pgid, process.start, process.boot), " AND pid IS NULL")
 
-    def finish(self, key: AttemptKey, block: int, position: int, conclusion: Conclusion, rc: int | None, now: float) -> None:
+    def finish(self, key: AttemptKey, block: int, position: int, conclusion: CommandConclusion, rc: int | None, now: float) -> None:
         """A started check's conclusion (never `undefined`, which only `undefined` writes); `interrupted` is the
         reconcile's word for one whose command was proven gone without a conclusion."""
-        if conclusion == "undefined":
+        if conclusion is CommandConclusion.UNDEFINED:
             raise ValueError("an undefined result is written by `undefined`")
         with self._connection(write=True) as con:
-            self._changed(con, key, block, position, "conclusion=?,rc=?,ended_at=?", (conclusion, rc, now), "")
+            self._changed(con, key, block, position, "conclusion=?,rc=?,ended_at=?", (encode(conclusion), rc, now), "")
 
     def _changed(self, con: sqlite3.Connection, key: AttemptKey, block: int, position: int, assignments: str,
                  values: tuple[object, ...], also: str) -> None:

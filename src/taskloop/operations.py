@@ -22,9 +22,9 @@ from typing import Final, Literal, Protocol
 
 from sqlite_store import SchemaError
 
-from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
 from taskloop.admit_chain import NextStepRequest
+from taskloop.agents.settings import Overrides, StepSettings, apply
 from taskloop.attempt_reads import PublishedRow, StoreRefused, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
@@ -40,6 +40,8 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
 )
 from taskloop.check_admit import ChecksRequest
+from taskloop.check_repeat.feedback import FeedbackReason
+from taskloop.check_repeat.status import CheckRepeatDecision, CheckRepeatTarget, repeat_target
 from taskloop.check_status import HALF_DONE, checks_result, latest, route
 from taskloop.check_store import ChecksRow, CheckStore
 from taskloop.hold_status import ANSWERED
@@ -50,6 +52,7 @@ from taskloop.machine_config import ConfigRefused
 from taskloop.publish import BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
+from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
 type Clock = Callable[[], float]
@@ -115,6 +118,7 @@ class Failed:
     admitted: bool = False
     checks: bool = False
     land: bool = False
+    config: ConfigRefused | None = None
 
     @property
     def word(self) -> str:
@@ -123,6 +127,10 @@ class Failed:
 
 class Repeat(Protocol):
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed: ...
+
+
+class CheckRepeating(Protocol):
+    def repair(self, request: StartRequest, previous: AttemptKey, source: AttemptKey) -> Started | Failed: ...
 
 
 @dataclass(frozen=True)
@@ -144,6 +152,7 @@ class StartPorts:
     repeat: Repeat
     advance: Advance
     checks: ChecksPorts
+    check_repeat: CheckRepeating | None = None
 
 
 @dataclass(frozen=True)
@@ -152,8 +161,8 @@ class StartRequest:
     backlog: str
     tracker_root: str
     checkout: Path
-    model: str
-    effort: str
+    settings: StepSettings
+    overrides: Overrides
     minutes: int
     label: str | None = None  # the round's approval label, stored on a fresh admission; None: `tl step start` by hand
 
@@ -220,7 +229,7 @@ class Adoption:
     slots: tuple[Adopted | NotAdopted, ...]
 
 
-type Action = Literal["start", "relaunch", "repeat", "verify", "advance", "release", "publish", "report", "skip", "hold"]
+type Action = Literal["start", "relaunch", "repeat", "verify", "advance", "release", "publish", "report", "skip", "hold", "land"]
 
 
 @dataclass(frozen=True)
@@ -275,7 +284,7 @@ def require_database(open_ro: Callable[[], sqlite3.Connection | None]) -> sqlite
 
 
 def refused_config(refused: ConfigRefused) -> Failed:
-    return Failed("refused", refused.reason, refused.detail)
+    return Failed("refused", refused.reason, refused.detail, config=refused)
 
 
 def deadline_after(minutes: int, clock: Clock) -> float:
@@ -290,19 +299,6 @@ def minutes_refused(minutes: int) -> Failed | None:
     store, tracker or launch call."""
     ok = 1 <= minutes <= MAX_MINUTES
     return None if ok else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
-
-
-def _word(value: str) -> bool:
-    return bool(value) and value.isprintable() and not any(char.isspace() for char in value) and not value.startswith("-")
-
-
-def choices_refused(model: str, effort: str) -> Failed | None:
-    """`--model` and `--effort` of every agent launch, checked before a slot or claim is taken, by shape only: one printable
-    word that cannot read as a flag. Which models and efforts exist is the vendor's to say (its catalog changes); a value it
-    refuses fails in the agent."""
-    if not _word(model) or not _word(effort):
-        return Failed("refused", "choices", "--model and --effort must each be one printable word that does not start with `-`")
-    return None
 
 
 @dataclass(frozen=True)
@@ -334,7 +330,7 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
     repeat: refused `abandoned` when the task's attempt was abandoned since, `changed` when it is no longer that done
     attempt (another current attempt, or not advanceable). `rerun`: the round's one re-run of a failed checks attempt
     (`main_moved`, tl-8bh9.14.64) is that advance too; otherwise an advance is never a re-run."""
-    found = _start(ports, request, advancing, rerun)
+    found = minutes_refused(request.minutes) or _start(ports, request, advancing, rerun)
     if isinstance(found, Failed) or found.step is not None:
         return found
     try:
@@ -344,16 +340,17 @@ def start(ports: StartPorts, request: StartRequest, *, advancing: str | None = N
 
 
 def _start(ports: StartPorts, request: StartRequest, advancing: str | None, rerun: bool) -> Started | Failed:
-    refused = choices_refused(request.model, request.effort) or minutes_refused(request.minutes)
-    if refused is not None:
-        return refused
     try:
         found = _current(ports, request)
-        wanted = isinstance(found, _Advance) and found.previous.attempt_id == advancing and (found.number == 1 or rerun)
+        wanted = ((isinstance(found, _Advance) and found.previous.attempt_id == advancing and (found.number == 1 or rerun))
+                  or (isinstance(found, CheckRepeatTarget) and found.previous.attempt_id == advancing))
         if advancing is not None and not wanted:
             found = _not_advanced(found)
         if isinstance(found, (Started, Failed)):
             return found
+        if isinstance(found, CheckRepeatTarget):
+            return (Failed("unavailable", FeedbackReason.EVIDENCE, "Check-driven implement repeats are not wired.")
+                    if ports.check_repeat is None else ports.check_repeat.repair(request, found.previous, found.source))
         if isinstance(found, (tuple, _Relaunch)):  # an existing attempt: launched as admitted
             target = (found[0] if isinstance(found, tuple) else found.key, True)
         else:
@@ -372,7 +369,7 @@ def _start(ports: StartPorts, request: StartRequest, advancing: str | None, reru
     return replace(result, admitted=True) if isinstance(result, Failed) and not existing else result
 
 
-type _Found = tuple[AttemptKey, str, EntryIdentity | None] | _Advance | _Relaunch | Started | Failed | None
+type _Found = tuple[AttemptKey, str, EntryIdentity | None] | _Advance | _Relaunch | CheckRepeatTarget | Started | Failed | None
 
 
 def _current(ports: StartPorts, request: StartRequest) -> _Found:
@@ -415,7 +412,10 @@ def _checked(ports: StartPorts, request: StartRequest, implement: AttemptKey) ->
     """The done implement attempt's latest checks attempt (`check_status.route`): advance or re-run it, launch it, refuse
     `release` while the task's abandon is half done (never a launch), or answer its result."""
     row = latest(CheckStore(ports.reader.connect, ports.reader.begin), implement.attempt_id)
-    found = route(row)
+    repeat = repeat_target(ports.reader, implement, row)
+    if isinstance(repeat, CheckRepeatTarget):
+        return repeat
+    found = "answer" if repeat is CheckRepeatDecision.EXHAUSTED else route(row)
     if row is None or found == "advance":
         return _Advance(implement, CHECK)
     match found:
@@ -468,14 +468,19 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
     """The new attempt's key (a fresh admission, or the next step's after `advance`), or the winner's after
     `task_attempted`; StoreUnavailable propagates."""
     deadline = deadline_after(request.minutes, ports.clock)
-    choices = (request.checkout, request.model, request.effort, SANDBOX, deadline)
     checks = advance is not None and advance.step == CHECK
-    if advance is None:  # the round's label (tl-8bh9.14.9 section 8); an advance and a repeat copy their attempt's
-        admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root, *choices, request.label))
-    elif checks:
+    if advance is not None and checks:
         admitted = ports.checks.admission.admit_checks(ChecksRequest(advance.previous, request.checkout, deadline, advance.number))
     else:
-        admitted = ports.advance.admit_next(NextStepRequest(advance.previous, *choices))
+        try:
+            setting = apply(request.settings.for_step("plan" if advance is None else advance.step), request.overrides)
+        except ValueError as error:
+            return Failed("refused", "choices", str(error))
+        if advance is None:
+            admitted = ports.admission.admit(AdmitRequest(request.task_id, request.backlog, request.tracker_root,
+                                                        request.checkout, setting, deadline, request.label))
+        else:
+            admitted = ports.advance.admit_next(NextStepRequest(advance.previous, request.checkout, setting, deadline))
     if isinstance(admitted, Admitted):
         return admitted.key, False
     if isinstance(admitted, AdmitUnavailable):
@@ -591,5 +596,5 @@ def verify_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled 
     if isinstance(result, VerifyUnavailable) and result.reason == "inconsistent":  # same inputs, another verdict: a defect
         return Failed("defect", result.reason)
     if isinstance(result, Unsettled):
-        return Failed("unsettled", result.reason, "\n".join(result.listing))
+        return Failed("unsettled", result.reason, "\n".join(filter(None, (unsafe_details(result), "\n".join(result.listing)))))
     return Failed(VERIFY_KINDS[type(result)], result.what if isinstance(result, NotApplicable) else result.reason)

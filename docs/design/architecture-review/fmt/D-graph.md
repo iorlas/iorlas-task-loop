@@ -1,3 +1,5 @@
+Status: **evidence**. Historical architecture-review format/opinion specimen; its proposals are not adopted system authority.
+
 # storage
 engine      -owns->       attempt reservation slot execution verification slot_release
 step        -owns->       own result table(s)

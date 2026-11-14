@@ -13,7 +13,9 @@ import pytest
 from git_porcelain import GitUnavailable
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 
+from taskloop.agents.settings import AgentSetting
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Admission, AnswerState, AttemptKey, ChainLink, FileRef, Rejected, Unsettled
 from taskloop.factory_commit import Committed, clean_at, settle
 from taskloop.git_views import GitViews
@@ -66,7 +68,7 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *relative: str) 
 def admission(main: Path, slot: Path) -> Admission:
     key = VIEWS.checkouts(main).identity().key
     task = TaskReference(TaskScope("tasks"), "tl-1")
-    choices = ("m", "e", "s", 100, (1, "", ""), 1, "plan")
+    choices = (AgentSetting(model="m", effort="e"), 100, (1, "", ""), 1, "plan")
     return Admission(AttemptKey("attempt", "dispatch", 1), task, RepoId(key), "s1", str(slot), FileRef("i", "d"), *choices)
 
 
@@ -76,7 +78,7 @@ def test_the_factory_commit_runs_no_hook_carries_the_trailer_and_leaves_the_slot
     main, slot, markers = repository(tmp_path.resolve(), monkeypatch)
     base = git(slot, "rev-parse", "HEAD").strip()
     (slot / "docs/design/tl-1").mkdir(parents=True)
-    (slot / P).write_text("# Plan\n")
+    (slot / P).write_text(PLAN_TEXT)
     attempt = admission(main, slot)
     made = settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet)
     assert isinstance(made, Committed) and made.sha != base
@@ -110,7 +112,7 @@ def redirect(slot: Path, target: Path) -> None:
 
 def plan(slot: Path) -> None:
     (slot / "docs/design/tl-1").mkdir(parents=True)
-    (slot / P).write_text("# Plan\n")
+    (slot / P).write_text(PLAN_TEXT)
 
 
 def test_a_symlink_indirected_pointer_to_the_persons_git_directory_is_redirected(

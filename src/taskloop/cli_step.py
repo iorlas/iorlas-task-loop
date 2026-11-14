@@ -4,13 +4,19 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
+from pydantic import ValidationError
+
 from taskloop import attempt_status, cli_composition, dash_composition, land, operations, result_data
+from taskloop.agents.settings import Overrides
 from taskloop.composition import real_slots
+from taskloop.drain.models import Reason
 from taskloop.exit_codes import exit_code
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind
 from taskloop.land_guide import INTERRUPTED
 from taskloop.machine_config import ConfigRefused, Effective, Flags, Loaded
 from taskloop.operations import Ended, Failed, Round, StartRequest
@@ -22,6 +28,7 @@ from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
 
 type Parsers = argparse._SubParsersAction[argparse.ArgumentParser]
+DASH_PORT = 8765
 COMMANDS = ("config", "slot", "step")
 
 
@@ -44,9 +51,10 @@ def register(commands: Parsers) -> None:
     config = _add(commands, "config", "Machine configuration").add_subparsers(dest="operation", required=True)
     show = _add(config, "show", "Print each effective setting, its source, and the config file")
     _common(show, "--db", "--artifacts", "--root")
+    _harness_flag(show)
     show.add_argument("--count", type=int, help="Slot count (overrides the machine config's slot_count)")
     slot = _add(commands, "slot", "Managed slots (setup)").add_subparsers(dest="operation", required=True)
-    adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo_id>/sN`; creates factory.db")
+    adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo name>/sN`; creates factory.db")
     adopt.add_argument("checkout", metavar="CHECKOUT", help="The person's checkout of the repository")
     adopt.add_argument("--count", type=int, help="Adopt s1..sN (overrides slot_count); adds slots only, retires none")
     _common(adopt, "--root", "--db")
@@ -54,9 +62,10 @@ def register(commands: Parsers) -> None:
     start = _add(step, "start", "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
                  "re-run failed checks on the same commit. The tracker claim stays held between steps; nothing renews it then")
     start.add_argument("task_id", metavar="TASK")
-    for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
+    for flag in ("--backlog", "--tracker-root", "--checkout"):
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
+    _harness_flag(start)
     _common(start, "--db", "--artifacts")
     status = _add(step, "show", "The task's attempt, its entry, setup run, result and next action (read-only)")
     status.add_argument("task_id", metavar="TASK")
@@ -87,8 +96,9 @@ def register(commands: Parsers) -> None:
     rounds = _add(step, "rounds", ROUNDS)
     rounds.add_argument("--every", type=int, metavar="SECONDS", help="Seconds between regular rounds, at least 5 (overrides the "
                         "machine config's round_seconds)")
-    rounds.add_argument("--dash-port", type=int, metavar="PORT", help="Serve the read-only dashboard on 127.0.0.1:PORT while the "
-                        "rounds run (0 picks a free port); without it nothing is served")
+    rounds.add_argument("--dash-port", type=int, metavar="PORT", default=DASH_PORT, help="Serve the read-only dashboard on "
+                        f"127.0.0.1:PORT while the rounds run (default {DASH_PORT}; 0 picks a free port)")
+    rounds.add_argument("--no-dashboard", action="store_true", help="Serve no dashboard (for a second rounds on one machine)")
     _round_flags(rounds)
     rounds.epilog = ("--json prints JSON Lines: one start record and one end record on a graceful stop; "
                      "refusals and abrupt end results go to stderr. Dashboard notices go to stderr with --json.")
@@ -102,7 +112,8 @@ def register(commands: Parsers) -> None:
 LAND = ("Land the task's checked commit X yourself: fetch origin's main (O), squash X onto it as one commit S (Git objects only), "
         "run every check again on S in a free slot, in this shell, only when main moved or its required names changed, push S "
         "to origin's main as you (never forced), then close the task in your local tracker (never synced: `bd dolt push` is "
-        "yours). A rerun does only what is missing; rounds never land. Your checkout and local main are never written. Exit 0 landed "
+        "yours). A rerun does only what is missing; under the profile's `land: auto` a round runs this same land by itself. "
+        "Your checkout and local main are never written. Exit 0 landed "
         "(or already), 1 refused, 3 unknown (a rerun is safe), 130 interrupted by Ctrl-C (a rerun reconciles it)")
 
 
@@ -126,16 +137,24 @@ def _land_flags(parser: argparse.ArgumentParser) -> None:
     _common(parser, "--db", "--artifacts")
 
 
+def _harness_flag(parser: argparse.ArgumentParser) -> None:
+    for flag in ("--model", "--effort"):
+        parser.add_argument(flag, default=None, help="Override this field of each newly admitted step (flag > machine config > default)")
+    parser.add_argument("--harness", type=HarnessKind, choices=list(HarnessKind), default=None,
+                        help="Override each newly admitted step's configured harness")
+
+
 def _round_flags(parser: argparse.ArgumentParser) -> None:
-    for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
+    for flag in ("--backlog", "--tracker-root", "--checkout"):
         parser.add_argument(flag, required=True)
     parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
                         "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
     parser.add_argument("--max-running", type=int, default=3, metavar="N", help="Tasks of this backlog in flight (a step "
-                        "running, or passed and waiting for `tl step land`, which counts until landed; not failed, stuck or held) "
+                        "running, or passed and waiting to be landed, which counts until landed; not failed, stuck or held) "
                         "at which no new task starts (default 3, at least 1); claimed work advances regardless. Start only what you "
                         "approved: use a label only those tasks carry")
     parser.add_argument("--minutes", type=int, required=True, help="Deadline of each attempt a round admits, from now")
+    _harness_flag(parser)
     parser.add_argument("--retake-lapsed", action="store_true", help="After a factory.db discard only: also take the tasks "
                         "`taskloop` still holds in progress with an expired lease and no attempt here (assumes this is the one "
                         "factory on the tracker); run it once, with `tl step next`")
@@ -148,28 +167,32 @@ def views_for(loaded: Loaded) -> GitViews:
 
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.model,
-                           arguments.effort, arguments.minutes)
+    request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), loaded.settings.agents,
+                           _overrides(arguments), arguments.minutes)
     with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
         return ports if isinstance(ports, Failed) else operations.start(ports, request)
 
 
-def _next_request(arguments: argparse.Namespace) -> NextRequest:
-    return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
-                       arguments.effort, arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed)
+def _overrides(arguments: argparse.Namespace) -> Overrides:
+    return Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort)
+
+
+def _next_request(arguments: argparse.Namespace, loaded: Loaded) -> NextRequest:
+    return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, loaded.settings.agents,
+                       _overrides(arguments), arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed)
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    settings = loaded.settings
+    settings, request = loaded.settings, _next_request(arguments, loaded)
     with cli_composition.open_next(settings.db.value, settings.artifacts.value, views_for(loaded), arguments.tracker_root) as ports:
-        return ports if isinstance(ports, Failed) else run_round(ports, _next_request(arguments))
+        return ports if isinstance(ports, Failed) else run_round(ports, request)
 
 
 def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_composition.DashRequest | None:
-    if arguments.dash_port is None:
+    if arguments.no_dashboard:
         return None
     return dash_composition.DashRequest(arguments.backlog, arguments.tracker_root, arguments.label, arguments.dash_port,
-                                        settings.db.value, settings.artifacts.value)
+                                        settings.db.value, settings.artifacts.value, Path(arguments.checkout))
 
 
 def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
@@ -178,8 +201,10 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings, request = loaded.settings, RoundsRequest(arguments.backlog, loaded.settings.round_seconds.value)
     log = settings.artifacts.value / "rounds.log"
     try:
-        with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments)) as ports:
-            if isinstance(ports, Failed):
+        with cli_composition.open_rounds(
+            settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments, loaded)
+        ) as ports:
+            if isinstance(ports, (Failed, Ended)):
                 return ports
             label = arguments.label.strip()  # as `run_round` reads it
             data = result_data.rounds_data(request.backlog, request.every, str(log), label, arguments.max_running)
@@ -187,7 +212,7 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                        f"Rounds for backlog {request.backlog} every {request.every} s, taking tasks labelled {label!r}"
                        + (" (and its own lapsed claims)" if arguments.retake_lapsed else "")
                        + f", none new while {arguments.max_running} or more tasks of this backlog are in flight (a step running, or "
-                       f"passed and waiting for land until `tl step land` lands it); log: {log}; "
+                       f"passed and waiting to be landed, by a round under the profile's `land: auto`, else by a person); log: {log}; "
                        + ("stop with Ctrl-C" if ports.ctrl_c else "Ctrl-C is ignored here: stop with SIGTERM"))
             print(started, flush=True)
             with dash_composition.serving(_dash_request(arguments, settings), views_for(loaded)) as address:
@@ -250,8 +275,22 @@ def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                                  real_slots(views_for(loaded)))
 
 
+def _configuration(arguments: argparse.Namespace, loaded: Loaded) -> Loaded | Failed:
+    flags = _overrides(arguments)
+    try:
+        settings = loaded.settings.agents.overridden(flags)
+    except ValueError as error:
+        return Failed("refused", "choices", str(error))
+    sources = dict(loaded.settings.agent_sources)
+    for step in ("plan", "implement"):
+        for key in ("harness", "model", "effort"):
+            if getattr(flags, key) is not None:
+                sources[f"agents.{step}.{key}"] = "flag"
+    return replace(loaded, settings=replace(loaded.settings, agents=settings, agent_sources=sources))
+
+
 OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]] = {
-    ("config", "show"): lambda _arguments, loaded: loaded,
+    ("config", "show"): _configuration,
     ("slot", "adopt"): _adopt,
     ("step", "start"): _start,
     ("step", "next"): _next,
@@ -273,8 +312,12 @@ def run(arguments: argparse.Namespace) -> int:
     if isinstance(loaded, ConfigRefused):
         result: Result = operations.refused_config(loaded)
     else:
-        result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
-    failed = isinstance(result, Failed) or (isinstance(result, Ended) and result.reason != "interrupted")
+        try:
+            result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
+        except ValidationError as error:
+            result = Failed("refused", "choices", str(error))
+    failed = isinstance(result, Failed) or (isinstance(result, Ended)
+                                            and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING})
     stream = sys.stderr if failed else sys.stdout
     if arguments.json_output:
         admission = (arguments.command, arguments.operation) == ("step", "start")  # the one command whose refusals carry slots

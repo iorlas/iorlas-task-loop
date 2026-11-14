@@ -37,7 +37,10 @@ from git_porcelain import (
 from taskloop.attempt_reads import PublishedRow, StoreUnavailable, as_nullable_text, as_text
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.factory_schema import LATER, PUBLISHED, current, marks
+from taskloop.ids import Ids
 from taskloop.prepare import task_branch
 from taskloop.slot_state import repository
 
@@ -136,8 +139,23 @@ class BranchPublish:
     remotes: Checkouts
     slot_files: SlotFiles
     clock: Callable[[], float]
+    ids: Ids
 
     def publish(self, key: AttemptKey) -> PublishResult:
+        try:
+            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
+                           existing=lambda owner: self.store.owns_entry(key, owner)) as call:
+                result = self._publish(key)
+                call.resolved = not isinstance(result, NotPublished) or result.kind != "unavailable"
+                return result
+        except Fenced:
+            return _refused(Reason.DRAINING, BLOCKED)
+        except Unobservable:
+            return _unavailable("observe", "The calling process cannot be observed.")
+        except (sqlite3.Error, StoreUnavailable):
+            return _unavailable("store", "The factory database is unavailable.")
+
+    def _publish(self, key: AttemptKey) -> PublishResult:
         """Publish the attempt's verified commit once: every precondition first, then one push, then the record."""
         try:
             row = self._read(key)

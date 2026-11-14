@@ -21,16 +21,20 @@ from stream_proc import OwnedProcess, ProcessObservation
 from taskloop import land_store
 from taskloop.admit import issued
 from taskloop.admit_rows import reserve
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import NativeIds
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher, LaunchResult
 from taskloop.operations import LATE, ChecksPorts, Failed, Started, StartPorts, StartRequest, start
 from taskloop.round import RoundPorts
+from taskloop.round_land import Landing
 from taskloop.setup_store import ProcessSeen, SetupStore
 from taskloop.slot_lock import custody
 from taskloop.slot_release import Released
@@ -61,6 +65,7 @@ class Checking(Factory):
         self.entries, self.launched, self.alive = list[tuple[str, str]](), list[str](), set[EntryIdentity]()
         self.checks = CheckStore(lambda: con)
         self.groups: dict[int, ProcessSeen] = {}
+        self.landing: Landing | None = None
 
     def command(self, process: OwnedProcess) -> ProcessSeen:
         return self.groups.get(process.pid, "gone")
@@ -68,7 +73,7 @@ class Checking(Factory):
     def ports(self) -> RoundPorts:
         ports = super().ports()
         reads = replace(ports.reads, commands=self.command)
-        return replace(ports, reads=reads, holding=self.holding(reads))
+        return replace(ports, reads=reads, holding=self.holding(reads), landing=self.landing)
 
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         self.launched.append(task_id)  # the agent launcher: plan and implement attempts only
@@ -76,9 +81,9 @@ class Checking(Factory):
 
     def starting(self) -> StartPorts:
         admission = ChecksAdmission(lambda: self.con, begin_immediate, self.tracker.inspect, self.checkouts, lambda: self.now,
-                                    lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts))
+                                    lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts), ids=NativeIds())
         launcher = Launcher(self.path, EvidenceFiles(self.tmp), lambda: self.now, self.entry, self.process, "python",
-                            targets=CheckStore, module=CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS)
+                            targets=CheckStore, module=CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
         return replace(super().starting(), checks=ChecksPorts(admission, launcher, self.releasing()))
 
     def observe(self, _entry: EntryIdentity) -> Seen:
@@ -128,7 +133,7 @@ class Checking(Factory):
         self.checks.registered(key, block, 0, OwnedProcess(pid, pid, f"check-{pid}", "boot"))
         self.groups[pid] = "alive"
         if pid == 901:
-            self.checks.finish(key, block, 0, "lingering", 0, self.now)
+            self.checks.finish(key, block, 0, CommandConclusion.LINGERING, 0, self.now)
             self.checks.conclude(key, "failed", "check:lingering", self.now)
 
     def checks_commit(self, key: AttemptKey) -> str:
@@ -155,7 +160,7 @@ class Checking(Factory):
 
     def releasing(self) -> ChecksRelease:
         return ChecksRelease(self.checks, self.checkouts, self.files, lambda _entry: "gone", custody, lambda: self.now,
-                             self.command, lambda _scratch: True)
+                             self.command, lambda _scratch: True, ids=NativeIds())
 
     def finish(self, task_id: str, body: str) -> None:
         """The running entry of the task's checks attempt ends with `body`."""
@@ -284,7 +289,10 @@ def test_two_counted_refusals_hold_the_task_without_stopping_new_work_and_a_star
     assert rig.round(frozenset()) == [held, ("tl-2", "plan", "start", "started")]
     assert held not in rig.round(rig.last.written) and rig.starts == 2 and rig.counted("tl-1") == ("checks:running", 2)
     rig.now += 1
-    by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
+    by_hand = start(
+        rig.starting(),
+        StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+    )
     assert isinstance(by_hand, Failed) and by_hand.word == "refused:on_hold"
     assert rig.con.execute("SELECT count(*) FROM attempt WHERE task_id='tl-1' AND step='plan'").fetchone() == (1,)
 
@@ -312,7 +320,7 @@ def test_a_relaunch_past_the_deadline_that_concludes_expired_clears_the_count(ri
     assert rig.round() == [("tl-1", "check", "hold", "held failed:expired")] and rig.counted("tl-1") == (None, 0)
 
 
-def test_an_abandon_during_checks_is_never_re_advanced_and_its_half_done_state_is_attempted(rig: Checking) -> None:
+def test_an_abandon_during_checks_is_never_re_advanced_and_the_finished_abandon_restarts(rig: Checking) -> None:
     implemented(rig)
     rig.bodies = ["failed"]
     rig.round()
@@ -322,8 +330,8 @@ def test_an_abandon_during_checks_is_never_re_advanced_and_its_half_done_state_i
     assert rig.round() == [("tl-1", "check", "report", "release"), ("tl-1", "check", "skip", "attempted")]
     found = rig.store.attempt_of("tasks", "tl-1")
     assert found is not None and found[0].attempt_id == implement and rig.releaser().release(found[0], True)
-    assert rig.round() == [("tl-1", "implement", "skip", "abandoned")]
-    assert rig.rows() == [("tl-1", 1, "concluded", "failed")] and rig.starts == 1 and rig.tracker.claims == ["tl-1"]
+    assert rig.round() == [("tl-1", "plan", "start", "started")]  # the person's finished abandon: restarted fresh at plan
+    assert rig.rows() == [("tl-1", 1, "concluded", "failed")]
 
 
 def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_waits_for_the_land(rig: Checking) -> None:
@@ -338,7 +346,7 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_w
     reads = rig.tracker.ready_reads
     assert rig.round() == [("tl-1", "check", "report", "running")] and rig.last.stopped == "no_free_slot"
     assert rig.tracker.ready_reads == reads and rig.next_words()["tl-2"] == ("implement", "advance")  # tl-2 and tl-3 wait
-    rig.finish("tl-1", "passed")
+    rig.finish("tl-1", CommandConclusion.PASSED)
     # tl-1 waits for its land: the slot it freed is left to that land (tl-8bh9.14.34), so tl-2 and tl-3 still wait
     assert rig.round() == [LAND_LINE] and rig.last.stopped == "slot_for_land"
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.next_words()["tl-2"] == ("implement", "advance")
@@ -457,7 +465,10 @@ def test_a_pending_hold_refuses_a_start_by_hand_and_never_abandons_a_passing_re_
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     rig.tracker.down = {"labels"}
     assert rig.round() == [("tl-1", "check", "hold", "pending labels unavailable:tracker")]
-    by_hand = start(rig.starting(), StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30))
+    by_hand = start(
+        rig.starting(),
+        StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30),
+    )
     assert isinstance(by_hand, Failed) and by_hand.word == "refused:held" and rig.starts == 1
     implement = rig.store.attempt_of("tasks", "tl-1")
     assert implement is not None
@@ -513,7 +524,7 @@ def test_a_task_started_by_hand_that_failed_main_moved_is_reported_never_re_run_
     rig.by_hand("tl-1")
     rig.by_hand("tl-1")  # plan, then implement; the label-less task is now at its check advance
     rig.bodies = ["main_moved"]
-    request = StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, "m", "high", 30)
+    request = StartRequest("tl-1", "tasks", "/tracker", rig.slot.repo.path, StepSettings(), Overrides(model="m", effort="high"), 30)
     assert isinstance(start(rig.starting(), request), Started)
     assert rig.round() == [("tl-1", "check", "report", "failed:main_moved")]
     assert rig.starts == 1 and rig.tracker.holds == []

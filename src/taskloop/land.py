@@ -1,5 +1,6 @@
-"""`tl step land TASK` (tl-8bh9.14.8): one application operation, `land(ports, request)`, run only by the person's
-command (never by rounds or an entry: the import contract `rounds-never-land`). It squashes the checked X onto origin's
+"""`tl step land TASK` (tl-8bh9.14.8): one application operation, `land(ports, request)`, run by the person's command and,
+under the profile's `land: auto`, by a round (`round_land`, tl-8bh9.14.136); never by an entry (`entries-never-land`). It
+squashes the checked X onto origin's
 `main` at O as one commit S (Git objects only, no checkout written), validates S in a free slot in the foreground when
 S's tree is not X's or `main`'s required names changed, and delivers S to origin's `main` by `land_push`'s one rule
 (never forced), then closes the task in the person's local tracker (`land_close`: push first, then `bd close`; never
@@ -38,6 +39,8 @@ from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_status import latest
 from taskloop.check_store import ChecksRow
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.land_check import LandPorts, inserted, released, validated
 from taskloop.land_close import closed
 from taskloop.land_gate import Gate, gate_of
@@ -73,6 +76,9 @@ class LandRequest:
     accept: bool = False  # `--accept-gate-changes`: S may change what decides a pass (`land_gate`)
 
 
+type How = Literal["pushed", "already_pushed", "no_change", "delivered", "already_landed"]
+
+
 @dataclass(frozen=True)
 class Landed:
     """The task's candidate delivered and, but from `--withdraw`, its task closed (`row.close`): `how` is `pushed` (this
@@ -81,7 +87,7 @@ class Landed:
     before this call: nothing called); `release` is the word of a slot release this call ran (None: none)."""
 
     row: LandRow
-    how: Literal["pushed", "already_pushed", "no_change", "delivered", "already_landed"]
+    how: How
     release: str | None = None
     gate: Gate | None = None  # with `--accept-gate-changes`: what the pushed S changed in the gate (`land_gate`), read after the push
 
@@ -111,8 +117,8 @@ def _not_checked(checks: ChecksRow | None, no_change: bool) -> Failed | None:
     if checks is None or checks.abandoned or checks.released_at is None or checks.conclusion is None:
         return Failed("refused", "not_checked", f"The task's checks have not concluded and been released: {SHOW}")
     if checks.conclusion != "passed" and not no_change:
-        return Failed("refused", "not_checked", f"The task's checks failed ({checks.reason}): re-run them with `tl step start`, "
-                      "or abandon.")
+        return Failed("refused", "not_checked", f"The task's checks failed ({checks.reason}): they have to pass before it "
+                      "lands; run them again (`tl step start`) or give the task up.")
     return None
 
 
@@ -221,8 +227,9 @@ def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, n
     s, tree_s, tree_x, tree_o = squashed
     no_change = tree_s == tree_o
     if no_change != request.no_change:
-        return Failed("refused", "no_change", f"origin's main at {o} already holds X's changes: confirm, then `tl step land "
-                      "--no-change`.") if no_change else Failed("refused", "changes", "There is something to land: drop --no-change.")
+        return Failed("refused", "no_change", f"origin's main at {o} already holds X's changes, so there is nothing to push: "
+                      "a person confirms that and records the task as landed (`tl step land --no-change`).") if no_change else Failed(
+            "refused", "changes", "There is something to land: drop --no-change.")
     refused = None if no_change else gated(ports.profiles, origin, request.accept, o, s)
     if refused is not None:
         return refused
@@ -247,8 +254,9 @@ def _checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
     found = validated(ports, row)
     if isinstance(found, Failed) or found.validation == "passed":
         return found
-    return Failed("refused", "checks_failed", f"The checks of S ({found.commit}) failed ({found.reason}): read the `Land check:` "
-                  "logs, then rerun `tl step land` (flaky) or abandon. Nothing was pushed.")
+    return Failed("refused", "checks_failed", f"The checks of S ({found.commit}) failed ({found.reason}), though they passed on "
+                  "the task's own commit: the change does not hold on the current main. The `Land check:` logs say which. Nothing was "
+                  "pushed; a flaky check may be retried (`tl step land`), otherwise the task starts again.")
 
 
 def _no_change(ports: LandPorts, origin: Origin, current: LandRow | None, again: Callable[[], LandRow | Failed],
@@ -383,6 +391,14 @@ def land(ports: LandPorts, request: LandRequest) -> LandResult:
     """The land, through the delivery and the close: `Landed`, `Withdrawn`, `LandSummary`, or `Failed` (refused: exit 1; unavailable:
     exit 3, a rerun is safe). A factory.db fault anywhere is `unavailable store`, nothing further changed by this call."""
     try:
-        return _landing(ports, request)
+        with operation(ports.lands, ActionKind.LAND, ids=ports.ids, subject=request.task_id, backlog=request.backlog,
+                       checkout=str(request.checkout.expanduser().absolute())) as call:
+            result = _landing(ports, request)
+            call.resolved = not isinstance(result, Failed) or result.kind not in {"unavailable", "uncertain"}
+            return result
+    except Fenced:
+        return Failed("refused", Reason.DRAINING, BLOCKED)
+    except Unobservable:
+        return Failed("unavailable", "observe", "The calling process cannot be observed.")
     except (sqlite3.Error, StoreUnavailable) as error:
         return Failed("unavailable", "store", f"{type(error).__name__}: rerun.")

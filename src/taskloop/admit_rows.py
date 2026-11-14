@@ -19,7 +19,8 @@ def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey
 
 def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object]) -> None:
     """The admitted attempt row, inside the caller's write transaction."""
-    con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", bound(ATTEMPT_ADMITTED, attempt))
+    values = bound(ATTEMPT_ADMITTED, {"source_checks_id": None, **attempt})
+    con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
 
 
 def issue(con: sqlite3.Connection, repo_id: object, slot: object, generation: int) -> None:
@@ -39,3 +40,28 @@ def as_count(value: object) -> int:
     if isinstance(value, int):
         return value
     raise sqlite3.DatabaseError("Malformed stored integer")
+
+
+def issued(con: sqlite3.Connection, repo_id: RepoId, names: tuple[str, ...]) -> int:
+    """The highest generation issued for any of the named slots (0 when none was)."""
+    marked = ",".join("?" * len(names))
+    found = f"SELECT coalesce(max(generation),0) FROM slot WHERE repo_id=? AND name IN ({marked})"
+    row = con.execute(found, (repo_id, *names)).fetchone()
+    return as_count(None if row is None else row[0])
+
+
+def next_seq(con: sqlite3.Connection, backlog: str, task_id: str) -> int:
+    row = con.execute(
+        "SELECT coalesce(max(seq),0)+1 FROM attempt WHERE adapter='beads' AND backlog=? AND task_id=?", (backlog, task_id),
+    ).fetchone()
+    return as_count(None if row is None else row[0])
+
+
+def task_attempted(con: sqlite3.Connection, backlog: str, task_id: str) -> bool:
+    """Only an abandoned current attempt whose claim was returned permits a fresh admission."""
+    found = con.execute(
+        """SELECT EXISTS (SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id
+        AND r.claim IN ('unclaimed','not_held')) FROM attempt p
+        WHERE p.adapter='beads' AND p.backlog=? AND p.task_id=? ORDER BY p.seq DESC LIMIT 1""", (backlog, task_id),
+    ).fetchone()
+    return found is not None and not found[0]

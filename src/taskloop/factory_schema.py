@@ -1,5 +1,9 @@
 """The one owner of factory.db DDL, its version and every column list of its tables.
 
+v18: durable factory drain and external-action ownership.
+v17: check-driven repeats retain their source checks link and start at the checked commit.
+Drain old attempts before upgrading; refuse the old database, then discard only through its owning operation.
+
 v11: `attempt.step` admits `implement`; `attempt.after_commit` names, for attempt 1 of every later step, the previous
 step's published X it starts from. `setup_run` is the slot setup's record: "latest" is always the highest `run` of one
 attempt, never a wall-clock order. v12 (tl-8bh9.14.6): the checks step's own tables, `checks_attempt` (one per run of the
@@ -11,18 +15,80 @@ close; `check_result.attempt_id` names a checks attempt or a land candidate, so 
 `task_hold`, a hold of a round-taken task's agent attempt with its tracker writes' phases (written only by `hold_store`).
 v15 (tl-8bh9.14.134): `attempt.repeat_listing`, the JSON array of paths the failed verification listed (the unsafe path,
 the leftovers, the ignored paths) that a repeat attempt answers; NULL for attempt 1. The dashboard shows it as the
-verification's result. No migration: an older factory.db is refused (`schema`)."""
+verification's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.provider`, the agent harness the step ran
+under and the provider of its model (`harness_choice`), shown on the dashboard. v19 (tl-8bh9.14.148): `task_hold.saved`, the JSON
+array of the commits a hold saved on the task branch (`wip.SavedCommit`), written only by `hold_store`.
+No migration: an older factory.db is refused (`schema`).
+v21 (tl-8bh9.14.109): covering whole-task step counts for current-card reads.
+v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbox column.
+v21: durable preparation merges. Drain old entries before discarding an older database.
+v22: durable agent stop intents and signal-call reports. Drain old entries before discarding an older database.
+"""
 
 import sqlite3
 from pathlib import Path
 
 from sqlite_store import Schema, SchemaError
 
+from taskloop.check_repeat.feedback import CheckRepeatReason
+from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, encode
+from taskloop.drain.models import ActionKind, ActionState, State
+from taskloop.harness_choice import HarnessKind, Provider
+
+_HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
+_PROVIDERS = ",".join(f"'{each}'" for each in Provider)
+
+_COMMAND_CONCLUSIONS = ",".join(repr(encode(each)) for each in CommandConclusion)
+_SETUP_CONCLUSIONS = ",".join(repr(encode(each)) for each in SETUP_CONCLUSIONS)
+_UNDEFINED = encode(CommandConclusion.UNDEFINED)
+
+# This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
+# interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=15,
+    version=23,
     name="factory",
     steps={},
-    ddl="""
+    ddl=f"""
+CREATE TABLE agent_stop (
+ attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE TABLE recovery_intent (
+ attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE UNIQUE INDEX recovery_owner ON recovery_intent(json_extract(data,'$.token'));
+CREATE TABLE merge_operation (
+ attempt_id TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE TABLE land_conflict (
+ operation_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE,
+ implement_id TEXT NOT NULL UNIQUE REFERENCES attempt(attempt_id),
+ checks_id TEXT NOT NULL REFERENCES checks_attempt(attempt_id),
+ repo_id TEXT NOT NULL, slot TEXT NOT NULL, generation INTEGER NOT NULL CHECK(generation>=1),
+ data TEXT NOT NULL CHECK(json_valid(data)),
+ FOREIGN KEY(repo_id,slot) REFERENCES slot(repo_id,name),
+ UNIQUE(repo_id,slot,generation),
+ CHECK(json_extract(data,'$.key.attempt_id') IS operation_id),
+ CHECK(json_extract(data,'$.key.dispatch_token') IS dispatch_token),
+ CHECK(json_extract(data,'$.key.reservation_generation') IS generation),
+ CHECK(json_extract(data,'$.inputs.key.attempt_id') IS implement_id),
+ CHECK(json_extract(data,'$.request.source.attempt_id') IS implement_id),
+ CHECK(json_extract(data,'$.request.checks.attempt_id') IS checks_id),
+ CHECK(json_extract(data,'$.request.repo_id') IS repo_id),
+ CHECK(json_extract(data,'$.slot') IS slot)
+);
+CREATE TABLE drain_state (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL CHECK(generation>=1),
+ state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in State)}))
+);
+CREATE TABLE drain_action (
+ action_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ({','.join(repr(each.value) for each in ActionKind)})),
+ state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in ActionState)})),
+ pid INTEGER NOT NULL, pgid INTEGER NOT NULL, start TEXT NOT NULL, boot TEXT NOT NULL,
+ subject TEXT NOT NULL, backlog TEXT NOT NULL, tracker_root TEXT NOT NULL,
+ checkout TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0 CHECK(rev>=0)
+);
+CREATE UNIQUE INDEX drain_claim ON drain_action(tracker_root,backlog,subject)
+ WHERE kind='{ActionKind.CLAIM.value}' AND state<>'{ActionState.DONE.value}';
 CREATE TABLE slot (
  repo_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
  generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
@@ -39,7 +105,7 @@ CREATE TABLE attempt (
  tracker_root TEXT NOT NULL CHECK(substr(tracker_root,1,1)='/'),
  repo_id TEXT NOT NULL, slot TEXT NOT NULL, input_path TEXT NOT NULL, input_digest TEXT NOT NULL,
  schema_version INTEGER NOT NULL CHECK(schema_version=1), model TEXT NOT NULL, effort TEXT NOT NULL,
- sandbox TEXT NOT NULL, deadline REAL NOT NULL, entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
+ access_policy TEXT NOT NULL CHECK(json_valid(access_policy)), deadline REAL NOT NULL, entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
  phase TEXT NOT NULL DEFAULT 'admitted' CHECK(phase IN ('admitted','dispatching','registered','captured')),
  rev INTEGER NOT NULL DEFAULT 0, worker_pid INTEGER, worker_pgid INTEGER, worker_start TEXT, worker_boot TEXT,
  session_ref TEXT, session_conflict INTEGER NOT NULL DEFAULT 0 CHECK(session_conflict IN (0,1)),
@@ -48,15 +114,21 @@ CREATE TABLE attempt (
  number INTEGER NOT NULL CHECK(number >= 1), seq INTEGER NOT NULL CHECK(seq >= 1),
  slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),
  previous_attempt_id TEXT UNIQUE REFERENCES attempt(attempt_id),
- repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored')),
+ repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored','{CheckRepeatReason.FAILED_CHECK.value}')),
+ source_checks_id TEXT UNIQUE REFERENCES checks_attempt(attempt_id),
  repeat_listing TEXT CHECK(repeat_listing IS NULL OR json_valid(repeat_listing)),
  after_commit TEXT CHECK(after_commit IS NULL OR length(after_commit) IN (40,64)),
  label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 200),
+ harness TEXT NOT NULL DEFAULT '{HarnessKind.CODEX}' CHECK(harness IN ({_HARNESSES})),
+ provider TEXT NOT NULL DEFAULT '{Provider.OPENAI}' CHECK(provider IN ({_PROVIDERS})),
  CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
- CHECK((number = 1 AND step <> 'plan') = (after_commit IS NOT NULL)),
+ CHECK(((number = 1 AND step <> 'plan') OR source_checks_id IS NOT NULL) = (after_commit IS NOT NULL)),
+ CHECK((repeat_reason IS '{CheckRepeatReason.FAILED_CHECK.value}') = (source_checks_id IS NOT NULL)),
+ CHECK(source_checks_id IS NULL OR step='implement'),
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id, seq)
 );
+CREATE INDEX attempt_step_count ON attempt(adapter,backlog,task_id,step,seq);
 CREATE TABLE execution (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  rc INTEGER, timed_out INTEGER NOT NULL, stop TEXT, watch TEXT, work INTEGER NOT NULL, stands INTEGER NOT NULL,
@@ -94,7 +166,7 @@ CREATE TABLE setup_run (
  command INTEGER NOT NULL DEFAULT 0 CHECK(command >= 0),
  pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
  started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
- conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','interrupted')),
+ conclusion TEXT CHECK(conclusion IN ({_SETUP_CONCLUSIONS})),
  CHECK((ended_at IS NULL) = (conclusion IS NULL)), PRIMARY KEY (attempt_id, run)
 );
 CREATE TABLE checks_attempt (
@@ -128,11 +200,11 @@ CREATE TABLE check_result (
  argv_digest TEXT CHECK(argv_digest IS NULL OR length(argv_digest)=64), timeout INTEGER CHECK(timeout IS NULL OR timeout >= 1),
  pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
  started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
- conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','undefined','interrupted')),
- CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS 'undefined')),
+ conclusion TEXT CHECK(conclusion IN ({_COMMAND_CONCLUSIONS})),
+ CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS '{_UNDEFINED}')),
  CHECK((timeout IS NULL) = (argv_digest IS NULL)),
  CHECK((pid IS NULL) = (pgid IS NULL) AND (pid IS NULL) = (proc_start IS NULL) AND (pid IS NULL) = (boot IS NULL)),
- CHECK(conclusion IS NOT 'undefined' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
+ CHECK(conclusion IS NOT '{_UNDEFINED}' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
  PRIMARY KEY (attempt_id, block, position), UNIQUE (attempt_id, block, name)
 );
 CREATE TABLE land_candidate (
@@ -178,6 +250,7 @@ CREATE TABLE task_hold (
  commenting_at REAL, commented_at REAL,
  cleared_at REAL,
  rev INTEGER NOT NULL DEFAULT 0,
+ saved TEXT NOT NULL DEFAULT '[]',
  CHECK((labels IS NULL) = (labelled_at IS NULL)),
  CHECK(commented_at IS NULL OR commenting_at IS NOT NULL),
  CHECK(commented_at IS NULL OR (labels IS NOT NULL AND labels IN ('moved','absent','not_ours'))),
@@ -190,12 +263,12 @@ SLOT = "repo_id,name,path"
 RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,sandbox,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label"
+    "schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label,harness,provider,source_checks_id"
 )
 ATTEMPT_LOADED = (
-    "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,"
+    "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,"
     "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,end_commit,"
-    "number,previous_attempt_id,step,after_commit"
+    "number,previous_attempt_id,step,after_commit,harness,source_checks_id,provider"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,"
@@ -275,16 +348,17 @@ def current(con: sqlite3.Connection) -> bool:
 
 
 def refusal(error: SchemaError, path: Path) -> str:
-    """The words of `refused schema`: the store's for a newer file (this code must be updated); for an older one, which
-    nothing upgrades (`SCHEMA.steps` is empty), the truth that an older version wrote it and that the owner discards it."""
+    """Explain an incompatible restart without changing the database or offering unsafe upgrade recovery."""
     found = _recorded(path)
-    if found is None or found >= SCHEMA.version:
-        return str(error)
-    if found == 0:
-        return (f"factory.db records no schema version, this code knows v{SCHEMA.version}: it is not a factory.db; the "
-                "owner moves it aside, then tl slot adopt")
-    return (f"factory is schema v{found}, this code knows v{SCHEMA.version}: an older version wrote it and nothing upgrades "
-            "it; the owner discards factory.db (moves it aside), then tl slot adopt")
+    diagnosis = (f"its recorded schema version could not be read ({error})" if found is None else
+                 f"it records schema version {found}" + (" (no schema version recorded)" if found == 0 else ""))
+    return (f"Restart refused: factory.db at {path.resolve()}: {diagnosis}; this runtime expects schema version {SCHEMA.version}. "
+            "The database has been preserved. Resume with matching code to keep unfinished work. For an incompatible "
+            "upgrade, first stop admitting work and let running attempts and their entry processes finish under the "
+            "matching runtime. Draining belongs before the upgrade; this incompatible runtime cannot safely perform it. "
+            "Stopping rounds alone does not confirm that entries or agents have stopped. After confirming they have "
+            "stopped, the owner deliberately discards the old factory database before initializing the new runtime. "
+            "Discard loses local execution progress and session references.")
 
 
 def _recorded(path: Path) -> int | None:

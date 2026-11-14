@@ -29,15 +29,18 @@ from stream_proc import OwnedProcess
 
 from taskloop.access import folders
 from taskloop.attempt_types import AttemptKey, AttemptResult
-from taskloop.check_store import CheckStore, Conclusion, Outcome, Required, ResultRow
+from taskloop.check_store import CheckStore, Outcome, Required, ResultRow
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.environment import GroupAlive, SetupEnded, SetupProcess, setup_env
 from taskloop.evidence_files import CappedLog, EvidenceFiles
 from taskloop.prepare import MAIN
 from taskloop.profile import Check
 from taskloop.slot_state import bounded
 
-TERMINAL: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "undefined")
-STOPPING: Final[tuple[Conclusion, ...]] = ("lingering", "dirty")  # the block stops; the attempt fails with this result
+TERMINAL: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.PASSED, CommandConclusion.FAILED,
+    CommandConclusion.TIMED_OUT, CommandConclusion.UNDEFINED)
+STOPPING: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.LINGERING,
+    CommandConclusion.DIRTY)  # the block stops; the attempt fails with this result
 type _Next = Literal["next", "stopped"]
 
 
@@ -67,7 +70,7 @@ class ResultSink(Protocol):
         """The command's identity, committed before it executes."""
         ...
 
-    def conclude(self, block: int, position: int, conclusion: Conclusion, rc: int | None) -> None: ...
+    def conclude(self, block: int, position: int, conclusion: CommandConclusion, rc: int | None) -> None: ...
 
     def undefined(self, block: int, position: int, name: str) -> None: ...
 
@@ -92,7 +95,7 @@ class CheckSink:
     def registered(self, block: int, position: int, process: OwnedProcess) -> None:
         self.store.registered(self.key, block, position, process)
 
-    def conclude(self, block: int, position: int, conclusion: Conclusion, rc: int | None) -> None:
+    def conclude(self, block: int, position: int, conclusion: CommandConclusion, rc: int | None) -> None:
         self.store.finish(self.key, block, position, conclusion, rc, self.clock())
 
     def undefined(self, block: int, position: int, name: str) -> None:
@@ -181,7 +184,7 @@ class Block:
             log.write(_ending(ended, own))
             judged = self._judged(target, ended, own, log)
             sink.conclude(block, position, judged, ended.rc)
-        if judged == "interrupted":
+        if judged is CommandConclusion.INTERRUPTED:
             return _refused(f"expired:{check.name}")
         return "stopped" if judged in STOPPING else "next"
 
@@ -203,17 +206,17 @@ class Block:
             log.write(b"ended uncertainly\n")
             return SetupEnded(None, False, False, committed[0].pgid)
 
-    def _judged(self, target: BlockTarget, ended: SetupEnded, own: bool, log: CappedLog) -> Conclusion:
+    def _judged(self, target: BlockTarget, ended: SetupEnded, own: bool, log: CappedLog) -> CommandConclusion:
         """Section 7 steps 4-6 for a command that ended."""
         if not ended.exec_failed and (ended.survivors or self.ports.lingering(ended.pgid)):
             log.write(b"lingering\n")
-            return "lingering"
+            return CommandConclusion.LINGERING
         if not ended.exec_failed and _dirty(target, log):
             log.write(b"dirty\n")
-            return "dirty"
+            return CommandConclusion.DIRTY
         if ended.timed_out:
-            return "timed_out" if own else "interrupted"
-        return "passed" if not ended.exec_failed and ended.rc == 0 else "failed"
+            return CommandConclusion.TIMED_OUT if own else CommandConclusion.INTERRUPTED
+        return CommandConclusion.PASSED if not ended.exec_failed and ended.rc == 0 else CommandConclusion.FAILED
 
 
 def _dirty(target: BlockTarget, log: CappedLog) -> bool:
@@ -244,10 +247,10 @@ def conclusion(results: Sequence[ResultRow], required: Required) -> tuple[Outcom
     first required name (the target's order) that did not: `<name>:<conclusion>`, or `<name>:not_run`."""
     stopping = next((row for row in results if row.conclusion in STOPPING), None)
     if stopping is not None:
-        return "failed", f"{stopping.name}:{stopping.conclusion}"
+        return "failed", f"{stopping.name}:{encode(stopping.conclusion)}"
     found = {row.name: row.conclusion for row in results}
-    failing = next((name for name, _ in required if found.get(name) != "passed"), None)
-    return ("passed", None) if failing is None else ("failed", f"{failing}:{found.get(failing) or 'not_run'}")
+    failing = next((name for name, _ in required if found.get(name) is not CommandConclusion.PASSED), None)
+    return ("passed", None) if failing is None else ("failed", f"{failing}:{encode(found.get(failing)) or 'not_run'}")
 
 
 def differs(required: Required, row: ResultRow) -> bool:

@@ -28,7 +28,10 @@ from taskloop.attempt_types import (
     Verified,
     entry_identity,
 )
-from taskloop.factory_schema import EVIDENCE, FACTS, VERDICT
+from taskloop.drain.models import ActionKind
+from taskloop.drain.store import blocked, pending
+from taskloop.factory_schema import EVIDENCE, FACTS, SUCCESSOR, VERDICT
+from taskloop.recovery.models import Outcome, Result
 
 # A registration write (the entry's or the harness's) waits at most this for the write lock, so it finishes well inside
 # the registered start's fixed 5 s window; every other write keeps the library's 5 s.
@@ -56,11 +59,47 @@ def _facts_values(facts: ExecutionFacts) -> tuple[object, ...]:
 def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:
     if isinstance(result, Verified):
         return "verified", None, result.blob, int(result.reused)
-    return "rejected", result.reason, None, 0
+    return "rejected", str(result.reason), None, 0
 
 
 class AttemptStore(AttemptLoads):
     """The fenced writes of an admitted attempt; the reads they need are `AttemptLoads`', the status reads `AttemptReads`'."""
+
+    def recovery(self, con: sqlite3.Connection, key: AttemptKey, now: float) -> AttemptRecord | Result:
+        """Read eligibility inside the recovery store's transaction; no attempt facts are changed."""
+        row = con.execute(
+            f"""SELECT {SUCCESSOR},EXISTS(SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id),
+            EXISTS(SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id)
+            FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?""", astuple(key),
+        ).fetchone()
+        if row is None or row[0] or row[1]:
+            return Result(outcome=Outcome.INELIGIBLE, explanation="The attempt is missing, superseded or released.")
+        if row[2]:
+            return Result(outcome=Outcome.CAPTURED, explanation="The saved execution requires collection, not another agent.")
+        try:
+            record = self._load(con, key)
+        except StoreRefused as error:
+            outcome = Outcome.UNRESOLVED if str(error) == "unregistered_entry" else Outcome.INELIGIBLE
+            return Result(outcome=outcome, explanation=f"The attempt cannot be recovered: {error}.")
+        if record is None:
+            return Result(outcome=Outcome.INELIGIBLE, explanation="The attempt is absent.")
+        return self._recovery_session(con, record, now)
+
+    def _recovery_session(self, con: sqlite3.Connection, record: AttemptRecord, now: float) -> AttemptRecord | Result:
+        if not math.isfinite(now) or not math.isfinite(record.admission.deadline) or now >= record.admission.deadline:
+            return Result(outcome=Outcome.EXPIRED, explanation="The attempt's existing allowance has expired.")
+        if record.phase != "registered" or record.worker is None:
+            return Result(outcome=Outcome.UNRESOLVED, explanation="Complete entry and worker registration is required for stop proof.")
+        if not record.session_ref or record.session_conflict:
+            return Result(outcome=Outcome.INELIGIBLE, explanation="The attempt has no consistent saved session.")
+        other = con.execute(
+            f"""SELECT 1 FROM attempt p WHERE p.session_ref=? AND p.harness=? AND p.attempt_id<>?
+            AND NOT {SUCCESSOR} AND NOT EXISTS(SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id)""",
+            (record.session_ref, record.admission.setting.harness.value, record.admission.key.attempt_id),
+        ).fetchone()
+        if other is not None:
+            return Result(outcome=Outcome.INELIGIBLE, explanation="Another current attempt owns the saved session in this harness.")
+        return record
 
     def _fence(self, con: sqlite3.Connection, admission: Admission) -> AttemptRecord:
         record = self._load(con, admission.key)
@@ -81,6 +120,9 @@ class AttemptStore(AttemptLoads):
         is refused and writes nothing. A same-boot replacement or a first registration never renews.
         """
         with self._connection(write=True) as con:
+            if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id
+                                        for action in pending(con)):
+                return "refused"
             row: tuple[object, ...] | None = con.execute(
                 """SELECT p.phase,p.deadline,p.entry_pid,p.entry_start,p.entry_boot FROM attempt p
                 JOIN reservation r ON r.slot=p.slot AND r.repo_id=p.repo_id AND r.generation=p.generation AND r.attempt_id=p.attempt_id
@@ -202,7 +244,8 @@ class AttemptStore(AttemptLoads):
             return "accepted"
 
     def end_commit(self, admission: Admission, commit: str) -> str:
-        """Write once the commit the step ends at: X != B for effect `commit`, B itself for `keep`, only for a captured,
+        """Write once the commit the step ends at: X != B for effect `commit`, B itself for `keep` (over saved work: the step's own
+        commit of that tree), only for a captured,
         clean valid answer with its session complete, with no verdict stored yet (a `nothing_written` verdict has no commit and
         is never contradicted afterwards). Returns the value now stored: another one than `commit` is the caller's
         `inconsistent`; a refused registration write is StoreRefused."""
@@ -212,7 +255,7 @@ class AttemptStore(AttemptLoads):
                 """UPDATE attempt SET end_commit=?1,rev=rev+1 WHERE attempt_id=?2 AND end_commit IS NULL AND phase='captured'
                 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=?2 AND e.answer_kind='valid' AND e.rc=0
                 AND e.timed_out=0 AND e.session_state='complete' AND ((e.effect='commit' AND ?1<>attempt.base_commit)
-                OR (e.effect='keep' AND ?1=attempt.base_commit)))
+                OR e.effect='keep'))
                 AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=?2)""",
                 (commit, admission.key.attempt_id),
             )

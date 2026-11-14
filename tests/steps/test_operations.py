@@ -14,10 +14,13 @@ from any_agent.testing import FakeRun
 from doubles import NO_CHECKS, FakeSlotFiles, NoAdvance, PinnedViews
 from git_porcelain import GitUnavailable, NotARepo, Repo
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store
 
 from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Shown, StatusPorts, list_attempts, next_action, show_attempt
@@ -43,6 +46,8 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.exit_codes import exit_code
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.launch import AlreadyRunning, Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     MAX_MINUTES,
@@ -70,7 +75,7 @@ from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
-REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), "model-m", "high", 30)
+REQUEST = StartRequest("tl-1", "tasks", "/tracker", Path("/checkout"), StepSettings(), Overrides(model="model-m", effort="high"), 30)
 
 
 class Admission:
@@ -140,7 +145,7 @@ class Publishes:
 def releaser(store: AttemptStore, checkouts: Checkouts, slot_files: SlotFiles) -> SlotRelease:
     """The real release over the fakes: the entry gone, the agent gone, the real slot lock, a claim that returns."""
     return SlotRelease(store, checkouts, slot_files, lambda _entry: "gone", gone, custody, lambda _root, _task: True, lambda: 30,
-                       lambda _setup: "gone", lambda _scratch: True)
+                       lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
 
 
 class FakeVerifier:
@@ -181,7 +186,12 @@ def test_a_first_start_admits_with_the_fixed_sandbox_and_launches(empty: Attempt
     assert started == Started("started", "tasks", "tl-1", "attempt", False, ENTRY)
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
-    assert (request.model, request.effort, request.sandbox, request.deadline) == ("model-m", "high", SANDBOX, 1000 + 30 * 60)
+    assert (request.setting.model, request.setting.effort, request.setting.summary, request.deadline) == (
+        "model-m",
+        "high",
+        SANDBOX,
+        1000 + 30 * 60,
+    )
     assert (launcher.calls, launcher.minutes) == ([("tasks", "tl-1")], [30])
 
 
@@ -221,8 +231,8 @@ def test_an_impossible_model_or_effort_is_refused_before_any_read_or_launch(mode
     admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
     unread = AttemptStore(lambda: None)
     ports = StartPorts(unread, admission, launcher, lambda: 1000, Repeats(), NoAdvance(), NO_CHECKS)
-    found = start(ports, replace(REQUEST, model=model, effort=effort))
-    assert isinstance(found, Failed) and found.word == "refused:choices" and found.detail.startswith("--")
+    with pytest.raises(ValueError):
+        start(ports, replace(REQUEST, overrides=Overrides(model=model, effort=effort)))
     assert admission.requests == [] and launcher.calls == []
 
 
@@ -424,16 +434,20 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40)
-    first = verify_task(store, Verifier(store, checkouts, slot_files, gone, lambda: 20, hold), releasing, publishing, "tasks", "tl-1")
+    releasing, publishing = releaser(store, checkouts, slot_files), BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds())
+    first = verify_task(store, Verifier(store, checkouts, slot_files, gone, lambda: 20, hold,
+        ids=NativeIds()), releasing, publishing, "tasks", "tl-1")
     assert first == VerifiedTask("verified", "tasks", "tl-1", "attempt", "released", "published") and slot.branch() is None
     slot.repo.drop_checkout(slot.path)
     opened: list[Path] = []
@@ -443,8 +457,8 @@ def test_verify_returns_a_stored_verdict_with_no_git_read(
         return checkouts(where, git_dir=git_dir)
 
     again = releaser(store, counted, slot_files)  # already released and published: nothing pending, no Git
-    verifier = Verifier(store, counted, slot_files, gone, lambda: 20, hold)
-    second = verify_task(store, verifier, again, BranchPublish(store, counted, slot_files, lambda: 50), "tasks", "tl-1")
+    verifier = Verifier(store, counted, slot_files, gone, lambda: 20, hold, ids=NativeIds())
+    second = verify_task(store, verifier, again, BranchPublish(store, counted, slot_files, lambda: 50, ids=NativeIds()), "tasks", "tl-1")
     # the fresh call said released/published; the same verdict again says the already-done words
     assert second == VerifiedTask("verified", "tasks", "tl-1", "attempt", "already_released", "already_published")
     assert opened == []
@@ -456,16 +470,19 @@ def test_show_reads_leftovers_fresh_and_names_the_repeat(
     path, stray = "docs/design/tl-1/plan.md", "docs/design/tl-1/stray.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         slot.write_file(stray, "x")
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
     before = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert isinstance(before, Shown) and (before.view.next, before.view.leftovers) == ("verify", ())  # nothing committed yet
@@ -498,19 +515,24 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     path, near = "docs/design/tl-1/plan.md", "docs/design/tl-1/.gitignore"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         slot.write_file(near, "x")
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
     on = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(on, Shown) and (on.view.next, on.view.leftovers) == ("repeat", ("unsafe", near))
+    assert isinstance(on, Shown) and on.view.next == "repeat"
+    assert on.view.leftovers[0] == "unsafe" and on.view.leftovers[-1] == near
+    assert "A changed Git file" in on.view.leftovers[1] and near in on.view.leftovers[1]
     slot.checkout_new("other")
     assert verifier.leftovers(KEY) == Unsettled("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
@@ -614,7 +636,10 @@ def test_a_step_that_ended_on_a_dirty_slot_says_release_then_done_then_start_aft
         return FakeRun(RunOutcome(rc=1, worker=worker, summary=Summary(text="", rc=1, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), failed, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            failed, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).status == "collected"
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
 
@@ -653,9 +678,9 @@ def test_list_shows_one_row_per_task_its_latest_attempt_and_show_names_the_aband
     registered.execute("UPDATE reservation SET attempt_id='fresh',generation=2")
     registered.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
+        input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head)
         SELECT 'fresh','token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,model,effort,
-        sandbox,deadline,1,2,slot_head FROM attempt WHERE attempt_id='attempt'"""
+        access_policy,deadline,1,2,slot_head FROM attempt WHERE attempt_id='attempt'"""
     )
     reads = StatusPorts(AttemptStore(lambda: registered), observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
     listed = list_attempts(reads)
@@ -704,15 +729,18 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
     path = "docs/design/tl-1/plan.md"
 
     def agent(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
-        slot.write_file(path, "# Plan\n")
+        slot.write_file(path, PLAN_TEXT)
         text = json.dumps({"disposition": "planned", "plan_path": path, "paths": [path], "message": "Plan", "explanation": "done"})
         worker = Worker(pid=42, pgid=42, start="native-start", boot="boot")
         return FakeRun(RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True)))(harness, spec, timeout, hooks)
 
     store = AttemptStore(lambda: registered)
-    attempts = Attempts(store, EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent, lambda: 10, checkouts, slot_files)
+    attempts = Attempts(
+        store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent, lambda: 10, checkouts, slot_files
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
-    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold)
+    verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, nothing_left, lambda: "boot")
 
     def shown() -> AttemptView:
@@ -727,7 +755,7 @@ def test_a_verified_plan_is_release_first_then_publish_then_advance(
     assert isinstance(releaser(store, checkouts, slot_files).release(KEY, False), Released)
     assert (shown().next, shown().published) == ("publish", None)
     x = next(ref.sha for ref in slot.repo.refs(["refs/heads/task/"]) if ref.name == "refs/heads/task/tl-1")
-    found = publish_task(store, BranchPublish(store, checkouts, slot_files, lambda: 40), "tasks", "tl-1")
+    found = publish_task(store, BranchPublish(store, checkouts, slot_files, lambda: 40, ids=NativeIds()), "tasks", "tl-1")
     assert found == PublishedTask("tasks", "tl-1", "attempt", BranchPublished(x, x))
     assert (shown().next, shown().published) == ("advance", PublishedRow(x, x, 40.0))  # implement follows plan
 
@@ -752,3 +780,12 @@ def test_a_rounds_exit_code(stopped: str, word: str, code: int) -> None:
 @pytest.mark.parametrize("reason, code", [("interrupted", 0), ("abrupt", 130), ("refused:database", 1), ("refused:schema", 1)])
 def test_a_rounds_end_exit_code(reason: str, code: int) -> None:
     assert exit_code(Ended("tasks", reason)) == code
+
+
+def test_a_harness_override_needs_a_matching_policy_before_admission(empty: AttemptStore) -> None:
+    admission, launcher = Admission(Admitted(KEY, "s1")), FakeLauncher(Launched(KEY, ENTRY))
+    ports = StartPorts(empty, admission, launcher, lambda: 10, Repeats(), NoAdvance(), NO_CHECKS)
+    request = replace(REQUEST, overrides=Overrides(harness=HarnessKind.CLAUDE, model="opus"))
+    found = start(ports, request)
+    assert isinstance(found, Failed) and found.reason == "choices" and "matching per-step" in found.detail
+    assert admission.requests == [] and launcher.calls == []

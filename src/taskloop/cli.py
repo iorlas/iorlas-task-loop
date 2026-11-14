@@ -11,10 +11,11 @@ from pathlib import Path
 
 from git_porcelain import GitReadFailure, GitTimeout, GitUnavailable, NotARepo
 
-from taskloop import cli_step
+from taskloop import cli_drain, cli_step
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.exit_codes import ExitCode, profile_exit_code
 from taskloop.git_views import GitProfileFiles, GitViews
+from taskloop.inspection_guide import PROFILE, REPO, TASK
 from taskloop.printable import block, one_line
 from taskloop.profile import Refused, Resolved, Unavailable, resolve
 from taskloop.repo import UnsupportedCheckout
@@ -53,7 +54,7 @@ def show_task(arguments: argparse.Namespace) -> int:
                 data["backend_kind"] = error.backend_kind
             print(json.dumps({"error": data}), file=sys.stderr)
         else:
-            print(f"tl task show: {error}", file=sys.stderr)
+            print(f"tl task show: {block(str(error))}\n{TASK[error.kind]}", file=sys.stderr)
         return ExitCode.REFUSED
     if arguments.json_output:
         shown = {key: value for key, value in asdict(result).items() if key not in {"status", "assignee"}}  # its keys as they were
@@ -100,7 +101,7 @@ def show_profile(arguments: argparse.Namespace) -> int:
             text = f"tl profile show: refused {reason} ({side}{', ' + key if key else ''}): {detail}"
         case Unavailable(detail=detail):
             error, text = {"kind": "unavailable", "message": detail}, f"tl profile show: unavailable: {detail}"
-    print(json.dumps({"error": error}) if arguments.json_output else text, file=sys.stderr)
+    print(json.dumps({"error": error}) if arguments.json_output else f"{block(text)}\n{PROFILE[error['kind']]}", file=sys.stderr)
     return profile_exit_code(found)
 
 
@@ -119,7 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         description=f"Task-loop successor foundation. Step commands ({STEP_ONLY}).",
         epilog="Exit 0: success; 1: refusal or task/repo inspection error; 2: invalid syntax; "
                "3: no reliable result (profile unavailable or step unknown), safe to retry; "
-               "130: abrupt rounds stop or interrupted land.",
+               "130: abrupt rounds stop, interrupted land or interrupted drain.",
         allow_abbrev=False,
     )
     parser.add_argument("--config", metavar="FILE", help="Machine config file (default ~/.config/task-loop/config.toml)")
@@ -146,12 +147,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                               "(default: main)")
     profile_show.add_argument("--json", action="store_true", dest="json_output", help="Print JSON data; refusals are JSON on stderr")
     cli_step.register(commands)
+    cli_drain.register(commands)
     commands.add_parser("version", help="Print the running package version", allow_abbrev=False).add_argument(
         "--json", action="store_true", dest="json_output")
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         parser.print_help()
         return ExitCode.SUCCESS
+    if arguments.command == "drain":
+        return cli_drain.run(arguments)
     if arguments.command in cli_step.COMMANDS:
         return cli_step.run(arguments)
     handlers = {"repo": inspect_repo, "task": show_task, "profile": show_profile, "version": show_version}
@@ -166,7 +170,7 @@ def inspect_repo(arguments: argparse.Namespace) -> int:
         if arguments.json_output:
             print(json.dumps({"error": {"kind": inspection_error_kind(error), "message": str(error)}}), file=sys.stderr)
         else:
-            print(f"tl repo inspect: {error}", file=sys.stderr)
+            print(f"tl repo inspect: {block(str(error))}\n{REPO[inspection_error_kind(error)]}", file=sys.stderr)
         return ExitCode.REFUSED
     data = {
         "repo_id": result.repo_id,

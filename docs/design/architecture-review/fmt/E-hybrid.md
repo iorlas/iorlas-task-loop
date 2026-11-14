@@ -1,4 +1,5 @@
 ---
+# Status: **evidence**. Historical architecture-review format/opinion specimen; its proposals are not adopted system authority.
 area: storage
 read_when: SQL, store, Tx, factory.db, row type
 uses: slice store Tx attempt reservation slot step

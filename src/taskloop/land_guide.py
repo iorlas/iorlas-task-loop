@@ -8,11 +8,12 @@ from typing import Final
 
 def restart(task_id: str = "<id>", x: str = "<X>") -> str:
     """The one recovery from a conflict (or a failed validation that needs new code): a new chain on the current main. The
-    task branch is the chain's memory, so the stale one is set aside under a name no earlier recovery used (X's first 12
-    characters) and dropped from origin; local `main`, where a new branch starts, is brought up to date first."""
+    task branch is the chain's memory, so the stale one is set aside under a name no earlier recovery used (its tip's first 12
+    characters, saved work included) and dropped from origin; local `main`, where a new branch starts, is brought up to date first."""
     aside = f"old/{task_id}-{x[:12]}"
     return (
-        f"start the task again on the current main, in your checkout: `git switch main && git pull --ff-only` (if that "
+        "start the task again: its old branch has to be set aside and the factory restarts it from the plan on the current "
+        "main. For an operator, in the checkout: `git switch main && git pull --ff-only` (if that "
         f"cannot fast-forward, local main holds commits origin lacks: push or move them first, a new chain starts at local "
         f"main); `git branch -m task/{task_id} {aside}`; `git push origin --delete task/{task_id}` (the old commits then "
         f"stay only in your checkout, on `{aside}`); then `tl step release {task_id} --abandon` and `tl step start {task_id}` "
@@ -25,12 +26,15 @@ INTERRUPTED: Final = "interrupted"  # `tl step land` stopped by Ctrl-C (`cli_ste
 
 # The `Next` words of a land; `step_guide.GUIDE` carries `land` and `landed` (a status without a candidate shows them too).
 LAND_NEXT: Final = {
-    "land": "The checks passed, or a land is under way: read the diff and `tl step land TASK --summary`, then `tl step land "
-    "TASK`. It fetches origin's main, squashes X onto it as one commit S, runs every check again on S in a free slot (in "
-    "your shell; rounds leave the last free slot for it) only when main moved or its required names changed, pushes S to "
-    "origin's main as you, never forced, and closes the task in your local tracker. Rounds never land; a rerun does only what is missing.",
-    "landed": "S is on origin's main and the task is closed in your local tracker: nothing is left. Run `git pull --ff-only` in "
-    "your checkout; `bd dolt push` shares the tracker if others read it. (From `tl step release --abandon`: the code is on "
+    "land": "The checks passed and the change waits to be landed (or a land is under way). Where the repository's profile says "
+    "`\"land\": \"auto\"` the next round lands it by itself: it fetches origin's main, squashes X onto it as one commit S, "
+    "runs every check again on S in a free slot only when main moved or its required names changed, pushes S to origin's main, "
+    "never forced, and closes the task; a conflict or a failed re-check holds the task with the cause. Under `manual` (the "
+    "default) it waits for a person, who lands it with `tl step land TASK` (`--summary` first shows the facts); rounds leave "
+    "the last free slot for that land. A rerun does only what is missing.",
+    "landed": "S is on origin's main and the task is closed in the local tracker: nothing is left. The factory never writes your "
+    "checkout: pull it (`git pull --ff-only`) when you next work there; `bd dolt push` shares the tracker if others read "
+    "it. (From `tl step release --abandon`: the code is on "
     "main, nothing to abandon; if `tl step show` still says `Next: land`, rerun `tl step land` to finish the close.)",
     "release": "The land's candidate still holds its slot (its release was held: `held:check_running` waits for a check's "
     "process group, `held:slot_dirty` for files a person removes, `held:slot_redirected` for a rewritten slot pointer). "
@@ -57,12 +61,16 @@ LAND_GUIDE: Final = {
     "no_change": "origin's main already holds X's changes (a hand land, say): confirm with `git log origin/main`, then `tl step "
     "land TASK --no-change` records it and closes the task.",
     "changes": "There is something to land: drop `--no-change`.",
-    "gate_changed": "The land changes what decides a pass (the lines above: checks, setup, required names, configuration files, "
-    "weakened tests). Read the diff (`tl step land TASK --summary`); if the person means it, rerun `tl step land TASK "
-    "--accept-gate-changes`, else fix the task branch (abandon and restart).",
-    "conflict": "X does not merge onto origin's main: the detail above gives the restart to run.",
-    "checks_failed": "A check failed on S (the `Land check:` lines and logs say which): rerun `tl step land` if it is flaky; "
-    f"otherwise {restart()} Nothing was pushed.",
+    "gate_changed": "The land would change what decides a pass (the lines above: checks, setup, required names, configuration "
+    "files, weakened tests), and the factory never accepts that by itself: the task waits until a person decides. To accept it, "
+    "run `tl step land TASK --accept-gate-changes` (read the diff with `--summary` first); otherwise fix the task branch "
+    "(abandon and restart).",
+    "conflict": "X does not merge onto origin's main, because main moved: the task has to start again on the current main (the "
+    "detail above says how). Under `land: auto` the factory has held the task and said so on it.",
+    "checks_failed": "A check failed on S, the change as squashed onto the current main (the `Land check:` lines and logs say "
+    "which). Under `land: auto` the factory has held the task; to retry a flaky check by hand, rerun `tl step land`; "
+    f"otherwise {restart()} "
+    "Nothing was pushed.",
     "target_moved": "Rerun `tl step land`: it squashes X onto the new main as a new candidate and runs the checks again on it "
     "when its tree differs from X's (a slot and the checks' time).",
     "no_remote": "The checkout has no `origin`: add it (`git remote add origin <url>`), then rerun.",
@@ -74,7 +82,8 @@ LAND_GUIDE: Final = {
     "target_profile": "The profile at origin's main is refused (the detail says why): fix `.task-loop.json` on main, then rerun.",
     "no_required": "origin main's profile requires no check, so nothing would decide a pass: add the required names to "
     "`.task-loop.json` on main, then rerun.",
-    "remote_rejected": "Push S by hand to read origin's reason (`git push origin <S>:refs/heads/main`, never `--force`): often a "
+    "remote_rejected": "Origin refused the push by its own policy, not because main moved (under `land: auto` the factory has held "
+    "the task). For an operator: push S by hand to read origin's reason (`git push origin <S>:refs/heads/main`, never `--force`): often a "
     "protected main that requires a pull request (PR mode is held), signed commits or a server hook. After a hand push of "
     "that S, rerun `tl step land`: it finds S on main, records it and closes the task.",
     "remote": "origin could not be fetched or pushed (often credentials): check that `git fetch` and `git push` work from this "
@@ -120,6 +129,7 @@ LAND_GUIDE: Final = {
     "slot_dirty": "The candidate's slot has files the release will not remove (listed): remove them, then rerun `tl step land` "
     "(it retries the release first) or `tl step release TASK`.",
     "slot_branch": "The candidate's slot is on a branch, not detached: `git -C <slot> switch --detach`, then rerun.",
+    "merge_pending": "The slot has an active merge. Its owning operation retains it until preservation and process stop are confirmed.",
     "slot_unborn": "The candidate's slot has no commit: inspect it (`git -C <slot> log -1`), then rerun.",
     "slot_redirected": "The candidate's slot `.git` pointer was rewritten (by a check's code, say): inspect and restore it, then "
     "rerun; nothing was reset.",

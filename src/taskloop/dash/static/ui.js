@@ -1,16 +1,18 @@
 // Shared constants and small DOM helpers for the dashboard page.
 
+import { say } from "./words.js";
+
 export const COLUMNS = [
   { id: "waiting", label: "Ready", emoji: "⏳", help: "Approved by the person and not yet admitted to a slot." },
   { id: "plan", label: "Plan", emoji: "🧭", help: "A plan attempt is running in a slot." },
   { id: "implement", label: "Implement", emoji: "🛠️", help: "An implement attempt is running in a slot." },
   { id: "checks", label: "Checks", emoji: "🧪", help: "A checks attempt is running the profile's checks." },
-  { id: "land", label: "Land", emoji: "🚀", help: "Checked and ready. It waits for the person to run tl step land; a card says landing only while a land runs." },
+  { id: "land", label: "Land", emoji: "🚀", help: "Checked and ready to land. A round lands it by itself when the repository profile says land: auto; under manual it waits for a person. A card says landing only while a land runs." },
   { id: "held", label: "Held", emoji: "⛔", help: "The factory will not advance this task until a person acts. The hold cause says what to do." },
   { id: "landed", label: "Landed", emoji: "✅", help: "Landed on main and closed." },
 ];
 export const STEPS = COLUMNS.slice(1, 5);
-// The factory's verification of an agent attempt's answer is a row of the rail between that attempt and what follows; it is not a column.
+// The factory's verification is a mark on its agent attempt's rail row; it has its own Result, but no column.
 export const VERIFY = { id: "verification", label: "Verification", emoji: "🔎" };
 export const stepInfo = (id) => (id === VERIFY.id ? VERIFY : STEPS.find((s) => s.id === id));
 export const STATE = {
@@ -24,7 +26,9 @@ export const JUMP = {
 };
 // The Land column's states (`card.land`): what the card says, and what the drawer's rail row says.
 export const LAND = {
-  waiting: { label: "Waiting for you", row: "waiting for you to land it", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
+  waiting: { label: "Waiting for the factory", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
+  unknown: { label: "Landing policy unavailable", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
+  manual: { label: "Waiting for a person", row: "waiting for a person: the profile says land: manual", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
   landing: { label: "Landing", row: "landing on main now", text: "text-sky-700 dark:text-sky-300", bar: "border-sky-500" },
   done: { row: "landed on main", text: "text-emerald-700 dark:text-emerald-300" },
 };
@@ -56,7 +60,11 @@ const BAR_TEXT = {
 export function callout(barCls, head, body) {
   const node = el("div", `border-l-2 pl-2.5 text-xs leading-snug ${barCls}`);
   if (head) node.append(el("p", `font-medium ${BAR_TEXT[barCls] ?? ""}`, head));
-  if (body) node.append(el("p", "mt-0.5 text-slate-600 dark:text-slate-300", body));
+  if (body) {
+    const text = el("p", "mt-0.5 text-slate-600 dark:text-slate-300", say(body)); // a typed code shows its words, the code as hover text
+    if (say(body) !== body) text.title = body;
+    node.append(text);
+  }
   return node;
 }
 

@@ -1,5 +1,7 @@
 # Untouched-file and workflow gap analysis
 
+Status: **evidence**. Dated source review; recommendations remain proposals unless explicitly accepted below.
+
 Task: tl-8bh9.13. Requested by the owner on 2026-11-09. Analysis only.
 
 Compare the reference implementation immediately before the first successor source change with the current

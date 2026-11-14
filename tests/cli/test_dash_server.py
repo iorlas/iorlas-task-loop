@@ -4,13 +4,14 @@ when a read fails, a page goes away or too many connect."""
 import json
 import time
 from collections.abc import Iterator
+from dataclasses import replace
 from http.client import HTTPConnection, HTTPResponse
 from pathlib import Path
 
 import pytest
 
-from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail
-from taskloop.dash_server import DashPorts, DashServer, Hub
+from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail, Usage
+from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
 
@@ -51,7 +52,8 @@ class Ports:
         return FeedPage((line,), "7:42", replaced=False, available=True) if cursor is None else FeedPage((), cursor, False, True)
 
     def task(self, task_id: str) -> TaskDetail | Failed:
-        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), ())
+        usage = Usage(16, 13, 7, 1, 1, 1)
+        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), (), {"plan": usage}, usage)
 
     def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
         return AttemptBody("prompt", Outcome("verified", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
@@ -93,7 +95,7 @@ class Stream:
 
 
 @pytest.fixture
-def served(tmp_path: Path) -> Iterator[tuple[Ports, DashServer]]:
+def served(tmp_path: Path, require_loopback: None) -> Iterator[tuple[Ports, DashServer]]:
     (tmp_path / "index.html").write_text("<html>page</html>")
     (tmp_path / "secret.txt").write_text("not served")
     fake = Ports(tmp_path)
@@ -120,7 +122,16 @@ def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served
     assert json.loads(get(server, "/api/log")[1])["rows"][0]["move"] == "admit"
     assert get(server, "/") == (200, b"<html>page</html>")
     assert get(server, "/api/tasks/unknown")[0] == 200 and get(server, "/api/tasks/broken")[0] == 503
+    detail = json.loads(get(server, "/api/tasks/tl-1")[1])
+    assert detail["step_usage"]["plan"] == detail["usage"] == {
+        "fresh": 16, "cached": 13, "output": 7, "turns": 1, "attempts": 1, "complete": 1}
     assert get(server, "/secret.txt")[0] == 404 and get(server, "/../secret.txt")[0] == 404 and get(server, "/api/tasks/a%2F..")[0] == 404
+
+
+def test_every_file_of_the_static_page_is_served_so_no_import_ends_in_a_404() -> None:
+    page = Path(__file__).resolve().parents[2] / "src/taskloop/dash/static"
+    shipped = {path.name for path in page.iterdir() if path.suffix in {".html", ".js", ".css"}} - {"dash.input.css"}
+    assert shipped == set(PAGES.values())
 
 
 def test_only_a_request_addressed_to_the_local_server_is_answered(served: tuple[Ports, DashServer]) -> None:
@@ -165,6 +176,19 @@ def test_the_first_moves_after_connecting_are_not_lost(served: tuple[Ports, Dash
     stream = Stream(server)  # the baseline was taken before the first byte came back
     fake.cards = [card(column="implement")]
     assert part(stream.kinds({"task"})[-1]["task"])["column"] == "implement"
+    stream.close()
+
+
+def test_agent_question_fields_reach_snapshots_and_question_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
+    fake, server = served
+    fake.cards = [replace(card(), column="held", ask=True, question="Which database?\nUse <primary>?")]
+    status, body = get(server, "/api/board")
+    found = json.loads(body)["tasks"][0]
+    assert status == 200 and found["ask"] is True and found["question"] == "Which database?\nUse <primary>?"
+    stream = Stream(server)
+    fake.cards = [replace(fake.cards[0], question="Which region?")]
+    changed = part(stream.kinds({"task"})[-1]["task"])
+    assert changed["ask"] is True and changed["question"] == "Which region?" and changed["column"] == "held"
     stream.close()
 
 

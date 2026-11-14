@@ -12,6 +12,7 @@ from taskloop.attempt_reads import ReleaseRow
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_types import AttemptResult
 from taskloop.hold_store import HoldRow
+from taskloop.merge.models import PREFIX as MERGE
 
 type HoldNext = Literal["hold", "on_hold"]
 # The `Next` words a hold never comes from (section 3): transient or progressing, the person's land, `stuck:hung` (D7).
@@ -40,6 +41,8 @@ class Viewed(Protocol):
     def label(self) -> str | None: ...
     @property
     def number(self) -> int: ...
+    @property
+    def check_repeat_eligible(self) -> bool: ...
 
 
 def cause(view: Viewed) -> str | None:
@@ -48,7 +51,10 @@ def cause(view: Viewed) -> str | None:
     result is `failed:<result reason>` (a checks attempt's reason already reads `failed:<reason>`); `repeats_exhausted`
     names the repeat reason; every `stuck:*` word but `stuck:hung` is its own reason. The advance's and the
     publication's refusals (`claim_lost`, `branch_moved`) are the round's to pass: no status shows them."""
-    if view.label is None or (view.release is not None and view.release.abandoned):
+    merge_terminal = view.result.reason.startswith(MERGE) and view.result.status == "refused"
+    if merge_terminal or view.label is None or (view.release is not None and view.release.abandoned):
+        return view.result.reason if merge_terminal else None
+    if view.check_repeat_eligible:
         return None
     word = view.next
     if view.result.reason == MAIN_MOVED and view.number < MAIN_MOVED_RUNS:  # not the task's fault: the round runs them again
@@ -77,4 +83,5 @@ def reingests(word: str, row: HoldRow | None, label: str) -> bool:
     """Section 7.2: an `on_hold` task is taken again by a round under `label` only when its hold removed (or found absent)
     the very label the task was taken under and that label is the round's: a later ready read with it is the person's
     answer. Any other abandon (another labels word, a hand abandon, another round label) keeps the `abandoned` skip."""
-    return word == "on_hold" and row is not None and row.labels in ANSWERED and row.label == label
+    return (word == "on_hold" and row is not None and not row.reason.startswith(MERGE)
+            and row.labels in ANSWERED and row.label == label)

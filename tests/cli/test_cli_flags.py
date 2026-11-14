@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from taskloop import cli_composition, cli_step, dash_composition
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.cli import main
+from taskloop.cli_step import DASH_PORT
 from taskloop.dash_composition import DashRequest
 from taskloop.git_views import GitViews
 from taskloop.operations import Adoption, Ended, Failed, Round
@@ -88,17 +90,20 @@ class Dashboard:
             self.events.append("dashboard closed")
 
 
-@pytest.mark.parametrize("port", [None, 0, 8123])
+@pytest.mark.parametrize("port", [None, 0, 8123, "off"])
 @pytest.mark.parametrize("structured", [False, True])
 def test_dashboard_selection_lifetime_and_output(
-    port: int | None, structured: bool, execution: Execution, tmp_path: Path,
+    port: int | str | None, structured: bool, execution: Execution, tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     dashboard, db, artifacts = Dashboard(execution.events), tmp_path / "factory.db", tmp_path / "artifacts"
     monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
-    flags = ([] if port is None else ["--dash-port", str(port)]) + (["--json"] if structured else [])
+    named = ["--no-dashboard"] if port == "off" else [] if port is None else ["--dash-port", str(port)]
+    flags = named + (["--json"] if structured else [])
     assert main(["step", "rounds", *CHOICES, "--db", str(db), "--artifacts", str(artifacts), *flags]) == 0
-    assert dashboard.requests == [None if port is None else DashRequest("tasks", "/tracker", "approved", port, db, artifacts)]
+    number = int(port) if isinstance(port, int) else DASH_PORT
+    shown = None if port == "off" else DashRequest("tasks", "/tracker", "approved", number, db, artifacts, Path("/checkout"))
+    assert dashboard.requests == [shown]
     assert execution.events == ["rounds entered", "dashboard entered", "rounds ran", "dashboard closed", "rounds closed"]
     output = capsys.readouterr()
     notice = "Dashboard: http://127.0.0.1:8123/\n"
@@ -108,10 +113,10 @@ def test_dashboard_selection_lifetime_and_output(
              "label": "approved", "max_running": 3},
             {"status": "ended", "backlog": "tasks", "reason": "interrupted", "detail": None},
         ]
-        assert output.err == ("" if port is None else notice)
+        assert output.err == ("" if shown is None else notice)
     else:
         assert output.err == ""
-        assert (notice in output.out) == (port is not None)
+        assert (notice in output.out) == (shown is not None)
 
 
 def test_dashboard_closes_when_rounds_are_interrupted(
@@ -210,10 +215,22 @@ def test_scheduling_choices_reach_each_commands_request(
     operation: str, maximum: int | None, retake: bool, execution: Execution, capsys: pytest.CaptureFixture[str],
 ) -> None:
     flags = ([] if maximum is None else ["--max-running", str(maximum)]) + (["--retake-lapsed"] if retake else [])
-    assert main(["step", operation, *CHOICES, *flags, "--json"]) == 0
+    quiet = ["--no-dashboard"] if operation == "rounds" else []
+    assert main(["step", operation, *CHOICES, *flags, *quiet, "--json"]) == 0
     expected = 3 if maximum is None else maximum
-    assert execution.requests == [NextRequest("tasks", "/tracker", Path("/checkout"), "approved", "m", "high", 30,
-                                             max_running=expected, retake=retake)]
+    assert execution.requests == [
+        NextRequest(
+            "tasks",
+            "/tracker",
+            Path("/checkout"),
+            "approved",
+            StepSettings(),
+            Overrides(model="m", effort="high"),
+            30,
+            max_running=expected,
+            retake=retake,
+        )
+    ]
     output = capsys.readouterr()
     assert output.err == ""
     if operation == "rounds":
@@ -228,7 +245,7 @@ def test_scheduling_choices_reach_each_commands_request(
 def test_rounds_announces_recovery_only_when_selected(
     retake: bool, execution: Execution, capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["step", "rounds", *CHOICES, *(["--retake-lapsed"] if retake else [])]) == 0
+    assert main(["step", "rounds", "--no-dashboard", *CHOICES, *(["--retake-lapsed"] if retake else [])]) == 0
     assert ("(and its own lapsed claims)" in capsys.readouterr().out) == retake
 
 
@@ -241,3 +258,20 @@ def test_retake_help_keeps_the_recovery_limit(operation: str, capsys: pytest.Cap
     assert "After a factory.db discard only" in shown
     assert "expired lease and no attempt here" in shown
     assert "assumes this is the one factory on the tracker" in shown
+
+
+@pytest.mark.parametrize("operation", ["next", "rounds"])
+def test_round_commands_work_without_agent_flags_and_keep_a_configuration_snapshot(
+    operation: str, execution: Execution, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text('[agents.implement]\nmodel = "configured"\neffort = "low"\n')
+    argv = CHOICES[:8] + CHOICES[12:]
+    assert main(["--config", str(config), "step", operation, *argv, *(["--no-dashboard"] if operation == "rounds" else [])]) == 0
+    capsys.readouterr()
+    (request,) = execution.requests
+    assert request.overrides == Overrides()
+    assert request.settings.plan.effort == "high" and request.settings.implement.effort == "low"
+    assert request.settings.implement.model == "configured"
+    config.unlink()
+    assert request.settings.implement.model == "configured"

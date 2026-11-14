@@ -6,7 +6,6 @@ No Git or SQL of its own: the verifier, the store reads, the files, the admissio
 and the entry observation are injected. `tl step start` on a captured attempt calls `repeat`; a scheduler would too.
 """
 
-import secrets
 from dataclasses import dataclass, replace
 from typing import Protocol
 
@@ -31,7 +30,11 @@ from taskloop.attempt_types import (
     VerifyResult,
     WorkerGone,
 )
+from taskloop.discussion import RefreshDiscussion, replace_block
+from taskloop.earlier_input import without
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.ids import Ids
+from taskloop.input_context import InputError
 from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, launched, verify_failure
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
@@ -65,6 +68,8 @@ class StepRepeat:
     observe: Observe
     clock: Clock
     hold: ParkHold  # the slot's lock around the takeover (`slot_lock.repeating`), so a concurrent abandon cannot park under it
+    ids: Ids
+    discussion: RefreshDiscussion | None = None
 
     def repeat(self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int) -> Started | Failed:
         """For the task's captured current attempt C: the stop proof (C's entry, then its worker and group) before any Git
@@ -114,16 +119,21 @@ class StepRepeat:
         """The feedback over attempt 1's input, read through its digest."""
         try:
             steps = self.store.chain(current)  # read after the verify: C's commit, if it made one, is stored now
-            task = self.files.read(steps[0].input_ref)
+            task = without(self.files.read(steps[0].input_ref))
+            if self.discussion is not None:
+                root = self.store.tracker_root(current)
+                if root is None:
+                    raise InputError("The attempt's tracker binding is unavailable")
+                task = replace_block(task, self.discussion(record.admission.task, root))
         except StoreUnavailable as error:
             return Failed("unavailable", "store", str(error))
-        except EvidenceError as error:
+        except (EvidenceError, InputError) as error:
             return Failed("refused", "input", str(error))
         unrecorded = steps[-1].effect == "commit" and steps[-1].end_commit is None
         admission = record.admission
         step = kind(admission.step)
         rules = step.rules(admission.task.task_id)
-        return step.feedback(found, rules, admission.number, task, secrets.token_hex(8), unrecorded=unrecorded)
+        return step.feedback(found, rules, admission.number, task, self.ids.token(8), unrecorded=unrecorded)
 
     def _stopped(
         self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int

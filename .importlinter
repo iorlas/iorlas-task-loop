@@ -31,6 +31,8 @@ source_modules =
     taskloop.attempt_status
     taskloop.round
     taskloop.round_log
+    taskloop.round_land
+    taskloop.land_mode
     taskloop.selection
     taskloop.result_data
     taskloop.machine_config
@@ -51,16 +53,15 @@ source_modules =
     taskloop.hold_status
     taskloop.hold_facts
     taskloop.hold_guide
+    taskloop.task_status
 forbidden_modules =
     taskloop.attempt_entry
     taskloop.check_entry
 
-[importlinter:contract:rounds-never-land]
-name = Rounds, the step operations, both entry processes and the wiring they import never import the land (only the person's `tl step land` runs it, wired in `cli_composition`)
+[importlinter:contract:entries-never-land]
+name = The step operations, both entry processes and the wiring they import never import the land (only the command surface and a round's land phase, `round_land`, run it, wired in `cli_composition`)
 type = forbidden
 source_modules =
-    taskloop.round
-    taskloop.rounds
     taskloop.operations
     taskloop.attempt_entry
     taskloop.check_entry
@@ -73,6 +74,7 @@ source_modules =
     taskloop.hold
     taskloop.hold_status
     taskloop.hold_facts
+    taskloop.task_status
 forbidden_modules =
     taskloop.land
     taskloop.land_check

@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
+from taskloop.land_status import LandState
+
 type Column = Literal["waiting", "plan", "implement", "checks", "land", "held", "landed"]
 type State = Literal["running", "succeeded", "failed"]
-type LandState = Literal["waiting", "landing"]
 
 
 def iso(epoch: float | None) -> str | None:
@@ -32,7 +33,12 @@ class Card:
     last_activity_at: str | None
     slot: str | None
     hold_cause: str | None
-    land: LandState | None = None  # in `land` only: `waiting` for the person to run `tl step land`, `landing` while a land runs
+    # in `land` only: the shared policy/execution decision (`land_status.LandState`)
+    land: LandState | None = None
+    status: str | None = None  # `task_status.Status`: the one status of the task, for every reader
+    status_note: str | None = None  # the status in plain words (`task_status.words`)
+    ask: bool = False
+    question: str | None = None
 
 
 @dataclass(frozen=True)
@@ -116,7 +122,7 @@ class Outcome:
 class FeedEvent:
     """One live line (docs/design/dashboard-ui.md, *Live event*); the fields of the other types are null."""
 
-    type: Literal["step", "check", "command", "tool", "message", "error", "waiting"]
+    type: Literal["step", "check", "command", "tool", "message", "think", "error", "waiting"]
     at: str
     step: str | None = None
     attempt: int | None = None
@@ -126,7 +132,7 @@ class FeedEvent:
     id: str | None = None
     state: Literal["running", "finished", "unfinished"] | None = None  # unfinished: its attempt ended without a finish line
     cmd: str | None = None  # a command's text, or a tool's main argument
-    text: str | None = None  # a message, an error or a wait
+    text: str | None = None  # a message, the agent's reasoning words (only when the harness gave them), an error or a wait
     waited_ms: int | None = None
     exit_code: int | None = None
 
@@ -139,6 +145,18 @@ class FeedPage:
     cursor: str | None
     replaced: bool
     available: bool
+
+
+@dataclass(frozen=True)
+class Usage:
+    """Known counts and coverage: totals include reported values only when complete < attempts."""
+
+    fresh: int | None = None
+    cached: int | None = None
+    output: int | None = None
+    turns: int | None = None
+    attempts: int = 0
+    complete: int = 0
 
 
 @dataclass(frozen=True)
@@ -155,6 +173,21 @@ class AttemptDetail:
     feed: tuple[FeedEvent, ...]
     feed_cursor: str | None = None  # follow the agent's lines from here (`FeedPage`); None for checks and before any line
     led_by: int | None = None  # a repeat of an agent attempt: the try of the `verification` step whose failure led to it
+    past: bool = False  # belongs to a chain a person abandoned: history, not the task's current steps
+    run: Run | None = None  # an agent attempt's: what ran it; None for a check or a verification
+    usage: Usage | None = None  # None for checks/verification; an agent with no report has empty counts
+
+
+@dataclass(frozen=True)
+class Run:
+    """What an agent attempt ran, in plain words: the harness, the provider of its model, the model, the reasoning effort and what
+    its access policy allows. Its facts are the admitted harness, provider, model, effort and captured access policy."""
+
+    harness: str
+    provider: str
+    model: str
+    effort: str
+    access: str
 
 
 @dataclass(frozen=True)
@@ -173,6 +206,8 @@ class TaskDetail:
 
     task: Card
     attempts: tuple[AttemptDetail, ...]
+    step_usage: dict[str, Usage]
+    usage: Usage
 
 
 @dataclass(frozen=True)

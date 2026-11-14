@@ -15,10 +15,12 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from git_porcelain.testing import FakeWorktree
+from plan_fixtures import PLAN_TEXT
 
 from taskloop import verifier as verifier_module
 from taskloop.admit import AdmitRefused, Admitted, AdmitUnavailable
 from taskloop.admit_chain import RepeatRequest
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
@@ -34,6 +36,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import GitQuiet, Settled
+from taskloop.ids import NativeIds
 from taskloop.operations import Failed
 from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import LABEL, acquire, hold, lock_path, refused, repeating
@@ -62,13 +65,20 @@ def agent(slot: FakeWorktree, files: dict[str, str]) -> Execution:
 def captured(
     con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles, written: dict[str, str]
 ) -> None:
-    attempts = Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent(slot, written), lambda: 10,
-                            checkouts, files)
+    attempts = Attempts(
+        AttemptStore(lambda: con),
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        agent(slot, written),
+        lambda: 10,
+        checkouts,
+        files,
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
 
 
 def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone = lambda _worker: True) -> Verifier:
-    return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, hold)
+    return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
 
 
 @pytest.fixture
@@ -94,7 +104,7 @@ def test_a_held_slot_refuses_verify_before_any_git_write_and_then_it_settles(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
     occupy: Occupy,
 ) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     with occupy(lock_path(str(slot.path))):
         assert verifier(registered, checkouts, slot_files).verify(KEY) == VerifyUnavailable("slot_busy")
     assert writes == [] and registered.execute("SELECT count(*) FROM verification").fetchone() == (0,)
@@ -108,7 +118,7 @@ def test_the_lock_is_released_after_a_verify_and_a_live_worker_is_still_alive(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
     """A free lock is never a stop proof: the worker gate still refuses the Git write."""
-    captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     assert verifier(registered, checkouts, slot_files, lambda _worker: False).verify(KEY) == Unsettled("worker_alive")
     assert writes == []
     acquire(str(slot.path), "probe", "verify").release()  # free again
@@ -128,7 +138,7 @@ def test_the_holder_record_names_the_attempt_and_the_role_only(slot: FakeWorktre
 def test_an_uncreatable_lock_file_is_unavailable_lock(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     lock_path(str(slot.path)).parent.parent.mkdir(parents=True, exist_ok=True)
     lock_path(str(slot.path)).parent.write_text("not a folder")
     assert verifier(registered, checkouts, slot_files).verify(KEY) == VerifyUnavailable("lock") and writes == []
@@ -152,12 +162,12 @@ def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str],
     occupy: Occupy,
 ) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n", "stray.txt": "s"})
+    captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT, "stray.txt": "s"})
     store, admits = AttemptStore(lambda: registered), Admits()
     repeat = StepRepeat(
         store, verifier(registered, checkouts, slot_files), EvidenceFiles(tmp_path), admits, NoLaunch(), lambda _worker: True,
         lambda _entry: "gone", lambda: 10, repeating,
-    )
+    ids=NativeIds())
     with occupy(lock_path(str(slot.path))):
         found = repeat.repeat("tasks", "tl-1", KEY, None, 30)
     assert found == Failed("unavailable", "slot_busy") and admits.calls == [] and writes == []
@@ -166,8 +176,9 @@ def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
 def test_a_read_only_verifier_asked_to_write_is_its_own_unknown(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
-    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True, lambda: 20, refused).verify(KEY)
+    captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
+    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
+        lambda: 20, refused, ids=NativeIds()).verify(KEY)
     assert found == VerifyUnavailable("read_only") and writes == []
 
 
@@ -177,7 +188,7 @@ def test_a_verify_reads_the_attempt_again_under_the_lock(
 ) -> None:
     """Another verifier settles between this one's first read and its lock: this one returns that stored verdict with
     no Git step of its own (one `settle` in all), never acting on what it read before the lock."""
-    captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
+    captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     other: list[object] = []
     settled: list[str] = []
     real = verifier_module.settle
@@ -194,5 +205,6 @@ def test_a_verify_reads_the_attempt_again_under_the_lock(
         with hold(admission):
             yield
 
-    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True, lambda: 20, late).verify(KEY)
+    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
+        lambda: 20, late, ids=NativeIds()).verify(KEY)
     assert isinstance(found, Verified) and other == [found] and writes == ["stage", "record"] and settled == ["attempt"]

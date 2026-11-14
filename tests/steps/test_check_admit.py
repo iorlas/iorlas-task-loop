@@ -8,17 +8,20 @@ from collections.abc import Callable, Generator
 from pathlib import Path
 
 import pytest
-from doubles import MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, PinnedViews
+from doubles import MAIN_PROFILE, ChecksBench, Done, FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import Sha
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, Admitted
 from taskloop.admit_chain import NextAdmission, NextStepRequest
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt_types import AttemptKey
+from taskloop.check_admit import ChecksRequest
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.checks import argv_digest
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 
 
 @pytest.fixture
@@ -33,7 +36,10 @@ def required() -> str:
 
 
 def test_an_advance_stores_number_1_on_a_free_slot_at_d_with_the_target_and_its_required_digests(bench: ChecksBench) -> None:
-    found = bench.admit()
+    admission = bench.admission()
+    ids = FixedIds()
+    admission.ids = ids
+    found = admission.admit_checks(ChecksRequest(bench.done.implement, bench.repo.path, 100.0, 1))
     assert isinstance(found, Admitted) and found.slot == "s1" and bench.reads == ["tl-1"]
     rows, held = bench.stored()
     assert rows == [(1, "s1", bench.done.d, bench.done.target, required(), 100.0, "admitted", "implement")]
@@ -41,6 +47,8 @@ def test_an_advance_stores_number_1_on_a_free_slot_at_d_with_the_target_and_its_
     assert bench.con.execute("SELECT generation FROM slot WHERE name='s1'").fetchone() == (1,)
     current = CheckStore(lambda: bench.con).attempt_of("tasks", "tl-1")
     assert current is not None and current[0] == found.key and current[1] == "admitted"
+    assert found.key.attempt_id == ids.fresh[0] and found.key.dispatch_token == ids.tokens[0][1]
+    assert [size for size, _ in ids.tokens] == [16]
     assert bench.con.execute("SELECT count(*) FROM attempt").fetchone() == (1,)  # no agent attempt, no input file
     assert not (bench.done.path.parent / "attempts").exists()
 
@@ -206,6 +214,13 @@ def test_a_commit_between_the_reads_and_the_write_is_seen_under_the_lock(
 def test_the_agent_advance_refuses_the_check_step_before_any_tracker_read_or_input(bench: ChecksBench) -> None:
     """`admit_chain` admits only agent steps: after implement it is `not_advanceable` (never `kind("check")`)."""
     advance = NextAdmission(lambda: bench.con, begin_immediate, EvidenceFiles(bench.done.path.parent), bench.inspect, bench.views,
-                            lambda: 10, lambda _p: True, bench.files)
-    found = advance.admit_next(NextStepRequest(bench.done.implement, bench.repo.path, "m", "high", "workspace-write", 100.0))
+                            lambda: 10, lambda _p: True, bench.files, ids=NativeIds())
+    found = advance.admit_next(
+        NextStepRequest(
+            bench.done.implement,
+            bench.repo.path,
+            AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            100.0,
+        )
+    )
     assert isinstance(found, AdmitRefused) and found.reason == "not_advanceable" and bench.reads == []

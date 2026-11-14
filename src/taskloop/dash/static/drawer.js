@@ -2,11 +2,12 @@
 // it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, position, quietSpan, startedAt, stepInfo, tag } from "./ui.js";
+import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, position, quietSpan, stepInfo, tag } from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
-import { causeLink, lasted, rail } from "./rail.js";
+import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
+import { usageNode } from "./usage.js";
 
 let source = null;
 let tasks = null;
@@ -21,7 +22,7 @@ export function initDrawer(src, taskMap) {
 
 const attemptOf = () => open.detail?.attempts.find((a) => a.step === open.step && a.n === open.n);
 const tabOf = (a) => (a.step === VERIFY.id ? "result" : open.tab ?? (a.state === "running" ? "lines" : "result")); // a verification has only its result
-const signature = (t) => JSON.stringify([t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.land]); // what changes the attempts
+const signature = (t) => JSON.stringify([t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.land, t.status]); // what changes the attempts
 
 // Select an attempt: the given one, else the last of the step, else the last of the task.
 function select(step, n) {
@@ -41,7 +42,7 @@ function reveal() {
 // it arrives and the tracker's fields (`bd`, slow under load) when they do. Opening another task cancels the first one's tracker read.
 export async function openDrawer(id) {
   open?.abort.abort();
-  const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, bodies: new Map(), opened: new Map(), tab: null, view: null };
+  const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, bodies: new Map(), opened: new Map(), runs: new Map(), tab: null, view: null };
   open = mine;
   render();
   reveal();
@@ -135,8 +136,8 @@ const VIEWS = [["attempts", "Steps"], ["task", "Task"]];
 function placeOf(t) {
   const col = COLUMNS.find((c) => c.id === t.column);
   if (t.column !== "land") return { label: `${col.emoji} ${col.label}`, help: col.help };
-  const word = LAND[t.land ?? "waiting"];
-  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.land === "landing" ? "A land is putting the checked change on main now." : "Checked and ready; the factory never lands by itself." };
+  const word = LAND[t.land ?? "unknown"];
+  return { label: `${col.emoji} ${col.label} · ${word.label}`, help: t.status_note };
 }
 
 function head(t) {
@@ -165,17 +166,30 @@ function render() {
   const drawer = $("drawer");
   const railTop = $("rail")?.scrollTop ?? 0;
   const kept = $("tail") && { key: $("tail").dataset.key, top: $("tail").scrollTop, bottom: atBottom($("tail")) };
+  // Capture disclosure changes even when a redraw precedes the asynchronous toggle event.
+  for (const group of $("rail")?.querySelectorAll("details[data-run]") ?? []) open.runs.set(group.dataset.run, group.open);
   drawer.replaceChildren();
   if (!t) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", `Loading ${open.id}…`));
   drawer.append(head(t));
+  if (detail) {
+    const total = el("div", "px-6 pb-3");
+    total.append(usageNode(detail.usage, "Task total", true));
+    drawer.append(total);
+  }
   if (t.hold_cause) {
     const hold = el("div", "px-6 pb-3");
     hold.append(callout("border-rose-500", "Held", t.hold_cause));
     drawer.append(hold);
   }
-  if (t.column === "land" && t.land !== "landing") {
+  if (t.column === "waiting" && t.attempt > 0) {
+    const fresh = el("div", "px-6 pb-3");
+    fresh.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
+    drawer.append(fresh);
+  }
+  if (t.column === "land") {
     const waiting = el("div", "px-6 pb-3");
-    waiting.append(callout(LAND.waiting.bar, "Waiting for you to land it", `Run: tl step land ${t.id}`));
+    const word = LAND[t.land ?? "unknown"];
+    waiting.append(callout(word.bar, word.label, t.status_note));
     drawer.append(waiting);
   }
   if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));
@@ -191,10 +205,10 @@ function render() {
   }
   drawer.append(bar);
 
-  if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }));
+  if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }, detail.usage));
   if (!detail.attempts.length) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
   const body = el("div", "flex min-h-0 flex-1");
-  body.append(rail(detail.attempts, t, open, select), pane());
+  body.append(rail(detail.attempts, t, open, select, detail.step_usage), pane());
   drawer.append(body);
   if ($("rail") && railTop) $("rail").scrollTop = railTop;
   else body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
@@ -224,30 +238,37 @@ function bodyTab(a, tab) {
 const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
 const nameOf = stepInfo;
 
+// The selected attempt explains its restart/repeat, including navigation to a failed verification.
+function began(a) {
+  const list = open.detail.attempts;
+  const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
+  const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`;
+  const what = a.after === "repeat" ? `a repeat of ${at}` : `a restart at plan (after ${at})`;
+  const line = el("p", `w-full text-xs ${JUMP[a.after].text}`);
+  line.append(el("span", "font-medium", `Began after ${what}`), el("span", "text-slate-500 dark:text-slate-400", ` · ${changeReason(a)}`));
+  line.title = `${changeReason(a)}${a.reason ? ` (${a.reason})` : ""}`;
+  if (a.led_by) line.append(" ", causeLink(a, select));
+  return line;
+}
+
 function pane() {
   const a = attemptOf();
   const st = STATE[a.state];
   const tab = tabOf(a);
   const wrap = el("section", "flex min-w-0 flex-1 flex-col");
   const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
-  top.append(el("h3", "text-sm font-semibold", `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
+  top.append(el("h3", "text-sm font-semibold", a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}` : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
   if (a.step !== VERIFY.id) top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
+  if (a.usage) top.append(usageNode(a.usage));
   if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) {
     const quiet = quietSpan(a.feed.at(-1)?.at ?? a.started_at);
     quiet.id = "quiet";
     top.append(quiet);
   }
   wrap.append(top);
-  if (a.after) {
-    const why = el("div", "px-6 pt-3");
-    const list = open.detail.attempts;
-    const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
-    const what = a.after === "repeat" ? "Repeat of" : "Restarted at plan after";
-    why.append(callout(JUMP[a.after].bar, `${what} ${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}${a.after === "repeat" ? "" : `,${startedAt(a.started_at)}`}`, a.reason));
-    if (a.led_by) why.append(causeLink(a, select));
-    wrap.append(why);
-  }
+  if (a.run) wrap.append(el("p", "px-6 pt-1 text-xs text-slate-500 dark:text-slate-400", [a.run.harness, a.run.provider, a.run.model, `${a.run.effort} effort`, a.run.access].join(" · ")));
+  if (a.after) top.append(began(a)); // the full reason is readable here after selecting the row or tag
   const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
   for (const [id, label] of TABS) {
     const on = id === tab;

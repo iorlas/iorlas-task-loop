@@ -4,7 +4,9 @@ import sqlite3
 from dataclasses import astuple
 
 from any_agent.procs import Worker
+from pydantic import BaseModel, ConfigDict
 
+from taskloop.agents.settings import AgentSetting
 from taskloop.attempt_reads import (
     AttemptReads,
     StoreRefused,
@@ -15,6 +17,7 @@ from taskloop.attempt_reads import (
     as_nullable_text,
     as_text,
     stored_effect,
+    stored_setting,
 )
 from taskloop.attempt_types import (
     Admission,
@@ -29,10 +32,39 @@ from taskloop.attempt_types import (
     Verdict,
     Verified,
 )
+from taskloop.earlier_attempt import EarlierAttempt
 from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, prefixed
 from taskloop.repo import RepoId
 from taskloop.steps import RULES
 from taskloop.task import TaskReference, TaskScope
+
+
+class RetainedInputs(BaseModel):
+    """The implement attempt's original inputs, independent of its released slot."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    key: AttemptKey
+    repo_id: str
+    backlog: str
+    task_id: str
+    tracker_root: str
+    checked: str
+    input_ref: FileRef
+    setting: AgentSetting
+
+
+def retained_on(con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | None:
+    row = con.execute(
+        "SELECT repo_id,backlog,task_id,tracker_root,end_commit,input_path,input_digest,harness,provider,model,effort,access_policy "
+        "FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? AND step='implement'",
+        astuple(key),
+    ).fetchone()
+    if row is None:
+        return None
+    return RetainedInputs(key=key, repo_id=as_text(row[0]), backlog=as_text(row[1]), task_id=as_text(row[2]),
+                          tracker_root=as_text(row[3]), checked=as_text(row[4]),
+                          input_ref=FileRef(as_text(row[5]), as_text(row[6])),
+                          setting=stored_setting(*row[7:12]))
 
 
 def _counts(row: tuple[object, ...]) -> tuple[int | None, int | None, int | None] | None:
@@ -57,6 +89,35 @@ def verdict_of(row: tuple[object, ...]) -> Verdict | None:
 class AttemptLoads(AttemptReads):
     """The fenced reads an attempt's writers need; the status reads are `AttemptReads`'."""
 
+    def retained(self, key: AttemptKey) -> RetainedInputs | None:
+        with self._connection() as con:
+            return retained_on(con, key)
+
+    def earlier(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> EarlierAttempt | None:
+        """Latest agent attempt for exactly this registered repo and tracker task; checks have their own table."""
+        with self._connection() as con:
+            row: tuple[object, ...] | None = con.execute(
+                """SELECT attempt_id,dispatch_token,generation,rev,slot,step,end_commit FROM attempt
+                WHERE repo_id=? AND adapter='beads' AND backlog=? AND task_id=? AND tracker_root=?
+                ORDER BY seq DESC LIMIT 1""", (repo_id, backlog, task_id, tracker_root),
+            ).fetchone()
+        if row is None:
+            return None
+        return EarlierAttempt.model_validate({
+            "key": AttemptKey(as_text(row[0]), as_text(row[1]), as_int(row[2])), "revision": as_int(row[3]),
+            "repo_id": repo_id, "backlog": backlog, "task_id": task_id, "tracker_root": tracker_root,
+            "slot": as_text(row[4]), "step": as_text(row[5]), "end_commit": as_nullable_text(row[6]),
+        })
+
+    def earlier_for(self, key: AttemptKey) -> EarlierAttempt | None:
+        """Select by the predecessor's fenced identity, independently of its released reservation."""
+        with self._connection() as con:
+            row = con.execute(
+                "SELECT repo_id,backlog,task_id,tracker_root FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
+                astuple(key),
+            ).fetchone()
+        return None if row is None else self.earlier(*(as_text(value) for value in row))
+
     def _load(self, con: sqlite3.Connection, key: AttemptKey) -> AttemptRecord | None:
         """The fenced read; `start` (E) is the previous attempt's X, else its B, frozen since this attempt took over."""
         row: tuple[object, ...] | None = con.execute(
@@ -73,11 +134,11 @@ class AttemptLoads(AttemptReads):
         held = con.execute(
             "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
         ).fetchone()
-        if held != (row[2], key.reservation_generation, key.attempt_id) or row[27] is None:
+        if held != (row[2], key.reservation_generation, key.attempt_id) or row[30] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):
             raise StoreUnavailable("Malformed deadline")
-        start = as_nullable_text(row[28])
+        start = as_nullable_text(row[31])
         if (row[24] is None) != (start is None):  # a later attempt always starts where a captured one ended
             raise StoreUnavailable("Malformed previous attempt")
         admission = Admission(
@@ -85,16 +146,15 @@ class AttemptLoads(AttemptReads):
             TaskReference(TaskScope(as_text(row[0])), as_text(row[1])),
             RepoId(as_text(row[2])),
             as_text(row[3]),
-            as_text(row[27]),
+            as_text(row[30]),
             FileRef(as_text(row[4]), as_text(row[5])),
-            as_text(row[6]),
-            as_text(row[7]),
-            as_text(row[8]),
+            stored_setting(row[27], row[29], row[6], row[7], row[8]),
             float(row[9]),
             (as_int(row[10]), as_text(row[11]), as_text(row[12])),
             as_int(row[23]),
             as_text(row[25]),
             as_nullable_text(row[26]),
+            as_nullable_text(row[28]),
         )
         pid, pgid, began, boot = row[15:19]
         worker = None if pid is None else Worker(pid=as_int(pid), pgid=as_int(pgid), start=as_text(began), boot=as_text(boot))
@@ -105,6 +165,15 @@ class AttemptLoads(AttemptReads):
     def load(self, key: AttemptKey) -> AttemptRecord | None:
         with self._connection() as con:
             return self._load(con, key)
+
+    def slot_base(self, key: AttemptKey) -> str:
+        """The reservation's original park point D, independent of the branch source and prepared B."""
+        with self._connection() as con:
+            row = con.execute("SELECT slot_head FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
+                              astuple(key)).fetchone()
+        if row is None:
+            raise StoreRefused("absent")
+        return as_text(row[0])
 
     def _execution(self, con: sqlite3.Connection, key: AttemptKey) -> StoredExecution | None:
         row: tuple[object, ...] | None = con.execute(

@@ -20,11 +20,12 @@ def test_help(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
         assert main(arguments) == 0
     output = capsys.readouterr()
     assert "usage: tl" in output.out
-    assert "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round" in " ".join(output.out.split())
+    assert BUILT in " ".join(output.out.split())
     assert output.err == ""
 
 
-BUILT = "steps built: plan, implement, check; publishes task/<id>; `tl step land` lands, never a round"
+BUILT = ("steps built: plan, implement, check; publishes task/<id>; lands under the profile's `land` "
+         "(`auto`: a round, `manual`: `tl step land`)")
 
 
 def test_step_help_names_the_steps_built_once_and_each_command_help_does_not_repeat_it(capsys: pytest.CaptureFixture[str]) -> None:
@@ -46,7 +47,9 @@ def test_publish_help_says_it_pushes_as_you_never_forced(capsys: pytest.CaptureF
 
 @pytest.mark.parametrize(
     "arguments",
-    [["plan"], ["step"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["step", "prepare"], ["slot"], ["config"]],
+    [["plan"], ["step"], ["implement"], ["--unknown"], ["--he"], ["land", "tl-123"], ["step", "prepare"], ["slot"], ["config"],
+     ["install"], ["pin"], ["report"], ["repo", "register"], ["task", "create"],
+     ["slot", "list"], ["slot", "release"], ["slot", "hold"]],
 )
 def test_invalid_request(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as result:

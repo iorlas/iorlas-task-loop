@@ -11,12 +11,14 @@ import pytest
 from doubles import CHECKS, REQUIRED, Command, FakeSetupProcess, PinnedViews
 from git_porcelain import GitUnavailable, Recorded, WorktreeInfo
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from sqlite_store import begin_immediate
 
 from taskloop.access import folders
 from taskloop.agent_credentials import PUSH_REFUSED, scrubbed
-from taskloop.attempt_types import AttemptResult
-from taskloop.check_store import CheckStore, Conclusion, Required, ResultRow, unsettled
+from taskloop.attempt_types import AttemptKey, AttemptResult
+from taskloop.check_store import ChecksAdmitted, CheckStore, Required, ResultRow, insert, unsettled
 from taskloop.checks import Block, BlockPorts, BlockTarget, CheckSink, argv_digest, check_env, completed, conclusion, differs, main_seen
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import CappedLog, EvidenceFiles, capped
 from taskloop.profile import Check
 
@@ -81,6 +83,24 @@ def test_every_check_runs_in_order_after_its_identity_is_committed(bench: Bench)
     assert bench.log("check") == "$ just check\ndone\nexit 0\n" and bench.log("lint") == "$ ruff .\ndone\nexit 1\n"
     stored = bench.con.execute("SELECT name,argv_digest,timeout,proc_start,boot FROM check_result ORDER BY position").fetchall()
     assert stored[0] == ("check", argv_digest(("just", "check")), 600, "start-501", "boot")
+
+
+def test_a_new_checks_attempt_runs_commands_despite_a_previous_pass(bench: Bench) -> None:
+    assert bench.run(CHECK, TEST) is None and bench.verdict() == ("passed", None)
+    key = AttemptKey("new-checks", "new-token", 2)
+    with begin_immediate(bench.con):
+        bench.con.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=11,released_at=12,parked=?",
+                          (bench.x,))
+        bench.con.execute("DELETE FROM reservation WHERE attempt_id=?", (CHECKS.attempt_id,))
+        bench.con.execute("INSERT INTO reservation VALUES ('s2','r',2,?)", (key.attempt_id,))
+        insert(bench.con, ChecksAdmitted(key, "implement", 2, "s2", bench.x, bench.x, REQUIRED, 100))
+    before = len(bench.process.calls)
+    sink = CheckSink(bench.store, key, EvidenceFiles(bench.artifacts), bench.clock)
+    block = Block(BlockPorts(bench.process, bench.process.lingering, bench.clock))
+    assert block.run(bench.target(), sink, bench.store.block(key), (CHECK, TEST)) is None
+    assert len(bench.process.calls) == before + 2
+    assert conclusion(bench.store.results(key), REQUIRED) == ("passed", None)
+    assert conclusion(bench.store.results(CHECKS), REQUIRED) == ("passed", None)
 
 
 def test_each_command_runs_in_the_slot_with_the_scrubbed_environment_and_the_nearer_limit(bench: Bench) -> None:
@@ -247,18 +267,20 @@ def test_an_interrupted_block_repeats_whole_and_only_the_latest_block_concludes(
     assert bench.log("check", 2) == "$ just check\ndone\nexit 0\n"
 
 
-def result(name: str, found: Conclusion | None, digest: str | None = "0" * 64) -> ResultRow:
+def result(name: str, found: CommandConclusion | None, digest: str | None = "0" * 64) -> ResultRow:
     return ResultRow(1, 0, name, digest, None if digest is None else 1, None, 1.0, None if found is None else 2.0, None, found)
 
 
 @pytest.mark.parametrize(("results", "done"), [
     ((), False),
-    ((result("check", "passed"), result("test", "timed_out"), result("lint", "failed")), True),
-    ((result("check", "failed"), result("test", "passed")), False),  # lint missing
-    ((result("check", "passed"), result("test", "passed"), result("lint", "interrupted")), False),
-    ((result("check", "passed"), result("test", "passed"), result("lint", None)), False),
-    ((result("check", "passed"), result("lint", "dirty")), True),
-    ((result("lint", "lingering"),), True),
+    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.TIMED_OUT), result("lint",
+        CommandConclusion.FAILED)), True),
+    ((result("check", CommandConclusion.FAILED), result("test", CommandConclusion.PASSED)), False),  # lint missing
+    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint",
+        CommandConclusion.INTERRUPTED)), False),
+    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint", None)), False),
+    ((result("check", CommandConclusion.PASSED), result("lint", CommandConclusion.DIRTY)), True),
+    ((result("lint", CommandConclusion.LINGERING),), True),
 ], ids=["empty", "terminal", "missing", "interrupted", "unfinished", "dirty", "lingering"])
 def test_a_completed_block_is_every_terminal_result_or_a_stopping_one(results: tuple[ResultRow, ...], done: bool) -> None:
     assert completed(results, (CHECK, TEST, LINT), REQUIRED) is done
@@ -266,18 +288,21 @@ def test_a_completed_block_is_every_terminal_result_or_a_stopping_one(results: t
 
 def test_an_undefined_required_name_needs_its_own_result_for_a_completed_block() -> None:
     required = (*REQUIRED, ("smoke", "3" * 64))
-    ran = (result("check", "passed"), result("test", "passed"))
+    ran = (result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED))
     assert not completed(ran, (CHECK, TEST), required)
-    assert completed((*ran, result("smoke", "undefined", None)), (CHECK, TEST), required)
+    assert completed((*ran, result("smoke", CommandConclusion.UNDEFINED, None)), (CHECK, TEST), required)
 
 
 @pytest.mark.parametrize(("results", "verdict"), [
-    ((result("check", "passed"), result("test", "passed"), result("lint", "failed")), ("passed", None)),
-    ((result("check", "failed"), result("test", "timed_out")), ("failed", "check:failed")),
-    ((result("test", "timed_out"), result("check", "failed")), ("failed", "check:failed")),  # the target's order, not the block's
-    ((result("check", "passed"),), ("failed", "test:not_run")),
-    ((result("check", "failed"), result("lint", "dirty")), ("failed", "lint:dirty")),
-    ((result("check", "passed"), result("test", "passed"), result("lint", "lingering")), ("failed", "lint:lingering")),
+    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint",
+        CommandConclusion.FAILED)), ("passed", None)),
+    ((result("check", CommandConclusion.FAILED), result("test", CommandConclusion.TIMED_OUT)), ("failed", "check:failed")),
+    ((result("test", CommandConclusion.TIMED_OUT), result("check", CommandConclusion.FAILED)), ("failed",
+        "check:failed")),  # the target's order, not the block's
+    ((result("check", CommandConclusion.PASSED),), ("failed", "test:not_run")),
+    ((result("check", CommandConclusion.FAILED), result("lint", CommandConclusion.DIRTY)), ("failed", "lint:dirty")),
+    ((result("check", CommandConclusion.PASSED), result("test", CommandConclusion.PASSED), result("lint",
+        CommandConclusion.LINGERING)), ("failed", "lint:lingering")),
 ], ids=["passed", "first_required", "target_order", "not_run", "stopping_wins", "stopping_not_required"])
 def test_the_conclusion_reads_the_required_names_and_any_stopping_result(
     results: tuple[ResultRow, ...], verdict: tuple[str, str | None]
@@ -286,10 +311,10 @@ def test_the_conclusion_reads_the_required_names_and_any_stopping_result(
 
 
 def test_a_required_check_whose_argv_differs_from_the_targets_is_marked() -> None:
-    assert differs(REQUIRED, result("check", "passed", "9" * 64))
-    assert not differs(REQUIRED, result("check", "passed", "1" * 64))
-    assert not differs(REQUIRED, result("lint", "passed", "9" * 64))  # not required
-    assert not differs(REQUIRED, result("test", "undefined", None))
+    assert differs(REQUIRED, result("check", CommandConclusion.PASSED, "9" * 64))
+    assert not differs(REQUIRED, result("check", CommandConclusion.PASSED, "1" * 64))
+    assert not differs(REQUIRED, result("lint", CommandConclusion.PASSED, "9" * 64))  # not required
+    assert not differs(REQUIRED, result("test", CommandConclusion.UNDEFINED, None))
 
 
 def test_the_digest_is_of_the_argv_as_compact_json() -> None:

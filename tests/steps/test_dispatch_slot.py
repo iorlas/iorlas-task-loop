@@ -14,10 +14,12 @@ from any_agent.testing import FakeRun
 from git_porcelain import Repo, Sha, WorktreeInfo
 from git_porcelain.testing import FakeRepo, FakeWorktree
 
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
@@ -38,13 +40,21 @@ class CountingHarness(CodexHarness):
 
 @pytest.fixture
 def con(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
-    monkeypatch.setattr("taskloop.attempt.CodexHarness", CountingHarness)
+    monkeypatch.setattr("taskloop.agents.launch.CodexHarness", CountingHarness)
     monkeypatch.setattr(CountingHarness, "cleanups", [])
     return registered
 
 
 def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
-    return Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
+    return Attempts(
+        AttemptStore(lambda: con),
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+        run,
+        lambda: 10,
+        checkouts,
+        files,
+    )
 
 
 def run() -> FakeRun:
@@ -81,7 +91,8 @@ def test_a_deadline_crossed_during_the_slot_read_never_dispatches(
 
     agent = run()
     store, files = AttemptStore(lambda: con), EvidenceFiles(tmp_path)
-    owner = Attempts(store, files, lambda: ("/bin/codex", {}), agent, lambda: now[0], slow, slot_files)
+    owner = Attempts(store, files, AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), agent,
+        lambda: now[0], slow, slot_files)
     result = owner.execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "expired") and agent.calls == [] and CountingHarness.cleanups == [1]
     assert con.execute("SELECT phase,rev,base_commit FROM attempt").fetchone() == ("admitted", 0, None)

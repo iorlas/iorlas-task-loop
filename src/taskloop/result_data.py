@@ -3,12 +3,15 @@ It never holds a dispatch token, a remote URL or Git output."""
 
 from pathlib import Path
 
+from taskloop.agents.config import display
+from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
 from taskloop.check_status import ChecksView
 from taskloop.checks import differs
+from taskloop.command_conclusion import encode
 from taskloop.hold_store import HoldRow
 from taskloop.land import Landed
 from taskloop.land_data import land_data, view_data
@@ -28,6 +31,7 @@ from taskloop.operations import (
 from taskloop.publish import publish_word
 from taskloop.slot_release import Released, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
+from taskloop.task_status import task_status, words
 
 # every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
 # `exit_codes`
@@ -43,8 +47,11 @@ def _show_data(each: AttemptView) -> dict[str, object]:
     return {
         "backlog": each.backlog, "task": each.task_id, "step": each.step, "attempt_id": each.attempt_id, "slot": each.slot,
         "phase": each.phase,
-        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
+        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason,
+                                       **({"explanation": each.result.explanation} if each.result.explanation else {})},
         "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
+        "status": task_status(each).status.value,
+        "status_note": words(task_status(each)),
         "entry_process": _entry_data(each.entry_process),
         "worker": None if each.worker is None else {"pid": each.worker[0], "pgid": each.worker[1]},
         "leftovers": list(each.leftovers), "number": each.number, "previous_attempt_id": each.previous_attempt_id,
@@ -52,7 +59,9 @@ def _show_data(each: AttemptView) -> dict[str, object]:
         "last_entry": each.last_entry, "seq": each.seq, "release": _release_data(each.release),
         "published": _published_data(each.published), "checks": _checks_data(each.checks), "land": view_data(each.land),
         "label": each.label, "hold": _hold_data(each.hold), "hold_due": each.hold_due,
-        "last_command": each.last_command,
+        "last_command": each.last_command, "source_checks_id": each.source_checks_id,
+        "agent_stop": None if each.stop is None else each.stop.model_dump(mode="json", exclude={"dispatch_token"}),
+        "stop_cause": stop_text(each.stop, None if each.result.execution is None else each.result.execution.facts.rc),
     }
 
 
@@ -71,7 +80,7 @@ def _checks_data(checks: ChecksView | None) -> dict[str, object] | None:
         return None
     row, required = checks.row, dict(checks.row.required)
     logs = checks.logs or (None,) * len(checks.results)
-    results = [{"name": each.name, "required": each.name in required, "conclusion": each.conclusion, "rc": each.rc,
+    results = [{"name": each.name, "required": each.name in required, "conclusion": encode(each.conclusion), "rc": each.rc,
                 "block": each.block, "started_at": each.started_at, "ended_at": each.ended_at,
                 "argv_differs": differs(row.required, each), "log": None if log is None else str(log)}
                for each, log in zip(checks.results, logs, strict=True)]
@@ -147,10 +156,11 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
                     "existing": result.existing, "entry_process": _entry_data(result.entry), "number": result.number,
                     "result": result.result or None}
         case Shown():
-            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": result.setup.row.conclusion,
+            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": encode(result.setup.row.conclusion),
                                                         "commit": result.setup.row.commit, "log": str(result.setup.log),
                                                         "attempt_id": result.setup.attempt_id}
-            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log), "setup": setup,
+            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log),
+                                                   "events_path": str(result.events_path), "setup": setup,
                                                    "failed_checks": _checks_data(result.failed)}
         case Listed() | Round() | Ended():
             return _rows_data(result)
@@ -180,8 +190,9 @@ def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
 def _setup_data(result: Adoption | Loaded) -> dict[str, object]:
     if isinstance(result, Adoption):
         return {"slots": [_slot_data(each) for each in result.slots]}
-    settings = {
+    settings: dict[str, object] = {
         key: {"value": str(each.value) if isinstance(each.value, Path) else each.value, "source": each.source}
         for key, each in result.settings.pairs()
     }
+    settings.update(display(result.settings.agents, result.settings.agent_sources))
     return {"file": {"path": str(result.path), "exists": result.exists}, "settings": settings}

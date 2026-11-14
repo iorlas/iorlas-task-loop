@@ -5,8 +5,8 @@ import { $, FEED_LIMIT, clock, el, fmtDur, tick } from "./ui.js";
 
 const offset = (e, a) => (a.started_at ? clock(Date.parse(e.at) - Date.parse(a.started_at)) : "");
 
-const KIND = { command: "💻", tool: "🧰", message: "💬", error: "❌", waiting: "⏳", check: "🧪", step: "🚦" };
-const WORD = { command: "Command", tool: "Tool", message: "Agent message", error: "Error", waiting: "Waiting", check: "Check", step: "Step" };
+const KIND = { command: "💻", tool: "🧰", message: "💬", think: "🧠", error: "❌", waiting: "⏳", check: "🧪", step: "🚦" };
+const WORD = { command: "Command", tool: "Tool", message: "Agent message", think: "Agent reasoning", error: "Error", waiting: "Waiting", check: "Check", step: "Step" };
 const PAUSE_MS = 2000; // a pause shorter than this is not worth a row
 const BOTTOM_PX = 24; // within this of the end counts as "at the bottom"
 
@@ -88,6 +88,11 @@ function fill(e, content, right) {
   } else if (e.type === "message") {
     content.className += " whitespace-pre-wrap break-words text-slate-700 dark:text-slate-200"; // what the agent said, in full
     content.textContent = e.text;
+  } else if (e.type === "think") {
+    // collapsed; only the words the harness gave (the server sends no think line without text)
+    const more = el("details", "text-slate-600 dark:text-slate-300");
+    more.append(el("summary", "cursor-pointer text-slate-500 dark:text-slate-400", "Reasoning"), el("p", "mt-1 whitespace-pre-wrap break-words", e.text));
+    content.append(more);
   } else if (e.type === "error" || e.type === "waiting") {
     content.className += e.type === "error" ? " font-medium text-rose-600 dark:text-rose-400" : " text-amber-600 dark:text-amber-400";
     content.textContent = e.text;

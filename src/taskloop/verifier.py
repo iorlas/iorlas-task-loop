@@ -33,7 +33,10 @@ from taskloop.attempt_types import (
     VerifyUnavailable,
     WorkerGone,
 )
+from taskloop.drain.actions import Fenced, Unobservable, operation
+from taskloop.drain.models import ActionKind, Reason
 from taskloop.factory_commit import NotSettled, clean_at, leftovers, settle
+from taskloop.ids import Ids
 from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import SlotState, bounded, observe_slot, staged
 from taskloop.steps import kind
@@ -67,16 +70,30 @@ class Verifier:
     clean tree at it, then one verdict over immutable facts, stored once and then returned with no Git read."""
 
     def __init__(
-        self, store: AttemptStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone, clock: Callable[[], float], hold: VerifyHold
+        self, store: AttemptStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone,
+        clock: Callable[[], float], hold: VerifyHold, *, ids: Ids,
     ) -> None:
         """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise).
         `hold` is the slot's custody around the commit through the verdict: the entry already holds it (a no-op here),
         `tl step verify` and a repeat take it (`slot_lock.hold`), a read-only verifier refuses it (`slot_lock.refused`).
         A held slot is `unavailable:slot_busy`, an unopenable lock file `unavailable:lock`, a write asked of a read-only
         verifier `unavailable:read_only`."""
+        self.ids = ids
         self.store, self.checkouts, self.files, self.gone, self.clock, self.hold = store, checkouts, files, gone, clock, hold
 
     def verify(self, key: AttemptKey) -> VerifyResult:
+        try:
+            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
+                           existing=lambda owner: self.store.owns_entry(key, owner)):
+                return self._verified(key)
+        except Fenced:
+            return VerifyRefused(Reason.DRAINING)
+        except Unobservable:
+            return VerifyUnavailable("observe")
+        except StoreUnavailable:
+            return VerifyUnavailable("store")
+
+    def _verified(self, key: AttemptKey) -> VerifyResult:
         try:
             return self._verify(key)
         except StoreUnavailable:

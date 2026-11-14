@@ -30,6 +30,7 @@ class DashRequest:
     port: int
     db: Path
     artifacts: Path
+    checkout: Path
 
 
 def _ports(request: DashRequest, views: GitViews) -> DashPorts:

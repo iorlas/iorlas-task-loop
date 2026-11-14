@@ -11,6 +11,7 @@ from any_agent import RunOutcome
 
 from taskloop.activity_file import ActivityPage, command_time, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
+from taskloop.check_repeat.feedback import TAIL_BYTES, TAIL_LINES, Availability, OutputTail
 from taskloop.round_log import WORD
 from taskloop.slot_state import shown
 
@@ -97,6 +98,12 @@ class EvidenceFiles:
     def directory(self, key: AttemptKey) -> str:
         encoded = json.dumps([key.attempt_id, key.dispatch_token, key.reservation_generation]).encode()
         return "attempts/" + hashlib.sha256(encoded).hexdigest()
+
+    def launch_root(self, key: AttemptKey) -> Path:
+        """Private launcher files, outside the worktree reset by preparation."""
+        path = self._path(self.directory(key) + "/launcher")
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     def entry_log(self, key: AttemptKey) -> Path:
         """The attempt's entry process log (`entry.log` in its key-derived directory), with that directory made."""
@@ -219,6 +226,22 @@ class EvidenceFiles:
         except (OSError, EvidenceError):
             return None
 
+    def check_output(self, key: AttemptKey, block: int, name: str) -> OutputTail:
+        """Bounded evidence only: seek to the last 16 KiB and retain at most 100 lines, including an unfinished line."""
+        try:
+            with self.check_path(key, block, name).open("rb") as stream:
+                size = stream.seek(0, 2)
+                start = max(0, size - TAIL_BYTES)
+                stream.seek(start)
+                data = stream.read(TAIL_BYTES)
+        except (OSError, EvidenceError):
+            return OutputTail(availability=Availability.UNAVAILABLE)
+        if not data:
+            return OutputTail(availability=Availability.EMPTY)
+        lines = data.decode("utf-8", "replace").splitlines(keepends=True)
+        return OutputTail(availability=Availability.AVAILABLE, text="".join(lines[-TAIL_LINES:]),
+                          truncated=bool(start) or len(lines) > TAIL_LINES)
+
     def events_path(self, key: AttemptKey) -> Path:
         """The attempt's agent-activity file (`events.jsonl`), made nothing."""
         return self._path(self.directory(key) + "/events.jsonl")
@@ -243,6 +266,10 @@ class EvidenceFiles:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
 
+    def put_launched_input(self, key: AttemptKey, text: str) -> FileRef:
+        """The complete dispatched prompt and source commit, retaining admission's original input snapshot."""
+        return self._write(self.directory(key) + "/launched-input.txt", text)
+
     def prepare(self, key: AttemptKey, schema: Mapping[str, object]) -> tuple[str, str]:
         """Write the step kind's answer `schema` (`schema.json`) and return its path and the native answer path, without
         executing a harness."""
@@ -252,6 +279,16 @@ class EvidenceFiles:
 
     def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
         directory = self.directory(key)
-        diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
-        return Evidence(self._write(directory + "/stdout.txt", capped(raw.out)), self._write(directory + "/stderr.txt", capped(raw.err)),
-                        self._write(directory + "/answer.txt", raw.summary.text), self._write(directory + "/diagnostics.txt", diagnostic))
+        return Evidence(*(self._write(directory + "/" + name, text) for name, text in _capture_text(raw)))
+
+    def capture_refs(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
+        """The capture's immutable expected references, for a consumer's intent before the file effects."""
+        directory = self.directory(key)
+        return Evidence(*(FileRef(directory + "/" + name, hashlib.sha256(text.encode()).hexdigest())
+                          for name, text in _capture_text(raw)))
+
+
+def _capture_text(raw: RunOutcome) -> tuple[tuple[str, str], ...]:
+    diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
+    return (("stdout.txt", capped(raw.out)), ("stderr.txt", capped(raw.err)),
+            ("answer.txt", raw.summary.text), ("diagnostics.txt", diagnostic))

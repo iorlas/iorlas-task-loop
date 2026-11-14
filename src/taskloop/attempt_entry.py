@@ -206,10 +206,12 @@ def _step(
     accepted = captured is not None and captured.status in ACCEPTED
     if accepted:  # captured but maybe not finished (the store was busy again): finish it before verify commits anything
         resumed(lambda: app.collect(key), lambda: app.execute(key, found.me), clock, wait, found.deadline)
-    verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held).verify(key)
+    verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held, ids=app.agent.ids).verify(key)
     # newly stored facts or a stored verdict: read the terminal result back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
+    if latest.explanation:
+        line += f": {latest.explanation}"
     if captured is not None:  # `publish=` is the log word of the capture retry's DB acceptance, not the branch push
         then = f" then={latest.status}:{latest.reason}" if accepted else ""
         line = f"{result.status} {result.reason} publish={captured.status}{then}"
@@ -280,7 +282,7 @@ def _branch(found: _Registered, publishing: Checkouts) -> str:
     read) is `unavailable:git` or `unavailable:store`: it never loses the step's log line or a verified plan's exit 0."""
     app = found.app
     try:
-        return publish_word(BranchPublish(app.store, publishing, app.slot_files, app.clock).publish(found.key))
+        return publish_word(BranchPublish(app.store, publishing, app.slot_files, app.clock, ids=app.agent.ids).publish(found.key))
     except (GitUnavailable, ValueError, OSError):
         return "unavailable:git"
     except (sqlite3.Error, StoreUnavailable):
@@ -307,7 +309,7 @@ def _claimed(
     if collected:
         app = found.app
         releaser = SlotRelease(app.store, app.checkouts, app.slot_files, entry_seen, gone, _unheld, unclaim, app.clock, setup_seen,
-                               RealEnvFiles().empty_scratch)
+                               RealEnvFiles().empty_scratch, ids=app.agent.ids)
         line += " release=" + release_word(releaser.release(found.key, False, found.me))
     return line, ok
 

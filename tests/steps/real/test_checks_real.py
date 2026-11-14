@@ -26,6 +26,7 @@ from taskloop.prepare import Prepared, detach_at
 from taskloop.profile import Check
 from taskloop.slot_env import setup_process
 from taskloop.slot_files import RealSlotFiles
+from taskloop.slots import folder_name
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -49,13 +50,13 @@ def test_checks_run_on_the_host_in_a_slot_detached_at_x(
     (main / "README").write_text("one\n")
     git(main, "add", "README")
     git(main, "commit", "-q", "-m", "D")
-    slot = root / "slots" / VIEWS.checkouts(main).identity().key / "s1"
+    slot = root / "slots" / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     (main / "README").write_text("two\n")
     git(main, "commit", "-q", "-am", "X")
     x = git(main, "rev-parse", "HEAD").strip()
 
-    taken = detach_at(VIEWS.checkouts, RealSlotFiles(), str(slot), slot.parent.name, x)
+    taken = detach_at(VIEWS.checkouts, RealSlotFiles(), str(slot), VIEWS.checkouts(main).identity().key, x)
     assert isinstance(taken, Prepared) and taken.head == x
     assert git(slot, "rev-parse", "HEAD").strip() == x and (slot / "README").read_text() == "two\n"
     view = VIEWS.checkouts(slot, git_dir=taken.gitdir)

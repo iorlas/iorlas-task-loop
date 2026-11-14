@@ -17,6 +17,8 @@ from git_porcelain.testing import apply_hermetic_env, git
 from stream_proc import group_alive
 
 from taskloop.access import folders
+from taskloop.agents.launch import codex_access
+from taskloop.agents.settings import CodexPolicy
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey
 from taskloop.environment import EnvironmentPorts, Preparation, Renewal
@@ -26,6 +28,7 @@ from taskloop.owned_processes import setup_seen
 from taskloop.prepare import Prepared
 from taskloop.setup_store import SetupStore
 from taskloop.slot_env import RealEnvFiles, setup_process
+from taskloop.slots import folder_name
 
 VIEWS = GitViews(DEFAULT_GIT_READ_SECONDS)
 
@@ -50,7 +53,7 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     (main / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/sh", "-c", SETUP]]}))
     git(main, "add", ".gitignore", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
-    slot = root / "slots" / VIEWS.checkouts(main).identity().key / "s1"
+    slot = root / "slots" / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     (slot / ".task-loop.json").write_text(json.dumps({"setup": [["/bin/false"]]}))  # the working tree is never read
@@ -62,16 +65,17 @@ def test_setup_resets_the_slot_and_runs_the_committed_setup_in_it(
     factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (slot.parent.name,))
     factory.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-        input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,after_commit)
+        input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head,after_commit)
         VALUES ('attempt','dispatch',1,'implement','beads','tasks','tl-1','/tracker',?,'s1','input.txt','x',1,'m','high',
-        'workspace-write',?,7,'s','b',1,2,?,?)""", (slot.parent.name, time.time() + 600, d, d))
+        '{"harness":"codex","sandbox":"workspace-write"}',?,7,'s','b',1,2,?,?)""", (slot.parent.name, time.time() + 600, d, d))
     record = AttemptStore(lambda: factory).load(KEY)
     assert record is not None
     ports = EnvironmentPorts(SetupStore(lambda: factory), VIEWS.checkouts, VIEWS.slot_profiles, RealEnvFiles(), setup_process, setup_seen,
                              group_alive, EvidenceFiles(root / "art"), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks,
                              lambda *_probe: True, (root / "art",), 4096)  # tmp_path is longer than the TMPDIR budget
     gitdir = Path(git(slot, "rev-parse", "--absolute-git-dir").strip())
-    result = Preparation(ports).prepare(record, Prepared(d, gitdir, main), held, ("/bin/codex", {"PATH": os.environ["PATH"]}))
+    result = Preparation(ports).prepare(record, Prepared(d, gitdir, main), held, ("/bin/codex", {"PATH": os.environ["PATH"]}),
+                                        codex_access(CodexPolicy(), folders(slot)).sandbox_argv("/bin/codex", ["true"]))
     assert result is None
     found = folders(slot)
     assert factory.execute("SELECT run,commit_sha,conclusion,rc FROM setup_run").fetchall() == [(1, d, "passed", 0)]

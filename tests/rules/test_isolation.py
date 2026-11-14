@@ -29,23 +29,24 @@ def test_noneditable_install_matches_current_source() -> None:
     installed = Path(taskloop.__file__).resolve().parent
     assert installed.is_relative_to(Path(sys.prefix).resolve())
     source = ROOT / "src" / "taskloop"
-    assert {path.name for path in installed.glob("*.py")} == {path.name for path in source.glob("*.py")}
-    for path in source.glob("*.py"):
-        assert (installed / path.name).read_bytes() == path.read_bytes(), path.name
+    assert {path.relative_to(installed) for path in installed.rglob("*.py")} == {
+        path.relative_to(source) for path in source.rglob("*.py")}
+    for path in source.rglob("*.py"):
+        assert (installed / path.relative_to(source)).read_bytes() == path.read_bytes(), path.name
     entries = [entry for entry in distribution.entry_points if entry.group == "console_scripts"]
     assert [(entry.name, entry.value) for entry in entries] == [("tl", "taskloop.cli:main")]
     assert entries[0].load() is cli.main
 
 
 # Every shared dependency and the shelf tag it is pinned at. stream-proc is pinned at any-agent's tag (a later
-# commit than its own stream-proc-v0.7.0 tag): both must resolve to one shelf commit.
+# commit than its own stream-proc-v0.9.0 tag): both must resolve to one shelf commit.
 SHARED = {
-    "git-porcelain": "git-porcelain-v0.18.1",
+    "git-porcelain": "git-porcelain-v0.21.0",
     "beads-client": "beads-client-v0.2.0",
-    "any-agent": "any-agent-v0.6.1",
+    "any-agent": "any-agent-v0.11.0",
     "sqlite-store": "sqlite-store-v0.1.0",
     "process-lock": "process-lock-v0.2.1",
-    "stream-proc": "any-agent-v0.6.1",
+    "stream-proc": "any-agent-v0.11.0",
 }
 
 

@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 entity: term/attempt
 owner: area/engine
 source: "src/taskloop/factory_schema.py::sql:attempt.phase"

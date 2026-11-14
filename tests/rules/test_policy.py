@@ -63,6 +63,25 @@ def test_caps_cannot_be_relaxed() -> None:
 
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
+    ("CREATE TABLE", "recovery_intent"): "factory_schema.py",
+    ("CREATE INDEX", "recovery_intent"): "factory_schema.py",
+    ("INSERT", "recovery_intent"): "recovery/store.py",
+    ("UPDATE", "recovery_intent"): "recovery/store.py",
+    ("CREATE TABLE", "agent_stop"): "factory_schema.py",
+    ("INSERT", "agent_stop"): "agents/stop_store.py",
+    ("UPDATE", "agent_stop"): "agents/stop_store.py",
+    ("CREATE TABLE", "merge_operation"): "factory_schema.py",
+    ("CREATE TABLE", "land_conflict"): "factory_schema.py",
+    ("INSERT", "land_conflict"): "land_conflict/store.py",
+    ("INSERT", "merge_operation"): "merge/store.py",
+    ("UPDATE", "merge_operation"): "merge/store.py",
+    ("CREATE TABLE", "drain_state"): "factory_schema.py",
+    ("CREATE TABLE", "drain_action"): "factory_schema.py",
+    ("CREATE INDEX", "drain_action"): "factory_schema.py",
+    ("INSERT", "drain_state"): "drain/store.py",
+    ("UPDATE", "drain_state"): "drain/store.py",
+    ("INSERT", "drain_action"): "drain/store.py",
+    ("UPDATE", "drain_action"): "drain/store.py",
     ("CREATE TABLE", "slot"): "factory_schema.py",
     ("CREATE TABLE", "reservation"): "factory_schema.py",
     ("CREATE TABLE", "attempt"): "factory_schema.py",
@@ -74,6 +93,7 @@ WRITERS = {
     ("CREATE TABLE", "checks_attempt"): "factory_schema.py",
     ("CREATE TABLE", "check_result"): "factory_schema.py",
     ("CREATE TABLE", "land_candidate"): "factory_schema.py",
+    ("CREATE INDEX", "attempt"): "factory_schema.py",
     ("CREATE INDEX", "land_candidate"): "factory_schema.py",  # `land_delivered`: at most one delivered candidate per checks attempt
     ("CREATE TABLE", "task_hold"): "factory_schema.py",
     ("INSERT", "task_hold"): "hold_store.py",  # a hold's record, fenced on its attempt and cause being current
@@ -119,8 +139,9 @@ def write_of(match: re.Match[str]) -> tuple[str, str]:
 
 
 def sql_writes() -> set[tuple[str, str, str]]:
-    paths = (ROOT / "src" / "taskloop").glob("*.py")
-    return {(*write_of(match), path.name) for path in paths for match in WRITE.finditer(path.read_text())}
+    paths = (ROOT / "src" / "taskloop").rglob("*.py")
+    return {(*write_of(match), str(path.relative_to(ROOT / "src" / "taskloop"))) for path in paths
+            for match in WRITE.finditer(path.read_text())}
 
 
 def test_every_sql_write_has_its_one_owner() -> None:
@@ -144,6 +165,7 @@ def test_write_pattern_catches_spelling_variants(statement: str, write: tuple[st
 GIT_WRITES = frozenset({
     "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
     "push_request", "push_lease", "delete_branch", "clean", "reset", "squash",
+    "start_merge", "finish_merge", "abort_merge", "commit_tree", "update_ref",
 })
 
 
@@ -170,7 +192,8 @@ def git_names(tree: ast.AST) -> set[str]:
 
 def git_writers() -> set[tuple[str, str]]:
     """Every use of a Git write in the factory source, by module (`git_names`)."""
-    return {(name, path.name) for path in (ROOT / "src" / "taskloop").glob("*.py") for name in git_names(ast.parse(path.read_text()))}
+    root = ROOT / "src" / "taskloop"
+    return {(name, str(path.relative_to(root))) for path in root.rglob("*.py") for name in git_names(ast.parse(path.read_text()))}
 
 
 @pytest.mark.parametrize(("source", "names"), [
@@ -188,7 +211,12 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
     land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s."""
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
-        ("park", "slot_release.py"), ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
+        ("park", "slot_release.py"), ("park", "wip.py"), ("reset", "wip.py"),
+        ("stage", "wip.py"), ("commit_tree", "wip.py"), ("update_ref", "wip.py"), ("abort_merge", "slot_release.py"),
+        ("park", "merge/start.py"), ("start_merge", "merge/start.py"), ("finish_merge", "merge/start.py"),
+        ("fetch", "merge/start.py"),
+        ("stage", "merge/start.py"), ("stage", "merge/git.py"), ("update_ref", "merge/git.py"), ("take_branch", "merge/git.py"),
+            ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
         ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }
     assert git_writers() == expected

@@ -16,17 +16,21 @@ from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, lock_path, probe
-from taskloop.slots import SlotGit, adopt
+from taskloop.slots import SlotGit, adopt, folder_name
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -57,9 +61,10 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     main.mkdir()
     git(main, "init", "-q", "-b", "main")
     (main / "README").write_text("one\n")
-    git(main, "add", "README")
+    (main / ".task-loop.json").write_text("{}")
+    git(main, "add", "README", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
-    slot = slots / VIEWS.checkouts(main).identity().key / "s1"
+    slot = slots / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
     d = git(slot, "rev-parse", "HEAD").strip()
     adopt(lambda: factory, begin_immediate, VIEWS.checkouts(main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
@@ -68,8 +73,18 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     m = git(main, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
         lambda: factory, begin_immediate, EvidenceFiles(art), tasks, VIEWS.checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
+    , ids=NativeIds())
+    admitted = admission.admit(
+        AdmitRequest(
+            "tl-1",
+            "tasks",
+            str(root),
+            main,
+            AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            100,
+            None,
+        )
     )
-    admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), main, "m", "high", "workspace-write", 100, None))
     assert isinstance(admitted, Admitted) and admitted.slot == "s1"
     store, files = AttemptStore(lambda: factory), RealSlotFiles()
     assert store.register_entry(admitted.key, ENTRY, 10) == "accepted"
@@ -78,13 +93,16 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         assert git(slot, "symbolic-ref", "--short", "HEAD").strip() == "task/tl-1"  # the agent starts on the branch, at M
         assert git(slot, "rev-parse", "HEAD").strip() == m and (slot / "README").read_text() == "two\n"
         (slot / P).parent.mkdir(parents=True)
-        (slot / P).write_text("# Plan\n")
+        (slot / P).write_text(PLAN_TEXT)
         outcome = RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True))
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
-    attempts = Attempts(store, EvidenceFiles(art), lambda: ("/bin/codex", {}), run, lambda: 10, VIEWS.checkouts, files)
+    attempts = Attempts(
+        store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), run,
+            lambda: 10, VIEWS.checkouts, files
+    )
     assert attempts.execute(admitted.key, ENTRY).reason == "verification"
-    verdict = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold).verify(admitted.key)
+    verdict = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).verify(admitted.key)
     assert isinstance(verdict, Verified) and not verdict.reused
     x = git(slot, "rev-parse", "HEAD").strip()
     assert git(main, "rev-parse", "refs/heads/task/tl-1").strip() == x and git(slot, "rev-parse", "HEAD^").strip() == m != d

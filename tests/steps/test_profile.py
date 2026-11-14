@@ -15,6 +15,7 @@ from taskloop.profile import (
     DEFAULT_SETUP,
     PROFILE_PATH,
     Check,
+    LandMode,
     NoCommit,
     NotAFile,
     Profile,
@@ -51,6 +52,19 @@ class FakeProfileFiles:
 def test_an_empty_object_takes_every_default() -> None:
     assert parse(b"{}") == Profile(DEFAULT_SETUP, (), (), "main")
     assert DEFAULT_SETUP == (("just", "install"),)
+
+
+def test_land_is_manual_unless_the_profile_says_auto() -> None:
+    assert parse(b"{}") == Profile(DEFAULT_SETUP, (), (), "main", LandMode.MANUAL)
+    for word, mode in (("manual", LandMode.MANUAL), ("auto", LandMode.AUTO)):
+        found = parse(encoded(land=word))
+        assert isinstance(found, Profile) and found.land is mode
+
+
+@pytest.mark.parametrize("value", ["automatic", "", True, 1, None, ["auto"]])
+def test_land_names_only_a_known_mode(value: object) -> None:
+    found = parse(encoded(land=value))
+    assert isinstance(found, Refused) and (found.reason, found.key) == ("bad_value", "land")
 
 
 def test_a_full_profile_is_typed() -> None:

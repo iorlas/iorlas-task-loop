@@ -20,9 +20,10 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import ROUND_CAUSES, HoldMove, HoldPorts, clear_holds, hold_task
-from taskloop.hold_guide import KEPT_ACTIONS
+from taskloop.hold_guide import pending_guide
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Uncleared
 from taskloop.operations import Failed, Move, Round
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
@@ -37,9 +38,9 @@ def attempt(con: sqlite3.Connection, attempt_id: str = "a", *, seq: int = 1, lab
     """tl-1's captured plan attempt at `seq` on slot s1 (X stored, agent pid 42 group 41), taken under `label`."""
     con.execute(
         """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-        input_path,input_digest,schema_version,model,effort,sandbox,deadline,phase,base_commit,end_commit,worker_pid,worker_pgid,
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,phase,base_commit,end_commit,worker_pid,worker_pgid,
         worker_start,worker_boot,number,seq,slot_head,label) VALUES (?,?,1,'plan','beads','tasks','tl-1','/tracker','r','s1','i',
-        'd',1,'m','e','workspace-write',100,'captured',?,?,42,41,'st','boot',1,?,?,?)""",
+        'd',1,'m','e','{"harness":"codex","sandbox":"workspace-write"}',100,'captured',?,?,42,41,'st','boot',1,?,?,?)""",
         (attempt_id, attempt_id + "-token", D, X, seq, D, label))
 
 
@@ -55,7 +56,7 @@ class Tracker:
     texts: list[str] = field(default_factory=list)
     during_comment: list[object] = field(default_factory=list)
 
-    def labels(self, root: str, task: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(self, root: str, task: str, label: str | None) -> HoldAnswer[LabelStep]:
         self.calls.append(f"labels {root} {task} {label}")
         detail = "lock" if self.labelled == "unavailable" else self.assignee if self.labelled in ("moved", "absent") else ""
         return HoldAnswer(self.labelled, detail)
@@ -146,7 +147,7 @@ def test_a_hold_records_moves_the_labels_abandons_then_comments_once(bench: Benc
     text = bench.tracker.texts[0]
     assert text.startswith("taskloop hold: failed:needs_owner\nStep plan, attempt 1 (a)")
     assert "task branch task/tl-1 is not published." in text and "removed `auto` and added `held` and returned its claim." in text
-    assert "`bd label add tl-1 auto`" in text and f"Evidence: {bench.root}/attempts/" in text
+    assert "restore the approval label `auto`" in text and f"Evidence: {bench.root}/attempts/" in text
 
 
 def test_a_finished_hold_called_again_writes_nothing_more(bench: Bench) -> None:
@@ -201,7 +202,7 @@ def test_each_label_answer_and_whether_it_comments(bench: Bench, answer: LabelSt
     row = bench.row()
     assert row.labels == answer and (row.commented_at is not None) == comments
     if answer == "not_ours":
-        assert "changed no label" in bench.tracker.texts[0] and "`tl step start tl-1`" in bench.tracker.texts[0]
+        assert "changed no label" in bench.tracker.texts[0] and "resolve its ownership with the current actor" in bench.tracker.texts[0]
 
 
 @pytest.mark.parametrize(("answer", "refusal", "detail"), [
@@ -352,9 +353,9 @@ def test_a_checks_cause_holds_the_implement_attempt_and_names_its_failed_checks(
         (2, "lint", None, None, None, None, None, None, 2, None, "undefined")])
     bench = Bench(checking, tmp_path)
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
-    results = (ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, "passed"),
-               ResultRow(1, 1, "test", "e" * 64, 60, OwnedProcess(5, 5, "st", "boot"), 1.0, 2.0, 1, "lingering"),
-               ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, "undefined"))
+    results = (ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
+               ResultRow(1, 1, "test", "e" * 64, 60, OwnedProcess(5, 5, "st", "boot"), 1.0, 2.0, 1, CommandConclusion.LINGERING),
+               ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, CommandConclusion.UNDEFINED))
     failed = AttemptResult("collected", "failed:test:lingering")
     view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
                        hold_due="failed:test:lingering", checks=ChecksView(row, results))
@@ -546,9 +547,9 @@ def test_clear_lists_only_the_round_s_own_backlog(bench: Bench) -> None:
 def test_tl_step_next_prints_the_hold_guide_for_a_pending_hold_only() -> None:
     pending = Round("tasks", (Move("tl-1", "hold", "pending abandon held:slot_dirty", "a", step="plan"),))
     shown = human("next", pending, None)
-    assert [line for line in shown if line.startswith("hold: ")] == [f"hold: `held:slot_dirty`: {KEPT_ACTIONS['held:slot_dirty']}"]
+    assert [line for line in shown if line.startswith("hold: ")] == [f"hold: {pending_guide('pending abandon held:slot_dirty')}"]
     transient = Round("tasks", (Move("tl-1", "hold", "pending abandon unavailable:slot_busy", "a", step="plan"),))
-    assert "hold: `unavailable:slot_busy`: needs nothing" in "\n".join(human("next", transient, None))
+    assert "Another operation holds the slot lock" in "\n".join(human("next", transient, None))
     held = Round("tasks", (Move("tl-1", "hold", "held failed:needs_owner", "a", step="plan"),))
     assert not any(line.startswith("hold: ") for line in human("next", held, None))
 
@@ -557,5 +558,5 @@ def test_a_refusal_echoing_an_untrusted_id_prints_one_printable_line_per_detail_
     hostile = "tl\x1b[31m\u202e-1\nForged: yes" + "x" * 3000
     refused = Failed("refused", "absent", f"No attempt for {hostile} in backlog tasks")
     lines = human("show", refused, None)
-    assert lines[0] == "show: refused:absent" and lines[2].startswith("Forged: yes") and len(lines) == 3  # the newline is a line break only
+    assert lines[0] == "show: refused:absent" and lines[2].startswith("Forged: yes") and len(lines) == 4  # the newline is a line break only
     assert all(each.isprintable() and len(each) <= 2000 for each in lines) and "tl [31m -1" in lines[1]

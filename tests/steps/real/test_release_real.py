@@ -17,19 +17,23 @@ from beads_client import Bead
 from beads_client.testing import FakeTaskReadClient
 from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
+from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.repo import RepoId
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import custody, hold, probe
 from taskloop.slot_release import Released, SlotRelease
-from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, observe
+from taskloop.slots import Adopted, NotAdopted, SlotGit, adopt, folder_name, observe
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.verifier import Verifier
@@ -73,20 +77,21 @@ class Repository:
         self.main.mkdir()
         git(self.main, "init", "-q", "-b", "main")
         (self.main / "README").write_text("one\n")
-        git(self.main, "add", "README")
+        (self.main / ".task-loop.json").write_text("{}")
+        git(self.main, "add", "README", ".task-loop.json")
         git(self.main, "commit", "-q", "-m", "base")
         slots = root / "slots"
         self.repo_id = RepoId(VIEWS.checkouts(self.main).identity().key)
-        self.slot = slots / self.repo_id / "s1"
+        self.slot = slots / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"
         git(self.main, "worktree", "add", "-q", "--detach", str(self.slot), "HEAD")
         self.d = self.rev("HEAD")
         adopt(lambda: factory, begin_immediate, VIEWS.checkouts(self.main), SlotGit(VIEWS.checkouts, RealSlotFiles()), slots, 1)
         self.store, self.files = AttemptStore(lambda: factory), RealSlotFiles()
         self.releaser = SlotRelease(self.store, VIEWS.checkouts, self.files, lambda _entry: "gone", gone, custody, yes, lambda: 30,
-                                    lambda _setup: "gone", lambda _scratch: True)
+                                    lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
         self.admission = AttemptAdmission(
             lambda: factory, begin_immediate, EvidenceFiles(self.art), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe, RealSlotFiles()
-        )
+        , ids=NativeIds())
         self.root = root
 
     def rev(self, name: str) -> str:
@@ -94,20 +99,38 @@ class Repository:
 
     def run(self, agent: Agent) -> AttemptKey:
         """Admit the task, register its entry, run the attempt once."""
-        admitted = self.admission.admit(AdmitRequest("tl-1", "tasks", str(self.root), self.main, "m", "high", "workspace-write", 100, None))
+        admitted = self.admission.admit(
+            AdmitRequest(
+                "tl-1",
+                "tasks",
+                str(self.root),
+                self.main,
+                AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+                100,
+                None,
+            )
+        )
         assert isinstance(admitted, Admitted) and admitted.slot == "s1"
         assert self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
-        attempts = Attempts(self.store, EvidenceFiles(self.art), lambda: ("/bin/codex", {}), agent, lambda: 10, VIEWS.checkouts, self.files)
+        attempts = Attempts(
+            self.store,
+            EvidenceFiles(self.art),
+            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
+            agent,
+            lambda: 10,
+            VIEWS.checkouts,
+            self.files,
+        )
         attempts.execute(admitted.key, ENTRY)
         return admitted.key
 
     def planned(self) -> tuple[AttemptKey, str]:
         def write() -> None:
             (self.slot / P).parent.mkdir(parents=True)
-            (self.slot / P).write_text("# Plan\n")
+            (self.slot / P).write_text(PLAN_TEXT)
 
         key = self.run(answered(PLAN, write))
-        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold).verify(key), Verified)
+        assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold, ids=NativeIds()).verify(key), Verified)
         return key, self.rev("HEAD")
 
 

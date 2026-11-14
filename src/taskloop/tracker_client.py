@@ -13,8 +13,10 @@ from beads_client import Bd, BdError, Runner
 
 from taskloop.admit import Claim, Unclaim
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
+from taskloop.discussion import DiscussionSource
 from taskloop.task import ReadyTitle, TaskBinding, TaskComment, TaskFacts, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import ACTOR, HELD, ReadyRows, gone, inspect_task, ready_titles, task_comments, task_facts, task_titles
+from taskloop.tracker_discussion import read_discussion
 
 
 def _tracker_root(tracker_root: str) -> Path:
@@ -35,6 +37,11 @@ def inspect_tracker_task(task_id: str, backlog: str, tracker_root: str) -> TaskI
     scope = TaskScope(backlog)
     root = _tracker_root(tracker_root)
     return inspect_task(TaskBinding(scope, root), Bd(ACTOR, cwd=str(root)), task_id)
+
+
+def tracker_discussion(task: TaskInspection, tracker_root: str) -> tuple[DiscussionSource, ...]:
+    root = _tracker_root(tracker_root)
+    return read_discussion(task, TaskBinding(task.reference.scope, root), Bd(ACTOR, cwd=str(root)))
 
 
 def tracker_reads(tracker_root: str) -> ReadyRows:
@@ -211,7 +218,7 @@ class HoldAnswer[W: str]:
     detail: str = ""
 
 
-type Labels = Callable[[str, str, str], HoldAnswer[LabelStep]]  # (tracker root, task id, the stored approval label)
+type Labels = Callable[[str, str, str | None], HoldAnswer[LabelStep]]  # (tracker root, task id, the stored approval label)
 type Comment = Callable[[str, str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id, text)
 type Clear = Callable[[str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id)
 
@@ -235,11 +242,11 @@ def _hold_failed[W: str](error: BdError, stale: W) -> HoldAnswer[W | Literal["mi
     return HoldAnswer("unavailable", error.kind)
 
 
-def _labelled(bd: Bd, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+def _labelled(bd: Bd, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
     """One read (`Bd.show`): missing, closed or another actor's task is written nothing; else, fenced on the assignee
     just read (the factory's own, or none), `held` added and then the approval label removed (both idempotent). A label
     bd would read as a flag is `bad_label` before any call."""
-    if not label or label.startswith("-"):
+    if label is not None and (not label or label.startswith("-")):
         return HoldAnswer("bad_label")
     try:
         found = bd.show(task_id)
@@ -250,7 +257,8 @@ def _labelled(bd: Bd, task_id: str, label: str) -> HoldAnswer[LabelStep]:
         if found.assignee not in (ACTOR, ""):
             return HoldAnswer("not_ours")
         bd.add_label(task_id, HELD, if_assignee=found.assignee)
-        bd.remove_label(task_id, label)
+        if label is not None:
+            bd.remove_label(task_id, label)
     except BdError as error:
         return _hold_failed(error, "precondition")
     return HoldAnswer("moved" if label in found.labels else "absent", found.assignee)  # detail: the assignee read
@@ -264,7 +272,7 @@ def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHo
     def bd(tracker_root: str) -> Bd:
         return client(ACTOR, cwd=str(Path(tracker_root).expanduser().resolve()), run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
 
-    def labels(tracker_root: str, task_id: str, label: str) -> HoldAnswer[LabelStep]:
+    def labels(tracker_root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         return _labelled(bd(tracker_root), task_id, label)
 
     def written(call: Callable[[], None]) -> HoldAnswer[HoldWrite]:

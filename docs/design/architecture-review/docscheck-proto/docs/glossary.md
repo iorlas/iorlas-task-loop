@@ -1,4 +1,5 @@
 ---
+# Status: evidence; historical format specimen, not current system authority
 terms:
   - {name: task, definition: "Work to accomplish, with a description, acceptance criteria and status, tracked in the task tracker.", avoid: [bead, ticket, issue]}
   - {name: task tracker, definition: "The system storing tasks, requirements, dependencies, questions, answers and task discussion; a replaceable backend, currently Beads."}
