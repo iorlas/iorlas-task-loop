@@ -111,3 +111,21 @@ Run focused tests for the touched behavior using the installed successor package
 The implementation gates are `just check` and `just test`, under the active
 implementation verification instructions. This planning attempt changes only this
 document; implementation checks are deferred until code changes exist.
+
+## As built
+
+Settlement and read-only leftovers now share raw-byte comparison against the
+captured HEAD tree before commit restrictions. Only unchanged 100644 files
+reached through plain directories are omitted; HEAD's blob length bounds the
+slot read, including existing files over the commit cap. The stored answer is
+preserved, and staging and index ownership use the filtered list.
+
+Unsafe results carry path/explanation pairs from the owning checks. Plan and
+implement repeats, status reads and CLI failure details render those explanations, retain
+escaped path identities and bounded listings, and include the unchanged-files
+instruction even after an uncommitted attempt. Merge resolution retains its
+captured-tree validation and now includes the supplied predicate in its refusal.
+
+`tests/steps/test_commit_paths.py` covers the credential-fixture reproduction,
+multiple distinct predicates, repeat and CLI rendering, unchanged-file filtering,
+over-cap files, modes, deletions, read-only agreement and foreign index ownership.

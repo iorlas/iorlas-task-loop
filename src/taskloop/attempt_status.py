@@ -32,6 +32,7 @@ from taskloop.merge.status import result as merge_result
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Clock, Failed
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
+from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
 type EntryState = Literal["none", "running", "gone", "different_process", "unknown"]
@@ -225,7 +226,9 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
         return AttemptView(*found, entry, result, late, next_word, row.entry, row.worker, shown, *chain, **ended)
     next_word = "repeats_exhausted" if row.number >= ATTEMPTS else "repeat"
     held = AttemptResult("pending", next_word, result.execution)
-    return AttemptView(*found, entry, held, late, next_word, row.entry, row.worker, (left.reason, *left.listing), *chain, **ended)
+    details = tuple(unsafe_details(left).splitlines())
+    listing = (left.reason, *details, *left.listing)
+    return AttemptView(*found, entry, held, late, next_word, row.entry, row.worker, listing, *chain, **ended)
 
 
 def _idle(reads: StatusPorts, key: AttemptKey) -> int | Literal["none", "unreadable"]:

@@ -229,6 +229,18 @@ class Rejected:
 
 
 @dataclass(frozen=True)
+class PathExplanation:
+    """A rejected path and the owning check's explanation, without file content."""
+
+    path: str
+    explanation: str
+
+    def __post_init__(self) -> None:
+        if not self.explanation.strip():
+            raise ValueError("A refused path needs an explanation")
+
+
+@dataclass(frozen=True)
 class Unsettled:
     """The slot is not settled (`unborn`, `branch`, `head_moved`, `dirty`, `redirected`, `worker_alive`, `superseded`,
     `staged`, `uncommitted`, `unsafe`, `ignored`); nothing stored, retryable. `listing` is data for a person and a repeat's
@@ -236,7 +248,7 @@ class Unsettled:
 
     reason: str
     listing: tuple[str, ...] = ()
-    unsafe_path: str | None = field(default=None, compare=False)  # diagnostic identity before the bounded display codec
+    explanations: tuple[PathExplanation, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)

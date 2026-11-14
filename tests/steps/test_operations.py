@@ -529,7 +529,9 @@ def test_show_and_verify_agree_on_a_slot_moved_off_its_task_branch(
     verifier = Verifier(store, checkouts, slot_files, gone, lambda: 20, hold, ids=NativeIds())
     reads = StatusPorts(store, observe("gone", []), lambda: 10, verifier.leftovers, lambda: "boot")
     on = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
-    assert isinstance(on, Shown) and (on.view.next, on.view.leftovers) == ("repeat", ("unsafe", near))
+    assert isinstance(on, Shown) and on.view.next == "repeat"
+    assert on.view.leftovers[0] == "unsafe" and on.view.leftovers[-1] == near
+    assert "A changed Git file" in on.view.leftovers[1] and near in on.view.leftovers[1]
     slot.checkout_new("other")
     assert verifier.leftovers(KEY) == Unsettled("branch")
     off = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
