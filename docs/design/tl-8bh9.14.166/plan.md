@@ -17,8 +17,9 @@ fixing the behavior. A negative return code alone cannot identify the original s
 
 ## Current evidence
 
-Revalidated against source commit `62f5ba3541e8cd440cac96093d45da911cdada1d`.
-The existing plan was committed at `e951881d` and then merged with current main.
+Revalidated against source commit `f6b6b594d55ea824e686eab6e227c81102623e87`.
+The existing plan was committed at `e951881d`, refreshed at `7974cc05`, and then
+merged with current main, including the shelf upgrade at `5e7dced4`.
 There is no unfinished commit for this task on the branch. An inherited main commit
 contains a squashed `Task-Loop-Wip:` message for a different task; it is not this
 task's unfinished implementation.
@@ -31,21 +32,25 @@ The current source establishes these paths; it does not establish the historical
 - `interrupts.py` stops only the rounds process. `rounds.py` stops scheduling; neither
   signals entries. `slots.adopt` inserts missing slot rows after Git validation and leaves
   known slots alone. `owned_processes.py` performs observations, not termination.
-- `any-agent==0.10.0` and `stream-proc==0.8.0` are both pinned to shelf commit
-  `c88be700bb482b4c01fde43093eafc5e0bab701b`, through tag `any-agent-v0.10.0`.
+- `any-agent==0.11.0` and `stream-proc==0.9.0` are both pinned to shelf commit
+  `14bb4512c383c174d8db580d66d1c270aa656dee`, through tag `any-agent-v0.11.0`.
   The installed packages' provenance matches the lockfile. In `any_agent.supervisor`, deadline
   expiry sets `timed_out` and calls `_stop`; watchers and policy can also stop an agent.
   `_wait` handles entry SIGTERM/SIGHUP by raising `SystemExit`, stopping the agent's tree,
   then re-raising. Parent disappearance stops an agent only with unattended supervision.
   `any_agent.procs.kill_tree` delegates to `stream_proc.stop_tree_report`, which sends
   SIGTERM first and escalates to SIGKILL when needed.
-- `RunHooks.before_stop` now receives a reason, but only a string, and its exceptions
-  are suppressed. `RunHooks.stops` now retains reports with initiating reasons and
-  `term_delivered`/`kill_delivered` facts in memory. Exceptional exits still collapse
-  to `caller`; there is no after-stop callback. `any_agent.procs.stop` still defaults
-  `term_sent=True` and can infer `kill_sent` from elapsed grace or survivors, whereas
-  `stream_proc.StopReport.kill_sent` records an actual attempt. Delivery means a kernel
-  signal call succeeded, not proof that the signal caused the observed exit.
+- `RunHooks.before_stop` receives `StopIntent` with the exact worker identity, reason,
+  first requested signal and triggering entry signal. A refusal propagates and forbids
+  both the stop and exception-cleanup retry. `after_stop` receives that intent and the
+  report, including on exceptional exits. The supervisor serializes stop initiators;
+  the first wins. Entry SIGTERM/SIGHUP, Ctrl-C, parent loss and other caller exits have
+  distinct attribution. `RunHooks.stops` retains the reports in memory.
+  `any_agent.procs.stop` now copies actual attempted/delivered SIGTERM/SIGKILL flags
+  from `stream_proc.StopReport`, with false defaults and no elapsed-time inference.
+  Delivery means a kernel signal call succeeded, not proof that the signal caused the
+  observed exit. These APIs supply the previously missing shelf prerequisite; the
+  factory does not yet connect either stop callback to durable state.
 - `RunOutcome` has several separate reason fields. `execution_facts` projects only part
   of that information; neither `Attempts._call` nor `EvidenceFiles.capture` persists
   the hook's stop reports. An interrupted supervisor can raise before normal capture.
@@ -67,25 +72,23 @@ The current source establishes these paths; it does not establish the historical
    a sender from proximity to an adopt or restart, parse logs to drive state transitions,
    or operate on the historical processes/worktrees. Retain the findings in this directory.
 
-2. **Complete the existing stop hooks at the signal owner.** Reuse the pinned shelf's
-   `before_stop`, reason-bearing reports and delivery fields; do not duplicate them in
-   a factory process wrapper. The current best-effort hook is insufficient for durable
-   intent. Extend the owning shelf agent/process APIs only for the remaining contract,
-   release that change there, and update the factory's paired pins and lockfile to the
-   same shelf revision. This shelf release is an implementation prerequisite, not an
-   assumption that the current pinned callback already meets the contract.
-   A before-stop callback must identify the
-   initiating condition and exact owned target before a tree stop; an after-stop callback
-   supplies the actual signal report and survivors. Both must run on exceptional exits as
-   well as ordinary returns. Cover deadline, watchdog/turn/policy stops, entry interruption,
-   parent loss when enabled, and exceptional cleanup. Preserve the triggering entry signal
-   separately from the signal sent to the agent, rather than projecting all exceptional
-   exits to `caller`. Carry the process library's actual attempt/delivery facts through
-   unchanged; remove the agent wrapper's elapsed-time inference for `kill_sent`. Do not
-   infer actual signal delivery from grace time or the default `term_sent=True`.
-   A refused intent callback must propagate without a secondary `caller` cleanup
-   issuing the same unrecorded stop. Serialize competing stop initiators so the stored
-   first cause is also the initiating condition for the owned action.
+2. **Connect the released stop hooks at the signal owner.** Use the pinned shelf's
+   `before_stop(StopIntent)` and `after_stop(StopIntent, StopReport)` callbacks; do not
+   duplicate process supervision, signal handling or stop serialization in the factory.
+   The current release already supplies identity-bearing intent, propagating callbacks,
+   first-initiator serialization, distinct exceptional-exit causes and actual signal-call
+   facts. No further shelf release or dependency update is a planned prerequisite.
+   Verify these contracts at the adapter boundary, including a refused intent leaving
+   the worker alive without a second cleanup stop. If investigation exposes an additional
+   library defect, fix it at its owner and update both pins together only as needed.
+
+   Persist the initiating condition and exact owned target before the tree stop, then
+   the actual report and survivors afterward, on exceptional exits as well as normal
+   returns. Cover deadline, watchdog/turn/policy stops, entry interruption, parent loss
+   when enabled, and exceptional cleanup. Preserve the triggering entry signal separately
+   from the signal sent to the agent. Copy attempted/delivered flags unchanged; neither
+   grace time nor an intent proves delivery. Keep the stored first initiating cause
+   aligned with the library's first-initiator rule.
 
    Translate library types inside the factory's agent adapter into generic typed values.
    Use stdlib enums for cause, initiating operation and record phase, and pydantic v2 for
