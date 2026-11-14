@@ -11,9 +11,10 @@ from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles, WorkerGone
 from taskloop.environment import Launch, Preparation, Renew, SetupFor
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.land_conflict.models import Record
+from taskloop.land_conflict.models import Record, SavePhase
+from taskloop.land_conflict.preserve import Preservation
 from taskloop.land_conflict.store import ConflictStore
-from taskloop.merge.models import Completed, Reason, Result, Unavailable, Waiting, Work
+from taskloop.merge.models import Completed, Phase, Reason, Result, Terminal, Unavailable, Waiting, Work
 from taskloop.merge.resolve import Resolution, Run
 from taskloop.merge.start import Merge
 from taskloop.merge.store import MergeStore
@@ -78,6 +79,9 @@ def _execute(ports: Ports, record: Record) -> Result:
     fields = tuple(name for name in Work.model_fields if name in expected.model_fields_set)
     if any(getattr(work, name) != getattr(expected, name) for name in fields):
         raise StoreRefused("merge_reservation")
+    pending = ports.store.saved(record.key)
+    if pending is not None and pending.phase is not SavePhase.COMPLETE:
+        return _saved_result(ports, record, work, fence)
 
     def setup(target: Work) -> Waiting | None:
         fence()
@@ -91,12 +95,23 @@ def _execute(ports: Ports, record: Record) -> Result:
     resolution = Resolution(ports.merges, ports.agent, ports.evidence, ports.run, ports.gone, ports.clock, fence)
     result = Merge(ports.merges, ports.checkouts, ports.remotes, ports.files, ports.clock, setup, resolution, fence).resume(work)
     fence()
-    if isinstance(result, Completed):
-        observed = observe_slot(ports.checkouts, ports.files, record.slot_path, record.request.repo_id)
-        if (not isinstance(observed, SlotState) or observed.dirty or observed.branch is not None
-                or (observed.root, observed.gitdir, observed.head) != (work.root, work.gitdir, result.commit)):
-            return Unavailable(reason=Reason.SLOT, explanation="The completed detached merge slot changed; its result remains reserved.")
+    current = ports.merges.get(record.key.attempt_id)
+    if current is None:
+        raise StoreRefused("merge_missing")
+    if isinstance(result, (Completed, Terminal)) and current.phase in (Phase.COMPLETE, Phase.TERMINAL):
+        return _saved_result(ports, record, current, fence)
     return result
+
+
+def _saved_result(ports: Ports, record: Record, work: Work, fence: Callable[[], None]) -> Result:
+    if work.phase is Phase.COMPLETE:
+        result = Completed(commit=work.result or work.source, source=work.source, target=work.target or work.source,
+                           explanation=work.explanation)
+    elif work.phase is Phase.TERMINAL:
+        result = Terminal(reason=work.reason or Reason.INVALID, explanation=work.explanation)
+    else:
+        return Unavailable(reason=Reason.UNKNOWN, explanation="The pending conflict save has no matching terminal merge record.")
+    return Preservation(ports.store, ports.repo, ports.checkouts, ports.files, ports.gone, ports.clock, fence)(record, work, result)
 
 
 def _work(record: Record, state: SlotState) -> Work:
