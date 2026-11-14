@@ -82,7 +82,10 @@ class AgentLaunch:
         self.credentials = credentials
 
     def build(self, setting: AgentSetting, slot: Path, prepared: bool, root: Path, schema: str, out_file: str,
-              prompt: str) -> LaunchedAgent | LaunchFailure:
+              prompt: str, *, resume: str | None = None) -> LaunchedAgent | LaunchFailure:
+        if resume is not None and (not resume or resume.startswith("-") or any(char.isspace() for char in resume)):
+            return LaunchFailure("launch:ValueError", "The saved session reference must be nonempty, contain no whitespace "
+                                 "and not start with a dash.")
         try:
             exe, env = self.credentials(setting.harness)
         except CredentialsUnavailable as error:
@@ -95,7 +98,7 @@ class AgentLaunch:
         access: CodexAccess | ClaudeAccess | None = None
         found = folders(slot) if prepared else None
         if isinstance(policy, CodexPolicy):
-            harness = CodexHarness()
+            harness = CodexHarness(resume=resume)
             access = codex_access(policy, found)
             if found is not None and policy.sandbox is CodexSandbox.WORKSPACE_WRITE:  # full access asks for no sandbox to prove
                 command = ["/bin/sh", "-c", PROBE, "sh", *(str(p) for p in found.roots)]
@@ -110,7 +113,8 @@ class AgentLaunch:
             contract = Path(schema).read_text(encoding="utf-8")
             prompt += "\nReturn exactly one JSON object satisfying this answer schema:\n" + contract
             inputs = LaunchInputs(exe=exe, cwd=str(slot), model=setting.model, effort=setting.effort, prompt=prompt,
-                                  env=env, schema=schema, out_file=out_file, access_policy=access, write=True, session=self.ids.session())
+                                  env=env, schema=schema, out_file=out_file, access_policy=access, write=True,
+                                  session=self.ids.session() if resume is None else resume, resume=resume)
             return LaunchedAgent(harness, harness.launch_spec(inputs), (exe, env), probe)
         except Exception as error:
             harness.cleanup()
