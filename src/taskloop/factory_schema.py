@@ -24,6 +24,7 @@ v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbo
 v21: durable preparation merges. Drain old entries before discarding an older database.
 v22: durable agent stop intents and signal-call reports. Drain old entries before discarding an older database.
 v27: captured per-attempt compaction threshold. Drain old entries before discarding an older database.
+v31: durable answer repairs retain their predecessor's repeat number, settings, session and deadline.
 """
 
 import sqlite3
@@ -47,7 +48,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=30,
+    version=31,
     name="factory",
     steps={},
     ddl=f"""
@@ -122,14 +123,16 @@ CREATE TABLE attempt (
  number INTEGER NOT NULL CHECK(number >= 1), seq INTEGER NOT NULL CHECK(seq >= 1),
  slot_head TEXT NOT NULL CHECK(length(slot_head) IN (40,64)),
  previous_attempt_id TEXT UNIQUE REFERENCES attempt(attempt_id),
+ repair_context TEXT CHECK(repair_context IS NULL OR json_valid(repair_context)),
  repeat_reason TEXT CHECK(repeat_reason IN ('uncommitted','unsafe','ignored','{CheckRepeatReason.FAILED_CHECK.value}')),
- source_checks_id TEXT UNIQUE REFERENCES checks_attempt(attempt_id),
+ source_checks_id TEXT REFERENCES checks_attempt(attempt_id),
  repeat_listing TEXT CHECK(repeat_listing IS NULL OR json_valid(repeat_listing)),
  after_commit TEXT CHECK(after_commit IS NULL OR length(after_commit) IN (40,64)),
  label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 200),
  harness TEXT NOT NULL DEFAULT '{HarnessKind.CODEX}' CHECK(harness IN ({_HARNESSES})),
  provider TEXT NOT NULL DEFAULT '{Provider.OPENAI}' CHECK(provider IN ({_PROVIDERS})),
- CHECK((number = 1) = (previous_attempt_id IS NULL)), CHECK((number = 1) = (repeat_reason IS NULL)),
+ CHECK((number = 1 AND repair_context IS NULL) = (previous_attempt_id IS NULL)),
+ CHECK((number = 1) = (repeat_reason IS NULL)),
  CHECK(((number = 1 AND step <> 'plan') OR source_checks_id IS NOT NULL) = (after_commit IS NOT NULL)),
  CHECK((repeat_reason IS '{CheckRepeatReason.FAILED_CHECK.value}') = (source_checks_id IS NOT NULL)),
  CHECK(source_checks_id IS NULL OR step='implement'),
@@ -137,6 +140,7 @@ CREATE TABLE attempt (
  UNIQUE(adapter, backlog, task_id, seq)
 );
 CREATE INDEX attempt_step_count ON attempt(adapter,backlog,task_id,step,seq);
+CREATE UNIQUE INDEX attempt_checks_source ON attempt(source_checks_id) WHERE repair_context IS NULL;
 CREATE TABLE execution (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  rc INTEGER, timed_out INTEGER NOT NULL, stop TEXT, watch TEXT, work INTEGER NOT NULL, stands INTEGER NOT NULL,
@@ -277,7 +281,7 @@ RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
     "schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,"
-    "after_commit,label,harness,provider,source_checks_id,compaction_token_limit"
+    "after_commit,label,harness,provider,source_checks_id,compaction_token_limit,repair_context"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,"
@@ -312,10 +316,10 @@ HOLD = "attempt_id,cause_id,reason,held_at,labels,labelled_at,commenting_at,comm
 CHECK_RESULT = "block,position,name,argv_digest,timeout,pid,pgid,proc_start,boot,started_at,ended_at,rc,conclusion"
 
 
-# A repeat of attempt `p` exists (`previous_attempt_id` links only a step's repeats): its chain is frozen.
+# A repeat or answer repair of attempt `p` exists: its chain is frozen.
 REPEATED = "EXISTS (SELECT 1 FROM attempt s WHERE s.previous_attempt_id=p.attempt_id)"
 # A later attempt of the same task exists (a repeat, the next step or a fresh start): attempt `p` is no longer the current
-# one. The one "not current" rule of every read and fence; `previous_attempt_id` links only a step's repeats.
+# one. The one "not current" rule of every read and fence; `previous_attempt_id` links a step's repeats and answer repairs.
 LATER = """EXISTS (SELECT 1 FROM attempt later WHERE later.adapter=p.adapter AND later.backlog=p.backlog
 AND later.task_id=p.task_id AND later.seq>p.seq)"""
 # The release's "not current" rule (`slot_release` ROW, FENCE, FLIP): `LATER`, or the attempt's latest checks attempt (its

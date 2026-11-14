@@ -21,6 +21,8 @@ from taskloop.admit import AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, NextAdmission
 from taskloop.agent_credentials import machine_credentials, scrubbed
 from taskloop.agents.launch import AgentLaunch, Credentials
+from taskloop.answer_repair import AnswerRepair
+from taskloop.answer_repair_store import AnswerRepairStore
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import AttemptReads, StoreConnection
 from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
@@ -275,6 +277,13 @@ def open_chain(database: Path, artifacts: Path, views: GitViews, store: Store | 
     store = store if store is not None else Store(SCHEMA)
     return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time,
                           views.checkouts, RealSlotFiles(), ids=NativeIds())
+
+
+def open_answer_repair(database: Path, artifacts: Path, store: Store | None = None) -> AnswerRepair:
+    """Repair admission shares the attempt lifecycle; dispatch uses the ordinary launcher and continuation."""
+    store = store if store is not None else Store(SCHEMA)
+    return AnswerRepair(AnswerRepairStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
+                        NativeProcesses(), slot_lock.hold, time.time, ids=NativeIds())
 
 
 def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> NextAdmission:
