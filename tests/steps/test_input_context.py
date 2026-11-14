@@ -35,12 +35,14 @@ PROFILE = {"checks": [{"name": "check", "argv": ["just", "check"], "timeout": 60
 
 
 class Files:
-    def __init__(self, glossary: bytes | NotAFile | Unavailable | NoCommit | None = GLOSSARY, profile: bytes = b"{}") -> None:
+    def __init__(self, glossary: bytes | NotAFile | Unavailable | NoCommit | None = GLOSSARY, profile: bytes = b"{}",
+                 paths: tuple[str, ...] = ()) -> None:
         self.glossary, self.profile = glossary, profile
+        self.names = paths
         self.reads: list[tuple[str, str]] = []
 
     def paths(self, commit: str) -> tuple[str, ...]:
-        return ()
+        return self.names
 
     def blob(self, commit: str, path: str) -> bytes | NotAFile | Unavailable | NoCommit | None:
         self.reads.append((commit, path))
@@ -49,7 +51,8 @@ class Files:
 
 @pytest.mark.parametrize("step", [PLAN, IMPLEMENT], ids=lambda step: step.step)
 def test_both_steps_supply_the_spec_commands_and_orientation_once(step: StepKind) -> None:
-    context = read(Files(profile=json.dumps(PROFILE).encode()), "commit")
+    paths = ("src/taskloop/app.py", "tests/steps/example.py", "docs/design/tl-1/plan.md")
+    context = read(Files(profile=json.dumps(PROFILE).encode(), paths=paths), "commit")
     text = step.input_text(TASK, step.rules("tl-1"), context)
     assert TASK.title in text and TASK.requirements in text and TASK.acceptance in text
     for phrase in ("AGENTS.md is already in context", "without reading it again", "complete task specification",
@@ -59,6 +62,14 @@ def test_both_steps_supply_the_spec_commands_and_orientation_once(step: StepKind
         assert phrase in text
     assert "- just check\n- just test" in text
     assert text.count(BEGIN) == text.count(END) == text.count(HEADING) == 1
+    assert text.splitlines().count("CODE MAP") == 1
+    prefix, block = text.split(BEGIN)
+    block, closing = block.split(END)
+    assert TASK.acceptance in prefix and SAVED_WORK in closing
+    glossary, code_map = block.split("\nCODE MAP\n")
+    assert "task: Work to accomplish." in glossary
+    assert code_map.splitlines() == ["In this repository, source modules are primarily src/taskloop/*.py.",
+                                     "Tests: tests/steps/.", *sorted(paths)]
     assert SAVED_WORK in text and "tl-8bh9.8.7" not in text
     assert "run every command listed under" not in text
     assert "You have no task tracker" not in text and "bd and the beads skill are unavailable" not in text
@@ -194,8 +205,11 @@ def test_moved_source_is_refreshed_before_dispatch_and_complete_input_is_retaine
     text = run.calls[0][1].stdin
     assert "Complete task spec" in text and SAVED_WORK in text
     assert f"Source commit: {commit}" in text and "task: New meaning." in text and "obsolete check" not in text
-    assert text.count(HEADING) == text.count(BEGIN) == text.count("CODE MAP") == 1
-    assert "src/obsolete.py" not in text and "src/context.py" in text
+    assert text.count(HEADING) == text.count(BEGIN) == text.count(END) == text.splitlines().count("CODE MAP") == 1
+    block = text.split(BEGIN)[1].split(END)[0]
+    glossary, code_map = block.split("\nCODE MAP\n")
+    assert "task: New meaning." in glossary
+    assert "src/obsolete.py" not in text and code_map.splitlines().count("src/context.py") == 1
     assert files.read(ref).find("Source commit: old") >= 0
     path = surroundings.tmp / files.directory(KEY) / "launched-input.txt"
     assert path.read_text() == text and "Return exactly one JSON object" in text
@@ -216,7 +230,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     commit = committed(slot.repo.worktree(slot.repo.identity().root), "Original definition.")
-    context = InputContext(commit, ("just check", "just test"), extract(GLOSSARY), ())
+    context = InputContext(commit, ("just check", "just test"), extract(GLOSSARY), ("src/obsolete.py",))
     files = EvidenceFiles(tmp_path)
     ref = files.put_input(KEY, PLAN.input_text(TASK, PLAN.rules("tl-1"), context))
     registered.execute("UPDATE attempt SET input_path=?,input_digest=?", (ref.path, ref.digest))
@@ -234,7 +248,11 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     record = store.load(current[0])
     assert record is not None and f"Source commit: {record.base_commit}" in text
     assert record.base_commit != commit
-    assert text.count(BEGIN) == text.count(HEADING) == text.count("CODE MAP") == 1 and text.count("BEGIN SLOT STATUS") == 1
-    assert "src/context.py" in text
+    assert text.count(BEGIN) == text.count(END) == text.count(HEADING) == text.splitlines().count("CODE MAP") == 1
+    assert text.count("BEGIN SLOT STATUS") == 1
+    block = text.split(BEGIN)[1].split(END)[0]
+    glossary, code_map = block.split("\nCODE MAP\n")
+    assert "task: Original definition." in glossary and "src/obsolete.py" not in text
+    assert code_map.splitlines().count("src/context.py") == code_map.splitlines().count("docs/design/tl-1/plan.md") == 1
     assert TASK.requirements in text and SAVED_WORK in text and "- just check\n- just test" in text
     assert (tmp_path / files.directory(current[0]) / "launched-input.txt").read_text() == text
