@@ -15,9 +15,15 @@ from test_attempt import surroundings as attempt_surroundings
 from taskloop.agent_credentials import machine_credentials
 from taskloop.agents.launch import AgentLaunch, CredentialReason, CredentialsUnavailable, LaunchedAgent, LaunchFailure
 from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, encode_policy
+from taskloop.attempt_types import AttemptKey, Unsettled
+from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HarnessKind
 from taskloop.ids import NativeIds
+from taskloop.input_context import InputContext
+from taskloop.step_text import SAVED_WORK
+from taskloop.steps import failed_check_feedback, kind
+from taskloop.task import TaskInspection, TaskReference, TaskScope
 
 SAVED_SESSION = "saved-session-reference"
 
@@ -62,6 +68,82 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
             assert "edit" not in config["permission"]  # both steps edit files
             assert Path(result.spec.env["SHELL"]).is_relative_to(root)
         assert prompt
+    finally:
+        result.harness.cleanup()
+
+
+def assert_disposition_guidance(text: str, step: str, success: str) -> None:
+    assert f"answer `{success}`" in text
+    assert f"With `{success}`, list in `paths` every file" in text
+    assert "one-line commit `message`; the factory commits exactly those paths." in text
+    assert f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`" in text
+    assert SAVED_WORK in text
+    if step == "plan":
+        assert "`docs/design/tl-1/plan.md`" in text
+        assert ("If the assessed plan is still valid for the task and code as they are now, "
+                "change nothing and answer `unchanged`") in text
+        assert "If you could not finish planning, answer `incomplete` and explain why in `explanation`" in text
+        assert "If the task cannot be planned as written" in text
+        assert "answer `needs_owner` and say in `explanation` what the owner must decide" in text
+        assert "the expected or null `plan_path`" in text
+    else:
+        assert "If the code already does what the plan asks, change nothing and answer `unchanged`" in text
+        assert "If you could not finish, answer `incomplete`" in text
+        assert "if the plan cannot be implemented as written or needs a decision, answer `needs_owner`; say why" in text
+        assert "In `explanation`, name each command you ran and how it ended, and every test file you added." in text
+        assert "the answer's paths list must not contain any plan.md" in text
+
+
+@pytest.mark.parametrize("harness", list(HarnessKind))
+@pytest.mark.parametrize(("step", "unrecorded", "failed_check"), [
+    pytest.param("plan", None, False, id="plan-initial"),
+    pytest.param("plan", False, False, id="plan-recorded-leftovers"),
+    pytest.param("plan", True, False, id="plan-unrecorded-leftovers"),
+    pytest.param("implement", None, False, id="implement-initial"),
+    pytest.param("implement", False, False, id="implement-recorded-leftovers"),
+    pytest.param("implement", True, False, id="implement-unrecorded-leftovers"),
+    pytest.param("implement", None, True, id="implement-failed-check"),
+])
+def test_dispatched_step_inputs_carry_their_answer_contract(
+    tmp_path: Path, harness: HarnessKind, step: str, unrecorded: bool | None, failed_check: bool,
+) -> None:
+    task = TaskInspection(TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "Persist widgets.",
+                          "Widgets survive restart.", (), "in_progress", "taskloop")
+    context = InputContext("a" * 40, ("just check", "just test"), "task: Work to accomplish.", ())
+    operation = kind(step)
+    rules = operation.rules(task.reference.task_id)
+    initial = operation.input_text(task, rules, context)
+    prompt = initial
+    if failed_check:
+        found = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
+                            argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
+        prompt = failed_check_feedback(found, initial, "nonce")
+    elif unrecorded is not None:
+        prompt = operation.feedback(Unsettled("uncommitted", ("?? widget.txt",)), rules, 1, initial, "nonce",
+                                    unrecorded=unrecorded)
+        assert ("Nothing of attempt 1 was committed" in prompt) is unrecorded
+    assert prompt.endswith(initial)
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, operation.answer_schema)
+    result = AgentLaunch(lambda _kind: (f"/bin/{harness}", {"HOME": str(tmp_path)}), ids=FixedIds()).build(
+        setting(harness, tmp_path), tmp_path / "slot", operation.environment, files.launch_root(KEY), schema, out, prompt,
+    )
+    assert isinstance(result, LaunchedAgent)
+    try:
+        delimiter = "\nReturn exactly one JSON object satisfying this answer schema:\n"
+        dispatched = result.spec.stdin
+        assert dispatched.count(delimiter) == 1
+        original, _, appendix = dispatched.rpartition(delimiter)
+        assert original == prompt
+        contract = json.loads(appendix)
+        assert contract == json.loads(Path(schema).read_text()) == operation.answer_schema
+        keys = {"disposition", "paths", "message", "explanation"}
+        success = "planned" if step == "plan" else "implemented"
+        if step == "plan":
+            keys.add("plan_path")
+        assert set(contract["properties"]) == set(contract["required"]) == keys
+        assert contract["properties"]["disposition"]["enum"] == [success, "unchanged", "incomplete", "needs_owner"]
+        assert_disposition_guidance(original, step, success)
     finally:
         result.harness.cleanup()
 
