@@ -34,7 +34,7 @@ def detail(con: sqlite3.Connection, root: Path, task_id: str = "tl-1") -> TaskDe
 
 
 @pytest.mark.parametrize(("tokens", "turns", "expected"), [
-    ((546541, 496768, 2375), 1, Usage(49773, 496768, 2375, 1, 1, 1)),
+    ((546541, 496768, 2375), 74, Usage(49773, 496768, 2375, 74, 1, 1)),
     ((0, 0, 0), 0, Usage(0, 0, 0, 0, 1, 1)),
     ((20, 5, 3), None, Usage(15, 5, 3, None, 1, 0)),
     ((None, None, None), 2, Usage(None, None, None, 2, 1, 0)),
