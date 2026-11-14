@@ -10,6 +10,7 @@ from taskloop.attempt_reads import StoreUnavailable
 from taskloop.hold_store import HoldRow
 from taskloop.input_context import InputError
 from taskloop.task import TaskInspection, TaskInspectionError, TaskReference
+from taskloop.task_content import TaskContentDigest, digest
 
 BEGIN = "BEGIN TRACKER DISCUSSION DATA"
 END = "END TRACKER DISCUSSION DATA"
@@ -27,6 +28,7 @@ class DiscussionComment(BaseModel):
     author: str
     at: str
     text: str
+    generated: bool = False
 
     @property
     def timestamp(self) -> datetime | None:
@@ -45,8 +47,14 @@ class DiscussionSource(BaseModel):
 
 
 type ReadDiscussion = Callable[[TaskInspection, str], tuple[DiscussionSource, ...]]
-type CollectDiscussion = Callable[[TaskInspection, str], str]
-type RefreshDiscussion = Callable[[TaskReference, str], str]
+class DiscussionSnapshot(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
+    text: str
+    digest: TaskContentDigest
+
+
+type CollectDiscussion = Callable[[TaskInspection, str], DiscussionSnapshot]
+type RefreshDiscussion = Callable[[TaskReference, str], DiscussionSnapshot]
 
 
 def frame(lines: list[str]) -> str:
@@ -54,9 +62,9 @@ def frame(lines: list[str]) -> str:
     return f"{NOTICE}\n{BEGIN}\n{quoted}\n{END}"
 
 
-def empty(_task: TaskInspection, _root: str) -> str:
+def empty(task: TaskInspection, _root: str) -> DiscussionSnapshot:
     """Explicit empty data for callers with an empty semantic discussion port."""
-    return frame(["No tracker discussion."])
+    return DiscussionSnapshot(text=frame(["No tracker discussion."]), digest=digest(task, ()))
 
 
 @dataclass(frozen=True)
@@ -65,18 +73,19 @@ class Discussion:
     latest_hold: Callable[[TaskReference], HoldRow | None]
     tasks: Callable[[str, str, str], TaskInspection]
 
-    def collect(self, task: TaskInspection, root: str) -> str:
+    def collect(self, task: TaskInspection, root: str) -> DiscussionSnapshot:
         linked = {link.reference for link in task.dependencies if link.reference != task.reference}
         if len(linked) > MAX_LINKS:
             raise InputError(f"Discussion for {task.reference.task_id} exceeds {MAX_LINKS} unique linked tasks")
         try:
             hold = self.latest_hold(task.reference)
             sources = self.read(task, root)
-            return render(sources, task.reference.task_id, hold)
-        except (TaskInspectionError, ValidationError, StoreUnavailable) as error:
+            evidence = digest(task, sources)
+            return DiscussionSnapshot(text=render(sources, task.reference.task_id, hold), digest=evidence)
+        except (TaskInspectionError, ValidationError, StoreUnavailable, UnicodeError) as error:
             raise InputError(f"Discussion for {task.reference.task_id} unavailable: {error}") from error
 
-    def for_task(self, reference: TaskReference, root: str) -> str:
+    def for_task(self, reference: TaskReference, root: str) -> DiscussionSnapshot:
         try:
             task = self.tasks(reference.task_id, reference.scope.backlog, root)
         except TaskInspectionError as error:

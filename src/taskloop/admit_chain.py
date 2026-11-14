@@ -1,7 +1,5 @@
-"""Continue a claimed task, copying its tracker root without claiming again.
-A repeat atomically takes over the held reservation, retaining its original park point.
-An advance follows a verified, released and published step into a free slot, requiring its previous result
-in the task branch. Both store earlier-answer context before their short, fenced admission transaction.
+"""Continue a claimed task without claiming again. Repeats take over its reservation and original park point.
+Advances require the previous result in the task branch. Both store earlier-answer context before the admission transaction.
 """
 
 import json
@@ -53,6 +51,7 @@ from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
 from taskloop.steps import is_agent, next_step
 from taskloop.task import TaskInspection
+from taskloop.task_content import TaskContentDigest
 from taskloop.tracker import ACTOR
 
 # The previous attempt under the write lock: its numbers, its copied choices, a successor, the held reservation, a valid
@@ -78,6 +77,7 @@ class RepeatRequest:
     deadline: float
     reason: RepeatReason
     listing: tuple[str, ...] = ()  # what the failed verification listed; stored with the repeat, the verification's typed result
+    content_digest: TaskContentDigest | None = None
 
 
 class _Lost(Exception):
@@ -149,6 +149,8 @@ class ChainAdmission:
         refused = deadline_refusal(self.clock, request.deadline)
         if refused is not None:
             return refused
+        if row[15] == "plan" and request.content_digest is None:
+            raise InputError("A plan repeat requires freshly collected task-content evidence")
         insert_attempt(con, {
             "attempt_id": key.attempt_id, "dispatch_token": key.dispatch_token, "generation": key.reservation_generation,
             "adapter": row[2], "backlog": row[3], "task_id": row[4], "tracker_root": row[12], "repo_id": row[5], "slot": row[6],
@@ -159,7 +161,7 @@ class ChainAdmission:
             "harness": row[17], "provider": row[18],
             "compaction_token_limit": row[19],
             "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
-        })
+        }, request.content_digest)
         moved = con.execute(
             """UPDATE reservation SET attempt_id=?,generation=generation+1 WHERE repo_id=? AND slot=? AND attempt_id=?
             AND generation=?""",
@@ -251,7 +253,7 @@ class NextAdmission:
             earlier = reader.earlier_for(request.previous)
             ready = replace(ready, earlier=earlier)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
-                task_text(ready.task, ready.step, context, discussion), earlier,
+                task_text(ready.task, ready.step, context, discussion.text), earlier,
                 partial(commit_names, self.checkouts(request.checkout), request.checkout))
             ref = self.files.put_input(key, text)
         except (sqlite3.Error, StoreUnavailable) as error:

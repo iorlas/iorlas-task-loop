@@ -29,6 +29,7 @@ from taskloop.composition import (
     open_checks_admission,
     open_checks_launcher,
     open_checks_releaser,
+    open_completion,
     open_discussion,
     open_launcher,
     open_publisher,
@@ -181,6 +182,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                 yield RoundPorts(reads, _starting(reader, database, artifacts, store, views), open_verifier(database, store, views),
                                  releaser, open_publisher(database, store, views), holding, ready, EvidenceFiles(artifacts).log_round,
                                  repository=partial(repository_of, views.checkouts), landing=landing,
+                                 completion=open_completion(database, artifacts, views),
                                  drain_store=DrainStore(lambda: store.shared_rw(database),
                                      ids=NativeIds()), ids=NativeIds())
         finally:

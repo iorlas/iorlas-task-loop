@@ -63,6 +63,8 @@ def test_caps_cannot_be_relaxed() -> None:
 
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
+    ("CREATE TABLE", "task_content"): "factory_schema.py",
+    ("INSERT", "task_content"): "task_content_store.py",
     ("CREATE TABLE", "recovery_intent"): "factory_schema.py",
     ("CREATE INDEX", "recovery_intent"): "factory_schema.py",
     ("INSERT", "recovery_intent"): "recovery/state_store.py",

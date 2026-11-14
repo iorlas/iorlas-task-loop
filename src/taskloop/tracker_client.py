@@ -12,8 +12,11 @@ from typing import Literal
 from beads_client import Bd, BdError, Runner
 
 from taskloop.admit import Claim, Unclaim
+from taskloop.attempt_types import Admission
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
 from taskloop.discussion import DiscussionSource
+from taskloop.recovery.models import Claim as RecoveryClaim
+from taskloop.recovery.models import ClaimState
 from taskloop.task import ReadyTitle, TaskBinding, TaskComment, TaskFacts, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import ACTOR, HELD, ReadyRows, gone, inspect_task, ready_titles, task_comments, task_facts, task_titles
 from taskloop.tracker_discussion import read_discussion
@@ -57,6 +60,27 @@ def _reader(tracker_root: Path) -> Bd:
 def tracker_facts(task_id: str, tracker_root: Path) -> TaskFacts | None:
     """The task's facts (`Bd.show`); None when the tracker says it does not exist; a failed read raises TaskInspectionError."""
     return task_facts(_reader(tracker_root), task_id)
+
+
+def tracker_recovery_claim(tracker_root: Path) -> Callable[[Admission], RecoveryClaim]:
+    """Bind a read-only claim observation to the explicitly supplied tracker root."""
+    def claim(admission: Admission) -> RecoveryClaim:
+        try:
+            root = _tracker_root(str(tracker_root))
+            facts = tracker_facts(admission.task.task_id, root)
+            if facts is None:
+                return RecoveryClaim(state=ClaimState.LOST, explanation="The task no longer exists in the bound tracker.")
+            if (facts.task_id != admission.task.task_id or not isinstance(facts.status, str) or not facts.status
+                    or (facts.assignee is not None and not isinstance(facts.assignee, str))):
+                raise ValueError("Malformed task facts")
+        except (TaskInspectionError, ValueError, TypeError, AttributeError) as error:
+            return RecoveryClaim(state=ClaimState.UNKNOWN,
+                                 explanation=f"The bound task claim cannot be read ({type(error).__name__}).")
+        if facts.status == "closed" or facts.assignee != ACTOR:
+            return RecoveryClaim(state=ClaimState.LOST, explanation="The task is closed or its claim no longer belongs to the factory.")
+        return RecoveryClaim(state=ClaimState.OWNED, explanation="The bound task is open and claimed by the factory.")
+
+    return claim
 
 
 def tracker_comments(task_id: str, tracker_root: Path) -> tuple[TaskComment, ...]:

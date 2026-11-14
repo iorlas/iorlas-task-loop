@@ -41,6 +41,7 @@ from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.merge.prepare import SourcePreparation
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
+from taskloop.recovery.complete_attempt import CapturedCompletion
 from taskloop.recovery.continue_attempt import Continuation
 from taskloop.recovery.models import Claim
 from taskloop.recovery.native import NativeContinuation
@@ -100,6 +101,12 @@ def open_continuation(
                         slot_lock.hold, time.time, NativeIds())
     attempts = open_attempts(database, artifacts, views, credentials)
     return Continuation(recovery, attempts, NativeContinuation(attempts, open_recovery_registration(database)))
+
+
+def open_completion(database: Path, artifacts: Path, views: GitViews) -> CapturedCompletion:
+    attempts = open_attempts(database, artifacts, views)
+    holds = HoldStore(attempts.store.connect, attempts.store.begin)
+    return CapturedCompletion(attempts, holds, slot_lock.hold, entry_seen)
 
 
 def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials: Credentials = machine_credentials) -> Attempts:

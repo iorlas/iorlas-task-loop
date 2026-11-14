@@ -16,6 +16,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
+from test_repeat import refresh_discussion
 
 from taskloop import verifier as verifier_module
 from taskloop.admit import AdmitRefused, Admitted, AdmitUnavailable
@@ -167,7 +168,7 @@ def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
     repeat = StepRepeat(
         store, verifier(registered, checkouts, slot_files), EvidenceFiles(tmp_path), admits, NoLaunch(), lambda _worker: True,
         lambda _entry: "gone", lambda: 10, repeating,
-    ids=NativeIds())
+    ids=NativeIds(), discussion=refresh_discussion)
     with occupy(lock_path(str(slot.path))):
         found = repeat.repeat("tasks", "tl-1", KEY, None, 30)
     assert found == Failed("unavailable", "slot_busy") and admits.calls == [] and writes == []

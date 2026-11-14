@@ -6,7 +6,7 @@ from beads_client import TaskReadClient
 
 from taskloop.discussion import DiscussionComment, DiscussionSource
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError
-from taskloop.tracker import CommentsRead, inspect_task, task_comments
+from taskloop.tracker import ACTOR, CommentsRead, inspect_task, task_comments
 
 
 class DiscussionRead(TaskReadClient, CommentsRead, Protocol):
@@ -26,7 +26,10 @@ def read_discussion(task: TaskInspection, binding: TaskBinding, client: Discussi
             found = task if task_id == task.reference.task_id else inspect_task(binding, client, task_id)
             comments = task_comments(client, task_id)
             sources.append(DiscussionSource(task_id=task_id, title=found.title, relationships=tuple(sorted(links[task_id])),
-                                            comments=tuple(DiscussionComment(author=c.author, at=c.at, text=c.text) for c in comments)))
+                                            comments=tuple(DiscussionComment(
+                                                author=c.author, at=c.at, text=c.text,
+                                                generated=c.author == ACTOR and c.text.startswith("taskloop hold: "),
+                                            ) for c in comments)))
         except TaskInspectionError as error:
             raise TaskInspectionError(error.kind, f"Discussion source {task_id}: {error}") from error
     return tuple(sources)

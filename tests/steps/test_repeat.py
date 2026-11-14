@@ -21,6 +21,7 @@ from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from sqlite_store import Store, begin_immediate
+from test_steps import TASK as INSPECTION
 
 from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
@@ -47,6 +48,7 @@ from taskloop.attempt_types import (
     VerifyResult,
     VerifyUnavailable,
 )
+from taskloop.discussion import DiscussionSnapshot, empty
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.harness_choice import HarnessKind
@@ -63,6 +65,7 @@ from taskloop.repeat import Settle, StepRepeat
 from taskloop.result_data import as_data
 from taskloop.slot_lock import hold, lock_path, repeating
 from taskloop.steps import kind
+from taskloop.task import TaskReference
 from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -79,6 +82,12 @@ PLAN_WARNING = (
     "a message without a tool call ends the step."
 )
 type Files = Mapping[str, str]
+CONTENT_DIGEST = empty(INSPECTION, "").digest
+
+
+def refresh_discussion(reference: TaskReference, root: str) -> DiscussionSnapshot:
+    assert reference == INSPECTION.reference
+    return empty(INSPECTION, root)
 
 
 def head(slot: FakeWorktree) -> str:
@@ -145,7 +154,7 @@ def repeater(
     check = verifier or Verifier(store, checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
     launcher = launcher or RegisteringLauncher(store, SECOND)
     return StepRepeat(store, check, EvidenceFiles(tmp_path), admission(con, tmp_path, checkouts, files), launcher,
-                      lambda _worker: not alive, seen(observe), lambda: 10, repeating, ids=NativeIds())
+                      lambda _worker: not alive, seen(observe), lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
 
 
 def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles, written: Files,
@@ -373,11 +382,24 @@ def test_a_second_repeat_of_the_same_attempt_is_task_attempted(
 ) -> None:
     unsafe(registered, tmp_path, slot, checkouts, slot_files)
     admit = admission(registered, tmp_path, checkouts, slot_files)
-    first = admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe"))
+    first = admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe", content_digest=CONTENT_DIGEST))
     assert isinstance(first, Admitted)
     again = admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe"))
     assert isinstance(again, AdmitRefused) and again.reason == "task_attempted"
     assert len(rows(registered)) == 2 and held(registered) == (first.key.attempt_id, 2)
+
+
+def test_plan_repeat_requires_structured_collection_before_admitting(
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles,
+) -> None:
+    unsafe(registered, tmp_path, slot, checkouts, slot_files)
+    app = dataclasses.replace(repeater(registered, tmp_path, checkouts, slot_files), discussion=None)
+    result = app.repeat("tasks", "tl-1", KEY, ENTRY, 5)
+    assert isinstance(result, Failed) and result.reason == "input" and "structured discussion collector" in result.detail
+    assert len(rows(registered)) == 1 and held(registered) == (KEY.attempt_id, 1)
+    refused = admission(registered, tmp_path, checkouts, slot_files).admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe"))
+    assert isinstance(refused, AdmitRefused) and refused.reason == "input"
+    assert len(rows(registered)) == 1
 
 
 def test_two_starts_on_two_connections_admit_exactly_one(
@@ -411,7 +433,7 @@ def test_two_starts_on_two_connections_admit_exactly_one(
         store = Store(SCHEMA)
         mine = store.open_rw(path)
         admit = ChainAdmission(lambda: mine, store.begin_immediate, Racing(tmp_path), lambda: 10, checkouts, slot_files, ids=NativeIds())
-        outcomes.append(admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")))
+        outcomes.append(admit.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe", content_digest=CONTENT_DIGEST)))
 
     threads = [threading.Thread(target=contender) for _ in range(2)]
     for thread in threads:

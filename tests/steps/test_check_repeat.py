@@ -15,6 +15,7 @@ from round_bench import Tracker, scripted, scripts, task
 from sqlite_store import Store
 from test_checks_round import implemented
 from test_input_context import GLOSSARY
+from test_repeat import CONTENT_DIGEST
 
 from taskloop.admit import AdmitRefused, Admitted, Free
 from taskloop.agents.config import resolve_agents
@@ -29,7 +30,7 @@ from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_repeat.store import CheckRepeatStore
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.discussion import BEGIN as DISCUSSION_BEGIN
-from taskloop.discussion import frame
+from taskloop.discussion import DiscussionSnapshot, frame
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.glossary_extract import HEADING
@@ -40,6 +41,7 @@ from taskloop.operations import Failed, Round, Started, release_task, start
 from taskloop.round import NextRequest, run_round
 from taskloop.setup_store import SetupStore
 from taskloop.steps import kind
+from taskloop.task_content_store import TaskContentStore
 
 
 @pytest.fixture
@@ -72,9 +74,10 @@ def test_repair_sends_fresh_discussion_once_alongside_check_feedback(rig: Repair
     ports = rig.starting()
     assert isinstance(ports.check_repeat, CheckRepeat)
     block = frame(["Author: owner; time: 2026-11-13T12:00:00Z", "Decision after failed checks"])
-    repair = replace(ports.check_repeat, discussion=lambda _reference, _root: block)
+    repair = replace(ports.check_repeat, discussion=lambda _reference, _root: DiscussionSnapshot(text=block, digest=CONTENT_DIGEST))
     result = start(replace(ports, check_repeat=repair), rig.request())
     assert isinstance(result, Started)
+    assert TaskContentStore(lambda: rig.con).read(result.attempt_id) is None
     text = specs[0].stdin
     assert text.splitlines().count(DISCUSSION_BEGIN) == text.splitlines().count(BEGIN) == 1
     assert text.count("Decision after failed checks") == 1 and "Failed check\n" in text
