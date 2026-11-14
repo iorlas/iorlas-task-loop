@@ -70,8 +70,9 @@ def outcome(reader: AttemptStore, agent: AttemptRow, released: ReleasedTask | Fa
 
 
 def explanation(files: EvidenceFiles, execution: StoredExecution | None, step: str, task_id: str) -> str | None:
-    """The agent's explanation from its stored valid answer, by the step kind's own decoder; None without one (no valid
-    answer, a checks attempt, or an answer file that no longer reads as stored)."""
+    """The captured broken rule, otherwise the valid answer's explanation through its owning decoder."""
+    if execution is not None and execution.answer.failure is not None:
+        return execution.answer.failure.describe()
     try:
         answer = read_answer(files, execution, step, task_id)
     except EvidenceError:

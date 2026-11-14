@@ -5,6 +5,7 @@ from taskloop.inspection_guide import SLOT
 from taskloop.step_refusal_guide import REFUSALS
 
 GUIDE = {
+    "answer_repair": "The rejected answer's repair could not be admitted. The factory will retry when admission is available.",
     **REFUSALS,
     "minutes": "The validation needs a supported deadline. The owner must supply enough time before land can validate the change.",
     "incomplete": "The agent stopped before completing the task. The factory preserves its work and waits for the owner's decision.",

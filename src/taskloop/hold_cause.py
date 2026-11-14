@@ -112,7 +112,7 @@ def _stuck(rest: str) -> Cause:
 
 
 def _answer(_rest: str) -> Cause:
-    return Cause("The agent's answer did not fit the answer contract; `diagnostics.txt` in the evidence directory says how.", "")
+    return Cause("The agent's answer did not fit the answer contract; the broken rule and its explanation are quoted above.", "")
 
 
 def _repeats(_rest: str) -> Cause:

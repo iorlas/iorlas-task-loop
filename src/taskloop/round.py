@@ -30,6 +30,7 @@ from typing import Final
 
 from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo
 from taskloop.agents.settings import Overrides, StepSettings
+from taskloop.answer_repair_route import repair_move
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
@@ -224,6 +225,14 @@ def repository_of(checkouts: Checkouts, checkout: Path) -> str | Failed:
 
 
 def _settle(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: Trail) -> None:
+    move = repair_move(ports.starting, request.backlog, request.minutes, each)
+    if move is None:
+        _settle_attempt(ports, request, each, trail)
+    else:
+        trail.add(move)
+
+
+def _settle_attempt(ports: RoundPorts, request: NextRequest, each: AttemptView, trail: Trail) -> None:
     """One existing attempt by its `Next` word: an abandoned one is restarted only by admission
     (`task_status.restartable`); `advance` waits for the advance
     phase, `publish` for the last one; `hold` is the hold operation (due, or not finished), `on_hold` nothing at all."""
