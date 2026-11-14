@@ -7,7 +7,7 @@ from typing import Final
 
 from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_status import AttemptView
-from taskloop.hold_cause import cause, next_step
+from taskloop.hold_cause import cause, next_step, terminal_cause
 from taskloop.hold_store import HoldRow
 from taskloop.printable import one_line
 from taskloop.round_guide import automatic_guide
@@ -63,9 +63,9 @@ def pending_guide(word: str) -> str:
 
 def hold_guide(view: AttemptView) -> str:
     """The guide of `Next: hold` or `Next: on_hold`, with the stored label and the reason's own line once recorded."""
-    if (view.hold is not None and view.hold.reason.startswith("merge:")) or (view.hold_due or "").startswith("merge:"):
-        return ("Main's merge stopped for a decision while retaining the task's work. The factory preserves its files and "
-                "finishes the hold. Approval labels do not restart the plan or reset the resolution limit.")
+    terminal = terminal_cause(view.hold.reason if view.hold is not None else view.hold_due or "")
+    if terminal is not None:
+        return terminal.explanation
     if view.next == "hold":
         return HOLD
     row = view.hold

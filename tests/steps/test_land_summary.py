@@ -9,10 +9,14 @@ from pathlib import Path
 import pytest
 from doubles import CHECKS, FixedIds
 from git_porcelain import Recorded, Sha, Squashed, TreeId
-from land_bench import LandBench, bench
+from land_bench import LandBench, bench, executing
 
+from taskloop.attempt_status import Listed, StatusPorts, list_attempts
+from taskloop.attempt_store import AttemptStore
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
 from taskloop.command_conclusion import CommandConclusion
+from taskloop.dash_land import build_land
+from taskloop.dash_model import LandDetail
 from taskloop.land import Landed, LandRequest, LandResult, land
 from taskloop.land_data import summary_data
 from taskloop.land_gate import Changed
@@ -24,6 +28,7 @@ from taskloop.land_summary import (
     message_at,
     summary,
 )
+from taskloop.merge.models import Completed, Disposition, Terminal
 from taskloop.operations import Failed
 from taskloop.printable import one_line
 from taskloop.profile import Check, Profile
@@ -152,6 +157,41 @@ def test_summary_with_retained_work_never_resumes_it_or_advances_delivery(b: Lan
     assert summarized(b.land("summary")).state == "no_change"
     assert (b.conflict_runs, b.reservations(), b.environment.events) == before
     assert b.rows() == () and b.repo.pushes == 0 and b.tracker == []
+
+
+@pytest.mark.parametrize("state", ["active", "terminal", "accepted"])
+def test_repeated_summaries_and_dashboard_reads_preserve_retained_conflict_state(tmp_path: Path, state: str) -> None:
+    world = bench(tmp_path, {"README": "the task\n"})
+    try:
+        world.advance({"README": "current main\n"})
+        ports, cases = executing(world, interrupt=True)
+        request = LandRequest("tasks", "tl-1", world.repo.path, 5, accept=True)
+        with pytest.raises(KeyboardInterrupt):
+            land(ports, request)
+        [case] = cases
+        if state != "active":
+            case.interrupt = False
+            case.disposition = Disposition.OWNER if state == "terminal" else Disposition.RESOLVED
+            for _ in range(3):
+                result = case.resume()
+                if isinstance(result, (Completed, Terminal)):
+                    break
+            assert isinstance(result, Terminal if state == "terminal" else Completed)
+        tables = ("land_conflict", "merge_operation", "reservation", "task_hold", "checks_attempt", "check_result", "land_candidate")
+        before = [world.con.execute(f"SELECT * FROM {table}").fetchall() for table in tables]
+        events, calls = list(world.environment.events), case.calls
+        reads = StatusPorts(AttemptStore(lambda: world.con), lambda _entry: "gone", lambda: world.now,
+                            lambda _key: None, lambda: "boot")
+        for _ in range(2):
+            found = land(ports, dataclasses.replace(request, minutes=None, mode="summary"))
+            assert isinstance(found, LandSummary)
+            assert isinstance(build_land(ports, "tasks", "tl-1", world.repo.path), LandDetail)
+            assert isinstance(list_attempts(reads), Listed)
+            assert [world.con.execute(f"SELECT * FROM {table}").fetchall() for table in tables] == before
+            assert world.environment.events == events and case.calls == calls
+            assert world.tracker == [] and world.repo.pushes == 0
+    finally:
+        world.con.close()
 
 
 def test_the_summary_compares_the_target_s_profile_with_x_s(b: LandBench) -> None:

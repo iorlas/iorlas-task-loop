@@ -16,13 +16,23 @@ from round_bench import Tracker, scripts, task
 from sqlite_store import Store
 from test_checks_round import LAND_LINE, Checking, implemented
 
+from taskloop.attempt_loads import AttemptLoads
 from taskloop.attempt_types import SlotFiles
+from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.hold_store import HoldRow, HoldStore
+from taskloop.ids import NativeIds
 from taskloop.land import How, LandRequest
+from taskloop.land_conflict.admit import Ports, admit
+from taskloop.land_conflict.handoff import request_for
+from taskloop.land_conflict.store import ConflictStore
 from taskloop.land_mode import known_mode, land_mode
+from taskloop.merge.models import Phase, Reason, Work
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
 from taskloop.profile import PROFILE_PATH, LandMode
 from taskloop.round_land import Landing
+from taskloop.slots import SlotGit
 
 
 @pytest.fixture
@@ -120,12 +130,89 @@ def test_a_refusal_about_the_change_holds_the_task_once_with_the_cause_and_never
     assert "tl step" not in text  # a person is told what to decide in words, not which command to run
 
 
-def test_a_conflict_comment_says_what_to_do_with_the_old_branch(rig: Checking) -> None:
+def test_a_conflict_comment_preserves_retained_work_and_restored_labels_do_not_restart_it(rig: Checking) -> None:
     passed(rig)
     rig.landing = Lands(LandMode.AUTO, Failed("refused", "conflict")).landing()
     rig.round(rig.last.written)
     [(_, text)] = rig.tracker.comments
-    assert "conflict with it" in text and "set the task's old branch aside" in text and "starts again on the current `main`" in text
+    assert "retained task work" in text and "stays held" in text and "resolution limit" in text
+    assert "branch aside" not in text and "starts again" not in text and "restore the approval label" not in text
+    rig.tracker.beads["tl-1"] = replace(rig.tracker.beads["tl-1"], labels=("auto",))
+    for _ in range(2):
+        assert rig.round(rig.last.written) == [("tl-1", "implement", "skip", "abandoned")]
+    assert len(rig.tracker.comments) == 1 and rig.next_words()["tl-1"] == ("implement", "on_hold")
+
+
+@pytest.mark.parametrize("evidence", ["valid", "identity", "active", "malformed"])
+def test_terminal_notice_retries_an_interrupted_effect_and_reads_released_resolution_evidence(rig: Checking, evidence: str) -> None:
+    passed(rig)
+    [agent] = rig.store.current_attempts()
+    checks = rig.checks.row(rig.key("tl-1"))
+    assert checks is not None
+    store = ConflictStore(lambda: rig.con)
+    request = request_for(agent.key, checks, checks.commit, rig.now + 300)
+    ports = Ports(store, AttemptLoads(lambda: rig.con), EvidenceFiles(rig.tmp), rig.slot.repo,
+                  SlotGit(rig.checkouts, rig.files), lambda _p: True, lambda: rig.now, NativeIds())
+    admitted = admit(ports, request)
+    assert admitted.record is not None
+    record = admitted.record
+    work = Work(attempt_id=record.key.attempt_id, dispatch_token=record.key.dispatch_token,
+                generation=record.key.reservation_generation, task_id=request.task_id, repo_id=request.repo_id,
+                root=rig.root, slot=Path(record.slot_path), gitdir=rig.root / "gitdir", base=record.base,
+                source=request.checked, target=request.target, branch=None, deadline=request.deadline,
+                setting=record.inputs.setting, input_path=record.inputs.input_ref.path, input_digest=record.inputs.input_ref.digest,
+                phase=Phase.TERMINAL, reason=Reason.OWNER, explanation="The retained resolution needs the owner's choice.")
+    merges = MergeStore(lambda: rig.con)
+    stored = work.model_copy(update={"dispatch_token": "another-operation"}) if evidence == "identity" else (
+        work.model_copy(update={"phase": Phase.RESOLVE}) if evidence == "active" else work)
+    merges.start(stored)
+    if evidence == "malformed":
+        rig.con.execute("UPDATE merge_operation SET data='{}' WHERE attempt_id=?", (record.key.attempt_id,))
+    rig.con.execute("DELETE FROM reservation WHERE attempt_id=?", (record.key.attempt_id,))
+    lands = Lands(LandMode.AUTO, Failed("refused", "conflict"))
+    rig.landing = lands.landing()
+    rig.tracker.down.add("comment")
+    rig.round(rig.last.written)
+    assert rig.tracker.comments == []
+    rig.tracker.down.clear()
+    if evidence == "malformed":
+        rig.con.execute("UPDATE merge_operation SET data=? WHERE attempt_id=?", (work.model_dump_json(), record.key.attempt_id))
+    elif evidence != "valid":
+        merges.put(stored, work)
+    rig.now += 121  # an interrupted notice's existing comment lease expires before another caller retries
+    rig.round(rig.last.written)
+    [(_, text)] = rig.tracker.comments
+    assert f"> {work.explanation}" in text
+    holds = list(rig.tracker.holds)
+    rig.tracker.beads["tl-1"] = replace(rig.tracker.beads["tl-1"], labels=("auto",))
+    for _ in range(2):
+        assert rig.round(rig.last.written) == [("tl-1", "implement", "skip", "abandoned")]
+    assert rig.tracker.holds == holds and len(lands.requests) == 1
+    assert merges.get(record.key.attempt_id) == work
+
+
+def test_a_crash_after_posting_a_terminal_notice_reconciles_without_posting_it_twice(
+    rig: Checking, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    passed(rig)
+    lands = Lands(LandMode.AUTO, Failed("refused", "conflict"))
+    rig.landing = lands.landing()
+
+    def interrupted(_store: HoldStore, _attempt_id: str, _rev: int, _now: float) -> HoldRow:
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as patch:
+        patch.setattr(HoldStore, "commented", interrupted)
+        with pytest.raises(KeyboardInterrupt):
+            rig.round(rig.last.written)
+    assert len(rig.tracker.comments) == 1
+    rig.now += 121
+    rig.round(rig.last.written)
+    assert rig.next_words()["tl-1"] == ("implement", "on_hold")
+    assert len(rig.tracker.comments) == 1 and len(lands.requests) == 1
+    writes = list(rig.tracker.holds)
+    assert rig.round(rig.last.written) == []
+    assert rig.tracker.holds == writes
 
 
 @pytest.mark.parametrize("reason", ["remote", "running", "unknown", "no_slot"])

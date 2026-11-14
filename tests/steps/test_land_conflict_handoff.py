@@ -22,7 +22,7 @@ from taskloop.land_conflict.execute import Ports as ExecutionPorts
 from taskloop.land_conflict.execute import execute
 from taskloop.land_conflict.handoff import request_for
 from taskloop.land_summary import LandSummary
-from taskloop.merge.models import Completed, Phase, Result
+from taskloop.merge.models import Completed, InProgress, Phase, Reason, Result, Unavailable
 from taskloop.operations import Failed
 
 
@@ -185,6 +185,31 @@ def test_running_resolution_is_retryable_and_restart_keeps_its_original_admissio
     assert work is not None and work.phase is Phase.COMPLETE and case.calls == 2
     assert case.record == record and b.reservations() == []
     unchanged_input(b, target)
+
+
+@pytest.mark.parametrize("answer", [
+    InProgress(reason=Reason.RUNNING, explanation="Resolution is running."),
+    InProgress(reason=Reason.UNKNOWN, explanation="Resolution cannot be observed yet."),
+    Unavailable(reason=Reason.UNKNOWN, explanation="Resolution evidence is temporarily unavailable."),
+])
+def test_active_results_keep_the_admission_deadline_and_execution_count(b: LandBench, answer: Result) -> None:
+    b.advance({"README": "current main\n"})
+    ports, cases = executing(b, interrupt=True)
+    request = LandRequest("tasks", "tl-1", b.repo.path, 5, accept=True)
+    with pytest.raises(KeyboardInterrupt):
+        land(ports, request)
+    [case] = cases
+    record = case.record
+    work = case.ports.merges.get(record.key.attempt_id)
+    assert work is not None and len(work.executions) == 1
+    reservations = b.reservations()
+    ports = replace(ports, conflicts=replace(ports.conflicts, execution=lambda _repo, _record: answer))
+    for _ in range(2):
+        result = land(ports, replace(request, minutes=30))
+        assert isinstance(result, Failed) and result.kind == "unavailable" and result.detail == answer.explanation
+        assert ports.conflicts.store.find(record.request) == record
+        assert case.ports.merges.get(record.key.attempt_id) == work
+        assert b.reservations() == reservations and case.calls == 1
 
 
 def test_production_handoff_wiring_executes_over_the_existing_adapters(b: LandBench, monkeypatch: pytest.MonkeyPatch) -> None:

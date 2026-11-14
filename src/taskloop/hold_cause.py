@@ -7,10 +7,31 @@ fixes it (lower case, no final stop), after which the label is added back. Text 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from taskloop.agents.stop_models import AgentStop
 from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_types import PlanContentRule
+from taskloop.merge.models import PREFIX as MERGE
+
+
+class TerminalCause(StrEnum):
+    MERGE = MERGE
+    LAND_CONFLICT = "land:conflict"
+
+    @property
+    def explanation(self) -> str:
+        what = ("Main's merge stopped for a decision." if self is TerminalCause.MERGE else
+                "The factory tried to land this task by itself and was refused: conflict resolution stopped for a decision.")
+        return (f"{what} The retained task work and resolution evidence remain available. "
+                "The task stays held; approval labels do not restart its plan or reset the resolution limit.")
+
+
+def terminal_cause(reason: str) -> TerminalCause | None:
+    if reason.startswith(MERGE):
+        return TerminalCause.MERGE
+    return TerminalCause.LAND_CONFLICT if reason == TerminalCause.LAND_CONFLICT else None
+
 
 CHECK_GIT = "look at the task branch and the retained slot evidence"
 EVIDENCE = "its `stdout.txt`, `stderr.txt` and `diagnostics.txt` in the evidence directory"
@@ -104,7 +125,7 @@ ASIDE = ("set the task's old branch aside (rename it to `old/<id>-` and the firs
          "included: nothing is deleted) so the work starts again on the current "
          "`main`")
 LAND = {  # a land refusal about the task's own change: what happened and the fix ("" = the same work may be tried again)
-    "conflict": ("The checked change no longer merges onto `main`: newer changes on `main` conflict with it.", ASIDE),
+    "conflict": ("Conflict resolution stopped for a decision; the task's work and resolution evidence remain retained.", None),
     "checks_failed": ("The checks failed on the change as squashed onto the current `main`, though they passed on the task's own "
                       "commit (the land's check logs say which).", ASIDE),
     "remote_rejected": ("Origin refused the push to `main` by its own policy (for example a protected branch), not because `main` "
