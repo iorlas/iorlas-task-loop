@@ -232,10 +232,8 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     assert spec.stdin.startswith(PLAN_WARNING + "\n\n")
     prompt = spec.stdin + " ".join(spec.argv)
     assert "Do the thing" in prompt and "It is done" in prompt
-    closing = (
-        "After the depth assessment permits planning, read `docs/design/tl-1/plan.md` if it exists. "
-        "Use exactly these sections in this order"
-    )
+    closing = "After the depth assessment permits planning, follow this plan-only reading order."
+    assert "Use exactly these sections in this order" in prompt
     assert "Before answering `planned` or `unchanged`, require a Size estimate in Header" in prompt
     assert closing in prompt and "answer `unchanged`" in prompt and "do not run `git add`, `git commit`, `git push`" in prompt
     assert "list in `paths` every file you want committed and give a one-line commit `message`" in prompt

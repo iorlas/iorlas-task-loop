@@ -18,11 +18,11 @@ from taskloop.admit import AdmitRefused, Admitted
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import TRAILER, Checkouts, SlotFiles
+from taskloop.attempt_types import TRAILER, Checkouts, SlotFiles, Unsettled
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.glossary_extract import BUDGET, HEADING, MAX_BYTES, PRIORITY, extract
 from taskloop.ids import NativeIds
-from taskloop.input_context import BEGIN, END, InputContext, InputError, read
+from taskloop.input_context import BEGIN, END, InputContext, InputError, read, refresh
 from taskloop.operations import Started
 from taskloop.profile import NoCommit, NotAFile, Unavailable
 from taskloop.step_text import SAVED_WORK
@@ -53,13 +53,31 @@ def test_both_steps_supply_the_spec_commands_and_orientation_once(step: StepKind
     text = step.input_text(TASK, step.rules("tl-1"), context)
     assert TASK.title in text and TASK.requirements in text and TASK.acceptance in text
     for phrase in ("AGENTS.md is already in context", "without reading it again", "complete task specification",
-                   "bd and the beads skill are unavailable", "bd prime", "bd show", "beads SKILL.md", "grep pattern",
+                   "No task tracker lookup is required: use the supplied task text", "bd prime", "bd show",
+                   "beads SKILL.md", "grep pattern",
                    "Do not read the justfile or .task-loop.json", "at most one targeted read", "only if the task's own plan cites it"):
         assert phrase in text
     assert "- just check\n- just test" in text
     assert text.count(BEGIN) == text.count(END) == text.count(HEADING) == 1
     assert SAVED_WORK in text and "tl-8bh9.8.7" not in text
     assert "run every command listed under" not in text
+    assert "You have no task tracker" not in text and "bd and the beads skill are unavailable" not in text
+
+
+@pytest.mark.parametrize("step", [PLAN, IMPLEMENT], ids=lambda step: step.step)
+@pytest.mark.parametrize("repeat", [False, True])
+def test_context_refresh_removes_unsupported_tracker_claims(step: StepKind, repeat: bool) -> None:
+    context = read(Files(), "commit")
+    text = step.input_text(TASK, step.rules("tl-1"), context)
+    text = text.replace("No task tracker lookup is required: use the supplied task text.",
+                        "You have no task tracker: bd and the beads skill are unavailable.")
+    if repeat:
+        text = step.feedback(Unsettled("uncommitted"), step.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+    text = refresh(text, context)
+    assert "You have no task tracker" not in text and "bd and the beads skill are unavailable" not in text
+    assert text.count("No task tracker lookup is required: use the supplied task text.") == 1
+    assert text.count(BEGIN) == text.count(END) == 1
+    assert ("Do not search outside the repository" in text) is (step is PLAN)
 
 
 def test_all_validated_commands_keep_complete_shell_safe_argv() -> None:
