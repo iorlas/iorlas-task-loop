@@ -12,6 +12,8 @@ from any_agent import RunOutcome
 from taskloop.activity_file import ActivityPage, command_time, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
 from taskloop.check_repeat.feedback import TAIL_BYTES, TAIL_LINES, Availability, OutputTail
+from taskloop.recovery.execution_models import Callback
+from taskloop.recovery.models import Intent
 from taskloop.round_log import WORD
 from taskloop.slot_state import shown
 
@@ -95,13 +97,19 @@ class EvidenceFiles:
             raise EvidenceError("Cannot capture artifact") from error
         return FileRef(relative, hashlib.sha256(data).hexdigest())
 
-    def directory(self, key: AttemptKey) -> str:
+    def directory(self, key: AttemptKey, execution: Intent | Callback | None = None) -> str:
         encoded = json.dumps([key.attempt_id, key.dispatch_token, key.reservation_generation]).encode()
-        return "attempts/" + hashlib.sha256(encoded).hexdigest()
+        directory = "attempts/" + hashlib.sha256(encoded).hexdigest()
+        if execution is not None:
+            if execution.key != key:
+                raise EvidenceError("Recovery destination does not match the attempt")
+            encoded = json.dumps([execution.generation, execution.token]).encode()
+            directory += "/recovery/" + hashlib.sha256(encoded).hexdigest()
+        return directory
 
-    def launch_root(self, key: AttemptKey) -> Path:
+    def launch_root(self, key: AttemptKey, execution: Intent | Callback | None = None) -> Path:
         """Private launcher files, outside the worktree reset by preparation."""
-        path = self._path(self.directory(key) + "/launcher")
+        path = self._path(self.directory(key, execution) + "/launcher")
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -266,24 +274,24 @@ class EvidenceFiles:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
 
-    def put_launched_input(self, key: AttemptKey, text: str) -> FileRef:
+    def put_launched_input(self, key: AttemptKey, text: str, execution: Intent | Callback | None = None) -> FileRef:
         """The complete dispatched prompt and source commit, retaining admission's original input snapshot."""
-        return self._write(self.directory(key) + "/launched-input.txt", text)
+        return self._write(self.directory(key, execution) + "/launched-input.txt", text)
 
-    def prepare(self, key: AttemptKey, schema: Mapping[str, object]) -> tuple[str, str]:
+    def prepare(self, key: AttemptKey, schema: Mapping[str, object], execution: Intent | Callback | None = None) -> tuple[str, str]:
         """Write the step kind's answer `schema` (`schema.json`) and return its path and the native answer path, without
         executing a harness."""
-        directory = self.directory(key)
+        directory = self.directory(key, execution)
         ref = self._write(directory + "/schema.json", json.dumps(schema, sort_keys=True))
         return str(self._path(ref.path)), str(self._path(directory + "/native-answer.txt"))
 
-    def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
-        directory = self.directory(key)
+    def capture(self, key: AttemptKey, raw: RunOutcome, execution: Callback | None = None) -> Evidence:
+        directory = self.directory(key, execution)
         return Evidence(*(self._write(directory + "/" + name, text) for name, text in _capture_text(raw)))
 
-    def capture_refs(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
+    def capture_refs(self, key: AttemptKey, raw: RunOutcome, execution: Callback | None = None) -> Evidence:
         """The capture's immutable expected references, for a consumer's intent before the file effects."""
-        directory = self.directory(key)
+        directory = self.directory(key, execution)
         return Evidence(*(FileRef(directory + "/" + name, hashlib.sha256(text.encode()).hexdigest())
                           for name, text in _capture_text(raw)))
 

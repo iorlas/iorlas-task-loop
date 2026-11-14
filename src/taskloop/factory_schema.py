@@ -45,7 +45,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=23,
+    version=24,
     name="factory",
     steps={},
     ddl=f"""
@@ -139,7 +139,8 @@ CREATE TABLE execution (
  answer_kind TEXT NOT NULL DEFAULT 'validation_pending'
   CHECK(answer_kind IN ('validation_pending','valid','missing','json_invalid','schema_invalid')),
  disposition TEXT, effect TEXT CHECK(effect IN ('commit','keep','none')), commit_paths TEXT, commit_message TEXT,
- session_state TEXT NOT NULL CHECK(session_state IN ('complete','pending','conflict','fault'))
+ session_state TEXT NOT NULL CHECK(session_state IN ('complete','pending','conflict','fault')),
+ recovery_callback TEXT CHECK(recovery_callback IS NULL OR json_valid(recovery_callback))
 );
 CREATE TABLE verification (
  attempt_id TEXT PRIMARY KEY REFERENCES execution(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,

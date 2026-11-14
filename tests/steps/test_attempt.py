@@ -766,7 +766,7 @@ def test_ref_callback_faults_are_retained_with_cause_and_never_raised(
     assert loaded is not None
 
     class Broken(AttemptStore):
-        def session(self, admission: Admission, ref: str) -> Literal["accepted", "already_same", "conflict"]:
+        def _fence(self, con: sqlite3.Connection, admission: Admission) -> AttemptRecord:
             raise error
 
     latch = SessionLatch(Broken(lambda: con), loaded.admission)

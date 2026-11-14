@@ -4,15 +4,23 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 
+from any_agent.procs import Worker
 from sqlite_store import begin_immediate
 
-from taskloop.attempt_reads import StoreConnection, StoreUnavailable
+from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
 from taskloop.drain.models import Identity, Seen
 from taskloop.drain.store import blocked, boundary
 from taskloop.hold_store import recovery_held
+from taskloop.recovery.execution_models import Execution, Phase
 from taskloop.recovery.models import ClaimState, Intent, Observations, Outcome, Result, Snapshot
+from taskloop.recovery.state_store import intent as read_intent
+from taskloop.recovery.state_store import save
+
+
+def worker_value(identity: Identity) -> Worker:
+    return Worker(pid=identity.pid, pgid=identity.pgid, start=identity.start, boot=identity.boot)
 
 
 def permitted(observed: Observations, owner: Identity, token: str) -> Result | None:
@@ -39,14 +47,42 @@ class RecoveryStore(StoreConnection):
         super().__init__(connect, begin)
         self.attempts = AttemptStore(connect, begin)
 
-    def _intent(self, con: sqlite3.Connection, key: AttemptKey) -> Intent | None:
-        row = con.execute("SELECT data FROM recovery_intent WHERE attempt_id=?", (key.attempt_id,)).fetchone()
-        if row is None:
-            return None
-        intent = Intent.model_validate_json(row[0])
-        if intent.key != key:
-            raise StoreUnavailable("Recovery record does not match the attempt key")
-        return intent
+    def execute(self, expected: Intent, clock: Callable[[], float]) -> Result:
+        """Record launch intent before a caller performs an external launch."""
+        with self._connection(write=True) as con:
+            snapshot = self._snapshot(con, expected.key, clock())
+            if isinstance(snapshot, Result):
+                return snapshot
+            if snapshot.intent != expected or snapshot.attempt.revision != expected.attempt_revision:
+                return Result(outcome=Outcome.CHANGED, explanation="The execution authorization changed.")
+            value = expected.model_copy(update={"execution": expected.execution or Execution(drain=snapshot.drain)})
+            save(con, value, expected)
+            return Result(outcome=Outcome.INTENDED, explanation="The authorized execution intent is durable.", intent=value)
+
+    def register(self, expected: Intent, worker: Identity, clock: Callable[[], float]) -> Result:
+        """Bind the worker and execution record in one short transaction, before delivering its permit."""
+        with self._connection(write=True) as con:
+            snapshot = self._snapshot(con, expected.key, clock())
+            if isinstance(snapshot, Result):
+                return snapshot
+            current = snapshot.intent
+            if (current is None or current.execution is None or expected.execution is None
+                    or current.execution.drain != snapshot.drain
+                    or current.model_dump(exclude={"execution"}) != expected.model_dump(exclude={"execution"})):
+                return Result(outcome=Outcome.CHANGED, explanation="The execution intent, owner, generation or drain boundary changed.")
+            execution = current.execution
+            if execution.phase is Phase.REGISTERED:
+                if execution.worker == worker and snapshot.attempt.worker == worker_value(worker):
+                    return Result(outcome=Outcome.REGISTERED, explanation="This exact worker is already registered.", intent=current)
+                return Result(outcome=Outcome.OCCUPIED, explanation="A different worker already owns this execution.")
+            try:
+                revision = self.attempts.replace_worker(con, snapshot.attempt, current, worker)
+            except StoreRefused:
+                return Result(outcome=Outcome.CHANGED, explanation="The attempt changed before worker registration.")
+            execution = Execution(drain=execution.drain, phase=Phase.REGISTERED, worker=worker, revision=revision)
+            value = current.model_copy(update={"execution": execution})
+            save(con, value, current)
+            return Result(outcome=Outcome.REGISTERED, explanation="The authorized worker registration is durable.", intent=value)
 
     def _snapshot(self, con: sqlite3.Connection, key: AttemptKey, now: float) -> Snapshot | Result:
         record = self.attempts.recovery(con, key, now)
@@ -56,7 +92,7 @@ class RecoveryStore(StoreConnection):
             return Result(outcome=Outcome.INELIGIBLE, explanation="The attempt is explicitly held.")
         if blocked(con):
             return Result(outcome=Outcome.DRAINING, explanation="Recovery authorization is closed while the factory drains.")
-        return Snapshot(attempt=record, drain=boundary(con), intent=self._intent(con, key))
+        return Snapshot(attempt=record, drain=boundary(con), intent=read_intent(con, key))
 
     def snapshot(self, key: AttemptKey, now: float) -> Snapshot | Result:
         with self._connection(write=True) as con:
@@ -90,11 +126,5 @@ class RecoveryStore(StoreConnection):
                         token=token, owner=owner, attempt_revision=record.revision, session=record.session_ref,
                         entry=record.admission.entry,
                         worker=Identity(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot))
-        if old is None:
-            con.execute("INSERT INTO recovery_intent(attempt_id,data) VALUES(?,?)", (intent.key.attempt_id, intent.model_dump_json()))
-        else:
-            changed = con.execute("UPDATE recovery_intent SET data=? WHERE attempt_id=? AND data=?",
-                                  (intent.model_dump_json(), intent.key.attempt_id, old.model_dump_json())).rowcount
-            if not changed:
-                return Result(outcome=Outcome.CHANGED, explanation="The observed recovery owner was replaced.")
+        save(con, intent, old)
         return Result(outcome=Outcome.AUTHORIZED, explanation="Stopped eligible work has a durable recovery owner.", intent=intent)
