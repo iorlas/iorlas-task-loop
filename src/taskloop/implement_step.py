@@ -45,7 +45,7 @@ ANSWER_SCHEMA: Final = {
 }
 # The prepared environment, bounded verification policy (design tl-8bh9.14.178) and editing guidance (tl-8bh9.14.182).
 ENVIRONMENT: Final = (
-    "The factory ran this repository's `setup` before you started; there is no network now. "
+    "The factory ran this repository's `setup` before you started; uv uses the prepared cache offline. "
     "While working, run only focused test files for the code you changed. For lint and type validation, run "
     "`just check 2>&1 | tail -60` at most twice while working, in addition to the required final run. "
     "Do not run a full `just test` while working. The only direct pytest invocation permitted is "
@@ -63,8 +63,9 @@ ENVIRONMENT: Final = (
     "for the two required final checks, once each, with the stated failure exception. This narrow exception does "
     "not authorize other whole-suite or live tests. Keep line length at most 140 (`E501`), at most six returns per "
     "function (`PLR0911`), and no function-local imports (`PLC0415`). In `explanation`, name the result of each final "
-    "command. Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere "
-    "outside the repository. Your runs are evidence for you: after this step the checks run again outside your control, "
+    "command. Temporary files go to `$TMPDIR`; cleanup is attempted after release and required before the next agent. "
+    "Do not write elsewhere outside the repository. Your runs are evidence for you: after this step the checks run again "
+    "outside your control, "
     "and only those results count. "
     "First confirm that `apply_patch` is offered in your implement tool set. Make every file edit with `apply_patch`, "
     "never with a Python or sed script. This includes additions, deletions and repairs; do not rewrite repository files "

@@ -59,13 +59,14 @@ class FactoryCodexAccess(CodexAccess):
 
 
 def codex_access(policy: CodexPolicy, found: Folders | None = None) -> CodexAccess:
+    shell_env = () if found is None else tuple(agent_env(found).items())
     if policy.sandbox is not CodexSandbox.WORKSPACE_WRITE:
         return FactoryCodexAccess(sandbox=policy.sandbox, approval=CodexApproval.NEVER, tool_output_token_limit=3000,
-                                  ignore_user_config=True, ignore_rules=True)
+                                  shell_env=shell_env, ignore_user_config=True, ignore_rules=True)
     return FactoryCodexAccess(
         sandbox=policy.sandbox, network=False, writable_roots=() if found is None else tuple(str(p) for p in found.roots),
         exclude_slash_tmp=True, exclude_tmpdir=True,
-        shell_env=() if found is None else tuple(agent_env(found).items()), approval=CodexApproval.NEVER,
+        shell_env=shell_env, approval=CodexApproval.NEVER,
         tool_output_token_limit=3000, ignore_user_config=True, ignore_rules=True,
     )
 
