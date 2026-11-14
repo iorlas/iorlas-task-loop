@@ -43,7 +43,7 @@ def test_status_composition_observes_worker_groups_without_writing(
     monkeypatch.setattr(NativeProcesses, "process", process)
     db, artifacts = tmp_path / "factory.db", tmp_path / "artifacts"
     before, rows = db.read_bytes(), list(factory.iterdump())
-    expected = {Seen.ALIVE: "wait", Seen.UNKNOWN: "unknown", Seen.GONE: "release"}[seen]
+    expected = {Seen.ALIVE: "wait", Seen.UNKNOWN: "unknown", Seen.GONE: "start"}[seen]
     for _ in range(2):
         assert main(["step", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts), "--json"]) == 0
         assert json.loads(capsys.readouterr().out)["next"] == expected

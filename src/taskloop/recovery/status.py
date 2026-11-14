@@ -24,7 +24,7 @@ def reader(store: AttemptStore, clock: Callable[[], float]) -> Callable[[Attempt
 
 def process_gate(
     store: AttemptStore, key: AttemptKey, read: Callable[[AttemptKey], Observations | Result], expired: bool,
-) -> Literal["unknown", "wait", "stuck:hung"] | None:
+) -> Literal["unknown", "wait", "stuck:hung", "start"] | None:
     try:
         if HoldStore(store.connect, store.begin).of_attempts((key.attempt_id,)):
             return None
@@ -38,4 +38,4 @@ def process_gate(
         return "unknown"
     if Seen.ALIVE in states:
         return "stuck:hung" if expired else "wait"
-    return None
+    return "start"
