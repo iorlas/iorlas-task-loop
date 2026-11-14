@@ -65,8 +65,8 @@ def test_caps_cannot_be_relaxed() -> None:
 WRITERS = {
     ("CREATE TABLE", "recovery_intent"): "factory_schema.py",
     ("CREATE INDEX", "recovery_intent"): "factory_schema.py",
-    ("INSERT", "recovery_intent"): "recovery/store.py",
-    ("UPDATE", "recovery_intent"): "recovery/store.py",
+    ("INSERT", "recovery_intent"): "recovery/state_store.py",
+    ("UPDATE", "recovery_intent"): "recovery/state_store.py",
     ("CREATE TABLE", "agent_stop"): "factory_schema.py",
     ("INSERT", "agent_stop"): "agents/stop_store.py",
     ("UPDATE", "agent_stop"): "agents/stop_store.py",

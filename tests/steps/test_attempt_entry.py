@@ -30,6 +30,7 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
 from taskloop.ids import NativeIds
+from taskloop.recovery.execution_models import Callback
 from taskloop.slot_lock import SlotBusy, acquire, lock_path
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -51,11 +52,11 @@ class FlakyFiles(EvidenceFiles):
         super().__init__(root)
         self.failures, self.captures = failures, 0
 
-    def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
+    def capture(self, key: AttemptKey, raw: RunOutcome, execution: Callback | None = None) -> Evidence:
         self.captures += 1
         if self.captures <= self.failures:
             raise EvidenceError("Cannot capture artifact")
-        return super().capture(key, raw)
+        return super().capture(key, raw, execution)
 
 
 class Stop:

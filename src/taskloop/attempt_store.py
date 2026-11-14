@@ -26,12 +26,13 @@ from taskloop.attempt_types import (
     Replaced,
     Verdict,
     Verified,
-    entry_identity,
 )
-from taskloop.drain.models import ActionKind
+from taskloop.drain.models import ActionKind, Identity
 from taskloop.drain.store import blocked, pending
 from taskloop.factory_schema import EVIDENCE, FACTS, SUCCESSOR, VERDICT
-from taskloop.recovery.models import Outcome, Result
+from taskloop.recovery.execution_models import Callback
+from taskloop.recovery.models import Intent, Outcome, Result
+from taskloop.recovery.state_store import fence
 
 # A registration write (the entry's or the harness's) waits at most this for the write lock, so it finishes well inside
 # the registered start's fixed 5 s window; every other write keeps the library's 5 s.
@@ -64,6 +65,17 @@ def _verdict_values(result: Verdict) -> tuple[str, str | None, str | None, int]:
 
 class AttemptStore(AttemptLoads):
     """The fenced writes of an admitted attempt; the reads they need are `AttemptLoads`', the status reads `AttemptReads`'."""
+
+    def replace_worker(self, con: sqlite3.Connection, current: AttemptRecord, intent: Intent, worker: Identity) -> int:
+        """Only the recovery transaction calls this; admission and original session remain frozen."""
+        previous = current.worker
+        if (previous is None or current.revision != intent.attempt_revision
+                or (previous.pid, previous.pgid, previous.start, previous.boot)
+                != (intent.worker.pid, intent.worker.pgid, intent.worker.start, intent.worker.boot)):
+            raise StoreRefused("worker_mismatch")
+        con.execute("UPDATE attempt SET worker_pid=?,worker_pgid=?,worker_start=?,worker_boot=?,rev=rev+1 WHERE attempt_id=? AND rev=?",
+                    (worker.pid, worker.pgid, worker.start, worker.boot, intent.key.attempt_id, current.revision))
+        return current.revision + 1
 
     def recovery(self, con: sqlite3.Connection, key: AttemptKey, now: float) -> AttemptRecord | Result:
         """Read eligibility inside the recovery store's transaction; no attempt facts are changed."""
@@ -106,6 +118,16 @@ class AttemptStore(AttemptLoads):
         if record is None or record.admission != admission:
             raise StoreRefused("changed_admission")
         return record
+
+    def _owned(self, con: sqlite3.Connection, admission: Admission, callback: Callback | None) -> AttemptRecord:
+        fence(con, admission.key, callback)
+        current = self._fence(con, admission)
+        worker = current.worker
+        if callback is not None and (worker is None or
+                (worker.pid, worker.pgid, worker.start, worker.boot) !=
+                (callback.worker.pid, callback.worker.pgid, callback.worker.start, callback.worker.boot)):
+            raise StoreRefused("worker_mismatch")
+        return current
 
     def register_entry(
         self, key: AttemptKey, entry: EntryIdentity, now: float, replacing: Replaced | None = None,
@@ -166,9 +188,10 @@ class AttemptStore(AttemptLoads):
 
     def register(self, admission: Admission, worker: Worker) -> Literal["accepted", "already_same", "conflict"]:
         with self._connection(write=True) as con:
+            fence(con, admission.key, None)
             current = self._fence(con, admission)
             if current.worker is not None:
-                return "already_same" if entry_identity(current.worker) == entry_identity(worker) else "conflict"
+                return "already_same" if current.worker == worker else "conflict"
             if current.phase != "dispatching":
                 return "conflict"
             con.execute(
@@ -178,9 +201,9 @@ class AttemptStore(AttemptLoads):
             )
             return "accepted"
 
-    def session(self, admission: Admission, ref: str) -> Literal["accepted", "already_same", "conflict"]:
+    def session(self, admission: Admission, ref: str, callback: Callback | None = None) -> Literal["accepted", "already_same", "conflict"]:
         with self._connection(write=True) as con:
-            current = self._fence(con, admission)
+            current = self._owned(con, admission, callback)
             if current.worker is None:
                 raise StoreRefused("unregistered_worker")
             if current.session_ref == ref:
@@ -199,16 +222,17 @@ class AttemptStore(AttemptLoads):
         facts: ExecutionFacts,
         evidence: Evidence,
         session_state: Literal["complete", "pending", "conflict", "fault"],
+        callback: Callback | None = None,
     ) -> Literal["accepted", "already_same", "conflict"]:
         with self._connection(write=True) as con:
-            current = self._fence(con, admission)
-            if current.worker is None or (worker is not None and entry_identity(current.worker) != entry_identity(worker)):
+            current = self._owned(con, admission, callback)
+            if current.worker is None or (worker is not None and current.worker != worker):
                 raise StoreRefused("worker_mismatch")
             if current.session_conflict:
                 session_state = "conflict"  # a recorded differing session is never stored as complete
             old = self._execution(con, admission.key)
             if old is not None:
-                if old.facts != facts or old.evidence != evidence:
+                if old.facts != facts or old.evidence != evidence or self._callback(con, admission.key) != callback:
                     return "conflict"
                 if old.session_state in ("pending", "fault") and session_state in ("complete", "conflict"):
                     con.execute(
@@ -220,19 +244,23 @@ class AttemptStore(AttemptLoads):
             if current.phase != "registered":
                 return "conflict"
             refs = tuple(value for ref in astuple(evidence) for value in ref)
-            values = (*astuple(admission.key), *_facts_values(facts), *refs, session_state)
+            values = (*astuple(admission.key), *_facts_values(facts), *refs, session_state,
+                      None if callback is None else callback.model_dump_json())
             marks = ",".join("?" * len(values))
             con.execute(
-                f"INSERT INTO execution (attempt_id,dispatch_token,generation,{FACTS},{EVIDENCE},session_state) VALUES ({marks})", values
+                f"INSERT INTO execution (attempt_id,dispatch_token,generation,{FACTS},{EVIDENCE},session_state,recovery_callback) "
+                f"VALUES ({marks})", values
             )
             con.execute("UPDATE attempt SET phase='captured',rev=rev+1 WHERE attempt_id=?", (admission.key.attempt_id,))
             return "accepted"
 
-    def answer(self, admission: Admission, evidence: Evidence, answer: AnswerState) -> Literal["accepted", "already_same", "conflict"]:
+    def answer(
+        self, admission: Admission, evidence: Evidence, answer: AnswerState, callback: Callback | None = None,
+    ) -> Literal["accepted", "already_same", "conflict"]:
         with self._connection(write=True) as con:
-            self._fence(con, admission)
+            self._owned(con, admission, callback)
             current = self._execution(con, admission.key)
-            if current is None or current.evidence != evidence:
+            if current is None or current.evidence != evidence or self._callback(con, admission.key) != callback:
                 return "conflict"
             if current.answer.kind != "validation_pending":
                 return "already_same" if current.answer == answer else "conflict"
