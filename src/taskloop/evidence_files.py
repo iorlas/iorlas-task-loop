@@ -3,7 +3,7 @@
 import hashlib
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final, Literal
 
@@ -13,6 +13,10 @@ from taskloop.activity_file import ActivityPage, command_time, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
 from taskloop.check_repeat.feedback import TAIL_BYTES, TAIL_LINES, Availability, OutputTail
 from taskloop.clock_jumps import ClockJump, encode
+from taskloop.duration_evidence import DurationObserver, DurationSample
+from taskloop.duration_file import invalidate as invalidate_duration
+from taskloop.duration_file import read as read_duration
+from taskloop.duration_file import write as write_duration
 from taskloop.recovery.execution_models import Callback
 from taskloop.recovery.models import Intent
 from taskloop.round_log import WORD
@@ -114,6 +118,26 @@ class EvidenceFiles:
         path = self._path(self.directory(key, execution) + "/launcher")
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def duration(self, key: AttemptKey, execution: Intent | Callback | None = None) -> DurationSample | None:
+        """Saved values only: reopening never counts downtime or creates files."""
+        try:
+            identity = self.directory(key, execution)
+            return read_duration(self._path(identity), identity)
+        except (EvidenceError, OSError):
+            return None
+
+    def write_duration(self, key: AttemptKey, sample: DurationSample, execution: Intent | Callback | None = None) -> None:
+        identity = self.directory(key, execution)
+        write_duration(self._path(identity), identity, sample)
+
+    def observe_duration(
+        self, key: AttemptKey, clock: Callable[[], float], execution: Intent | Callback | None = None,
+    ) -> DurationObserver:
+        return DurationObserver(
+            lambda: self.directory(key, execution), clock, lambda sample: self.write_duration(key, sample, execution),
+            lambda: invalidate_duration(self._path(self.directory(key, execution))),
+        )
 
     def entry_log(self, key: AttemptKey) -> Path:
         """The attempt's entry process log (`entry.log` in its key-derived directory), with that directory made."""

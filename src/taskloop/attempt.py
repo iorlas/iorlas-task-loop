@@ -279,9 +279,11 @@ class Attempts:
         )
         latch = SessionLatch(self.store, admission)
         stops = AgentStops(StopStore(self.registration_store.connect, self.registration_store.begin), admission, self.clock)
+        duration = self.files.observe_duration(admission.key, self.monotonic)
         hooks = WatchedHooks(
             started=registration_hook(self.registration_store, admission, runtime_clock), ref=latch.observe, unattended=False,
-            before_stop=stops.before, after_stop=stops.after, live=CommandSink(self.files, admission.key, self.clock, jumps.sample),
+            before_stop=stops.before, after_stop=stops.after,
+            live=CommandSink(self.files, admission.key, self.clock, jumps.sample, duration),
         )
         try:
             return self.execution(harness, spec, remaining, hooks), latch.snapshot()
@@ -294,7 +296,9 @@ class Attempts:
         except Exception as error:  # registered worker and phase stay in the DB; nothing is erased or retried here
             return AttemptResult("unavailable", "run_failed:" + type(error).__name__)
         finally:
-            jumps.sample()
+            with suppress(Exception):
+                jumps.sample()
+            duration.seal()
             harness.cleanup()
 
     def _capture(self, pending: PendingResult, callback: Callback | None = None) -> tuple[CaptureResult, PendingResult]:

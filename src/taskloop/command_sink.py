@@ -10,6 +10,7 @@ from any_agent import LiveSink, NullSink, RunHooks, events
 from any_agent.activity import Timeline, encode
 
 from taskloop.attempt_types import AttemptKey
+from taskloop.duration_evidence import DurationObserver
 from taskloop.evidence_files import CappedLog, EvidenceFiles
 
 
@@ -23,16 +24,25 @@ class WatchedHooks(RunHooks):
 class CommandSink:
     def __init__(
         self, files: EvidenceFiles, key: AttemptKey, clock: Callable[[], float], observe: Callable[[], None] = lambda: None,
+        duration: DurationObserver | None = None,
     ) -> None:
         """`clock`: the wall time written for each observed action."""
         self._files, self._key, self._clock = files, key, clock
         self._observe = observe
+        self._duration = duration
         # a vendor restarts its ids with each process: a resumed run's scope keeps it from reusing the last run's
         self._timeline, self._lost = Timeline(f"{int(clock() * 1000)}:"), False
         self._events: CappedLog | None = None  # opened at the first action
 
     def started(self, pid: int) -> None:
-        self._observe()
+        self._sample()
+
+    def _sample(self, *, command: bool = False) -> None:
+        with suppress(Exception):
+            self._observe()
+        if self._duration is not None:
+            with suppress(Exception):
+                self._duration.sample(command=command)
 
     def _record(self, e: events.HarnessEvent) -> None:
         records = self._timeline.add(e, self._clock())
@@ -47,15 +57,15 @@ class CommandSink:
             self._lost = True  # display only: no events file, no retry, never a failed attempt
 
     def feed(self, e: events.HarnessEvent) -> None:
-        self._observe()
+        self._sample(command=isinstance(e, events.Cmd))
         with suppress(Exception):  # display only: a lost write never fails the attempt
             self._record(e)
 
     def poll(self, idle_s: float) -> None:
-        self._observe()
+        self._sample()
 
     def end(self, status: str, cost_usd: float | None = None) -> None:
-        self._observe()
+        self._sample()
         if self._events is not None:
             with suppress(OSError):
                 self._events.close()
