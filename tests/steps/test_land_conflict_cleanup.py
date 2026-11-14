@@ -42,10 +42,11 @@ def edit(slot: FakeWorktree) -> None:
 
 
 def retained(c: ExecutionCase) -> Save:
-    saved = c.ports.store.saved(c.record.key)
+    completed = c.ports.store.completed(c.record.key)
+    saved = completed or c.ports.store.saved(c.record.key)
     assert saved is not None
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        c.record.key.attempt_id, c.record.key.reservation_generation)
+        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation))
     assert dict(c.ports.repo.branches("task/")) == {"task/tl-1": c.record.request.checked}
     tree = c.ports.repo.tree(saved.commit or "")
     assert tree is not None
@@ -154,8 +155,8 @@ def test_cleanup_restart_preserves_saved_and_ignored_bytes(
     assert isinstance(result, Terminal) and result.explanation == "Retain both sides."
     complete = retained(c)
     assert complete.cleanup is not None and complete.cleanup.phase is CleanupPhase.COMPLETE
-    assert complete.model_dump(exclude={"abort", "cleanup"}) == before.model_dump(exclude={"abort", "cleanup"})
-    assert head(c.slot) == c.record.request.checked and c.slot.branch() is None and not c.slot.merging()
+    assert complete.model_dump(exclude={"abort", "cleanup", "release"}) == before.model_dump(exclude={"abort", "cleanup", "release"})
+    assert head(c.slot) == c.record.base and c.slot.branch() is None and not c.slot.merging()
     assert not c.slot.dirty().raw and not c.slot.unmerged()
     assert c.slot.read_file("notes/local") is None and c.slot.read_file("notes/other") is None
     assert c.slot.read_file("addition") is None and c.slot.read_file(".gitignore") is None
@@ -268,7 +269,7 @@ def test_cleanup_transitions_freeze_expectations(execution_case: ExecutionCase) 
     assert saved.cleanup is not None
     for cleanup in (None, saved.cleanup.model_copy(update={"phase": CleanupPhase.PARK}),
                     saved.cleanup.model_copy(update={"ignored": {}})):
-        with pytest.raises(StoreRefused):
+        with pytest.raises((StoreRefused, ValueError)):
             c.ports.store.save(c.record.key, saved, saved.model_copy(update={"cleanup": cleanup}))
 
 

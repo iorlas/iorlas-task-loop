@@ -10,6 +10,7 @@ from taskloop.attempt_loads import RetainedInputs
 from taskloop.attempt_types import AttemptKey
 from taskloop.land_conflict.abort_models import Abort, AbortPhase
 from taskloop.land_conflict.cleanup_models import Cleanup, CleanupPhase
+from taskloop.land_conflict.release_models import Release
 
 
 class Value(BaseModel):
@@ -107,6 +108,15 @@ class Save(Value):
     commit: str | None = Field(default=None, min_length=40, max_length=64)
     abort: Abort | None = None
     cleanup: Cleanup | None = None
+    release: Release | None = None
+
+    @model_validator(mode="after")
+    def consistent_release(self) -> Self:
+        if self.release is not None and (
+                self.cleanup is None or self.cleanup.phase is not CleanupPhase.COMPLETE
+                or self.release.work != self.cleanup.work or self.release.before != self.cleanup.after):
+            raise ValueError("release requires completed cleanup and the exact saved work")
+        return self
 
     @model_validator(mode="after")
     def consistent(self) -> Self:

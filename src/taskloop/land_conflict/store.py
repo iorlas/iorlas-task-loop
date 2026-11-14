@@ -13,9 +13,11 @@ from taskloop.attempt_types import AttemptKey
 from taskloop.land_conflict.abort_models import transition
 from taskloop.land_conflict.cleanup_models import transition as cleanup_transition
 from taskloop.land_conflict.models import AdmissionRefused, Outcome, Record, Request, Save, SavePhase, Slot
+from taskloop.land_conflict.release_models import ReleasePhase
 from taskloop.land_conflict.reservation_store import owns
 from taskloop.land_store import require_checked
 from taskloop.repo import RepoId
+from taskloop.slot_release import free
 from taskloop.slots import Probe, SlotGit
 
 
@@ -30,6 +32,20 @@ def existing(con: sqlite3.Connection, request: Request) -> Record | None:
 
 
 class ConflictStore(StoreConnection):
+    def completed(self, key: AttemptKey) -> Save | None:
+        """Historical completion grants only a result read, independently of current slot custody."""
+        with self._connection() as con:
+            row = con.execute(
+                "SELECT save_data FROM land_conflict WHERE operation_id=? AND dispatch_token=? AND generation=?",
+                astuple(key),
+            ).fetchone()
+        try:
+            saved = None if row is None or row[0] is None else Save.model_validate_json(as_text(row[0]))
+        except ValueError as error:
+            raise StoreUnavailable("Malformed retained conflict save") from error
+        return saved if (saved is not None and saved.key == key and saved.release is not None
+                         and saved.release.phase is ReleasePhase.COMPLETE) else None
+
     def saved(self, key: AttemptKey) -> Save | None:
         with self._connection() as con:
             if not owns(con, key):
@@ -44,17 +60,21 @@ class ConflictStore(StoreConnection):
 
     def save(self, key: AttemptKey, previous: Save | None, updated: Save) -> Save:
         value = Save.model_validate(updated.model_dump())
-        if value.key != key:
+        if value.key != key or (value.release is not None and value.release.phase is ReleasePhase.COMPLETE):
             raise StoreRefused("stale_reservation")
         progress = {SavePhase.CAPTURE: SavePhase.OBJECT, SavePhase.OBJECT: SavePhase.REF, SavePhase.REF: SavePhase.COMPLETE}
         if previous is None:
             if value.phase is not SavePhase.CAPTURE:
                 raise StoreRefused("stale_reservation")
         elif previous.phase is SavePhase.COMPLETE and value.phase is SavePhase.COMPLETE:
-            if (previous.model_dump(exclude={"abort", "cleanup"}) != value.model_dump(exclude={"abort", "cleanup"})
+            if (previous.model_dump(exclude={"abort", "cleanup", "release"})
+                    != value.model_dump(exclude={"abort", "cleanup", "release"})
                     or previous == value
                     or (previous.abort != value.abort and not transition(previous.abort, value.abort))
-                    or (previous.cleanup != value.cleanup and not cleanup_transition(previous.cleanup, value.cleanup))):
+                    or (previous.cleanup != value.cleanup and not cleanup_transition(previous.cleanup, value.cleanup))
+                    or (previous.release != value.release and (
+                        previous.release is not None or value.release is None
+                        or previous.model_dump(exclude={"release"}) != value.model_dump(exclude={"release"})))):
                 raise StoreRefused("stale_reservation")
         elif (progress.get(previous.phase) is not value.phase
               or previous.model_dump(exclude={"phase", "tree", "commit"}) != value.model_dump(exclude={"phase", "tree", "commit"})
@@ -64,11 +84,34 @@ class ConflictStore(StoreConnection):
         with self._connection(write=True) as con:
             if not owns(con, key):
                 raise StoreRefused("stale_reservation")
+            if value.release is not None:
+                _release_admission(con, key, value)
             changed = con.execute(
                 "UPDATE land_conflict SET save_data=? WHERE operation_id=? AND save_data IS ?",
                 (value.model_dump_json(), key.attempt_id, None if previous is None else previous.model_dump_json()),
             ).rowcount
             if changed != 1:
+                raise StoreRefused("stale_reservation")
+        return value
+
+    def release(self, key: AttemptKey, previous: Save, updated: Save) -> Save:
+        """Complete the frozen release and remove exactly its reservation in one transaction."""
+        value = Save.model_validate(updated.model_dump())
+        if (previous.key != key or value.key != key or previous.release is None or value.release is None
+                or previous.release.phase is not ReleasePhase.PENDING or value.release.phase is not ReleasePhase.COMPLETE
+                or previous.model_dump(exclude={"release"}) != value.model_dump(exclude={"release"})
+                or previous.release.model_dump(exclude={"phase"}) != value.release.model_dump(exclude={"phase"})):
+            raise StoreRefused("stale_reservation")
+        with self._connection(write=True) as con:
+            if not owns(con, key):
+                raise StoreRefused("stale_reservation")
+            _release_admission(con, key, value)
+            changed = con.execute(
+                "UPDATE land_conflict SET save_data=? WHERE operation_id=? AND save_data IS ?",
+                (value.model_dump_json(), key.attempt_id, previous.model_dump_json()),
+            ).rowcount
+            removed = free(con, value.repo_id, value.slot, key.attempt_id, key.reservation_generation)
+            if changed != 1 or removed != 1:
                 raise StoreRefused("stale_reservation")
         return value
 
@@ -132,3 +175,12 @@ class ConflictStore(StoreConnection):
                  request.repo_id, chosen.name, key.reservation_generation, record.model_dump_json()),
             )
         return record, True
+
+
+def _release_admission(con: sqlite3.Connection, key: AttemptKey, saved: Save) -> None:
+    row = con.execute("SELECT data FROM land_conflict WHERE operation_id=?", (key.attempt_id,)).fetchone()
+    record = Record.model_validate_json(as_text(row[0]))
+    if (saved.release is None or saved.release.work.base != record.base or record.key != key
+            or (saved.repo_id, saved.slot, str(saved.slot_path), saved.source, saved.target)
+            != (record.request.repo_id, record.slot, record.slot_path, record.request.checked, record.request.target)):
+        raise StoreRefused("stale_reservation")

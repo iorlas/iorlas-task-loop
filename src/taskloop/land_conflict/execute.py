@@ -14,6 +14,7 @@ from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.land_conflict.cleanup import CleanupSaved
 from taskloop.land_conflict.models import Record, SavePhase
 from taskloop.land_conflict.preserve import Preservation
+from taskloop.land_conflict.release import ReleaseSaved
 from taskloop.land_conflict.store import ConflictStore
 from taskloop.merge.models import Completed, Phase, Reason, Result, Terminal, Unavailable, Waiting, Work
 from taskloop.merge.resolve import Resolution, Run
@@ -46,6 +47,9 @@ class Ports:
 def execute(ports: Ports, key: AttemptKey) -> Result:
     """Only the durable admission supplies facts; custody spans all effects and acceptance."""
     try:
+        completed = ports.store.completed(key)
+        if completed is not None and completed.release is not None:
+            return completed.release.result
         record = ports.store.load(key)
         with landing(record.slot_path, key.attempt_id):
             return _execute(ports, record)
@@ -119,12 +123,20 @@ def _saved_result(ports: Ports, record: Record, work: Work, fence: Callable[[], 
         return Unavailable(reason=Reason.UNKNOWN, explanation="The pending conflict save has no matching terminal merge record.")
     preservation = Preservation(ports.store, ports.repo, ports.checkouts, ports.files, ports.gone, ports.clock, owned)
     saved = ports.store.saved(record.key)
+    if saved is not None and saved.release is not None and isinstance(result, Terminal):
+        return ReleaseSaved(preservation)(record, work, saved, result)
     if saved is not None and (saved.cleanup is not None or saved.abort is not None) and isinstance(result, Terminal):
-        return CleanupSaved(preservation)(record, work, saved, result)
-    retained = preservation(record, work, result)
+        retained = result
+    else:
+        retained = preservation(record, work, result)
     saved = ports.store.saved(record.key)
     if isinstance(retained, Terminal) and saved is not None and not saved.accepted and saved.phase is SavePhase.COMPLETE:
-        return CleanupSaved(preservation)(record, work, saved, retained)
+        cleaned = CleanupSaved(preservation)(record, work, saved, retained)
+        if not isinstance(cleaned, Terminal):
+            return cleaned
+        saved = ports.store.saved(record.key)
+        assert saved is not None
+        return ReleaseSaved(preservation)(record, work, saved, cleaned)
     return retained
 
 

@@ -155,11 +155,12 @@ def _saved(checkouts: Checkouts, path: Path, state: SlotState, slot_head: str, s
     return slot_head, parked
 
 
-def free(con: sqlite3.Connection, repo_id: str, slot: str, attempt_id: str, generation: int) -> None:
+def free(con: sqlite3.Connection, repo_id: str, slot: str, attempt_id: str, generation: int) -> int:
     """The one deletion of a reservation, inside the caller's release transaction after its fenced record (an agent
-    attempt's release row, or a checks attempt's `check_store.record_release`)."""
-    con.execute("DELETE FROM reservation WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",
-                (repo_id, slot, attempt_id, generation))
+    attempt's release row, a checks attempt's `check_store.record_release`, or a completed conflict release).
+    Return the number removed so the caller can require exactly one deletion."""
+    return con.execute("DELETE FROM reservation WHERE repo_id=? AND slot=? AND attempt_id=? AND generation=?",
+                       (repo_id, slot, attempt_id, generation)).rowcount
 
 
 @dataclass(frozen=True)
