@@ -20,6 +20,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity, Seen
 from taskloop.check_status import commands_seen
 from taskloop.check_store import CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.command_sink import CommandSink
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.result_data import as_data
@@ -194,7 +195,7 @@ def test_show_reads_the_checks_entry_s_own_last_line(status: Status, tmp_path: P
 
 def test_the_commands_a_dead_checks_entry_left_are_its_setup_and_its_unsettled_results_by_the_entry_s_rule() -> None:
     setup, check, done = (OwnedProcess(pid, pid, "start", "boot") for pid in (1, 2, 3))
-    passed = ResultRow(1, 1, "test", "d" * 64, 60, done, 1.0, 2.0, 0, "passed")  # settled: never observed
+    passed = ResultRow(1, 1, "test", "d" * 64, 60, done, 1.0, 2.0, 0, CommandConclusion.PASSED)  # settled: never observed
     running = ResultRow(1, 0, "check", "c" * 64, 60, check, 1.0, None, None, None)
     seen: dict[int, ProcessSeen] = {}
 

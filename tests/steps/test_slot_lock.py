@@ -35,6 +35,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import GitQuiet, Settled
+from taskloop.ids import NativeIds
 from taskloop.operations import Failed
 from taskloop.repeat import StepRepeat
 from taskloop.slot_lock import LABEL, acquire, hold, lock_path, refused, repeating
@@ -66,7 +67,7 @@ def captured(
     attempts = Attempts(
         AttemptStore(lambda: con),
         EvidenceFiles(tmp_path),
-        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
         agent(slot, written),
         lambda: 10,
         checkouts,
@@ -76,7 +77,7 @@ def captured(
 
 
 def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone = lambda _worker: True) -> Verifier:
-    return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, hold)
+    return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, hold, ids=NativeIds())
 
 
 @pytest.fixture
@@ -165,7 +166,7 @@ def test_a_repeat_whose_verify_finds_the_slot_held_admits_nothing(
     repeat = StepRepeat(
         store, verifier(registered, checkouts, slot_files), EvidenceFiles(tmp_path), admits, NoLaunch(), lambda _worker: True,
         lambda _entry: "gone", lambda: 10, repeating,
-    )
+    ids=NativeIds())
     with occupy(lock_path(str(slot.path))):
         found = repeat.repeat("tasks", "tl-1", KEY, None, 30)
     assert found == Failed("unavailable", "slot_busy") and admits.calls == [] and writes == []
@@ -175,7 +176,8 @@ def test_a_read_only_verifier_asked_to_write_is_its_own_unknown(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, writes: list[str]
 ) -> None:
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: "# Plan\n"})
-    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True, lambda: 20, refused).verify(KEY)
+    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
+        lambda: 20, refused, ids=NativeIds()).verify(KEY)
     assert found == VerifyUnavailable("read_only") and writes == []
 
 
@@ -202,5 +204,6 @@ def test_a_verify_reads_the_attempt_again_under_the_lock(
         with hold(admission):
             yield
 
-    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True, lambda: 20, late).verify(KEY)
+    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
+        lambda: 20, late, ids=NativeIds()).verify(KEY)
     assert isinstance(found, Verified) and other == [found] and writes == ["stage", "record"] and settled == ["attempt"]

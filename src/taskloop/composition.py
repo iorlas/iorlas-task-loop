@@ -35,6 +35,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.hold_store import HoldStore
+from taskloop.ids import Ids, NativeIds
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
@@ -84,7 +85,7 @@ def open_attempts(database: Path, artifacts: Path, views: GitViews, credentials:
     return Attempts(
         AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
         EvidenceFiles(artifacts),
-        AgentLaunch(credentials),
+        AgentLaunch(credentials, ids=NativeIds()),
         _run,
         time.time,
         views.checkouts,
@@ -115,6 +116,7 @@ class Checking:
     scratch: Scratch
     clock: Callable[[], float]
     environ: Callable[[], Mapping[str, str]]
+    ids: Ids
 
 
 def open_checking(database: Path, artifacts: Path, views: GitViews, store: Store | None = None,
@@ -129,7 +131,7 @@ def open_checking(database: Path, artifacts: Path, views: GitViews, store: Store
         CheckStore(lambda: store.shared_rw(database), store.begin_immediate, registering), setup, EvidenceFiles(artifacts), views.checkouts,
         RealSlotFiles(), views.slot_profiles, _environment(setup, database, artifacts, views),
         Block(BlockPorts(setup_process, group_alive, time.time)),
-        setup_seen, entry_seen, RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(os.environ),
+        setup_seen, entry_seen, RealEnvFiles().empty_scratch, time.time, lambda: scrubbed(os.environ), ids=NativeIds(),
     )
 
 
@@ -142,7 +144,7 @@ def open_verifier(database: Path, store: Store, views: GitViews) -> Verifier:
     """Real wiring for on-demand verification (`tl step verify`, a repeat's verify): a shared writer of `store` (the caller
     closes it) on factory.db, real Git, wall clock, its Git writes under the slot's custody lock."""
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-    return Verifier(writer, views.checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold)
+    return Verifier(writer, views.checkouts, RealSlotFiles(), worker_gone, time.time, slot_lock.hold, ids=NativeIds())
 
 
 def open_releaser(database: Path, store: Store, views: GitViews) -> SlotRelease:
@@ -152,13 +154,14 @@ def open_releaser(database: Path, store: Store, views: GitViews) -> SlotRelease:
     writer = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
     return SlotRelease(writer, views.checkouts, RealSlotFiles(), entry_seen, worker_gone, slot_lock.custody, tracker_claims().unclaim,
                        time.time, setup_seen, RealEnvFiles().empty_scratch,
-                       HoldStore(lambda: store.shared_rw(database), store.begin_immediate))
+                       HoldStore(lambda: store.shared_rw(database), store.begin_immediate), ids=NativeIds())
 
 
 def open_publisher(database: Path, store: Store, views: GitViews) -> BranchPublish:
     """Real wiring for `tl step publish` and the publication after `tl step verify`: a shared writer of `store` (the caller
     closes it) on factory.db, the remote-capable Git view, the real slot file port, wall clock."""
-    return BranchPublish(AttemptStore(lambda: store.shared_rw(database), store.begin_immediate), views.remotes, RealSlotFiles(), time.time)
+    return BranchPublish(AttemptStore(lambda: store.shared_rw(database), store.begin_immediate),
+        views.remotes, RealSlotFiles(), time.time, ids=NativeIds())
 
 
 def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
@@ -166,13 +169,13 @@ def open_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
 
     The database path is made absolute here: the entry refuses a relative one, after its registration would commit."""
     return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable,
-                    read_seconds=views.read_seconds)
+                    read_seconds=views.read_seconds, ids=NativeIds())
 
 
 def open_checks_launcher(database: Path, artifacts: Path, views: GitViews) -> Launcher:
     """`open_launcher` for checks attempts: `CheckStore`'s attempts and registration, the checks entry module."""
     return Launcher(database.absolute(), EvidenceFiles(artifacts), time.time, popen_registered, observe_owned, sys.executable,
-                    CheckStore, CHECK_ENTRY_MODULE, read_seconds=views.read_seconds)
+                    CheckStore, CHECK_ENTRY_MODULE, read_seconds=views.read_seconds, ids=NativeIds())
 
 
 def adopt_slots(
@@ -203,13 +206,14 @@ def open_admission(database: Path, artifacts: Path, views: GitViews, store: Stor
         time.time,
         slot_lock.probe,
         RealSlotFiles(),
+        ids=NativeIds(),
     )
 
 
 def open_chain(database: Path, artifacts: Path, store: Store | None = None) -> ChainAdmission:
     """Real wiring of the admissions that continue a task: per-thread shared writers on factory.db, wall-clock deadlines."""
     store = store if store is not None else Store(SCHEMA)
-    return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time)
+    return ChainAdmission(lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), time.time, ids=NativeIds())
 
 
 def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store | None = None) -> NextAdmission:
@@ -219,6 +223,7 @@ def open_advance(database: Path, artifacts: Path, views: GitViews, store: Store 
     return NextAdmission(
         lambda: store.shared_rw(database), store.begin_immediate, EvidenceFiles(artifacts), inspect_tracker_task, views.checkouts,
         time.time, slot_lock.probe, RealSlotFiles(),
+        ids=NativeIds(),
     )
 
 
@@ -228,7 +233,7 @@ def open_checks_admission(database: Path, views: GitViews, store: Store | None =
     wall-clock deadlines; no claim, no input file."""
     store = store if store is not None else Store(SCHEMA)
     return ChecksAdmission(lambda: store.shared_rw(database), store.begin_immediate, inspect_tracker_task, views.checkouts, time.time,
-                           slot_lock.probe, RealSlotFiles(), partial(GitProfileFiles, repos=views.checkouts))
+                           slot_lock.probe, RealSlotFiles(), partial(GitProfileFiles, repos=views.checkouts), ids=NativeIds())
 
 
 def open_checks_releaser(database: Path, store: Store, views: GitViews) -> ChecksRelease:
@@ -237,4 +242,4 @@ def open_checks_releaser(database: Path, store: Store, views: GitViews) -> Check
     no tracker call."""
     writer = CheckStore(lambda: store.shared_rw(database), store.begin_immediate)
     return ChecksRelease(writer, views.checkouts, RealSlotFiles(), entry_seen, slot_lock.custody, time.time, setup_seen,
-                         RealEnvFiles().empty_scratch)
+                         RealEnvFiles().empty_scratch, ids=NativeIds())

@@ -3,8 +3,10 @@ the held reservation, `admitted`), its phase and block transitions, the refusal 
 deadline refusal, the admission's insert and the release's record; a land candidate's results through `RESULT_HELD`
 only, and the abandon fence `LANDING` (v13, tl-8bh9.14.8 section 11)."""
 
+import ast
 import sqlite3
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from doubles import CANDIDATE, CHECKS, ORIGIN, REQUIRED, SQUASH, TARGET, D, X
@@ -14,7 +16,8 @@ from stream_proc import OwnedProcess
 from taskloop import check_store, land_store
 from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Replaced
-from taskloop.check_store import ChecksAdmitted, CheckStore, Conclusion, Recorded, ResultRow, latest_results, record_release, unsettled
+from taskloop.check_store import ChecksAdmitted, CheckStore, Recorded, ResultRow, latest_results, record_release, unsettled
+from taskloop.command_conclusion import CommandConclusion, decode, encode
 
 ENTRY = (7, "entry-start", "boot")
 ME = OwnedProcess(501, 501, "start-501", "boot")
@@ -168,7 +171,8 @@ def writes(checks: CheckStore, key: AttemptKey) -> dict[str, Callable[[], object
         "refused": lambda: checks.refused(key, "slot_busy"), "profiled": lambda: checks.profiled(key, DIGEST),
         "block": lambda: checks.block(key), "start": lambda: checks.start(key, 1, 1, "test", DIGEST, 60, 3),
         "undefined": lambda: checks.undefined(key, 1, 2, "smoke", 3), "registered": lambda: checks.registered(key, 1, 0, ME),
-        "finish": lambda: checks.finish(key, 1, 0, "passed", 0, 4), "conclude": lambda: checks.conclude(key, "passed", None, 5),
+        "finish": lambda: checks.finish(key, 1, 0, CommandConclusion.PASSED, 0, 4),
+            "conclude": lambda: checks.conclude(key, "passed", None, 5),
     }
 
 
@@ -209,11 +213,11 @@ def test_a_block_runs_its_results_once_and_only_the_latest_block_is_read(checkin
     checks.undefined(CHECKS, 1, 2, "smoke", 2)
     checks.start(CHECKS, 1, 0, "check", DIGEST, 60, 2)
     checks.registered(CHECKS, 1, 0, ME)
-    checks.finish(CHECKS, 1, 0, "passed", 0, 3)
+    checks.finish(CHECKS, 1, 0, CommandConclusion.PASSED, 0, 3)
     checks.start(CHECKS, 1, 1, "test", DIGEST, 60, 3)
     assert [(row.name, row.conclusion) for row in checks.results(CHECKS)] == [("check", "passed"), ("test", None), ("smoke", "undefined")]
-    assert checks.results(CHECKS)[0] == ResultRow(1, 0, "check", DIGEST, 60, ME, 2.0, 3.0, 0, "passed")
-    assert checks.results(CHECKS)[2] == ResultRow(1, 2, "smoke", None, None, None, 2.0, 2.0, None, "undefined")
+    assert checks.results(CHECKS)[0] == ResultRow(1, 0, "check", DIGEST, 60, ME, 2.0, 3.0, 0, CommandConclusion.PASSED)
+    assert checks.results(CHECKS)[2] == ResultRow(1, 2, "smoke", None, None, None, 2.0, 2.0, None, CommandConclusion.UNDEFINED)
     assert checks.block(CHECKS) == 2
     checks.start(CHECKS, 2, 0, "check", DIGEST, 60, 4)
     assert [(row.block, row.name) for row in checks.results(CHECKS)] == [(2, "check")]
@@ -240,19 +244,19 @@ def test_a_result_registers_once_concludes_once_and_never_in_an_older_block(chec
     checks.start(CHECKS, 1, 0, "check", DIGEST, 60, 2)
     checks.registered(CHECKS, 1, 0, ME)
     for write in (lambda: checks.registered(CHECKS, 1, 0, ME), lambda: checks.registered(CHECKS, 1, 5, ME),
-                  lambda: checks.finish(CHECKS, 1, 5, "passed", 0, 3)):
+                  lambda: checks.finish(CHECKS, 1, 5, CommandConclusion.PASSED, 0, 3)):
         with pytest.raises(StoreRefused, match="check_changed"):
             write()
-    checks.finish(CHECKS, 1, 0, "timed_out", None, 3)
+    checks.finish(CHECKS, 1, 0, CommandConclusion.TIMED_OUT, None, 3)
     with pytest.raises(StoreRefused, match="check_changed"):
-        checks.finish(CHECKS, 1, 0, "passed", 0, 4)
+        checks.finish(CHECKS, 1, 0, CommandConclusion.PASSED, 0, 4)
     checks.start(CHECKS, 1, 1, "test", DIGEST, 60, 4)
     checks.start(CHECKS, 2, 0, "check", DIGEST, 60, 5)
-    for write in (lambda: checks.registered(CHECKS, 1, 1, ME), lambda: checks.finish(CHECKS, 1, 1, "interrupted", None, 6)):
+    for write in (lambda: checks.registered(CHECKS, 1, 1, ME), lambda: checks.finish(CHECKS, 1, 1, CommandConclusion.INTERRUPTED, None, 6)):
         with pytest.raises(StoreRefused, match="check_changed"):  # block 1 is no longer the latest
             write()
     with pytest.raises(ValueError, match="undefined"):
-        checks.finish(CHECKS, 2, 0, "undefined", None, 6)
+        checks.finish(CHECKS, 2, 0, CommandConclusion.UNDEFINED, None, 6)
     assert columns(checking, "SELECT block,position,pid,conclusion,rc FROM check_result ORDER BY block,position") == [
         (1, 0, 501, "timed_out", None), (1, 1, None, None, None), (2, 0, None, None, None)]
 
@@ -266,14 +270,16 @@ def test_only_the_identity_write_uses_the_registration_connection(checking: sqli
     checks = CheckStore(connect("main"), registering=AttemptReads(connect("registration")))
     checks.start(CHECKS, 1, 0, "check", DIGEST, 60, 2)
     checks.registered(CHECKS, 1, 0, ME)
-    checks.finish(CHECKS, 1, 0, "passed", 0, 3)
+    checks.finish(CHECKS, 1, 0, CommandConclusion.PASSED, 0, 3)
     assert opened == ["main", "registration", "main"]
 
 
-@pytest.mark.parametrize(("conclusion", "listed"), [(None, True), ("lingering", True), ("timed_out", True), ("interrupted", True),
-                                                    ("passed", False), ("failed", False), ("dirty", False)])
+@pytest.mark.parametrize(("conclusion", "listed"), [(None, True), (CommandConclusion.LINGERING, True),
+    (CommandConclusion.TIMED_OUT, True), (CommandConclusion.INTERRUPTED, True),
+                                                    (CommandConclusion.PASSED, False),
+                                                        (CommandConclusion.FAILED, False), (CommandConclusion.DIRTY, False)])
 def test_unsettled_is_every_unfinished_or_live_after_result_of_the_latest_block(
-    checking: sqlite3.Connection, conclusion: Conclusion | None, listed: bool
+    checking: sqlite3.Connection, conclusion: CommandConclusion | None, listed: bool
 ) -> None:
     checks = store(checking)
     checks.start(CHECKS, 1, 0, "check", DIGEST, 60, 2)  # an older block's unfinished row is never listed
@@ -466,10 +472,10 @@ def test_a_pending_land_candidates_block_and_results_are_written_under_its_own_k
     assert checks.block(CANDIDATE) == 1
     checks.start(CANDIDATE, 1, 0, "check", DIGEST, 60, 11)
     checks.registered(CANDIDATE, 1, 0, ME)
-    checks.finish(CANDIDATE, 1, 0, "passed", 0, 12)
+    checks.finish(CANDIDATE, 1, 0, CommandConclusion.PASSED, 0, 12)
     checks.undefined(CANDIDATE, 1, 1, "smoke", 12)
     assert candidate_rows(landing) == [(1, 0, "check", 501, "passed"), (1, 1, "smoke", None, "undefined")]
-    assert checks.results(CANDIDATE)[0] == ResultRow(1, 0, "check", DIGEST, 60, ME, 11.0, 12.0, 0, "passed")
+    assert checks.results(CANDIDATE)[0] == ResultRow(1, 0, "check", DIGEST, 60, ME, 11.0, 12.0, 0, CommandConclusion.PASSED)
     assert columns(landing, "SELECT count(*) FROM check_result WHERE attempt_id='checks'") == [(0,)]
 
 
@@ -496,7 +502,7 @@ def test_a_candidates_result_writes_need_it_pending_with_its_held_reservation(la
     landing.execute(change)
     for write in (lambda: checks.block(CANDIDATE), lambda: checks.start(CANDIDATE, 1, 1, "test", DIGEST, 60, 12),
                   lambda: checks.undefined(CANDIDATE, 1, 2, "smoke", 12), lambda: checks.registered(CANDIDATE, 1, 0, ME),
-                  lambda: checks.finish(CANDIDATE, 1, 0, "passed", 0, 12)):
+                  lambda: checks.finish(CANDIDATE, 1, 0, CommandConclusion.PASSED, 0, 12)):
         with pytest.raises(StoreRefused, match="stale_reservation"):
             write()
     assert candidate_rows(landing) == [(1, 0, "check", None, None)]
@@ -585,3 +591,54 @@ def test_the_abandon_of_a_checks_re_run_sees_the_land_candidates_of_the_earlier_
     assert released(checking, (1, "concluded"), False, later) == "released"
     assert checks.abandon_released(later) == "landed"
     assert [row.abandoned for row in checks.of_attempt("implement")] == [False, False]
+
+
+@pytest.mark.parametrize("conclusion", list(CommandConclusion))
+def test_command_conclusions_roundtrip_as_enum_members(checking: sqlite3.Connection, conclusion: CommandConclusion) -> None:
+    checks = store(checking)
+    if conclusion is CommandConclusion.UNDEFINED:
+        checks.undefined(CHECKS, 1, 0, "one", 3)
+    else:
+        checks.start(CHECKS, 1, 0, "one", "a" * 64, 60, 2)
+        checks.finish(CHECKS, 1, 0, conclusion, None, 3)
+    row, = checks.results(CHECKS)
+    assert row.conclusion is conclusion
+    assert checking.execute("SELECT conclusion FROM check_result").fetchone() == (encode(conclusion),)
+    assert decode(encode(conclusion)) is conclusion
+    assert type(encode(conclusion)) is str
+
+
+@pytest.mark.parametrize("value", ["unknown", "", 1, True, b"passed", {}, []])
+def test_command_conclusion_codec_rejects_unknown_words_and_invalid_types(value: object) -> None:
+    with pytest.raises(ValueError):
+        decode(value)
+    assert decode(None) is None and encode(None) is None
+
+
+@pytest.mark.parametrize("value", ["unknown", b"passed", 1])
+def test_malformed_command_conclusions_keep_the_store_explanation(checking: sqlite3.Connection, value: object) -> None:
+    checks = store(checking)
+    checks.start(CHECKS, 1, 0, "one", "a" * 64, 60, 2)
+    checking.execute("PRAGMA ignore_check_constraints=ON")
+    checking.execute("UPDATE check_result SET conclusion=?,ended_at=3", (value,))
+    with pytest.raises(StoreUnavailable, match="Malformed stored conclusion"):
+        checks.results(CHECKS)
+
+
+def test_command_conclusions_have_one_definition_and_native_ids_one_adapter() -> None:
+    root = Path(__file__).resolve().parents[2] / "src" / "taskloop"
+    assert [encode(each) for each in CommandConclusion] == [
+        "passed", "failed", "timed_out", "lingering", "dirty", "undefined", "interrupted"]
+    definitions: list[Path] = []
+    for path in root.rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        definitions.extend(path for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.name == "CommandConclusion")
+        if path.name != "ids.py":
+            imports = [node for node in ast.walk(tree) if isinstance(node, (ast.Import, ast.ImportFrom))]
+            assert not any((isinstance(node, ast.ImportFrom) and node.module in {"uuid", "secrets"}) or
+                           (isinstance(node, ast.Import) and any(name.name in {"uuid", "secrets"} for name in node.names))
+                           for node in imports), path
+        if path.name in {"check_store.py", "setup_store.py"}:
+            assert not any(isinstance(node, ast.TypeAlias) and node.name.id == "Conclusion" for node in ast.walk(tree))
+            assert not any(isinstance(node, ast.Name) and node.id == "CONCLUSIONS" for node in ast.walk(tree))
+    assert definitions == [root / "command_conclusion.py"]

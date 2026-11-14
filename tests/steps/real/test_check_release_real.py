@@ -16,6 +16,7 @@ from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Seen
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import ChecksAdmitted, CheckStore, insert
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.prepare import Prepared, detach_at
 from taskloop.setup_store import ProcessSeen
 from taskloop.slot_files import RealSlotFiles
@@ -77,7 +78,7 @@ def test_a_passed_block_s_leftovers_are_reset_away_and_the_slot_parked_at_d(
         emptied.append(path)
         return True
 
-    release = ChecksRelease(store, VIEWS.checkouts, RealSlotFiles(), never, custody, lambda: 30, gone, scratch)
+    release = ChecksRelease(store, VIEWS.checkouts, RealSlotFiles(), never, custody, lambda: 30, gone, scratch, ids=NativeIds())
     assert release.release(CHECKS, False) == Released("s1", d, True, "kept", False)
     assert git(slot, "rev-parse", "HEAD").strip() == d and git(slot, "status", "--porcelain", "--ignored").strip() == ""
     assert (slot / "README").read_text() == "one\n" and not (slot / "coverage.xml").exists() and not (slot / "build").exists()

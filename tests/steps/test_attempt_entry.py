@@ -28,6 +28,7 @@ from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.slot_lock import SlotBusy, acquire, lock_path
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -140,7 +141,8 @@ class Entry:
         self.opened.append((database, artifacts))
         store = Store(SCHEMA)
         connect = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-        return Attempts(connect, self.files, AgentLaunch(self.credentials), self.execution, self.clock, self.checkouts, self.slot_files)
+        return Attempts(connect, self.files, AgentLaunch(self.credentials, ids=NativeIds()), self.execution,
+            self.clock, self.checkouts, self.slot_files)
 
     def clock(self) -> float:
         return self.now

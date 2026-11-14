@@ -22,7 +22,7 @@ tracker's unclaim, the clock, the setup observation and the scratch's emptying. 
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
-from dataclasses import astuple, dataclass, replace
+from dataclasses import astuple, dataclass, field, replace
 from pathlib import Path
 from typing import Final, Literal
 
@@ -40,6 +40,7 @@ from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, Observe
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks
+from taskloop.ids import Ids
 from taskloop.prepare import task_branch
 from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
@@ -284,11 +285,12 @@ class SlotRelease:
     clock: Callable[[], float]
     setup_seen: SetupSeen
     scratch: Scratch  # empties the slot's `.t/<slot>` after a release (`RealEnvFiles.empty_scratch`)
+    ids: Ids = field(kw_only=True)
     saved: wip.SavedLog | None = None  # the hold's record of saved commits: an abandon of a held attempt saves a dirty slot first
 
     def release(self, key: AttemptKey, abandon: bool, me: EntryIdentity | None = None) -> ReleaseResult:
         try:
-            with operation(self.store, ActionKind.FINALIZE, subject=key.attempt_id,
+            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
                            existing=lambda owner: self.store.owns_entry(key, owner)):
                 return self._release(key, abandon, me)
         except Fenced:

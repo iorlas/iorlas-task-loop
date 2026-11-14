@@ -20,15 +20,15 @@ from stream_proc import OwnedProcess
 from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable, as_int, as_nullable_int, as_nullable_text, as_text
 from taskloop.attempt_types import AttemptKey
 from taskloop.check_store import RESULT_HELD
+from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, decode, encode
 from taskloop.drain.models import Owner, Role, owners
 
-type Conclusion = Literal["passed", "failed", "timed_out", "lingering", "dirty", "interrupted"]
-CONCLUSIONS: Final[tuple[Conclusion, ...]] = ("passed", "failed", "timed_out", "lingering", "dirty", "interrupted")
-FAILURES: Final[tuple[Conclusion, ...]] = ("failed", "timed_out", "lingering", "dirty")  # `interrupted` is not the setup's fault
+FAILURES: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.FAILED, CommandConclusion.TIMED_OUT,
+    CommandConclusion.LINGERING, CommandConclusion.DIRTY)  # `interrupted` is not the setup's fault
 SETUP_RUNS: Final = 2  # failed runs of one attempt before relaunches stop running its setup (`environment:failed`)
 # Concluded with a process possibly left in the last command's group (a member that outlived it, or one the deadline's stop
 # could not prove gone): until that group is empty the run still holds the slot, like an unfinished one.
-LIVE_AFTER: Final[tuple[Conclusion, ...]] = ("lingering", "timed_out")
+LIVE_AFTER: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.LINGERING, CommandConclusion.TIMED_OUT)
 type ProcessSeen = Literal["gone", "alive", "unknown"]
 type SetupSeen = Callable[[OwnedProcess], ProcessSeen]  # a registered setup command and its group; another boot is gone
 COLUMNS: Final = "run,commit_sha,digest,command,pid,pgid,proc_start,boot,conclusion"
@@ -51,7 +51,7 @@ class SetupRow:
     digest: str
     command: int
     process: OwnedProcess | None
-    conclusion: Conclusion | None
+    conclusion: CommandConclusion | None
 
     @property
     def unsettled(self) -> OwnedProcess | None:
@@ -60,11 +60,14 @@ class SetupRow:
         return self.process if self.conclusion is None or self.conclusion in LIVE_AFTER else None
 
 
-def _conclusion(value: object) -> Conclusion | None:
-    found = next((each for each in CONCLUSIONS if each == value), None)
-    if (found is None) != (value is None):
-        raise StoreUnavailable("Malformed setup conclusion")
-    return found
+def _conclusion(value: object) -> CommandConclusion | None:
+    try:
+        found = decode(value)
+        if found is not None and found not in SETUP_CONCLUSIONS:
+            raise ValueError("Setup cannot be undefined")
+        return found
+    except ValueError as error:
+        raise StoreUnavailable("Malformed setup conclusion") from error
 
 
 def _row(row: tuple[object, ...]) -> SetupRow:
@@ -117,7 +120,7 @@ class SetupStore(AttemptReads):
         marks = ",".join("?" * len(FAILURES))
         with self._connection() as con:
             row = con.execute(f"SELECT count(*) FROM setup_run WHERE attempt_id=? AND conclusion IN ({marks})",
-                              (key.attempt_id, *FAILURES)).fetchone()
+                              (key.attempt_id, *(encode(each) for each in FAILURES))).fetchone()
             return as_int(row[0])
 
     def _held(self, con: sqlite3.Connection, key: AttemptKey) -> None:
@@ -144,8 +147,10 @@ class SetupStore(AttemptReads):
             self._changed(con, key, run, "command=?,pid=?,pgid=?,proc_start=?,boot=?",
                           (command, process.pid, process.pgid, process.start, process.boot))
 
-    def conclude(self, key: AttemptKey, run: int, conclusion: Conclusion, rc: int | None, now: float) -> None:
-        self._update(key, run, "conclusion=?,rc=?,ended_at=?", (conclusion, rc, now))
+    def conclude(self, key: AttemptKey, run: int, conclusion: CommandConclusion, rc: int | None, now: float) -> None:
+        if conclusion not in SETUP_CONCLUSIONS:
+            raise ValueError("Setup cannot be undefined")
+        self._update(key, run, "conclusion=?,rc=?,ended_at=?", (encode(conclusion), rc, now))
 
     def _update(self, key: AttemptKey, run: int, assignments: str, values: tuple[object, ...]) -> None:
         with self._connection(write=True) as con:

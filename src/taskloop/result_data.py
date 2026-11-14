@@ -10,6 +10,7 @@ from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
 from taskloop.check_status import ChecksView
 from taskloop.checks import differs
+from taskloop.command_conclusion import encode
 from taskloop.hold_store import HoldRow
 from taskloop.land import Landed
 from taskloop.land_data import land_data, view_data
@@ -74,7 +75,7 @@ def _checks_data(checks: ChecksView | None) -> dict[str, object] | None:
         return None
     row, required = checks.row, dict(checks.row.required)
     logs = checks.logs or (None,) * len(checks.results)
-    results = [{"name": each.name, "required": each.name in required, "conclusion": each.conclusion, "rc": each.rc,
+    results = [{"name": each.name, "required": each.name in required, "conclusion": encode(each.conclusion), "rc": each.rc,
                 "block": each.block, "started_at": each.started_at, "ended_at": each.ended_at,
                 "argv_differs": differs(row.required, each), "log": None if log is None else str(log)}
                for each, log in zip(checks.results, logs, strict=True)]
@@ -150,7 +151,7 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
                     "existing": result.existing, "entry_process": _entry_data(result.entry), "number": result.number,
                     "result": result.result or None}
         case Shown():
-            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": result.setup.row.conclusion,
+            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": encode(result.setup.row.conclusion),
                                                         "commit": result.setup.row.commit, "log": str(result.setup.log),
                                                         "attempt_id": result.setup.attempt_id}
             return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log),

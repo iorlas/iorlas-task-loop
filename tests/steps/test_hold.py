@@ -20,6 +20,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import ROUND_CAUSES, HoldMove, HoldPorts, clear_holds, hold_task
 from taskloop.hold_guide import pending_guide
@@ -352,9 +353,9 @@ def test_a_checks_cause_holds_the_implement_attempt_and_names_its_failed_checks(
         (2, "lint", None, None, None, None, None, None, 2, None, "undefined")])
     bench = Bench(checking, tmp_path)
     row = CheckStore(lambda: checking).of_attempt("implement")[0]
-    results = (ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, "passed"),
-               ResultRow(1, 1, "test", "e" * 64, 60, OwnedProcess(5, 5, "st", "boot"), 1.0, 2.0, 1, "lingering"),
-               ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, "undefined"))
+    results = (ResultRow(1, 0, "check", None, None, None, 1.0, 2.0, 0, CommandConclusion.PASSED),
+               ResultRow(1, 1, "test", "e" * 64, 60, OwnedProcess(5, 5, "st", "boot"), 1.0, 2.0, 1, CommandConclusion.LINGERING),
+               ResultRow(1, 2, "lint", None, None, None, 1.0, None, None, CommandConclusion.UNDEFINED))
     failed = AttemptResult("collected", "failed:test:lingering")
     view = AttemptView("tasks", "tl-1", "check", CHECKS.attempt_id, "s2", "concluded", "gone", failed, False, "hold", label="auto",
                        hold_due="failed:test:lingering", checks=ChecksView(row, results))

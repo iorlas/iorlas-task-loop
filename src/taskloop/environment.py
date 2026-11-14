@@ -34,10 +34,11 @@ from stream_proc import OwnedProcess
 
 from taskloop.access import TMP_BYTES, Folders, folders
 from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Checkouts
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import CappedLog, EvidenceFiles
 from taskloop.prepare import Prepared, task_branch
 from taskloop.profile import ProfileFiles, Refused, Unavailable, read_profile
-from taskloop.setup_store import SETUP_RUNS, Conclusion, SetupSeen, SetupStore
+from taskloop.setup_store import SETUP_RUNS, SetupSeen, SetupStore
 
 type Renewal = Literal["held", "unrenewed", "lost"]
 type Renew = Callable[[], Renewal]  # one claim renewal, now (the entry's keep-alive)
@@ -249,7 +250,7 @@ class Preparation:
         if seen == "unknown":
             return _unavailable("environment:unknown")
         if latest.conclusion is None:
-            self.ports.store.conclude(key, latest.run, "interrupted", None, self.ports.clock())
+            self.ports.store.conclude(key, latest.run, CommandConclusion.INTERRUPTED, None, self.ports.clock())
         return None
 
     def _preflight(self, path: Path, slot: Prepared, found: Folders) -> AttemptResult | None:
@@ -293,7 +294,7 @@ class Preparation:
             return _unavailable("environment:profile")
         digest = setup_digest(profile.setup)
         latest = ports.store.latest(key)
-        reusable = latest is not None and (latest.conclusion, latest.commit, latest.digest) == ("passed", head, digest)
+        reusable = latest is not None and (latest.conclusion, latest.commit, latest.digest) == (CommandConclusion.PASSED, head, digest)
         if reusable and target.commit is None:
             return None  # no agent ran since it passed: this attempt is still `admitted`
         reset = self._reset(path, slot.gitdir, folders(path), target.commit)
@@ -336,16 +337,16 @@ class Preparation:
         view = self.ports.checkouts(run.slot, git_dir=gitdir)
         listed = next((info for info in view.worktrees() if info.path == run.slot), None)
         if listed is None or (listed.head, listed.branch) != (run.head, run.branch):
-            return self._concluded(run, "dirty", None, _refused("environment:moved"))
+            return self._concluded(run, CommandConclusion.DIRTY, None, _refused("environment:moved"))
         if view.worktree(run.slot).dirty().raw:
-            return self._concluded(run, "dirty", None, _refused("environment:dirty"))
-        return self._concluded(run, "passed", 0, None)
+            return self._concluded(run, CommandConclusion.DIRTY, None, _refused("environment:dirty"))
+        return self._concluded(run, CommandConclusion.PASSED, 0, None)
 
     def _command(self, run: _Run, index: int, argv: Sequence[str]) -> AttemptResult | None:
         ports = self.ports
         remaining = run.deadline - ports.clock()
         if remaining <= 0:
-            return self._concluded(run, "timed_out", None, _refused("expired"))
+            return self._concluded(run, CommandConclusion.TIMED_OUT, None, _refused("expired"))
         run.log.write(f"$ {shlex.join(argv)}\n".encode())
 
         committed: list[OwnedProcess] = []
@@ -372,13 +373,13 @@ class Preparation:
         stopped by the deadline, then a failed or never-run command."""
         if not ended.exec_failed and (ended.survivors or self.ports.lingering(ended.pgid)):
             run.log.write(b"lingering\n")
-            return self._concluded(run, "lingering", ended.rc, _unavailable("environment:lingering"))
+            return self._concluded(run, CommandConclusion.LINGERING, ended.rc, _unavailable("environment:lingering"))
         if ended.timed_out:
-            return self._concluded(run, "timed_out", ended.rc, _refused("expired"))
+            return self._concluded(run, CommandConclusion.TIMED_OUT, ended.rc, _refused("expired"))
         if ended.exec_failed or ended.rc != 0:
-            return self._concluded(run, "failed", ended.rc, _unavailable("environment:exit"))
+            return self._concluded(run, CommandConclusion.FAILED, ended.rc, _unavailable("environment:exit"))
         return None
 
-    def _concluded(self, run: _Run, conclusion: Conclusion, rc: int | None, result: AttemptResult | None) -> AttemptResult | None:
+    def _concluded(self, run: _Run, conclusion: CommandConclusion, rc: int | None, result: AttemptResult | None) -> AttemptResult | None:
         self.ports.store.conclude(run.key, run.run, conclusion, rc, self.ports.clock())
         return result

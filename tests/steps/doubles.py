@@ -25,6 +25,7 @@ from taskloop.environment import EnvironmentPorts, Preparation, SetupEnded
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import ChecksPorts
 from taskloop.profile import NoCommit, NotAFile, ProfileFiles, Unavailable
@@ -434,7 +435,7 @@ class ChecksBench:
 
     def admission(self) -> ChecksAdmission:
         return ChecksAdmission(lambda: self.con, self.begin, self.inspect, self.views, lambda: self.now, lambda _p: True, self.files,
-                               lambda path: GitProfileFiles(path, self.views))
+                               lambda path: GitProfileFiles(path, self.views), ids=NativeIds())
 
     def admit(self, number: int = 1, checkout: Path | None = None) -> AdmitResult:
         return self.admission().admit_checks(ChecksRequest(self.done.implement, checkout or self.repo.path, 100.0, number))
@@ -473,3 +474,25 @@ class ReadyTracker(FakeTaskReadClient):
 
     def find(self, status: str = "", label: str = "", *, include_closed: bool = False) -> list[Bead]:
         return [each for each in self.records if each.status == status and (not label or label in each.labels)]
+
+
+class FixedIds:
+    def __init__(self) -> None:
+        self.fresh: list[str] = []
+        self.tokens: list[tuple[int, str]] = []
+        self.sessions: list[str] = []
+
+    def hex(self) -> str:
+        value = f"{len(self.fresh) + 1:032x}"
+        self.fresh.append(value)
+        return value
+
+    def token(self, nbytes: int) -> str:
+        value = f"{len(self.tokens) + 1:0{2 * nbytes}x}"
+        self.tokens.append((nbytes, value))
+        return value
+
+    def session(self) -> str:
+        value = f"00000000-0000-4000-8000-{len(self.sessions) + 1:012x}"
+        self.sessions.append(value)
+        return value

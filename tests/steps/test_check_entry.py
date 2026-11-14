@@ -31,6 +31,7 @@ from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.setup_store import SetupStore
 from taskloop.slot_lock import custody
 
@@ -120,7 +121,8 @@ class Bench:
         env = self.environment
         block = Block(BlockPorts(env.process, env.process.lingering, self.clock))
         return Checking(self.store, SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files, env.profiles,
-                        env.preparation(), block, env.observe, lambda _entry: "gone", self.scratch, self.clock, self.environ)
+                        env.preparation(), block, env.observe, lambda _entry: "gone", self.scratch,
+                            self.clock, self.environ, ids=NativeIds())
 
     def __call__(self, inspect: object = inspect_process) -> int:
         observe = inspect_process if inspect is inspect_process else self.other

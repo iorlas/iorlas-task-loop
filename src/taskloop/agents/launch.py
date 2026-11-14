@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import override
-from uuid import uuid4
 
 from any_agent import ClaudeHarness, CodexHarness, Harness, LaunchInputs, LaunchSpec, OpenCodeHarness
 from any_agent.access import ClaudeAccess, CodexAccess, CodexApproval, CodexSandbox
@@ -14,6 +13,7 @@ from any_agent.harnesses.opencode_sandbox import Sandbox
 from taskloop.access import PROBE, Folders, agent_env, folders
 from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy
 from taskloop.harness_choice import HarnessKind
+from taskloop.ids import Ids
 
 type Credentials = Callable[[HarnessKind], tuple[str, dict[str, str]]]
 
@@ -71,7 +71,8 @@ def codex_access(policy: CodexPolicy, found: Folders | None = None) -> CodexAcce
 
 
 class AgentLaunch:
-    def __init__(self, credentials: Credentials) -> None:
+    def __init__(self, credentials: Credentials, *, ids: Ids) -> None:
+        self.ids = ids
         self.credentials = credentials
 
     def build(self, setting: AgentSetting, slot: Path, prepared: bool, root: Path, schema: str, out_file: str,
@@ -103,7 +104,7 @@ class AgentLaunch:
             contract = Path(schema).read_text(encoding="utf-8")
             prompt += "\nReturn exactly one JSON object satisfying this answer schema:\n" + contract
             inputs = LaunchInputs(exe=exe, cwd=str(slot), model=setting.model, effort=setting.effort, prompt=prompt,
-                                  env=env, schema=schema, out_file=out_file, access_policy=access, write=True, session=str(uuid4()))
+                                  env=env, schema=schema, out_file=out_file, access_policy=access, write=True, session=self.ids.session())
             return LaunchedAgent(harness, harness.launch_spec(inputs), (exe, env), probe)
         except Exception as error:
             harness.cleanup()

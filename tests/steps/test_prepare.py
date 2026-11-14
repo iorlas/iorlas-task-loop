@@ -28,6 +28,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import TRAILER, AttemptKey, AttemptResult, Checkouts, FileRef, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 from taskloop.prepare import UNPUBLISHED, Branch, BranchRefusal, branch_refusal, named
 from taskloop.slots import SlotGit, adopt, folder_name
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
@@ -109,7 +110,8 @@ def execute(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files
     agent = FakeRun(RunOutcome(rc=0, worker=WORKER, summary=Summary(text=json.dumps(PLAN), rc=0, stands=True)))
     store = AttemptStore(lambda: con)
     environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096).preparation()  # an implement attempt's setup passes
-    result = Attempts(store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {})), agent, lambda: 10, checkouts, files,
+    result = Attempts(store, EvidenceFiles(tmp_path), AgentLaunch(lambda _harness: ("/bin/codex", {}),
+        ids=NativeIds()), agent, lambda: 10, checkouts, files,
                       environment=environment).execute(KEY, ENTRY, lambda: "held")
     return result.status, result.reason, agent
 
@@ -350,7 +352,7 @@ def admitted(factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: 
 
     claims = Claims(tmp_path / "artifacts")
     admission = AttemptAdmission(lambda: factory, begin_immediate, claims.files, tasks, PinnedViews(repo),
-                              claims.claim, claims.unclaim, lambda: 10, lambda _slot_path: True, FakeSlotFiles(repo))
+                              claims.claim, claims.unclaim, lambda: 10, lambda _slot_path: True, FakeSlotFiles(repo), ids=NativeIds())
     return admission.admit(
         AdmitRequest(
             task_id,

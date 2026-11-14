@@ -29,11 +29,16 @@ from pathlib import Path
 from sqlite_store import Schema, SchemaError
 
 from taskloop.check_repeat.feedback import CheckRepeatReason
+from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, encode
 from taskloop.drain.models import ActionKind, ActionState, State
 from taskloop.harness_choice import HarnessKind, Provider
 
 _HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
 _PROVIDERS = ",".join(f"'{each}'" for each in Provider)
+
+_COMMAND_CONCLUSIONS = ",".join(repr(encode(each)) for each in CommandConclusion)
+_SETUP_CONCLUSIONS = ",".join(repr(encode(each)) for each in SETUP_CONCLUSIONS)
+_UNDEFINED = encode(CommandConclusion.UNDEFINED)
 
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
@@ -132,7 +137,7 @@ CREATE TABLE setup_run (
  command INTEGER NOT NULL DEFAULT 0 CHECK(command >= 0),
  pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
  started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
- conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','interrupted')),
+ conclusion TEXT CHECK(conclusion IN ({_SETUP_CONCLUSIONS})),
  CHECK((ended_at IS NULL) = (conclusion IS NULL)), PRIMARY KEY (attempt_id, run)
 );
 CREATE TABLE checks_attempt (
@@ -166,11 +171,11 @@ CREATE TABLE check_result (
  argv_digest TEXT CHECK(argv_digest IS NULL OR length(argv_digest)=64), timeout INTEGER CHECK(timeout IS NULL OR timeout >= 1),
  pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
  started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
- conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','undefined','interrupted')),
- CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS 'undefined')),
+ conclusion TEXT CHECK(conclusion IN ({_COMMAND_CONCLUSIONS})),
+ CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS '{_UNDEFINED}')),
  CHECK((timeout IS NULL) = (argv_digest IS NULL)),
  CHECK((pid IS NULL) = (pgid IS NULL) AND (pid IS NULL) = (proc_start IS NULL) AND (pid IS NULL) = (boot IS NULL)),
- CHECK(conclusion IS NOT 'undefined' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
+ CHECK(conclusion IS NOT '{_UNDEFINED}' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
  PRIMARY KEY (attempt_id, block, position), UNIQUE (attempt_id, block, name)
 );
 CREATE TABLE land_candidate (

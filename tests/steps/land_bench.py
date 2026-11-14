@@ -29,6 +29,7 @@ from taskloop.composition import Checking
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import NativeIds
 from taskloop.land import LandRequest, LandResult, land
 from taskloop.land_check import LandPorts
 from taskloop.land_store import LandRow, LandStore
@@ -183,11 +184,12 @@ class LandBench:
         block = Block(BlockPorts(env.process, env.process.lingering, lambda: self.now))
         return Checking(CheckStore(lambda: self.con), SetupStore(lambda: self.con), EvidenceFiles(env.artifacts), self.views, self.files,
                         env.profiles, env.preparation(), block, env.observe, lambda entry: self.seen.get(entry, "gone"),
-                        lambda _path: True, lambda: self.now, lambda: {"HOME": "/home/p"})
+                        lambda _path: True, lambda: self.now, lambda: {"HOME": "/home/p"}, ids=NativeIds())
 
     def ports(self) -> LandPorts:
         return LandPorts(self.checking(), self.lands, self.views, lambda path: GitProfileFiles(path, self.views), self.inspect,
-                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing, self.environ, self.close)
+                         self.heartbeat_for, NoBeats, lambda: self.me, lambda _path: True, landing,
+                             self.environ, self.close, ids=NativeIds())
 
     def land(self, mode: str = "land", *, no_change: bool = False, minutes: int | None = 5, checkout: Path | None = None,
              accept: bool = False) -> LandResult:

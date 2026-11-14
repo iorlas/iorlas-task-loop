@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from check_repeat_bench import ASSERTION, Repairing
-from doubles import MAIN_PROFILE, PinnedViews
+from doubles import MAIN_PROFILE, FixedIds, PinnedViews
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeWorktree
 from round_bench import Tracker, scripted, scripts, task
@@ -23,8 +23,10 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, FileRef, SlotFiles, Unsettled
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_repeat.feedback import FailedCheck
+from taskloop.check_repeat.repair import CheckRepeat
 from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_repeat.store import CheckRepeatStore
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.harness_choice import HarnessKind
@@ -79,8 +81,15 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert not isinstance(released, Failed)
     x = rig.tip("tl-1")
     specs = repair_agent(rig, change=change)
-    result = start(rig.starting(), rig.request())
+    ports = rig.starting()
+    assert isinstance(ports.check_repeat, CheckRepeat)
+    ids = FixedIds()
+    ports = replace(ports, check_repeat=replace(ports.check_repeat, ids=ids))
+    result = start(ports, rig.request())
     assert isinstance(result, Started) and result.step == "implement"
+    assert result.attempt_id == ids.fresh[0] and [size for size, _ in ids.tokens] == [16, 16]
+    assert rig.store.attempts("tasks", "tl-1")[0].key.dispatch_token == ids.tokens[0][1]
+    assert ids.tokens[1][1] in specs[0].stdin
     (spec,) = specs
     assert "Failed check\n" in spec.stdin and "Check: test" in spec.stdin
     assert 'Command argv: ["just", "test"]' in spec.stdin and all(line in spec.stdin for line in ASSERTION.splitlines())
@@ -93,7 +102,7 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert rig.con.execute("SELECT base_commit,after_commit FROM attempt WHERE attempt_id=?", (row.key.attempt_id,)).fetchone() == (x, x)
     assert rig.ran[-1] == "pending:verification"
     setup = SetupStore(lambda: rig.con).latest(row.key)
-    assert setup is not None and setup.commit == x and setup.conclusion == "passed"
+    assert setup is not None and setup.commit == x and setup.conclusion == CommandConclusion.PASSED
     assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
     rig.bodies = ["passed"]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
@@ -119,7 +128,11 @@ def test_rounds_share_the_implement_cap_and_hold_once_after_three_attempts(rig: 
 def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: Repairing) -> None:
     previous, source = failed(rig)
     rig.failing = LaunchUnavailable("start")
-    first = start(rig.starting(), rig.request())
+    ports = rig.starting()
+    assert isinstance(ports.check_repeat, CheckRepeat)
+    ids = FixedIds()
+    repair = replace(ports.check_repeat, ids=ids)
+    first = start(replace(ports, check_repeat=repair), rig.request())
     assert isinstance(first, Failed)
     row = rig.store.attempts("tasks", "tl-1")[0]
     files = EvidenceFiles(rig.tmp)
@@ -127,10 +140,9 @@ def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: 
     files.check_log(source, 1, "test").write_text("different output after admission\n")
     specs = repair_agent(rig)
     # A losing caller with the old source adopts the admitted successor; the normal restart does too.
-    repair = rig.starting().check_repeat
-    assert repair is not None
     second = repair.repair(rig.request(), previous, source)
     assert isinstance(second, Started) and second.attempt_id == row.key.attempt_id and len(specs) == 1
+    assert ids.fresh == [row.key.attempt_id] and len(ids.tokens) == 2
     assert prompt is not None and specs[0].stdin.startswith(prompt) and all(line in specs[0].stdin for line in ASSERTION.splitlines())
     assert len(rig.store.attempts("tasks", "tl-1")) == 3  # plan, implement, repeat
 
@@ -204,7 +216,7 @@ def test_required_order_selects_one_failure_and_optional_failure_alone_does_not_
     assert isinstance(start(rig.starting(), rig.request()), Started)
     assert "Check: test\n" in specs[0].stdin and "Check: slow\n" not in specs[0].stdin
     # The same structured evidence with only an optional failure is ineligible.
-    results = tuple(replace(each, conclusion="failed" if each.name == "slow" else "passed",
+    results = tuple(replace(each, conclusion=CommandConclusion.FAILED if each.name == "slow" else CommandConclusion.PASSED,
                             rc=1 if each.name == "slow" else 0) for each in rig.checks.results(source))
     assert decision(1, row, results) is CheckRepeatDecision.INELIGIBLE
     assert previous != rig.store.attempts("tasks", "tl-1")[0].key
@@ -373,3 +385,18 @@ def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_
     if harness is HarnessKind.CLAUDE:
         assert json.loads(specs[0].argv[specs[0].argv.index("--settings") + 1]) == {"env": {"CAPTURED": "first"}}
     assert rig.store.attempts("tasks", "tl-1")[0].run == settings.implement
+
+
+@pytest.mark.parametrize("conclusion", list(CommandConclusion))
+def test_failed_check_evidence_retains_the_canonical_enum_and_rejects_other_conclusions(conclusion: CommandConclusion) -> None:
+    data = {
+        "source": AttemptKey("checks", "token", 1), "block": 1, "commit": "a" * 40,
+        "name": "test", "argv": ("just", "test"), "rc": 1, "result": conclusion,
+        "output": {"availability": "empty"},
+    }
+    if conclusion is CommandConclusion.FAILED:
+        found = FailedCheck.model_validate(data)
+        assert found.result is conclusion and found.model_dump(mode="json")["result"] == "failed"
+    else:
+        with pytest.raises(ValueError, match="A failed check needs a failed conclusion"):
+            FailedCheck.model_validate(data)
