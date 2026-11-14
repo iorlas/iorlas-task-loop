@@ -46,7 +46,8 @@ VIEW = AttemptView(
     ReleaseRow(D, 1762941600.0, "kept"), PublishedRow(X, X, 6.0),
     ChecksView(ROW, RESULTS, (*(LOGS / f"check-1-{name}.log" for name in ("check", "test", "slow")), None)),
 )
-SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", EVENTS, SetupShown(SetupRow(1, X, "f" * 64, 0, None, CommandConclusion.PASSED), LOGS / "setup-1.log"))
+SETUP = SetupShown(SetupRow(1, X, "f" * 64, 0, None, CommandConclusion.PASSED), LOGS / "setup-1.log")
+SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", EVENTS, SETUP)
 SHOW = ["step", "show", "tl-1", "--backlog", "tasks"]
 
 
