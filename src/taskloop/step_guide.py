@@ -233,6 +233,7 @@ GUIDE.update({word: f"Verification refused: {what}. Inspect the retained evidenc
 GUIDE.update({f"run:{word}": f"{what} The owner must resolve this before new work is approved."
               for word, (what, _fix) in RUN.items()})
 GUIDE.update({
+    "answer_repair": "The rejected answer's repair could not be admitted. The factory will retry when admission is available.",
     "run:timeout": "The agent exceeded its deadline. Inspect its retained work and evidence before deciding on another attempt.",
     "incomplete": "The agent reported incomplete work. Inspect its answer and evidence before deciding how to continue.",
     "needs_owner": NEEDS_OWNER,

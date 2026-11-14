@@ -39,6 +39,7 @@ from taskloop.attempt_types import (
     VerifyResult,
     VerifyUnavailable,
 )
+from taskloop.captured_start import AnswerRepairing, start_captured
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_repeat.feedback import FeedbackReason
 from taskloop.check_repeat.status import CheckRepeatDecision, CheckRepeatTarget, repeat_target
@@ -157,6 +158,7 @@ class StartPorts:
     advance: Advance
     checks: ChecksPorts
     check_repeat: CheckRepeating | None = None
+    answer_repair: AnswerRepairing | None = None
 
 
 @dataclass(frozen=True)
@@ -301,8 +303,7 @@ MAX_MINUTES = 7 * 24 * 60  # a week: an attempt's deadline (and a renewal after 
 def minutes_refused(minutes: int) -> Failed | None:
     """`--minutes` of `tl step start`, `next` and `rounds`: from 1 to MAX_MINUTES, checked before any
     store, tracker or launch call."""
-    ok = 1 <= minutes <= MAX_MINUTES
-    return None if ok else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
+    return None if 1 <= minutes <= MAX_MINUTES else Failed("refused", "choices", f"--minutes must be from 1 to {MAX_MINUTES}")
 
 
 @dataclass(frozen=True)
@@ -365,7 +366,7 @@ def _start(ports: StartPorts, request: StartRequest, advancing: str | None, reru
         return target
     key, existing = target
     if isinstance(found, tuple) and found[1] == "captured":  # the step ran: repeat it when its leftovers are repeatable
-        return ports.repeat.repeat(request.backlog, request.task_id, key, found[2], request.minutes)
+        return start_captured(ports, request, key, found[2])
     checks = isinstance(found, _Relaunch) or (isinstance(found, _Advance) and found.step == CHECK)
     outcome = (ports.checks.launcher if checks else ports.launcher).launch(request.backlog, request.task_id, request.minutes)
     result = launched(outcome, request.backlog, request.task_id, key, existing=existing)

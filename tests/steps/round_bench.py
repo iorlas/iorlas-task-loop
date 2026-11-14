@@ -23,12 +23,17 @@ from taskloop.admit import AdmitRefused, AdmitResult, AttemptAdmission
 from taskloop.admit_chain import NextAdmission
 from taskloop.agents.launch import AgentLaunch
 from taskloop.agents.settings import Overrides, StepSettings
+from taskloop.answer_repair import AnswerRepair
+from taskloop.answer_repair_route import AnswerRepairRouting
+from taskloop.answer_repair_store import AnswerRepairStore
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import Listed, StatusPorts, current_view, list_attempts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Seen, SlotFiles
 from taskloop.check_admit import ChecksRequest
 from taskloop.discussion import Discussion
+from taskloop.drain.models import Identity
+from taskloop.drain.models import Seen as ProcessSeen
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
@@ -37,6 +42,7 @@ from taskloop.launch import Launched, LaunchResult
 from taskloop.merge.prepare import SourcePreparation
 from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, start, verify_task
 from taskloop.publish import BranchPublish
+from taskloop.recovery.models import ProcessObservation
 from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import SlotRelease
@@ -206,7 +212,9 @@ class Factory:
                                  self.tracker.unclaim, clock, lambda _p: True, self.files, ids=NativeIds())
         advance = NextAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, clock, lambda _p: True,
                                 self.files, ids=NativeIds())
-        return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks(), NoChecks()))
+        repairs = AnswerRepair(AnswerRepairStore(lambda: self.con), files, StoppedProcesses(), hold, clock, ids=NativeIds())
+        return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks(), NoChecks()),
+                          answer_repair=AnswerRepairRouting(self.store, repairs, self))
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(self.store, self.checkouts, self.files, lambda _entry: "gone", lambda _worker: True, custody,
@@ -284,6 +292,14 @@ class Factory:
 
     def tip(self, task_id: str) -> str:
         return next(ref.sha for ref in self.slot.repo.refs(["refs/heads/task/"]) if ref.name == f"refs/heads/task/{task_id}")
+
+
+class StoppedProcesses:
+    def entry(self, identity: EntryIdentity) -> ProcessObservation:
+        return ProcessObservation(seen=ProcessSeen.GONE, explanation="The bench entry has ended.")
+
+    def process(self, identity: Identity) -> ProcessObservation:
+        return ProcessObservation(seen=ProcessSeen.GONE, explanation="The bench worker has ended.")
 
 
 class NoRequired:

@@ -67,6 +67,8 @@ REVIEWED_DYNAMIC = {
     ('admit.py', 'AdmitRefused', 'Reason.DRAINING'),
     ('admit.py', 'AdmitRefused', 'found'),
     ('admit_chain.py', 'AdmitRefused', 'Reason.DRAINING'),
+    ('answer_repair_route.py', 'Failed', 'RepairReason.ADMISSION'),
+    ('answer_repair_route.py', 'Failed', 'result.reason'),  # captured answer failures, listed in DYNAMIC_REASONS
     ('attempt_loads.py', 'Rejected', 'rule'),
     ('check_admit.py', 'AdmitRefused', 'Reason.DRAINING'),
     ('check_release.py', 'NotReleased', 'Reason.DRAINING'),
@@ -150,6 +152,7 @@ REVIEWED_DYNAMIC = {
 }
 
 DYNAMIC_REASONS = {
+    "answer_repair",
     "draining", "drained", "check_feedback", "check_profile", "interrupted", "released", "land_running",
     "branch", "unborn", "slot_branch", "slot_redirected", "slot_dirty", "head_moved", "repo", "not_listed",
     "dirty", "slot_head_moved", "ref_moved", "slot:branch", "slot:moved", "slot:redirected", "expired:check-name",

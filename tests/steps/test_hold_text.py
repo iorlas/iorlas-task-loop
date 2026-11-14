@@ -38,6 +38,13 @@ def test_the_comment_of_a_returned_claim() -> None:
     ]
 
 
+def test_terminal_answer_failure_quotes_the_latest_rule() -> None:
+    found = comment(replace(FACTS, reason="failed:answer:paths_invalid", explanation="plan_path: The plan must be listed."), RETURNED)
+    assert "> plan_path: The plan must be listed." in found
+    assert "the broken rule and its explanation are quoted above" in found
+    assert "diagnostics.txt" not in found
+
+
 @pytest.mark.parametrize(("labels", "outcome", "line"), [
     ("absent", Returned("unclaimed"), "The factory added `held` (`auto` is no longer on the task) and returned its claim."),
     ("moved", Returned("not_held"), "The factory removed `auto` and added `held`; the claim was no longer the factory's."),

@@ -14,6 +14,7 @@ from pathlib import Path
 from git_porcelain import GitUnavailable, NotARepo
 from sqlite_store import Store
 
+from taskloop.answer_repair_route import AnswerRepairRouting
 from taskloop.attempt_reads import SlotUse, StoreUnavailable
 from taskloop.attempt_status import StatusPorts, current_view
 from taskloop.attempt_store import AttemptStore
@@ -24,6 +25,7 @@ from taskloop.composition import (
     adopt_slots,
     open_admission,
     open_advance,
+    open_answer_repair,
     open_chain,
     open_checking,
     open_checks_admission,
@@ -150,7 +152,9 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
                          inspect_tracker_task, views.checkouts, RealSlotFiles(), probe,
                          partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time, ids=NativeIds(),
                          discussion=open_discussion(database, store).for_task)
-    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store), checks, repair)
+    answers = AnswerRepairRouting(reader, open_answer_repair(database, artifacts, store), launcher)
+    return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store),
+                      checks, repair, answers)
 
 
 @contextmanager
