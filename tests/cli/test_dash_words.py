@@ -76,5 +76,6 @@ def test_waiting_and_activity_labels_describe_observations_rather_than_readiness
     source = (PAGE / "ui.js").read_text()
     assert "Tasks with no current work, including queued and abandoned tasks." in source
     assert "Last activity ${fmtDur(s * 1000)} ago" in source
-    assert 'waiting: ["", " waiting"]' in (PAGE / "app.js").read_text()
+    assert "Waiting since not recorded" in source
+    assert "Waiting since${startedAt(node.dataset.waitingSince)}" in source
     assert '"Reload task"' in (PAGE / "taskview.js").read_text()
