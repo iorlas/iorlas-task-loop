@@ -14,7 +14,7 @@ from doubles import CHECKS, D, X
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
-from taskloop.attempt_reads import ReleaseRow
+from taskloop.attempt_reads import ReleaseRow, StoreRefused
 from taskloop.attempt_status import AttemptView
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult
@@ -54,6 +54,9 @@ class Tracker:
     commented: HoldWrite = "done"
     cleared: HoldWrite = "done"
     texts: list[str] = field(default_factory=list)
+    keys: list[str] = field(default_factory=list)
+    notices: dict[tuple[str, str, str], str] = field(default_factory=dict)
+    lost_response: bool = False
     during_comment: list[object] = field(default_factory=list)
 
     def labels(self, root: str, task: str, label: str | None) -> HoldAnswer[LabelStep]:
@@ -61,13 +64,19 @@ class Tracker:
         detail = "lock" if self.labelled == "unavailable" else self.assignee if self.labelled in ("moved", "absent") else ""
         return HoldAnswer(self.labelled, detail)
 
-    def comment(self, root: str, task: str, text: str) -> HoldAnswer[HoldWrite]:
+    def comment(self, root: str, task: str, key: str, text: str) -> HoldAnswer[HoldWrite]:
         self.calls.append(f"comment {task}")
         self.texts.append(text)
+        self.keys.append(key)
+        identity = (root, task, key)
+        if identity in self.notices:
+            return HoldAnswer("done")
+        if self.commented == "done" or self.lost_response:
+            self.notices[identity] = text
         for each in self.during_comment:
             assert callable(each)
             each()
-        return HoldAnswer(self.commented)
+        return HoldAnswer("unavailable" if self.lost_response else self.commented)
 
     def clear(self, root: str, task: str) -> HoldAnswer[HoldWrite]:
         self.calls.append(f"clear {task}")
@@ -293,10 +302,49 @@ def test_an_unclaim_still_to_retry_is_no_returned_claim(bench: Bench) -> None:
 def test_two_callers_comment_once(bench: Bench) -> None:
     """A second caller (`tl step next` beside `tl step rounds`) arriving while the first posts finds the lease taken."""
     seen: list[HoldMove] = []
-    bench.tracker.during_comment.append(lambda: seen.append(bench.hold()))
-    assert bench.hold().word == "held"
+    timeout = replace(VIEW, result=AttemptResult("collected", "run:timeout"), hold_due="failed:run:timeout")
+    bench.tracker.during_comment.append(lambda: seen.append(bench.hold(timeout)))
+    assert bench.hold(timeout).word == "held"
+    assert bench.hold(timeout).word == "held"
     assert (seen[0].word, seen[0].missing, seen[0].refusal) == ("pending", "comment", "refused:leased")
     assert bench.calls.count("comment tl-1") == 1
+    assert bench.tracker.keys == ["a"]
+    assert len(bench.tracker.notices) == 1
+    assert bench.tracker.texts[0].startswith("taskloop hold: failed:run:timeout\n")
+
+
+def test_a_lost_timeout_notice_response_survives_restart_and_a_later_timeout(bench: Bench) -> None:
+    timeout = replace(VIEW, result=AttemptResult("collected", "run:timeout"), hold_due="failed:run:timeout")
+    bench.tracker.lost_response = True
+    assert bench.hold(timeout).refusal == "unavailable:tracker"
+    assert bench.row().commented_at is None and len(bench.tracker.notices) == 1
+    restarted = Bench(bench.con, bench.root, now=11.0)
+    restarted.tracker.notices = bench.tracker.notices
+    assert restarted.hold(timeout).word == "held"
+    assert restarted.row().commented_at == 11.0
+    assert len(restarted.tracker.notices) == 1 and restarted.tracker.keys == ["a"]
+    with begin_immediate(bench.con):
+        attempt(bench.con, "b", seq=2)
+    assert restarted.hold(replace(timeout, attempt_id="b")).word == "held"
+    assert restarted.tracker.keys == ["a", "b"] and len(restarted.tracker.notices) == 2
+
+
+def test_a_timeout_notice_survives_failed_delivery_recording(bench: Bench, monkeypatch: pytest.MonkeyPatch) -> None:
+    timeout = replace(VIEW, result=AttemptResult("collected", "run:timeout"), hold_due="failed:run:timeout")
+
+    def failed_record(_store: HoldStore, _attempt_id: str, _rev: int, _now: float) -> HoldRow:
+        raise StoreRefused("changed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(HoldStore, "commented", failed_record)
+        assert bench.hold(timeout).refusal == "refused:changed"
+    assert bench.row().commented_at is None and len(bench.tracker.notices) == 1
+    assert bench.hold(timeout).refusal == "refused:leased"
+    restarted = Bench(bench.con, bench.root, now=bench.now + COMMENT_LEASE + 1)
+    restarted.tracker.notices = bench.tracker.notices
+    assert restarted.hold(timeout).word == "held"
+    assert restarted.row().commented_at == restarted.now
+    assert len(restarted.tracker.notices) == 1 and restarted.tracker.keys == ["a"]
 
 
 def test_a_lease_older_than_the_lease_time_is_taken_again(bench: Bench) -> None:
@@ -319,6 +367,7 @@ def test_a_failed_comment_gives_its_lease_back_and_a_deleted_task_needs_none(ben
     bench.now = 11.0
     assert (bench.hold().missing, bench.hold().refusal) == ("comment", "unavailable:tracker")
     assert bench.calls.count("comment tl-1") == 3
+    assert bench.tracker.keys == ["a", "a", "a"] and not bench.tracker.notices
     bench.tracker.commented = "missing"
     assert bench.hold().word == "held" and bench.row().commented_at is not None
 

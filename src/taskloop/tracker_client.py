@@ -243,15 +243,14 @@ class HoldAnswer[W: str]:
 
 
 type Labels = Callable[[str, str, str | None], HoldAnswer[LabelStep]]  # (tracker root, task id, the stored approval label)
-type Comment = Callable[[str, str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id, text)
+type Comment = Callable[[str, str, str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id, attempt id, text)
 type Clear = Callable[[str, str], HoldAnswer[HoldWrite]]  # (tracker root, task id)
 
 
 @dataclass(frozen=True)
 class TrackerHolds:
-    """A hold's tracker writes, each bound per tracker root and each bd call one try capped at BD_TIMEOUT_S (no lock
-    retry, so no call outlasts `hold_store.COMMENT_LEASE`): the label step, the one comment, and the removal of `held`
-    once the task is taken again."""
+    """A hold's tracker writes, bound per tracker root. Each bd call is capped at BD_TIMEOUT_S with no lock retry.
+    The keyed comment takes at most three calls (90 s), within `hold_store.COMMENT_LEASE` (120 s)."""
 
     labels: Labels
     comment: Comment
@@ -289,9 +288,9 @@ def _labelled(bd: Bd, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
 
 
 def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHolds:
-    """`TrackerHolds` over `Bd` as this actor at the resolved tracker root, each call one try capped at BD_TIMEOUT_S (a
-    hung bd is `unavailable`; no lock retry, as the heartbeat: a refused write is retried by the next round, and one
-    call stays within `hold_store.COMMENT_LEASE`); `client` is the seam a test checks the construction through."""
+    """`TrackerHolds` over `Bd` as this actor at the resolved tracker root. A failed write is retried next round;
+    comments always use the same attempt key, including after ambiguous delivery. The keyed read/write/read fits
+    within `hold_store.COMMENT_LEASE`; `client` is the seam a test checks the construction through."""
 
     def bd(tracker_root: str) -> Bd:
         return client(ACTOR, cwd=str(Path(tracker_root).expanduser().resolve()), run=run, timeout=BD_TIMEOUT_S, lock_retries=0)
@@ -299,15 +298,15 @@ def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHo
     def labels(tracker_root: str, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
         return _labelled(bd(tracker_root), task_id, label)
 
-    def written(call: Callable[[], None]) -> HoldAnswer[HoldWrite]:
+    def written(call: Callable[[], object]) -> HoldAnswer[HoldWrite]:
         try:
             call()
         except BdError as error:
             return _hold_failed(error, "unavailable")
         return HoldAnswer("done")
 
-    def comment(tracker_root: str, task_id: str, text: str) -> HoldAnswer[HoldWrite]:
-        return written(lambda: bd(tracker_root).comment(task_id, text))
+    def comment(tracker_root: str, task_id: str, attempt_id: str, text: str) -> HoldAnswer[HoldWrite]:
+        return written(lambda: bd(tracker_root).comment_once(task_id, attempt_id, text))
 
     def clear(tracker_root: str, task_id: str) -> HoldAnswer[HoldWrite]:
         return written(lambda: bd(tracker_root).remove_label(task_id, HELD))

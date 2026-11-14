@@ -30,7 +30,7 @@ type Labels = Literal["moved", "absent", "not_ours", "closed", "missing", "super
 type Labelled = Literal["moved", "absent", "not_ours", "closed", "missing"]  # the label step's own words (5.2)
 LABELS: Final[tuple[Labels, ...]] = ("moved", "absent", "not_ours", "closed", "missing", "superseded")
 COMMENTED: Final = "('moved','absent','not_ours')"  # the label words after which the hold writes its comment
-COMMENT_LEASE: Final = 120.0  # seconds: longer than one bd call of `TrackerHolds` (one try, `claim_lease.BD_TIMEOUT_S`, 30 s)
+COMMENT_LEASE: Final = 120.0  # seconds: longer than the keyed comment's three bd calls (30 s each, no lock retry)
 COLUMNS: Final = f"SELECT {prefixed('h', HOLD)},p.backlog,p.task_id,p.tracker_root,p.label"
 JOINED: Final = " FROM task_hold h JOIN attempt p ON p.attempt_id=h.attempt_id"
 LOADED: Final = COLUMNS + JOINED
