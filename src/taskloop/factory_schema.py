@@ -45,13 +45,17 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=22,
+    version=23,
     name="factory",
     steps={},
     ddl=f"""
 CREATE TABLE agent_stop (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))
 );
+CREATE TABLE recovery_intent (
+ attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE UNIQUE INDEX recovery_owner ON recovery_intent(json_extract(data,'$.token'));
 CREATE TABLE merge_operation (
  attempt_id TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data))
 );

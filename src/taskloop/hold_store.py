@@ -99,6 +99,11 @@ def _row(row: tuple[object, ...]) -> HoldRow:
     )
 
 
+def recovery_held(con: sqlite3.Connection, attempt_id: str) -> bool:
+    """Transaction-local hold fence for recovery; a hold is never cleared by recovery."""
+    return con.execute("SELECT 1 FROM task_hold WHERE attempt_id=?", (attempt_id,)).fetchone() is not None
+
+
 class HoldStore(StoreConnection):
     """The fenced writes and the reads of holds."""
 
