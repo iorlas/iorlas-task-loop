@@ -90,7 +90,7 @@ class AgentLaunch:
         if isinstance(policy, CodexPolicy):
             harness = CodexHarness()
             access = codex_access(policy, found)
-            if found is not None:
+            if found is not None and policy.sandbox is CodexSandbox.WORKSPACE_WRITE:  # full access asks for no sandbox to prove
                 command = ["/bin/sh", "-c", PROBE, "sh", *(str(p) for p in found.roots)]
                 probe = tuple(access.sandbox_argv(exe, command))
         elif isinstance(policy, ClaudePolicy):

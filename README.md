@@ -108,6 +108,11 @@ when required), and optional `access.sandbox_file`: a JSON object containing `re
 Policy paths must be absolute or home-expanded. Omitting the OpenCode file uses the released library defaults.
 Unknown keys, malformed documents and incomplete choices fail before admission.
 
+A Codex step's `access.sandbox` may be `danger-full-access` (set it on both `[agents.plan.access]` and
+`[agents.implement.access]`): the agent then runs with no sandbox and can read and write everything the factory's user can and
+reach the network, so use it only on a machine whose container is the boundary. No `codex sandbox` probe runs for it and
+the dashboard shows "full access: the container is the boundary". `workspace-write` stays the default.
+
 Rounds capture configuration and policy contents once at startup. An advance selects the next step's setting;
 repeats, failed-check repairs and relaunches keep their admitted settings even if policy files change or disappear.
 Attempt headers show the stored harness, provider, model, effort and access summary. Codex uses its local file login;

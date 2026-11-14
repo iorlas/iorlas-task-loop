@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
 
+from any_agent.access import CodexSandbox
 from any_agent.activity import Activity
 
 from taskloop.access import SANDBOX
@@ -113,7 +114,8 @@ def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
     return tuple((start, end) for kind, _a, _b, start, end in found if kind in ("insert", "replace"))
 
 
-SANDBOX_WORDS = {SANDBOX: "can write its own workspace only, no network"}
+SANDBOX_WORDS = {SANDBOX: "can write its own workspace only, no network",
+                 CodexSandbox.DANGER_FULL_ACCESS.value: "full access: the container is the boundary"}
 
 
 def _run(row: AttemptRow) -> Run | None:
