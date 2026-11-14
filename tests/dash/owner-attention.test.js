@@ -59,7 +59,7 @@ const node = (id) => document.querySelector(`article[data-id="${id}"]`);
 const ids = (parent) => [...parent.querySelectorAll("article")].map((n) => n.dataset.id).join(",");
 function summary(asks, held) {
   const text = document.getElementById("summary").textContent;
-  assert(text.includes(`${asks} need you`) && text.includes(`${held} held`), `Wrong summary: ${text}`);
+  assert(text.includes(`${asks} need you`) && text.includes(`${held} on hold`), `Wrong summary: ${text}`);
 }
 function placement() {
   assert(ids(node("ask-old").parentNode) === "ask-new,ask-old,hold-new,hold-old", "Asks first, then recency in each group");
@@ -106,9 +106,35 @@ async function drawers() {
   node("ask-old").click();
   await tick();
   const drawer = document.getElementById("drawer");
+  assert(drawer.textContent.includes("⛔ Hold"), "Drawer uses the shared Hold label");
   assert(drawer.textContent.includes("Needs you") && drawer.textContent.includes(question), "Drawer preserves agent question");
   assert(!drawer.textContent.includes("Factory problem:") && !drawer.querySelector("img"), "Drawer ask is safe and distinct");
   document.getElementById("backdrop").click();
+}
+
+async function boardWords() {
+  const headings = [...document.querySelectorAll("#board h2")].map((h) => h.textContent);
+  assert(headings.join("|") === "Waiting|Plan|Implement|Check|Land|Hold|Landed", "glossary column labels in both layouts");
+  for (const status of ["queued", "abandoned"]) {
+    const task = card(`waiting-${status}`, "00", { column: "waiting", status, slot: null,
+      status_note: `${status}: no current work`, hold_cause: null });
+    send({ kind: "task", task });
+    const article = node(task.id);
+    assert(article.textContent.includes(status === "queued" ? "Queued" : "Abandoned"), "waiting retains status explanation");
+    assert(article.querySelector("[data-since]").textContent.endsWith(" waiting"), "waiting duration does not claim ready");
+    assert(!article.querySelector("[data-quiet]"), "waiting adds no running-activity observation");
+    article.click(); await tick();
+    assert(document.getElementById("drawer").textContent.includes("Waiting"), "drawer shares Waiting label");
+    document.getElementById("backdrop").click();
+  }
+  const heading = document.querySelector("#board h2").parentNode;
+  assert(heading.title.includes("queued and abandoned") && !heading.title.includes("Approved"), "waiting membership help");
+  assert(node("running").textContent.includes("step 2 of 4 · attempt 1"), "board position uses attempt");
+  const activity = node("running").querySelector("[data-quiet]");
+  const previous = activity.textContent;
+  assert(previous.startsWith("Last activity ") && previous.endsWith(" ago"), "board activity age label");
+  advance(60000);
+  assert(activity.textContent !== previous && activity.textContent.endsWith(" ago"), "activity age still updates");
 }
 
 const healthText = () => document.getElementById("mode").textContent;
@@ -230,6 +256,7 @@ try {
       placement();
       questions();
       await drawers();
+      await boardWords();
       await resync(mixed);
       if (layout === "view-lanes") {
         assert(node("running").parentNode !== node("ask-old").parentNode, "Slot cells preserve step columns");
@@ -240,7 +267,7 @@ try {
     summary(2, 4);
     send({ kind: "task", task: { ...mixed[3], column: "implement" } });
     summary(1, 3);
-    assert(!node("ask-new").textContent.includes("Needs you"), "Leaving Held removes ask treatment");
+    assert(!node("ask-new").textContent.includes("Needs you"), "Leaving Hold removes ask treatment");
     send({ kind: "gone", id: "ask-old" });
     summary(0, 2);
     assert(!node("ask-old"), "Removed ask disappears");

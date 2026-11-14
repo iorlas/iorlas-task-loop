@@ -245,7 +245,7 @@ const nameOf = stepInfo;
 function began(a) {
   const list = open.detail.attempts;
   const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
-  const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`;
+  const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, attempt ${prev.n}` : ""}`;
   const what = a.after === "repeat" ? `a repeat of ${at}` : `a restart at plan (after ${at})`;
   const line = el("p", `w-full text-xs ${JUMP[a.after].text}`);
   line.append(el("span", "font-medium", `Began after ${what}`), el("span", "text-slate-500 dark:text-slate-400", ` · ${changeReason(a)}`));
@@ -260,7 +260,9 @@ function pane() {
   const tab = tabOf(a);
   const wrap = el("section", "flex min-w-0 flex-1 flex-col");
   const top = el("div", "flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-4");
-  top.append(el("h3", "text-sm font-semibold", a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}` : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, try ${a.n}`), tag(st.label, { dotCls: st.dot, cls: st.text }));
+  const title = a.step === VERIFY.id ? `${VERIFY.emoji} ${verifyTitle(open.detail.attempts, a)}`
+    : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, attempt ${a.n}`;
+  top.append(el("h3", "text-sm font-semibold", title), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
   if (a.step !== VERIFY.id) top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
   if (a.usage) top.append(usageNode(a.usage));
@@ -284,7 +286,7 @@ function pane() {
   return wrap;
 }
 
-// A card moved. The drawer reloads the task's steps only when they can have changed (a step or try began or ended, a hold, a land);
+// A card moved. The drawer reloads the task's steps only when they can have changed (an attempt began or ended, a hold, a land);
 // a card that only shows newer activity changes nothing here, and never moves the tab, the selection or the scroll place.
 export async function onTaskMoved(task) {
   if (open?.id !== task.id || !open.detail || signature(task) === open.sig) return;

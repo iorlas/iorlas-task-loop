@@ -60,7 +60,9 @@ function check(c, blocks, shown) {
   node.open = shown.opened.get(key) ?? !c.passed; // what the owner opened or closed stays, across the drawer's rebuilds
   node.addEventListener("toggle", () => shown.opened.set(key, node.open));
   const top = el("summary", "flex cursor-pointer items-baseline gap-3 text-xs");
-  top.append(el("span", "font-mono text-[12px]", c.name), el("span", `font-medium ${c.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`, c.passed ? "passed" : "failed"));
+  const color = c.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
+  top.append(el("span", "font-mono text-[12px]", c.name),
+    el("span", `font-medium ${color}`, c.passed ? STATE.succeeded.label : STATE.failed.label));
   if (blocks > 1) top.append(el("span", "text-slate-500", `block ${c.block}`));
   top.append(el("span", "ml-auto tabular-nums text-slate-500", fmtDur(c.duration_ms)));
   node.append(top, c.output == null ? el("p", "mt-2 text-xs text-slate-500", "Output unavailable: the log file is gone or cannot be read.") : pre(plain(c.output) || "(no output)", `mt-2 ${c.passed ? "" : "border-l-2 border-l-rose-500"}`));
@@ -68,8 +70,8 @@ function check(c, blocks, shown) {
 }
 
 const MARK = {
-  passed: ["passed", "text-emerald-600 dark:text-emerald-400"],
-  failed: ["failed", "text-rose-600 dark:text-rose-400"],
+  passed: [STATE.succeeded.label, "text-emerald-600 dark:text-emerald-400"],
+  failed: [STATE.failed.label, "text-rose-600 dark:text-rose-400"],
   not_run: ["not reached", "text-slate-400 dark:text-slate-500"],
 };
 
@@ -78,7 +80,8 @@ const MARK = {
 function verification(v) {
   const box = el("div", "flex flex-col gap-5");
   const what = el("div");
-  what.append(label(`Checked after ${stepInfo(v.of_step).label}, try ${v.of} · the agent listed ${v.listed.length} ${v.listed.length === 1 ? "path" : "paths"}`));
+  what.append(label(`Checked after ${stepInfo(v.of_step).label}, attempt ${v.of}`
+    + ` · the agent listed ${v.listed.length} ${v.listed.length === 1 ? "path" : "paths"}`));
   const list = el("ol", "list-decimal pl-5 text-sm");
   for (const c of v.checks) {
     const li = el("li", "py-0.5");

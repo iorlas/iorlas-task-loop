@@ -47,8 +47,8 @@ export const WORDS = {
 const FAMILIES = [
   ["failed:rejected:", "Not committed: the commit broke a rule: "],
   ["rejected:", "Not committed: the commit broke a rule: "],
-  ["failed:run:", "The agent run failed: "],
-  ["run:", "The agent run failed: "],
+  ["failed:run:", "The agent attempt failed: "],
+  ["run:", "The agent attempt failed: "],
   ["failed:test:", "Checks failed: "],
   ["test:", "Checks failed: "],
 ];
