@@ -10,7 +10,7 @@ from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome
 from check_repeat_bench import ASSERTION, Repairing
 from doubles import MAIN_PROFILE, FixedIds, PinnedViews
 from git_porcelain import Recorded
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRemote, FakeWorktree
 from round_bench import Tracker, scripted, scripts, task
 from sqlite_store import Store
 from test_checks_round import implemented
@@ -48,6 +48,7 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
     root.write_file("docs/glossary.md", GLOSSARY.decode())
     assert isinstance(root.record("profile", paths="all"), Recorded)
+    root.push("main")
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)
     assert con is not None
@@ -281,6 +282,24 @@ def test_no_clean_slot_is_transient_and_does_not_hold_the_task(rig: Repairing) -
     assert rig.next_words() == {"tl-1": ("check", "repeat")}
     rig.slot.remove_file("owner-scratch.txt")
     assert rig.round() == [("tl-1", "implement", "repeat", "started")]
+
+
+def test_failed_check_repair_refreshes_origin_and_records_its_park_destination(rig: Repairing) -> None:
+    failed(rig)
+    repair_agent(rig)
+    repo = rig.slot.repo
+    original = dict(repo.branches())["main"]
+    origin = FakeRemote("https://example.invalid/current.git")
+    repo.add_remote("origin", origin)
+    repo.worktree(repo.path).push("main")
+    target = origin.advance("main", {"other": "New landing\n"})
+    result = start(rig.starting(), rig.request())
+    assert isinstance(result, Started)
+    row = rig.store.attempts("tasks", "tl-1")[0]
+    assert rig.store.slot_base(row.key) == target and dict(repo.branches())["main"] == original
+    assert rig.round() == [("tl-1", "implement", "verify", "verified release=released branch=published")]
+    assert rig.slot.branch() is None
+    assert next(info.head for info in repo.worktrees() if info.path == rig.slot.path) == target
 
 
 @pytest.mark.parametrize("after", [False, True])

@@ -209,9 +209,11 @@ def test_the_git_write_matcher_sees_uses_and_not_words(source: str, names: set[s
 def test_only_the_commit_prepare_release_publish_environment_and_land_modules_write_git() -> None:
     """`clean` is the environment reset's (the slot's ignored files and nested repositories, before each setup); `reset`
     too (a checks slot's tracked files back to exactly X, tl-8bh9.14.6 section 8). The checks block writes no Git. The
-    land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s."""
+    land's squash (objects only) is `land_target`'s, its fetch of origin's `main` and its push of S `land_push`'s.
+    Admission's bounded fetch of origin main is `prepare`'s."""
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
+        ("fetch", "prepare.py"),
         ("park", "slot_release.py"), ("park", "wip.py"), ("reset", "wip.py"),
         ("stage", "wip.py"), ("commit_tree", "wip.py"), ("update_ref", "wip.py"), ("abort_merge", "slot_release.py"),
         ("park", "merge/start.py"), ("start_merge", "merge/start.py"), ("finish_merge", "merge/start.py"),

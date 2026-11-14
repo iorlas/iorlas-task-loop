@@ -80,6 +80,9 @@ class Repository:
         (self.main / ".task-loop.json").write_text("{}")
         git(self.main, "add", "README", ".task-loop.json")
         git(self.main, "commit", "-q", "-m", "base")
+        origin = root / "origin"
+        git(root, "clone", "-q", "--bare", str(self.main), str(origin))
+        git(self.main, "remote", "add", "origin", str(origin))
         slots = root / "slots"
         self.repo_id = RepoId(VIEWS.checkouts(self.main).identity().key)
         self.slot = slots / folder_name(VIEWS.checkouts(self.main).identity()) / "s1"

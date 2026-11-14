@@ -14,7 +14,7 @@ import pytest
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
-from doubles import FakeSlotFiles, PinnedViews, linked_into, main_at
+from doubles import FakeSlotFiles, PinnedViews, linked_into, origin_main_at
 from git_porcelain import Dirty, Recorded, Repo, Tree
 from git_porcelain.api import RecordResult
 from git_porcelain.testing import FakeRepo, FakeWorktree
@@ -222,8 +222,11 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
     ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
     ("unreadable_listed_file", None, PLANNED, PLAN, unreadable(P), None, "unsettled:unsafe", 0),  # named, not unavailable:git forever
-    ("committed_private_key", None, {P: "# Plan\n-----BEGIN OPENSSH PRIVATE KEY-----\nx\n"}, PLAN, None, None, "unsettled:unsafe", 0),
-    ("committed_codex_login", None, {P: '{"access_token": "a", "refresh_token": "r"}'}, PLAN, None, None, "unsettled:unsafe", 0),
+    # Assemble synthetic signatures at runtime so this test source itself remains safe to commit.
+    ("committed_private_key", None, {P: "# Plan\n-----BEGIN OPENSSH PRIVATE " + "KEY-----\nx\n"},
+     PLAN, None, None, "unsettled:unsafe", 0),
+    ("committed_codex_login", None, {P: json.dumps({"access_" + "token": "a", "refresh_" + "token": "r"})},
+     PLAN, None, None, "unsettled:unsafe", 0),
     ("symlinked_root", None, PLANNED, PLAN, entry(D.rstrip("/"), FileStat("link", 9, False)), None, "unsettled:unsafe", 0),
     ("ignored", {".gitignore": "*.log\n"}, PLANNED | {D + "x.log": "x"}, PLAN, None, None, "unsettled:ignored", 0),
     ("listed_path_ignored", {".gitignore": "*.md\n"}, PLANNED, PLAN, None, None, "unsettled:ignored", 0),
@@ -265,8 +268,8 @@ def test_the_stage_commit_and_verdict_table(
     commits: int,
 ) -> None:
     if before is not None:
-        commit(slot, before)  # before dispatch, then on `main`: B is this commit
-        main_at(slot)
+        commit(slot, before)  # before dispatch, then on origin main: B is this commit
+        origin_main_at(slot)
     base = head(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, written, answer)
     if after is not None:
@@ -320,7 +323,7 @@ def test_unchanged_records_b_only_after_the_tree_is_clean(
     registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
 ) -> None:
     base = commit(slot, PLANNED)
-    main_at(slot)
+    origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {NOTE: "n"}, UNCHANGED)
     check = verifier(registered, checkouts, slot_files)
     assert shown(check.verify(KEY)) == "unsettled:uncommitted" and end_commit(registered) is None
@@ -336,7 +339,7 @@ def test_unchanged_over_saved_work_ends_at_its_own_commit_of_the_same_tree(
     """B is a hold's saved commit (its typed trailer): preservation is never a result, so `unchanged` ends at a new commit
     of the same tree on B, with this attempt's trailer and no other change, and the chain verifies it as one link."""
     base = commit(slot, PLANNED, f"Save unfinished work\n\nTask-Loop-Attempt: old\n{WIP}: old")
-    main_at(slot)
+    origin_main_at(slot)
     captured(registered, tmp_path, slot, checkouts, slot_files, {}, UNCHANGED)
     result = verifier(registered, checkouts, slot_files).verify(KEY)
     assert isinstance(result, Verified) and not result.reused
