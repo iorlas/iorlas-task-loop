@@ -83,11 +83,15 @@ def step_rules(_task_id: str) -> StepRules:
 
 def decode(value: object, rules: StepRules) -> Answer:
     """Validate the implement answer contract, without verifying Git effects; the single owner of its cross-field rules
-    and every bound: `implemented` lists at least one path and a message, every other disposition lists none."""
+    and every bound: `implemented` lists at least one path and a message, `unchanged` lists none, and unfinished
+    answers ignore structurally valid paths without requesting a commit."""
     if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
         raise ValueError("Invalid implement answer")
     disposition, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
-    listed = listed_paths(paths, rules)
+    if disposition in ("incomplete", "needs_owner"):
+        listed = () if isinstance(paths, list) and all(isinstance(path, str) for path in paths) else None
+    else:
+        listed = listed_paths(paths, rules)
     if disposition == "implemented":
         fits = bool(listed) and commit_message(message)
     else:
@@ -114,11 +118,14 @@ def _closing_words(task_id: str, rules: StepRules) -> str:
         f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. The plan's own folder may change too (for example "
         f"an \"As built\" section). {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
         "`implemented`, list in `paths` every file you changed, "
-        "added or deleted and give a one-line commit `message`; the factory commits exactly those paths. Remove any other "
-        "file you created. Anything left uncommitted is reported back to you as a failed step. In `explanation`, name each "
+        "added or deleted and give a one-line commit `message`; the factory commits exactly those paths. With "
+        "`implemented`, remove any other file you created; anything left uncommitted is reported back to you as a failed "
+        "step. In `explanation`, name each "
         "command you ran and how it ended, and every test file you added. If you could not finish, answer "
         "`incomplete`; if the plan cannot be implemented as written or needs a decision, answer `needs_owner`; say why in "
-        "`explanation`. " + step_text.SAVED_WORK
+        "`explanation`. Only with `implemented` should `paths` list files; otherwise return `paths: []` and `message: null`, "
+        "and the factory saves unfinished slot work as a work-in-progress commit on the task branch when holding the "
+        "task. " + step_text.SAVED_WORK
     )
 
 

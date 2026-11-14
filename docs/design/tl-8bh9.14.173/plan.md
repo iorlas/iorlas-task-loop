@@ -92,3 +92,17 @@ Run the changed behavior tests first after `just install`, using
 focused gates `just check` and `just test` as defined in the justfile; do not run the whole suite or live
 tests. Keep source/function/test caps and existing import boundaries. This planning step changes only this
 document; runtime checks belong to implementation.
+
+## As built
+
+Both decoders now accept string lists on unfinished answers and discard their entries before commit-path validation.
+The structural schemas are unchanged. Both fixed inputs carry the paths/null-message/save sentence and scope cleanup
+to successful commit answers; repeat and failed-check feedback retain that input.
+
+Regression coverage in the four test files above exercises decoding, stored collection and raw evidence, generated
+instructions, and holding/resuming both unfinished dispositions for both steps. The existing hold implementation
+saves listed and unlisted edits together, records the full saved commit and trailer, releases the slot, and resumes
+from that task branch after an owner answer. No runtime hold changes were needed. No new test files were added.
+
+The required gates also exposed an existing dashboard test reading `Run.summary` instead of `Run.access`; its assertion
+was corrected without changing dashboard behavior.
