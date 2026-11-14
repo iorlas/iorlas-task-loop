@@ -29,8 +29,43 @@ DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
 EFFECT_OF: Final[dict[str, Effect]] = {"planned": "commit", "unchanged": "keep", "incomplete": "none", "needs_owner": "none"}
 PLAN_NAME: Final = "plan.md"
 FINAL_ANSWER_WARNING: Final = (
-    "Your final message must be the JSON answer only; write plan.md before you answer; "
+    "Your final message must be the JSON answer only; write plan.md before you answer `planned`; "
     "a message without a tool call ends the step."
+)
+DEPTH_ASSESSMENT: Final = (
+    "First assess depth from the supplied task text alone, before any exploration or reading. State the depth in your "
+    "first commentary message so the dashboard conversation shows it for owner correction. The only optional cheap "
+    "check is at most one search for identifiers named in the task, returning only a count of files and opening nothing. "
+    "Do not read source, an existing plan, glossary, tracker or history before this assessment.\n\n"
+    "Apply these depth rules in order, using only facts in the task text:\n"
+    "- Large: more than 3 independent behaviours, or a schema version change, or an explicitly unlanded task dependency, "
+    "or more than 60 named files.\n"
+    "- Otherwise medium: 2 to 3 behaviours, or changes in 2 to 3 owning modules.\n"
+    "- Otherwise small: one behaviour in one owning module.\n"
+    "Three behaviours meet the medium rule; four meet the large rule. 60 named files do not trigger large; 61 do. "
+    "A large trigger takes precedence over medium or small. Give a one-sentence reason, state whether an owner decision "
+    "is missing or a dependency is unlanded, and state the evidence-gathering budget in model calls: small 6, medium 12, "
+    "large 20. These are total evidence ceilings, not additional calls per search or file, and are distinct from the "
+    "Size estimate for an implement attempt. Finish within the budget using bounded evidence; a budget alone is not "
+    "an owner-refusal cause.\n\n"
+    "Before exploring, answer `needs_owner` for exactly these three early causes:\n"
+    "- Large work with independent parts: propose a split in words, each part with a name, independently testable "
+    "acceptance criterion and dependencies (explicitly none where appropriate).\n"
+    "- A missing owner decision: identify the decision and what the owner must resolve.\n"
+    "- An explicitly unlanded dependency named in the task: identify the dependency and what must land first.\n"
+    "For each early refusal, put `# Depth`, the assessment and concrete reason in `explanation`, within 2000 characters; "
+    "write no new plan and offer no commit: use `paths: []`, `message: null`, and the expected or null `plan_path`. "
+    "Preserve existing saved work. The owner or orchestrator creates split tasks; do not create them or ask the owner "
+    "to run a CLI command. Do not infer a missing decision from terse wording or treat a reference to another task as "
+    "proof it is unlanded. A single cohesive schema change may be large and still receive a bounded plan when none "
+    "of these causes applies. Later refusal for actual contradictions or infeasibility and the separate Size limits "
+    "still apply; they are not additional early causes.\n\n"
+    "If the assessment permits planning, only then read the existing plan and gather bounded evidence. Planning is "
+    "never skipped: a small task gets a short plan. The first lines of plan.md must be `# Depth` and this assessment "
+    "(depth, reason, decision/dependency status and evidence budget), followed by `## Size`. Reusing an existing plan "
+    "requires both current assessments; an existing plan without Depth needs revision, not `unchanged`. Use the "
+    "included glossary excerpt at every depth; collect missing terms into at most one targeted glossary read, after "
+    "the assessment permits planning. Depth is plain English: add no glossary term or new stage."
 )
 ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size")  # the plan.md rule's words
 ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
@@ -87,16 +122,17 @@ def decode(value: object, rules: StepRules) -> Answer:
 
 
 def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
-    """The plan step's admitted input: the final-answer warning, task prose, then fixed closing words (where the plan goes,
-    `unchanged` or `planned`, no Git write: the factory commits the listed paths)."""
-    return (f"{FINAL_ANSWER_WARNING}\n\n{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
+    """Put the depth assessment before task prose, orientation and plan reads; the factory commits listed paths."""
+    return (f"{FINAL_ANSWER_WARNING}\n\n{DEPTH_ASSESSMENT}\n\n"
+            f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
             f"{_closing_words(rules)}\n")
 
 
 def _closing_words(rules: StepRules) -> str:
     root = rules.root
     return (
-        f"First read `{root}{PLAN_NAME}` if it exists. Before answering `planned` or `unchanged`, require a `## Size` "
+        f"After the depth assessment permits planning, read `{root}{PLAN_NAME}` if it exists. "
+        "Before answering `planned` or `unchanged`, require a `## Size` "
         "section with estimated changed files (including tests and artifacts), independent behaviours, and model calls "
         "for one implement attempt. Each independent behaviour must have an independently testable acceptance criterion; "
         "file count alone is insufficient. An existing plan without this assessment needs revision, not `unchanged`. "
@@ -142,13 +178,14 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
 
 
 def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
-    """The next attempt's complete input: the warning, then the shared frame (`step_text.feedback`) with fixed words for the
-    reason, the listing, its fixed instructions, then the task. `unrecorded`: attempt `number` answered `planned` and
+    """The next input: warning and assessment before the shared feedback frame, listing, repair instructions and task.
+    `unrecorded`: attempt `number` answered `planned` and
     nothing of it was committed, so its files must be listed again. `found.reason` is one of REPEATABLE."""
     opening = next(text for reason, text in OPENING.items() if reason == found.reason)
     instructions = repeat_instructions(rules, number, unrecorded=unrecorded)
     opening = step_text.unsafe_details(found) or opening.format(number=number)
-    return FINAL_ANSWER_WARNING + "\n\n" + step_text.feedback(opening, found.listing, instructions, task, nonce)
+    return (FINAL_ANSWER_WARNING + "\n\n" + DEPTH_ASSESSMENT + "\n\n"
+            + step_text.feedback(opening, found.listing, instructions, task, nonce))
 
 
 def artifact(tip: Tree, rules: StepRules) -> Rejected | str:

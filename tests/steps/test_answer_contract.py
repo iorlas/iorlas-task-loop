@@ -76,6 +76,28 @@ PLANNED = {"disposition": "planned", "plan_path": EXPECTED, "paths": [EXPECTED],
 UNCHANGED = {"disposition": "unchanged", "plan_path": EXPECTED, "paths": [], "message": None, "explanation": "still valid"}
 
 
+@pytest.mark.parametrize("plan_path", [None, EXPECTED])
+@pytest.mark.parametrize("explanation", [
+    "# Depth\nLarge: four independent behaviours. No owner decision or unlanded dependency; evidence budget 20 model calls. "
+    "Split into storage (rows persist; no dependencies), reads (rows display; depends on storage), "
+    "ordering (requests queue; no dependencies) and cleanup (expired rows clear; depends on storage).",
+    "# Depth\nSmall: one behaviour in one owning module; evidence budget 6 model calls. "
+    "The owner must decide whether a refused request waits or ends before this can be planned. No unlanded dependency.",
+    "# Depth\nLarge: the task explicitly depends on unlanded tl-2; evidence budget 20 model calls. "
+    "No missing owner decision. The merge design in tl-2 must land before this task can use its operation.",
+])
+def test_plan_early_owner_causes_accept_words_without_a_plan_or_commit(
+    tmp_path: Path, plan_path: str | None, explanation: str,
+) -> None:
+    answer = kind("plan").decode({
+        "disposition": "needs_owner", "plan_path": plan_path, "paths": [], "message": None, "explanation": explanation,
+    }, RULES)
+    assert (answer.disposition, answer.effect, answer.paths, answer.message, answer.explanation) == (
+        "needs_owner", "none", (), None, explanation,
+    )
+    assert not (tmp_path / EXPECTED).exists()
+
+
 def test_the_schema_has_the_five_keys_and_the_unchanged_disposition(tmp_path: Path) -> None:
     root = schema(tmp_path)
     properties = root["properties"]
