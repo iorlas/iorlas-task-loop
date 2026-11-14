@@ -11,7 +11,10 @@ const chosen = (a, selected) => a && selected.step === a.step && selected.n === 
 const marker = (cls) => el("span", `absolute -left-[3px] top-[0.8rem] h-1.5 w-1.5 rounded-full border ${cls}`);
 
 export function lasted(a) {
-  if (a.state === "running" && a.duration && !a.duration.frozen) return fmtDur(elapsedDuration(a.duration.execution));
+  if (["plan", "implement"].includes(a.step)) {
+    const ms = a.duration ? elapsedDuration(a.duration.execution) : null;
+    return ms === null ? "Unknown duration" : fmtDur(ms);
+  }
   if (a.step === VERIFY.id || !a.started_at) return "—";
   const end = a.ended_at ? Date.parse(a.ended_at) : a.state === "running" ? Date.now() : NaN;
   const ms = end - Date.parse(a.started_at);
@@ -132,7 +135,7 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
       + (a.reason ? ` (${a.reason})` : "") + (gap === null ? "" : ` · ${gapWords(gap)}`);
     top.append(tag);
   }
-  top.append(a.state === "running" && a.duration && !a.duration.frozen
+  top.append(["plan", "implement"].includes(a.step)
     ? elapsedSpan(a.duration, `ml-auto text-[11px] tabular-nums ${muted}`)
     : el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
   btn.append(top);

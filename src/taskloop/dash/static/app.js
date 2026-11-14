@@ -6,7 +6,7 @@ import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
 import { receiveDuration } from "./duration.js";
 import {
-  $, COLUMNS, LAND, STEPS, callout, el, holdCallout, isWaiting, position, quietSpan, runningAgent, tag, tick, waitingNote,
+  $, COLUMNS, LAND, STEPS, callout, el, elapsedSpan, holdCallout, isWaiting, position, quietSpan, runningAgent, tag, tick, waitingNote,
 } from "./ui.js";
 
 const tasks = new Map(); // id -> board card
@@ -170,16 +170,17 @@ function fillCard(node, t) {
   if (notes.children.length) node.append(notes);
   const foot = el("div", "mt-2.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400");
   const time = el("span", "whitespace-nowrap tabular-nums");
-  if (!isWaiting(t) && (t.step_started_at || (runningAgent(t) && t.duration && !t.duration.frozen))) {
+  if (!isWaiting(t) && ["plan", "implement"].includes(t.column)) {
+    foot.append(elapsedSpan(t.duration, time.className, ...TIME[t.column]));
+  } else if (!isWaiting(t) && t.step_started_at) {
     [time.dataset.prefix, time.dataset.suffix] = TIME[t.column];
-    if (runningAgent(t) && t.duration && !t.duration.frozen) time.dataset.duration = t.duration.execution;
-    else time.dataset.since = t.step_started_at;
+    time.dataset.since = t.step_started_at;
     foot.append(time);
     tick(time);
   }
   if (t.slot && !lanes) foot.append(el("span", "ml-auto font-mono", t.slot));
   node.append(foot);
-  if (runningAgent(t) && t.duration && !t.duration.frozen) {
+  if (runningAgent(t) && !t.duration?.frozen) {
     const quiet = quietSpan(t.duration);
     node.append(quiet);
     tick(quiet);
