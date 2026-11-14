@@ -12,6 +12,18 @@ Review remains future work; the retained designs describe more than the implemen
 
 Start with [First landed task](#first-landed-task-linux) for an ordered setup and delivery walkthrough.
 
+- `uv run --frozen --no-sync python -I -m taskloop.shelf_digest --checkout PATH --at REV --shelf PATH` generates
+  a digest of the six shelf dependencies pinned by committed `pyproject.toml` and `uv.lock`. After `just install`,
+  use the installed module with Python 3.15+. `--checkout` defaults to `.` and `--at` to `HEAD`; `--shelf` is required.
+  All required commits must exist locally. Reads use Git objects, without fetching or consulting checkout edits.
+  The digest includes reconciled identities, public signatures, complete package README/Markdown/reStructuredText
+  and documentation text files (`.txt`, `.text` and extensionless files under `docs`), module docstrings and public
+  declaration/member docstrings, including overloads and aliases. Text retains qualifications, examples and warnings;
+  records identify package, immutable commit, path and inclusive source lines, with public and defining symbols for
+  API documentation. Output is canonical UTF-8 JSON: sorted records and keys, two-space indentation, LF and one final
+  newline, with no timestamps or host paths. Success writes one complete digest to stdout. Invalid inputs, missing
+  objects, unreadable documentation and extraction or serialization failures explain themselves on stderr and exit
+  nonzero with empty stdout. No tracker configuration is needed.
 - `tl repo inspect PATH [--json]` reports the local repository identity, common directory, selected checkout and origin.
 - `tl task show TASK_ID --backlog BACKLOG --tracker-root PATH [--json]` reads the explicitly configured Beads tracker,
   preserving requirements, acceptance and dependency relationships. The backlog key is supplied configuration; it is
