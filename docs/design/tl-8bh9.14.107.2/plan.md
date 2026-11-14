@@ -1,57 +1,55 @@
 # Header
-Task: tl-8bh9.14.107.2; base: a45a755bdfc8d1d64fe1905cab974080327b269e
-Depth: small; one captured-completion behaviour
-Decisions missing: none. Dependencies unlanded: none.
+Task: tl-8bh9.14.107.2; base: 13d49fb449a82309374e07847d26533fc1144883
+Depth: small; one recovery behaviour.
+Owner decision: none; unlanded dependency: none.
 Evidence budget: 6 model calls.
-Size: 6 changed files; 1 independent behaviour; 45 implement model calls.
+Size: 2 changed files; 1 independent behaviour; 20 implement model calls.
 
 ## Outcome and non-goals
-Finish captured answer/session work before ordinary verification. Preserve the attempt and reservation. Exclude uncaptured execution, lost-entry release, claim recovery, orphan evidence and remote branches.
+Cover `open_completion` after database reopen. Existing tests cover answer/session completion, round retries and ownership fences with manually constructed completion. Retain runtime behaviour; exclude uncaptured execution and other reconciliation tasks.
 
 ## Settled decisions
-Reuse captured `Attempts.execute`, evidence readers and callback fences.
-Respect holds and uncertain liveness.
-No schema change or new shelf capability.
+Retain `CapturedCompletion`, status routing and completion before round verification.
+Retain `Attempts.execute` as the captured-answer/session completion operation.
+Use semantic process and harness fakes through existing ports; no shelf change is needed.
 
 ## Open decisions
 - None.
 
 ## Change map
-- `src/taskloop/attempt_status.py`: `next_action`, `_stopped` route stopped captured pending work to `verify`; preserve live/unknown precedence.
-- `src/taskloop/recovery/complete_attempt.py` (new): captured-only completion using `Attempts.execute`, saved admission and custody.
-- `src/taskloop/round.py`: `RoundPorts`, `_settle`, `_verified` complete before verification; retain retryable failures.
-- `src/taskloop/composition.py`: wire captured completion into round ports.
-- `tests/steps/test_restart.py`: reopen database and exercise round completion/retries.
-- `tests/steps/test_continuation.py`: captured completion and preservation cases without execution.
-- `src/taskloop/attempt.py`: consult `execute`, `_resume`, `_refresh`, `_answered` and capture producer.
-- `src/taskloop/recovery/continue_attempt.py`: consult `_continue`, `_existing`, `_complete` consumers.
-- `src/taskloop/drain/actions.py`: consult continuation consumer.
-- `tests/steps/test_continuation_composition.py`: consult composition consumer.
+- `tests/steps/test_continuation_composition.py`: add a regression through `open_completion` after reopen, covering pending answer/session and repeated completion.
+- `docs/design/tl-8bh9.14.107.2/plan.md`: bound remaining work and validation.
+- `src/taskloop/composition.py`: consult `open_completion` and dependency producer `open_attempts`.
+- `src/taskloop/cli_composition.py`: consult `open_round`, the constructor caller supplying `RoundPorts.completion`.
+- `src/taskloop/round.py`: consult `RoundPorts.completion` and callback consumer `_verified`.
+- `src/taskloop/recovery/complete_attempt.py`: consult `CapturedCompletion.__call__` and `_complete` fences.
+- `src/taskloop/attempt.py`: consult `execute`, `_resume`, `_refresh`, the saved-evidence consumers.
+- `src/taskloop/attempt_status.py`: consult `next_action` and `_stopped` routing.
+- `tests/steps/test_restart.py`: consult reopened-round coverage and its manually constructed callback.
+- `tests/steps/test_continuation.py`: reuse producer `captured_work`; consult preservation coverage.
 
 ## Read list
-- `src/taskloop/attempt_status.py:135-155` — restart routing.
-- `src/taskloop/attempt.py:84-144` — completion/session refresh.
-- `src/taskloop/attempt.py:267-326` — capture/validation.
-- `src/taskloop/attempt_result.py:1-60` — pending projection.
-- `src/taskloop/round.py:105-160` — ports.
-- `src/taskloop/round.py:225-297` — settlement.
-- `src/taskloop/round.py:337-360` — verification/release.
-- `src/taskloop/composition.py:100-150` — recovery wiring.
-- `src/taskloop/recovery/continue_attempt.py:24-100` — custody/completion.
-- `src/taskloop/recovery/store.py:88-105` — eligibility.
-- `src/taskloop/drain/actions.py:1-80` — continuation consumer.
-- `tests/steps/test_continuation_composition.py:1-80` — composition consumer.
-- `tests/steps/test_continuation.py:1-105` — continuation setup.
-- `tests/steps/test_restart.py:23-72` — reopen/round setup.
+- `tests/steps/test_continuation_composition.py:1-60` — production-composition conventions; edit here.
+- `src/taskloop/composition.py:106-120` — constructor and dependency producer.
+- `src/taskloop/cli_composition.py:172-190` — production round wiring caller.
+- `src/taskloop/round.py:123-130` — completion port.
+- `src/taskloop/round.py:337-349` — callback consumer before verification.
+- `src/taskloop/recovery/complete_attempt.py:13-49` — custody and captured-only completion.
+- `src/taskloop/attempt.py:90-102` — saved execution precedes dispatch.
+- `src/taskloop/attempt.py:117-145` — answer/session reconciliation.
+- `src/taskloop/attempt_status.py:135-157` — restart routing.
+- `tests/steps/test_restart.py:36-83` — reopen, retries and identity assertions.
+- `tests/steps/test_continuation.py:37-75` — captured fixture and completion assertions.
+- `tests/steps/test_continuation.py:78-149` — existing fence and retry coverage.
 
 ## Contract
-Intent: under slot custody, reload current ownership and captured facts; refuse absent capture.
-Effect: call trusted completion with saved admission/entry and callback fence; read saved answer and reconcile session. Never authorize a worker.
-Result: reuse `AttemptResult`; verify only after answer/session completion. Storage, evidence or custody failure stays retryable. Conflict, changed ownership and hold preserve state. No stored fields or workflow words added.
+Intent: reopen the intact database and construct completion through `open_completion`, using captured fixture evidence and its artifact paths.
+Effect: fake the entry observation as stopped; decode the saved answer and reconcile its session under real slot custody. Fail the test on any harness execution.
+Result: existing `AttemptResult` becomes pending verification; repeated completion preserves identity, reservation and completed session. Add no runtime names, fields or transitions.
 
 ## Work packages
-1. Add captured-only completion and status/round/composition integration; closes A.
-2. Cover A across reopen, repeated rounds, answer/session pending, transient failure, ownership change and hold. Run `just check` and `just test` once each, last.
+1. Add the regression in `tests/steps/test_continuation_composition.py` for pending-answer and pending-session inputs; closes A.
+2. Run `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40` once each, last; both must pass.
 
 ## Acceptance behaviours
-A. After restart, a stopped captured attempt finishes pending answer/session work and reaches verification with the same identity/reservation. Repeated rounds never launch an agent or abandon it. Transient failures retain work; holds, uncertain liveness and changed ownership prevent completion effects.
+A. After reopen, production-composed completion finishes a captured pending answer or session and returns verification-ready work with the same attempt identity and reservation; repeated completion starts no agent and preserves the completed session.
