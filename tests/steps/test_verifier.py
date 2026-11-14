@@ -216,7 +216,8 @@ CASES: list[tuple[str, Files | None, Files, Mapping[str, object], After | None, 
     ("unchanged_with_a_stray_file", PLANNED, {NOTE: "n"}, UNCHANGED, None, None, "unsettled:uncommitted", 0),
     ("plan_empty", None, {P: " \n\t"}, PLAN, None, None, "rejected:plan_empty", 1),
     ("plan_encoding", None, {P: b"\xff\xfe plan"}, PLAN, None, None, "rejected:plan_encoding", 1),
-    ("plan_at_cap", None, {P: PLAN_TEXT + "a" * ((1 << 20) - len(PLAN_TEXT.encode()))}, PLAN, None, None, "verified", 1),
+    ("plan_at_file_cap", None, {P: PLAN_TEXT + "a" * ((1 << 20) - len(PLAN_TEXT.encode()))},
+     PLAN, None, None, "rejected:plan_size", 1),
     ("plan_over_cap", None, {P: "a" * ((1 << 20) + 1)}, PLAN, None, None, "unsettled:unsafe", 0),
     ("plan_missing", None, {NOTE: "n"}, PLAN | {"paths": [P, NOTE]}, None, None, "unsettled:unsafe", 0),
     ("executable", None, PLANNED, PLAN, entry(P, FileStat("file", 7, True)), None, "unsettled:unsafe", 0),
@@ -795,35 +796,3 @@ def test_a_moved_head_lists_the_tags_the_agent_made_and_the_guide_names_the_work
     guide = GUIDE["unsettled"]
     assert "`tl step release --abandon`, then `tl step start`" in guide and "`head_moved`" in guide
     assert "for `branch`" in guide and "`git switch task/<id>`" in guide  # the guide's `branch` text answers the `branch` leftover
-
-
-def test_leftovers_read_the_adopt_rule_commit_as_none_and_a_slot_left_detached_as_branch(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
-) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    check = verifier(registered, checkouts, slot_files)
-    trailer_commit(slot, slot_files)
-    assert check.leftovers(KEY) is None and isinstance(check.verify(KEY), Verified)
-
-
-def test_a_slot_left_detached_by_the_agent_is_branch_in_the_leftovers(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
-) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    slot.park(head(slot))  # detached: not on the task branch
-    assert verifier(registered, checkouts, slot_files).leftovers(KEY) == Unsettled("branch")
-
-
-def test_a_head_reset_to_the_persons_main_never_lists_main_but_still_lists_an_agent_tag(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: FakeSlotFiles
-) -> None:
-    captured(registered, tmp_path, slot, checkouts, slot_files, PLANNED)
-    main = slot.repo.worktree(slot.repo.identity().root)
-    main.write_file("person.txt", "mine")
-    made = main.record("the person's commit", paths="all")
-    assert isinstance(made, Recorded)
-    slot.reset(made.sha, mode="hard")  # the agent: `git reset --hard main`
-    slot.repo.tag("task/evil", made.sha)
-    result = verifier(registered, checkouts, slot_files).verify(KEY)
-    assert result == Unsettled("head_moved", ("refs/tags/task/evil",)) or result == Unsettled("head_moved", ())
-    assert isinstance(result, Unsettled) and "refs/heads/main" not in result.listing

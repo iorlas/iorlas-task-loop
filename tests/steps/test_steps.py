@@ -171,9 +171,9 @@ def test_plan_assessment_precedes_task_orientation_and_reads_and_is_visible_and_
     assert "returning only a count of files and opening nothing" in text
     assert "only then read the existing plan and gather bounded evidence" in text
     assert "Planning is never skipped: a small task gets a short plan" in text
-    assert "The first lines of plan.md must be `# Depth`" in text
-    assert "depth, reason, decision/dependency status and evidence budget), followed by `## Size`" in text
-    assert "requires both current assessments; an existing plan without Depth needs revision, not `unchanged`" in text
+    assert "Put depth, reason, decision/dependency status, evidence budget and the Size estimate in Header" in text
+    assert "do not add separate Depth or Size sections" in text
+    assert "current assessments in Header; an existing plan without them needs revision, not `unchanged`" in text
     assert "Use the included glossary excerpt at every depth" in text
     assert "collect missing terms into at most one targeted glossary read, after the assessment permits planning" in text
     assert "Depth is plain English: add no glossary term or new stage" in text
@@ -203,13 +203,13 @@ def test_plan_early_refusals_name_the_cause_in_words_without_artifacts(cause: st
 
 def test_plan_success_requires_a_current_size_assessment_and_an_owner_created_split_on_refusal() -> None:
     text = task_text(TASK, "plan", CONTEXT)
-    assert "Before answering `planned` or `unchanged`, require a `## Size` section" in text
+    assert "Before answering `planned` or `unchanged`, require a Size estimate in Header" in text
     assert "estimated changed files (including tests and artifacts), independent behaviours, and model calls" in text
     assert "for one implement attempt" in text
     assert "Each independent behaviour must have an independently testable acceptance criterion" in text
     assert "file count alone is insufficient" in text
     assert "An existing plan without this assessment needs revision, not `unchanged`" in text
-    assert "Reassess an existing Size section against the current requirements and code before reusing it" in text
+    assert "Reassess the existing Header Size estimate against the current requirements and code before reusing it" in text
     assert "reason and proposed split in `explanation`, within its existing 2000-character limit" in text
     assert "each part must have a name, acceptance criterion and dependencies (explicitly none where appropriate)" in text
     assert "The owner or orchestrator creates the parts in the task tracker; do not create them" in text
@@ -277,12 +277,24 @@ def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
     assert "the factory saves unfinished slot work" in feedback and SAVED_WORK in feedback
 
 
-def test_plan_requests_bounded_read_locations_and_rewrite_of_missing_sections() -> None:
+@pytest.mark.parametrize("repeat", [False, True])
+def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -> None:
     text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
-    for phrase in ("literal heading `## Read list`", "nonempty Markdown bullet list", "25 entries or fewer",
-                   "`path:first-last`", "short reason", "producers and callers", "narrow, useful line ranges",
-                   "new files as new", "must be rewritten, not reused as `unchanged`"):
+    if repeat:
+        text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+    headings = ("# Header:", "## Outcome and non-goals:", "## Settled decisions:", "## Open decisions:",
+                "## Change map:", "## Contract:", "## Work packages:", "## Acceptance behaviours:")
+    assert [text.index(heading) for heading in headings] == sorted(text.index(heading) for heading in headings)
+    for phrase in ("300 bytes", "800 bytes", "1,500 bytes", "2,000 bytes", "small 4,000, medium 8,000, large 12,000",
+                   "symbol names instead of line numbers", "list every caller found", "producers and callers",
+                   "Mark new files as new", "A plan missing this template needs revision, not `unchanged`",
+                   "any open decision requires `needs_owner`", "Never grow beyond the cap", "no test names or gate boilerplate",
+                   "numbered, with files and the acceptance lines each closes", "intent, effect, result",
+                   "cite the task's own decision numbers instead of restating them", "alternatives paragraphs",
+                   "restating task text, AGENTS.md or glossary rules", "history or provenance", "tables repeating decisions or code",
+                   "Status, As built, Progress or Implementation progress headings and content"):
         assert phrase in text
+    assert "## Read list" not in text and "## Size" not in text
 
 
 @pytest.mark.parametrize("route", ["initial", "repeat", "failed_check"])
@@ -295,9 +307,11 @@ def test_implement_reading_directions_survive_both_retry_routes(route: str) -> N
         failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
                              argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
         text = failed_check_feedback(failed, text, "nonce")
-    for phrase in ("Read its Read list by the stated line ranges before exploring other files", "Search with `rg -n`",
+    for phrase in ("Read the files and symbols in its Change map before exploring other files", "Search with `rg -n`",
                    "omitted caller is allowed", "Do not `cat` a file over 300 lines", "file over 150 lines",
                    "`rg -n '^def |^class '`", "even if the symbol search is empty", "Do not batch whole-file dumps",
                    "Do not read a file again within this session unless it changed", "read only the changed range",
-                   "including verification after an edit", "edit without reopening unchanged content"):
+                   "including verification after an edit", "edit without reopening unchanged content",
+                   "Do not edit plan.md", "paths list must not contain any plan.md", "including another task's plan or a deletion",
+                   "handoff of what was built belongs in the one-line commit message"):
         assert phrase in text
