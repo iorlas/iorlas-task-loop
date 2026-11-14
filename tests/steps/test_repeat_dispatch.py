@@ -41,6 +41,7 @@ from taskloop.attempt_types import (
     VerifyResult,
 )
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 from taskloop.operations import (
     Failed,
     Started,
@@ -102,13 +103,13 @@ class Step:
         self.con, self.tmp, self.slot, self.checkouts, self.files = con, tmp, slot, checkouts, files
         self.store = AttemptStore(lambda: con)
         self.launcher = RegisteringLauncher(self.store)
-        self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold)
+        self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
 
     def run(self, key: AttemptKey, entry: EntryIdentity, agent: Agent) -> str:
         attempts = Attempts(
             self.store,
             EvidenceFiles(self.tmp),
-            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             agent,
             lambda: 10,
             self.checkouts,
@@ -118,13 +119,13 @@ class Step:
         return f"{found.status} {found.reason}"
 
     def admission(self) -> ChainAdmission:
-        return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10)
+        return ChainAdmission(lambda: self.con, begin_immediate, EvidenceFiles(self.tmp), lambda: 10, ids=NativeIds())
 
     def repeat(self, current: AttemptKey) -> Started | Failed:
         found = self.store.attempt_of("tasks", "tl-1")
         assert found is not None and found[0] == current
         repeat = StepRepeat(self.store, self.verifier, EvidenceFiles(self.tmp), self.admission(), self.launcher, lambda _worker: True,
-                            lambda _entry: "gone", lambda: 10, repeating)
+                            lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
         return repeat.repeat("tasks", "tl-1", current, found[2], 30)
 
     def next_attempt(self, current: AttemptKey) -> tuple[AttemptKey, EntryIdentity]:
@@ -415,7 +416,7 @@ def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: Fa
     taken = step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted"))
     assert isinstance(taken, Admitted)
     repeat = StepRepeat(step.store, step.verifier, EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10, repeating)
+                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
     found = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)  # its read of the current attempt predates the takeover
     assert found == Started("relaunched", "tasks", "tl-1", taken.key.attempt_id, True, (8, "start", "boot"))
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (2,)
@@ -436,7 +437,7 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
             return step.verifier.staged(key)
 
     repeat = StepRepeat(step.store, Racing(), EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10, repeating)
+                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
     assert repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Started("relaunched", "tasks", "tl-1", taken[0].attempt_id, True,
                                                                       (8, "start", "boot"))
 

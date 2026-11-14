@@ -7,7 +7,7 @@ of tl-8bh9.14.6): the view's step, attempt, slot, phase, entry, result, deadline
 then that checks attempt's (`check_status`); the backlog, task, order and publication stay the implement attempt's."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import pairwise
 from pathlib import Path
@@ -22,11 +22,14 @@ from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResu
 from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result, commands_seen
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_facts import explanation
 from taskloop.hold_status import cause, hold_next
 from taskloop.hold_store import HoldRow, HoldStore
 from taskloop.land_status import LandView, land_next, land_view, with_logs
+from taskloop.merge.status import result as merge_result
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Clock, Failed
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
 from taskloop.steps import CHECK, following
@@ -109,6 +112,7 @@ class Shown:
     view: AttemptView
     directory: Path
     entry_log: Path
+    events_path: Path
     setup: SetupShown | None = None  # None: no setup ran for the step (a plan attempt, or implement before its preparation)
     failed: ChecksView | None = None  # the unpassed results (with their logs) of the checks attempt that caused the view's hold
     explanation: str | None = None  # the agent's own words of a `needs_owner` answer (a hand-started step is never held)
@@ -117,6 +121,7 @@ class Shown:
 @dataclass(frozen=True)
 class Listed:
     attempts: tuple[AttemptView, ...]
+    rows: tuple[AttemptRow, ...] = field(default=(), compare=False, repr=False)
 
 
 def next_action(phase: str, entry: EntryState, result: AttemptResult, expired: bool, *, rebooted: bool = False) -> Next:
@@ -204,6 +209,11 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
     rebooted = row.entry is not None and reads.boot() not in (None, row.entry[2])
     next_word = _released(row, next_action(row.phase, entry, result, expired, rebooted=rebooted), succeeded(result))
     next_word = _setup_failed(reads, row, next_word)
+    if row.phase == "admitted" and row.release is None:
+        merging = merge_result(MergeStore(reads.store.connect, reads.store.begin), row.key.attempt_id, reads.clock())
+        if merging is not None:
+            result = merging
+            next_word = "hold" if merging.status == "refused" else "wait" if entry == "running" else "start"
     found = (row.backlog, row.task_id, row.step, row.key.attempt_id, row.slot, row.phase)
     left = reads.leftovers(row.key) if probe and next_word == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
@@ -288,7 +298,7 @@ def show_attempt(
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
     told = explanation(files, view.result.execution, view.step, view.task_id) if view.result.reason == NEEDS_OWNER else None
-    return Shown(shown, directory, directory / "entry.log", setup, failed, told)
+    return Shown(shown, directory, directory / "entry.log", files.events_path(rows[0].key), setup, failed, told)
 
 
 def _failed_checks(reads: StatusPorts, files: EvidenceFiles, hold: HoldRow | None) -> ChecksView | None:
@@ -300,8 +310,9 @@ def _failed_checks(reads: StatusPorts, files: EvidenceFiles, hold: HoldRow | Non
     row = next((each for each in store.of_attempt(hold.attempt_id) if each.key.attempt_id == hold.cause_id), None)
     if row is None:
         return None
-    results = tuple(each for each in store.results(row.key) if each.conclusion != "passed")
-    logs = tuple(None if each.conclusion == "undefined" else files.check_path(row.key, each.block, each.name) for each in results)
+    results = tuple(each for each in store.results(row.key) if each.conclusion != CommandConclusion.PASSED)
+    logs = tuple(None if each.conclusion == CommandConclusion.UNDEFINED else files.check_path(row.key,
+        each.block, each.name) for each in results)
     return ChecksView(row, results, logs)
 
 
@@ -310,12 +321,13 @@ def _checks_shown(reads: StatusPorts, files: EvidenceFiles, view: AttemptView, c
     never made); StoreUnavailable propagates."""
     key = checks.row.key
     directory = files.root / files.directory(key)
-    logs = tuple(None if row.conclusion == "undefined" else files.check_path(key, row.block, row.name) for row in checks.results)
+    logs = tuple(None if row.conclusion is CommandConclusion.UNDEFINED else files.check_path(key, row.block, row.name)
+                 for row in checks.results)
     latest = SetupStore(reads.store.connect, reads.store.begin).latest(key)
     setup = None if latest is None else SetupShown(latest, directory / f"setup-{latest.run}.log")
     land = None if view.land is None else with_logs(view.land, partial(files.check_path, view.land.row.key))
     shown = replace(view, last_entry=files.last_entry(key), checks=replace(checks, logs=logs), land=land)
-    return Shown(shown, directory, directory / "entry.log", setup)
+    return Shown(shown, directory, directory / "entry.log", files.events_path(key), setup)
 
 
 def _first(rows: tuple[AttemptRow, ...]) -> AttemptRow:
@@ -338,13 +350,11 @@ def list_attempts(reads: StatusPorts, *, stuck: bool = False) -> Listed | Failed
     """Every task's current attempt (one row per task: its highest `seq`; its latest checks attempt once its implement
     attempt is done), or (`stuck`) only those whose next action is `stuck:*`, `hold` or `unknown`."""
     try:
-        every = reads.store.attempts()
+        rows = reads.store.current_attempts()
+        found = _holding(reads, tuple(_show(reads, row, probe=not stuck or row.label is not None) for row in rows))
     except StoreUnavailable as error:
         return Failed("unavailable", "store", str(error))
-    rows = [row for before, row in zip((None, *every), every, strict=False) if before is None or before.task_id != row.task_id
-            or before.backlog != row.backlog]
-    found = _holding(reads, tuple(_show(reads, row, probe=not stuck or row.label is not None) for row in rows))
-    return Listed(tuple(each for each in found if not stuck or each.next in ("unknown", "hold") or each.next.startswith("stuck:")))
+    return Listed(tuple(each for each in found if not stuck or each.next in ("unknown", "hold") or each.next.startswith("stuck:")), rows)
 
 
 def current_view(reads: StatusPorts, backlog: str, task_id: str) -> AttemptView | None:

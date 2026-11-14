@@ -47,6 +47,7 @@ from taskloop.composition import open_verifier
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.slot_lock import hold
 from taskloop.slot_state import pointer
 from taskloop.step_guide import GUIDE
@@ -117,7 +118,7 @@ def attempts(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, file
     return Attempts(
         AttemptStore(lambda: con),
         EvidenceFiles(tmp_path),
-        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
         run,
         lambda: 10,
         checkouts,
@@ -137,7 +138,7 @@ def unheld(_admission: Admission) -> AbstractContextManager[None]:
 
 
 def verifier(con: sqlite3.Connection, checkouts: Checkouts, files: FakeSlotFiles, custody: VerifyHold = hold) -> Verifier:
-    return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, custody)
+    return Verifier(AttemptStore(lambda: con), checkouts, files, gone, lambda: 20, custody, ids=NativeIds())
 
 
 def stored(con: sqlite3.Connection) -> list[tuple[object, ...]]:
@@ -538,7 +539,8 @@ def test_refusals_and_unknowns_before_any_git_read(
         "UPDATE execution SET answer_kind='validation_pending',disposition=NULL,effect=NULL,commit_paths=NULL,commit_message=NULL"
     )
     assert verifier(registered, counted, slot_files).verify(KEY) == VerifyUnavailable("validation_pending")
-    assert Verifier(AttemptStore(lambda: None), counted, slot_files, gone, lambda: 20, hold).verify(KEY) == VerifyUnavailable("store")
+    assert Verifier(AttemptStore(lambda: None), counted, slot_files, gone, lambda: 20, hold,
+        ids=NativeIds()).verify(KEY) == VerifyUnavailable("store")
     assert counted.opens == 0 and stored(registered) == []
 
 
@@ -596,7 +598,7 @@ def test_another_verifier_storing_first_is_inconsistent(
             found = super().collect(key)
             return None if found is None else dataclasses.replace(found, verification=None)
 
-    racing = Verifier(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3, hold)
+    racing = Verifier(Racing(lambda: registered), checkouts, slot_files, gone, lambda: 3, hold, ids=NativeIds())
     assert racing.verify(KEY) == VerifyUnavailable("inconsistent")
 
 
@@ -775,7 +777,7 @@ def test_no_git_write_while_the_worker_may_still_run(
         seen.append(worker)
         return False
 
-    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, alive, lambda: 20, hold).verify(KEY)
+    found = Verifier(AttemptStore(lambda: registered), checkouts, slot_files, alive, lambda: 20, hold, ids=NativeIds()).verify(KEY)
     assert found == Unsettled("worker_alive") and seen == [WORKER]
     assert slot.state().index == index and made(slot, base) == [] and end_commit(registered) is None
     assert isinstance(verifier(registered, checkouts, slot_files).verify(KEY), Verified)  # once it is gone

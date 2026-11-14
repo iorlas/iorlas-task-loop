@@ -19,6 +19,7 @@ from taskloop.drain.models import Conclusion, Reason, State
 from taskloop.drain.store import DrainStore
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.interrupts import Interrupts
 from taskloop.operations import Ended, Failed
 from taskloop.round import NextRequest
@@ -76,7 +77,7 @@ def test_incomplete_drain_is_finished_by_rounds_without_reopening(tmp_path: Path
     con = Store(SCHEMA).open_rw(database)
     assert con is not None
     try:
-        store = DrainStore(lambda: con)
+        store = DrainStore(lambda: con, ids=NativeIds())
         store.request()
         with open_rounds(database, tmp_path / "art", GitViews(30), REQUEST, handler.install) as ports:
             assert isinstance(ports, Ended) and ports.reason is Reason.DRAINED

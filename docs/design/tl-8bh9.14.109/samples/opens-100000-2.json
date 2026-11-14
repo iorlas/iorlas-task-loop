@@ -1,0 +1,57 @@
+{
+  "schema": 21,
+  "filesystem_cold": false,
+  "samples": 3,
+  "opens": {
+    "first_and_same_store": [
+      {
+        "seconds": 0.4998839378822595,
+        "quick_check_seconds": [
+          0.4987437550444156
+        ]
+      },
+      {
+        "seconds": 0.0008004889823496342,
+        "quick_check_seconds": []
+      },
+      {
+        "seconds": 0.0005471778567880392,
+        "quick_check_seconds": []
+      }
+    ],
+    "distinct_stores": [
+      {
+        "seconds": 0.48562402883544564,
+        "quick_check_seconds": [
+          0.48513790615834296
+        ]
+      },
+      {
+        "seconds": 0.4754909100010991,
+        "quick_check_seconds": [
+          0.47472884482704103
+        ]
+      },
+      {
+        "seconds": 0.4892050549387932,
+        "quick_check_seconds": [
+          0.48837137199006975
+        ]
+      }
+    ],
+    "readonly": [
+      {
+        "seconds": 0.014435532968491316,
+        "quick_check_seconds": []
+      },
+      {
+        "seconds": 0.0005135750398039818,
+        "quick_check_seconds": []
+      },
+      {
+        "seconds": 0.00038488092832267284,
+        "quick_check_seconds": []
+      }
+    ]
+  }
+}

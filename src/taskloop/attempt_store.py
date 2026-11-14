@@ -29,7 +29,7 @@ from taskloop.attempt_types import (
     entry_identity,
 )
 from taskloop.drain.models import ActionKind
-from taskloop.drain.store import DrainStore, blocked
+from taskloop.drain.store import blocked, pending
 from taskloop.factory_schema import EVIDENCE, FACTS, VERDICT
 
 # A registration write (the entry's or the harness's) waits at most this for the write lock, so it finishes well inside
@@ -84,7 +84,7 @@ class AttemptStore(AttemptLoads):
         """
         with self._connection(write=True) as con:
             if blocked(con) and not any(action.kind is ActionKind.DISPATCH and action.subject == key.attempt_id
-                                        for action in DrainStore(lambda: con, self.begin).pending()):
+                                        for action in pending(con)):
                 return "refused"
             row: tuple[object, ...] | None = con.execute(
                 """SELECT p.phase,p.deadline,p.entry_pid,p.entry_start,p.entry_boot FROM attempt p

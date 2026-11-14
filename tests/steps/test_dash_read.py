@@ -13,6 +13,7 @@ from taskloop.attempt_status import StatusPorts
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Seen
 from taskloop.check_store import CheckStore
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.command_sink import CommandSink
 from taskloop.dash_board import BoardPorts, build_board, land_state
 from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, Ready, Run, TaskDetail
@@ -159,7 +160,7 @@ def test_a_full_access_attempt_says_the_container_is_the_boundary(registered: sq
     found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(found, TaskDetail)
     (attempt,) = found.attempts
-    assert attempt.run is not None and attempt.run.summary == "full access: the container is the boundary"
+    assert attempt.run is not None and attempt.run.access == "full access: the container is the boundary"
 
 
 def test_reasoning_is_a_collapsed_line_only_when_the_harness_gave_words(registered: sqlite3.Connection, tmp_path: Path) -> None:
@@ -225,7 +226,8 @@ def test_each_check_carries_the_end_of_its_log_passed_or_failed_and_none_when_th
     checking: sqlite3.Connection, tmp_path: Path,
 ) -> None:
     files, store = EvidenceFiles(tmp_path), CheckStore(lambda: checking, begin_immediate)
-    for position, name, rc, conclusion in ((0, "lint", 0, "passed"), (1, "test", 1, "failed"), (2, "types", 0, "passed")):
+    for position, name, rc, conclusion in ((0, "lint", 0, CommandConclusion.PASSED), (1, "test", 1,
+        CommandConclusion.FAILED), (2, "types", 0, CommandConclusion.PASSED)):
         store.start(CHECKS, 1, position, name, "a" * 64, 60, 3)
         store.finish(CHECKS, 1, position, conclusion, rc, 4)
     files.check_log(CHECKS, 1, "lint").write_text("all clean\n")

@@ -24,6 +24,7 @@ from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts, SlotFil
 from taskloop.environment import Renewal, SetupFor, setup_digest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.prepare import Prepared
 from taskloop.profile import Unavailable
 
@@ -79,7 +80,7 @@ class Entry:
         attempts = Attempts(
             AttemptStore(lambda: env.con),
             EvidenceFiles(env.artifacts),
-            AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/p"})),
+            AgentLaunch(lambda _harness: ("/bin/codex", {"HOME": "/home/p"}), ids=NativeIds()),
             self.agent,
             env.clock,
             self.checkouts,

@@ -18,11 +18,13 @@ from round_bench import Factory, Tracker, scripted, scripts, task
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_types import SlotFiles
+from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldStore
 from taskloop.launch import LaunchUnavailable
 from taskloop.operations import Failed, Round, StartRequest, start
 from taskloop.round import NextRequest, run_round
 from taskloop.step_render import human
+from taskloop.step_text import SAVED_WORK
 from taskloop.wip import SavedCommit
 
 AFTER_DEADLINE = 31 * 60  # past an attempt's deadline: the rounds' --minutes is 30
@@ -75,7 +77,7 @@ def test_a_failed_task_is_held_once_then_costs_no_tracker_call_or_line(factory: 
     assert factory.tracker.holds == ["labels tl-1 auto", "comment tl-1"]
     text = factory.tracker.comments[0][1]
     assert text.startswith("taskloop hold: failed:needs_owner\nStep plan, attempt 1") and f"> {ASKED}" in text
-    assert "returned its claim" in text and "`bd label add tl-1 auto`" in text
+    assert "returned its claim" in text and "restore the approval label `auto`" in text
     assert [line.split(" ")[2:] for line in factory.lines if " hold " in line] == [["tl-1", "plan", "hold", "held", "failed:needs_owner",
                                                                                      attempt]]
     assert factory.next_words() == {"tl-1": ("plan", "on_hold")}
@@ -212,7 +214,7 @@ def test_a_hold_saves_edits_deletions_and_new_files_but_not_ignored_files(factor
     factory.round(frozenset())
     (saved,) = _saved(factory)
     files = factory.slot.repo.tree(saved.sha)
-    assert files is not None and sorted(files.files) == ["README", "new/file.txt"]
+    assert files is not None and sorted(files.files) == [".task-loop.json", "README", "new/file.txt"]
     assert files.read("README") == b"edited\n"
     assert not factory.slot.dirty().raw and factory.slot.dirty(ignored_under=["."]).ignored == ("junk.log",)
     assert len(_saved(factory)) == 1 and len(dict(factory.slot.repo.branches("task/"))) == 1
@@ -226,6 +228,61 @@ def test_a_hold_of_a_clean_slot_saves_nothing(factory: Factory) -> None:
     factory.now += AFTER_DEADLINE
     assert factory.round(frozenset()) == [("tl-1", "plan", "hold", "held stuck:expired_admitted")]
     assert _saved(factory) == () and "task/tl-1" not in dict(factory.slot.repo.branches("task/"))
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+@pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
+def test_unfinished_answers_with_paths_hold_save_and_resume_the_whole_slot(
+    factory: Factory, step: str, disposition: str
+) -> None:
+    if step == "implement":
+        assert factory.round() == [("tl-1", "plan", "start", "started")]
+        assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    plan = {"plan_path": None} if step == "plan" else {}
+    factory.agents["tl-1", step] = scripted(
+        factory.slot.repo,
+        {"disposition": disposition, **plan, "paths": ["README", "../unused"], "message": None,
+         "explanation": "Work remains"},
+        {"README": "partial edit\n", "unlisted.txt": "unfinished new file\n"},
+    )
+    action = "start" if step == "plan" else "advance"
+    assert factory.round() == [("tl-1", step, action, "started")]
+    attempt = factory.current("tl-1")
+    current = factory.store.attempt_of("tasks", "tl-1")
+    assert current is not None
+    collected = factory.store.collect(current[0])
+    assert collected is not None and collected.answer.kind == "valid"
+    assert (collected.answer.disposition, collected.answer.effect, collected.answer.paths) == (disposition, "none", ())
+    assert factory.ran[-1] == f"collected:{disposition}"
+    assert factory.round() == [("tl-1", step, "hold", f"held failed:{disposition}")]
+    (saved,) = HoldStore(lambda: factory.con).saved(attempt)
+    assert saved.attempt_id == attempt and len(saved.sha) == 40 and factory.tip("tl-1") == saved.sha
+    history = factory.slot.repo.history([saved.sha], limit=1)
+    assert f"Task-Loop-Wip: {attempt}" in history[0].body.splitlines()
+    tree = factory.slot.repo.tree(saved.sha)
+    assert tree is not None and tree.read("README") == b"partial edit\n"
+    assert tree.read("unlisted.txt") == b"unfinished new file\n"
+    assert not factory.slot.dirty().raw
+    assert factory.con.execute("SELECT count(*) FROM reservation").fetchone() == (0,)
+    ran = list(factory.ran)
+    assert factory.round() == [] and factory.ran == ran
+    assert HoldStore(lambda: factory.con).saved(attempt) == (saved,) and factory.tip("tl-1") == saved.sha
+    assert factory.next_words() == {"tl-1": (step, "on_hold")}
+    assert f"failed:{disposition}" in factory.tracker.comments[0][1]
+    assert "schema_invalid" not in "\n".join([*factory.lines, factory.tracker.comments[0][1]])
+    factory.tracker.answer("tl-1")
+    factory.agents["tl-1", "plan"] = scripted(
+        factory.slot.repo,
+        {"disposition": "unchanged", "plan_path": None, "paths": [], "message": None, "explanation": "Assess saved work"}, {},
+    )
+    assert factory.round() == [("tl-1", "plan", "start", "started"), ("tl-1", "", "hold", "cleared")]
+    resumed = factory.store.attempt_of("tasks", "tl-1")
+    assert resumed is not None and resumed[0].attempt_id != attempt
+    row = factory.con.execute("SELECT base_commit FROM attempt WHERE attempt_id=?", (resumed[0].attempt_id,)).fetchone()
+    assert row == (saved.sha,)
+    text = EvidenceFiles(factory.tmp).text(resumed[0], "input.txt")
+    assert text is not None and SAVED_WORK in text and "Only with `planned` should `paths` list files" in text
+    assert factory.slot.read_file("unlisted.txt") == "unfinished new file\n"
 
 def test_an_advance_refused_claim_lost_holds_a_round_taken_task_without_touching_another_actor_s_labels(factory: Factory) -> None:
     assert factory.round() == [("tl-1", "plan", "start", "started")]

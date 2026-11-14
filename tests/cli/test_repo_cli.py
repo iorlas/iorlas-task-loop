@@ -11,6 +11,7 @@ from taskloop import git_views
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS
 from taskloop.cli import main
 from taskloop.git_views import GitViews
+from taskloop.inspection_guide import REPO
 from taskloop.repo import RepoInspection, UnsupportedCheckout, inspect_repo
 
 
@@ -61,7 +62,7 @@ def test_inspection_failures_are_nonzero(
     if structured:
         assert json.loads(output.err) == {"error": {"kind": kind, "message": str(error)}}
     else:
-        assert output.err == f"tl repo inspect: {error}\n"
+        assert output.err == f"tl repo inspect: {error}\n{REPO[kind]}\n"
 
 
 @pytest.mark.parametrize("structured", [False, True])
@@ -74,7 +75,7 @@ def test_unknown_home_is_a_cli_refusal(structured: bool, capsys: pytest.CaptureF
     if structured:
         assert json.loads(output.err) == {"error": {"kind": "unsupported_checkout", "message": message}}
     else:
-        assert output.err == f"tl repo inspect: {message}\n"
+        assert output.err == f"tl repo inspect: {message}\n{REPO['unsupported_checkout']}\n"
 
 
 @pytest.mark.parametrize("arguments", [["repo"], ["repo", "inspect"], ["repo", "inspect", ".", "--js"]])

@@ -2,6 +2,7 @@
 `tl step land`'s answers (`Landed`, `Withdrawn`, `LandSummary`). Additive to `result_data`'s shapes; no dispatch token,
 remote URL, Git output or log content. `synced` is always false: the land never shares the tracker (O4)."""
 
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.land import Landed
 from taskloop.land_gate import Changed, Gate
 from taskloop.land_push import Withdrawn
@@ -75,7 +76,8 @@ def summary_data(found: LandSummary) -> dict[str, object]:
     """The summary's facts (section 10), its message whole."""
     return {
         "status": "summary", "checks_attempt_id": found.checks_id, "conclusion": found.conclusion, "target": found.target,
-        "commit": found.x, "results": [{"name": name, "conclusion": result} for name, result in found.results], "origin": found.origin,
+        "commit": found.x, "results": [{"name": name, "conclusion": encode(result) if isinstance(result,
+            CommandConclusion) else result} for name, result in found.results], "origin": found.origin,
         "added": list(found.added), "removed": list(found.removed), "argv": [_changed(each) for each in found.argv],
         "gate": gate_data(found.gate), "base": found.base,
         "state": found.state, "again": found.again, "conflicts": list(found.conflicts), "message": found.message,

@@ -15,9 +15,11 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import StoredExecution
 from taskloop.check_status import latest
 from taskloop.check_store import CheckStore
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.hold_store import HoldRow
 from taskloop.hold_text import FailedCheck, HoldFacts, Kept, KeptWord, LabelsWord, Leftovers, Returned
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed, ReleasedTask
 from taskloop.setup_store import SetupStore
 from taskloop.steps import CHECK, is_agent, kind
@@ -91,12 +93,14 @@ def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: Labe
         if checks is None:
             raise StoreRefused("changed")
         failed = tuple(
-            FailedCheck(each.name, each.conclusion or "unfinished",
-                        "" if each.conclusion == "undefined" else str(files.check_path(checks.key, each.block, each.name)))
-            for each in store.results(checks.key) if each.conclusion != "passed")
+            FailedCheck(each.name, encode(each.conclusion) or "unfinished",
+                        "" if each.conclusion == CommandConclusion.UNDEFINED else str(files.check_path(checks.key, each.block, each.name)))
+            for each in store.results(checks.key) if each.conclusion != CommandConclusion.PASSED)
         return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit, None, failed, None,
                          str(files.root / files.directory(checks.key)), files.last_entry(checks.key), checks.deadline)
     left = Leftovers(leftovers[0], leftovers[1:]) if leftovers and row.reason.startswith("repeats_exhausted") else None
     told = explanation(files, collect(reader, agent.key).execution, agent.step, agent.task_id)
+    merge = MergeStore(reader.connect, reader.begin).get(agent.key.attempt_id) if row.reason.startswith("merge:") else None
+    told = told if merge is None else merge.explanation
     return HoldFacts(*head, agent.step, agent.number, agent.key.attempt_id, row.held_at, published, agent.end_commit, told, (),
                      left, str(files.root / files.directory(agent.key)), files.last_entry(agent.key), agent.deadline)

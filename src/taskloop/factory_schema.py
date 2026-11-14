@@ -19,7 +19,9 @@ verification's result. v16 (tl-8bh9.14.149): `attempt.harness` and `attempt.prov
 under and the provider of its model (`harness_choice`), shown on the dashboard. v19 (tl-8bh9.14.148): `task_hold.saved`, the JSON
 array of the commits a hold saved on the task branch (`wip.SavedCommit`), written only by `hold_store`.
 No migration: an older factory.db is refused (`schema`).
+v21 (tl-8bh9.14.109): covering whole-task step counts for current-card reads.
 v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbox column.
+v21: durable preparation merges. Drain old entries before discarding an older database.
 """
 
 import sqlite3
@@ -28,19 +30,27 @@ from pathlib import Path
 from sqlite_store import Schema, SchemaError
 
 from taskloop.check_repeat.feedback import CheckRepeatReason
+from taskloop.command_conclusion import SETUP_CONCLUSIONS, CommandConclusion, encode
 from taskloop.drain.models import ActionKind, ActionState, State
 from taskloop.harness_choice import HarnessKind, Provider
 
 _HARNESSES = ",".join(f"'{each}'" for each in HarnessKind)
 _PROVIDERS = ",".join(f"'{each}'" for each in Provider)
 
+_COMMAND_CONCLUSIONS = ",".join(repr(encode(each)) for each in CommandConclusion)
+_SETUP_CONCLUSIONS = ",".join(repr(encode(each)) for each in SETUP_CONCLUSIONS)
+_UNDEFINED = encode(CommandConclusion.UNDEFINED)
+
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=20,
+    version=21,
     name="factory",
     steps={},
     ddl=f"""
+CREATE TABLE merge_operation (
+ attempt_id TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data))
+);
 CREATE TABLE drain_state (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL CHECK(generation>=1),
  state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in State)}))
@@ -93,6 +103,7 @@ CREATE TABLE attempt (
  CHECK(phase='admitted' OR base_commit IS NOT NULL), CHECK(end_commit IS NULL OR phase='captured'),
  UNIQUE(adapter, backlog, task_id, seq)
 );
+CREATE INDEX attempt_step_count ON attempt(adapter,backlog,task_id,step,seq);
 CREATE TABLE execution (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
  rc INTEGER, timed_out INTEGER NOT NULL, stop TEXT, watch TEXT, work INTEGER NOT NULL, stands INTEGER NOT NULL,
@@ -130,7 +141,7 @@ CREATE TABLE setup_run (
  command INTEGER NOT NULL DEFAULT 0 CHECK(command >= 0),
  pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
  started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
- conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','interrupted')),
+ conclusion TEXT CHECK(conclusion IN ({_SETUP_CONCLUSIONS})),
  CHECK((ended_at IS NULL) = (conclusion IS NULL)), PRIMARY KEY (attempt_id, run)
 );
 CREATE TABLE checks_attempt (
@@ -164,11 +175,11 @@ CREATE TABLE check_result (
  argv_digest TEXT CHECK(argv_digest IS NULL OR length(argv_digest)=64), timeout INTEGER CHECK(timeout IS NULL OR timeout >= 1),
  pid INTEGER, pgid INTEGER, proc_start TEXT, boot TEXT,
  started_at REAL NOT NULL, ended_at REAL, rc INTEGER,
- conclusion TEXT CHECK(conclusion IN ('passed','failed','timed_out','lingering','dirty','undefined','interrupted')),
- CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS 'undefined')),
+ conclusion TEXT CHECK(conclusion IN ({_COMMAND_CONCLUSIONS})),
+ CHECK((ended_at IS NULL) = (conclusion IS NULL)), CHECK((argv_digest IS NULL) = (conclusion IS '{_UNDEFINED}')),
  CHECK((timeout IS NULL) = (argv_digest IS NULL)),
  CHECK((pid IS NULL) = (pgid IS NULL) AND (pid IS NULL) = (proc_start IS NULL) AND (pid IS NULL) = (boot IS NULL)),
- CHECK(conclusion IS NOT 'undefined' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
+ CHECK(conclusion IS NOT '{_UNDEFINED}' OR (pid IS NULL AND rc IS NULL)), CHECK(rc IS NULL OR conclusion IS NOT NULL),
  PRIMARY KEY (attempt_id, block, position), UNIQUE (attempt_id, block, name)
 );
 CREATE TABLE land_candidate (

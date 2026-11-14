@@ -2,11 +2,13 @@
 
 import json
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from any_agent import RunOutcome, Summary
 from any_agent.access import CodexSandbox
 from any_agent.testing import FakeRun
+from doubles import FixedIds
 from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, database
 from test_attempt import surroundings as attempt_surroundings
 
@@ -15,6 +17,7 @@ from taskloop.agents.launch import AgentLaunch, CredentialReason, CredentialsUna
 from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy, encode_policy
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 
 
 def setting(harness: HarnessKind, tmp_path: Path) -> AgentSetting:
@@ -31,12 +34,14 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
     schema, out = files.prepare(KEY, {"type": "object", "properties": {}})
     root = files.launch_root(KEY)
     asked: list[HarnessKind] = []
-    adapter = AgentLaunch(lambda kind: (asked.append(kind) or f"/bin/{kind}", {"HOME": str(tmp_path)}))
+    ids = FixedIds()
+    adapter = AgentLaunch(lambda kind: (asked.append(kind) or f"/bin/{kind}", {"HOME": str(tmp_path)}), ids=ids)
     result = adapter.build(setting(harness, tmp_path), tmp_path / "slot", prepared, root, schema, out, "Task input")
     assert isinstance(result, LaunchedAgent)
     try:
         argv = result.spec.argv
         assert asked == [harness] and "chosen" in argv
+        assert ids.sessions == ["00000000-0000-4000-8000-000000000001"]
         prompt = result.spec.stdin or argv[-1]
         # Claude's prompt is passed on stdin as well; every harness gets the answer contract.
         assert "Return exactly one JSON object" in result.spec.stdin
@@ -46,6 +51,7 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
         elif harness is HarnessKind.CLAUDE:
             assert result.probe is None and "medium" in argv
             assert argv[argv.index("--permission-mode") + 1] == "dontAsk"
+            assert argv[argv.index("--session-id") + 1] == ids.sessions[0]
             assert json.loads(argv[argv.index("--settings") + 1]) == {"env": {"OPAQUE": "value"}}
             assert "Write" in argv[argv.index("--tools") + 1] and "--json-schema" in argv and "--session-id" in argv
         else:
@@ -62,7 +68,7 @@ def test_codex_full_access_asks_for_no_sandbox_and_no_probe(tmp_path: Path) -> N
     files = EvidenceFiles(tmp_path)
     schema, out = files.prepare(KEY, {"type": "object", "properties": {}})
     full = AgentSetting(model="chosen", access=CodexPolicy(sandbox=CodexSandbox.DANGER_FULL_ACCESS))
-    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", {"HOME": str(tmp_path)}))
+    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", {"HOME": str(tmp_path)}), ids=NativeIds())
     result = adapter.build(full, tmp_path / "slot", True, files.launch_root(KEY), schema, out, "Task input")
     assert isinstance(result, LaunchedAgent)
     try:
@@ -93,7 +99,7 @@ def test_every_typed_credential_failure_has_a_useful_explanation(tmp_path: Path,
     def unavailable(_harness: HarnessKind) -> tuple[str, dict[str, str]]:
         raise CredentialsUnavailable(reason, "The local login or executable is unavailable.")
 
-    result = AgentLaunch(unavailable).build(AgentSetting(), tmp_path, False, tmp_path, "unused", "unused", "input")
+    result = AgentLaunch(unavailable, ids=NativeIds()).build(AgentSetting(), tmp_path, False, tmp_path, "unused", "unused", "input")
     assert isinstance(result, LaunchFailure) and result.explanation and "credentials:" in result.reason
 
 
@@ -112,3 +118,13 @@ def test_all_harnesses_use_the_same_strict_step_decoder(
     assert run.calls[0][0].kind == harness
 
 surroundings = attempt_surroundings
+
+
+def test_native_id_adapter_preserves_uuid_and_token_formats() -> None:
+    ids = NativeIds()
+    hexadecimal, session = ids.hex(), ids.session()
+    assert UUID(hex=hexadecimal).hex == hexadecimal and len(hexadecimal) == 32
+    assert str(UUID(session)) == session and len(session) == 36
+    for size in (8, 16):
+        token = ids.token(size)
+        assert len(token) == 2 * size and bytes.fromhex(token).hex() == token

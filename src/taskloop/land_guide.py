@@ -129,6 +129,7 @@ LAND_GUIDE: Final = {
     "slot_dirty": "The candidate's slot has files the release will not remove (listed): remove them, then rerun `tl step land` "
     "(it retries the release first) or `tl step release TASK`.",
     "slot_branch": "The candidate's slot is on a branch, not detached: `git -C <slot> switch --detach`, then rerun.",
+    "merge_pending": "The slot has an active merge. Its owning operation retains it until preservation and process stop are confirmed.",
     "slot_unborn": "The candidate's slot has no commit: inspect it (`git -C <slot> log -1`), then rerun.",
     "slot_redirected": "The candidate's slot `.git` pointer was rewritten (by a check's code, say): inspect and restore it, then "
     "rerun; nothing was reset.",

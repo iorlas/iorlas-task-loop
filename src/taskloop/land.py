@@ -391,7 +391,7 @@ def land(ports: LandPorts, request: LandRequest) -> LandResult:
     """The land, through the delivery and the close: `Landed`, `Withdrawn`, `LandSummary`, or `Failed` (refused: exit 1; unavailable:
     exit 3, a rerun is safe). A factory.db fault anywhere is `unavailable store`, nothing further changed by this call."""
     try:
-        with operation(ports.lands, ActionKind.LAND, subject=request.task_id, backlog=request.backlog,
+        with operation(ports.lands, ActionKind.LAND, ids=ports.ids, subject=request.task_id, backlog=request.backlog,
                        checkout=str(request.checkout.expanduser().absolute())) as call:
             result = _landing(ports, request)
             call.resolved = not isinstance(result, Failed) or result.kind not in {"unavailable", "uncertain"}
