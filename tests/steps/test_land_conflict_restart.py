@@ -175,7 +175,7 @@ def test_owner_answer_stays_terminal(execution_case: ExecutionCase) -> None:
     result = c.resume()
     assert isinstance(result, Terminal) and result.reason is Reason.OWNER
     c.restart()
-    assert isinstance(c.resume(), Terminal) and c.calls == 1 and c.slot.merging()
+    assert isinstance(c.resume(), Terminal) and c.calls == 1 and not c.slot.merging()
 
 
 def test_foreign_active_merge_is_never_overwritten(execution_case: ExecutionCase) -> None:

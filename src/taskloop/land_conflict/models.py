@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from taskloop.attempt_loads import RetainedInputs
 from taskloop.attempt_types import AttemptKey
+from taskloop.land_conflict.abort_models import Abort
 
 
 class Value(BaseModel):
@@ -103,9 +104,18 @@ class Save(Value):
     phase: SavePhase = SavePhase.CAPTURE
     tree: str | None = Field(default=None, min_length=40, max_length=64)
     commit: str | None = Field(default=None, min_length=40, max_length=64)
+    abort: Abort | None = None
 
     @model_validator(mode="after")
     def consistent(self) -> Self:
+        if self.abort is not None and (self.phase is not SavePhase.COMPLETE or self.accepted or not self.merging):
+            raise ValueError("abort requires a completely retained unfinished merge")
+        if self.abort is not None and (
+                (self.abort.work.attempt_id, self.abort.work.dispatch_token, self.abort.work.generation)
+                != (self.key.attempt_id, self.key.dispatch_token, self.key.reservation_generation)
+                or (self.abort.work.repo_id, self.abort.work.slot, self.abort.work.gitdir, self.abort.work.source, self.abort.work.target)
+                != (self.repo_id, self.slot_path, self.gitdir, self.source, self.target)):
+            raise ValueError("abort must retain the exact saved merge identity")
         if self.expected is not None:
             raise ValueError("a conflict save creates its own ref")
         if self.phase is not SavePhase.CAPTURE and self.tree is None:

@@ -11,6 +11,7 @@ from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles, WorkerGone
 from taskloop.environment import Launch, Preparation, Renew, SetupFor
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.land_conflict.abort import AbortMerge
 from taskloop.land_conflict.models import Record, SavePhase
 from taskloop.land_conflict.preserve import Preservation
 from taskloop.land_conflict.store import ConflictStore
@@ -80,7 +81,7 @@ def _execute(ports: Ports, record: Record) -> Result:
     if any(getattr(work, name) != getattr(expected, name) for name in fields):
         raise StoreRefused("merge_reservation")
     pending = ports.store.saved(record.key)
-    if pending is not None and pending.phase is not SavePhase.COMPLETE:
+    if pending is not None and not (pending.accepted and pending.phase is SavePhase.COMPLETE):
         return _saved_result(ports, record, work, fence)
 
     def setup(target: Work) -> Waiting | None:
@@ -104,6 +105,11 @@ def _execute(ports: Ports, record: Record) -> Result:
 
 
 def _saved_result(ports: Ports, record: Record, work: Work, fence: Callable[[], None]) -> Result:
+    def owned() -> None:
+        fence()
+        if ports.merges.get(record.key.attempt_id) != work:
+            raise StoreRefused("merge_changed")
+
     if work.phase is Phase.COMPLETE:
         result = Completed(commit=work.result or work.source, source=work.source, target=work.target or work.source,
                            explanation=work.explanation)
@@ -111,7 +117,15 @@ def _saved_result(ports: Ports, record: Record, work: Work, fence: Callable[[], 
         result = Terminal(reason=work.reason or Reason.INVALID, explanation=work.explanation)
     else:
         return Unavailable(reason=Reason.UNKNOWN, explanation="The pending conflict save has no matching terminal merge record.")
-    return Preservation(ports.store, ports.repo, ports.checkouts, ports.files, ports.gone, ports.clock, fence)(record, work, result)
+    preservation = Preservation(ports.store, ports.repo, ports.checkouts, ports.files, ports.gone, ports.clock, owned)
+    saved = ports.store.saved(record.key)
+    if saved is not None and saved.abort is not None and isinstance(result, Terminal):
+        return AbortMerge(preservation)(record, work, saved, result)
+    retained = preservation(record, work, result)
+    saved = ports.store.saved(record.key)
+    if isinstance(retained, Terminal) and saved is not None and saved.merging:
+        return AbortMerge(preservation)(record, work, saved, retained)
+    return retained
 
 
 def _work(record: Record, state: SlotState) -> Work:

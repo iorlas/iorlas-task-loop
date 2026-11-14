@@ -219,6 +219,7 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
         ("stage", "merge/start.py"), ("stage", "merge/git.py"), ("update_ref", "merge/git.py"), ("take_branch", "merge/git.py"),
         ("stage", "land_conflict/preserve.py"), ("commit_tree", "land_conflict/preserve.py"),
         ("update_ref", "land_conflict/preserve.py"),
+            ("abort_merge", "land_conflict/abort.py"),
             ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
         ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }
