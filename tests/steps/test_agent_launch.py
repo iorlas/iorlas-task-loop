@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from any_agent import RunOutcome, Summary
+from any_agent.access import CodexSandbox
 from any_agent.testing import FakeRun
 from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, database
 from test_attempt import surroundings as attempt_surroundings
@@ -53,6 +54,21 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
             assert "edit" not in config["permission"]  # both steps edit files
             assert Path(result.spec.env["SHELL"]).is_relative_to(root)
         assert prompt
+    finally:
+        result.harness.cleanup()
+
+
+def test_codex_full_access_asks_for_no_sandbox_and_no_probe(tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, {"type": "object", "properties": {}})
+    full = AgentSetting(model="chosen", access=CodexPolicy(sandbox=CodexSandbox.DANGER_FULL_ACCESS))
+    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", {"HOME": str(tmp_path)}))
+    result = adapter.build(full, tmp_path / "slot", True, files.launch_root(KEY), schema, out, "Task input")
+    assert isinstance(result, LaunchedAgent)
+    try:
+        argv = result.spec.argv
+        assert result.probe is None and argv[argv.index("-s") + 1] == "danger-full-access"
+        assert 'approval_policy="never"' in argv and not any("sandbox_workspace_write" in item for item in argv)
     finally:
         result.harness.cleanup()
 
