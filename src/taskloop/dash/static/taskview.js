@@ -22,7 +22,8 @@ function skeleton() {
 function failure(message, retry) {
   const wrap = el("div", "flex flex-col items-start gap-3 px-6 py-5");
   wrap.append(el("p", "text-sm text-rose-700 dark:text-rose-300", `The tracker did not answer: ${message}`));
-  const again = el("button", "rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800", "Try again");
+  const again = el("button", "rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 "
+    + "dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800", "Reload task");
   again.type = "button";
   again.addEventListener("click", retry);
   wrap.append(again);

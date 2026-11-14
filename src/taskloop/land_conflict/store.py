@@ -10,6 +10,7 @@ from taskloop.admit_rows import reserve
 from taskloop.attempt_loads import retained_on
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_text
 from taskloop.attempt_types import AttemptKey
+from taskloop.land_conflict.abort_models import transition
 from taskloop.land_conflict.models import AdmissionRefused, Outcome, Record, Request, Save, SavePhase, Slot
 from taskloop.land_conflict.reservation_store import owns
 from taskloop.land_store import require_checked
@@ -47,6 +48,10 @@ class ConflictStore(StoreConnection):
         progress = {SavePhase.CAPTURE: SavePhase.OBJECT, SavePhase.OBJECT: SavePhase.REF, SavePhase.REF: SavePhase.COMPLETE}
         if previous is None:
             if value.phase is not SavePhase.CAPTURE:
+                raise StoreRefused("stale_reservation")
+        elif previous.phase is SavePhase.COMPLETE and value.phase is SavePhase.COMPLETE:
+            if (previous.model_dump(exclude={"abort"}) != value.model_dump(exclude={"abort"})
+                    or not transition(previous.abort, value.abort)):
                 raise StoreRefused("stale_reservation")
         elif (progress.get(previous.phase) is not value.phase
               or previous.model_dump(exclude={"phase", "tree", "commit"}) != value.model_dump(exclude={"phase", "tree", "commit"})

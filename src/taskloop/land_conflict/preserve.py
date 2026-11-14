@@ -34,7 +34,7 @@ class Preservation:
         except (EmbeddedRepositories, UnmergedPaths, GitUnavailable) as error:
             return Unavailable(reason=Reason.GIT, explanation=f"The conflict save is pending; its checkout remains reserved: {error}")
 
-    def _stopped(self, work: Work) -> InProgress | Unavailable | None:
+    def stopped(self, work: Work) -> InProgress | Unavailable | None:
         for execution in work.executions:
             worker = execution.worker
             if worker is not None and not self.gone(Worker(pid=worker.pid, pgid=worker.pgid, start=worker.start, boot=worker.boot)):
@@ -44,7 +44,7 @@ class Preservation:
         return None
 
     def _preserve(self, record: Record, work: Work, result: Completed | Terminal) -> Result:
-        stopped = self._stopped(work)
+        stopped = self.stopped(work)
         if stopped is not None:
             return stopped
         self.fence()
@@ -166,6 +166,10 @@ class Preservation:
         return (slot.merging() == saved.merging and (not saved.merging
                 or self.files.read(saved.gitdir / "MERGE_HEAD", 256) == f"{saved.target}\n".encode("ascii"))
                 and str(slot.capture()) == saved.tree)
+
+    def verified(self, saved: Save) -> bool:
+        """Recheck the retained ref and its immutable object before a checkout effect."""
+        return self._tip(saved.ref) == saved.commit and self._matches(saved)
 
     def _matches(self, saved: Save) -> bool:
         commit = self.repo.tree(saved.commit or "")

@@ -66,14 +66,15 @@ def test_unfinished_bytes_deletions_and_both_inputs_are_retained(execution_case:
     record = saved(c)
     tree = c.ports.repo.tree(record.commit or "")
     assert tree is not None and is_saved(c.ports.repo, record.commit or "")
-    assert tree.read("README") == (None if delete else (c.slot.read_file("README") or "").encode())
+    readme = tree.read("README")
+    assert readme is None if delete else readme is not None and readme.endswith(b"partially edited\n")
     assert tree.read("staged") == b"working version wins\n" and tree.read("new") == b"untracked bytes\n"
     assert "ignored" not in tree.files and c.slot.read_file("ignored") == "local data\n"
     assert {c.record.request.checked, c.record.request.target, record.head} <= {
         str(entry.sha) for entry in c.ports.repo.history([record.commit or ""])}
     assert f"Task-Loop-Merge-Start: {record.source}" in record.message
     assert f"Task-Loop-Merge-Target: {record.target}" in record.message
-    assert head(c.slot) == record.head and c.slot.merging() and c.calls == 1
+    assert head(c.slot) == record.head and not c.slot.merging() and c.calls == 1
     c.restart()
     assert isinstance(c.resume(), Terminal) and saved(c) == record and c.calls == 1
 
