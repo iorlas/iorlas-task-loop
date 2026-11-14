@@ -13,7 +13,7 @@ const mixed = [card("hold-old", "03"), card("hold-new", "04", {
 }),
   card("ask-old", "01", { ask: true, question }),
   card("ask-new", "02", { ask: true, question: "Which region?\nChoose one." }),
-  card("running", "05", { column: "implement", ask: true })];
+  card("running", "05", { column: "implement", status: "running", ask: true })];
 let snapshot = { slots: ["s1", "s2"], tasks: mixed };
 const backlog = "fixture/main";
 const round = (at, extra = {}) => ({ at, backlog, move: "round", task: null, step: null, words: ["moves=0"], ...extra });
@@ -40,7 +40,10 @@ window.fetch = async (url) => {
   } else if (url === "/api/log") {
     logReads++;
     data = await logResponse();
-  } else if (url.endsWith("/tracker")) data = null;
+  } else if (url.endsWith("/tracker")) data = { fields: {
+    description: "Fixture task", labels: [], depends_on: [],
+    created_at: "2026-11-14T10:00:00Z", updated_at: "2026-11-14T10:00:00Z",
+  }, comments: [] };
   else if (url.startsWith("/api/tasks/")) {
     const task = snapshot.tasks.find((t) => t.id === url.split("/").at(-1));
     data = { task, attempts: [], step_usage: {}, usage: {} };
@@ -121,7 +124,7 @@ async function boardWords() {
     send({ kind: "task", task });
     const article = node(task.id);
     assert(article.textContent.includes(status === "queued" ? "Queued" : "Abandoned"), "waiting retains status explanation");
-    assert(article.querySelector("[data-since]").textContent.endsWith(" waiting"), "waiting duration does not claim ready");
+    assert(article.textContent.includes("Waiting since not recorded"), "unknown waiting start is explicit");
     assert(!article.querySelector("[data-quiet]"), "waiting adds no running-activity observation");
     article.click(); await tick();
     assert(document.getElementById("drawer").textContent.includes("Waiting"), "drawer shares Waiting label");
@@ -135,6 +138,50 @@ async function boardWords() {
   assert(previous.startsWith("Last activity ") && previous.endsWith(" ago"), "board activity age label");
   advance(60000);
   assert(activity.textContent !== previous && activity.textContent.endsWith(" ago"), "activity age still updates");
+}
+
+async function waitingStates() {
+  const stamp = "2026-11-14T11:00:00Z";
+  const waiting = [
+    card("new-queued", "00", { column: "waiting", attempt: 0, status_note: "queued to start: no free slot" }),
+    card("abandoned", "00", { column: "waiting", status: "abandoned", waiting_since: stamp,
+      status_note: "abandoned: waits for approval" }),
+    ...["manual", "waiting", "unknown"].map((land) => card(`land-${land}`, "00", {
+      column: "land", land, waiting_since: stamp, status_note: `Awaiting land: ${land}`,
+    })),
+    card("checking", "00", { column: "checks" }),
+    card("landing", "00", { column: "land", land: "landing" }),
+  ];
+  await resync([...mixed, ...waiting]);
+  for (const task of waiting) {
+    const article = node(task.id);
+    assert(!article.querySelector("[data-quiet]"), `${task.id} has no agent quiet duration`);
+    if (["checking", "landing"].includes(task.id)) {
+      assert(!article.textContent.includes("Waiting since"), `${task.id} is active work`);
+      continue;
+    }
+    assert(article.textContent.includes(task.status_note), `${task.id} names what it awaits`);
+    article.click(); await tick();
+    const drawer = document.getElementById("drawer");
+    assert(drawer.textContent.includes(task.status_note), `${task.id} drawer explains wait`);
+    if (task.waiting_since) {
+      const time = article.querySelector("[data-waiting-since]");
+      assert(time.title === stamp && time.textContent.startsWith("Waiting since"), "recorded start is visible");
+      assert(drawer.querySelector("[data-waiting-since]").title === stamp, "drawer shares wait start");
+      const before = time.textContent;
+      advance(60000);
+      assert(time.textContent !== before, "waiting age updates");
+    } else assert(drawer.textContent.includes("Waiting since not recorded"), "new queued start is unknown");
+    document.getElementById("backdrop").click();
+  }
+  assert(node("running").dataset.quietLevel === "long", "running warning is present before transition");
+  for (const next of [waiting[0], mixed[0], waiting[2], waiting[5]]) {
+    send({ kind: "task", task: { ...next, id: "running" } });
+    assert(!node("running").querySelector("[data-quiet]") && !node("running").dataset.quietLevel,
+      "leaving a running agent clears activity and warning border");
+  }
+  send({ kind: "task", task: mixed.at(-1) });
+  assert(node("running").querySelector("[data-quiet]"), "returning to running restores activity age");
 }
 
 const healthText = () => document.getElementById("mode").textContent;
@@ -257,6 +304,7 @@ try {
       questions();
       await drawers();
       await boardWords();
+      await waitingStates();
       await resync(mixed);
       if (layout === "view-lanes") {
         assert(node("running").parentNode !== node("ask-old").parentNode, "Slot cells preserve step columns");

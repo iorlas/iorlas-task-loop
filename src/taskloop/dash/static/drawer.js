@@ -2,7 +2,9 @@
 // it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, holdCallout, position, quietSpan, stepInfo, tag } from "./ui.js";
+import {
+  $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, holdCallout, isWaiting, position, quietSpan, stepInfo, tag, waitingNote,
+} from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
 import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
@@ -184,15 +186,19 @@ function render() {
     hold.append(notice);
     drawer.append(hold);
   }
-  if (t.column === "waiting" && t.attempt > 0) {
+  if (t.column === "waiting") {
     const fresh = el("div", "px-6 pb-3");
-    fresh.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
+    const note = callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued");
+    note.append(waitingNote(t));
+    fresh.append(note);
     drawer.append(fresh);
   }
   if (t.column === "land") {
     const waiting = el("div", "px-6 pb-3");
     const word = LAND[t.land ?? "unknown"];
-    waiting.append(callout(word.bar, word.label, t.status_note));
+    const note = callout(word.bar, word.label, isWaiting(t) ? null : t.status_note);
+    if (isWaiting(t)) note.append(waitingNote(t));
+    waiting.append(note);
     drawer.append(waiting);
   }
   if (!detail) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Loading the task's steps…"));
@@ -266,7 +272,7 @@ function pane() {
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
   if (a.step !== VERIFY.id) top.append(el("span", "text-xs text-slate-500 dark:text-slate-400", `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
   if (a.usage) top.append(usageNode(a.usage));
-  if (a.state === "running" && (a.feed.at(-1)?.at ?? a.started_at)) {
+  if (a.state === "running" && ["plan", "implement"].includes(a.step) && (a.feed.at(-1)?.at ?? a.started_at)) {
     const quiet = quietSpan(a.feed.at(-1)?.at ?? a.started_at);
     quiet.id = "quiet";
     top.append(quiet);

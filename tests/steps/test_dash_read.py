@@ -95,6 +95,8 @@ def test_current_agent_questions_agree_on_board_and_detail(
     assert (card.column, card.ask, card.question) == ("held", True, "Which database?\nUse <primary>?")
     assert card.hold_explanation is None
     assert (card.slot is None) == released
+    assert card.waiting_since == ("1970-01-01T00:00:10Z" if released else None)
+    assert card.last_activity_at is None
 
 
 @pytest.mark.parametrize("damage", ["missing", "changed", "invalid"])
@@ -177,7 +179,29 @@ def test_the_board_has_a_card_for_each_attempted_task_and_each_ready_task_withou
     assert cards["tl-1"].step_started_at is not None and cards["tl-1"].repeat is None and cards["tl-1"].hold_cause is None
     assert not cards["tl-1"].ask and cards["tl-1"].question is None
     assert (cards["tl-2"].column, cards["tl-2"].title, cards["tl-2"].attempt, cards["tl-2"].slot) == ("waiting", "Second", 0, None)
-    assert cards["tl-2"].step_started_at == "2026-11-12T09:30:00Z"
+    assert cards["tl-2"].step_started_at is None
+    assert cards["tl-2"].waiting_since is None and cards["tl-2"].last_activity_at is None
+    detail = build_task(TaskPorts(reads_of(registered), files, Tracker(ready)), "tasks", "tl-2")
+    assert isinstance(detail, TaskDetail)
+    assert detail.task.status_note == cards["tl-2"].status_note
+    assert detail.task.waiting_since is None and detail.task.last_activity_at is None
+
+
+@pytest.mark.parametrize("approved", [False, True])
+def test_abandoned_wait_starts_at_release_but_requeued_wait_has_no_recorded_start(
+    registered: sqlite3.Connection, tmp_path: Path, approved: bool,
+) -> None:
+    registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,12,'unclaimed')", (D,))
+    registered.execute("DELETE FROM reservation WHERE attempt_id='attempt'")
+    files = EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Earlier attempt start is not the wait start")
+    tracker = Tracker((Ready("tl-1", "Title of tl-1", "2026-11-12T09:30:00Z"),) if approved else ())
+    card, = board_of(registered, files, tracker).tasks
+    detail = build_task(TaskPorts(reads_of(registered), files, tracker), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task == card
+    assert card.column == "waiting" and card.status == ("queued" if approved else "abandoned")
+    assert card.waiting_since == (None if approved else "1970-01-01T00:00:12Z")
+    assert card.step_started_at is None and card.last_activity_at is None
 
 
 def test_a_tracker_problem_reaches_the_board_as_a_notice(registered: sqlite3.Connection, tmp_path: Path) -> None:
@@ -244,6 +268,9 @@ def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_liv
     assert [(line.type, line.state, line.cmd or line.text) for line in attempt.feed[1:]] == [
         ("command", "finished", "just test"), ("message", None, "two checks failed")]
     assert attempt.feed[1].exit_code == 2 and attempt.feed_cursor is not None
+    registered.execute("UPDATE attempt SET deadline=2000 WHERE attempt_id='attempt'")
+    card, = board_of(registered, files, Tracker()).tasks
+    assert card.last_activity_at is not None and card.waiting_since is None
     sink.feed(events.Msg(text="done"))
     page = build_feed(ports, "tasks", "tl-1", "plan", 1, attempt.feed_cursor)
     assert isinstance(page, FeedPage) and [line.text for line in page.events] == ["done"] and not page.replaced
@@ -321,6 +348,8 @@ def test_checks_cards_show_only_the_current_checks_slot(
     detail = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.slot) == (("land", None) if released else ("checks", "s2"))
+    assert card.last_activity_at is None
+    assert card.waiting_since == ("1970-01-01T00:00:06Z" if released else None)
 
 
 @pytest.mark.parametrize("assigned,released", [(True, False), (True, True), (False, False)])
@@ -347,6 +376,7 @@ def test_land_cards_show_only_the_current_land_slot(
     detail = build_task(TaskPorts(reads_of(landing), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.slot) == ("land", "s3" if assigned and not released else None)
+    assert card.last_activity_at is None and card.waiting_since == "1970-01-01T00:00:06Z"
 
 
 def land_of(con: sqlite3.Connection, seen: Seen) -> LandView | None:
