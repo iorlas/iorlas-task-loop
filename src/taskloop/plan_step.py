@@ -195,7 +195,8 @@ def _closing_words(rules: StepRules) -> str:
         "created; anything left uncommitted is reported back to you as a failed step. If the task cannot be planned as "
         "written (it contradicts "
         "itself or the code, is empty or too vague to act on), write no plan: answer `needs_owner` and say in `explanation` "
-        "what the owner must decide. Only with `planned` should `paths` list files; otherwise return `paths: []` and "
+        "what the owner must decide. If you could not finish planning, answer `incomplete` and explain why in "
+        "`explanation`. Only with `planned` should `paths` list files; otherwise return `paths: []` and "
         "`message: null`, and the factory saves unfinished slot work as a work-in-progress commit on the task branch "
         "when holding the task. " + step_text.SAVED_WORK
     )
