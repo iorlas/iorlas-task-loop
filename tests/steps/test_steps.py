@@ -19,6 +19,14 @@ TASK = TaskInspection(
 )
 
 
+@pytest.fixture(params=[False, True])
+def plan_input(request: pytest.FixtureRequest) -> str:
+    text = task_text(TASK, "plan", CONTEXT)
+    if request.param:
+        text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+    return text
+
+
 @pytest.mark.parametrize(("current", "done", "expected"), [
     (None, False, "plan"), (None, True, "plan"), ("plan", True, "implement"), ("implement", True, "check"), ("check", True, None),
     ("plan", False, None), ("implement", False, None),
@@ -140,8 +148,8 @@ def test_the_plan_input_sends_an_infeasible_or_empty_task_to_needs_owner_at_plan
     ("Otherwise medium", "changes in 2 to 3 owning modules"),
     ("Otherwise small", "one behaviour in one owning module"),
 ])
-def test_plan_depth_rules_are_explicit_and_precede_exploration(depth: str, rule: str) -> None:
-    text = kind("plan").input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
+def test_plan_depth_rules_are_explicit_and_precede_exploration(plan_input: str, depth: str, rule: str) -> None:
+    text = plan_input.partition("BEGIN SLOT STATUS nonce")[0]
     assessment = text.split("Apply these depth rules in order, using only facts in the task text:")[1].split("\n\n")[0]
     assert rule in assessment.split(f"- {depth}: ")[1].split("\n")[0]
     assert "Three behaviours meet the medium rule; four meet the large rule" in assessment
@@ -150,22 +158,25 @@ def test_plan_depth_rules_are_explicit_and_precede_exploration(depth: str, rule:
 
 
 @pytest.mark.parametrize(("depth", "calls"), [("small", 6), ("medium", 12), ("large", 20)])
-def test_plan_evidence_budgets_bound_total_evidence_not_implementation_estimates(depth: str, calls: int) -> None:
-    text = task_text(TASK, "plan", CONTEXT)
+def test_plan_evidence_budgets_bound_total_evidence_not_implementation_estimates(plan_input: str, depth: str, calls: int) -> None:
+    text = plan_input.partition("BEGIN SLOT STATUS nonce")[0]
     assert f"{depth} {calls}" in text.split("evidence-gathering budget in model calls: ")[1].split(".")[0]
     assert "total evidence ceilings, not additional calls per search or file" in text
     assert "distinct from the Size estimate for an implement attempt" in text
     assert "Finish within the budget using bounded evidence; a budget alone is not an owner-refusal cause" in text
 
 
-def test_plan_assessment_precedes_task_orientation_and_reads_and_is_visible_and_persisted() -> None:
-    text = task_text(TASK, "plan", CONTEXT)
+def test_plan_assessment_precedes_task_orientation_and_reads_and_is_visible_and_persisted(plan_input: str) -> None:
+    text = plan_input
     assessment = text.index("First assess depth from the supplied task text alone")
     task, orientation = text.index(TASK.title), text.index("AGENTS.md is already in context")
     plan_read = text.index("After the depth assessment permits planning, read `docs/design/tl-1/plan.md`")
     assert text.startswith("Your final message must be the JSON answer only;")
     assert assessment < text.index("Do not read source, an existing plan, glossary, tracker or history") < task
     assert assessment < task < orientation < plan_read
+    if "BEGIN SLOT STATUS nonce" in text:
+        assert assessment < text.index("BEGIN SLOT STATUS nonce") < text.index("Remove every untracked file listed") < task
+        assert text.index("Depth is plain English: add no glossary term or new stage") < text.index("BEGIN SLOT STATUS nonce")
     assert "first commentary message so the dashboard conversation shows it for owner correction" in text
     assert "The only optional cheap check is at most one search for identifiers named in the task" in text
     assert "returning only a count of files and opening nothing" in text
@@ -184,9 +195,10 @@ def test_plan_assessment_precedes_task_orientation_and_reads_and_is_visible_and_
     ("A missing owner decision", "identify the decision and what the owner must resolve"),
     ("An explicitly unlanded dependency named in the task", "identify the dependency and what must land first"),
 ])
-def test_plan_early_refusals_name_the_cause_in_words_without_artifacts(cause: str, explanation: str) -> None:
-    text = task_text(TASK, "plan", CONTEXT)
+def test_plan_early_refusals_name_the_cause_in_words_without_artifacts(plan_input: str, cause: str, explanation: str) -> None:
+    text = plan_input.partition("BEGIN SLOT STATUS nonce")[0]
     early = text.split("Before exploring, answer `needs_owner` for exactly these three early causes:")[1].split("\n\n")[0]
+    assert len([line for line in early.splitlines() if line.startswith("- ")]) == 3
     assert f"- {cause}: " in early and explanation in early
     assert "explicitly none where appropriate" in early
     assert "put `# Depth`, the assessment and concrete reason in `explanation`, within 2000 characters" in early
@@ -196,9 +208,21 @@ def test_plan_early_refusals_name_the_cause_in_words_without_artifacts(cause: st
     assert "The owner or orchestrator creates split tasks; do not create them" in early
     assert "Do not infer a missing decision from terse wording" in early
     assert "or treat a reference to another task as proof it is unlanded" in early
+    assert "A large classification alone is not an early refusal cause" in early
     assert "A single cohesive schema change may be large and still receive a bounded plan" in early
     assert "Later refusal for actual contradictions or infeasibility and the separate Size limits still apply" in early
     assert "write plan.md before you answer `planned`" in text
+
+
+def test_plan_inspects_existing_work_and_supplied_overlap_only_after_assessment_permits_planning(plan_input: str) -> None:
+    permitted = plan_input.index("If the assessment permits planning")
+    inspection = plan_input.index("Within that evidence budget, inspect existing implementations")
+    assert plan_input.index("Before exploring, answer `needs_owner`") < permitted < inspection < plan_input.index(TASK.title)
+    text = plan_input.partition("BEGIN SLOT STATUS nonce")[0]
+    assert "supplied overlapping-task information before proposing remaining work" in text
+    assert "Use the supplied task discussion; do not require tracker access" in text
+    assert "Identify what is already delivered and the remaining gap; avoid duplicating delivered work" in text
+    assert "Overlap alone establishes neither a missing owner decision nor an explicitly unlanded dependency" in text
 
 
 def test_plan_success_requires_a_current_size_assessment_and_an_owner_created_split_on_refusal() -> None:
