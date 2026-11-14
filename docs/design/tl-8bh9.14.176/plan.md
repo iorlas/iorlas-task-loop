@@ -1,6 +1,6 @@
 # Reduce the fixed context of factory Codex attempts
 
-Task: `tl-8bh9.14.176`. Status: proposed; implementation and measurement pending.
+Task: `tl-8bh9.14.176`. Status: implemented; three-attempt measurement pending.
 
 ## Intended result
 
@@ -127,3 +127,36 @@ record the actual saving and remaining blocks and report the criterion unmet;
 an owner decision is then needed to accept the documented limit or change scope.
 The supplied expected 1.7M-token/3% saving and caching improvement remain estimates
 until supported by observations.
+
+## As built
+
+`FactoryCodexAccess.config()` now appends the three documented false overrides
+to each factory Codex launch. The released harness launch contract verifies
+their actual argv values for prepared and unprepared attempts under both
+sandbox policies, including conflicting host temporary-directory settings.
+Existing permission, environment, writable-root and ignore-flag assertions
+remain in the same contract. No new test file was needed.
+
+The implementation environment still reports `codex-cli 0.162.1`.
+Its local `--help` and `features list` confirm the per-run override mechanism
+and the stable `multi_agent` and `recommended_plugins` options. The official
+OpenAI configuration reference recorded above supplies
+`skills.include_instructions`; no network documentation refresh was available
+during implementation. No dependency or user configuration was changed.
+The read-only `features list` probe with all three overrides succeeded and
+reported both supported features false; collaboration modes remained removed.
+
+Focused verification: after `just install` refreshed the non-editable project
+package, `tests/steps/test_agent_launch.py` passed all 30 cases. The initial
+focused run had loaded the pre-change installed package and failed the eight
+new launch-contract cases; reinstalling resolved those failures.
+
+Collaboration-mode instructions, generated AGENTS.md content and its slot-path
+header remain subject to the documented limits above. No removed flags,
+instruction replacement, file edits or path-relocation workaround were added.
+
+No ordinary post-change model attempts are available in this implementation
+step, and no synthetic attempts were launched. Instruction-block omission and
+the at-most-14,500-token target on three comparable first calls remain
+unverified. The supplied 17,208-token baseline alone cannot establish a saving;
+measurement must follow restart with the changed factory.
