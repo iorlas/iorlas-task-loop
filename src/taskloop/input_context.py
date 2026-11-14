@@ -1,5 +1,6 @@
 """Factory-owned committed context; renderers receive values, never perform I/O."""
 
+import re
 import tomllib
 from dataclasses import dataclass
 from shlex import join
@@ -9,9 +10,17 @@ from pydantic import AliasPath, BaseModel, Field
 
 from taskloop import glossary_extract
 from taskloop.profile import NoCommit, NotAFile, Profile, ProfileFiles, Unavailable, read_profile
+from taskloop.shelf_digest.artifact import PATH as DIGEST_PATH
+from taskloop.shelf_digest.artifact import read_artifact
+from taskloop.shelf_digest.identities import PACKAGES, Identities, reconcile_manifests
+from taskloop.shelf_digest.source import SourceSnapshot
 
 BEGIN = "BEGIN FACTORY INPUT CONTEXT"
 END = "END FACTORY INPUT CONTEXT"
+SHELF_GUIDANCE = (
+    "Shelf is read-only for agents. Use this validated digest first. If the task requires a shelf change, "
+    "stop with needs_owner and describe the proposed shelf change."
+)
 ORIENTATION = (
     "AGENTS.md is already in context: follow it without reading it again. These attempt-specific directions replace "
     "its general orientation-file read instructions. The supplied task text is the complete task specification. "
@@ -40,6 +49,11 @@ class _PytestSettings(BaseModel):
     addopts: str | tuple[str, ...] = Field(default="", validation_alias=AliasPath("tool", "pytest", "ini_options", "addopts"))
 
 
+class _ShelfSettings(BaseModel):
+    dependencies: tuple[str, ...] = Field(default=(), validation_alias=AliasPath("project", "dependencies"))
+    sources: dict[str, object] = Field(default_factory=dict, validation_alias=AliasPath("tool", "uv", "sources"))
+
+
 @dataclass(frozen=True)
 class InputContext:
     commit: str
@@ -47,12 +61,13 @@ class InputContext:
     glossary: str
     paths: tuple[str, ...]
     layout: str = ""
+    shelf: str = ""
 
     def render(self) -> str:
         commands = "\n".join(f"- {command}" for command in self.commands) or "(none)"
         names = "\n".join(self.paths) or "(no tracked paths under src/, tests/ or docs/design/)"
         return (f"{BEGIN}\n{ORIENTATION}\nSource commit: {self.commit}\nCheck commands:\n{commands}\n\n"
-                f"{self.glossary}\nCODE MAP\n{self.layout}{names}\n{END}")
+                f"{self.glossary}\n{self.shelf}CODE MAP\n{self.layout}{names}\n{END}")
 
 
 def read(files: InputFiles, commit: str) -> InputContext:
@@ -80,7 +95,44 @@ def read(files: InputFiles, commit: str) -> InputContext:
     if isinstance(names, NoCommit):
         raise InputError(f"Code map source {commit} names no commit")
     paths = tuple(sorted(path for path in names if path.startswith(("src/", "tests/", "docs/design/"))))
-    return InputContext(commit, tuple(join(check.argv) for check in profile.checks), glossary, paths, _layout(files, commit, names))
+    return InputContext(commit, tuple(join(check.argv) for check in profile.checks), glossary, paths,
+                        _layout(files, commit, names), _shelf(files, commit))
+
+
+def _shelf_blob(files: InputFiles, commit: str, path: str) -> bytes | None:
+    blob = files.blob(commit, path)
+    if blob is None or isinstance(blob, bytes):
+        return blob
+    if isinstance(blob, NotAFile):
+        detail = f"not a regular file (mode {blob.mode})"
+    elif isinstance(blob, NoCommit):
+        detail = "source names no commit"
+    else:
+        detail = blob.detail
+    raise InputError(f"Shelf digest {DIGEST_PATH} at {commit}: {path}: {detail}")
+
+
+def _shelf(files: InputFiles, commit: str) -> str:
+    try:
+        data = _shelf_blob(files, commit, DIGEST_PATH)
+        project = _shelf_blob(files, commit, "pyproject.toml")
+        settings = _ShelfSettings() if project is None else _ShelfSettings.model_validate(tomllib.loads(project.decode("utf-8")))
+        required = bool(set(settings.sources) & set(PACKAGES)) or any(
+            re.sub(r"[-_.]+", "-", re.split(r"[\s<>=!~\[;@]", dependency, maxsplit=1)[0]).lower() in PACKAGES
+            for dependency in settings.dependencies)
+        if data is None and not required:
+            return ""
+        if data is None:
+            raise ValueError("Required artifact is missing")
+        lock = _shelf_blob(files, commit, "uv.lock")
+        manifests = {path: blob for path, blob in (("pyproject.toml", project), ("uv.lock", lock)) if blob is not None}
+        identities = reconcile_manifests(SourceSnapshot(commit, manifests))
+        if not isinstance(identities, Identities):
+            raise ValueError(identities.explanation)
+        artifact = read_artifact(data, identities)
+        return f"{SHELF_GUIDANCE}\nValidated shelf digest ({DIGEST_PATH}):\n{artifact.encode().decode('utf-8')}\n"
+    except (ValueError, UnicodeError) as error:
+        raise InputError(f"Shelf digest {DIGEST_PATH} at {commit}: {error}") from error
 
 
 def _layout(files: InputFiles, commit: str, names: tuple[str, ...]) -> str:

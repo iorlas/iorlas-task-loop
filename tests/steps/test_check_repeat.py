@@ -12,6 +12,7 @@ from doubles import MAIN_PROFILE, FixedIds, PinnedViews
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeWorktree
 from round_bench import Tracker, scripted, scripts, task
+from shelf_input_fixtures import shelf_files, write_shelf
 from sqlite_store import Store
 from test_checks_round import implemented
 from test_input_context import GLOSSARY
@@ -35,11 +36,12 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.glossary_extract import HEADING
 from taskloop.harness_choice import HarnessKind
-from taskloop.input_context import BEGIN, END
+from taskloop.input_context import BEGIN, END, SHELF_GUIDANCE
 from taskloop.launch import LaunchUnavailable
 from taskloop.operations import Failed, Round, Started, release_task, start
 from taskloop.round import NextRequest, run_round
 from taskloop.setup_store import SetupStore
+from taskloop.shelf_digest.artifact import PATH as DIGEST_PATH
 from taskloop.steps import kind
 from taskloop.task_content_store import TaskContentStore
 
@@ -49,6 +51,7 @@ def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: 
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
     root.write_file("docs/glossary.md", GLOSSARY.decode())
+    write_shelf(root)
     assert isinstance(root.record("profile", paths="all"), Recorded)
     root.push("main")
     path = tmp_path / "factory.db"
@@ -96,6 +99,41 @@ def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
 
     rig.agents["tl-1", "implement"] = run
     return specs
+
+
+@pytest.mark.parametrize("stale", [False, True])
+def test_failed_check_repair_validates_checked_digest_and_refreshes_once(rig: Repairing, stale: bool) -> None:
+    inputs: list[str] = []
+    agent = scripted(rig.slot.repo, {"disposition": "implemented", "paths": [DIGEST_PATH],
+                                   "message": "Update digest", "explanation": "Done"},
+                     {DIGEST_PATH: shelf_files("b" * 40, stale=stale)[DIGEST_PATH].decode()})
+
+    def implement(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
+        inputs.append(spec.stdin)
+        return agent(harness, spec, timeout, hooks)
+
+    rig.agents["tl-1", "implement"] = implement
+    previous, source = failed(rig)
+    assert inputs[0].count(SHELF_GUIDANCE) == inputs[0].count("Validated shelf digest (") == 1
+    assert '"source_commit":"' + "a" * 40 + '"' in inputs[0]
+    specs = repair_agent(rig)
+    root = rig.slot.repo.worktree(rig.slot.repo.path)
+    root.write_file(DIGEST_PATH, "dirty artifact")
+    repair = rig.starting().check_repeat
+    assert repair is not None
+    result = repair.repair(rig.request(), previous, source)
+    if stale:
+        assert isinstance(result, Failed) and "docs/shelf-digest.json" in result.detail and not specs
+        assert rig.store.attempts("tasks", "tl-1")[0].key == previous
+        return
+    assert isinstance(result, Started)
+    text = specs[0].stdin
+    assert text.count(SHELF_GUIDANCE) == text.count("Validated shelf digest (") == text.splitlines().count(BEGIN) == 1
+    assert '"source_commit":"' + "b" * 40 + '"' in text and "a" * 40 not in text
+    assert "dirty artifact" not in text and "Failed check\n" in text and "It must do X" in text
+    key = rig.store.attempts("tasks", "tl-1")[0].key
+    files = EvidenceFiles(rig.tmp)
+    assert (rig.tmp / files.directory(key) / "launched-input.txt").read_text() == text
 
 
 @pytest.mark.parametrize("change", [False, True])
