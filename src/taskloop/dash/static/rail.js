@@ -130,9 +130,10 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
   top.append(el("span", "text-[13px] font-medium", stepInfo(a.step).label));
   if (a.n > 1) top.append(el("span", `text-[11px] ${muted}`, `attempt ${a.n}`));
   if (a.after === "repeat") {
-    const tag = el("span", `text-[11px] ${JUMP.repeat.text}`, "Repeat");
-    tag.title = `Repeat of ${stepInfo(a.step).label}${a.repeat_of ? ` attempt ${a.repeat_of}` : ""}: ${changeReason(a)}`
-      + (a.reason ? ` (${a.reason})` : "") + (gap === null ? "" : ` · ${gapWords(gap)}`);
+    const label = a.step === "checks" ? "Re-run after restart" : "Repeat";
+    const tag = el("span", `text-[11px] ${JUMP.repeat.text}`, label);
+    tag.title = `${label} of ${stepInfo(a.step).label}${a.repeat_of ? ` attempt ${a.repeat_of}` : ""}: ${changeReason(a)}`
+      + (a.reason && a.step !== "checks" ? ` (${a.reason})` : "") + (gap === null ? "" : ` · ${gapWords(gap)}`);
     top.append(tag);
   }
   top.append(["plan", "implement"].includes(a.step)

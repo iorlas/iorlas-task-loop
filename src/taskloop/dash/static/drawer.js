@@ -314,8 +314,10 @@ function began(a) {
   const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
   const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, attempt ${prev.n}` : ""}`;
   const what = a.after === "repeat" ? `a repeat of ${at}` : `a restart at plan (after ${at})`;
+  const description = a.after === "repeat" && a.step === "checks" ? `Re-run after restart of ${at}` : `Began after ${what}`;
   const line = el("p", `w-full text-xs ${JUMP[a.after].text}`);
-  line.append(el("span", "font-medium", `Began after ${what}`), el("span", "text-slate-500 dark:text-slate-400", ` · ${changeReason(a)}`));
+  line.append(el("span", "font-medium", description),
+    el("span", "text-slate-500 dark:text-slate-400", ` · ${changeReason(a)}`));
   line.title = `${changeReason(a)}${a.reason ? ` (${a.reason})` : ""}`;
   if (a.led_by) line.append(" ", causeLink(a, select));
   return line;

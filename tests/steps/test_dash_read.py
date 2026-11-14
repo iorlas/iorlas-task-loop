@@ -501,11 +501,12 @@ def test_an_answer_file_longer_than_the_bound_is_cut_and_says_so(registered: sql
     assert len(body.result.answer.text) == 65536 and body.result.answer.truncated
 
 
-def test_a_second_checks_try_is_numbered_across_the_task_and_says_which_try_it_repeats(
-    checking: sqlite3.Connection, tmp_path: Path,
+@pytest.mark.parametrize("outcome,reason", [("passed", None), ("failed", "test:failed")])
+def test_checks_rerun_after_restart_keeps_its_number_and_prior_attempt_regardless_of_outcome(
+    checking: sqlite3.Connection, tmp_path: Path, outcome: str, reason: str | None,
 ) -> None:
-    checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='failed',reason='test:failed',concluded_at=5,released_at=6,"
-                     "parked=? WHERE attempt_id='checks'", ("d" * 40,))
+    checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion=?,reason=?,concluded_at=5,released_at=6,"
+                     "parked=? WHERE attempt_id='checks'", (outcome, reason, D))
     checking.execute("DELETE FROM reservation WHERE attempt_id='checks'")
     again = check_store.ChecksAdmitted(AttemptKey("again", "again-token", 1), "implement", 2, "s2", D, TARGET, REQUIRED, 100.0)
     check_store.insert(checking, again)
@@ -513,7 +514,29 @@ def test_a_second_checks_try_is_numbered_across_the_task_and_says_which_try_it_r
     assert isinstance(found, TaskDetail)
     assert [(each.step, each.n, each.after, each.repeat_of) for each in found.attempts[1:]] == [
         ("checks", 1, None, None), ("checks", 2, "repeat", 1)]
-    assert found.attempts[2].reason == "test:failed"
+    assert found.attempts[1].summary == (reason or outcome)
+    assert (found.attempts[2].reason, found.attempts[2].state, found.attempts[2].summary) == (
+        "The factory restarted", "running", "running")
+
+
+def test_first_checks_for_another_implement_attempt_are_not_a_restart(checking: sqlite3.Connection, tmp_path: Path) -> None:
+    checking.execute(
+        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+        input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,
+        phase,base_commit,end_commit,after_commit)
+        SELECT 'another','another-token',1,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
+        schema_version,model,effort,access_policy,deadline,2,3,slot_head,'implement','unsafe',phase,base_commit,end_commit,NULL
+        FROM attempt WHERE attempt_id='implement'""")
+    checking.execute("INSERT INTO slot_release VALUES ('another','another-token',1,?,7,'kept')", (D,))
+    check_store.insert(checking, check_store.ChecksAdmitted(
+        AttemptKey("fresh", "fresh-token", 1), "another", 1, "s2", D, TARGET, REQUIRED, 100.0))
+    check_store.insert(checking, check_store.ChecksAdmitted(
+        AttemptKey("again", "again-token", 1), "another", 2, "s2", D, TARGET, REQUIRED, 100.0))
+    found = build_task(TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    checks = [each for each in found.attempts if each.step == "checks"]
+    assert [(each.n, each.after, each.repeat_of, each.reason) for each in checks] == [
+        (1, None, None, None), (2, None, None, None), (3, "repeat", 2, "The factory restarted")]
 
 
 def restarted_at_plan(con: sqlite3.Connection) -> None:

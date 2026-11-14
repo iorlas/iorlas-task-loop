@@ -122,6 +122,15 @@ function restartsAndRepeats() {
   node = mount([restart(2)]);
   assert(button(node, "Restarted at plan"), "no invented timestamp");
   assert(changeReason(restart(2)) === "Reason not recorded", "restart detail normalizes placeholder too");
+  for (const summary of ["passed", "failed:test:lint"]) {
+    node = mount([attempt("checks", 1, { summary, ended_at: before.toISOString() }),
+      repeat("checks", 2, { reason: "The factory restarted", started_at: today.toISOString() })]);
+    const tag = [...node.querySelectorAll("span")].find((s) => s.textContent === "Re-run after restart");
+    assert(tag?.title.includes("Re-run after restart of Check attempt 1: The factory restarted"),
+      "checks re-run tag identifies restart and prior checks regardless of outcome");
+    assert(tag.title.includes("8m 21s") && node.textContent.includes("attempt 2"), "checks re-run keeps gap and numbering");
+    assert(!tag.title.includes(summary) && !node.textContent.includes("Repeat"), "previous outcome is not a restart cause");
+  }
   for (const step of ["plan", "implement"]) {
     node = mount([attempt(step, 1, { ended_at: before.toISOString() }), repeat(step, 2, { started_at: today.toISOString() })]);
     const tag = [...node.querySelectorAll("span")].find((s) => s.textContent === "Repeat");
@@ -202,6 +211,7 @@ async function drawerSelection() {
     assert(drawer.querySelector("section").textContent.includes("Success"), "successful attempt badge");
     button(drawer, tab).click(); await tick();
     assert(drawer.textContent.includes("A listed path is unsafe"), "selected repeat reason translated");
+    assert(drawer.textContent.includes("Began after a repeat of Implement, attempt 2"), "agent repeat wording preserved");
     const mark = marks(drawer).find((b) => b.textContent === "✗");
     mark.click(); await tick();
     assert(drawer.querySelector("section h3").textContent.includes("Check of Implement attempt 2"), "verification title");
@@ -212,6 +222,29 @@ async function drawerSelection() {
   }
   assert(requested.includes("verification/40"), "real verification endpoint selected");
   closeDrawer();
+}
+
+async function checksRestartDetail() {
+  for (const summary of ["passed", "failed:test:lint"]) {
+    const list = [attempt("implement"), attempt("checks", 1, { summary }),
+      repeat("checks", 2, { reason: "The factory restarted", summary: "passed" })];
+    initDrawer({
+      detail: async () => ({ task, attempts: list }),
+      tracker: async () => tracked,
+      body: async () => ({ result: { summary: "passed", checks: [] } }),
+    }, new Map([[task.id, task]]));
+    await openDrawer(task.id); await tick();
+    const drawer = document.getElementById("drawer");
+    const row = [...drawer.querySelectorAll("#rail button")].find((b) => b.textContent.includes("Re-run after restart"));
+    row.click(); await tick();
+    const detail = drawer.querySelector("section");
+    assert(detail.textContent.includes("Re-run after restart of Check, attempt 1"),
+      "checks detail identifies restart and prior attempt");
+    assert(detail.textContent.includes("The factory restarted") && !detail.textContent.includes("a repeat of"),
+      "checks detail explains restart independently of previous outcome");
+    assert(detail.querySelector("h3").textContent.includes("Check, attempt 2"), "checks re-run selection keeps its number");
+    closeDrawer();
+  }
 }
 
 const landButton = (root) => [...root.querySelectorAll("#rail button")].find((b) => b.textContent.endsWith("Land"));
@@ -545,7 +578,7 @@ async function liveDurations() {
 
 try {
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
-    drawerSelection, landSelection, landStaleReplies, words, vocabulary, waitingRows, usage, liveDurations]) {
+    drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, vocabulary, waitingRows, usage, liveDurations]) {
     await test();
   }
   for (const dark of [false, true]) {
