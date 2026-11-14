@@ -98,6 +98,12 @@ def is_saved(repo: Repo, sha: str) -> bool:
     return bool(found) and found[0].sha == sha and any(line.startswith(f"{WIP}: ") for line in found[0].body.splitlines())
 
 
+def saved_since(repo: Repo, prepared: str, head: str) -> bool:
+    """Saved-work trailers anywhere in the new ancestry, including beneath ordinary or merge commits."""
+    return any(line.startswith(f"{WIP}: ")
+               for entry in repo.history([head], not_on=[prepared]) for line in entry.body.splitlines())
+
+
 def needs_review(repo: Repo, sha: str) -> bool:
     """A factory merge above saved work retains its review requirement until an ordinary step records its result."""
     seen: set[str] = set()

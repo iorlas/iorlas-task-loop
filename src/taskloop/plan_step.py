@@ -161,7 +161,19 @@ def input_text(task: TaskInspection, rules: StepRules, context: InputContext) ->
     """Put the depth assessment before task prose, orientation and plan reads; the factory commits listed paths."""
     return (f"{FINAL_ANSWER_WARNING}\n\n{DEPTH_ASSESSMENT}\n\n"
             f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
-            f"{_closing_words(rules)}\n")
+            f"{_closing_words(rules)}\n\n{_metadata_words(rules)}\n")
+
+
+def _metadata_words(rules: StepRules) -> str:
+    return (
+        f"With `planned`, write `{rules.root}plan-metadata.json` beside plan.md and include it in `paths`. "
+        "Its JSON object has exactly two fields: `prepared_commit`, the full Source commit supplied in the factory input "
+        "(the commit used to prepare this plan), and `cited_paths`, a nonempty array of unique literal repository-relative "
+        "files or folders consulted when preparing the plan. Include every consulted source and caller; folders mean "
+        "everything below them. Use no absolute paths, traversal, pathspec magic or wildcard patterns. "
+        "An existing plan without valid committed metadata needs revision, not `unchanged`. "
+        "When reusing a valid plan, retain its metadata and original prepared_commit."
+    )
 
 
 def _closing_words(rules: StepRules) -> str:
@@ -226,7 +238,8 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
         f"Remove every untracked file listed that does not belong to the plan. A tracked file you changed outside `{root}` "
         "cannot be committed: restore its committed content (`git show HEAD:<path> > <path>`); you cannot run `git checkout` "
         f"or `git restore`. With `planned`, `paths` always lists `{plan}` and every other file under that folder you want "
-        f"kept, and only when you changed or added a file there; leave files you did not change out of paths. {last}"
+        f"kept, and only when you changed or added a file there; leave files you did not change out of paths. {last}\n\n"
+        + _metadata_words(rules)
     )
 
 

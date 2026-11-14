@@ -27,6 +27,15 @@ def plan_input(request: pytest.FixtureRequest) -> str:
     return text
 
 
+def test_plan_producer_and_feedback_require_committed_preparation_evidence(plan_input: str) -> None:
+    for phrase in ("docs/design/tl-1/plan-metadata.json", "include it in `paths`", "`prepared_commit`", "full Source commit",
+                   "`cited_paths`", "nonempty array of unique literal repository-relative", "files or folders consulted",
+                   "without valid committed metadata needs revision", "retain its metadata and original prepared_commit"):
+        assert phrase in plan_input
+    repaired = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, "short task", "nonce", unrecorded=True)
+    assert "plan-metadata.json" in repaired and "`prepared_commit`" in repaired
+
+
 @pytest.mark.parametrize(("current", "done", "expected"), [
     (None, False, "plan"), (None, True, "plan"), ("plan", True, "implement"), ("implement", True, "check"), ("check", True, None),
     ("plan", False, None), ("implement", False, None),

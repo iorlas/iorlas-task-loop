@@ -8,7 +8,31 @@ from git_porcelain import GitUnavailable, MergeStarted, Recorded, UnmergedPaths
 from git_porcelain.testing import FakeRepo, FakeWorktree
 
 from taskloop.hold_store import HoldInsert, HoldStore
-from taskloop.wip import Refused, SaveReason, Source, is_saved, park, save
+from taskloop.wip import Refused, SaveReason, Source, is_saved, park, save, saved_since
+
+
+@pytest.mark.parametrize("merge", [False, True])
+def test_saved_work_in_new_ancestry_survives_ordinary_and_merge_commits(
+    repo: FakeRepo, slot: FakeWorktree, merge: bool,
+) -> None:
+    prepared = head(slot)
+    slot.write_file("unfinished", "work")
+    saved = slot.record("unfinished\n\nTask-Loop-Wip: attempt", paths="all")
+    assert isinstance(saved, Recorded)
+    slot.write_file("ordinary", "result")
+    ordinary = slot.record("ordinary step", paths="all")
+    assert isinstance(ordinary, Recorded)
+    if merge:
+        person = repo.worktree(repo.path)
+        person.write_file("main-change", "main")
+        target = person.record("main result", paths="all")
+        assert isinstance(target, Recorded)
+        assert isinstance(slot.start_merge(str(target.sha)), MergeStarted)
+        slot.finish_merge("ordinary merge")
+    tip = head(slot)
+    assert not is_saved(repo, tip)
+    assert saved_since(repo, prepared, tip)
+    assert not saved_since(repo, str(saved.sha), tip)
 
 
 @pytest.fixture

@@ -1,0 +1,16 @@
+{
+  "prepared_commit": "e752ae5d6944787089e270cceaa50faf7207d55e",
+  "cited_paths": [
+    "src/taskloop/plan_step.py",
+    "src/taskloop/plan_content.py",
+    "src/taskloop/steps.py",
+    "src/taskloop/verdict.py",
+    "src/taskloop/wip.py",
+    "src/taskloop/factory_commit.py",
+    "src/taskloop/task_content.py",
+    "src/taskloop/input_context.py",
+    "tests/steps/test_steps.py",
+    "tests/steps/test_wip_merge.py",
+    "docs/shelf-digest.json"
+  ]
+}
