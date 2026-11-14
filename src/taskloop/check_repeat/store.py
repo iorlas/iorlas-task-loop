@@ -6,6 +6,7 @@ from git_porcelain import Repo
 
 from taskloop.admit import AdmitRefused, Admitted, Free, branched, free_slots, issued, unheld
 from taskloop.admit_rows import insert_attempt, reserve
+from taskloop.agents.settings import encode_policy
 from taskloop.attempt_reads import AttemptRow, StoreConnection, StoreRefused, StoreUnavailable, as_text
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
@@ -100,7 +101,7 @@ class CheckRepeatStore(StoreConnection):
                 "step": "implement", "adapter": "beads", "backlog": row.backlog, "task_id": row.task_id,
                 "tracker_root": source.tracker_root, "repo_id": repo_id, "slot": name,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1,
-                "model": choices.model, "effort": choices.effort, "sandbox": choices.sandbox,
+                "model": choices.model, "effort": choices.effort, "access_policy": encode_policy(choices.access),
                 "harness": choices.harness, "provider": choices.provider, "deadline": deadline,
                 "number": row.number + 1, "seq": row.seq + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": CheckRepeatReason.FAILED_CHECK.value, "repeat_listing": None,

@@ -33,8 +33,8 @@ def attempt(con: sqlite3.Connection, key: str, backlog: str, task: str = "tl-1",
     with begin_immediate(con):
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,label) VALUES
-            (?,?,1,'plan','beads',?,?,'/tracker','repo','s1','input','digest',1,'m','high','workspace-write',?,1,?,?,?)""",
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,label) VALUES
+            (?,?,1,'plan','beads',?,?,'/tracker','repo','s1','input','digest',1,'m','high','{"harness":"codex","sandbox":"workspace-write"}',?,1,?,?,?)""",
             (key, f"{key}-token", backlog, task, deadline, seq, D, label),
         )
 

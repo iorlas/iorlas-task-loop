@@ -21,6 +21,8 @@ from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, CodexPolicy, Overrides, StepSettings
 from taskloop.attempt import Attempts
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_store import AttemptStore
@@ -55,8 +57,16 @@ def agent(answer: Mapping[str, object], change: Callable[[], None]) -> Agent:
 def execute(con: sqlite3.Connection, tmp_path: Path, key: AttemptKey, run: Agent, checkouts: Checkouts, files: SlotFiles) -> str:
     """The entry's execute; an implement attempt first runs its (fake) setup, which passes."""
     environment = Environment(con, checkouts, tmp_path, tmp_bytes=4096).preparation()
-    attempts = Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files,
-                        environment=environment)
+    attempts = Attempts(
+        AttemptStore(lambda: con),
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        run,
+        lambda: 10,
+        checkouts,
+        files,
+        environment=environment,
+    )
     return attempts.execute(key, ENTRY, lambda: "held").reason
 
 
@@ -87,7 +97,9 @@ def advancing(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, fil
 
 
 def request(repo: FakeRepo, previous: AttemptKey = KEY) -> NextStepRequest:
-    return NextStepRequest(previous, repo.path, "chosen", "high", "workspace-write", 100)
+    return NextStepRequest(
+        previous, repo.path, AgentSetting(model="chosen", effort="high", access=CodexPolicy(sandbox="workspace-write")), 100
+    )
 
 
 def tip(repo: FakeRepo) -> str:
@@ -119,10 +131,10 @@ def test_a_done_plan_advances_to_implement_attempt_one_after_its_commit(
     admitted = advancing(registered, tmp_path, checkouts, slot_files).admit_next(request(slot.repo))
     assert isinstance(admitted, Admitted) and admitted.slot == "s1"
     row = registered.execute(
-        """SELECT step,number,seq,after_commit,previous_attempt_id,tracker_root,sandbox,slot_head,input_path FROM attempt
+        """SELECT step,number,seq,after_commit,previous_attempt_id,tracker_root,access_policy,slot_head,input_path FROM attempt
         WHERE attempt_id=?""", (admitted.key.attempt_id,)).fetchone()
     d = registered.execute("SELECT slot_head FROM attempt WHERE attempt_id='attempt'").fetchone()[0]
-    assert row[:8] == ("implement", 1, 2, planned, None, "/tracker", "workspace-write", d)
+    assert row[:8] == ("implement", 1, 2, planned, None, "/tracker", '{"harness":"codex","sandbox":"workspace-write"}', d)
     text = (tmp_path / row[8]).read_text()
     assert text.startswith("Add a widget\n\nIt must do X") and f"`{PLAN}`" in text
     assert registered.execute("SELECT attempt_id FROM reservation").fetchone() == (admitted.key.attempt_id,)
@@ -289,7 +301,17 @@ def test_an_abandoned_implement_restarts_the_task_at_plan(
     abandon(registered, checkouts, slot_files, key)
     fresh = AttemptAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), tasks(CLAIMED), checkouts,
                              lambda _r, _t: True, lambda _r, _t: True, lambda: 10, lambda _p: True, slot_files)
-    admitted = fresh.admit(AdmitRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", "workspace-write", 100, None))
+    admitted = fresh.admit(
+        AdmitRequest(
+            "tl-1",
+            "tasks",
+            "/tracker",
+            slot.repo.path,
+            AgentSetting(model="chosen", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            100,
+            None,
+        )
+    )
     assert isinstance(admitted, Admitted)
     row = registered.execute("SELECT step,number,seq,after_commit,label FROM attempt WHERE attempt_id=?",
                              (admitted.key.attempt_id,)).fetchone()
@@ -357,16 +379,22 @@ def test_step_start_on_a_done_plan_admits_and_launches_implement(
     launcher, never = Launcher(), Never()
     ports = StartPorts(AttemptStore(lambda: registered), never, launcher, lambda: 10, never,
                        advancing(registered, tmp_path, checkouts, slot_files), NO_CHECKS)
-    started = start(ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", 1))
+    started = start(
+        ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, StepSettings(), Overrides(model="chosen", effort="high"), 1)
+    )
     assert isinstance(started, Started) and (started.status, started.step, started.existing) == ("started", "implement", False)
     assert launcher.calls == ["tl-1"]
-    again = start(ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, "chosen", "high", 1))
+    again = start(
+        ports, StartRequest("tl-1", "tasks", "/tracker", slot.repo.path, StepSettings(), Overrides(model="chosen", effort="high"), 1)
+    )
     assert isinstance(again, Started) and again.attempt_id == started.attempt_id and again.status == "relaunched"
 
 
 V11 = "INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,"
-V11 += "input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason,after_commit) "
-V11 += "VALUES (?,?,1,?,'beads','tasks','tl-1','/t','r','s1','i','d',1,'m','e','workspace-write',100,?,?,?,?,?,?)"
+V11 += """input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
+previous_attempt_id,repeat_reason,after_commit) """
+V11 += """VALUES (?,?,1,?,'beads','tasks','tl-1','/t','r','s1','i','d',1,'m','e','{"harness":"codex",
+"sandbox":"workspace-write"}',100,?,?,?,?,?,?)"""
 SHA = "a" * 40
 
 

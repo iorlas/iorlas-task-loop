@@ -19,6 +19,7 @@ from git_porcelain.testing import FakeWorktree
 from taskloop import verifier as verifier_module
 from taskloop.admit import AdmitRefused, Admitted, AdmitUnavailable
 from taskloop.admit_chain import RepeatRequest
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
@@ -62,8 +63,15 @@ def agent(slot: FakeWorktree, files: dict[str, str]) -> Execution:
 def captured(
     con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, files: SlotFiles, written: dict[str, str]
 ) -> None:
-    attempts = Attempts(AttemptStore(lambda: con), EvidenceFiles(tmp_path), lambda: ("/bin/codex", {}), agent(slot, written), lambda: 10,
-                            checkouts, files)
+    attempts = Attempts(
+        AttemptStore(lambda: con),
+        EvidenceFiles(tmp_path),
+        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        agent(slot, written),
+        lambda: 10,
+        checkouts,
+        files,
+    )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
 
 

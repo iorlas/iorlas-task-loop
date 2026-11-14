@@ -19,6 +19,7 @@ from git_porcelain.testing import apply_hermetic_env, git
 from sqlite_store import begin_immediate
 
 from taskloop.admit_chain import ChainAdmission
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Unsettled, Verified
@@ -73,9 +74,9 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
         factory.execute("INSERT INTO reservation VALUES ('s1',?,1,'attempt')", (VIEWS.checkouts(main).identity().key,))
         factory.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
+            input_digest,schema_version,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,number,seq,slot_head)
             VALUES ('attempt','dispatch',1,'plan','beads','tasks','tl-1','/tracker',?,'s1','input.txt',?,1,'chosen','high',
-            'workspace-write',100,7,'entry-start','boot',1,1,?)""",
+            '{"harness":"codex","sandbox":"workspace-write"}',100,7,'entry-start','boot',1,1,?)""",
             (VIEWS.checkouts(main).identity().key, hashlib.sha256(TASK.encode()).hexdigest(), base),
         )
     art.mkdir()
@@ -83,7 +84,9 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     store, files = AttemptStore(lambda: factory), RealSlotFiles()
 
     def attempts(run: Execution) -> Attempts:
-        return Attempts(store, EvidenceFiles(art), lambda: ("/bin/codex", {}), run, lambda: 10, VIEWS.checkouts, files)
+        return Attempts(
+            store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {})), run, lambda: 10, VIEWS.checkouts, files
+        )
 
     verifier = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold)
     assert attempts(agent(slot, {P: "# Plan\n", "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"

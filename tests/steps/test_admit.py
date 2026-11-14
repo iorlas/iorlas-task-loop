@@ -19,6 +19,8 @@ from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AdmitUnavailable, AttemptAdmission, checkout_repo, read_task
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, ClaudePolicy, CodexPolicy, OpenCodePolicy
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
@@ -101,7 +103,15 @@ def slots(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> No
 
 def request(tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str = "chosen", task_id: str = "tl-1",
             label: str | None = None) -> AdmitRequest:
-    return AdmitRequest(task_id, "tasks", str(tmp_path), repo.path, model, "high", "workspace-write", deadline, label)
+    return AdmitRequest(
+        task_id,
+        "tasks",
+        str(tmp_path),
+        repo.path,
+        AgentSetting(model=model, effort="high", access=CodexPolicy(sandbox="workspace-write")),
+        deadline,
+        label,
+    )
 
 
 def time() -> float:
@@ -138,7 +148,9 @@ def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractCon
 
 def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
     artifacts = EvidenceFiles(tmp_path / "artifacts")
-    return Attempts(AttemptStore(lambda: con), artifacts, lambda: ("/bin/codex", {}), run, lambda: 10, checkouts, files)
+    return Attempts(
+        AttemptStore(lambda: con), artifacts, AgentLaunch(lambda _harness: ("/bin/codex", {})), run, lambda: 10, checkouts, files
+    )
 
 
 def rows(con: sqlite3.Connection) -> tuple[int, int]:
@@ -186,7 +198,9 @@ def test_the_admission_stores_the_harness_and_the_provider_derived_from_it_and_t
 ) -> None:
     slots(factory, repo, root, 1)
     tracker = Tracker(factory, tmp_path / "artifacts")
-    wanted = replace(request(tmp_path, repo, model=model), harness=harness)
+    policy = (CodexPolicy() if harness is HarnessKind.CODEX else
+              ClaudePolicy(settings_file=tmp_path / "policy.json", settings="{}") if harness is HarnessKind.CLAUDE else OpenCodePolicy())
+    wanted = replace(request(tmp_path, repo), setting=AgentSetting(harness=harness, model=model, access=policy))
     assert isinstance(admission(factory, tmp_path, tracker, repo).admit(wanted), Admitted)
     assert factory.execute("SELECT harness,provider,model FROM attempt").fetchall() == [(harness, provider, model)]
 
@@ -361,7 +375,6 @@ def test_an_unexpected_failure_compensates_then_propagates(factory: sqlite3.Conn
 @pytest.mark.parametrize(
     ("change", "expected"),
     [
-        ("model", "choices"),
         ("nan", "deadline"),
         ("inf", "deadline"),
         ("deadline", "expired"),
@@ -383,7 +396,15 @@ def test_invalid_request_or_store_refuses_before_any_claim(
     if change in ("task", "input"):
         wanted = request(tmp_path, repo, task_id="tl-404" if change == "task" else "tl-3")
     elif change == "checkout":
-        wanted = AdmitRequest("tl-1", "tasks", str(tmp_path), repo.path / "subdir", "chosen", "high", "workspace-write", 100, None)
+        wanted = AdmitRequest(
+            "tl-1",
+            "tasks",
+            str(tmp_path),
+            repo.path / "subdir",
+            AgentSetting(model="chosen", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+            100,
+            None,
+        )
     elif change == "version":
         factory.execute("PRAGMA user_version=1")
     elif change == "reservations":

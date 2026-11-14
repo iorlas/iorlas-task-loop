@@ -43,10 +43,11 @@ type Renewal = Literal["held", "unrenewed", "lost"]
 type Renew = Callable[[], Renewal]  # one claim renewal, now (the entry's keep-alive)
 type GroupAlive = Callable[[int], bool]  # any process left in a process group
 type SlotProfiles = Callable[[Path, Path], ProfileFiles]  # (slot, its verified Git directory): the profile at a commit
-type Launch = tuple[str, Mapping[str, str]]  # the agent's Codex executable and its scrubbed environment (the credentials)
+type Launch = tuple[str, Mapping[str, str]]  # the selected agent's executable and scrubbed environment (the credentials)
 # Whether the implement agent's sandbox works here: `codex sandbox` (exe) with the agent's environment and keys, run in the
 # freshly emptied scratch, gives the shell its variables and writes each folder and not /tmp.
-type SandboxProbe = Callable[[str, Mapping[str, str], Folders], bool]
+type SandboxProbe = Callable[[Sequence[str], Mapping[str, str], Folders], bool]
+type ProbeLaunch = tuple[Sequence[str], Mapping[str, str]]
 
 
 @dataclass(frozen=True)
@@ -186,16 +187,18 @@ class Preparation:
     def __init__(self, ports: EnvironmentPorts) -> None:
         self.ports = ports
 
-    def prepare(self, record: AttemptRecord, slot: Prepared, renew: Renew, launch: Launch) -> AttemptResult | None:
+    def prepare(
+        self, record: AttemptRecord, slot: Prepared, renew: Renew, launch: Launch, command: Sequence[str] | None
+    ) -> AttemptResult | None:
         """Section 4's order; None when the agent may be dispatched. `launch`: the agent's executable and the credentials'
         scrubbed environment (setup gets it with the folders, the probe with the agent's additions)."""
         admission = record.admission
         target = SetupFor(admission.key, Path(admission.slot_path), None, task_branch(admission.task.task_id),
                           admission.deadline, admission.number == 1 or admission.source_checks_id is not None)
-        return self.prepare_for(target, slot, renew, launch[1], probe=launch)
+        return self.prepare_for(target, slot, renew, launch[1], probe=None if command is None else (command, launch[1]))
 
     def prepare_for(self, target: SetupFor, slot: Prepared, renew: Renew, env: Mapping[str, str], *,
-                    probe: Launch | None) -> AttemptResult | None:
+                    probe: ProbeLaunch | None) -> AttemptResult | None:
         """Both paths: `env` is the scrubbed environment setup gets with the folders; `probe` the agent's Codex and
         environment for the sandbox probe, None for no probe (a checks slot)."""
         found = folders(target.slot)
@@ -207,7 +210,7 @@ class Preparation:
                 stopped = _unavailable("git")
         return stopped or self._finish(found, renew, target.deadline)
 
-    def _ready(self, key: AttemptKey, path: Path, slot: Prepared, probe: Launch | None) -> AttemptResult | None:
+    def _ready(self, key: AttemptKey, path: Path, slot: Prepared, probe: ProbeLaunch | None) -> AttemptResult | None:
         """Steps 1-4: the failure count (before the probe: a dead attempt costs nothing), the reconcile, the preflight,
         the scratch emptied, then the sandbox probe in it (never in the slot, whose ignored files are not reset yet)."""
         if self.ports.store.failures(key) >= SETUP_RUNS:
@@ -220,8 +223,8 @@ class Preparation:
             return _unavailable("environment:files")
         if probe is None:
             return None
-        exe, env = probe
-        return None if self.ports.probe(exe, env, found) else _refused("environment:sandbox")
+        argv, env = probe
+        return None if self.ports.probe(argv, env, found) else _refused("environment:sandbox")
 
     def _finish(self, found: Folders, renew: Renew, deadline: float) -> AttemptResult | None:
         """Steps 9-11: the scratch emptied again (setup's temporary files never reach the agent), one claim renewal, the

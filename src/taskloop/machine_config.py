@@ -6,10 +6,12 @@ variable is read; `~` is expanded against the given home only.
 
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Final, Literal
 
+from taskloop.agents.config import configuration_error, resolve_agents
+from taskloop.agents.settings import StepSettings
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS, MIN_GIT_READ_SECONDS
 from taskloop.task import TaskInspectionError, TaskScope
 
@@ -34,13 +36,16 @@ class Effective:
     git_read_seconds: Setting[int]  # seconds a Git read (status, diff, ls-files, ...) may take before it is `unavailable:git`
     backlog: Setting[str | None]  # the file's default for `tl step show`; its explicit flag remains a separate input
 
+    agents: StepSettings = field(default_factory=StepSettings)
+    agent_sources: dict[str, str] = field(default_factory=dict)
+
     def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int] | Setting[str | None]], ...]:
         """Every key with its setting, in key order."""
         return (("db", self.db), ("artifacts", self.artifacts), ("slots_root", self.slots_root), ("slot_count", self.slot_count),
                 ("round_seconds", self.round_seconds), ("git_read_seconds", self.git_read_seconds), ("backlog", self.backlog))
 
 
-KEYS: Final = tuple(field.name for field in fields(Effective))  # the file's only keys
+KEYS: Final = tuple(field.name for field in fields(Effective) if field.name != "agent_sources")  # the file's only keys
 
 
 @dataclass(frozen=True)
@@ -162,6 +167,11 @@ def resolve(text: str | None, flags: Flags, home: Path) -> Effective | ConfigRef
         return ConfigRefused("unknown_key", unknown[0], f"Unknown keys: {', '.join(unknown)}")
     built, path = defaults(home), _path(home)
     try:
+        agents, sources = resolve_agents(table.get("agents", {}), home)
+    except (ValueError, OSError) as error:
+        key, detail = configuration_error(error)
+        return ConfigRefused("type", key, detail)
+    try:
         return Effective(
             _chosen("db", table, flags.db, built.db, path),
             _chosen("artifacts", table, flags.artifacts, built.artifacts, path),
@@ -171,6 +181,7 @@ def resolve(text: str | None, flags: Flags, home: Path) -> Effective | ConfigRef
             _chosen("git_read_seconds", table, flags.git_read_seconds, built.git_read_seconds,
                     _between(MIN_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS)),
             _chosen("backlog", table, None, built.backlog, _backlog),
+            agents, sources,
         )
     except _Refusal as refusal:
         return refusal.refused

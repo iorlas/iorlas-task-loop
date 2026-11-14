@@ -3,6 +3,7 @@ here decides, reads or writes; `result_data.as_data` is the one JSON shape."""
 
 from pathlib import Path
 
+from taskloop.agents.config import display
 from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.drain.models import Reason
@@ -174,4 +175,6 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         return lines + hints + (["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else [])
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
     lines += [f"{key} = {'unset' if each.value is None else each.value} ({each.source})" for key, each in result.settings.pairs()]
+    lines += [f"{key} = {each['value']} ({each['source']})"
+              for key, each in display(result.settings.agents, result.settings.agent_sources).items()]
     return [*lines, SLOT_COUNT_NOTE]

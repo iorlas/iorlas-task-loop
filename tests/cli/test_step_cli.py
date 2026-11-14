@@ -17,6 +17,7 @@ from stream_proc import OwnedProcess
 from taskloop import cli_composition, cli_step, rounds_lock, step_guide
 from taskloop.access import SANDBOX
 from taskloop.admit import AdmitRequest, AdmitResult, Admitted
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import PublishedRow, ReleaseRow
 from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, SetupShown, Shown
 from taskloop.attempt_store import AttemptStore
@@ -143,7 +144,12 @@ def test_start_flags_and_config_reach_the_request_and_the_openers(
     assert opened == [(tmp_path / "file.db", tmp_path / "flag-art")]
     request = admission.requests[0]
     assert (request.task_id, request.backlog, request.tracker_root, request.checkout) == ("tl-1", "tasks", "/tracker", Path("/checkout"))
-    assert (request.model, request.effort, request.sandbox, request.deadline) == ("m", "high", SANDBOX, 1000 + 30 * 60)
+    assert (request.setting.model, request.setting.effort, request.setting.summary, request.deadline) == (
+        "m",
+        "high",
+        SANDBOX,
+        1000 + 30 * 60,
+    )
     output = capsys.readouterr()
     assert json.loads(output.out) == {
         "status": "started", "backlog": "tasks", "task": "tl-1", "step": None, "attempt_id": "attempt", "existing": False,
@@ -412,8 +418,9 @@ def admitted(path: Path) -> None:
         con.execute("INSERT INTO reservation VALUES ('s1','repo',1,'attempt')")
         con.execute(
             """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,
-            input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head)
-            VALUES ('attempt',?,1,'plan','beads','tasks','tl-1','/tracker','repo','s1','input.txt',?,1,'m','high','workspace-write',100,1,1,
+            input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head)
+            VALUES ('attempt',?,1,'plan','beads','tasks','tl-1','/tracker','repo','s1','input.txt',?,1,'m','high',
+            '{"harness":"codex","sandbox":"workspace-write"}',100,1,1,
             'dddddddddddddddddddddddddddddddddddddddd')""",
             (KEY.dispatch_token, hashlib.sha256(b"x").hexdigest()),
         )
@@ -429,9 +436,10 @@ def test_a_repeat_shows_the_setup_of_the_attempt_whose_environment_it_keeps(tmp_
         con.execute("INSERT INTO setup_run (attempt_id,run,dispatch_token,generation,commit_sha,digest,started_at,ended_at,conclusion,rc) "
                     "VALUES ('attempt',1,?,1,?,?,1,2,'passed',0)", (KEY.dispatch_token, "d" * 40, "f" * 64))
         con.execute("""INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
-            input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason)
+            input_path,input_digest,schema_version,model,effort,access_policy,deadline,number,seq,slot_head,
+            previous_attempt_id,repeat_reason)
             SELECT 'second','token-2',1,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,schema_version,
-            model,effort,sandbox,deadline,2,2,slot_head,'attempt','uncommitted' FROM attempt WHERE attempt_id='attempt'""")
+            model,effort,access_policy,deadline,2,2,slot_head,'attempt','uncommitted' FROM attempt WHERE attempt_id='attempt'""")
     con.close()
     assert main(["step", "show", "tl-1", "--backlog", "tasks", "--db", str(db), "--artifacts", str(art), "--json"]) == 0
     shown = json.loads(capsys.readouterr().out)
@@ -537,7 +545,9 @@ def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
     monkeypatch.setattr(cli_step, "run_round", advanced)
     assert main([*NEXT, "--db", str(tmp_path / "f.db"), "--artifacts", str(tmp_path / "art"), "--json"]) == 0
     assert opened == [(tmp_path / "f.db", tmp_path / "art", "/tracker")]
-    assert requests == [cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)]
+    assert requests == [
+        cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+    ]
     assert json.loads(capsys.readouterr().out) == {
         "status": "round", "backlog": "tasks", "stopped": None, "logged": False,
         "moves": [{"task": "tl-3", "action": "start", "word": "started", "attempt_id": "a3", "detail": None}],
@@ -546,7 +556,7 @@ def test_next_flags_reach_the_request_and_the_opener_and_its_json_is_exact(
     assert f"Log: not written ({tmp_path / 'art' / 'rounds.log'})" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--model", "--effort", "--minutes"])
+@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--minutes"])
 def test_next_requires_every_choice_and_its_help_names_the_round(missing: str, capsys: pytest.CaptureFixture[str]) -> None:
     at = NEXT.index(missing)
     with pytest.raises(SystemExit) as result:
@@ -578,7 +588,9 @@ def test_one_round_runs_over_the_real_next_wiring_and_an_empty_factory_db(tmp_pa
     con.close()
     with cli_composition.open_next(db, tmp_path / "artifacts", GitViews(DEFAULT_GIT_READ_SECONDS), str(tmp_path)) as ports:
         assert not isinstance(ports, Failed) and ports.holding.status("tasks", "tl-1") is None
-        found = run_round(ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", "m", "high", 30))
+        found = run_round(
+            ports, NextRequest("tasks", str(tmp_path), tmp_path, "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
+        )
     assert isinstance(found, Round) and (found.moves, found.stopped) == ((), "no_free_slot")
 
 
@@ -617,7 +629,7 @@ def test_rounds_flags_reach_the_opener_and_print_a_start_and_an_end(
 ) -> None:
     run, art = stubbed(monkeypatch, Ended("tasks", "interrupted")), tmp_path / "art"
     assert main([*ROUNDS, "--db", str(tmp_path / "f.db"), "--artifacts", str(art)]) == 0
-    request = cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)
+    request = cli_step.NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
     assert run.opened == [(tmp_path / "f.db", art, request)] and run.requests == [cli_step.RoundsRequest("tasks", 60)]
     output = capsys.readouterr()
     assert output.out.splitlines() == [
@@ -661,7 +673,9 @@ def test_a_second_ctrl_c_exits_130(structured: bool, monkeypatch: pytest.MonkeyP
 
 def test_a_factory_db_that_exists_but_cannot_be_opened_backs_off_while_an_absent_one_ends(tmp_path: Path) -> None:
     db = tmp_path / "factory.db"
-    request = cli_step.NextRequest("tasks", str(tmp_path), Path("/checkout"), "auto", "m", "high", 30)
+    request = cli_step.NextRequest(
+        "tasks", str(tmp_path), Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30
+    )
     once = cli_composition.one_round(db, tmp_path / "art", GitViews(DEFAULT_GIT_READ_SECONDS), request, lambda: False)
     absent = once(frozenset())
     assert isinstance(absent, Failed) and (absent.kind, absent.reason) == ("refused", "database")
@@ -681,7 +695,7 @@ def test_rounds_refuse_a_short_interval_before_opening_anything(
     assert step_guide.GUIDE["interval"] in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--model", "--effort", "--minutes"])
+@pytest.mark.parametrize("missing", ["--label", "--backlog", "--tracker-root", "--checkout", "--minutes"])
 def test_rounds_require_every_choice_and_the_help_names_the_stop(missing: str, capsys: pytest.CaptureFixture[str]) -> None:
     at = ROUNDS.index(missing)
     with pytest.raises(SystemExit) as result:

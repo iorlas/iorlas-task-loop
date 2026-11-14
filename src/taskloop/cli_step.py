@@ -4,10 +4,14 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
+from pydantic import ValidationError
+
 from taskloop import attempt_status, cli_composition, dash_composition, land, operations, result_data
+from taskloop.agents.settings import Overrides
 from taskloop.composition import real_slots
 from taskloop.drain.models import Reason
 from taskloop.exit_codes import exit_code
@@ -47,6 +51,7 @@ def register(commands: Parsers) -> None:
     config = _add(commands, "config", "Machine configuration").add_subparsers(dest="operation", required=True)
     show = _add(config, "show", "Print each effective setting, its source, and the config file")
     _common(show, "--db", "--artifacts", "--root")
+    _harness_flag(show)
     show.add_argument("--count", type=int, help="Slot count (overrides the machine config's slot_count)")
     slot = _add(commands, "slot", "Managed slots (setup)").add_subparsers(dest="operation", required=True)
     adopt = _add(slot, "adopt", "Adopt worktrees made by hand with `git worktree add --detach <root>/<repo name>/sN`; creates factory.db")
@@ -57,7 +62,7 @@ def register(commands: Parsers) -> None:
     start = _add(step, "start", "Admit, relaunch or repeat the task's attempt (free slot, tracker claim), advance a done step, or "
                  "re-run failed checks on the same commit. The tracker claim stays held between steps; nothing renews it then")
     start.add_argument("task_id", metavar="TASK")
-    for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
+    for flag in ("--backlog", "--tracker-root", "--checkout"):
         start.add_argument(flag, required=True)
     start.add_argument("--minutes", type=int, required=True, help="Deadline of the attempt (or of its repeat), from now")
     _harness_flag(start)
@@ -133,12 +138,14 @@ def _land_flags(parser: argparse.ArgumentParser) -> None:
 
 
 def _harness_flag(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--harness", type=HarnessKind, choices=list(HarnessKind), default=HarnessKind.CODEX,
-                        help="The agent harness a started step runs under (default codex)")
+    for flag in ("--model", "--effort"):
+        parser.add_argument(flag, default=None, help="Override this field of each newly admitted step (flag > machine config > default)")
+    parser.add_argument("--harness", type=HarnessKind, choices=list(HarnessKind), default=None,
+                        help="Override each newly admitted step's configured harness")
 
 
 def _round_flags(parser: argparse.ArgumentParser) -> None:
-    for flag in ("--backlog", "--tracker-root", "--checkout", "--model", "--effort"):
+    for flag in ("--backlog", "--tracker-root", "--checkout"):
         parser.add_argument(flag, required=True)
     parser.add_argument("--label", required=True, help="The tracker label approving a ready task for "
                         "autonomous execution (`auto`), read only when a new task is taken; a claimed task advances without it")
@@ -160,22 +167,25 @@ def views_for(loaded: Loaded) -> GitViews:
 
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.model,
-                           arguments.effort, arguments.minutes, harness=arguments.harness)
+    request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), loaded.settings.agents,
+                           _overrides(arguments), arguments.minutes)
     with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
         return ports if isinstance(ports, Failed) else operations.start(ports, request)
 
 
-def _next_request(arguments: argparse.Namespace) -> NextRequest:
-    return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
-                       arguments.effort, arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed,
-                       harness=arguments.harness)
+def _overrides(arguments: argparse.Namespace) -> Overrides:
+    return Overrides(harness=arguments.harness, model=arguments.model, effort=arguments.effort)
+
+
+def _next_request(arguments: argparse.Namespace, loaded: Loaded) -> NextRequest:
+    return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, loaded.settings.agents,
+                       _overrides(arguments), arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed)
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    settings = loaded.settings
+    settings, request = loaded.settings, _next_request(arguments, loaded)
     with cli_composition.open_next(settings.db.value, settings.artifacts.value, views_for(loaded), arguments.tracker_root) as ports:
-        return ports if isinstance(ports, Failed) else run_round(ports, _next_request(arguments))
+        return ports if isinstance(ports, Failed) else run_round(ports, request)
 
 
 def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_composition.DashRequest | None:
@@ -191,7 +201,9 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings, request = loaded.settings, RoundsRequest(arguments.backlog, loaded.settings.round_seconds.value)
     log = settings.artifacts.value / "rounds.log"
     try:
-        with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments)) as ports:
+        with cli_composition.open_rounds(
+            settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments, loaded)
+        ) as ports:
             if isinstance(ports, (Failed, Ended)):
                 return ports
             label = arguments.label.strip()  # as `run_round` reads it
@@ -263,8 +275,22 @@ def _adopt(arguments: argparse.Namespace, loaded: Loaded) -> Result:
                                  real_slots(views_for(loaded)))
 
 
+def _configuration(arguments: argparse.Namespace, loaded: Loaded) -> Loaded | Failed:
+    flags = _overrides(arguments)
+    try:
+        settings = loaded.settings.agents.overridden(flags)
+    except ValueError as error:
+        return Failed("refused", "choices", str(error))
+    sources = dict(loaded.settings.agent_sources)
+    for step in ("plan", "implement"):
+        for key in ("harness", "model", "effort"):
+            if getattr(flags, key) is not None:
+                sources[f"agents.{step}.{key}"] = "flag"
+    return replace(loaded, settings=replace(loaded.settings, agents=settings, agent_sources=sources))
+
+
 OPERATIONS: dict[tuple[str, str], Callable[[argparse.Namespace, Loaded], Result]] = {
-    ("config", "show"): lambda _arguments, loaded: loaded,
+    ("config", "show"): _configuration,
     ("slot", "adopt"): _adopt,
     ("step", "start"): _start,
     ("step", "next"): _next,
@@ -286,7 +312,10 @@ def run(arguments: argparse.Namespace) -> int:
     if isinstance(loaded, ConfigRefused):
         result: Result = operations.refused_config(loaded)
     else:
-        result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
+        try:
+            result = OPERATIONS[arguments.command, arguments.operation](arguments, loaded)
+        except ValidationError as error:
+            result = Failed("refused", "choices", str(error))
     failed = isinstance(result, Failed) or (isinstance(result, Ended)
                                             and result.reason not in {"interrupted", Reason.DRAINED, Reason.DRAINING})
     stream = sys.stderr if failed else sys.stdout

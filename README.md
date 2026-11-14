@@ -3,7 +3,7 @@
 The successor task factory implements plan, implement and checks, task holds, explicit land, and an optional
 read-only dashboard. It admits approved tasks into free slots, publishes verified agent results as `task/<id>` on
 `origin`, and runs the repository profile's checks. Before implementation and checks, it prepares the slot's
-environment and runs the profile's `setup` (Linux only); the agent works offline with that environment.
+environment and runs the profile's `setup` (Linux only); Codex agents work offline with that environment.
 Rounds advance tasks through checks. Land defaults to `manual`: the person delivers a checked task with `tl step land`.
 With `land: auto` in the target profile read from origin's `main`, a round runs the same land operation for at most
 one task per round. Refusals about the task's change hold it with the recorded cause, preventing repeated attempts
@@ -47,8 +47,8 @@ tail in its prompt. Path repeats and check-driven repeats share the three-attemp
 also receives fresh checks. Infrastructure failures and optional failures alone do not trigger repair. Unsafe-path
 feedback names the actual unsafe file, including a nearby Git file omitted from the answer.
 
-Factory schema v18 adds the durable drain boundary and external-action ownership records (v17 added the source checks
-link). Older databases are refused, with no migration. For subsequent upgrades, drain with the pinned matching release
+Factory schema v20 stores each agent attempt's complete typed access policy (v19 added saved held work; v18 added the
+durable drain boundary and external-action ownership records; v17 added the source checks link). Older databases are refused, with no migration. For subsequent upgrades, drain with the pinned matching release
 before changing code. The first installation of v18 needs the supervisor to stop admission and verify that the previous
 runtime's entries, agents, checks and other writers finished; the new command cannot drain an incompatible database.
 Discard remains an owner decision through its authorized operation. Drain performs no upgrade, discard or restart.
@@ -79,6 +79,43 @@ The machine config is `~/.config/task-loop/config.toml` or `--config FILE`; stat
 `~/.local/state/task-loop`. Its optional `backlog = "KEY"` sets the default for `step show`; `config show` reports
 `unset` (JSON null) when absent. Other commands are rejected until their behavior is implemented. `tl <command> --help`
 is the reference; the design index links each slice's plan and implementation evidence. `tl plan` is no longer a command.
+Agent choices live in the machine config, independently for each built agent step. With no agent flags,
+start, next and rounds use Codex with `gpt-6.1-sol`, high effort for plan and medium for implement. These effort defaults
+are the owner's convention, not vendor guidance. For example:
+
+```toml
+[agents.plan]
+harness = "codex"
+effort = "high"
+[agents.plan.access]
+sandbox = "workspace-write"
+
+[agents.implement]
+harness = "claude"
+model = "opus"
+effort = "medium"
+[agents.implement.access]
+settings_file = "~/.config/task-loop/claude-settings.json"
+permission_mode = "dontAsk"
+```
+
+`--harness`, `--model` and `--effort` optionally override their fields on each newly admitted step (flag, then file,
+then default). A different harness needs its own model and policy in configuration; a harness flag cannot borrow
+another harness's policy. Provider is derived from the harness and model. `config show` accepts these overrides too
+and reports sources and safe access summaries. Claude settings must be a JSON object; the mode defaults to `dontAsk`,
+including for plan. OpenCode uses `harness = "opencode"`, an explicit model identifier (including its provider prefix
+when required), and optional `access.sandbox_file`: a JSON object containing `readable`, `scratch` and `runners`.
+Policy paths must be absolute or home-expanded. Omitting the OpenCode file uses the released library defaults.
+Unknown keys, malformed documents and incomplete choices fail before admission.
+
+Rounds capture configuration and policy contents once at startup. An advance selects the next step's setting;
+repeats, failed-check repairs and relaunches keep their admitted settings even if policy files change or disappear.
+Attempt headers show the stored harness, provider, model, effort and access summary. Codex uses its local file login;
+Claude uses its local subscription login, and OpenCode uses the released harness's local configuration. Claude and
+OpenCode skip sandbox and writable-root preflight; shared setup and safe folder cleanup still apply. OpenCode's
+released shell sandbox uses macOS `sandbox-exec`, so Linux enforcement is not promised. Harness routing and fallback
+remain future work.
+
 The previous implementation remains in Git history. [docs/design/INDEX.md](docs/design/INDEX.md) lists every design folder
 and document; [docs/glossary.md](docs/glossary.md) holds the vocabulary, the commit letters and the CLI flag table.
 The [decision records](docs/design/INDEX.md#decision-records) distinguish accepted decisions, later qualifications

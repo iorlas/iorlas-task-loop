@@ -19,6 +19,7 @@ from sqlite_store import begin_immediate
 
 from taskloop.admit import Admitted
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
+from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
 from taskloop.attempt_entry import shown
 from taskloop.attempt_status import StatusPorts, show_attempt
@@ -104,7 +105,15 @@ class Step:
         self.verifier = Verifier(self.store, checkouts, files, lambda _worker: True, lambda: 20, hold)
 
     def run(self, key: AttemptKey, entry: EntryIdentity, agent: Agent) -> str:
-        attempts = Attempts(self.store, EvidenceFiles(self.tmp), lambda: ("/bin/codex", {}), agent, lambda: 10, self.checkouts, self.files)
+        attempts = Attempts(
+            self.store,
+            EvidenceFiles(self.tmp),
+            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            agent,
+            lambda: 10,
+            self.checkouts,
+            self.files,
+        )
         found = attempts.execute(key, entry)
         return f"{found.status} {found.reason}"
 

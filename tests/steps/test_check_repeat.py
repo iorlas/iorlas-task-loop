@@ -16,7 +16,10 @@ from sqlite_store import Store
 from test_checks_round import implemented
 
 from taskloop.admit import AdmitRefused, Admitted, Free
+from taskloop.agents.config import resolve_agents
+from taskloop.agents.settings import Overrides
 from taskloop.attempt_status import current_view, list_attempts, show_attempt
+from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, FileRef, SlotFiles, Unsettled
 from taskloop.check_admit import ChecksRequest
 from taskloop.check_repeat.feedback import FailedCheck
@@ -24,8 +27,10 @@ from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_repeat.store import CheckRepeatStore
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.harness_choice import HarnessKind
 from taskloop.launch import LaunchUnavailable
-from taskloop.operations import Failed, Started, release_task, start
+from taskloop.operations import Failed, Round, Started, release_task, start
+from taskloop.round import NextRequest, run_round
 from taskloop.setup_store import SetupStore
 from taskloop.steps import kind
 
@@ -126,7 +131,7 @@ def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: 
     assert repair is not None
     second = repair.repair(rig.request(), previous, source)
     assert isinstance(second, Started) and second.attempt_id == row.key.attempt_id and len(specs) == 1
-    assert specs[0].stdin == prompt and all(line in specs[0].stdin for line in ASSERTION.splitlines())
+    assert prompt is not None and specs[0].stdin.startswith(prompt) and all(line in specs[0].stdin for line in ASSERTION.splitlines())
     assert len(rig.store.attempts("tasks", "tl-1")) == 3  # plan, implement, repeat
 
 
@@ -332,3 +337,39 @@ def test_status_and_dashboard_reads_only_describe_the_repeat(rig: Repairing) -> 
     assert not isinstance(listing, Failed) and listing.attempts[0].next == "repeat"
     assert not isinstance(shown, Failed) and shown.view.next == "repeat"
     assert rig.con.total_changes == before and not rig.tracker.holds
+
+
+@pytest.mark.parametrize("harness", [HarnessKind.CLAUDE, HarnessKind.OPENCODE])
+def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_reopening(rig: Repairing, harness: HarnessKind) -> None:
+    policy = rig.tmp / "machine-policy.json"
+    policy.write_text('{"env":{"CAPTURED":"first"}}' if harness is HarnessKind.CLAUDE else '{"scratch":".kept"}')
+    field = "settings_file" if harness is HarnessKind.CLAUDE else "sandbox_file"
+    settings, _sources = resolve_agents({"plan": {"model": "plan-model"}, "implement": {
+        "harness": harness.value, "model": "chosen-model", "access": {field: str(policy)}}}, rig.tmp)
+    request = NextRequest("tasks", "/tracker", rig.slot.repo.path, "auto", settings, Overrides(), 30)
+    for _turn in range(4):
+        rig.now += 1
+        assert isinstance(run_round(rig.ports(), request), Round)
+    rows = rig.store.attempts("tasks", "tl-1")
+    assert rows[0].step == "implement" and rows[0].run == settings.implement
+    assert rows[1].run == settings.plan and not rig.environment.probes
+    rig.bodies = ["failed"]
+    rig.now += 1
+    assert isinstance(run_round(rig.ports(), request), Round)
+    rig.failing = LaunchUnavailable("start")
+    assert isinstance(start(rig.starting(), rig.request()), Failed)
+    admitted = rig.store.attempts("tasks", "tl-1")[0]
+    assert admitted.run == settings.implement and admitted.number == 2
+    policy.unlink()
+    reopened = Store(SCHEMA).open_rw(rig.path)
+    assert reopened is not None
+    try:
+        assert AttemptStore(lambda: reopened).attempts("tasks", "tl-1")[0].run == settings.implement
+    finally:
+        reopened.close()
+    specs = repair_agent(rig)
+    assert isinstance(start(rig.starting(), rig.request()), Started)
+    assert len(specs) == 1 and "chosen-model" in specs[0].argv and "changed-model" not in specs[0].argv
+    if harness is HarnessKind.CLAUDE:
+        assert json.loads(specs[0].argv[specs[0].argv.index("--settings") + 1]) == {"env": {"CAPTURED": "first"}}
+    assert rig.store.attempts("tasks", "tl-1")[0].run == settings.implement

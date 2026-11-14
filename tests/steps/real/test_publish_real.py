@@ -21,6 +21,8 @@ from git_porcelain.testing import apply_hermetic_env, git
 from sqlite_store import begin_immediate
 
 from taskloop.admit import AdmitRequest, Admitted, AttemptAdmission
+from taskloop.agents.launch import AgentLaunch
+from taskloop.agents.settings import AgentSetting, CodexPolicy
 from taskloop.attempt import Attempts
 from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
@@ -90,11 +92,28 @@ class Published:
             lambda: factory, begin_immediate, EvidenceFiles(root / "art"), tasks, VIEWS.checkouts, yes, yes, lambda: 10, probe,
             RealSlotFiles()
         )
-        admitted = admission.admit(AdmitRequest("tl-1", "tasks", str(root), self.main, "m", "high", "workspace-write", 100, None))
+        admitted = admission.admit(
+            AdmitRequest(
+                "tl-1",
+                "tasks",
+                str(root),
+                self.main,
+                AgentSetting(model="m", effort="high", access=CodexPolicy(sandbox="workspace-write")),
+                100,
+                None,
+            )
+        )
         assert isinstance(admitted, Admitted) and self.store.register_entry(admitted.key, ENTRY, 10) == "accepted"
         self.key: AttemptKey = admitted.key
-        attempts = Attempts(self.store, EvidenceFiles(root / "art"), lambda: ("/bin/codex", {}), write_plan(self.slot), lambda: 10,
-                                VIEWS.checkouts, self.files)
+        attempts = Attempts(
+            self.store,
+            EvidenceFiles(root / "art"),
+            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            write_plan(self.slot),
+            lambda: 10,
+            VIEWS.checkouts,
+            self.files,
+        )
         attempts.execute(self.key, ENTRY)
         assert isinstance(Verifier(self.store, VIEWS.checkouts, self.files, gone, lambda: 20, hold).verify(self.key), Verified)
         self.x = self.rev(self.main, BRANCH)

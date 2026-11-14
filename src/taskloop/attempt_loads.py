@@ -15,6 +15,7 @@ from taskloop.attempt_reads import (
     as_nullable_text,
     as_text,
     stored_effect,
+    stored_setting,
 )
 from taskloop.attempt_types import (
     Admission,
@@ -30,7 +31,6 @@ from taskloop.attempt_types import (
     Verified,
 )
 from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, prefixed
-from taskloop.harness_choice import HarnessKind
 from taskloop.repo import RepoId
 from taskloop.steps import RULES
 from taskloop.task import TaskReference, TaskScope
@@ -74,11 +74,11 @@ class AttemptLoads(AttemptReads):
         held = con.execute(
             "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
         ).fetchone()
-        if held != (row[2], key.reservation_generation, key.attempt_id) or row[29] is None:
+        if held != (row[2], key.reservation_generation, key.attempt_id) or row[30] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):
             raise StoreUnavailable("Malformed deadline")
-        start = as_nullable_text(row[30])
+        start = as_nullable_text(row[31])
         if (row[24] is None) != (start is None):  # a later attempt always starts where a captured one ended
             raise StoreUnavailable("Malformed previous attempt")
         admission = Admission(
@@ -86,17 +86,14 @@ class AttemptLoads(AttemptReads):
             TaskReference(TaskScope(as_text(row[0])), as_text(row[1])),
             RepoId(as_text(row[2])),
             as_text(row[3]),
-            as_text(row[29]),
+            as_text(row[30]),
             FileRef(as_text(row[4]), as_text(row[5])),
-            as_text(row[6]),
-            as_text(row[7]),
-            as_text(row[8]),
+            stored_setting(row[27], row[29], row[6], row[7], row[8]),
             float(row[9]),
             (as_int(row[10]), as_text(row[11]), as_text(row[12])),
             as_int(row[23]),
             as_text(row[25]),
             as_nullable_text(row[26]),
-            HarnessKind(as_text(row[27])),
             as_nullable_text(row[28]),
         )
         pid, pgid, began, boot = row[15:19]

@@ -10,11 +10,11 @@ from dataclasses import astuple, dataclass
 
 from sqlite_store import begin_immediate
 
+from taskloop.agents.settings import AgentSetting, decode_setting
 from taskloop.attempt_types import ATTEMPTS, EFFECTS, AttemptKey, ChainLink, Effect, EntryIdentity, FileRef
 from taskloop.check_repeat.feedback import stored_source
 from taskloop.drain.models import Identity, Owner, Role, owners
 from taskloop.factory_schema import REPEATED, current
-from taskloop.harness_choice import HarnessKind, Provider
 
 
 @dataclass(frozen=True)
@@ -44,15 +44,7 @@ class PublishedRow:
     published_at: float
 
 
-@dataclass(frozen=True)
-class RunChoices:
-    """What an agent attempt was admitted to run: its harness, the provider of its model, its model, effort and sandbox."""
-
-    harness: HarnessKind
-    provider: Provider
-    model: str
-    effort: str
-    sandbox: str
+type RunChoices = AgentSetting
 
 
 @dataclass(frozen=True)
@@ -111,6 +103,13 @@ def as_text(value: object) -> str:
     if isinstance(value, str):
         return value
     raise StoreUnavailable("Malformed stored text")
+
+
+def stored_setting(harness: object, provider: object, model: object, effort: object, policy: object) -> AgentSetting:
+    try:
+        return decode_setting(as_text(harness), as_text(provider), as_text(model), as_text(effort), as_text(policy))
+    except ValueError as error:
+        raise StoreUnavailable("Malformed stored agent setting") from error
 
 
 def as_int(value: object) -> int:
@@ -202,7 +201,7 @@ class StoreConnection:
                     yield con
             else:
                 yield con
-        except sqlite3.Error as error:
+        except (sqlite3.Error, ValueError) as error:
             raise StoreUnavailable("Factory database operation failed") from error
 
 
@@ -284,7 +283,7 @@ class AttemptReads(StoreConnection):
                 EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.repo_id AND r.slot=p.slot AND r.attempt_id=p.attempt_id
                  AND r.generation=p.generation),x.head,x.released_at,x.claim,b.commit_sha,b.remote_head,b.published_at,p.step,
                 p.label,p.end_commit,p.repeat_listing,
-                p.harness,p.provider,p.model,p.effort,p.sandbox,p.source_checks_id FROM attempt p
+                p.harness,p.provider,p.model,p.effort,p.access_policy,p.source_checks_id FROM attempt p
                 LEFT JOIN slot_release x ON x.attempt_id=p.attempt_id
                 LEFT JOIN published_branch b ON b.attempt_id=p.attempt_id
                 WHERE p.adapter='beads' AND (?1 IS NULL OR p.backlog=?1) AND (?2 IS NULL OR p.task_id=?2)
@@ -303,8 +302,7 @@ class AttemptReads(StoreConnection):
                            as_int(row[13]), as_nullable_text(row[14]), as_nullable_text(row[15]), bool(as_int(row[16])), as_text(row[25]),
                            as_int(row[17]), bool(as_int(row[18])), _released(row[19:22]), _published(row[22:25]),
                            as_nullable_text(row[26]), as_nullable_text(row[27]), as_listed(row[28]), _source(row[34], row[15]),
-                           RunChoices(HarnessKind(as_text(row[29])), Provider(as_text(row[30])), as_text(row[31]), as_text(row[32]),
-                                      as_text(row[33])))
+                           stored_setting(*row[29:34]))
             )
         return tuple(found)
 

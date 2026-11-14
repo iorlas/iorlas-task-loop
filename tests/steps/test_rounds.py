@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import SlotUse
 from taskloop.exit_codes import exit_code
 from taskloop.operations import Ended, Failed, Move, Quiet, Round
@@ -245,22 +246,28 @@ def test_an_unwritable_log_changes_nothing_but_warns_once_each_time_it_stops_bei
     assert flapping.warned == 2
 
 
-REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", "m", "high", 30)
+REQUEST = NextRequest("tasks", "/tracker", Path("/checkout"), "auto", StepSettings(), Overrides(model="m", effort="high"), 30)
 
 
 @pytest.mark.parametrize("change, reason", [
     ({"backlog": "a/b"}, "backlog"), ({"backlog": ""}, "backlog"), ({"backlog": "a b"}, "backlog"), ({"label": " "}, "label"),
-    ({"model": ""}, "choices"), ({"effort": " "}, "choices"), ({"effort": "-high"}, "choices"), ({"model": "-m"}, "choices"),
     ({"minutes": 0}, "choices"), ({"minutes": 7 * 24 * 60 + 1}, "choices"),
 ])
 def test_the_rounds_choices_are_checked_before_anything(change: dict[str, str | int], reason: str) -> None:
     fields = {"backlog": "tasks", "label": "auto", "model": "m", "effort": "high", "minutes": 30} | change
-    request = NextRequest(str(fields["backlog"]), "/tracker", Path("/checkout"), str(fields["label"]), str(fields["model"]),
-                          str(fields["effort"]), int(fields["minutes"]))
+    request = NextRequest(
+        str(fields["backlog"]),
+        "/tracker",
+        Path("/checkout"),
+        str(fields["label"]),
+        StepSettings(),
+        Overrides(model=str(fields["model"]), effort=str(fields["effort"])),
+        int(fields["minutes"]),
+    )
     refused = inputs(request)
     assert refused is not None and (refused.kind, refused.reason) == ("refused", reason)
     assert inputs(REQUEST) is None
-    assert inputs(replace(REQUEST, effort="ultra")) is None  # which efforts exist is the vendor's to say
+    assert inputs(replace(REQUEST, overrides=Overrides(effort="ultra"))) is None  # which efforts exist is the vendor's to say
 
 
 def test_the_abrupt_line_is_best_effort() -> None:

@@ -10,10 +10,17 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.access import agent_env, folders
+from taskloop.access import PROBE, Folders, agent_env, folders
+from taskloop.agents.launch import codex_access
+from taskloop.agents.settings import CodexPolicy
 from taskloop.slot_env import sandbox_probe
 
+
 # MODE=record: write the cwd, TMPDIR, UV_OFFLINE and every argument to $RECORD, then exit $RC.
+def command(exe: str, found: Folders) -> list[str]:
+    return codex_access(CodexPolicy(), found).sandbox_argv(exe, ["/bin/sh", "-c", PROBE, "sh", *(str(p) for p in found.roots)])
+
+
 # MODE=run: run what follows `--` (the probe itself, unsandboxed).
 CODEX = """#!/bin/sh
 if [ "$MODE" = run ]; then
@@ -50,7 +57,7 @@ def test_the_probe_runs_codex_sandbox_in_the_emptied_scratch_with_codexs_own_env
     """Codex itself gets the environment it is given (no TMPDIR of the roots); the shell's variables are its keys."""
     found, record = folders(slot), tmp_path / "record"
     env = {"PATH": os.environ["PATH"], "MODE": "record", "RECORD": str(record), "RC": str(rc)}
-    assert sandbox_probe(codex, env, found) is answer
+    assert sandbox_probe(command(codex, found), env, found) is answer
     lines = record.read_text().splitlines()
     assert lines[:4] == [str(found.tmp), "", "", "sandbox"]
     assert f"shell_environment_policy.set.TMPDIR={json.dumps(str(found.tmp))}" in lines
@@ -59,13 +66,13 @@ def test_the_probe_runs_codex_sandbox_in_the_emptied_scratch_with_codexs_own_env
 
 def test_a_codex_that_cannot_start_is_a_failed_probe(slot: Path, tmp_path: Path) -> None:
     found = folders(slot)
-    assert sandbox_probe(str(tmp_path / "missing"), {"PATH": os.environ["PATH"]}, found) is False
+    assert sandbox_probe(command(str(tmp_path / "missing"), found), {"PATH": os.environ["PATH"]}, found) is False
 
 
 def test_a_shell_without_its_variables_fails_the_probe(codex: str, slot: Path) -> None:
     """A Codex config that overrides the shell's policy would leave the agent without TMPDIR or offline uv: exit 5."""
     found = folders(slot)
-    assert sandbox_probe(codex, {"PATH": os.environ["PATH"], "MODE": "run"}, found) is False
+    assert sandbox_probe(command(codex, found), {"PATH": os.environ["PATH"], "MODE": "run"}, found) is False
     assert all(list(root.iterdir()) == [] for root in found.roots)
 
 
@@ -77,7 +84,7 @@ def test_the_probe_fails_on_a_root_it_cannot_write_and_leaves_nothing_behind(cod
     (found.cache / ".tl-probe-1").mkdir()
     found.tools.chmod(stat.S_IRUSR | stat.S_IXUSR)
     try:
-        assert sandbox_probe(codex, {"PATH": os.environ["PATH"], "MODE": "run", **agent_env(found)}, found) is False
+        assert sandbox_probe(command(codex, found), {"PATH": os.environ["PATH"], "MODE": "run", **agent_env(found)}, found) is False
     finally:
         found.tools.chmod(stat.S_IRWXU)
     assert [list(root.iterdir()) for root in found.roots] == [[], [found.cache / ".tl-probe-1"], []]

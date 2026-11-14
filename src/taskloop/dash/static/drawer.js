@@ -259,7 +259,7 @@ function pane() {
     top.append(quiet);
   }
   wrap.append(top);
-  if (a.run) wrap.append(el("p", "px-6 pt-1 text-xs text-slate-500 dark:text-slate-400", [a.run.harness, a.run.provider, a.run.model, `${a.run.effort} effort`, a.run.sandbox].join(" · ")));
+  if (a.run) wrap.append(el("p", "px-6 pt-1 text-xs text-slate-500 dark:text-slate-400", [a.run.harness, a.run.provider, a.run.model, `${a.run.effort} effort`, a.run.access].join(" · ")));
   if (a.after) top.append(began(a)); // the full reason is readable here after selecting the row or tag
   const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
   for (const [id, label] of TABS) {

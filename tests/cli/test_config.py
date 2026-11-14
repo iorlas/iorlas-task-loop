@@ -134,7 +134,12 @@ def test_config_show_prints_values_sources_and_the_file(
     assert main(["--config", str(config), "config", "show", "--artifacts", str(tmp_path / "art"), "--json"]) == 0
     output = capsys.readouterr()
     assert output.err == ""
-    assert json.loads(output.out) == {
+    data = json.loads(output.out)
+    agents = {key: value for key, value in data["settings"].items() if key.startswith("agents.")}
+    assert agents["agents.plan.effort"] == {"value": "high", "source": "default"}
+    assert agents["agents.implement.effort"] == {"value": "medium", "source": "default"}
+    data["settings"] = {key: value for key, value in data["settings"].items() if not key.startswith("agents.")}
+    assert data == {
         "file": {"path": str(config), "exists": True},
         "settings": {
             "db": {"value": str(tmp_path / "scratch/factory.db"), "source": "file"},
@@ -212,3 +217,31 @@ def test_an_explicit_config_file_must_exist_while_the_fixed_one_may_be_absent(tm
     assert isinstance(missing, ConfigRefused) and missing.reason == "missing"
     absent = cli_composition.load_config(None, Flags(), lambda: tmp_path)
     assert not isinstance(absent, ConfigRefused) and not absent.exists and absent.settings == defaults(tmp_path)
+
+
+def test_config_show_has_safe_policy_provenance_and_per_field_override_sources(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    policy = tmp_path / "settings.json"
+    policy.write_text('{"hooks":{"opaque":"do-not-display"}}')
+    config = tmp_path / "config.toml"
+    config.write_text(f'''[agents.plan]
+harness = "claude"
+model = "opus"
+[agents.plan.access]
+settings_file = "{policy}"
+''')
+    assert main(["--config", str(config), "config", "show", "--effort", "low", "--json"]) == 0
+    output = capsys.readouterr()
+    values = json.loads(output.out)["settings"]
+    assert "do-not-display" not in output.out and "hooks" not in output.out
+    assert values["agents.plan.harness"] == {"value": "claude", "source": "file"}
+    assert values["agents.plan.effort"] == values["agents.implement.effort"] == {"value": "low", "source": "flag"}
+    assert values["agents.plan.access.settings_file"] == {"value": str(policy), "source": "file"}
+    assert values["agents.plan.access.permission_mode"] == {"value": "dontAsk", "source": "default"}
+    assert values["agents.plan.provider"] == {"value": "anthropic", "source": "derived"}
+
+
+def test_invalid_file_choice_is_checked_even_when_a_flag_would_override_it(tmp_path: Path) -> None:
+    result = resolve('[agents.implement]\nmodel = ""', Flags(), tmp_path)
+    assert isinstance(result, ConfigRefused) and "agents.implement" in result.detail and "model" in result.detail
