@@ -1,50 +1,63 @@
 # Header
-Task: tl-8bh9.14.107.3; base: f720ecce0ae276391994b7ec58b3cc562e442116
+Task: tl-8bh9.14.107.3
+Base: 16ef79887d13fb5465b0a39c240195e3d159f720
 Depth: small; one claim behaviour
-Decision missing: no; dependency unlanded: none stated.
-Evidence: 6 model calls.
-Size: 5 files including tests/plan; 1 behaviour; 45 implement calls.
+Owner decision missing: no; dependency unlanded: none stated.
+Evidence budget: 6 model calls.
+Size: 1 changed file (plan); 1 behaviour; 20 implement calls.
 
 ## Outcome and non-goals
-Normal restart releases an unfinished admission's claim through the existing fenced adapter before ordinary admission. Excludes attempt/session recovery, database-discard retaking and unrelated claims.
+Claim-only reconciliation and restart tests exist; remaining work is verification. No source gap was found. Exclude attempt/session recovery, discarded databases and unrelated claims.
 
 ## Settled decisions
-- Admission already records ActionKind.CLAIM before calling the tracker; retain that durable intent.
-- Reconcile already adopts an attempt's claim or returns a claim without an attempt; reuse it.
-- Captured-session and lost-entry recovery are delivered; do not repeat their implementations.
-- Use existing action storage and liveness observations; no schema change or tracker-wide scan.
+- Release an unfinished admission's claim before scheduling; ordinary admission may then claim it.
+- Retain durable CLAIM intent, fenced adoption and tracker observation.
+- Preserve live/unknown owners and claims adopted by attempts.
+- No schema or shelf changes.
 
 ## Open decisions
 - None.
 
 ## Change map
-- `src/taskloop/drain/drain.py`: add claim-only reconciliation sharing ownership/observation handling with `inspect`; preserve drain semantics.
-- `src/taskloop/cli_composition.py`: `open_rounds` reconciles claims through `open_drain` before scheduling, including an open drain boundary.
-- `tests/steps/test_claim_restart.py` (new): exercise claim crash boundaries using `DrainStore`, `Reconcile` and admission helpers.
-- `tests/cli/test_factory_restart.py`: cover normal restart composition without retake enabled.
-- `docs/design/tl-8bh9.14.107.3/plan.md`: retain this implementation contract.
-- Consult producers/callers: admission's `_claim_then_admit`; `open_drain`, `_return_claim`, `Reconcile.__call__`, `run_round`, `_run_round`, `round_bench.Factory`; drain-fence callers of `Reconcile`/`inspect`.
+- `src/taskloop/drain/drain.py`: retain `reconcile_claims`, `_inspect` filtering.
+- `src/taskloop/cli_composition.py`: retain `open_rounds` startup integration.
+- `src/taskloop/admit.py`: consult `_claimed`, `_claim_then_admit` producer.
+- `src/taskloop/drain/composition.py`: consult `open_drain`, `_return_claim`, Reconcile construction.
+- `src/taskloop/drain/reconcile.py`: consult `Reconcile.__call__` adoption.
+- `src/taskloop/drain/store.py`: consult `authorize`, `adopt`, `finish`, `uncertain`, `pending`.
+- `src/taskloop/drain/observe.py`: consult `observe` liveness.
+- `src/taskloop/cli_step.py`: consult `_rounds` caller.
+- `tests/steps/test_claim_restart.py`: retain `ports` Reconcile construction and reconcile_claims cases.
+- `tests/cli/test_factory_restart.py`: retain `open_rounds` restart cases.
+- `tests/cli/test_open_rounds.py`: consult `open_rounds` callers.
+- `tests/cli/test_cli_flags.py`: consult `open_rounds` double.
+- `tests/steps/test_drain.py`: consult `Reconcile` caller.
+- `tests/steps/test_drain_fences.py`: consult `Reconcile` caller.
+- `docs/design/tl-8bh9.14.107.3/plan.md`: refresh assessment and verification.
 
 ## Read list
-- `src/taskloop/admit.py:211-260` — claim intent producer and admission commit boundary.
-- `src/taskloop/drain/drain.py:15-90` — ports, observation and action reconciliation loop.
-- `src/taskloop/drain/store.py:65-170` — authorize, adopt, finish, uncertain and pending storage.
-- `src/taskloop/drain/observe.py:10-33` — boot-aware owner liveness.
-- `src/taskloop/drain/reconcile.py:19-39` — attempt adoption versus claim return.
-- `src/taskloop/drain/composition.py:39-84` — fenced tracker return and production ports.
-- `src/taskloop/cli_composition.py:250-310` — rounds lock and restart integration.
-- `src/taskloop/round.py:155-210` — scheduling consumer.
-- `src/taskloop/tracker.py:91-111` — existing discard-only retake boundary.
-- `tests/steps/test_drain_fences.py:48-125` — admission/action fixtures and drain regression cases.
-- `tests/steps/round_bench.py:210-245` — scheduling test integration.
-- `tests/cli/test_factory_restart.py:55-109` — restart composition and refusal coverage.
+- `src/taskloop/drain/drain.py:26-80` — claim-only operation.
+- `src/taskloop/cli_composition.py:268-308` — startup ordering.
+- `src/taskloop/admit.py:212-253` — intent and claim boundary.
+- `src/taskloop/drain/composition.py:39-83` — observation/release.
+- `src/taskloop/drain/reconcile.py:19-39` — adoption versus release.
+- `src/taskloop/drain/store.py:66-134` — action ownership.
+- `src/taskloop/drain/observe.py:18-32` — liveness.
+- `src/taskloop/cli_step.py:198-208` — CLI caller.
+- `tests/steps/test_claim_restart.py:34-162` — crash, ownership and retry cases.
+- `tests/cli/test_factory_restart.py:124-191` — production startup cases.
+- `tests/cli/test_open_rounds.py:55-100` — startup callers.
+- `tests/cli/test_cli_flags.py:46-46` — composition double.
+- `tests/steps/test_drain.py:303-303` — Reconcile integration.
+- `tests/steps/test_drain_fences.py:231-231` — Reconcile integration.
+- `docs/design/tl-8bh9.14.107.3/plan.md:1-7` — assessment.
 
 ## Contract
-Intent: reconcile persisted CLAIM actions in this database. Observe owners before adoption; live/unknown owners remain untouched. Effect: after fenced adoption, invoke Reconcile outside a write transaction. Result: finish after observed release/nonownership or adoption by an attempt; tracker uncertainty stays retryable. Observe the tracker again after a crash between release and finish. No new fields or outcome vocabulary. Surface unresolved reconciliation without admitting that task or requiring retake.
+Intent: persisted ActionKind.CLAIM identifies unfinished admission. Effect: only after Seen.GONE, adopt with its revision fence; call Reconcile outside the write transaction. Result: finish after an attempt adopts the claim or tracker observation confirms release/nonownership. Uncertainty stays durable and blocks scheduling. Restart observes again after a crash during release. Preserve non-CLAIM actions. No new typed names or stored fields.
 
 ## Work packages
-1. Add the shared claim-only operation and wire normal startup in the two source files; close A1.
-2. Add crash/reopen, ownership, retry and production-composition coverage in the two test files; close A1. Run `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40` once each, last.
+1. Confirm retained source and coverage satisfy A1; no additions are currently identified.
+2. Validate A1: run `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40` once each, last. This plan attempt has not run gates.
 
 ## Acceptance behaviours
-A1: Reopening an intact database after claim acquisition but before attempt creation returns that claim and permits ordinary admission without retake; retries converge across crashes before acquisition and after release, while existing attempts, live/unknown owners and unrelated claims remain protected and tracker failures retain a retryable intent.
+A1: Intact-DB restart releases a dead admission owner's pending claim and permits ordinary admission with retake disabled; crash retries converge, uncertainty blocks scheduling, and attempts, live/unknown owners and unrelated claims remain protected.
