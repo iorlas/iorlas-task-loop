@@ -61,9 +61,16 @@ Retain caps: 400 source lines per file, 80 per function and 800 per test file. N
   Explicitly held work stays held. Do not carry adapter behavior until its deletion consequences are assessed.
 - Runtime version stays fixed until restart. Skills are lightweight explicit helpers, not another scheduler,
   policy/state owner or a prerequisite for factory correctness.
-- Names: a new term borrows GitHub's word first; otherwise it chains defined terms (retry attempt, check suite).
+- Names: a new term borrows the industry-standard word for the same concept first (GitHub; OpenTelemetry GenAI
+  conventions; the Claude Agent SDK and OpenAI Agents SDK: a turn is one request to the model and its reply, an
+  agent invocation is one whole run); otherwise it chains defined terms (retry attempt, check suite). Where a
+  vendor's word differs from the standard (Codex calls the whole run a turn), the glossary states both.
   Before a term enters the glossary or the code, put the options and reasons to a human and wait for the decision.
   Delete a term that is plain English or derivable from defined terms.
+- Decide every name, meaning and structure as if starting from scratch. An existing column, name, code or earlier
+  work is never a reason to keep a wrong name or meaning (sunk cost): rename or redefine and delete the old, as
+  'No backward compatibility' requires. Example: execution.turns stayed 1 because it stored the harness's whole
+  run; the fix is to redefine turns as the model-request count, not to add 'model_calls' beside it (tl-8bh9.14.187).
 - Closed vocabularies (outcomes, phases, reasons, step and check names) are enums or classes, never string literals.
   A string appears only at the edge that stores or prints it, through one codec per vocabulary.
 - A backend's (task tracker, Git, harness) tool names, commands, error text and types stay inside its adapter. The
