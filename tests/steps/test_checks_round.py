@@ -26,9 +26,11 @@ from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, EntryId
 from taskloop.check_admit import ChecksAdmission, ChecksRequest
 from taskloop.check_release import ChecksRelease
 from taskloop.check_store import CheckStore
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitProfileFiles
+from taskloop.ids import NativeIds
 from taskloop.launch import CHECK_ENTRY_MODULE, Launcher, LaunchResult
 from taskloop.operations import LATE, ChecksPorts, Failed, Started, StartPorts, StartRequest, start
 from taskloop.round import RoundPorts
@@ -79,9 +81,9 @@ class Checking(Factory):
 
     def starting(self) -> StartPorts:
         admission = ChecksAdmission(lambda: self.con, begin_immediate, self.tracker.inspect, self.checkouts, lambda: self.now,
-                                    lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts))
+                                    lambda _p: True, self.files, lambda path: GitProfileFiles(path, self.checkouts), ids=NativeIds())
         launcher = Launcher(self.path, EvidenceFiles(self.tmp), lambda: self.now, self.entry, self.process, "python",
-                            targets=CheckStore, module=CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS)
+                            targets=CheckStore, module=CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
         return replace(super().starting(), checks=ChecksPorts(admission, launcher, self.releasing()))
 
     def observe(self, _entry: EntryIdentity) -> Seen:
@@ -131,7 +133,7 @@ class Checking(Factory):
         self.checks.registered(key, block, 0, OwnedProcess(pid, pid, f"check-{pid}", "boot"))
         self.groups[pid] = "alive"
         if pid == 901:
-            self.checks.finish(key, block, 0, "lingering", 0, self.now)
+            self.checks.finish(key, block, 0, CommandConclusion.LINGERING, 0, self.now)
             self.checks.conclude(key, "failed", "check:lingering", self.now)
 
     def checks_commit(self, key: AttemptKey) -> str:
@@ -158,7 +160,7 @@ class Checking(Factory):
 
     def releasing(self) -> ChecksRelease:
         return ChecksRelease(self.checks, self.checkouts, self.files, lambda _entry: "gone", custody, lambda: self.now,
-                             self.command, lambda _scratch: True)
+                             self.command, lambda _scratch: True, ids=NativeIds())
 
     def finish(self, task_id: str, body: str) -> None:
         """The running entry of the task's checks attempt ends with `body`."""
@@ -344,7 +346,7 @@ def test_two_done_tasks_and_one_slot_check_in_release_order_and_the_freed_slot_w
     reads = rig.tracker.ready_reads
     assert rig.round() == [("tl-1", "check", "report", "running")] and rig.last.stopped == "no_free_slot"
     assert rig.tracker.ready_reads == reads and rig.next_words()["tl-2"] == ("implement", "advance")  # tl-2 and tl-3 wait
-    rig.finish("tl-1", "passed")
+    rig.finish("tl-1", CommandConclusion.PASSED)
     # tl-1 waits for its land: the slot it freed is left to that land (tl-8bh9.14.34), so tl-2 and tl-3 still wait
     assert rig.round() == [LAND_LINE] and rig.last.stopped == "slot_for_land"
     assert rig.rows() == [("tl-1", 1, "concluded", "passed")] and rig.next_words()["tl-2"] == ("implement", "advance")

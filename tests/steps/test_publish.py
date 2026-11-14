@@ -25,6 +25,7 @@ from taskloop.attempt_reads import PublishedRow
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, FileStat, SlotFiles
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 from taskloop.publish import BranchPublish, BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import Released, SlotRelease
 from taskloop.verifier import Verifier
@@ -130,7 +131,7 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
     attempts = Attempts(
         store,
         EvidenceFiles(tmp_path),
-        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
         agent(slot, written, disposition),
         lambda: 10,
         checkouts,
@@ -138,10 +139,10 @@ def run(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: 
     )
     assert attempts.execute(KEY, ENTRY).reason == "verification"
     if verify:
-        Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere).verify(KEY)
+        Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).verify(KEY)
     if release:
         releaser = SlotRelease(store, checkouts, files, lambda _e: "gone", lambda _w: True, nowhere, lambda _r, _t: True, lambda: 30,
-                               lambda _setup: "gone", lambda _scratch: True)
+                               lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
         assert isinstance(releaser.release(KEY, False), Released)
     return tip(slot.repo)
 
@@ -151,7 +152,7 @@ def tip(repo: FakeRepo, prefix: str = "refs/heads/task/") -> str:
 
 
 def publisher(con: sqlite3.Connection, git: Checkouts, files: SlotFiles, store: AttemptStore | None = None) -> BranchPublish:
-    return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40)
+    return BranchPublish(store or AttemptStore(lambda: con), git, files, lambda: 40, ids=NativeIds())
 
 
 def rows(con: sqlite3.Connection) -> list[tuple[object, ...]]:

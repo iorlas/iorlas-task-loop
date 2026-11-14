@@ -26,6 +26,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.slot_files import RealSlotFiles
 from taskloop.slot_lock import hold, lock_path, probe
 from taskloop.slots import SlotGit, adopt, folder_name
@@ -70,7 +71,7 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     m = git(main, "rev-parse", "HEAD").strip()
     admission = AttemptAdmission(
         lambda: factory, begin_immediate, EvidenceFiles(art), tasks, VIEWS.checkouts, claimed, claimed, lambda: 10, probe, RealSlotFiles()
-    )
+    , ids=NativeIds())
     admitted = admission.admit(
         AdmitRequest(
             "tl-1",
@@ -95,10 +96,11 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
         return FakeRun(outcome)(harness, spec, timeout, hooks)
 
     attempts = Attempts(
-        store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {})), run, lambda: 10, VIEWS.checkouts, files
+        store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), run,
+            lambda: 10, VIEWS.checkouts, files
     )
     assert attempts.execute(admitted.key, ENTRY).reason == "verification"
-    verdict = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold).verify(admitted.key)
+    verdict = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds()).verify(admitted.key)
     assert isinstance(verdict, Verified) and not verdict.reused
     x = git(slot, "rev-parse", "HEAD").strip()
     assert git(main, "rev-parse", "refs/heads/task/tl-1").strip() == x and git(slot, "rev-parse", "HEAD^").strip() == m != d

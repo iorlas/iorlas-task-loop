@@ -13,7 +13,7 @@ from any_agent.procs import Worker
 from any_agent.testing import FakeRun
 from beads_client import Bd, BdError, Bead
 from beads_client.testing import FakeTaskReadClient, Script
-from doubles import FakeSlotFiles, PinnedViews
+from doubles import FakeSlotFiles, FixedIds, PinnedViews
 from git_porcelain import GitTimeout, NotARepo, Repo
 from git_porcelain.testing import FakeRemote, FakeRepo
 from sqlite_store import Store, begin_immediate
@@ -31,6 +31,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind, Provider
+from taskloop.ids import NativeIds
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt, folder_name
@@ -127,7 +128,7 @@ def admission(con: sqlite3.Connection, tmp_path: Path, tracker: Tracker, repo: F
     return AttemptAdmission(
         lambda: con, begin_immediate, tracker.files, tasks, PinnedViews(repo), tracker.claim, tracker.unclaim, time, unlocked,
         FakeSlotFiles(repo),
-    )
+    ids=NativeIds())
 
 
 def admit(con: sqlite3.Connection, tmp_path: Path, repo: FakeRepo, tracker: Tracker | None = None) -> AdmitResult:
@@ -149,7 +150,8 @@ def breaking(error: BaseException) -> Callable[[sqlite3.Connection], AbstractCon
 def attempts(con: sqlite3.Connection, tmp_path: Path, run: FakeRun, checkouts: Checkouts, files: SlotFiles) -> Attempts:
     artifacts = EvidenceFiles(tmp_path / "artifacts")
     return Attempts(
-        AttemptStore(lambda: con), artifacts, AgentLaunch(lambda _harness: ("/bin/codex", {})), run, lambda: 10, checkouts, files
+        AttemptStore(lambda: con), artifacts, AgentLaunch(lambda _harness: ("/bin/codex", {}),
+            ids=NativeIds()), run, lambda: 10, checkouts, files
     )
 
 
@@ -538,7 +540,7 @@ def test_after_an_abandon_the_task_is_admitted_afresh_on_its_existing_branch_wit
     d = factory.execute("SELECT slot_head FROM attempt").fetchone()[0]
     repo.worktree(path).take_branch("task/tl-1", "HEAD", mode="resume")  # as its entry prepared it
     release = SlotRelease(AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody,
-                          tracker.unclaim, time, lambda _setup: "gone", lambda _scratch: True)
+                          tracker.unclaim, time, lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
     assert release.release(first.key, True) == Released("s1", d, True, "unclaimed", True)
     again = admit(factory, tmp_path, repo, tracker)
     assert isinstance(again, Admitted) and again.slot == "s1" and again.key.reservation_generation == 2  # never reused
@@ -595,7 +597,7 @@ def test_an_abandon_still_returning_its_claim_keeps_the_task_attempted(
     release = SlotRelease(
         AttemptStore(lambda: factory), checkouts, slot_files, lambda _entry: "gone", lambda _w: True, custody, unclaim, time,
         lambda _setup: "gone", lambda _scratch: True,
-    )
+    ids=NativeIds())
     failed = release.release(first.key, True)
     assert isinstance(failed, NotReleased) and failed.detail.endswith("The reservation was removed, no Git write.")
     assert admit(factory, tmp_path, repo, contender) == AdmitRefused("task_attempted")
@@ -625,3 +627,24 @@ def test_a_checkout_that_is_not_a_repository_is_a_refusal_naming_the_path_and_ot
     assert isinstance(refused, AdmitRefused) and refused.reason == "checkout" and str(tmp_path / "nowhere") in refused.detail
     assert isinstance(checkout_repo(broken, tmp_path), AdmitUnavailable)
 
+
+
+def test_admission_uses_the_id_port_in_storage_and_evidence(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path,
+) -> None:
+    slots(factory, repo, root, 1)
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    operation = admission(factory, tmp_path, tracker, repo)
+    ids = FixedIds()
+    operation.ids = ids
+    found = operation.admit(request(tmp_path, repo))
+    assert isinstance(found, Admitted)
+    assert found.key == AttemptKey(ids.fresh[0], ids.tokens[0][1], 1)
+    assert ids.tokens == [(16, "0" * 31 + "1")]
+    assert factory.execute("SELECT attempt_id,dispatch_token FROM attempt").fetchone() == (
+        ids.fresh[0], ids.tokens[0][1])
+    assert (tmp_path / "artifacts" / tracker.files.directory(found.key)).is_dir()
+    again = operation.admit(request(tmp_path, repo))
+    assert isinstance(again, AdmitRefused)
+    assert factory.execute("SELECT attempt_id,dispatch_token FROM attempt").fetchall() == [(
+        found.key.attempt_id, found.key.dispatch_token)]

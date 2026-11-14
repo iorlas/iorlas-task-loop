@@ -23,6 +23,7 @@ from taskloop.attempt_status import AttemptView, EntryState, Listed, Next, Setup
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, AttemptResult, EntryIdentity
 from taskloop.cli import main
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.inspection_guide import CONFIG
@@ -74,7 +75,7 @@ ABANDONED = AttemptView(
     "tasks", "tl-1", "plan", "second", "s1", "admitted", "none", AttemptResult("pending", "admitted"), False, "start",
     earlier=(("first", "abandoned"),), seq=2, release=ReleaseRow(D, 30.0, "unclaimed"),
 )
-FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, "failed"), Path("/a/d/setup-2.log"))
+FAILED_SETUP = SetupShown(SetupRow(2, D, "f" * 64, 0, None, CommandConclusion.FAILED), Path("/a/d/setup-2.log"))
 RUNNING_SETUP = SetupShown(SetupRow(3, D, "f" * 64, 1, OwnedProcess(5, 5, "s", "b"), None), Path("/a/d/setup-3.log"))
 RELEASE = ["step", "release", "tl-1", "--backlog", "tasks"]
 FREED = {"status", "backlog", "task", "attempt_id", "slot", "parked", "reservation_removed", "claim", "abandoned", "checks", "land",

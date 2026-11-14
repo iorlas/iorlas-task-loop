@@ -15,6 +15,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import StoredExecution
 from taskloop.check_status import latest
 from taskloop.check_store import CheckStore
+from taskloop.command_conclusion import CommandConclusion, encode
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.hold_store import HoldRow
 from taskloop.hold_text import FailedCheck, HoldFacts, Kept, KeptWord, LabelsWord, Leftovers, Returned
@@ -91,9 +92,9 @@ def facts(files: EvidenceFiles, reader: AttemptStore, row: HoldRow, labels: Labe
         if checks is None:
             raise StoreRefused("changed")
         failed = tuple(
-            FailedCheck(each.name, each.conclusion or "unfinished",
-                        "" if each.conclusion == "undefined" else str(files.check_path(checks.key, each.block, each.name)))
-            for each in store.results(checks.key) if each.conclusion != "passed")
+            FailedCheck(each.name, encode(each.conclusion) or "unfinished",
+                        "" if each.conclusion == CommandConclusion.UNDEFINED else str(files.check_path(checks.key, each.block, each.name)))
+            for each in store.results(checks.key) if each.conclusion != CommandConclusion.PASSED)
         return HoldFacts(*head, CHECK, checks.number, row.cause_id, row.held_at, published, agent.end_commit, None, failed, None,
                          str(files.root / files.directory(checks.key)), files.last_entry(checks.key), checks.deadline)
     left = Leftovers(leftovers[0], leftovers[1:]) if leftovers and row.reason.startswith("repeats_exhausted") else None

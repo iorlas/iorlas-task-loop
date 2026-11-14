@@ -45,6 +45,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.session import SessionLatch
 from taskloop.steps import kind
 
@@ -79,7 +80,7 @@ class AttemptSurroundings:
         registration_store: AttemptStore | None = None,
     ) -> Attempts:
         return Attempts(
-            store, EvidenceFiles(self.tmp), AgentLaunch(credentials), execution, clock, self.checkouts, self.files,
+            store, EvidenceFiles(self.tmp), AgentLaunch(credentials, ids=NativeIds()), execution, clock, self.checkouts, self.files,
             registration_store=registration_store,
         )
 

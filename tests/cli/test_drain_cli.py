@@ -16,6 +16,7 @@ from taskloop.drain.drain import Ports, drain
 from taskloop.drain.models import Conclusion, Seen, State
 from taskloop.drain.store import DrainStore
 from taskloop.factory_schema import SCHEMA
+from taskloop.ids import NativeIds
 
 
 def initialized(path: Path) -> None:
@@ -45,7 +46,7 @@ def test_drain_needs_only_an_existing_db_and_reports_verified_idle(
         assert "New work is blocked" in output.out and "Idle was verified" in output.out
         assert "owner" in output.out and "discard" in output.out and "restart" in output.out
     with sqlite3.connect(path) as con:
-        assert DrainStore(lambda: con).boundary().state is State.COMPLETE
+        assert DrainStore(lambda: con, ids=NativeIds()).boundary().state is State.COMPLETE
 
 
 @pytest.mark.parametrize("structured", [False, True])
@@ -95,10 +96,10 @@ def test_config_db_is_used_and_explicit_db_wins(tmp_path: Path, capsys: pytest.C
     assert main(["--config", str(config), "drain", "--db", str(explicit), "--artifacts", str(tmp_path / "other")]) == 0
     capsys.readouterr()
     with sqlite3.connect(configured) as con:
-        assert DrainStore(lambda: con).boundary().state is State.OPEN
+        assert DrainStore(lambda: con, ids=NativeIds()).boundary().state is State.OPEN
     assert main(["--config", str(config), "drain"]) == 0
     with sqlite3.connect(configured) as con:
-        assert DrainStore(lambda: con).boundary().state is State.COMPLETE
+        assert DrainStore(lambda: con, ids=NativeIds()).boundary().state is State.COMPLETE
     assert not (tmp_path / "artifacts").exists() and not (tmp_path / "other").exists()
 
 
@@ -124,7 +125,7 @@ def test_unknown_process_observation_exits_three_with_identity_and_keeps_fence(
     else:
         assert "Idle was not verified" in output.err and "pid=80" in output.err
     with sqlite3.connect(path) as con:
-        assert DrainStore(lambda: con).boundary().state is State.DRAINING
+        assert DrainStore(lambda: con, ids=NativeIds()).boundary().state is State.DRAINING
 
 
 def test_ctrl_c_exits_130_and_later_invocation_continues(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -143,7 +144,7 @@ def test_ctrl_c_exits_130_and_later_invocation_continues(tmp_path: Path, monkeyp
     monkeypatch.setattr(cli_drain, "drain", interrupted)
     assert main(["drain", "--db", str(path)]) == 130
     with sqlite3.connect(path) as con:
-        assert DrainStore(lambda: con).boundary().state is State.DRAINING
+        assert DrainStore(lambda: con, ids=NativeIds()).boundary().state is State.DRAINING
         assert con.execute("SELECT entry_pid FROM attempt").fetchone() == (81,)
     monkeypatch.setattr(cli_drain, "drain", drain)
     monkeypatch.setattr(composition, "observe", lambda _owner: Seen.GONE)

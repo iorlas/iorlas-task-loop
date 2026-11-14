@@ -13,13 +13,11 @@ the lowest observed-free slot still unheld (`admit.reserve`) and inserts the row
 HEAD). A lost race on the number is `task_attempted`: the caller launches the winner with the checks launcher.
 """
 
-import secrets
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import astuple, dataclass
 from pathlib import Path
-from uuid import uuid4
 
 from git_porcelain import GitUnavailable, Repo
 
@@ -49,6 +47,7 @@ from taskloop.checks import argv_digest, main_seen
 from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
 from taskloop.factory_schema import LANDED, LANDING
+from taskloop.ids import Ids
 from taskloop.prepare import HEADS, REMOTES, lacks
 from taskloop.profile import Profile, ProfileFiles, Refused, Unavailable, read_profile
 from taskloop.repo import RepoId
@@ -125,9 +124,11 @@ class ChecksAdmission:
         probe: Probe,
         slot_files: SlotFiles,
         profiles: Profiles,
+        *, ids: Ids,
     ) -> None:
         """The ports of an advance (`admit_chain.NextAdmission`) without the input files, plus the profile port on the
         person's checkout."""
+        self.ids = ids
         self.connect, self.begin, self.tasks, self.checkouts, self.clock = connect, begin, tasks, checkouts, clock
         self.probe, self.slot_files, self.profiles = probe, slot_files, profiles
 
@@ -137,7 +138,7 @@ class ChecksAdmission:
             return ready
         repo_id = RepoId(ready.found.repo_id)
         try:
-            key = AttemptKey(uuid4().hex, secrets.token_hex(16), issued(ready.con, repo_id, tuple(each.name for each in ready.free)) + 1)
+            key = AttemptKey(self.ids.hex(), self.ids.token(16), issued(ready.con, repo_id, tuple(each.name for each in ready.free)) + 1)
             return self._commit(ready, request, key)
         except StoreRefused as error:  # raised under the write lock, after the rollback: the number was taken meanwhile
             return AdmitRefused("task_attempted", detail=str(error))

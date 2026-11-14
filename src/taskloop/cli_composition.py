@@ -44,6 +44,7 @@ from taskloop.factory_schema import SCHEMA, refusal
 from taskloop.git_views import GitProfileFiles, GitViews
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
+from taskloop.ids import NativeIds
 from taskloop.interrupts import Interrupts, installed
 from taskloop.land import How, Landed, LandRequest, land
 from taskloop.land_check import LandPorts
@@ -118,7 +119,8 @@ def open_reads(database: Path, artifacts: Path, views: GitViews) -> Generator[St
             yield con
         else:
             reader = _reader(con)
-            verifier = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused)  # never verifies
+            verifier = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused,
+                ids=NativeIds())  # never verifies
             seen = EvidenceFiles(artifacts).last_command
             yield StatusPorts(reader, entry_seen, time.time, verifier.leftovers, current_boot, setup_seen, seen)
 
@@ -142,12 +144,12 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
     admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, store)
     launcher = open_launcher(database, artifacts, views)
     repeat = StepRepeat(reader, open_verifier(database, store, views), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
-                        time.time, repeating)
+                        time.time, repeating, ids=NativeIds())
     releaser = open_checks_releaser(database, store, views)
     checks = ChecksPorts(open_checks_admission(database, views, store), open_checks_launcher(database, artifacts, views), releaser)
     repair = CheckRepeat(CheckRepeatStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
                          inspect_tracker_task, views.checkouts, RealSlotFiles(), probe,
-                         partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time)
+                         partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time, ids=NativeIds())
     return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store), checks, repair)
 
 
@@ -171,7 +173,7 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                 yield Failed("refused", "tracker_root", str(error))
                 return
             reader = _reader(con)
-            leftovers = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused).leftovers
+            leftovers = Verifier(reader, views.checkouts, RealSlotFiles(), worker_gone, time.time, refused, ids=NativeIds()).leftovers
             reads = StatusPorts(reader, entry_seen, time.time, leftovers, current_boot, setup_seen)
             releaser = open_releaser(database, store, views)
             holding = HoldPorts(HoldStore(lambda: store.shared_rw(database), store.begin_immediate), reader, tracker_holds(), releaser,
@@ -181,7 +183,8 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                 landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
                 yield RoundPorts(reads, _starting(reader, database, artifacts, store, views), open_verifier(database, store, views),
                                  releaser, open_publisher(database, store, views), holding, ready, EvidenceFiles(artifacts).log_round,
-                                 landing=landing, drain_store=DrainStore(lambda: store.shared_rw(database)))
+                                 landing=landing, drain_store=DrainStore(lambda: store.shared_rw(database),
+                                     ids=NativeIds()), ids=NativeIds())
         finally:
             if owned:
                 store.close_shared()
@@ -382,7 +385,7 @@ def open_land(database: Path, artifacts: Path, views: GitViews, store: Store | N
             profiles = partial(GitProfileFiles, repos=views.remotes)
             claims = tracker_claims()
             yield LandPorts(work, LandStore(work.store.connect, work.store.begin), views.remotes, profiles, inspect_tracker_task,
-                            claims.heartbeat_for, threading.Event, this_process, probe, landing, os.environ, claims.close)
+                            claims.heartbeat_for, threading.Event, this_process, probe, landing, os.environ, claims.close, ids=NativeIds())
         finally:
             if owns_registration:
                 registration.close_shared()

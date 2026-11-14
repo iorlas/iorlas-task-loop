@@ -1,9 +1,7 @@
 """Repeat implementation after an ordinary failed check; external reads precede the fenced admission intent."""
 
 import hashlib
-import secrets
 from dataclasses import dataclass, replace
-from uuid import uuid4
 
 from git_porcelain import GitUnavailable, Repo
 from pydantic import ValidationError
@@ -19,6 +17,7 @@ from taskloop.check_repeat.store import CheckRepeatState, CheckRepeatStore
 from taskloop.check_store import CheckStore
 from taskloop.checks import argv_digest, completed
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.ids import Ids
 from taskloop.operations import Clock, Failed, Launch, Started, StartRequest, deadline_after, launched
 from taskloop.prepare import HEADS, REMOTES
 from taskloop.profile import PROFILE_PATH, Profile, read_profile
@@ -43,6 +42,7 @@ class CheckRepeat:
     observe: Observe
     seen: SetupSeen
     clock: Clock
+    ids: Ids
 
     def repair(self, request: StartRequest, previous: AttemptKey, source: AttemptKey) -> Started | Failed:
         try:
@@ -55,8 +55,8 @@ class CheckRepeat:
             evidence, free = ready
             reader = AttemptStore(self.store.connect, self.store.begin)
             original = self.files.read(reader.chain(previous)[0].input_ref)
-            key = AttemptKey(uuid4().hex, secrets.token_hex(16), self.store.generation(state.checks.repo_id, free))
-            ref = self.files.put_input(key, failed_check_feedback(evidence, original, secrets.token_hex(16)))
+            key = AttemptKey(self.ids.hex(), self.ids.token(16), self.store.generation(state.checks.repo_id, free))
+            ref = self.files.put_input(key, failed_check_feedback(evidence, original, self.ids.token(16)))
             admitted = self.store.admit(previous, evidence, key, ref, free, deadline_after(request.minutes, self.clock))
             if isinstance(admitted, AdmitRefused):
                 return self._winner(request, previous) if admitted.reason == "task_attempted" else Failed("refused", admitted.reason)

@@ -25,6 +25,7 @@ from typing import Literal
 from taskloop.attempt_reads import StoreConnection
 from taskloop.attempt_types import EntryIdentity, Observe
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.land_store import LandRow, LandStore
 
 type LandNext = Literal["land", "landed", "release", "unknown"]
@@ -79,5 +80,5 @@ def land_next[W: str](word: W, checks: ChecksRow, land: LandView | None) -> W | 
 
 def with_logs(land: LandView, path: Callable[[int, str], Path]) -> LandView:
     """Each result's log path (`check-<block>-<name>.log` in the candidate's evidence directory; none for `undefined`)."""
-    logs = tuple(None if row.conclusion == "undefined" else path(row.block, row.name) for row in land.results)
+    logs = tuple(None if row.conclusion is CommandConclusion.UNDEFINED else path(row.block, row.name) for row in land.results)
     return LandView(land.row, land.results, land.process, logs)

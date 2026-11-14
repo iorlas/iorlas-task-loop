@@ -17,6 +17,7 @@ from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.dash_board import admission_of, card_of, tries
 from taskloop.dash_model import (
     Answer,
@@ -142,7 +143,7 @@ def _took(result: ResultRow) -> int:
 
 
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:
-    return CheckLine(result.name, result.conclusion == "passed", _took(result),
+    return CheckLine(result.name, result.conclusion == CommandConclusion.PASSED, _took(result),
                      ports.files.check_tail(row.key, result.block, result.name), result.block)
 
 
@@ -155,7 +156,8 @@ def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: str | None)
     results = store.results(row.key)
     state, summary = _checks_state(row)
     started = min((each.started_at for each in results), default=None)
-    feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name, passed=each.conclusion == "passed",
+    feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name,
+        passed=each.conclusion == CommandConclusion.PASSED,
                            duration_ms=_took(each)) for each in results if each.conclusion is not None)
     return AttemptDetail("checks", number, state, iso(started), iso(row.concluded_at), summary, "repeat" if earlier is not None else None,
                          earlier, number - 1 if earlier is not None else None, feed)

@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from doubles import PinnedViews
+from doubles import FixedIds, PinnedViews
 from git_porcelain.testing import FakeRepo
 from sqlite_store import Store
 from test_admit import tasks
@@ -20,6 +20,7 @@ from taskloop.drain.reconcile import Reconcile
 from taskloop.drain.restart import restart
 from taskloop.drain.store import DrainStore
 from taskloop.factory_schema import SCHEMA
+from taskloop.ids import NativeIds
 from taskloop.land_store import LandStore
 
 CALLER = Identity(pid=100, pgid=100, start="caller", boot="boot")
@@ -87,7 +88,7 @@ def test_entries_agents_setup_and_checks_finish_naturally_across_backlogs(databa
     finishing = [{12, 13}, {15}, {11}, {14}]
 
     def wait(_seconds: float) -> None:
-        assert DrainStore(lambda: con).boundary().state is State.DRAINING
+        assert DrainStore(lambda: con, ids=NativeIds()).boundary().state is State.DRAINING
         live.difference_update(finishing.pop(0))
 
     for ports in opened(path):
@@ -156,7 +157,7 @@ def test_interrupted_wait_resumes_with_fresh_connections_and_joins_the_same_requ
 
 def test_dispatch_authorized_before_the_fence_stays_visible_until_registration_finishes(database: tuple[Path, sqlite3.Connection]) -> None:
     path, con = database
-    store = DrainStore(lambda: con)
+    store = DrainStore(lambda: con, ids=NativeIds())
     action = store.authorize(ActionKind.DISPATCH, CALLER, subject="one")
     assert action is not None
     for ports in opened(path):
@@ -175,7 +176,7 @@ def test_dispatch_authorized_before_the_fence_stays_visible_until_registration_f
 
 def test_unresolved_external_action_is_uncertain_after_its_owner_dies(database: tuple[Path, sqlite3.Connection]) -> None:
     path, con = database
-    action = DrainStore(lambda: con).authorize(ActionKind.FINALIZE, CALLER, subject="tl-1")
+    action = DrainStore(lambda: con, ids=NativeIds()).authorize(ActionKind.FINALIZE, CALLER, subject="tl-1")
     assert action is not None
     for ports in opened(path):
         found = drain(replace(ports, observe=lambda _owner: Seen.GONE))
@@ -186,7 +187,7 @@ def test_unresolved_external_action_is_uncertain_after_its_owner_dies(database: 
 
 def test_restart_finishes_incomplete_drain_then_only_a_later_invocation_reopens(database: tuple[Path, sqlite3.Connection]) -> None:
     path, con = database
-    store = DrainStore(lambda: con)
+    store = DrainStore(lambda: con, ids=NativeIds())
     store.request()
     for ports in opened(path):
         finished = restart(ports)
@@ -222,7 +223,7 @@ def test_malformed_partial_identity_is_uncertain(database: tuple[Path, sqlite3.C
 
 def test_reconciliation_has_one_durable_owner_before_external_io(database: tuple[Path, sqlite3.Connection]) -> None:
     path, con = database
-    store = DrainStore(lambda: con)
+    store = DrainStore(lambda: con, ids=NativeIds())
     original = store.authorize(ActionKind.DISPATCH, CALLER, subject="one")
     assert original is not None
     reconciler = Identity(pid=101, pgid=101, start="reconciler", boot="boot")
@@ -251,7 +252,7 @@ def test_dead_claim_intent_is_returned_or_adopted_from_the_committed_attempt(
     path, con = database
     if committed:
         seed(con, "tl-1", "one")
-    store = DrainStore(lambda: con)
+    store = DrainStore(lambda: con, ids=NativeIds())
     action = store.authorize(ActionKind.CLAIM, CALLER, subject="tl-1", backlog="tasks", tracker_root="/tracker")
     assert action is not None
     returned: list[str] = []
@@ -268,3 +269,17 @@ def test_dead_claim_intent_is_returned_or_adopted_from_the_committed_attempt(
         assert result.conclusion is Conclusion.COMPLETE and not store.pending()
     assert returned == ([] if committed else ["tl-1"])
     assert con.execute("SELECT count(*) FROM attempt").fetchone() == (int(committed),)
+
+
+def test_drain_authorization_and_reconciliation_keep_the_supplied_action_id(database: tuple[Path, sqlite3.Connection]) -> None:
+    _, con = database
+    ids = FixedIds()
+    store = DrainStore(lambda: con, ids=ids)
+    action = store.authorize(ActionKind.DISPATCH, CALLER, subject="attempt")
+    assert action is not None and action.action_id == ids.fresh[0]
+    next_owner = Identity(pid=101, pgid=101, start="reconciler", boot="boot")
+    adopted = store.adopt(action, next_owner)
+    assert adopted is not None and adopted.action_id == action.action_id and len(ids.fresh) == 1
+    assert store.pending() == (adopted,)
+    store.finish(adopted)
+    assert not store.pending()

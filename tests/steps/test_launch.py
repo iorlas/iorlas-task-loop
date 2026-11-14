@@ -27,6 +27,7 @@ from taskloop.composition import open_checks_launcher, open_launcher
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.launch import CHECK_ENTRY_MODULE, AlreadyRunning, Launched, Launcher, LaunchRefused, LaunchUnavailable, LaunchUncertain
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -108,7 +109,7 @@ class Observe:
 
 def launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:
     return Launcher(db, EvidenceFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python",
-                    read_seconds=DEFAULT_GIT_READ_SECONDS)
+                    read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
 
 
 def stored(db: Path) -> tuple[object, ...]:
@@ -129,7 +130,8 @@ def register(db: Path, entry: EntryIdentity) -> None:
 
 def test_the_launchers_git_bound_is_in_the_entry_argv(admitted: Path) -> None:
     start = FakeStart()
-    built = Launcher(admitted, EvidenceFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python", read_seconds=45)
+    built = Launcher(admitted, EvidenceFiles(admitted.parent), lambda: 10, start, Observe(),
+        "/venv/bin/python", read_seconds=45, ids=NativeIds())
     assert isinstance(built.launch("tasks", "tl-1", 30), Launched)
     argv = start.calls[0]["argv"]
     assert isinstance(argv, list) and argv[-3:] == ["45", "tasks", "tl-1"]
@@ -259,7 +261,7 @@ def test_a_relative_database_is_refused_before_any_read_registration_or_start(ad
     monkeypatch.chdir(admitted.parent)
     start = FakeStart()
     built = Launcher(Path(admitted.name), EvidenceFiles(admitted.parent), lambda: 10, start, Observe(), "/venv/bin/python",
-                     read_seconds=DEFAULT_GIT_READ_SECONDS)
+                     read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
     assert built.launch("tasks", "tl-1", 30) == LaunchRefused("database")
     assert start.calls == [] and stored(admitted) == (None, None, None, "admitted")
 
@@ -291,7 +293,7 @@ CHECKS = AttemptKey("checks", "checks-token", 1)
 
 def checks_launcher(db: Path, start: FakeStart, observe: Observe | None = None, now: float = 10) -> Launcher:
     return Launcher(db, EvidenceFiles(db.parent), lambda: now, start, observe or Observe(), "/venv/bin/python", CheckStore,
-                    CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS)
+                    CHECK_ENTRY_MODULE, read_seconds=DEFAULT_GIT_READ_SECONDS, ids=NativeIds())
 
 
 def checks_row(db: Path) -> tuple[object, ...]:

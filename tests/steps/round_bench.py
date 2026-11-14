@@ -30,6 +30,7 @@ from taskloop.check_admit import ChecksRequest
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import HoldPorts
 from taskloop.hold_store import HoldStore
+from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchResult
 from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, start, verify_task
 from taskloop.publish import BranchPublish
@@ -173,7 +174,7 @@ class Factory:
         attempts = Attempts(
             self.store,
             EvidenceFiles(self.tmp),
-            AgentLaunch(lambda _harness: ("/bin/codex", {})),
+            AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
             self.agents[task_id, step or ""],
             lambda: self.now,
             self.checkouts,
@@ -187,15 +188,15 @@ class Factory:
     def starting(self) -> StartPorts:
         files, clock = EvidenceFiles(self.tmp), lambda: self.now
         fresh = AttemptAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, self.tracker.claim,
-                                 self.tracker.unclaim, clock, lambda _p: True, self.files)
+                                 self.tracker.unclaim, clock, lambda _p: True, self.files, ids=NativeIds())
         advance = NextAdmission(lambda: self.con, begin_immediate, files, self.tracker.inspect, self.checkouts, clock, lambda _p: True,
-                                self.files)
+                                self.files, ids=NativeIds())
         return StartPorts(self.store, fresh, self, clock, Never(), advance, ChecksPorts(NoRequired(), NoChecks(), NoChecks()))
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(self.store, self.checkouts, self.files, lambda _entry: "gone", lambda _worker: True, custody,
                            self.tracker.unclaim, lambda: self.now, lambda _setup: "gone", lambda _scratch: True,
-                           HoldStore(lambda: self.con))
+                           HoldStore(lambda: self.con), ids=NativeIds())
 
     def observe(self, _entry: EntryIdentity) -> Seen:
         """Called while the round reads its snapshot: `during` is another actor acting once, right after that read."""
@@ -214,11 +215,12 @@ class Factory:
 
     def ports(self) -> RoundPorts:
         """Fresh ports over the same factory.db each round, as each `tl step rounds` round opens them (a restart too)."""
-        verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold)
+        verifier = Verifier(self.store, self.checkouts, self.files, lambda _worker: True, lambda: self.now, hold, ids=NativeIds())
         reads = StatusPorts(self.store, self.observe, lambda: self.now, verifier.leftovers, lambda: "boot")
-        publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now)
+        publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds())
         holding = self.holding(reads)
-        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker, self.lines.append)
+        return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker,
+            self.lines.append, ids=NativeIds())
 
     def round(
         self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto", running: int = 10
@@ -251,8 +253,9 @@ class Factory:
             Started,
         )
         self.now += 1
-        verify_task(self.store, Verifier(self.store, self.checkouts, self.files, lambda _w: True, lambda: self.now, hold), self.releaser(),
-                    BranchPublish(self.store, self.checkouts, self.files, lambda: self.now), "tasks", task_id)
+        verify_task(self.store, Verifier(self.store, self.checkouts, self.files, lambda _w: True,
+            lambda: self.now, hold, ids=NativeIds()), self.releaser(),
+                    BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds()), "tasks", task_id)
 
     def next_words(self) -> dict[str, tuple[str, str]]:
         listed = list_attempts(StatusPorts(self.store, lambda _entry: "gone", lambda: self.now, lambda _key: None, lambda: "boot"))

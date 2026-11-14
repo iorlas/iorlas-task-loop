@@ -16,6 +16,7 @@ from taskloop.attempt_types import AttemptKey, AttemptResult
 from taskloop.check_status import HALF_DONE, ChecksView
 from taskloop.check_store import ChecksRow, ResultRow
 from taskloop.cli import main
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.operations import Failed, ReleasedTask, Started
 from taskloop.result_data import Result
 from taskloop.setup_store import SetupRow
@@ -34,10 +35,10 @@ ROW = ChecksRow(
     "repo", "/tracker", X,
 )
 RESULTS = (
-    ResultRow(1, 0, "check", CHECK, 600, None, 10.0, 51.0, 0, "passed"),
-    ResultRow(1, 1, "test", "9" * 64, 600, None, 51.0, 363.0, 1, "failed"),
-    ResultRow(1, 2, "slow", "8" * 64, 60, None, 363.0, 364.4, 0, "passed"),
-    ResultRow(1, 3, "smoke", None, None, None, 10.0, 10.0, None, "undefined"),
+    ResultRow(1, 0, "check", CHECK, 600, None, 10.0, 51.0, 0, CommandConclusion.PASSED),
+    ResultRow(1, 1, "test", "9" * 64, 600, None, 51.0, 363.0, 1, CommandConclusion.FAILED),
+    ResultRow(1, 2, "slow", "8" * 64, 60, None, 363.0, 364.4, 0, CommandConclusion.PASSED),
+    ResultRow(1, 3, "smoke", None, None, None, 10.0, 10.0, None, CommandConclusion.UNDEFINED),
 )
 VIEW = AttemptView(
     "tasks", "tl-1", "check", "checks", "s1", "concluded", "gone", AttemptResult("collected", "failed:test:failed"), False, "done",
@@ -45,7 +46,7 @@ VIEW = AttemptView(
     ReleaseRow(D, 1762941600.0, "kept"), PublishedRow(X, X, 6.0),
     ChecksView(ROW, RESULTS, (*(LOGS / f"check-1-{name}.log" for name in ("check", "test", "slow")), None)),
 )
-SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", EVENTS, SetupShown(SetupRow(1, X, "f" * 64, 0, None, "passed"), LOGS / "setup-1.log"))
+SHOWN = Shown(VIEW, LOGS, LOGS / "entry.log", EVENTS, SetupShown(SetupRow(1, X, "f" * 64, 0, None, CommandConclusion.PASSED), LOGS / "setup-1.log"))
 SHOW = ["step", "show", "tl-1", "--backlog", "tasks"]
 
 
@@ -106,6 +107,7 @@ def test_show_json_adds_the_checks_facts_and_results(capsys: pytest.CaptureFixtu
     assert {key: checks[key] for key in ("commit", "target", "target_seen", "required", "profile_digest", "refusal", "refusals")} == {
         "commit": X, "target": TARGET, "target_seen": None, "required": ["check", "test", "smoke"], "profile_digest": "f" * 64,
         "refusal": None, "refusals": 0}
+    assert type(checks["results"][1]["conclusion"]) is str
     assert checks["results"][1] == {"name": "test", "required": True, "conclusion": "failed", "rc": 1, "block": 1, "started_at": 51.0,
                                     "ended_at": 363.0, "argv_differs": True, "log": "/a/c/check-1-test.log"}
     assert checks["results"][3]["log"] is None  # an undefined result has no log

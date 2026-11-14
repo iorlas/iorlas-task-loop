@@ -15,13 +15,11 @@ supervision stops the running check's tree, and the rerun's reconcile marks it `
 """
 
 import contextlib
-import secrets
 import sqlite3
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
 
 from git_porcelain import Repo
 
@@ -35,6 +33,7 @@ from taskloop.check_store import ChecksRow, Required
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import Checking
 from taskloop.factory_schema import LANDING
+from taskloop.ids import Ids
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, insert
 from taskloop.operations import Failed
 from taskloop.profile import ProfileFiles
@@ -70,11 +69,13 @@ class LandPorts:
     custody: Callable[[str, str], AbstractContextManager[None]]
     environ: Mapping[str, str]
     close: Close
+    ids: Ids
 
 
 def _release(ports: LandPorts, hold: Callable[[str, str], AbstractContextManager[None]]) -> ChecksRelease:
     work = ports.work
-    return ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, hold, work.clock, work.seen, work.scratch)
+    return ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, hold, work.clock,
+        work.seen, work.scratch, ids=ports.ids)
 
 
 def released(ports: LandPorts, row: LandRow | None) -> tuple[LandRow | None, str | None] | tuple[Failed, None]:
@@ -91,7 +92,7 @@ def released(ports: LandPorts, row: LandRow | None) -> tuple[LandRow | None, str
 def _settled(ports: LandPorts, checks: ChecksRow, squash: Squash, validation: Settled) -> LandRow | Failed:
     """A candidate with no slot: validated `same_tree` (or `no_change`, delivered at insert) in one write."""
     number, o, s, same, required = squash
-    key = AttemptKey(uuid4().hex, secrets.token_hex(16), 0)  # no reservation: the generation names none
+    key = AttemptKey(ports.ids.hex(), ports.ids.token(16), 0)  # no reservation: the generation names none
     con = ports.lands.connect()
     if con is None:
         raise StoreUnavailable("Factory database unavailable")
@@ -114,7 +115,7 @@ def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, d
     if not isinstance(free, tuple):
         detail = f"{NO_SLOT} {free.detail}".strip() if isinstance(free, AdmitRefused) else free.detail
         return Failed("unavailable", free.reason if isinstance(free, AdmitRefused) else free.what, detail)
-    key = AttemptKey(uuid4().hex, secrets.token_hex(16), issued(con, repo_id, tuple(each.name for each in free)) + 1)
+    key = AttemptKey(ports.ids.hex(), ports.ids.token(16), issued(con, repo_id, tuple(each.name for each in free)) + 1)
     with ports.lands.begin(con):
         chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, key.reservation_generation)) is not None), None)
         if chosen is None:

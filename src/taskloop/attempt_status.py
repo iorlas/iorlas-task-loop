@@ -22,6 +22,7 @@ from taskloop.attempt_types import ATTEMPTS, REPEATABLE, AttemptKey, AttemptResu
 from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_status import ChecksView, checks_next, checks_release, checks_result, commands_seen
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_facts import explanation
 from taskloop.hold_status import cause, hold_next
@@ -302,8 +303,9 @@ def _failed_checks(reads: StatusPorts, files: EvidenceFiles, hold: HoldRow | Non
     row = next((each for each in store.of_attempt(hold.attempt_id) if each.key.attempt_id == hold.cause_id), None)
     if row is None:
         return None
-    results = tuple(each for each in store.results(row.key) if each.conclusion != "passed")
-    logs = tuple(None if each.conclusion == "undefined" else files.check_path(row.key, each.block, each.name) for each in results)
+    results = tuple(each for each in store.results(row.key) if each.conclusion != CommandConclusion.PASSED)
+    logs = tuple(None if each.conclusion == CommandConclusion.UNDEFINED else files.check_path(row.key,
+        each.block, each.name) for each in results)
     return ChecksView(row, results, logs)
 
 
@@ -312,7 +314,8 @@ def _checks_shown(reads: StatusPorts, files: EvidenceFiles, view: AttemptView, c
     never made); StoreUnavailable propagates."""
     key = checks.row.key
     directory = files.root / files.directory(key)
-    logs = tuple(None if row.conclusion == "undefined" else files.check_path(key, row.block, row.name) for row in checks.results)
+    logs = tuple(None if row.conclusion is CommandConclusion.UNDEFINED else files.check_path(key, row.block, row.name)
+                 for row in checks.results)
     latest = SetupStore(reads.store.connect, reads.store.begin).latest(key)
     setup = None if latest is None else SetupShown(latest, directory / f"setup-{latest.run}.log")
     land = None if view.land is None else with_logs(view.land, partial(files.check_path, view.land.row.key))
