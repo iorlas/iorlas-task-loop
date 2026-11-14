@@ -8,6 +8,7 @@ from typing import Literal
 
 from any_agent.procs import Worker
 
+from taskloop import answer_failures
 from taskloop.attempt_loads import AttemptLoads, verdict_of
 from taskloop.attempt_reads import (
     StoreRefused,
@@ -265,9 +266,11 @@ class AttemptStore(AttemptLoads):
             if current.answer.kind != "validation_pending":
                 return "already_same" if current.answer == answer else "conflict"
             paths = json.dumps(list(answer.paths)) if answer.kind == "valid" else None
+            failure = answer_failures.encode(answer_failures.validate(answer.failure, answer.kind))
             con.execute(
-                "UPDATE execution SET answer_kind=?,disposition=?,effect=?,commit_paths=?,commit_message=? WHERE attempt_id=?",
-                (answer.kind, answer.disposition, answer.effect, paths, answer.message, admission.key.attempt_id),
+                "UPDATE execution SET answer_kind=?,disposition=?,effect=?,commit_paths=?,commit_message=?,answer_failure=? "
+                "WHERE attempt_id=?",
+                (answer.kind, answer.disposition, answer.effect, paths, answer.message, failure, admission.key.attempt_id),
             )
             return "accepted"
 

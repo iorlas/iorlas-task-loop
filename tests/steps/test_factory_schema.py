@@ -15,6 +15,7 @@ from taskloop.factory_store import open_ro
 DDL_DIGESTS = {
     26: "728ea63362ce086f01b39e967b837e6875854238f49c3b073fddcdcba1666787",
     27: "62ce0c0793427a8305ef420edd956d5adae7c832969b353265ad51d55a2ed2c0",
+    28: "21c4a4af7e596acc352e922680cec640ad249c52e44656fe27d2bef93d1728ac",
 }
 
 
@@ -24,6 +25,27 @@ def assert_pinned_ddl(schema: Schema) -> None:
 
 def test_effective_ddl_matches_its_version_pin() -> None:
     assert_pinned_ddl(SCHEMA)
+
+
+@pytest.mark.parametrize(("kind", "failure", "valid"), [
+    ("validation_pending", None, True), ("valid", None, True),
+    ("missing", None, False), ("json_invalid", None, False), ("schema_invalid", None, False),
+    ("valid", '{}', False), ("validation_pending", '{}', False), ("schema_invalid", 'not json', False),
+    ("schema_invalid", '{"rule":"shape","explanation":"Object required"}', True),
+])
+def test_answer_failure_storage_requires_detail_only_for_rejections(
+    registered: sqlite3.Connection, kind: str, failure: str | None, valid: bool,
+) -> None:
+    registered.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,timed_out,work,stands,stdout_path,stdout_digest,
+        stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,session_state)
+        SELECT attempt_id,dispatch_token,generation,0,1,1,'o','d','e','d','a','d','g','d','complete' FROM attempt""",
+    )
+    if valid:
+        registered.execute("UPDATE execution SET answer_kind=?,answer_failure=?", (kind, failure))
+    else:
+        with pytest.raises(sqlite3.IntegrityError):
+            registered.execute("UPDATE execution SET answer_kind=?,answer_failure=?", (kind, failure))
 
 
 def test_ddl_change_without_a_version_bump_fails_the_guard() -> None:

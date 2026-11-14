@@ -1,19 +1,24 @@
 """Captured answers preserve effects and discard permitted unfinished paths."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from doubles import Environment
-from test_attempt import ENTRY, KEY, PLAN, AttemptSurroundings, P, app, codex, database, fake
+from sqlite_store import Store
+from test_attempt import ENTRY, KEY, PLAN, AttemptSurroundings, P, app, codex, database, fake, seed
 from test_attempt import surroundings as attempt_surroundings
 
 from taskloop.agents.launch import AgentLaunch
+from taskloop.answer_failures import AnswerFailureData, AnswerRule
 from taskloop.attempt import Attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AnswerState
+from taskloop.attempt_types import Answer, AnswerState, StepRules
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.factory_schema import SCHEMA
 from taskloop.ids import NativeIds
+from taskloop.steps import kind
 
 surroundings = attempt_surroundings
 
@@ -82,3 +87,69 @@ def test_unfinished_answers_with_paths_are_collected_without_commit_or_repeat(
         disposition, "none", "[]", None)
     raw = EvidenceFiles(surroundings.tmp).text(KEY, "answer.txt")
     assert raw is not None and json.loads(raw) == answer
+
+
+@pytest.mark.parametrize(("text", "rule", "detail"), [
+    ("", AnswerRule.MISSING, "empty"),
+    ("not json", AnswerRule.JSON, "strict JSON"),
+    ('{"disposition":1,"disposition":2}', AnswerRule.JSON, "strict JSON"),
+    ('{"plan":3}', AnswerRule.SHAPE, "exactly"),
+    (json.dumps(PLAN | {"paths": [P, P]}), AnswerRule.PATHS_DUPLICATE, "unique"),
+    (json.dumps(PLAN | {"message": None}), AnswerRule.MESSAGE, "1 to 500"),
+])
+def test_failure_survives_reopening_and_missing_raw_answer(
+    surroundings: AttemptSurroundings, text: str, rule: AnswerRule, detail: str,
+) -> None:
+    path = surroundings.tmp / "factory.db"
+    con = Store(SCHEMA).open_rw(path)
+    assert con is not None
+    seed(con, surroundings)
+    execution = fake(text)
+    owner = app(con, surroundings, execution)
+    result = owner.execute(KEY, ENTRY)
+    assert result.execution is not None and result.execution.verification is None
+    failure = result.execution.answer.failure
+    assert failure is not None and failure.rule is rule and detail in failure.explanation
+    assert result.explanation == failure.describe() and result.execution.answer.effect is None
+    loaded = owner.store.load(KEY)
+    assert loaded is not None
+    state, evidence = result.execution.answer, result.execution.evidence
+    assert owner.store.answer(loaded.admission, evidence, state) == "already_same"
+    changed = replace(state, failure=AnswerFailureData(rule=rule, explanation="Another failure"))
+    assert owner.store.answer(loaded.admission, evidence, changed) == "conflict"
+    assert owner.store.answer(loaded.admission, evidence, AnswerState("valid", "planned", "commit", (P,), "Plan")) == "conflict"
+    con.close()
+    EvidenceFiles(surroundings.tmp).read(evidence.answer)
+    (surroundings.tmp / evidence.answer.path).unlink()
+    reopened = Store(SCHEMA).open_rw(path)
+    assert reopened is not None
+    try:
+        reader = app(reopened, surroundings, execution)
+        assert reader.collect(KEY) == result and reader.collect(KEY) == result
+        assert len(execution.calls) == 1
+        for malformed in (
+            {"rule": "unknown", "explanation": "bad"},
+            {"rule": rule},
+            {"rule": rule, "explanation": "x" * 2001},
+            {"rule": rule, "explanation": "bad", "extra": 1},
+            {"rule": AnswerRule.JSON if rule is AnswerRule.MISSING else AnswerRule.MISSING, "explanation": "Wrong phase"},
+            [],
+        ):
+            reopened.execute("UPDATE execution SET answer_failure=?", (json.dumps(malformed),))
+            assert reader.collect(KEY).status == "unavailable"
+    finally:
+        reopened.close()
+
+
+def test_unexpected_value_error_is_not_an_answer_rejection(surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch) -> None:
+    con = database(surroundings)
+    owner = app(con, surroundings, fake())
+    operation = kind("plan")
+
+    def broken(_value: object, _rules: StepRules) -> Answer:
+        raise ValueError("decoder bug")
+
+    monkeypatch.setattr("taskloop.attempt.kind", lambda _step: replace(operation, decode=broken))
+    with pytest.raises(ValueError, match="decoder bug"):
+        owner.execute(KEY, ENTRY)
+    assert owner.collect(KEY).reason == "validation_pending"

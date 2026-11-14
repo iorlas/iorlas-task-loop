@@ -19,11 +19,13 @@ from git_porcelain import Repo
 from taskloop.agents.launch import AgentLaunch, LaunchFailure
 from taskloop.agents.stop import AgentStops
 from taskloop.agents.stop_store import StopStore
+from taskloop.answer_failures import AnswerFailure, AnswerFailureData, AnswerRule
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_result import collect, report
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     Admission,
+    Answer,
     AnswerState,
     AttemptKey,
     AttemptRecord,
@@ -300,12 +302,25 @@ class Attempts:
             return "conflict"
         step = kind(admission.step)
         rules = step.rules(admission.task.task_id)
-        answer = decode_answer(text, lambda value: step.decode(value, rules))
+
+        def validate(value: object) -> Answer | AnswerFailure:
+            try:
+                return step.decode(value, rules)
+            except AnswerFailure as failure:
+                return failure
+
+        answer = decode_answer(text, validate)
         if isinstance(answer, DecodedAnswer):
             value = answer.value
-            state = AnswerState("valid", value.disposition, value.effect, value.paths, value.message)
+            if isinstance(value, AnswerFailure):
+                state = AnswerState("schema_invalid", failure=value.data)
+            else:
+                state = AnswerState("valid", value.disposition, value.effect, value.paths, value.message)
         elif isinstance(answer, InvalidAnswer):
-            state = AnswerState("json_invalid" if answer.kind == "json" else "schema_invalid")
+            if answer.kind != "json":
+                raise ValueError("Unexpected answer decoder failure: " + answer.reason)
+            failure = AnswerFailureData(rule=AnswerRule.JSON, explanation="Answer must be one complete strict JSON value: " + answer.reason)
+            state = AnswerState("json_invalid", failure=failure)
         else:
-            state = AnswerState("missing")
+            state = AnswerState("missing", failure=AnswerFailureData(rule=AnswerRule.MISSING, explanation="Answer must not be empty"))
         return self.store.answer(admission, evidence, state, callback)

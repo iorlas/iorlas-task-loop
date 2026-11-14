@@ -8,7 +8,8 @@ from typing import Final
 
 from git_porcelain import Tree
 
-from taskloop import step_text
+from taskloop import answer_decode, step_text
+from taskloop.answer_failures import AnswerFailure, AnswerRule
 from taskloop.attempt_types import (
     Answer,
     Effect,
@@ -17,8 +18,6 @@ from taskloop.attempt_types import (
     Rule,
     StepRules,
     Unsettled,
-    commit_message,
-    listed_paths,
 )
 from taskloop.check_repeat.feedback import FailedCheck, output_text
 from taskloop.command_conclusion import encode
@@ -96,25 +95,20 @@ def decode(value: object, rules: StepRules) -> Answer:
     """Validate the implement answer contract, without verifying Git effects; the single owner of its cross-field rules
     and every bound: `implemented` lists at least one path and a message, `unchanged` lists none, and unfinished
     answers ignore structurally valid paths without requesting a commit."""
-    if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
-        raise ValueError("Invalid implement answer")
-    disposition, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
+    disposition, paths, message, explanation = answer_decode.fields(value, ANSWER_KEYS)
     if isinstance(paths, list) and any(
         isinstance(path, str) and path.rstrip("/").rsplit("/", 1)[-1].casefold() == "plan.md" for path in paths
     ):
-        raise ValueError("Invalid implement answer: Do not include plan.md in paths; put the handoff in the commit message")
-    if disposition in ("incomplete", "needs_owner"):
-        listed = () if isinstance(paths, list) and all(isinstance(path, str) for path in paths) else None
-    else:
-        listed = listed_paths(paths, rules)
-    if disposition == "implemented":
-        fits = bool(listed) and commit_message(message)
-    else:
-        fits = disposition in DISPOSITIONS and listed == () and message is None
-    if not fits or listed is None or not isinstance(explanation, str) or len(explanation) > 2000:
-        raise ValueError("Invalid implement answer")
-    text = message if isinstance(message, str) else None
-    return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
+        raise AnswerFailure(AnswerRule.PLAN_FORBIDDEN, "Do not include plan.md in paths; put the handoff in the commit message")
+    if not isinstance(disposition, str) or disposition not in DISPOSITIONS:
+        raise AnswerFailure(AnswerRule.DISPOSITION, "disposition must be one of: " + ", ".join(DISPOSITIONS))
+    listed = answer_decode.paths(paths, rules, unfinished=disposition in ("incomplete", "needs_owner"))
+    if disposition == "implemented" and not listed:
+        raise AnswerFailure(AnswerRule.PATHS_REQUIRED, "implemented paths must include at least one file")
+    if disposition == "unchanged" and listed:
+        raise AnswerFailure(AnswerRule.PATHS_COUNT, "unchanged paths must be empty")
+    text = answer_decode.message(message, committing=disposition == "implemented")
+    return Answer(disposition, EFFECT_OF[disposition], listed, text, answer_decode.explanation(explanation))
 
 
 def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:

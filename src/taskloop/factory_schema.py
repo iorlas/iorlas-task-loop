@@ -47,7 +47,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=27,
+    version=28,
     name="factory",
     steps={},
     ddl=f"""
@@ -144,7 +144,10 @@ CREATE TABLE execution (
   CHECK(answer_kind IN ('validation_pending','valid','missing','json_invalid','schema_invalid')),
  disposition TEXT, effect TEXT CHECK(effect IN ('commit','keep','none')), commit_paths TEXT, commit_message TEXT,
  session_state TEXT NOT NULL CHECK(session_state IN ('complete','pending','conflict','fault')),
- recovery_callback TEXT CHECK(recovery_callback IS NULL OR json_valid(recovery_callback))
+ recovery_callback TEXT CHECK(recovery_callback IS NULL OR json_valid(recovery_callback)),
+ answer_failure TEXT CHECK(answer_failure IS NULL OR json_valid(answer_failure)),
+ CHECK ((answer_kind IN ('missing','json_invalid','schema_invalid') AND answer_failure IS NOT NULL)
+     OR (answer_kind IN ('valid','validation_pending') AND answer_failure IS NULL))
 );
 CREATE TABLE verification (
  attempt_id TEXT PRIMARY KEY REFERENCES execution(attempt_id), dispatch_token TEXT NOT NULL, generation INTEGER NOT NULL,
@@ -281,7 +284,7 @@ FACTS = (
     "c_in,c_cached,c_out,turns,session"
 )
 EVIDENCE = "stdout_path,stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest"
-ANSWER = "answer_kind,disposition,effect,commit_paths,commit_message,session_state"
+ANSWER = "answer_kind,disposition,effect,commit_paths,commit_message,answer_failure,session_state"
 VERDICT = "verdict,reason,blob,reused"
 RELEASE = "attempt_id,dispatch_token,generation,head,released_at,claim"
 PUBLISHED = "attempt_id,dispatch_token,generation,commit_sha,remote_head,published_at"  # X pushed; the remote tip confirmed
