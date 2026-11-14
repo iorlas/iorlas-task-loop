@@ -67,6 +67,8 @@ WRITERS = {
     ("INSERT", "agent_stop"): "agents/stop_store.py",
     ("UPDATE", "agent_stop"): "agents/stop_store.py",
     ("CREATE TABLE", "merge_operation"): "factory_schema.py",
+    ("CREATE TABLE", "land_conflict"): "factory_schema.py",
+    ("INSERT", "land_conflict"): "land_conflict/store.py",
     ("INSERT", "merge_operation"): "merge/store.py",
     ("UPDATE", "merge_operation"): "merge/store.py",
     ("CREATE TABLE", "drain_state"): "factory_schema.py",
