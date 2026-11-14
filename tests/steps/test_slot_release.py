@@ -372,7 +372,8 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     with pytest.raises(StoreRefused, match="stale_reservation"):
         store.load(KEY)
     assert store.register_entry(KEY, (8, "later", "boot"), 10) == "refused"
-    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=NativeIds())
+    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                               checkouts, slot_files, ids=NativeIds())
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
 

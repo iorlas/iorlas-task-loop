@@ -142,10 +142,13 @@ def test_direct_registration_without_dispatch_authorization_is_fenced(admitted: 
 def test_repeat_and_failed_check_repair_cannot_create_an_attempt_behind_the_fence(
     factory: sqlite3.Connection,
     tmp_path: Path,
+    checkouts: PinnedViews,
+    slot_files: FakeSlotFiles,
 ) -> None:
     DrainStore(lambda: factory, ids=NativeIds()).request()
     key = AttemptKey("previous", "token", 1)
-    chain = ChainAdmission(lambda: factory, Store(SCHEMA).begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=NativeIds())
+    chain = ChainAdmission(lambda: factory, Store(SCHEMA).begin_immediate, EvidenceFiles(tmp_path), lambda: 10,
+                           checkouts, slot_files, ids=NativeIds())
     found = chain.admit_repeat(RepeatRequest(key, "repeat", 100, "uncommitted"))
     assert isinstance(found, AdmitRefused) and found.reason is Reason.DRAINING
     source = AttemptKey("checks", "checks-token", 1)
