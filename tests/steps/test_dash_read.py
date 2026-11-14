@@ -274,7 +274,10 @@ def test_a_plan_restarted_at_plan_is_its_own_try_that_can_be_read_by_its_number(
     assert [(each.step, each.n, each.after) for each in found.attempts] == [
         ("plan", 1, None), ("implement", 1, None), ("plan", 2, "restart_at_plan")]
     assert found.task.attempt == 2 and found.task.repeat is not None and found.task.repeat.kind == "restart_at_plan"
-    assert [each.attempt for each in board_of(registered, files, Tracker()).tasks] == [2]
+    assert found.task.repeat.reason == "Reason not recorded"
+    board_task, = board_of(registered, files, Tracker()).tasks
+    assert board_task.attempt == 2 and board_task.repeat is not None
+    assert (board_task.repeat.kind, board_task.repeat.reason) == ("restart_at_plan", "Reason not recorded")
     files.put_input(KEY, "Plan the actual task")
     files.put_input(AttemptKey("again", "again-token", 1), "Plan it again after the owner's edit")
     first, second = (build_body(ports, "tasks", "tl-1", "plan", each) for each in (1, 2))
@@ -345,3 +348,19 @@ def test_a_repeats_prompt_marks_the_lines_it_added_to_the_prompt_it_repeats(chec
     first, second = (build_body(ports, "tasks", "tl-1", "implement", each) for each in (1, 2))
     assert isinstance(first, AttemptBody) and isinstance(second, AttemptBody)
     assert first.added == () and second.added == ((0, 3),)
+
+
+def test_a_plan_repeat_is_a_repeat_on_the_board_and_in_history(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    registered.execute(
+        """INSERT INTO attempt (attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,
+        input_path,input_digest,schema_version,model,effort,sandbox,deadline,number,seq,slot_head,previous_attempt_id,repeat_reason)
+        SELECT 'again','again-token',2,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,
+        schema_version,model,effort,sandbox,deadline,2,2,slot_head,'attempt','unsafe' FROM attempt WHERE attempt_id='attempt'""")
+    files = EvidenceFiles(tmp_path)
+    board_task, = board_of(registered, files, Tracker()).tasks
+    assert board_task.repeat is not None
+    assert (board_task.repeat.kind, board_task.repeat.reason) == ("repeat", "unsafe")
+    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    assert [(a.step, a.n, a.after) for a in found.attempts] == [("plan", 1, None), ("plan", 2, "repeat")]
+    assert (found.attempts[-1].reason, found.attempts[-1].repeat_of) == ("unsafe", 1)

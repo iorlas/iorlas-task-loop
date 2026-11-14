@@ -1,6 +1,6 @@
 # Compact Steps rail
 
-Status: proposed implementation plan. Task: `tl-8bh9.14.150`.
+Status: implemented; real-browser validation blocked by the execution sandbox. Task: `tl-8bh9.14.150`.
 
 The owner's 2026-11-13 review calls for one visible row per step try, verification
 marks on that row, compact restart/repeat information, and folded past runs. This
@@ -153,3 +153,39 @@ Keep source/test size limits and add no subprocess-based JavaScript test runner.
 
 This planning step changes only this document; it does not claim implementation
 or gate completion.
+
+
+## As built
+
+The rail now projects agent verifications onto separately focusable Result buttons,
+keeps one row per step try, folds past history at restart boundaries, and remembers
+open disclosures with the drawer. Repeats are inline tags; restarts carry local time
+and any recorded wait. Factory gaps shorter than two minutes are hover information;
+no elapsed gap is attributed to an individual commit/publish action. The old restart
+placeholder becomes `Reason not recorded` in presentation and in the board fallback.
+Plan repeats are classified before restarts. All existing history and Result endpoints
+remain intact. Compact step labels omit the extra emoji to make room for repeat tags
+and marks in the existing rail width. Agent summaries already covered by an attached
+verification are suppressed, keeping one failure explanation line. The stylesheet was rebuilt with pinned Tailwind
+4.1.11 (the unversioned shim was unavailable, so its installed bin was added to PATH).
+
+Extended `tests/cli/test_dash_words.py` and `tests/steps/test_dash_read.py` cover cause
+words, rejection wording, an unstored restart reason and correct Plan repeat classification.
+New `tests/dash/rail.test.js`, loaded by `tests/dash/rail.html`, exercises the real ES modules:
+healthy four-row history; verification states and failure navigation; 119/120-second gaps;
+missing/invalid timing; local restart dates; plan, implementation and check-driven repeats;
+multiple past histories, earlier failure hints, selection and disclosure redraws; and
+verification Result navigation from Lines, Prompt and Result, retaining listing/rule detail.
+For a browser run, serve the repository statically and open the HTML, or use Chromium
+with `--headless --allow-file-access-from-files --virtual-time-budget=5000 --dump-dom`
+on its file URL; the root `data-result` and `#results` report success/failure.
+
+Validation in this slot: `just check` passed (lint, types, nine import contracts),
+`just test` passed (3,351 passed, 13 skipped), and the focused dashboard tests passed.
+`node --check` passed for the changed rail/drawer modules and browser test module.
+A temporary semantic DOM harness under `$TMPDIR` executed all seven JavaScript contract
+groups successfully, including drawer interactions. This is not browser/layout evidence.
+The cached Playwright Chromium executable could not load `libglib-2.0.so.0`; the system
+Chromium failed on sandbox-denied socket operations, including with crash reporting
+disabled. Consequently actual browser layout, keyboard activation, screenshots and visual
+review of both themes remain unverified here. No screenshot was available in the repository.

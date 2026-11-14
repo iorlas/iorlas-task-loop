@@ -23,6 +23,14 @@ export const WORDS = {
   "held:slot_dirty": "Slot has leftover files",
   "held:slot_branch": "Slot is on another branch",
   "held:slot_redirected": "Slot pointer was rewritten",
+  failed_check: "The checks failed",
+  verification: "The factory's check of the answer failed",
+  unsafe: "A listed path is unsafe",
+  uncommitted: "Files were left uncommitted",
+  ignored: "A listed path is ignored by Git",
+  branch: "The slot was not on the task branch",
+  rejected: "The commit broke a rule",
+  repeat: "Reason not recorded",
   verified: "Checked and committed",
   reused: "Nothing new; earlier commit kept",
   "unsettled:branch": "Not committed: the slot was not on the task branch",
@@ -37,11 +45,12 @@ export const WORDS = {
 
 // A code with a family prefix and a tail the table cannot list (a rule, a check name).
 const FAMILIES = [
-  ["failed:rejected:", "Commit refused: "],
-  ["rejected:", "Commit refused: "],
+  ["failed:rejected:", "Not committed: the commit broke a rule: "],
+  ["rejected:", "Not committed: the commit broke a rule: "],
   ["failed:run:", "The agent run failed: "],
   ["run:", "The agent run failed: "],
   ["failed:test:", "Checks failed: "],
+  ["test:", "Checks failed: "],
 ];
 
 // The words of a code, or the code itself when the page has none for it.

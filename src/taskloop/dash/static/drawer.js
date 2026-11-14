@@ -4,7 +4,7 @@
 
 import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, position, quietSpan, stepInfo, tag } from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
-import { causeLink, lasted, rail, verifyTitle } from "./rail.js";
+import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
 import { taskView } from "./taskview.js";
 
@@ -41,7 +41,7 @@ function reveal() {
 // it arrives and the tracker's fields (`bd`, slow under load) when they do. Opening another task cancels the first one's tracker read.
 export async function openDrawer(id) {
   open?.abort.abort();
-  const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, bodies: new Map(), opened: new Map(), tab: null, view: null };
+  const mine = { id, detail: null, tracker: { state: "loading" }, abort: new AbortController(), sig: null, bodies: new Map(), opened: new Map(), runs: new Map(), tab: null, view: null };
   open = mine;
   render();
   reveal();
@@ -165,6 +165,8 @@ function render() {
   const drawer = $("drawer");
   const railTop = $("rail")?.scrollTop ?? 0;
   const kept = $("tail") && { key: $("tail").dataset.key, top: $("tail").scrollTop, bottom: atBottom($("tail")) };
+  // Capture disclosure changes even when a redraw precedes the asynchronous toggle event.
+  for (const group of $("rail")?.querySelectorAll("details[data-run]") ?? []) open.runs.set(group.dataset.run, group.open);
   drawer.replaceChildren();
   if (!t) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", `Loading ${open.id}…`));
   drawer.append(head(t));
@@ -229,15 +231,15 @@ function bodyTab(a, tab) {
 const TABS = [["lines", "Lines"], ["result", "Result"], ["prompt", "Prompt"]];
 const nameOf = stepInfo;
 
-// "Began after a repeat of Implement, try 1 · why": the reason is also the hover text, and the rail's jump line selects this attempt.
+// The selected attempt explains its restart/repeat, including navigation to a failed verification.
 function began(a) {
   const list = open.detail.attempts;
   const prev = a.after === "repeat" ? list.find((x) => x.step === a.step && x.n === a.repeat_of) : list.slice(0, list.indexOf(a)).findLast((x) => x.step !== VERIFY.id);
   const at = `${nameOf(prev?.step ?? a.step).label}${prev ? `, try ${prev.n}` : ""}`;
   const what = a.after === "repeat" ? `a repeat of ${at}` : `a restart at plan (after ${at})`;
   const line = el("p", `w-full text-xs ${JUMP[a.after].text}`);
-  line.append(el("span", "font-medium", `Began after ${what}`), el("span", "text-slate-500 dark:text-slate-400", a.reason ? ` · ${a.reason}` : ""));
-  line.title = a.reason ?? "";
+  line.append(el("span", "font-medium", `Began after ${what}`), el("span", "text-slate-500 dark:text-slate-400", ` · ${changeReason(a)}`));
+  line.title = `${changeReason(a)}${a.reason ? ` (${a.reason})` : ""}`;
   if (a.led_by) line.append(" ", causeLink(a, select));
   return line;
 }
@@ -258,7 +260,7 @@ function pane() {
   }
   wrap.append(top);
   if (a.run) wrap.append(el("p", "px-6 pt-1 text-xs text-slate-500 dark:text-slate-400", [a.run.harness, a.run.provider, a.run.model, `${a.run.effort} effort`, a.run.sandbox].join(" · ")));
-  if (a.after) top.append(began(a)); // one compact line; the rail's jump line, selectable, holds the full story
+  if (a.after) top.append(began(a)); // the full reason is readable here after selecting the row or tag
   const bar = el("div", "mt-3 flex gap-5 border-b border-slate-200 px-6 dark:border-slate-800");
   for (const [id, label] of TABS) {
     const on = id === tab;

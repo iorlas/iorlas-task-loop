@@ -11,7 +11,7 @@ PAGE = Path(__file__).resolve().parents[2] / "src/taskloop/dash/static"
 REQUIRED = (
     "needs_owner", "failed:needs_owner", "answer:schema_invalid", "failed:answer:schema_invalid", "failed:test:failed", "held:slot_dirty",
     "verified", "reused", "unsettled:branch", "unsettled:unsafe", "unsettled:ignored", "unsettled:uncommitted", "unsettled:rejected",
-    "pending", "registered", "passed",
+    "pending", "registered", "passed", "verification", "unsafe", "uncommitted", "ignored", "branch", "rejected", "repeat", "failed_check",
 )
 
 
@@ -33,3 +33,20 @@ def test_the_verification_reasons_the_backend_names_are_all_worded() -> None:
 def test_the_page_prints_its_codes_through_the_table() -> None:
     for name in ("rail.js", "result.js", "ui.js"):
         assert "words.js" in (PAGE / name).read_text(), name
+
+
+@pytest.mark.parametrize("code,expected", [
+    ("verification", "The factory's check of the answer failed"),
+    ("unsafe", "A listed path is unsafe"),
+    ("unsettled:unsafe", "Not committed: a listed path is unsafe"),
+    ("unsettled:rejected", "Not committed: the commit broke a rule"),
+])
+def test_repeat_causes_and_verification_failures_have_readable_words(code: str, expected: str) -> None:
+    assert table()[code] == expected
+
+
+def test_rejected_rules_and_check_repeat_reasons_keep_their_specific_tail() -> None:
+    source = (PAGE / "words.js").read_text()
+    families = dict(re.findall(r'\["([^"\n]+)", "([^"\n]+)"\]', source))
+    assert families["rejected:"] == families["failed:rejected:"] == "Not committed: the commit broke a rule: "
+    assert families["test:"] == families["failed:test:"] == "Checks failed: "
