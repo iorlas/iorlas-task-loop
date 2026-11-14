@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from sqlite_store import Store, begin_immediate
 
+from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.cli import main
 from taskloop.factory_schema import SCHEMA
 from taskloop.hold_store import HoldInsert, HoldStore
@@ -42,6 +43,36 @@ def attempt(con: sqlite3.Connection, key: str, backlog: str, task: str = "tl-1",
 def release(con: sqlite3.Connection, key: str) -> None:
     with begin_immediate(con):
         con.execute("INSERT INTO slot_release VALUES (?,?,1,?,14,'unclaimed')", (key, f"{key}-token", D))
+
+
+@pytest.mark.parametrize("structured", [False, True])
+def test_show_reports_persisted_answer_failure_without_artifacts(
+    factory: sqlite3.Connection, tmp_path: Path, capsys: pytest.CaptureFixture[str], structured: bool,
+) -> None:
+    attempt(factory, "broken", "tasks")
+    failure = AnswerFailureData(rule=AnswerRule.MESSAGE, explanation="A commit message must contain 1 to 500 characters")
+    with begin_immediate(factory):
+        factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
+        factory.execute(
+            """INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
+            stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,
+            answer_kind,session_state,answer_failure)
+            VALUES ('broken','broken-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','schema_invalid','complete',?)""",
+            (encode(failure),),
+        )
+    db, artifacts = tmp_path / "factory.db", tmp_path / "artifacts"
+    before = db.read_bytes()
+    assert main(["step", "show", "tl-1", "--db", str(db), "--artifacts", str(artifacts),
+                 *(["--json"] if structured else [])]) == 0
+    output = capsys.readouterr()
+    assert not output.err
+    if structured:
+        result = json.loads(output.out)["result"]
+        assert result == {"status": "collected", "reason": "answer:schema_invalid", "explanation": failure.describe()}
+    else:
+        assert "Result: collected answer:schema_invalid" in output.out
+        assert "Answer: " + failure.describe() in output.out
+    assert db.read_bytes() == before and not artifacts.exists()
 
 
 def config(tmp_path: Path, backlog: str) -> list[str]:

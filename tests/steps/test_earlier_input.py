@@ -10,6 +10,7 @@ from test_repeat_dispatch import step as repeat_step
 
 from taskloop.admit import AdmitRefused
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
+from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.attempt_types import AttemptKey, FileRef, FileStat
 from taskloop.earlier_input import BEGIN, END, START
 from taskloop.evidence_files import EvidenceFiles
@@ -87,7 +88,8 @@ def test_a_missing_or_invalid_answer_is_unavailable_without_inventing_an_explana
     step: Step, slot: FakeWorktree, invalid: bool,
 ) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: "# Plan\n", STRAY: "leftover"}, PLAN))
-    step.con.execute("UPDATE execution SET answer_kind=?", ("schema_invalid" if invalid else "missing",))
+    failure = AnswerFailureData(rule=AnswerRule.SHAPE if invalid else AnswerRule.MISSING, explanation="No usable answer")
+    step.con.execute("UPDATE execution SET answer_kind=?,answer_failure=?", ("schema_invalid" if invalid else "missing", encode(failure)))
     found = step.admission().admit_repeat(RepeatRequest(KEY, "task text", 100, "unsafe"))
     assert isinstance(found, AdmitRefused) and found.reason == "not_repeatable"
     # The refused admission's evidence remains reviewable, and cannot invent a valid earlier answer.

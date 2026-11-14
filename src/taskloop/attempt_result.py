@@ -35,7 +35,9 @@ def report(stored: StoredExecution) -> AttemptResult:
         return AttemptResult("pending", "session_" + stored.session_state, stored)
     reason, verdict = end_word(stored), stored.verification
     if not committing(stored):
-        return AttemptResult("collected", reason, stored)
+        failure = stored.answer.failure
+        explanation = failure.describe() if reason.startswith("answer:") and failure is not None else ""
+        return AttemptResult("collected", reason, stored, explanation=explanation)
     if verdict is None:
         return AttemptResult("pending", "verification", stored)
     return AttemptResult("collected", judged(verdict), stored)

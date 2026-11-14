@@ -26,6 +26,7 @@ from taskloop.admit import AdmitRefused, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
 from taskloop.agents.launch import AgentLaunch
 from taskloop.agents.settings import AgentSetting, ClaudePolicy, Overrides, StepSettings, encode_policy
+from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.attempt import Attempts, Execution
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_status import StatusPorts, list_attempts, show_attempt
@@ -323,7 +324,8 @@ GATES: list[tuple[str, str, float, str]] = [
     ("verdict", "INSERT INTO verification (attempt_id,dispatch_token,generation,verdict,reason,observed_at) "
      "VALUES ('attempt','dispatch',1,'rejected','paths',1)", 1000, "not_repeatable"),
     ("invalid_answer", "UPDATE execution SET answer_kind='schema_invalid',disposition=NULL,effect=NULL,commit_paths=NULL,"
-     "commit_message=NULL", 1000, "not_repeatable"),
+     f"commit_message=NULL,answer_failure='{encode(AnswerFailureData(rule=AnswerRule.SHAPE, explanation='Object required'))}'",
+     1000, "not_repeatable"),
     ("failed_run", "UPDATE execution SET rc=1", 1000, "not_repeatable"),
     ("timed_out", "UPDATE execution SET timed_out=1", 1000, "not_repeatable"),
     ("pending_session", "UPDATE execution SET session_state='pending'", 1000, "not_repeatable"),

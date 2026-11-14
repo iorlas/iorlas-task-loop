@@ -11,6 +11,7 @@ import pytest
 from doubles import D, X
 from sqlite_store import begin_immediate
 
+from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.attempt_reads import ReleaseRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, agent_attempt, list_attempts, show_attempt, with_hold
 from taskloop.attempt_store import AttemptStore
@@ -303,8 +304,10 @@ def test_deadline_passed_of_a_captured_agent_attempt_is_whether_its_run_timed_ou
     plan(factory)
     factory.execute("UPDATE attempt SET phase='captured',base_commit=?", (D,))
     factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
-        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state)
-        VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','json_invalid','complete')""")
+        stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,
+        session_state,answer_failure)
+        VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','json_invalid','complete',?)""",
+        (encode(AnswerFailureData(rule=AnswerRule.JSON, explanation="Answer must be strict JSON")),))
 
     def seen(now: float) -> list[bool]:
         found = list_attempts(reads(factory, now))
