@@ -241,13 +241,13 @@ def test_cleanup_failure_keeps_intent(execution_case: ExecutionCase, monkeypatch
     retained(c)
 
 
-def test_accepted_result_bypasses_cleanup(execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_accepted_result_cleans_without_resetting_accepted_work(execution_case: ExecutionCase, monkeypatch: pytest.MonkeyPatch) -> None:
     c = execution_case
     exclude = FakeWorktree.exclude
     reset = FakeWorktree.reset
 
     def excluding(self: FakeWorktree, patterns: Sequence[str]) -> None:
-        assert not c.calls
+        assert not c.con.in_transaction
         exclude(self, patterns)
 
     def resetting(self: FakeWorktree, rev: str, *, mode: str = "mixed") -> None:
@@ -257,8 +257,8 @@ def test_accepted_result_bypasses_cleanup(execution_case: ExecutionCase, monkeyp
     monkeypatch.setattr(FakeWorktree, "exclude", excluding)
     monkeypatch.setattr(FakeWorktree, "reset", resetting)
     assert isinstance(c.resume(), Completed)
-    saved = c.ports.store.saved(c.record.key)
-    assert saved is not None and saved.cleanup is None
+    saved = c.ports.store.completed(c.record.key)
+    assert saved is not None and saved.cleanup is not None and saved.cleanup.phase is CleanupPhase.COMPLETE
 
 
 def test_cleanup_transitions_freeze_expectations(execution_case: ExecutionCase) -> None:

@@ -149,12 +149,12 @@ def test_completed_resolution_and_repeated_reads_never_validate_or_deliver(b: La
     assert isinstance(first, Failed) and first.word == "refused:conflict" and "retained for review" in first.detail
     [case] = cases
     work = case.ports.merges.get(case.record.key.attempt_id)
-    saved = ports.conflicts.store.saved(case.record.key)
+    saved = ports.conflicts.store.completed(case.record.key)
     assert work is not None and work.phase is Phase.COMPLETE and saved is not None and saved.accepted
     assert case.record.request.target == target and case.record.request.deadline == b.now + 300
     assert case.record.request.checked == b.x
     reservations = b.reservations()
-    assert reservations == [("s1", case.record.key.attempt_id)]
+    assert reservations == []
     before = list(b.environment.events)
     for clean in (False, True):
         if clean:
@@ -171,12 +171,12 @@ def test_completed_resolution_and_repeated_reads_never_validate_or_deliver(b: La
             assert any(action in each for each in dashboard.actions)
             assert dashboard.command.endswith("--no-change") is clean
             assert case.calls == 1 and b.environment.events == before
-            assert b.reservations() == reservations and ports.conflicts.store.saved(case.record.key) == saved
+            assert b.reservations() == reservations and ports.conflicts.store.completed(case.record.key) == saved
             assert case.ports.merges.get(case.record.key.attempt_id) == work
             unchanged_input(b, target)
         assert land(ports, replace(request, minutes=None)) == first
         assert case.calls == 1 and b.environment.events == before
-        assert b.reservations() == reservations and ports.conflicts.store.saved(case.record.key) == saved
+        assert b.reservations() == reservations and ports.conflicts.store.completed(case.record.key) == saved
         assert case.ports.merges.get(case.record.key.attempt_id) == work
         unchanged_input(b, target)
 
@@ -203,7 +203,7 @@ def test_running_resolution_is_retryable_and_restart_keeps_its_original_admissio
     assert isinstance(finished, Failed) and finished.word == "refused:conflict"
     work = case.ports.merges.get(record.key.attempt_id)
     assert work is not None and work.phase is Phase.COMPLETE and case.calls == 2
-    assert case.record == record and b.reservations() == [("s1", record.key.attempt_id)]
+    assert case.record == record and b.reservations() == []
     unchanged_input(b, target)
 
 

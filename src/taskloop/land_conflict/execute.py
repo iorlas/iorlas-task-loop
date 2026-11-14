@@ -85,7 +85,7 @@ def _execute(ports: Ports, record: Record) -> Result:
     if any(getattr(work, name) != getattr(expected, name) for name in fields):
         raise StoreRefused("merge_reservation")
     pending = ports.store.saved(record.key)
-    if pending is not None and not (pending.accepted and pending.phase is SavePhase.COMPLETE):
+    if pending is not None:
         return _saved_result(ports, record, work, fence)
 
     def setup(target: Work) -> Waiting | None:
@@ -123,16 +123,16 @@ def _saved_result(ports: Ports, record: Record, work: Work, fence: Callable[[], 
         return Unavailable(reason=Reason.UNKNOWN, explanation="The pending conflict save has no matching terminal merge record.")
     preservation = Preservation(ports.store, ports.repo, ports.checkouts, ports.files, ports.gone, ports.clock, owned)
     saved = ports.store.saved(record.key)
-    if saved is not None and saved.release is not None and isinstance(result, Terminal):
+    if saved is not None and saved.release is not None:
         return ReleaseSaved(preservation)(record, work, saved, result)
-    if saved is not None and (saved.cleanup is not None or saved.abort is not None) and isinstance(result, Terminal):
+    if saved is not None and (saved.cleanup is not None or saved.abort is not None):
         retained = result
     else:
         retained = preservation(record, work, result)
     saved = ports.store.saved(record.key)
-    if isinstance(retained, Terminal) and saved is not None and not saved.accepted and saved.phase is SavePhase.COMPLETE:
+    if isinstance(retained, (Completed, Terminal)) and saved is not None and saved.phase is SavePhase.COMPLETE:
         cleaned = CleanupSaved(preservation)(record, work, saved, retained)
-        if not isinstance(cleaned, Terminal):
+        if not isinstance(cleaned, (Completed, Terminal)):
             return cleaned
         saved = ports.store.saved(record.key)
         assert saved is not None
