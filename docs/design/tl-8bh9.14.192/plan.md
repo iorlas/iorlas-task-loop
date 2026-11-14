@@ -1,0 +1,45 @@
+# Depth
+Medium: three behaviours cover once-only orientation, bounded repository searches with a verified tracker restriction, and narrowed searches after truncated output. No owner decision is missing; no dependency is explicitly unlanded. Evidence budget: 12 model calls total. References to .175 and .186 do not establish unlanded dependencies.
+
+## Size
+Estimate: 6 changed files including this plan, 3 independent behaviours, and 50 model calls for one implement attempt. Runtime measurement uses the next ten normally scheduled plan attempts, not ten extra attempts launched by the implementing agent. Completion includes the later measurement and tracker comment; a passing prompt test alone does not complete the task.
+
+1. Once-only orientation: fresh and repeated plan inputs prescribe the ordered reads, prohibit duplicate file reads, use the supplied glossary excerpt, and permit only one collected lookup for missing terms. The foundation plan is consulted only when the task text names it.
+2. Bounded discovery: plan inputs require repository-scoped, count-first searches and prohibit searches outside the repository, including task-loop state, ~/.codex and the uv cache. A statement that the tracker is unreachable appears only with recorded sandbox evidence; unsupported claims are removed. The ten-attempt audit records at most one glossary read per attempt and zero searches outside the repository.
+3. Truncation handling: plan inputs explicitly require narrowing a truncated search rather than repeating it. The existing launcher test continues to verify the unchanged 3,000-token limit.
+
+## Read list
+- `src/taskloop/plan_step.py:37-96` — depth instructions and existing template that the added orientation rules must preserve.
+- `src/taskloop/plan_step.py:152-185` — plan input producer and closing instructions; integration point for plan-only guidance.
+- `src/taskloop/input_context.py:13-24` — shared orientation wording, including the unconditional tracker claim and foundation-read condition.
+- `src/taskloop/input_context.py:43-55` — shared context renderer; keep plan-only restrictions out of implement inputs.
+- `src/taskloop/input_context.py:113-123` — refreshed context can replace shared wording inside repeat inputs.
+- `src/taskloop/steps.py:28-75` — StepKind consumers and registration through which inputs and repeat feedback are exposed.
+- `tests/steps/test_steps.py:129-179` — public plan-input tests and depth-before-orientation ordering.
+- `tests/steps/test_steps.py:280-297` — initial/repeat prompt contract and current lean-template assertions.
+- `tests/steps/test_input_context.py:37-71` — context fixtures and shared plan/implement orientation assertions.
+- `src/taskloop/agents/launch.py:66-76` — existing output bound and sandbox policy, consultation only.
+- `tests/steps/test_agent_launch.py:74-101` — existing launch contract pins the 3,000-token limit.
+- `tests/steps/real/test_sandbox_probe_real.py:13-21` — existing sandbox-construction integration point; its stand-in tests are not evidence of actual tracker reachability.
+- `docs/design/tl-8bh9.14.175/measurement.md:1-35` — established measurement baseline and overlap with the common orientation fix.
+- `docs/design/tl-8bh9.14.192/plan.md:1-45` — implementation scope, sampling protocol and acceptance conditions.
+
+## Implementation
+Change `plan_step.input_text`/closing guidance to add one explicit, ordered orientation prescription after the shared context. State that its plan-only rules supersede the shared foundation-read condition: AGENTS.md is already supplied and is not reopened; use the supplied glossary definitions, with at most one collected lookup for missing terms; read the task's saved plan once when present; consult a foundation plan only when named in the task text. Do not instruct a full glossary read when the excerpt suffices. After orientation, use bounded source evidence. Say “read each of these once; never read a file twice”. Retain the task-plan read, depth assessment, current lean template and existing Size limits.
+
+In the same plan-only prescription, require an explicit repository path scope and `rg -c` before printing matching lines. A truncated result means the scope or range was too wide: narrow it, do not repeat the same command or increase the output limit. Prohibit discovery outside the repository, explicitly naming task-loop state, ~/.codex and the uv cache. Refer to the supplied .186 shelf digest when shelf facts matter; do not invent digest contents or discover an installed shelf package elsewhere. If a necessary shelf fact is absent, apply the existing owner-refusal rule rather than guessing. This task changes prompts, not shelf APIs.
+
+Before retaining a factual tracker-unreachability statement, obtain the five sandbox observations described by the task through supplied evidence or an authorized owning sandbox operation. Record sandbox policy, source commit, non-mutating command, result and explanation for each observation. Do not invoke bd or the tracker from this agent step, search external state for receipts, or use an unsandboxed command or shell stand-in as proof. If five suitable observations are unavailable, mixed, or demonstrate access, remove the unsupported absolute claim from `input_context.ORIENTATION` and omit it from plan-specific guidance. Keep the independent instruction that the supplied task text is the complete requirement and no agent tracker lookup is required. An instruction not to use a tracker is distinct from evidence that it cannot be reached. Any unreachability wording must describe only the verified sandbox scope; the shared context must not claim this for unsupported harness policies.
+
+Extend public-input tests in `test_steps.py` to pin the exact once-only, no-outside-search and narrow-after-truncation sentences in initial and repeated plan inputs. Pin the conditional tracker sentence only if the measurement supports retaining it; otherwise assert the unsupported claim is absent. Adjust the existing shared assertion in `test_input_context.py` if that claim is removed. Check that plan-only restrictions are not added to implement inputs and that shared context refresh cannot restore a removed claim. Keep the existing launcher limit test; no launcher change is planned.
+
+Create `docs/design/tl-8bh9.14.192/measurement.md` as a new artifact. Its existing integration points are the .175 measurement baseline and the normally generated plan inputs/transcripts supplied by their owning readers. Record the tracker receipts or the reason for omitting the claim, then the post-change sample and proposed tracker comment. No runtime transcript reader, scheduler, schema or new measurement service is needed. Update this plan only to record evidence-driven scope corrections; do not turn it into a progress log.
+
+## Measurement and completion
+Use the first ten consecutive normally scheduled plan attempts after the prompt change. Have the owning transcript reader supply their evidence; do not locate task-loop state or harness files through outside-repository searches. Identify each attempt, source/prompt revision, depth, glossary file-read count, duplicate orientation reads, search scopes and truncation responses. Count actual tool operations, including failed reads and commands that read multiple files; the supplied excerpt is not a file read. Inspect both search commands and their working directories. Keep failed/repeated attempts in the sample and report unavailable evidence instead of substituting convenient attempts.
+
+Require every sampled attempt to have at most one glossary read and no search outside the repository. A failure requires correcting the prompt and reporting a fresh consecutive ten-attempt sample; retain the original observations. Record orientation and total input tokens using the same per-call accumulation as the supplied baseline, noting the stated approximately 10% measurement uncertainty and differences in task depth. Separate measured results from the projected 15–20% plan-attempt and 3–4% overall savings.
+
+Report savings net of .175: use an already-.175 baseline where available; otherwise report the overlapping orientation reduction once, using the larger overlapping estimate rather than adding both. State missing comparable data instead of manufacturing a precise net percentage. Prepare a concise comment containing sample size, maximum glossary reads, outside-search count, truncation findings and net saving/uncertainty. Publish it through the authorized owning tracker operation when available; a local artifact alone does not satisfy the comment criterion, and the implementing agent must not bypass unavailable tracker access.
+
+Validate the changed public-input contracts and existing launch-limit contract through focused tests, then the required focused gates `just check` and `just test` under the supplied factory check instructions. Do not run whole-suite/live agent tests or launch extra plan attempts to fill the sample. Preserve unrelated edits, claims and evidence. Delivery remains incomplete until the ten-attempt evidence and its tracker comment exist.

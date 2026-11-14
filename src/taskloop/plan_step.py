@@ -159,7 +159,22 @@ def input_text(task: TaskInspection, rules: StepRules, context: InputContext) ->
 def _closing_words(rules: StepRules) -> str:
     root = rules.root
     return (
-        f"After the depth assessment permits planning, read `{root}{PLAN_NAME}` if it exists. "
+        "After the depth assessment permits planning, follow this plan-only reading order. These rules supersede "
+        "the shared foundation-read condition:\n"
+        "1. AGENTS.md rules are already in context; follow them without reopening the file.\n"
+        "2. Use the supplied glossary excerpt; collect missing terms into at most one targeted read of "
+        "`docs/glossary.md`. If no glossary exists at the source commit, do not search for one.\n"
+        f"3. After the depth assessment permits planning, read `{root}{PLAN_NAME}` if it exists.\n"
+        "4. Read a foundation plan only when the task text names it.\n"
+        "For this list, read each of these once; never read a file twice. Then gather only the source evidence "
+        "needed for the task.\n\n"
+        "Search with an explicit repository path scope and a count first (`rg -c`) before printing matching lines. "
+        "Do not search outside the repository, including task-loop state, ~/.codex or the uv cache. "
+        "An output marked truncated means the search was too wide: narrow the scope or range; do not repeat "
+        "the same command or increase the output limit. "
+        "For shelf facts, use the supplied shelf digest from .186; do not discover an installed shelf package "
+        "outside the repository or invent missing digest contents. If a necessary shelf fact is absent, answer "
+        "`needs_owner` and explain the missing fact in words.\n\n"
         f"{TEMPLATE}\n\nBefore answering `planned` or `unchanged`, require a Size estimate in Header with "
         "estimated changed files (including tests and artifacts), independent behaviours, and model calls "
         "for one implement attempt. Each independent behaviour must have an independently testable acceptance criterion; "

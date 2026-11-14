@@ -278,6 +278,35 @@ def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
 
 
 @pytest.mark.parametrize("repeat", [False, True])
+def test_plan_orientation_bounds_reads_searches_and_truncated_output(repeat: bool) -> None:
+    text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
+    if repeat:
+        text = PLAN.feedback(Unsettled("uncommitted"), PLAN.rules("tl-1"), 1, text, "nonce", unrecorded=True)
+    ordered = (
+        "1. AGENTS.md rules are already in context; follow them without reopening the file.",
+        "2. Use the supplied glossary excerpt; collect missing terms into at most one targeted read of `docs/glossary.md`.",
+        "3. After the depth assessment permits planning, read `docs/design/tl-1/plan.md` if it exists.",
+        "4. Read a foundation plan only when the task text names it.",
+    )
+    positions = [text.index(phrase) for phrase in ordered]
+    assert positions == sorted(positions)
+    assert text.index("END FACTORY INPUT CONTEXT") < positions[0]
+    for phrase in (*ordered,
+                   "These rules supersede the shared foundation-read condition:",
+                   "read each of these once; never read a file twice",
+                   "Search with an explicit repository path scope and a count first (`rg -c`) before printing matching lines.",
+                   "Do not search outside the repository, including task-loop state, ~/.codex or the uv cache.",
+                   "An output marked truncated means the search was too wide: narrow the scope or range; do not repeat "
+                   "the same command or increase the output limit.",
+                   "For shelf facts, use the supplied shelf digest from .186",
+                   "If a necessary shelf fact is absent, answer `needs_owner` and explain the missing fact in words."):
+        assert text.count(phrase) == 1
+        assert phrase not in IMPLEMENT.input_text(TASK, IMPLEMENT.rules("tl-1"), CONTEXT)
+    assert "You have no task tracker" not in text
+    assert "bd and the beads skill are unavailable" not in text
+
+
+@pytest.mark.parametrize("repeat", [False, True])
 def test_plan_requests_fixed_lean_template_and_immutable_handoff(repeat: bool) -> None:
     text = PLAN.input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
     if repeat:
