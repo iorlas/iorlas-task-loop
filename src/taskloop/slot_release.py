@@ -41,6 +41,7 @@ from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.factory_schema import RELEASE, SUCCESSOR, current, marks
 from taskloop.ids import Ids
+from taskloop.merge.store import MergeStore
 from taskloop.prepare import task_branch
 from taskloop.setup_store import SetupSeen, running
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
@@ -204,10 +205,12 @@ def park_slot(
         left = listing(checkouts(path, git_dir=state.gitdir), path)
         again = f"List them again with `git -C {path} status --short`; remove or restore each, then run it again. {NOTHING}"
         return NotReleased("refused", "slot_dirty", "\n".join([*left, again]))
-    if state.branch is None and state.head == slot_head:
+    merging = checkouts(path, git_dir=state.gitdir).worktree(path).merging()
+    if state.branch is None and state.head == slot_head and not merging:
         return state.head, None
-    if state.branch not in (None, branch):
-        return NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}")
+    if merging or state.branch not in (None, branch):
+        return (NotReleased("unavailable", "merge_pending", "An active merge needs owning preservation before the slot can be parked.")
+                if merging else NotReleased("refused", "slot_branch", f"The slot is on another branch. {NOTHING}"))
     return slot_head, str(checkouts(path, git_dir=state.gitdir).worktree(path).park(slot_head))
 
 
@@ -224,11 +227,14 @@ def _saved(checkouts: Checkouts, path: Path, state: SlotState, slot_head: str, s
     kept; a slot already at D, clean, is left as it is."""
     view = checkouts(path, git_dir=state.gitdir)
     slot = view.worktree(path)
-    if state.dirty or state.branch is not None or state.head != slot_head:
+    if state.dirty or state.branch is not None or state.head != slot_head or slot.merging():
         refused = save(view, slot, state)
         if refused is not None:
-            return NotReleased("unavailable", refused.reason, refused.detail)
-    return slot_head, wip.park(slot, slot_head)
+            return NotReleased("unavailable", refused.reason.value, refused.detail)
+    parked = wip.park(slot, slot_head)
+    if isinstance(parked, wip.Refused):
+        return NotReleased("unavailable", parked.reason.value, parked.detail)
+    return slot_head, parked
 
 
 def free(con: sqlite3.Connection, repo_id: str, slot: str, attempt_id: str, generation: int) -> None:
@@ -352,7 +358,18 @@ class SlotRelease:
                 return NotReleased("unavailable", "store", f"The result could not be read. {NOTHING}")
             if result.status != "collected":
                 return NotReleased("refused", "not_terminal", f"The step has not ended: finish it, repeat it, or abandon it. {NOTHING}")
-        return stop_proof(self.observe, self.gone, me, row.stopping) or setup_stopped(self.setup_seen, row.setup)
+        return (stop_proof(self.observe, self.gone, me, row.stopping) or setup_stopped(self.setup_seen, row.setup)
+                or self._merge_stopped(row))
+
+    def _merge_stopped(self, row: _Row) -> NotReleased | None:
+        work = MergeStore(self.store.connect, self.store.begin).get(row.key.attempt_id)
+        if work is not None:
+            for execution in work.executions:
+                process = execution.worker
+                if process is not None and not self.gone(Worker(pid=process.pid, pgid=process.pgid,
+                                                               start=process.start, boot=process.boot)):
+                    return NotReleased("unsettled", "worker_alive", "A merge resolution process may still run; the slot stays reserved.")
+        return None
 
     def _pending(self, row: _Row, abandon: bool) -> ReleaseResult:
         """Released before: only what is pending is finished, with no Git and no lock. Abandoning a settled release flips
@@ -408,14 +425,25 @@ class SlotRelease:
         log = self.saved
         if not abandon or log is None or not log.held(row.key.attempt_id):
             return None
-        source = wip.Source(row.task_id, row.key.attempt_id, row.slot, row.slot_head)
+        work = MergeStore(self.store.connect, self.store.begin).get(row.key.attempt_id)
+        inputs = None if work is None or work.target is None else (work.source, work.target)
+        source = wip.Source(row.task_id, row.key.attempt_id, row.slot, row.slot_head, inputs)
 
         def save(view: Repo, slot: Worktree, state: SlotState) -> wip.Refused | None:
             head = state.head or row.slot_head
-            if not state.dirty:
+            if slot.merging() and source.merge is not None:
+                target = self.slot_files.read(state.gitdir / "MERGE_HEAD", 256)
+                if target != f"{source.merge[1]}\n".encode("ascii"):
+                    return wip.Refused(wip.SaveReason.MERGE_CHANGED,
+                                       "The active merge's target changed or cannot be read; work stays reserved.")
+            saved_head = any(each.source_head == head for each in log.saved(row.key.attempt_id))
+            if not state.dirty and not slot.merging() and (source.merge is None or saved_head):
                 wip.adopt(view, head, source, log)
                 return None
-            return wip.save(view, slot, source, head, int(self.clock()), log)
+            refused = wip.save(view, slot, source, head, int(self.clock()), log)
+            if refused is None and slot.merging() and source.merge is not None:
+                slot.abort_merge()  # preservation and its durable record precede the abort
+            return refused
 
         return save
 
