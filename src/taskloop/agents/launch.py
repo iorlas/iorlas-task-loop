@@ -48,24 +48,30 @@ class LaunchedAgent:
 
 
 class FactoryCodexAccess(CodexAccess):
-    """The released codec omits empty roots; an explicit empty override is needed for inherited sandbox config."""
+    """Limit automatic factory context and override inherited sandbox roots, including empty roots."""
 
     @override
     def config(self) -> list[str]:
         config = super().config()
+        # https://learn.chatgpt.com/docs/config-file/config-reference (skills.include_instructions)
+        # `codex features list` documents the feature names; `codex --help` documents per-run -c overrides.
+        config += ["-c", "skills.include_instructions=false",
+                   "-c", "features.multi_agent=false",
+                   "-c", "features.recommended_plugins=false"]
         if self.sandbox is CodexSandbox.WORKSPACE_WRITE and not self.writable_roots:
             config += ["-c", "sandbox_workspace_write.writable_roots=[]"]
         return config
 
 
 def codex_access(policy: CodexPolicy, found: Folders | None = None) -> CodexAccess:
+    shell_env = () if found is None else tuple(agent_env(found).items())
     if policy.sandbox is not CodexSandbox.WORKSPACE_WRITE:
         return FactoryCodexAccess(sandbox=policy.sandbox, approval=CodexApproval.NEVER, tool_output_token_limit=3000,
-                                  ignore_user_config=True, ignore_rules=True)
+                                  shell_env=shell_env, ignore_user_config=True, ignore_rules=True)
     return FactoryCodexAccess(
         sandbox=policy.sandbox, network=False, writable_roots=() if found is None else tuple(str(p) for p in found.roots),
         exclude_slash_tmp=True, exclude_tmpdir=True,
-        shell_env=() if found is None else tuple(agent_env(found).items()), approval=CodexApproval.NEVER,
+        shell_env=shell_env, approval=CodexApproval.NEVER,
         tool_output_token_limit=3000, ignore_user_config=True, ignore_rules=True,
     )
 

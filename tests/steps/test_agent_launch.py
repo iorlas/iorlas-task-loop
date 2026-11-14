@@ -64,17 +64,46 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
         result.harness.cleanup()
 
 
-def test_codex_full_access_asks_for_no_sandbox_and_no_probe(tmp_path: Path) -> None:
+@pytest.mark.parametrize("sandbox", [CodexSandbox.WORKSPACE_WRITE, CodexSandbox.DANGER_FULL_ACCESS])
+@pytest.mark.parametrize("prepared", [False, True])
+@pytest.mark.parametrize("host_tmp", [None, "/host/scratch"], ids=["unset", "conflicting_host"])
+def test_codex_launch_limits_automatic_context_and_preserves_access(
+    tmp_path: Path, sandbox: CodexSandbox, prepared: bool, host_tmp: str | None,
+) -> None:
     files = EvidenceFiles(tmp_path)
     schema, out = files.prepare(KEY, {"type": "object", "properties": {}})
-    full = AgentSetting(model="chosen", access=CodexPolicy(sandbox=CodexSandbox.DANGER_FULL_ACCESS))
-    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", {"HOME": str(tmp_path)}), ids=NativeIds())
-    result = adapter.build(full, tmp_path / "slot", True, files.launch_root(KEY), schema, out, "Task input")
+    chosen = AgentSetting(model="chosen", access=CodexPolicy(sandbox=sandbox))
+    credentials = {"HOME": str(tmp_path)}
+    if host_tmp is not None:
+        credentials["TMPDIR"] = host_tmp
+    adapter = AgentLaunch(lambda kind: (f"/bin/{kind}", credentials), ids=NativeIds())
+    slot = tmp_path / "slots" / "repo" / "s1"
+    result = adapter.build(chosen, slot, prepared, files.launch_root(KEY), schema, out, "Task input")
     assert isinstance(result, LaunchedAgent)
     try:
         argv = result.spec.argv
-        assert result.probe is None and argv[argv.index("-s") + 1] == "danger-full-access"
-        assert 'approval_policy="never"' in argv and not any("sandbox_workspace_write" in item for item in argv)
+        settings = dict(item.split("=", 1) for index, item in enumerate(argv) if index and argv[index - 1] == "-c")
+        assert settings["skills.include_instructions"] == "false"
+        assert settings["features.multi_agent"] == "false"
+        assert settings["features.recommended_plugins"] == "false"
+        prefix = "shell_environment_policy.set."
+        shell_env = {key.removeprefix(prefix): json.loads(value) for key, value in settings.items() if key.startswith(prefix)}
+        expected = {"TMPDIR": str(slot.parent / ".t" / "s1"),
+                    "UV_CACHE_DIR": str(slot.parent / ".env" / "s1" / "uv-cache"),
+                    "UV_TOOL_DIR": str(slot.parent / ".env" / "s1" / "uv-tools"), "UV_OFFLINE": "1"}
+        assert shell_env == (expected if prepared else {})
+        assert result.spec.env == credentials
+        assert argv[argv.index("-s") + 1] == sandbox
+        assert 'approval_policy="never"' in argv and "tool_output_token_limit=3000" in argv
+        assert "--ignore-user-config" in argv and "--ignore-rules" in argv
+        if sandbox is CodexSandbox.DANGER_FULL_ACCESS:
+            assert result.probe is None and not any("sandbox_workspace_write" in item for item in argv)
+        else:
+            assert (result.probe is not None) is prepared
+            assert json.loads(settings["sandbox_workspace_write.writable_roots"]) == (list(expected.values())[:3] if prepared else [])
+            assert settings["sandbox_workspace_write.network_access"] == "false"
+            assert settings["sandbox_workspace_write.exclude_slash_tmp"] == "true"
+            assert settings["sandbox_workspace_write.exclude_tmpdir_env_var"] == "true"
     finally:
         result.harness.cleanup()
 
