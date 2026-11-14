@@ -1,6 +1,7 @@
 """The dashboard's read model (board and task detail) over the same factory.db reads as `tl step list`: display only."""
 
 import json
+import os
 import sqlite3
 from dataclasses import astuple
 from pathlib import Path
@@ -67,6 +68,7 @@ def saved_ask(con: sqlite3.Connection, files: EvidenceFiles, key: AttemptKey = K
     if step == "plan":
         answer["plan_path"] = None
     evidence = files.capture(key, RunOutcome(rc=0, summary=Summary(text=json.dumps(answer))))
+    os.utime(files.root / evidence.diagnostics.path, (8, 8))
     refs = tuple(value for ref in astuple(evidence) for value in ref)
     con.execute("""UPDATE attempt SET phase='captured',base_commit=?,step=?,after_commit=?,label='auto'
         WHERE attempt_id=?""", (D, step, D if step == "implement" else None, key.attempt_id))
@@ -97,6 +99,59 @@ def test_current_agent_questions_agree_on_board_and_detail(
     assert (card.slot is None) == released
     assert card.waiting_since == ("1970-01-01T00:00:10Z" if released else None)
     assert card.last_activity_at is None
+    attempt, = detail.attempts
+    expected = "1970-01-01T00:00:12Z" if released else "1970-01-01T00:00:08Z"
+    assert attempt.state == "failed" and attempt.ended_at == expected
+    later = build_task(TaskPorts(reads_of(registered, now=2000), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(later, TaskDetail) and later.attempts[0].ended_at == expected
+
+
+def test_failed_attempt_end_time_uses_the_stored_capture_reference(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    saved_ask(registered, files)
+    original = files.root / files.directory(KEY) / "diagnostics.txt"
+    captured = original.parent / "recovery" / "diagnostics.txt"
+    captured.parent.mkdir()
+    original.rename(captured)
+    registered.execute("UPDATE execution SET diagnostic_path=?", (str(captured.relative_to(files.root)),))
+    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail) and found.attempts[0].ended_at == "1970-01-01T00:00:08Z"
+
+
+def test_running_attempt_has_no_end_time_even_with_captured_evidence(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    files = EvidenceFiles(tmp_path)
+    saved_ask(registered, files)
+    registered.execute("UPDATE execution SET session_state='pending'")
+    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    attempt, = found.attempts
+    assert attempt.state == "running" and attempt.ended_at is None
+
+
+@pytest.mark.parametrize("damage", ["missing", "unreadable", "outside_root"])
+def test_failed_attempt_with_unavailable_capture_time_stays_readable(
+    registered: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str,
+) -> None:
+    files = EvidenceFiles(tmp_path)
+    saved_ask(registered, files)
+    diagnostic = files.root / files.directory(KEY) / "diagnostics.txt"
+    if damage == "missing":
+        diagnostic.unlink()
+    elif damage == "outside_root":
+        registered.execute("UPDATE execution SET diagnostic_path='../diagnostics.txt'")
+    else:
+        stat = Path.stat
+
+        def unavailable(path: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+            if path == diagnostic:
+                raise PermissionError("Captured evidence is unreadable")
+            return stat(path, follow_symlinks=follow_symlinks)
+
+        monkeypatch.setattr(Path, "stat", unavailable)
+    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    attempt, = found.attempts
+    assert attempt.state == "failed" and attempt.ended_at is None
 
 
 @pytest.mark.parametrize("damage", ["missing", "changed", "invalid"])
