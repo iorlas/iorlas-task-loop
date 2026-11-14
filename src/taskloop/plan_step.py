@@ -28,6 +28,10 @@ DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
 # Each disposition's effect, stored with it: only `planned` commits and only `unchanged` keeps B; the rest end nothing.
 EFFECT_OF: Final[dict[str, Effect]] = {"planned": "commit", "unchanged": "keep", "incomplete": "none", "needs_owner": "none"}
 PLAN_NAME: Final = "plan.md"
+FINAL_ANSWER_WARNING: Final = (
+    "Your final message must be the JSON answer only; write plan.md before you answer; "
+    "a message without a tool call ends the step."
+)
 ARTIFACT_RULES: Final[tuple[Rule, ...]] = ("plan_missing", "plan_encoding", "plan_empty", "plan_size")  # the plan.md rule's words
 ANSWER_KEYS: Final = ("disposition", "plan_path", "paths", "message", "explanation")
 # The structural answer contract Codex forwards as an OpenAI strict response format: a plain object at the top level (no
@@ -84,9 +88,9 @@ def decode(value: object, rules: StepRules) -> Answer:
 
 
 def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
-    """The plan step's admitted input: the task's own prose, then the fixed closing words (where the plan goes,
+    """The plan step's admitted input: the final-answer warning, task prose, then fixed closing words (where the plan goes,
     `unchanged` or `planned`, no Git write: the factory commits the listed paths)."""
-    return (f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
+    return (f"{FINAL_ANSWER_WARNING}\n\n{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
             f"{_closing_words(rules)}\n")
 
 
@@ -127,12 +131,12 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
 
 
 def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: str, *, unrecorded: bool) -> str:
-    """The next attempt's complete input in the shared frame (`step_text.feedback`): the plan's fixed words for the
+    """The next attempt's complete input: the warning, then the shared frame (`step_text.feedback`) with fixed words for the
     reason, the listing, its fixed instructions, then the task. `unrecorded`: attempt `number` answered `planned` and
     nothing of it was committed, so its files must be listed again. `found.reason` is one of REPEATABLE."""
     opening = next(text for reason, text in OPENING.items() if reason == found.reason)
     instructions = repeat_instructions(rules, number, unrecorded=unrecorded)
-    return step_text.feedback(opening.format(number=number), found.listing, instructions, task, nonce)
+    return FINAL_ANSWER_WARNING + "\n\n" + step_text.feedback(opening.format(number=number), found.listing, instructions, task, nonce)
 
 
 def artifact(tip: Tree, rules: StepRules) -> Rejected | str:

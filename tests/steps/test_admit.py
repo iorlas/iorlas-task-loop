@@ -43,6 +43,10 @@ WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
 ENTRY = (7, "entry-start", "boot")
 P = "docs/design/tl-1/plan.md"
 PLAN = {"disposition": "planned", "plan_path": P, "paths": [P], "message": "Plan tl-1", "explanation": "Plan written"}
+PLAN_WARNING = (
+    "Your final message must be the JSON answer only; write plan.md before you answer; "
+    "a message without a tool call ends the step."
+)
 TASKS = FakeTaskReadClient(
     [
         Bead("tl-1", title="Plan it", description="Do the thing", acceptance_criteria="It is done"),
@@ -77,7 +81,7 @@ class Tracker:
         assert not self.con.in_transaction, "the claim must be outside any transaction"
         assert len(self.files.inputs) == 1 + self.calls.count("claim:" + task_id), "this admission wrote its input first"
         bead = TASKS.show(task_id)
-        assert bead is not None and self.files.read(self.files.inputs[-1]).startswith(bead.title)
+        assert bead is not None and self.files.read(self.files.inputs[-1]).startswith(PLAN_WARNING + "\n\n" + bead.title)
         self.calls.append("claim:" + task_id)
         self.during()
         if isinstance(self.claimed, BdError):
@@ -222,6 +226,7 @@ def test_admit_then_register_entry_then_execute_by_that_entry_is_collected(
     assert (collected.status, collected.reason) == ("pending", "verification") and len(run.calls) == 1
     _harness, spec, _timeout, _hooks = run.calls[0]
     assert spec.cwd == str(root.resolve() / folder_name(repo.identity()) / "s1")
+    assert spec.stdin.startswith(PLAN_WARNING + "\n\n")
     prompt = spec.stdin + " ".join(spec.argv)
     assert "Do the thing" in prompt and "It is done" in prompt
     closing = "First read `docs/design/tl-1/plan.md` if it exists. If it is still valid for the task and the code as they are now"
