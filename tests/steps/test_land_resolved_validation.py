@@ -17,8 +17,10 @@ from taskloop.attempt_types import AttemptKey
 from taskloop.land import Landed, LandRequest, land
 from taskloop.land_check import LandPorts
 from taskloop.land_conflict.store import ConflictStore
+from taskloop.land_store import Close, LandStore
 from taskloop.merge.models import Completed
 from taskloop.operations import Failed
+from taskloop.tracker_client import CloseAnswer
 
 
 @pytest.fixture
@@ -28,9 +30,8 @@ def b(tmp_path: Path) -> Iterator[LandBench]:
     world.con.close()
 
 
-def completed(b: LandBench, *, edit: Callable[[FakeWorktree], None] | None = None,
-              target: dict[str, str | None] | None = None) -> tuple[LandPorts, ExecutionCase, Completed]:
-    b.advance({"README": "current main\n"} | (target or {}))
+def completed(b: LandBench, *, edit: Callable[[FakeWorktree], None] | None = None) -> tuple[LandPorts, ExecutionCase, Completed]:
+    b.advance({"README": "current main\n"})
     b.land()  # admit without executing, then finish using the actual retained execution/release protocol
     ports, cases = executing(b, edit=edit)
     checks = ports.work.store.row(CHECKS)
@@ -47,7 +48,8 @@ def request(b: LandBench, minutes: int | None = 5) -> LandRequest:
 
 def preserved(b: LandBench, ports: LandPorts, case: ExecutionCase, result: Completed) -> None:
     saved = ports.conflicts.store.completed(case.record.key)
-    assert saved is not None and saved.commit == result.commit
+    assert saved is not None and (saved.source, saved.target, saved.commit) == (result.source, result.target, result.commit)
+    assert saved.accepted and saved.release is not None and saved.release.result == result
     assert b.files_of(saved.ref)["README"] == b.files_of(result.commit)["README"]
     assert dict(b.repo.branches("task/"))["task/tl-1"] == b.x
     assert b.con.execute("SELECT end_commit FROM attempt").fetchall() == [(b.x,)]
@@ -104,10 +106,11 @@ def test_slot_reuse_does_not_reexecute_resolution_or_touch_new_work(b: LandBench
 
 def test_validation_uses_fresh_target_required_checks(b: LandBench) -> None:
     profile = PROFILE | {"required": ["test"]}
-    ports, case, result = completed(b, target={".task-loop.json": json.dumps(profile)})
+    ports, case, result = completed(b)
+    target = b.advance({".task-loop.json": json.dumps(profile)})
     b.environment.profiles.data = json.dumps(profile).encode()
     found = land(ports, request(b))
-    assert isinstance(found, Landed) and found.row.origin == result.target
+    assert isinstance(found, Landed) and found.row.origin == target and target != result.target
     assert [name for name, _digest in found.row.required] == ["test"]
     assert b.execs() == RUN
     preserved(b, ports, case, result)
@@ -121,16 +124,14 @@ def test_equal_checked_tree_still_runs_validation(b: LandBench) -> None:
     preserved(b, ports, case, result)
 
 
-@pytest.mark.parametrize("failure", ["minutes", "target", "gate", "checks"])
+@pytest.mark.parametrize("failure", ["minutes", "gate", "checks"])
 def test_resolution_is_preserved_when_fresh_validation_cannot_deliver(b: LandBench, failure: str) -> None:
     ports, case, result = completed(b)
-    if failure == "target":
-        b.advance({"other": "target moved\n"})
     if failure == "checks":
         b.environment.process.script = [Command(), Command(rc=1)]
     target = b.origin_main()
     found = land(ports, replace(request(b, None if failure == "minutes" else 5), accept=failure != "gate"))
-    reasons = {"minutes": "minutes", "target": "conflict", "gate": "gate_changed", "checks": "checks_failed"}
+    reasons = {"minutes": "minutes", "gate": "gate_changed", "checks": "checks_failed"}
     assert isinstance(found, Failed) and found.reason == reasons[failure]
     assert b.origin_main() == target and b.repo.pushes == 0 and b.tracker == []
     if failure != "checks":
@@ -214,3 +215,155 @@ def test_passed_candidate_resumes_delivery_before_conflict_lookup(b: LandBench, 
     found = land(b.ports(), request(b, None))
     assert isinstance(found, Landed) and found.row.key == row.key and b.repo.pushes == 2 and b.execs() == RUN
     preserved(b, ports, case, result)
+
+
+@pytest.mark.parametrize("movement", ["construction", "validation", "push"])
+def test_moved_target_rebuilds_from_resolved_content_and_validates(b: LandBench, movement: str) -> None:
+    ports, case, result = completed(b)
+
+    def move() -> str:
+        return b.advance({"OTHER": "another task\n"})
+
+    if movement == "construction":
+        move()
+    elif movement == "validation":
+        b.environment.process.script = [Command(), Command(effect=move)]
+    else:
+        b.repo.after_ls = [None, move]
+    found = land(ports, request(b))
+    if movement != "construction":
+        assert isinstance(found, Failed) and found.reason == "target_moved"
+        [first] = b.rows()
+        assert first.superseded == "moved" and first.delivery is None and first.validation == "passed"
+        assert b.tracker == [] and b.repo.pushes == (1 if movement == "push" else 0)
+        preserved(b, ports, case, result)
+        found = land(b.ports(), request(b))
+    assert isinstance(found, Landed) and found.row.validation == "passed"
+    assert found.row.origin != result.target and b.origin_main() == found.row.commit
+    files = b.files_of(found.row.commit)
+    assert files["README"] == "X\ncurrent main\n" and files["OTHER"] == "another task\n"
+    assert b.execs() == RUN * (1 if movement == "construction" else 2)
+    assert all(row.checked == b.x for row in b.rows())
+    assert b.repo.pushes == (2 if movement == "push" else 1) and b.status == "closed"
+    preserved(b, ports, case, result)
+
+
+def test_pushable_resolution_rebuilds_once_during_delivery_to_a_moved_target(b: LandBench) -> None:
+    ports, case, result = completed(b)
+    b.repo.answer = Transient("connection reset")
+    stopped = land(ports, request(b))
+    assert isinstance(stopped, Failed) and stopped.reason == "remote"
+    [first] = b.rows()
+    target = b.advance({"OTHER": "new target content\n"})
+    found = land(b.ports(), request(b))
+    assert isinstance(found, Landed) and found.row.number == 2 and found.row.origin == target
+    assert found.row.checked == b.x and found.row.validation == "passed" and b.origin_main() == found.row.commit
+    files = b.files_of(found.row.commit)
+    assert files["README"] == "X\ncurrent main\n" and files["OTHER"] == "new target content\n"
+    old, new = b.rows()
+    assert old.key == first.key and old.superseded == "moved" and old.delivery is None
+    assert new.delivery == "pushed" and b.execs() == RUN * 2 and b.repo.pushes == 2
+    preserved(b, ports, case, result)
+
+
+@pytest.mark.parametrize("validated", [False, True])
+def test_renewed_conflict_preserves_resolution_without_another_agent(b: LandBench, validated: bool) -> None:
+    ports, case, result = completed(b)
+    if validated:
+        b.repo.answer = Transient("connection reset")
+        stopped = land(ports, request(b))
+        assert isinstance(stopped, Failed) and stopped.reason == "remote"
+    target = b.advance({"README": "incompatible later change\n"})
+    pushes, commands = b.repo.pushes, b.execs()
+    found = land(b.ports(), request(b))
+    assert isinstance(found, Failed) and found.reason == "conflict"
+    assert b.origin_main() == target and b.repo.pushes == pushes and b.tracker == [] and b.execs() == commands
+    assert all(row.delivery is None and row.superseded == "moved" for row in b.rows())
+    assert b.reservations() == []
+    preserved(b, ports, case, result)
+
+
+@pytest.mark.parametrize("containing_tip", [False, True])
+def test_interrupted_push_is_adopted_after_restart_without_repeating_work(
+    b: LandBench, monkeypatch: pytest.MonkeyPatch, containing_tip: bool,
+) -> None:
+    ports, case, result = completed(b)
+
+    def lose_delivery(_self: LandStore, _key: AttemptKey, _head: str, _now: float) -> Never:
+        assert not b.con.in_transaction and b.repo.pushes == 1
+        interrupt()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(LandStore, "record_delivery", lose_delivery)
+        with pytest.raises(KeyboardInterrupt):
+            land(ports, request(b))
+    [row] = b.rows()
+    assert row.pushable and row.delivery is None and b.origin_main() == row.commit and b.tracker == []
+    head = b.advance({"LATER": "on top of resolution\n"}) if containing_tip else row.commit
+    case.restart()
+    b.con = case.con
+
+    def forbidden(*_args: object) -> Never:
+        pytest.fail("delivery adoption revisited conflict work")
+
+    monkeypatch.setattr(ConflictStore, "find", forbidden)
+    b.remote.offline = True
+    unavailable = land(b.ports(), request(b, None))
+    assert isinstance(unavailable, Failed) and b.rows()[0].delivery is None and b.tracker == []
+    b.remote.offline = False
+    found = land(b.ports(), request(b, None))
+    assert isinstance(found, Landed) and found.how == "already_pushed" and found.row.key == row.key
+    assert found.row.remote_head == head and found.row.close == "closed"
+    assert b.repo.pushes == 1 and b.execs() == RUN and b.tracker == [("tl-1", head)]
+    assert b.files_of(found.row.commit)["README"] == "X\ncurrent main\n"
+    preserved(b, ports, case, result)
+    b.remote.offline = True
+    again = land(b.ports(), request(b, None))
+    assert isinstance(again, Landed) and again.how == "already_landed" and again.row == found.row
+    assert b.repo.pushes == 1 and b.execs() == RUN and b.tracker == [("tl-1", head)]
+
+
+@pytest.mark.parametrize("performed", [False, True])
+def test_interrupted_close_is_finished_or_adopted_after_restart(
+    b: LandBench, monkeypatch: pytest.MonkeyPatch, performed: bool,
+) -> None:
+    ports, case, result = completed(b)
+
+    def lose_close(_self: LandStore, _key: AttemptKey, _close: Close, _now: float) -> Never:
+        assert not b.con.in_transaction and b.status == "closed"
+        interrupt()
+
+    with monkeypatch.context() as patch:
+        if performed:
+            patch.setattr(LandStore, "record_close", lose_close)
+        else:
+            b.on_close = interrupt
+        with pytest.raises(KeyboardInterrupt):
+            land(ports, request(b))
+    [row] = b.rows()
+    assert row.delivery == "pushed" and row.close is None and b.origin_main() == row.commit
+    original_reason = b.reason
+    assert b.status == ("closed" if performed else "in_progress")
+    case.restart()
+    b.con = case.con
+    b.on_close = lambda: None
+    b.remote.offline = True
+    ports = b.ports()
+    # Use the adapter's observation contract: an already closed task causes no close effect.
+    close = ports.close
+    ports = replace(ports, close=lambda root, task, reason: CloseAnswer("already_closed")
+                    if b.status == "closed" else close(root, task, reason))
+    found = land(ports, request(b, None))
+    assert isinstance(found, Landed) and found.how == "delivered" and found.row.key == row.key
+    assert found.row.close == ("already_closed" if performed else "closed")
+    assert b.repo.pushes == 1 and b.execs() == RUN and b.tracker == [("tl-1", row.commit)]
+    assert b.reason == (original_reason if performed else f"Landed {row.commit} on main (task/tl-1 at {b.x})")
+    preserved(b, ports, case, result)
+
+    def forbidden(*_args: object) -> Never:
+        pytest.fail("final result repeated tracker observation or close")
+
+    ports = replace(ports, close=forbidden)
+    again = land(ports, request(b, None))
+    assert isinstance(again, Landed) and again.how == "already_landed" and again.row == found.row
+    assert b.repo.pushes == 1 and b.execs() == RUN and b.tracker == [("tl-1", row.commit)]
