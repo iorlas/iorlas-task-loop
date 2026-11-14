@@ -43,10 +43,11 @@ def edit(slot: FakeWorktree) -> None:
 
 
 def retained(c: ExecutionCase) -> Save:
-    saved = c.ports.store.saved(c.record.key)
+    completed = c.ports.store.completed(c.record.key)
+    saved = completed or c.ports.store.saved(c.record.key)
     assert saved is not None and saved.abort is not None
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        c.record.key.attempt_id, c.record.key.reservation_generation)
+        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation))
     assert dict(c.ports.repo.branches("task/")) == {"task/tl-1": c.record.request.checked}
     assert dict(c.ports.repo.branches("task-loop/conflicts/")) == {saved.ref.removeprefix("refs/heads/"): saved.commit}
     return saved
@@ -119,12 +120,12 @@ def test_abort_restart_retains_bytes_and_exact_custody(
     assert isinstance(result, Terminal) and result.reason is Reason.OWNER and result.explanation == "Retain both sides."
     complete = retained(c)
     assert complete.abort is not None and complete.abort.phase is AbortPhase.COMPLETE
-    assert complete.model_dump(exclude={"abort", "cleanup"}) == saved.model_dump(exclude={"abort", "cleanup"})
+    assert complete.model_dump(exclude={"abort", "cleanup", "release"}) == saved.model_dump(exclude={"abort", "cleanup", "release"})
     assert aborts == ([True] if boundary == "before" else []) and c.calls == 1
-    assert not c.slot.merging() and head(c.slot) == c.record.request.checked
+    assert not c.slot.merging() and head(c.slot) == c.record.base
     assert c.slot.read_file("notes/local") is None and c.slot.read_file("ignored") == "ignored local data\n"
     assert c.slot.read_file("addition") is None
-    source = c.ports.repo.tree(c.record.request.checked)
+    source = c.ports.repo.tree(c.record.base)
     assert source is not None and source.read("README") == (c.slot.read_file("README") or "").encode()
     c.restart()
     assert c.resume() == result and retained(c) == complete and c.calls == 1
