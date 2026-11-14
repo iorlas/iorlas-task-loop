@@ -1,9 +1,7 @@
 """Admit a task into a free slot after the branch rule, with the tracker claim taken outside the transaction.
-Admission records the resolved tracker root, fetched origin main park point, and a never-reused reservation generation.
-An abandoned task restarts at attempt 1; its task-wide seq and stored earlier-answer context continue.
-The entry must register before dispatch. Repeats and advances use the shared row writes through admit_chain.
+Admission records the tracker root, origin main park point and a never-reused reservation generation.
+Abandoned tasks restart at attempt 1; task-wide seq and earlier-answer context continue. The entry registers before dispatch.
 """
-
 
 import math
 import sqlite3
@@ -40,6 +38,7 @@ from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
 from taskloop.steps import STEPS, kind
 from taskloop.task import TaskInspection, TaskInspectionError
+from taskloop.task_content import TaskContentDigest
 
 type Claim = Callable[[str, str], bool]  # (tracker root, task id): True taken, False held elsewhere, BdError unknown
 type Unclaim = Callable[[str, str], bool]  # fenced to this actor's own claim; False: not released
@@ -110,6 +109,7 @@ class _Prepared:
     repo: Repo
     repo_id: RepoId
     earlier: EarlierAttempt | None = None
+    content_digest: TaskContentDigest | None = None
 
 
 def why(error: BaseException) -> str:
@@ -122,7 +122,7 @@ def task_text(task: TaskInspection, step: str, context: InputContext, discussion
     under its digest."""
     found = kind(step)
     text = found.input_text(task, found.rules(task.reference.task_id), context)
-    return replace_block(text, empty(task, "") if discussion is None else discussion)
+    return replace_block(text, empty(task, "").text if discussion is None else discussion)
 
 
 class AttemptAdmission:
@@ -164,12 +164,12 @@ class AttemptAdmission:
             generation = issued(con, prepared.repo_id, tuple(each.name for each in free)) + 1
             reader = AttemptStore(self.connect, self.begin)
             earlier = reader.earlier(str(prepared.repo_id), request.backlog, request.task_id, prepared.request.tracker_root)
-            prepared = replace(prepared, earlier=earlier)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), generation)  # the key names the evidence directory
             context = read_context(GitProfileFiles(request.checkout, self.checkouts), free[0].source)
             discussion = self.discussion(prepared.task, prepared.request.tracker_root)
+            prepared = replace(prepared, earlier=earlier, content_digest=discussion.digest)
             text = EarlierInput(reader, self.files, HoldStore(self.connect, self.begin)).attach(
-                task_text(prepared.task, FIRST, context, discussion), earlier, partial(commit_names, prepared.repo, request.checkout))
+                task_text(prepared.task, FIRST, context, discussion.text), earlier, partial(commit_names, prepared.repo, request.checkout))
             ref = self.files.put_input(key, text)
         except (sqlite3.Error, StoreUnavailable) as error:
             return AdmitUnavailable("store", detail=why(error))
@@ -313,6 +313,7 @@ class AttemptAdmission:
                     "harness": request.setting.harness,
                     "provider": request.setting.provider,
                 },
+                prepared.content_digest,
             )
         return Admitted(key, name)
 

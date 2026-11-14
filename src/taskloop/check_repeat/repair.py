@@ -62,7 +62,7 @@ class CheckRepeat:
             original = self.files.read(reader.chain(previous)[0].input_ref)
             if self.discussion is not None:
                 reference = TaskReference(TaskScope(state.checks.backlog), state.checks.task_id)
-                original = replace_block(original, self.discussion(reference, state.checks.tracker_root))
+                original = replace_block(original, self.discussion(reference, state.checks.tracker_root).text)
             context = read_context(GitProfileFiles(request.checkout, self.checkouts), evidence.commit)
             original = refresh(original, context)
             key = AttemptKey(self.ids.hex(), self.ids.token(16), self.store.generation(state.checks.repo_id, free))

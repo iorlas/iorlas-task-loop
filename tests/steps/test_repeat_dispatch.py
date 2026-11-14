@@ -17,6 +17,7 @@ from git_porcelain import Dirty, Recorded
 from git_porcelain.testing import FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT, PLAN_V2
 from sqlite_store import begin_immediate
+from test_repeat import CONTENT_DIGEST, refresh_discussion
 
 from taskloop.admit import Admitted
 from taskloop.admit_chain import ChainAdmission, RepeatRequest
@@ -54,6 +55,7 @@ from taskloop.verdict import judge
 from taskloop.verifier import Verifier
 
 KEY = AttemptKey("attempt", "dispatch", 1)
+REPEAT = RepeatRequest(KEY, "feedback", 1000, "uncommitted", content_digest=CONTENT_DIGEST)
 ENTRY = (7, "entry-start", "boot")
 STEP = kind("plan")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
@@ -127,7 +129,7 @@ class Step:
         found = self.store.attempt_of("tasks", "tl-1")
         assert found is not None and found[0] == current
         repeat = StepRepeat(self.store, self.verifier, EvidenceFiles(self.tmp), self.admission(), self.launcher, lambda _worker: True,
-                            lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
+                            lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
         return repeat.repeat("tasks", "tl-1", current, found[2], 30)
 
     def next_attempt(self, current: AttemptKey) -> tuple[AttemptKey, EntryIdentity]:
@@ -243,7 +245,7 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
 def test_a_late_verify_of_a_superseded_attempt_writes_no_git(step: Step, slot: FakeWorktree) -> None:
     base = head(slot)
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT}, PLAN))
-    taken = step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted"))
+    taken = step.admission().admit_repeat(REPEAT)
     assert isinstance(taken, Admitted)
     assert step.verifier.verify(KEY) == VerifyRefused("stale_reservation") and made(slot, base) == []
 
@@ -258,7 +260,7 @@ def test_a_takeover_during_the_verify_is_superseded_before_any_git_write(
 
     def dirty(self: FakeWorktree, base: str | None = None, *, ignored_under: Sequence[str] = ()) -> Dirty:
         if ignored_under:
-            assert isinstance(step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted")), Admitted)
+            assert isinstance(step.admission().admit_repeat(REPEAT), Admitted)
         return read(self, base, ignored_under=ignored_under)
 
     monkeypatch.setattr(FakeWorktree, "dirty", dirty)
@@ -394,7 +396,7 @@ def test_a_superseded_verify_that_staged_leaves_the_next_attempt_undispatched(
 
     def staging(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
         stage(self, paths, literal=literal)
-        assert isinstance(step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted")), Admitted)
+        assert isinstance(step.admission().admit_repeat(REPEAT), Admitted)
 
     monkeypatch.setattr(FakeWorktree, "stage", staging)
     assert step.verifier.verify(KEY) == Unsettled("superseded") and made(slot, base) == []
@@ -421,10 +423,10 @@ def test_a_path_staged_beside_the_listed_ones_is_never_committed(
 
 def test_a_start_that_lost_the_takeover_launches_the_winner(step: Step, slot: FakeWorktree) -> None:
     step.run(KEY, ENTRY, Agent(slot, {P: PLAN_TEXT, STRAY: "s"}, PLAN))
-    taken = step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted"))
+    taken = step.admission().admit_repeat(REPEAT)
     assert isinstance(taken, Admitted)
     repeat = StepRepeat(step.store, step.verifier, EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
+                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
     found = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)  # its read of the current attempt predates the takeover
     assert found == Started("relaunched", "tasks", "tl-1", taken.key.attempt_id, True, (8, "start", "boot"))
     assert step.con.execute("SELECT count(*) FROM attempt").fetchone() == (2,)
@@ -436,7 +438,7 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
 
     class Racing:
         def verify(self, key: AttemptKey) -> VerifyResult:
-            won = step.admission().admit_repeat(RepeatRequest(KEY, "feedback", 1000, "uncommitted"))
+            won = step.admission().admit_repeat(REPEAT)
             assert isinstance(won, Admitted)
             taken.append(won.key)
             return step.verifier.verify(key)
@@ -445,7 +447,7 @@ def test_a_takeover_during_the_repeats_verify_launches_the_winner(step: Step, sl
             return step.verifier.staged(key)
 
     repeat = StepRepeat(step.store, Racing(), EvidenceFiles(step.tmp), step.admission(), step.launcher, lambda _worker: True,
-                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds())
+                        lambda _entry: "gone", lambda: 10, repeating, ids=NativeIds(), discussion=refresh_discussion)
     assert repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30) == Started("relaunched", "tasks", "tl-1", taken[0].attempt_id, True,
                                                                       (8, "start", "boot"))
 

@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from taskloop.attempt_types import AttemptKey
 from taskloop.factory_schema import ATTEMPT_ADMITTED, RESERVATION, marks
 from taskloop.repo import RepoId
+from taskloop.task_content import TaskContentDigest
+from taskloop.task_content_store import TaskContentStore
 
 
 def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey) -> None:
@@ -17,10 +19,14 @@ def reserve(con: sqlite3.Connection, repo_id: RepoId, slot: str, key: AttemptKey
     issue(con, repo_id, slot, key.reservation_generation)
 
 
-def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object]) -> None:
+def insert_attempt(con: sqlite3.Connection, attempt: Mapping[str, object], content_digest: TaskContentDigest | None = None) -> None:
     """The admitted attempt row, inside the caller's write transaction."""
     values = bound(ATTEMPT_ADMITTED, {"source_checks_id": None, **attempt})
+    if attempt["step"] == "plan" and content_digest is None:
+        raise sqlite3.IntegrityError("Plan admission requires task-content evidence")
     con.execute(f"INSERT INTO attempt ({ATTEMPT_ADMITTED}) VALUES ({marks(ATTEMPT_ADMITTED)})", values)
+    if attempt["step"] == "plan" and content_digest is not None:
+        TaskContentStore.insert(con, str(attempt["attempt_id"]), content_digest)
 
 
 def issue(con: sqlite3.Connection, repo_id: object, slot: object, generation: int) -> None:

@@ -279,6 +279,7 @@ def test_a_slot_taken_between_observe_and_commit_moves_to_the_next_or_refuses(
     tracker.during = lambda: factory.execute(taken, ("s1", repo_id, "other"))
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, Admitted) and result.slot == "s2" and tracker.calls == ["claim:tl-1"]
+    factory.execute("DELETE FROM task_content")
     factory.execute("DELETE FROM attempt")
     factory.execute("DELETE FROM reservation WHERE slot='s2'")
     tracker = Tracker(factory, tmp_path / "artifacts")
@@ -342,16 +343,18 @@ def test_claim_refusal_and_unknown_claim(
 
 
 @pytest.mark.parametrize("unclaim", [True, False])
+@pytest.mark.parametrize("table", ["attempt", "task_content"])
 def test_constraint_is_caught_after_rollback_and_compensated(
-    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, unclaim: bool
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path, unclaim: bool, table: str,
 ) -> None:
     slots(factory, repo, root, 1)
-    factory.execute("CREATE TEMP TRIGGER mismatch BEFORE INSERT ON attempt BEGIN SELECT RAISE(ABORT, 'schema mismatch'); END")
+    factory.execute(f"CREATE TEMP TRIGGER mismatch BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT, 'schema mismatch'); END")
     tracker = Tracker(factory, tmp_path / "artifacts", unclaim=unclaim)
     result = admit(factory, tmp_path, repo, tracker)
     assert isinstance(result, AdmitRefused) and result.reason == "constraint" and result.claim_leaked is not unclaim
     assert result.detail == "IntegrityError: schema mismatch"
     assert tracker.calls == ["claim:tl-1", "unclaim:tl-1"] and rows(factory) == (0, 0)
+    assert factory.execute("SELECT count(*) FROM task_content").fetchone() == (0,)
 
 
 @pytest.mark.parametrize("unclaim", [True, False, BdError("timeout")])

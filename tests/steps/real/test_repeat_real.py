@@ -18,6 +18,7 @@ from git_porcelain.history import Identity
 from git_porcelain.testing import apply_hermetic_env, git
 from plan_fixtures import PLAN_TEXT, PLAN_V2
 from sqlite_store import begin_immediate
+from test_repeat import refresh_discussion
 
 from taskloop.admit_chain import ChainAdmission
 from taskloop.agents.launch import AgentLaunch
@@ -99,7 +100,7 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, VIEWS.checkouts, files, ids=NativeIds())
     repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),
                         lambda _w: True, lambda _e: "gone", lambda: 10,
-                        repeating, ids=NativeIds())
+                        repeating, ids=NativeIds(), discussion=refresh_discussion)
     started = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(started, Started) and started.status == "repeated"
     found = store.attempt_of("tasks", "tl-1")
