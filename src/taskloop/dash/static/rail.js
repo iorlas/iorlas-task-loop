@@ -195,10 +195,10 @@ function pastGroup(entries, n, selected, select, stepUsage) {
 
 function landRow(t) {
   const here = t.column === "land" || t.column === "landed";
-  const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "waiting"] : null;
+  const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "unknown"] : null;
   const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
   li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), el("span", `text-[13px] ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`));
-  if (word) li.append(el("span", `block text-[11px] ${word.text}`, word.row));
+  if (word) li.append(el("span", `block text-[11px] ${word.text}`, t.status_note ?? word.row));
   else li.append(el("span", "ml-2 text-[11px]", "pending"));
   return li;
 }

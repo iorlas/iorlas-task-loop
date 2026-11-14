@@ -15,11 +15,11 @@ from taskloop.attempt_types import AttemptKey, Seen
 from taskloop.check_store import CheckStore
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.command_sink import CommandSink
-from taskloop.dash_board import BoardPorts, build_board, land_state
+from taskloop.dash_board import BoardPorts, build_board
 from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, Ready, Run, TaskDetail
 from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.land_status import LandView, land_view
+from taskloop.land_status import LandView, land_state, land_view
 from taskloop.profile import LandMode
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -204,7 +204,7 @@ def land_of(con: sqlite3.Connection, seen: Seen) -> LandView | None:
 def test_a_waiting_task_says_manual_only_when_the_profile_says_so(landing: sqlite3.Connection) -> None:
     waiting = land_of(landing, "gone")
     assert land_state(waiting, LandMode.MANUAL) == "manual" and land_state(waiting, LandMode.AUTO) == "waiting"
-    assert land_state(waiting, None) == "waiting"  # an unreadable profile claims no policy
+    assert land_state(waiting, None) == "unknown"
     landing.execute("UPDATE land_candidate SET entry_pid=7,entry_start='entry-start',entry_boot='boot' WHERE candidate_id='candidate'")
     assert land_state(land_of(landing, "matching"), LandMode.MANUAL) == "landing"
 
@@ -212,14 +212,14 @@ def test_a_waiting_task_says_manual_only_when_the_profile_says_so(landing: sqlit
 def test_a_checked_task_nobody_has_landed_waits_to_be_landed(checking: sqlite3.Connection) -> None:
     checking.execute("UPDATE checks_attempt SET phase='concluded',conclusion='passed',concluded_at=5,released_at=6,parked=? "
                      "WHERE attempt_id='checks'", ("d" * 40,))
-    assert land_of(checking, "matching") is None and land_state(None) == "waiting"
+    assert land_of(checking, "matching") is None and land_state(None) == "unknown"
 
 
 def test_a_task_shows_landing_only_while_its_land_process_runs(landing: sqlite3.Connection) -> None:
-    assert land_state(land_of(landing, "matching")) == "waiting"  # its candidate holds a slot but no land process is registered
+    assert land_state(land_of(landing, "matching")) == "unknown"  # its candidate has no registered land process
     landing.execute("UPDATE land_candidate SET entry_pid=7,entry_start='entry-start',entry_boot='boot' WHERE candidate_id='candidate'")
     assert land_state(land_of(landing, "matching")) == "landing"
-    assert land_state(land_of(landing, "gone")) == "waiting"
+    assert land_state(land_of(landing, "gone")) == "unknown"
 
 
 def test_each_check_carries_the_end_of_its_log_passed_or_failed_and_none_when_the_log_is_gone(

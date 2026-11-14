@@ -3,7 +3,6 @@
 was given and the outputs of its failed checks. Display only. The lines of an agent attempt are its `events.jsonl`, read
 behind the evidence files; a checks attempt's are its results."""
 
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from difflib import SequenceMatcher
 
@@ -46,7 +45,6 @@ from taskloop.hold_store import HoldStore
 from taskloop.merge.status import result as merge_result
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
-from taskloop.profile import LandMode
 
 
 @dataclass(frozen=True)
@@ -54,7 +52,6 @@ class TaskPorts:
     reads: StatusPorts
     files: EvidenceFiles
     tracker: DashTracker
-    mode: Callable[[], LandMode | None] = lambda: None  # the profile's `land` (`dash_board.BoardPorts`)
 
 
 STEP_CHECKS = "checks"
@@ -287,7 +284,7 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
     title = task_id if view is None else ports.tracker.titles((task_id,)).get(task_id, task_id)  # cached by the board's own read
     card = Card(task_id, title, "waiting", 0, None, None, None, None, None) if view is None else card_of(
         view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
-        admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready())), ports.mode)
+        admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready())))
     step_usage, usage = totals(attempts)
     return TaskDetail(card, attempts, step_usage, usage)
 

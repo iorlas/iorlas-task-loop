@@ -33,6 +33,7 @@ from taskloop.land_status import LandView, land_next, land_view, with_logs
 from taskloop.merge.status import result as merge_result
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Clock, Failed
+from taskloop.profile import LandMode
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
 from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
@@ -60,6 +61,7 @@ class StatusPorts:
     boot: Callable[[], str | None]  # this machine's boot id, None when unknown (then no attempt counts as rebooted)
     commands: SetupSeen = lambda _process: "gone"  # a checks attempt's registered commands (the CLI: `setup_seen`)
     last_command: Callable[[AttemptKey], float | Literal["none", "unreadable"]] = lambda _key: "none"  # wall time of its latest command
+    policy: Callable[[Path, str], LandMode | None] = lambda _path, _repo: None
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,8 @@ class AttemptView:
     source_checks_id: str | None = None
     hold_due: str | None = None  # `Next: hold` with no hold recorded yet: the reason the next round holds it for
     stop: AgentStop | None = None
+    repo_id: str = ""
+    land_mode: LandMode | None = None
 
 NEEDS_OWNER = "needs_owner"  # the answer's disposition (and the collected result's reason) of a step that needs a decision
 
@@ -195,6 +199,8 @@ def _swapped(
     next_word = land_next(checks_next(latest, entry, expired, commands), latest, land)
     if repeat is CheckRepeatDecision.REPEAT:
         next_word = "wait" if entry == "running" else "unknown" if entry == "unknown" else "repeat"
+    path = reads.store.slot_path(latest.key.attempt_id) if next_word == "land" else None
+    mode = reads.policy(Path(path), view.repo_id) if path is not None else None
     return replace(
         view, step=CHECK, attempt_id=latest.key.attempt_id, slot=latest.slot, phase=latest.phase, entry=entry,
         result=checks_result(latest),
@@ -202,7 +208,7 @@ def _swapped(
         next=next_word, check_repeat_eligible=repeat in (CheckRepeatDecision.RELEASE, CheckRepeatDecision.REPEAT),
         entry_process=latest.entry,
         worker=None, last_command=None, leftovers=(), number=latest.number, previous_attempt_id=None, repeat_reason=None, earlier=earlier,
-        release=checks_release(latest, claim), checks=ChecksView(latest, results), land=land,
+        release=checks_release(latest, claim), checks=ChecksView(latest, results), land=land, land_mode=mode,
     )
 
 
@@ -222,7 +228,8 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
     left = reads.leftovers(row.key) if probe and next_word == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)
     ended = {"seq": row.seq, "release": row.release, "published": row.published, "label": row.label,
-             "last_command": _idle(reads, row.key) if entry == "running" else None, "source_checks_id": row.source_checks_id}
+             "last_command": _idle(reads, row.key) if entry == "running" else None, "source_checks_id": row.source_checks_id,
+             "repo_id": row.repo_id}
     late = expired if row.phase != "captured" or result.execution is None else result.execution.facts.timed_out
     if left is None or left.reason not in REPEATABLE:
         shown = (left.reason, *left.listing) if left is not None and left.reason in SHOWN else ()  # `head_moved`: the agent's refs
