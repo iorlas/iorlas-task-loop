@@ -15,6 +15,7 @@ from taskloop.shelf_digest.identities import (
     IdentityFailure,
     IdentityFailureReason,
     extract_identities,
+    reconcile_manifests,
 )
 from taskloop.shelf_digest.source import ReadFailure, ReadFailureReason, open_source
 
@@ -47,12 +48,14 @@ class Inputs:
     lock: str
     shelf: dict[str, dict[str, bytes]]
 
-    def extract(self) -> Identities | IdentityFailure | ReadFailure:
+    def extract(self, *, manifest_only: bool = False) -> Identities | IdentityFailure | ReadFailure:
         root = objects(self.path / "root", {SOURCE_COMMIT: {
             "pyproject.toml": self.project.encode(), "uv.lock": self.lock.encode(),
         }})
         source = open_source(root, SOURCE_COMMIT)
         assert not isinstance(source, ReadFailure)
+        if manifest_only:
+            return reconcile_manifests(source)
         return extract_identities(source, objects(self.path / "shelf", self.shelf))
 
 
@@ -108,6 +111,16 @@ def test_current_project_and_lock_pins_including_stream_procs_own_version(tmp_pa
     assert tuple(item.version for item in result.packages) == ("0.11.0", "0.2.0", "0.21.0", "0.2.1", "0.1.0", "0.9.0")
     assert result.packages[0].commit == result.packages[-1].commit
     assert result.packages[-1].requested_tag == "any-agent-v0.11.0"
+
+
+def test_manifest_reconciliation_requires_no_shelf_source(tmp_path: Path) -> None:
+    case = inputs(tmp_path)
+    expected = case.extract()
+    case.shelf.clear()
+    assert case.extract(manifest_only=True) == expected
+    assert isinstance(case.extract(), ReadFailure)
+    case.lock = case.lock.replace("tag=any-agent-v1.2.3", "branch=main")
+    assert isinstance(case.extract(manifest_only=True), IdentityFailure)
 
 
 @pytest.mark.parametrize(("field", "old", "new", "detail"), [

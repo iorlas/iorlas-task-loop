@@ -6,7 +6,7 @@ from typing import Never
 
 from taskloop.shelf_digest.declarations import Declaration, declared_names, expression_name
 from taskloop.shelf_digest.models import ExtractionError, SignatureFailure, SignatureFailureReason
-from taskloop.shelf_digest.source import CommittedSource, ReadFailure
+from taskloop.shelf_digest.source import ReadFailure, Source
 
 
 @dataclass
@@ -56,7 +56,7 @@ def _import_target(module: Module, node: ast.ImportFrom) -> str:
 
 
 class PackageExports:
-    def __init__(self, source: CommittedSource, subdirectory: str) -> None:
+    def __init__(self, source: Source, subdirectory: str) -> None:
         self.source = source
         self.modules: dict[str, Module] = {}
         entries = source.entries()

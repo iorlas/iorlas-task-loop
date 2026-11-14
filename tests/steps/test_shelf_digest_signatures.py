@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import override
 
@@ -12,7 +13,7 @@ from git_porcelain.testing import FakeRepo
 from taskloop.shelf_digest.identities import Identities, PackageIdentity
 from taskloop.shelf_digest.models import Signature, SignatureFailure, SignatureFailureReason, SignatureKind
 from taskloop.shelf_digest.signatures import extract_signatures
-from taskloop.shelf_digest.source import ReadFailure, ReadFailureReason
+from taskloop.shelf_digest.source import ReadFailure, ReadFailureReason, open_source
 
 COMMIT = "a" * 40
 NEXT_COMMIT = "b" * 40
@@ -39,7 +40,7 @@ def repository(path: Path, commits: dict[str, dict[str, bytes]]) -> Objects:
 
 def extract(path: Path, modules: Mapping[str, str | bytes]) -> tuple[Signature, ...] | SignatureFailure | ReadFailure:
     files = {PREFIX + name: data.encode() if isinstance(data, str) else data for name, data in modules.items()}
-    return extract_signatures(Identities("d" * 40, (IDENTITY,)), repository(path, {COMMIT: files}))
+    return extract_signatures(Identities("d" * 40, (IDENTITY,)), partial(open_source, repository(path, {COMMIT: files})))
 
 
 def test_aliases_chains_stars_and_exported_submodules(tmp_path: Path) -> None:
@@ -257,10 +258,10 @@ def test_pin_changes_and_body_only_edits(tmp_path: Path) -> None:
     new = {PREFIX + "__init__.py": b"def call(value: str = 'new') -> str:\n    return value.upper()\n"}
     bodies = {PREFIX + "__init__.py": b"def call(value: int = 1) -> int:\n    raise RuntimeError\n"}
     repo = repository(tmp_path, {COMMIT: old, NEXT_COMMIT: new, "e" * 40: bodies})
-    original = extract_signatures(Identities("d" * 40, (IDENTITY,)), repo)
+    original = extract_signatures(Identities("d" * 40, (IDENTITY,)), partial(open_source, repo))
     changed_identity = replace(IDENTITY, version="2.0", requested_tag="example-v2.0", commit=NEXT_COMMIT)
-    changed = extract_signatures(Identities("d" * 40, (changed_identity,)), repo)
-    body = extract_signatures(Identities("d" * 40, (replace(IDENTITY, commit="e" * 40),)), repo)
+    changed = extract_signatures(Identities("d" * 40, (changed_identity,)), partial(open_source, repo))
+    body = extract_signatures(Identities("d" * 40, (replace(IDENTITY, commit="e" * 40),)), partial(open_source, repo))
     assert isinstance(original, tuple) and isinstance(changed, tuple) and isinstance(body, tuple)
     assert original[0].declaration == body[0].declaration == "def call(value: int=1) -> int:\n    ..."
     assert changed[0].declaration == "def call(value: str='new') -> str:\n    ..."
@@ -274,10 +275,10 @@ def test_repeated_and_reordered_inputs_are_equal(tmp_path: Path) -> None:
     forward = repository(tmp_path / "forward", {COMMIT: files})
     reverse = repository(tmp_path / "reverse", {COMMIT: dict(reversed(list(files.items())))})
     identities = Identities("d" * 40, (IDENTITY, other))
-    first = extract_signatures(identities, forward)
+    first = extract_signatures(identities, partial(open_source, forward))
     assert isinstance(first, tuple)
-    assert first == extract_signatures(identities, forward)
-    assert first == extract_signatures(replace(identities, packages=(other, IDENTITY)), reverse)
+    assert first == extract_signatures(identities, partial(open_source, forward))
+    assert first == extract_signatures(replace(identities, packages=(other, IDENTITY)), partial(open_source, reverse))
     assert [(item.identity.name, item.public_name) for item in first] == [
         ("another", "other.C"), ("example", "demo.A"), ("example", "demo.Z"),
     ]
@@ -287,14 +288,14 @@ def test_missing_module_and_commit_failures(tmp_path: Path) -> None:
     missing = extract(tmp_path / "empty", {})
     assert isinstance(missing, SignatureFailure) and missing.reason == SignatureFailureReason.NO_MODULE
     assert COMMIT in missing.explanation
-    result = extract_signatures(Identities("d" * 40, (IDENTITY,)), repository(tmp_path / "missing", {}))
+    result = extract_signatures(Identities("d" * 40, (IDENTITY,)), partial(open_source, repository(tmp_path / "missing", {})))
     assert isinstance(result, ReadFailure) and result.reason == ReadFailureReason.NO_COMMIT
 
 
 def test_later_package_failure_does_not_return_earlier_records(tmp_path: Path) -> None:
     earlier = replace(IDENTITY, name="aaa", subdirectory="packages/aaa")
     repo = repository(tmp_path, {COMMIT: {"packages/aaa/src/aaa.py": b"VALUE = 1\n", PREFIX + "__init__.py": b"__all__ = ['missing']"}})
-    result = extract_signatures(Identities("d" * 40, (earlier, IDENTITY)), repo)
+    result = extract_signatures(Identities("d" * 40, (earlier, IDENTITY)), partial(open_source, repo))
     assert isinstance(result, SignatureFailure) and result.reason == SignatureFailureReason.UNRESOLVED_EXPORT
     assert "demo.missing" in result.explanation
 
@@ -302,6 +303,6 @@ def test_later_package_failure_does_not_return_earlier_records(tmp_path: Path) -
 def test_unreadable_committed_source_retains_read_failure(tmp_path: Path) -> None:
     repo = repository(tmp_path, {})
     repo.trees = {COMMIT: Tree(Sha(COMMIT), lambda: {PREFIX + "__init__.py": ("120000", Sha("c" * 40))}, lambda _: b"target")}
-    result = extract_signatures(Identities("d" * 40, (IDENTITY,)), repo)
+    result = extract_signatures(Identities("d" * 40, (IDENTITY,)), partial(open_source, repo))
     assert isinstance(result, ReadFailure) and result.reason == ReadFailureReason.NOT_A_FILE
     assert PREFIX + "__init__.py" in result.explanation and COMMIT in result.explanation

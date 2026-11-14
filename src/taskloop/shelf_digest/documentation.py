@@ -5,11 +5,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
 
-from git_porcelain import Repo
-
 from taskloop.shelf_digest.identities import Identities, PackageIdentity
 from taskloop.shelf_digest.models import Signature, SignatureKind
-from taskloop.shelf_digest.source import CommittedSource, ReadFailure, open_source
+from taskloop.shelf_digest.source import ReadFailure, Source, SourceOpener
 
 
 class DocumentationKind(StrEnum):
@@ -67,7 +65,7 @@ def _declaration_docs(
     return tuple(docs)
 
 
-def _document_path(path: str, prefix: str) -> bool:
+def document_path(path: str, prefix: str) -> bool:
     relative = PurePosixPath(path.removeprefix(prefix))
     return (relative.name.lower().split(".")[0] == "readme" or relative.suffix.lower() in {".md", ".rst"}
             or ("docs" in relative.parts[:-1] and relative.suffix.lower() in {"", ".txt", ".text"}))
@@ -95,7 +93,7 @@ def _module_docs(
 
 
 def _package_docs(
-    identity: PackageIdentity, source: CommittedSource, signatures: tuple[Signature, ...],
+    identity: PackageIdentity, source: Source, signatures: tuple[Signature, ...],
 ) -> tuple[Documentation, ...] | DocumentationFailure | ReadFailure:
     entries = source.entries()
     if isinstance(entries, ReadFailure):
@@ -106,7 +104,7 @@ def _package_docs(
         path = entry.path
         if not path.startswith(prefix):
             continue
-        document = _document_path(path, prefix)
+        document = document_path(path, prefix)
         module = path.startswith(f"{prefix}src/") and path.endswith(".py")
         if not document and not module:
             continue
@@ -132,12 +130,12 @@ def documentation_order(item: Documentation) -> tuple[str, str, int, int, str, s
 
 
 def extract_documentation(
-    identities: Identities, signatures: tuple[Signature, ...], shelf: Repo,
+    identities: Identities, signatures: tuple[Signature, ...], opener: SourceOpener,
 ) -> tuple[Documentation, ...] | DocumentationFailure | ReadFailure:
     """Retain full text and exact source lines; listed unreadable files fail the whole collection."""
     docs: set[Documentation] = set()
     for identity in sorted(identities.packages, key=lambda item: item.name):
-        source = open_source(shelf, identity.commit)
+        source = opener(identity.commit)
         if isinstance(source, ReadFailure):
             return source
         package = _package_docs(identity, source, tuple(item for item in signatures if item.identity == identity))

@@ -1,6 +1,7 @@
 """Documentation retains qualifications and alias provenance without executing source."""
 
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,7 @@ from shelf_digest_fixtures import COMMIT, SOURCE_COMMIT, objects
 from taskloop.shelf_digest.documentation import DocumentationFailure, DocumentationKind, extract_documentation
 from taskloop.shelf_digest.identities import Identities, PackageIdentity
 from taskloop.shelf_digest.signatures import extract_signatures
-from taskloop.shelf_digest.source import ReadFailure, ReadFailureReason
+from taskloop.shelf_digest.source import ReadFailure, ReadFailureReason, open_source
 
 IDENTITY = PackageIdentity("example", "1.0", "https://example.invalid/shelf", "example-v1.0", "packages/example", COMMIT)
 PREFIX = "packages/example/"
@@ -44,9 +45,9 @@ def test_complete_text_and_alias_member_overload_provenance(tmp_path: Path) -> N
     }
     repo = objects(tmp_path, {COMMIT: files})
     identities = Identities(SOURCE_COMMIT, (IDENTITY,))
-    signatures = extract_signatures(identities, repo)
+    signatures = extract_signatures(identities, partial(open_source, repo))
     assert isinstance(signatures, tuple)
-    docs = extract_documentation(identities, signatures, repo)
+    docs = extract_documentation(identities, signatures, partial(open_source, repo))
     assert isinstance(docs, tuple)
     document = next(item for item in docs if item.path == PREFIX + "README")
     assert document.text == readme and (document.start_line, document.end_line) == (1, 6)
@@ -71,19 +72,19 @@ def test_absent_docs_and_python_encoding_are_supported(tmp_path: Path) -> None:
     files = {PREFIX + "src/demo.py": '# coding: latin-1\n"""café; only after release."""\ndef call():\n    pass\n'.encode("latin-1")}
     repo = objects(tmp_path, {COMMIT: files})
     identities = Identities(SOURCE_COMMIT, (IDENTITY,))
-    signatures = extract_signatures(identities, repo)
+    signatures = extract_signatures(identities, partial(open_source, repo))
     assert isinstance(signatures, tuple)
-    docs = extract_documentation(identities, signatures, repo)
+    docs = extract_documentation(identities, signatures, partial(open_source, repo))
     assert isinstance(docs, tuple) and len(docs) == 1 and docs[0].text == "café; only after release."
     empty = objects(tmp_path / "empty", {COMMIT: {PREFIX + "src/demo.py": b"VALUE = 1\n"}})
-    assert extract_documentation(identities, (), empty) == ()
+    assert extract_documentation(identities, (), partial(open_source, empty)) == ()
 
 
 @pytest.mark.parametrize("data", [b"\xff", b"broken\x80text"])
 def test_invalid_late_document_returns_only_explained_failure(tmp_path: Path, data: bytes) -> None:
     later = replace(IDENTITY, name="later", subdirectory="packages/later")
     repo = objects(tmp_path, {COMMIT: {PREFIX + "README.md": b"valid", "packages/later/docs/end.txt": data}})
-    result = extract_documentation(Identities(SOURCE_COMMIT, (later, IDENTITY)), (), repo)
+    result = extract_documentation(Identities(SOURCE_COMMIT, (later, IDENTITY)), (), partial(open_source, repo))
     assert isinstance(result, DocumentationFailure)
     assert "later" in result.explanation and "docs/end.txt" in result.explanation and COMMIT in result.explanation
 
@@ -97,6 +98,6 @@ def test_listed_docs_must_be_readable_regular_files(
     path = PREFIX + "README.md"
     repo = objects(tmp_path, {})
     repo.trees = {COMMIT: Tree(Sha(COMMIT), lambda: {path: (mode, Sha("c" * 40))}, lambda _: data)}
-    result = extract_documentation(Identities(SOURCE_COMMIT, (IDENTITY,)), (), repo)
+    result = extract_documentation(Identities(SOURCE_COMMIT, (IDENTITY,)), (), partial(open_source, repo))
     assert isinstance(result, ReadFailure) and result.reason == reason
     assert path in result.explanation and COMMIT in result.explanation
