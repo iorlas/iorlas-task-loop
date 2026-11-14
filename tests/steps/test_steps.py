@@ -100,7 +100,7 @@ def test_the_implement_input_bounds_working_and_final_checks_without_hiding_fail
     assert "`uv run --frozen --no-sync python -I` for execution or inspection scripts, never for file edits" in text
     assert "Bare `python3` is the host's Python 3.12, not the project's Python 3.15" in text
     assert "First confirm that `apply_patch` is offered in your implement tool set" in text
-    assert "Only if `apply_patch` is absent, report the tool gap in the plan and in `explanation`" in text
+    assert "Only if `apply_patch` is absent, report the tool gap in `explanation` only" in text
     assert "retain heredoc edits with the bounded verification above" in text
     assert "at most twice while working" not in task_text(TASK, "plan", CONTEXT)
 
@@ -129,6 +129,56 @@ def test_the_attributes_files_follow_the_step_root_and_the_listed_paths() -> Non
 def test_the_plan_input_sends_an_infeasible_or_empty_task_to_needs_owner_at_plan() -> None:
     text = PLAN.input_text(TASK, StepRules("docs/design/tl-1/"), CONTEXT)
     assert "answer `needs_owner`" in text and "write no plan" in text
+
+
+def test_plan_success_requires_a_current_size_assessment_and_an_owner_created_split_on_refusal() -> None:
+    text = task_text(TASK, "plan", CONTEXT)
+    assert "Before answering `planned` or `unchanged`, require a `## Size` section" in text
+    assert "estimated changed files (including tests and artifacts), independent behaviours, and model calls" in text
+    assert "for one implement attempt" in text
+    assert "Each independent behaviour must have an independently testable acceptance criterion" in text
+    assert "file count alone is insufficient" in text
+    assert "An existing plan without this assessment needs revision, not `unchanged`" in text
+    assert "Reassess an existing Size section against the current requirements and code before reusing it" in text
+    assert "reason and proposed split in `explanation`, within its existing 2000-character limit" in text
+    assert "each part must have a name, acceptance criterion and dependencies (explicitly none where appropriate)" in text
+    assert "The owner or orchestrator creates the parts in the task tracker; do not create them" in text
+    assert "or ask the owner to run a CLI command" in text
+    assert "On refusal, write no new successful plan and offer no commit" in text
+    assert "use `paths: []`, `message: null`, and the expected or null `plan_path`" in text
+    assert "Preserve existing saved work; a draft is not approval to implement" in text
+
+
+@pytest.mark.parametrize("excess", ["61 files", "4 behaviours", "101 calls"])
+def test_plan_limits_allow_equality_and_refuse_each_independent_excess(excess: str) -> None:
+    text = task_text(TASK, "plan", CONTEXT)
+    assert (
+        "If any estimate exceeds 60 files, 3 independent behaviours or 100 model calls, answer `needs_owner`, never "
+        "`planned` or `unchanged`."
+    ) in text
+    assert "Equality is allowed (60 files, 3 behaviours, 100 calls)" in text
+    assert excess in text.split("each suffice for refusal")[0].split("Equality is allowed")[1]
+    assert "Low file count cannot excuse another excess" in text
+
+
+def test_implement_reassesses_before_exploration_and_stops_with_unfinished_work_without_editing_the_plan() -> None:
+    text = task_text(TASK, "implement", CONTEXT)
+    assert "Read it first. Immediately after reading the plan, reassess scope before broad exploration or editing" in text
+    assert "more than about 60 model calls or touches more than 60 files" in text
+    assert "stop after the first coherent part, commit nothing extra, and answer `needs_owner` with the proposed split" in text
+    assert "If the excess is evident before editing, answer then; do not begin a part just to have something to save" in text
+    assert "stop at the first coherent boundary without proceeding into another work package" in text
+    assert "Explain completed and remaining scope and propose named parts" in text
+    assert "each with an acceptance criterion and dependencies (explicitly none where appropriate)" in text
+    assert "Partial work is unfinished: use `needs_owner`, `paths: []`, `message: null`; the hold saves it" in text
+    assert "The owner or orchestrator creates parts in the task tracker; do not create them" in text
+    assert "or ask the owner to run a CLI command" in text
+    assert "100 estimated model calls limit is distinct from this implement reassessment at about 60 calls" in text
+    assert "scope instructions, not harness call quotas" in text
+    assert "60-file stop is earlier than the existing 96-path safety ceiling" in text
+    assert 'Do not edit `plan.md`, including status, progress or "As built" sections' in text
+    assert "Other artifacts in the plan's own folder may change under the same rules; add no audit artifact" in text
+    assert "tool gap in the plan" not in text
 
 
 @pytest.mark.parametrize(("step", "success"), [("plan", "planned"), ("implement", "implemented")])

@@ -89,6 +89,56 @@ def test_a_failed_task_is_held_once_then_costs_no_tracker_call_or_line(factory: 
     assert factory.tracker.ready_reads == reads + 2  # the ready read lists nothing: tl-1 lost its label
 
 
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_a_size_refusal_holds_the_parent_once_and_keeps_any_coherent_part_unfinished(factory: Factory, step: str) -> None:
+    if step == "implement":
+        assert factory.round() == [("tl-1", "plan", "start", "started")]
+        assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
+    explanation = (
+        "Scope exceeds 3 independent behaviours and needs about 80 implement model calls. "
+        "Hold the parent for the owner or orchestrator to create these parts: "
+        "Hand-start: acceptance: hand-start auto-land works; dependencies: none. "
+        "Resolution: acceptance: conflicts resume safely; dependencies: Hand-start."
+    )
+    if step == "implement":
+        explanation += " Completed: hand-start fix. Remaining: conflict-resolution flow."
+    plan = {"plan_path": None} if step == "plan" else {}
+    factory.agents["tl-1", step] = scripted(
+        factory.slot.repo,
+        {"disposition": "needs_owner", **plan, "paths": [], "message": None, "explanation": explanation},
+        {"README": "coherent hand-start fix\n"} if step == "implement" else {},
+    )
+    assert factory.round() == [("tl-1", step, "start" if step == "plan" else "advance", "started")]
+    attempt = factory.current("tl-1")
+    assert factory.ran[-1] == "collected:needs_owner"
+    assert factory.round() == [("tl-1", step, "hold", "held failed:needs_owner")]
+    comment = factory.tracker.comments[0][1]
+    assert f"> {explanation}" in comment and "taskloop hold: failed:needs_owner" in comment
+    assert "tl step" not in comment and "bd " not in comment
+    assert factory.tracker.beads["tl-1"].labels == ("held",)
+    assert set(factory.tracker.beads) == {"tl-1"} and factory.tracker.claims == ["tl-1"]
+    saved = HoldStore(lambda: factory.con).saved(attempt)
+    if step == "implement":
+        assert len(saved) == 1 and factory.tip("tl-1") == saved[0].sha
+        history = factory.slot.repo.history([saved[0].sha], limit=1)
+        assert f"Task-Loop-Wip: {attempt}" in history[0].body.splitlines()
+        tree = factory.slot.repo.tree(saved[0].sha)
+        assert tree is not None and tree.read("README") == b"coherent hand-start fix\n"
+        assert tree.read("docs/design/tl-1/plan.md") == b"# Plan\n"
+        assert "implementation is still incomplete" in comment and "no check ran on it" in comment
+    else:
+        assert saved == ()
+    ran = list(factory.ran)
+    holds = list(factory.tracker.holds)
+    assert factory.round() == [] and factory.round() == []
+    assert factory.ran == ran and factory.tracker.holds == holds == ["labels tl-1 auto", "comment tl-1"]
+    assert factory.next_words() == {"tl-1": (step, "on_hold")}
+    assert factory.con.execute("SELECT step FROM attempt ORDER BY seq").fetchall() == (
+        [("plan",)] if step == "plan" else [("plan",), ("implement",)]
+    )
+    assert HoldStore(lambda: factory.con).saved(attempt) == saved
+
+
 def test_a_held_task_never_stops_another_task_or_ingestion_through_one_slot(factory: Factory) -> None:
     """Section 9: per-task hold words never stop admission; with one slot the order is unchanged (claimed work first)."""
     asks(factory, "tl-1", "plan")

@@ -97,8 +97,20 @@ def input_text(task: TaskInspection, rules: StepRules, context: InputContext) ->
 def _closing_words(rules: StepRules) -> str:
     root = rules.root
     return (
-        f"First read `{root}{PLAN_NAME}` if it exists. If it is still valid for the task and the code as they are now, change "
-        f"nothing and answer `unchanged`. Otherwise write the plan there (rewrite it in place if it exists) and answer "
+        f"First read `{root}{PLAN_NAME}` if it exists. Before answering `planned` or `unchanged`, require a `## Size` "
+        "section with estimated changed files (including tests and artifacts), independent behaviours, and model calls "
+        "for one implement attempt. Each independent behaviour must have an independently testable acceptance criterion; "
+        "file count alone is insufficient. An existing plan without this assessment needs revision, not `unchanged`. "
+        "Reassess an existing Size section against the current requirements and code before reusing it. "
+        "If any estimate exceeds 60 files, 3 independent behaviours or 100 model calls, answer `needs_owner`, never "
+        "`planned` or `unchanged`. Equality is allowed (60 files, 3 behaviours, 100 calls); 61 files, 4 behaviours or "
+        "101 calls each suffice for refusal. Low file count cannot excuse another excess. Put the reason and proposed "
+        "split in `explanation`, within its existing 2000-character limit: each part must have a name, acceptance criterion "
+        "and dependencies (explicitly none where appropriate). The owner or orchestrator creates the parts in the task "
+        "tracker; do not create them or ask the owner to run a CLI command. On refusal, write no new successful plan and "
+        "offer no commit: use `paths: []`, `message: null`, and the expected or null `plan_path`. Preserve existing saved "
+        "work; a draft is not approval to implement. If the assessed plan is still valid for the task and code as they "
+        "are now, change nothing and answer `unchanged`. Otherwise write the plan there (rewrite it in place if it exists) and answer "
         f"`planned`; other files only under `{root}`. {step_text.GIT_WRITES} With `planned`, list in `paths` every file "
         "you want committed and give a "
         "one-line commit `message`; the factory commits exactly those paths. With `planned`, remove any other file you "
