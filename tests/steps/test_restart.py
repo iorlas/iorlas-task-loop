@@ -1,5 +1,6 @@
 """A fresh runtime reopens intact state and reconciles unfinished work without starting over."""
 
+import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
@@ -7,17 +8,79 @@ import pytest
 from doubles import Done
 from round_bench import NoRequired
 from sqlite_store import Store
+from test_attempt import AttemptSurroundings
+from test_attempt import surroundings as attempt_surroundings
+from test_continuation import captured_work as captured_attempt
 from test_launch import NEW, FakeStart, Observe, launcher
+from test_native_continuation import NativeRun
+from test_recovery_store import KEY
 from test_round import ENTRY, REQUEST, Bench, seed
 
-from taskloop.attempt_types import AttemptKey, Seen
+from taskloop.attempt import Attempts
+from taskloop.attempt_store import AttemptStore
+from taskloop.attempt_types import AttemptKey, Seen, VerifyResult
 from taskloop.cli_composition import open_reads
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
+from taskloop.hold_store import HoldStore
 from taskloop.operations import Failed, Round
+from taskloop.recovery.complete_attempt import CapturedCompletion
 from taskloop.round import run_round
+from taskloop.slot_lock import hold
 
 PROGRESS = ("attempt", "execution", "verification", "slot_release", "published_branch")
+surroundings = attempt_surroundings
+captured_work = captured_attempt
+
+
+@pytest.mark.parametrize("pending", ["answer", "pending", "fault"])
+def test_reopened_round_finishes_captured_work_before_verifying(
+    tmp_path: Path, surroundings: AttemptSurroundings, captured_work: Attempts, pending: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    con = captured_work.store.connect()
+    assert con is not None
+    if pending != "answer":
+        assert captured_work.execute(KEY, (7, "entry", "boot")).reason == "verification"
+        con.execute("UPDATE execution SET session_state=?", (pending,))
+        con.execute("UPDATE attempt SET session_ref=NULL")
+    reservations = con.execute("SELECT * FROM reservation").fetchall()
+    identity = con.execute("SELECT attempt_id,dispatch_token,generation FROM attempt").fetchall()
+    con.close()
+    reopened = sqlite3.connect(tmp_path / "factory.db", isolation_level=None)
+    try:
+        execution = NativeRun()
+        attempts = surroundings.attempts(AttemptStore(lambda: reopened), execution)
+        bench = Bench(reopened, free=False)
+        verify = bench.recorded.verify
+
+        def checked(key: AttemptKey) -> VerifyResult:
+            result = attempts.collect(key)
+            assert result.status == "pending" and result.reason == "verification"
+            return verify(key)
+
+        monkeypatch.setattr(bench.recorded, "verify", checked)
+        completion = CapturedCompletion(attempts, HoldStore(lambda: reopened), hold, lambda _entry: "gone")
+        ports = replace(bench.ports(), completion=completion)
+        with monkeypatch.context() as patch:
+            patch.setattr(attempts.store, "connect", lambda: None)
+            failed = run_round(ports, REQUEST)
+        assert isinstance(failed, Round)
+        assert [(move.action, move.word) for move in failed.moves] == [("verify", "unavailable:store")]
+        assert bench.recorded.calls == []
+        for _round in range(2):
+            result = run_round(ports, REQUEST)
+            assert isinstance(result, Round)
+            assert [(move.action, move.word) for move in result.moves] == [
+                ("verify", "verified release=released branch=published")]
+            stored = attempts.store.collect(KEY)
+            assert stored is not None and stored.answer.kind == "valid" and stored.session_state == "complete"
+        assert execution.calls == [] and execution.permits == 0
+        assert bench.launcher.calls == bench.admission.requests == bench.repeats.calls == []
+        assert reopened.execute("SELECT * FROM reservation").fetchall() == reservations
+        assert reopened.execute("SELECT attempt_id,dispatch_token,generation FROM attempt").fetchall() == identity
+        assert attempts.store.callback(KEY) is not None
+    finally:
+        reopened.close()
 
 
 @pytest.mark.parametrize("phase, seen, action, word, launches", [

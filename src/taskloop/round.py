@@ -34,7 +34,7 @@ from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptKey, Checkouts
+from taskloop.attempt_types import AttemptKey, AttemptResult, Checkouts
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.drain.store import DrainStore
@@ -127,6 +127,7 @@ class RoundPorts:
     generation: int | None = None  # captured at explicit rounds startup; older loops cannot schedule after reopening
     landing: Landing | None = None  # `land: auto` lands through it; None: rounds land nothing
     repository: Callable[[Path], str | Failed] = lambda _path: Failed("unavailable", "checkout")
+    completion: Callable[[str, str, str], AttemptResult] | None = None
 
 
 def _word(result: Started | Failed) -> str:
@@ -335,6 +336,12 @@ def _detail(result: Started | Failed) -> str:
 
 def _verified(ports: RoundPorts, backlog: str, each: AttemptView) -> Move:
     """`tl step verify` as built: the verdict, then the settled release and the publication of a verified result."""
+    if each.checks is None and each.result.status == "pending" and each.result.reason != "verification":
+        completed = (AttemptResult("unavailable", "store") if ports.completion is None
+                     else ports.completion(backlog, each.task_id, each.attempt_id))
+        if completed.status != "pending" or completed.reason != "verification":
+            return Move(each.task_id, "verify", f"{completed.status}:{completed.reason}", each.attempt_id,
+                        completed.explanation, each.step)
     verified = verify_task(ports.reads.store, ports.verifier, ports.releaser, ports.publisher, backlog, each.task_id)
     if isinstance(verified, VerifiedTask):
         word = f"{verified.status} release={verified.release} branch={verified.published}"
