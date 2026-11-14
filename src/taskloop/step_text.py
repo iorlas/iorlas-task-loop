@@ -1,12 +1,23 @@
 """The words every step kind shares with its agent: the sentence about Git writes and the frame of a repeat's input.
 A leaf: the kinds fill in their own opening and instructions. Nothing here runs, reads a store or writes."""
 
+import json
 from collections.abc import Sequence
 from typing import Final
 
-from taskloop.slot_state import shown
+from taskloop.attempt_types import Unsettled
+from taskloop.slot_state import LISTED, shown
 
 GIT_WRITES: Final = "You may read Git; do not run `git add`, `git commit`, `git push` or any other Git write; they will fail."
+
+
+def unsafe_details(found: Unsettled) -> str:
+    """Render the owning checks' explanations with escaped identities and the shared display bounds."""
+    lines = [f"The unsafe path {json.dumps(each.path, ensure_ascii=True)} cannot be committed: {shown(each.explanation)}"
+             for each in found.explanations[:LISTED]]
+    if len(found.explanations) > LISTED:
+        lines.append(f"+{len(found.explanations) - LISTED} more")
+    return "\n".join(lines)
 
 
 def feedback(opening: str, listing: Sequence[str], instructions: str, task: str, nonce: str) -> str:

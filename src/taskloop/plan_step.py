@@ -52,8 +52,7 @@ ANSWER_SCHEMA: Final = {
 }
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
-    "unsafe": "This listed path, or a `.git*` file near it, cannot be committed: a symlink or under one, not a plain file, "
-    "executable, over 1 MiB, or a Git file.",
+    "unsafe": "These paths cannot be committed.",
     "ignored": "These paths are ignored by Git. Any ignored file under the plan folder, and any ignored attributes file, "
     "blocks the commit whether it is listed or not; a listed one can never be committed.",
 }
@@ -128,7 +127,7 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
     it was committed, so its files must be listed again."""
     root, plan = rules.root, rules.root + PLAN_NAME
     last = (
-        f"Nothing of attempt {number} was committed, so none of its files is in Git: answer `planned` and list in `paths` "
+        f"Nothing of attempt {number} was committed: answer `planned` and list in `paths` "
         f"again every file you want committed, `{plan}` included."
         if unrecorded
         else "If you only removed or restored files, answer `unchanged`: a `planned` answer with nothing new to commit is "
@@ -138,7 +137,7 @@ def repeat_instructions(rules: StepRules, number: int, *, unrecorded: bool) -> s
         f"Remove every untracked file listed that does not belong to the plan. A tracked file you changed outside `{root}` "
         "cannot be committed: restore its committed content (`git show HEAD:<path> > <path>`); you cannot run `git checkout` "
         f"or `git restore`. With `planned`, `paths` always lists `{plan}` and every other file under that folder you want "
-        f"kept, and only when you changed or added a file there. {last}"
+        f"kept, and only when you changed or added a file there; leave files you did not change out of paths. {last}"
     )
 
 
@@ -148,7 +147,8 @@ def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: 
     nothing of it was committed, so its files must be listed again. `found.reason` is one of REPEATABLE."""
     opening = next(text for reason, text in OPENING.items() if reason == found.reason)
     instructions = repeat_instructions(rules, number, unrecorded=unrecorded)
-    return FINAL_ANSWER_WARNING + "\n\n" + step_text.feedback(opening.format(number=number), found.listing, instructions, task, nonce)
+    opening = step_text.unsafe_details(found) or opening.format(number=number)
+    return FINAL_ANSWER_WARNING + "\n\n" + step_text.feedback(opening, found.listing, instructions, task, nonce)
 
 
 def artifact(tip: Tree, rules: StepRules) -> Rejected | str:

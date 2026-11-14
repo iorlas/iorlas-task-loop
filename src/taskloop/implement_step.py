@@ -76,8 +76,7 @@ ENVIRONMENT: Final = (
 )
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
-    "unsafe": "The unsafe path {path} cannot be committed: a symlink or under one, not a plain file, "
-    "executable, over 1 MiB, or a Git file.",
+    "unsafe": "These paths cannot be committed.",
     "ignored": "These paths are ignored by Git. A listed path Git ignores can never be committed, and an ignored attributes "
     "file on the way to a listed path blocks the commit.",
 }
@@ -153,7 +152,7 @@ def repeat_instructions(number: int, *, unrecorded: bool) -> str:
     """A repeat's fixed instructions for the implement step. `unrecorded`: attempt `number` answered `implemented` and
     nothing of it was committed, so its files must be listed again."""
     last = (
-        f"Nothing of attempt {number} was committed, so none of its files is in Git: answer `implemented` and list in "
+        f"Nothing of attempt {number} was committed: answer `implemented` and list in "
         "`paths` again every file you want committed."
         if unrecorded
         else "If you only removed or restored files, answer `unchanged`: an `implemented` answer with nothing new to commit "
@@ -163,7 +162,8 @@ def repeat_instructions(number: int, *, unrecorded: bool) -> str:
         "Remove every untracked file listed that you do not want committed. Restore every tracked file you changed or "
         "deleted and do not want committed: read the original content with `git show HEAD:<path>` and restore it with "
         "`apply_patch`, following the editing rules below. You cannot run `git checkout` or `git restore`. "
-        f"With `implemented`, `paths` lists every file you want committed, changed, added or deleted. {last}"
+        f"With `implemented`, `paths` lists every file you want committed, changed, added or deleted; "
+        f"leave files you did not change out of paths. {last}"
     )
 
 
@@ -172,8 +172,8 @@ def feedback(found: Unsettled, rules: StepRules, number: int, task: str, nonce: 
     the reason, the listing, its fixed instructions, then the task. `found.reason` is one of REPEATABLE."""
     opening = next(text for reason, text in OPENING.items() if reason == found.reason)
     instructions = repeat_instructions(number, unrecorded=unrecorded)
-    path = json.dumps(found.unsafe_path or (found.listing[0] if found.listing else "(unavailable)"), ensure_ascii=True)
-    return step_text.feedback(opening.format(number=number, path=path), found.listing, instructions, task, nonce)
+    opening = step_text.unsafe_details(found) or opening.format(number=number)
+    return step_text.feedback(opening, found.listing, instructions, task, nonce)
 
 
 def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:

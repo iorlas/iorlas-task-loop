@@ -344,7 +344,7 @@ def test_unsafe_feedback_names_a_nearby_git_file_even_when_not_listed_in_the_ans
     rig.round()
     row = rig.store.attempts("tasks", "tl-1")[0]
     found = rig.ports().verifier.verify(row.key)
-    assert isinstance(found, Unsettled) and found.reason == "unsafe" and found.unsafe_path == path
+    assert isinstance(found, Unsettled) and found.reason == "unsafe" and found.explanations[0].path == path
     step = kind("implement")
     text = step.feedback(found, step.rules("tl-1"), 1, "Task", "NONCE", unrecorded=True)
     assert json.dumps(path, ensure_ascii=True) in text.splitlines()[0] and "\x1b" not in text

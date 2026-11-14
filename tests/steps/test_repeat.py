@@ -548,7 +548,7 @@ STEP = kind("plan")
 
 @pytest.mark.parametrize(("reason", "words"), [
     ("uncommitted", "Attempt 1 of this step left changes in the slot that it did not list for commit."),
-    ("unsafe", "This listed path, or a `.git*` file near it, cannot be committed"),
+    ("unsafe", "These paths cannot be committed."),
     ("ignored", "These paths are ignored by Git. Any ignored file under the plan folder, and any ignored attributes file, "
      "blocks the commit whether it is listed or not"),
 ])
@@ -565,7 +565,7 @@ def test_the_feedback_has_fixed_words_the_listing_as_data_and_the_task(reason: s
 
 def test_after_an_attempt_that_committed_nothing_the_feedback_asks_for_every_file_again() -> None:
     text = STEP.feedback(Unsettled("unsafe", (P,)), STEP.rules("tl-1"), 1, TASK, NONCE, unrecorded=True)
-    assert ("Nothing of attempt 1 was committed, so none of its files is in Git: answer `planned` and list in `paths` again every "
+    assert ("Nothing of attempt 1 was committed: answer `planned` and list in `paths` again every "
             f"file you want committed, `{P}` included.") in text
     assert "answer `unchanged`" not in text
 
