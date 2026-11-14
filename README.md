@@ -149,8 +149,18 @@ and document; [docs/glossary.md](docs/glossary.md) holds the vocabulary, the com
 The [decision records](docs/design/INDEX.md#decision-records) distinguish accepted decisions, later qualifications
 and their enforcing tests.
 
-Python 3.15 and the tool versions in `mise.toml` are required. Run `mise install` after
-trusting the repository configuration through normal mise setup.
+Install system Git at the exact version in `mise.toml`'s `vars.git_version` first.
+That file is the authoritative source for supported Git, Codex, Python and Tailwind
+versions. Run `mise install` after trusting the repository configuration through normal
+mise setup, and activate mise in your shell. Mise installs the pinned Python and standalone
+Codex and Tailwind executables; Node is not required. `.python-version` selects that same
+Python for uv; the package's `>=3.15` compatibility range is separate from this development pin.
+The committed `mise.lock` records managed downloads.
+
+`just check`, `just test`, the prek lint hook and `just css` verify these versions locally.
+A missing tool, unexpected executable version or contradictory committed declaration fails
+with the tool's expected version and observed detail. Install the declared version and check
+your shell's PATH before retrying; verification never installs or upgrades external tools.
 
 ```bash
 just install
