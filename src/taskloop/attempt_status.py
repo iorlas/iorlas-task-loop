@@ -28,6 +28,8 @@ from taskloop.hold_facts import explanation
 from taskloop.hold_status import cause, hold_next
 from taskloop.hold_store import HoldRow, HoldStore
 from taskloop.land_status import LandView, land_next, land_view, with_logs
+from taskloop.merge.status import result as merge_result
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Clock, Failed
 from taskloop.setup_store import SETUP_RUNS, ProcessSeen, SetupRow, SetupSeen, SetupStore
 from taskloop.steps import CHECK, following
@@ -207,6 +209,11 @@ def _agent(reads: StatusPorts, row: AttemptRow, *, probe: bool) -> AttemptView:
     rebooted = row.entry is not None and reads.boot() not in (None, row.entry[2])
     next_word = _released(row, next_action(row.phase, entry, result, expired, rebooted=rebooted), succeeded(result))
     next_word = _setup_failed(reads, row, next_word)
+    if row.phase == "admitted" and row.release is None:
+        merging = merge_result(MergeStore(reads.store.connect, reads.store.begin), row.key.attempt_id, reads.clock())
+        if merging is not None:
+            result = merging
+            next_word = "hold" if merging.status == "refused" else "wait" if entry == "running" else "start"
     found = (row.backlog, row.task_id, row.step, row.key.attempt_id, row.slot, row.phase)
     left = reads.leftovers(row.key) if probe and next_word == "verify" else None
     chain = (row.number, row.previous_attempt_id, row.repeat_reason)

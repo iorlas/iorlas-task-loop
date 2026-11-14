@@ -246,3 +246,46 @@ whole-repository or live run. Use `uv run --frozen --no-sync python -I -m pytest
 for focused selections, with no editable baseline install or PYTHONPATH fallback.
 Report commands and results in implementation evidence. This planning revision
 does not run source gates or claim the acceptance criteria have passed.
+
+## As built
+
+Admission now filters each D against the selected source or known origin main,
+and detects unrelated histories with structured ancestry. It remains read-only.
+The selected source is fenced again after take; a related ref move is
+`branch_moved`, while unrelated substitution is `branch_diverged`. Known origin
+main is included when detecting foreign unpublished work.
+
+The `merge` feature owns durable preparation intents, merge results and separate
+resolution executions. Preparation refreshes main through the bounded remote
+port, freezes its target, retains source ancestry, completes clean or textual
+merges, and attaches through expected-old-ref comparison. The ordinary entry
+resumes this operation before dispatch, including when its branch was already
+attached. Repeat leftovers bypass merging; check-driven repair first retains its
+exact checked-source fence and records the prepared descendant separately.
+The same operation supports a detached continuation without moving the task ref;
+land integration remains `.155`'s responsibility.
+
+Resolution uses the owning step's captured settings and target environment,
+records its own process/session, prompt and evidence references, and retains the
+three-execution limit across restarts. Completed capture, merge and ref effects
+are adopted. Unknown processes retain custody and reservations. Ordinary setup,
+verification, publication and checks still own their normal results; merging
+saved work retains its need for an ordinary review commit.
+
+The assessed preservation changes from `b65113b8` retain both inputs, detached
+merge ancestry and working files. Owning release proves processes stopped,
+records preservation before abort, adopts it after an interrupted abort, then
+parks at D. Terminal preparation holds also protect hand-started tasks, omit
+removal of a nonexistent approval label, and cannot reingest through an approval
+label. Existing holds are untouched. Drain observes resolution processes and
+status consumers report preparation's typed result and explanation.
+
+Factory schema is now 21. Existing entries must be drained before the owning
+operation discards an older database; no migration or compatibility reader was
+added. No dependency changed, and no Git writes were run during implementation.
+
+Verification uses `just install`, installed-package focused pytest selections
+covering admission, explicit/round advance, sequential waiting plans, merge and
+capture recovery, resolution bounds, WIP review and preservation, plus the
+required `just check` and `just test` gates. The factory's subsequent independent
+checks remain authoritative.

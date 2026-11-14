@@ -42,6 +42,7 @@ from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.git_views import GitProfileFiles
 from taskloop.input_context import InputError, refresh
 from taskloop.input_context import read as read_context
+from taskloop.merge.prepare import SourcePreparation
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
@@ -63,6 +64,7 @@ class Attempts:
         slot_files: SlotFiles,
         registration_store: AttemptStore | None = None,
         environment: Preparation | None = None,
+        source_preparation: SourcePreparation | None = None,
     ) -> None:
         """`registration_store` serves only the harness registration write (composition bounds its busy wait); default `store`.
         `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot. `environment`
@@ -72,6 +74,7 @@ class Attempts:
         self.execution, self.clock, self.checkouts, self.slot_files = execution, clock, checkouts, slot_files
         self.registration_store = store if registration_store is None else registration_store
         self.environment = environment
+        self.source_preparation = source_preparation
 
     def collect(self, key: AttemptKey) -> AttemptResult:
         return collect(self.store, key)
@@ -200,7 +203,8 @@ class Attempts:
     ) -> Prepared | AttemptResult:
         """The slot on its branch (`prepare.base`), then, for a kind with `environment`, its setup sequence with the
         credentials' executable and scrubbed environment."""
-        base = prepared_base(self.checkouts, self.slot_files, record, self.clock)
+        base = (prepared_base(self.checkouts, self.slot_files, record, self.clock) if self.source_preparation is None else
+                self.source_preparation.prepare(record, renew, credentials, probe))
         if isinstance(base, AttemptResult) or not kind(record.admission.step).environment:
             return base
         if self.environment is None or renew is None:

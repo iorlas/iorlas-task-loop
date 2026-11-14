@@ -279,6 +279,16 @@ class EvidenceFiles:
 
     def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
         directory = self.directory(key)
-        diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
-        return Evidence(self._write(directory + "/stdout.txt", capped(raw.out)), self._write(directory + "/stderr.txt", capped(raw.err)),
-                        self._write(directory + "/answer.txt", raw.summary.text), self._write(directory + "/diagnostics.txt", diagnostic))
+        return Evidence(*(self._write(directory + "/" + name, text) for name, text in _capture_text(raw)))
+
+    def capture_refs(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
+        """The capture's immutable expected references, for a consumer's intent before the file effects."""
+        directory = self.directory(key)
+        return Evidence(*(FileRef(directory + "/" + name, hashlib.sha256(text.encode()).hexdigest())
+                          for name, text in _capture_text(raw)))
+
+
+def _capture_text(raw: RunOutcome) -> tuple[tuple[str, str], ...]:
+    diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
+    return (("stdout.txt", capped(raw.out)), ("stderr.txt", capped(raw.err)),
+            ("answer.txt", raw.summary.text), ("diagnostics.txt", diagnostic))

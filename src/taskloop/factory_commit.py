@@ -99,7 +99,8 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     if answer.effect == "keep":  # X is B: a `keep` step never adopts a commit
         if head != base:
             return _moved(checkouts(state.root), head, base, admission)
-        return _reviewed(checkouts, files, admission, state, base, quiet) if wip.is_saved(checkouts(state.root), base) else Committed(base)
+        return (_reviewed(checkouts, files, admission, state, base, quiet)
+                if wip.needs_review(checkouts(state.root), base) else Committed(base))
     if head != base:
         view = checkouts(state.root)
         return Committed(head) if _ours(view, head, base, admission) else _moved(view, head, base, admission)

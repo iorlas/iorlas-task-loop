@@ -21,6 +21,7 @@ array of the commits a hold saved on the task branch (`wip.SavedCommit`), writte
 No migration: an older factory.db is refused (`schema`).
 v21 (tl-8bh9.14.109): covering whole-task step counts for current-card reads.
 v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbox column.
+v21: durable preparation merges. Drain old entries before discarding an older database.
 """
 
 import sqlite3
@@ -47,6 +48,9 @@ SCHEMA = Schema(
     name="factory",
     steps={},
     ddl=f"""
+CREATE TABLE merge_operation (
+ attempt_id TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data))
+);
 CREATE TABLE drain_state (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL CHECK(generation>=1),
  state TEXT NOT NULL CHECK(state IN ({','.join(repr(each.value) for each in State)}))
