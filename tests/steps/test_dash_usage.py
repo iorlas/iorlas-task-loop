@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from test_dash_read import Tracker, reads_of, restarted_at_plan, unsafe_repeat
 
+from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.dash_model import TaskDetail, Usage
 from taskloop.dash_task import TaskPorts, build_task
 from taskloop.evidence_files import EvidenceFiles
@@ -18,9 +19,10 @@ def report(con: sqlite3.Connection, attempt: str, tokens: tuple[int | None, int 
     con.execute(
         """INSERT OR IGNORE INTO execution
         (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,stdout_digest,stderr_path,stderr_digest,
-         answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state)
-        SELECT attempt_id,dispatch_token,generation,0,0,1,1,'o','d','e','d','a','d','g','d','missing','complete'
-        FROM attempt WHERE attempt_id=?""", (attempt,))
+         answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,session_state,answer_failure)
+        SELECT attempt_id,dispatch_token,generation,0,0,1,1,'o','d','e','d','a','d','g','d','missing','complete',?
+        FROM attempt WHERE attempt_id=?""",
+        (encode(AnswerFailureData(rule=AnswerRule.MISSING, explanation="Answer must not be empty")), attempt))
     con.execute("UPDATE execution SET t_in=?,t_cached=?,t_out=?,turns=?,c_in=999999,c_cached=999999,c_out=999999 WHERE attempt_id=?",
                 (*tokens, turns, attempt))
 

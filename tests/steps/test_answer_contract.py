@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from taskloop.answer_failures import AnswerFailure, AnswerFailureData, AnswerRule
 from taskloop.attempt_result import end_word, report, succeeded
 from taskloop.attempt_types import (
     AnswerState,
@@ -136,7 +137,7 @@ BAD_PATHS = [
     ],
 )
 def test_the_decoder_alone_owns_the_rules_and_bounds_the_schema_leaves_out(change: dict[str, object]) -> None:
-    with pytest.raises(ValueError, match="Invalid plan answer"):
+    with pytest.raises(AnswerFailure):
         decode(PLANNED | change, RULES)
 
 
@@ -146,7 +147,7 @@ def test_the_decoder_alone_owns_the_rules_and_bounds_the_schema_leaves_out(chang
     ids=["paths", "message", "other_plan_path"],
 )
 def test_unchanged_changes_nothing_and_names_no_other_plan(change: dict[str, object]) -> None:
-    with pytest.raises(ValueError, match="Invalid plan answer"):
+    with pytest.raises(AnswerFailure):
         decode(UNCHANGED | change, RULES)
 
 
@@ -253,7 +254,7 @@ def test_implement_answers_anywhere_in_the_repository_decode_with_their_effect(a
     {"plan_path": None}, {"explanation": "x" * 2001},
 ])
 def test_the_implement_decoder_owns_its_rules(change: dict[str, object]) -> None:
-    with pytest.raises(ValueError, match="Invalid implement answer"):
+    with pytest.raises(AnswerFailure):
         IMPLEMENT.decode(IMPLEMENTED | change, CODE)
 
 
@@ -286,13 +287,13 @@ def test_unfinished_answers_still_require_the_answer_shape(step: str, dispositio
     answer = {"disposition": disposition, "paths": ["src/work.py"], "message": None, "explanation": "Work remains"}
     if step == "plan":
         answer["plan_path"] = None
-    with pytest.raises(ValueError, match=f"Invalid {step} answer"):
+    with pytest.raises(AnswerFailure):
         operation.decode(answer | change, operation.rules("tl-1"))
 
 
 @pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
 def test_unfinished_plan_answers_cannot_name_another_tasks_plan(disposition: str) -> None:
-    with pytest.raises(ValueError, match="Invalid plan answer"):
+    with pytest.raises(AnswerFailure):
         decode(UNCHANGED | {"disposition": disposition, "paths": [EXPECTED], "plan_path": "docs/design/tl-2/plan.md"}, RULES)
 
 
@@ -304,3 +305,85 @@ def test_every_implement_answer_rejects_plan_paths_before_discarding_unfinished_
         answer["message"] = None
     with pytest.raises(ValueError, match=r"Do not include plan\.md"):
         IMPLEMENT.decode(answer, IMPLEMENT.rules("tl-1"))
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+@pytest.mark.parametrize(("change", "rule", "detail"), [
+    ({"extra": None}, AnswerRule.SHAPE, "exactly"),
+    ({"disposition": []}, AnswerRule.DISPOSITION, "one of"),
+    ({"paths": [3]}, AnswerRule.PATHS_SHAPE, "list of strings"),
+    ({"paths": []}, AnswerRule.PATHS_REQUIRED, "include"),
+    ({"paths": ["../a"]}, AnswerRule.PATHS_LOCATION, "paths[0]"),
+    ({"message": None}, AnswerRule.MESSAGE, "1 to 500"),
+    ({"message": "x" * 501}, AnswerRule.MESSAGE, "1 to 500"),
+    ({"message": "a\0b"}, AnswerRule.MESSAGE, "NUL"),
+    ({"message": "a\nTask-Loop-Attempt: x"}, AnswerRule.MESSAGE, "Task-Loop-Attempt:"),
+    ({"explanation": None}, AnswerRule.EXPLANATION, "2000"),
+    ({"explanation": "x" * 2001}, AnswerRule.EXPLANATION, "2000"),
+])
+def test_rejections_name_the_exact_rule(step: str, change: dict[str, object], rule: AnswerRule, detail: str) -> None:
+    operation = kind(step)
+    answer = PLANNED if step == "plan" else IMPLEMENTED
+    with pytest.raises(AnswerFailure) as caught:
+        operation.decode(answer | change, operation.rules("tl-1"))
+    assert caught.value.rule is rule and detail in caught.value.explanation
+    assert isinstance(caught.value, ValueError)
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_path_limits_and_duplicates_name_the_rule_and_bound(step: str) -> None:
+    operation = kind(step)
+    rules = operation.rules("tl-1")
+    answer = PLANNED if step == "plan" else IMPLEMENTED
+    path = EXPECTED if step == "plan" else "src/a.py"
+    with pytest.raises(AnswerFailure) as caught:
+        operation.decode(answer | {"paths": [path] * (rules.max_paths + 1)}, rules)
+    assert caught.value.rule is AnswerRule.PATHS_COUNT and str(rules.max_paths) in caught.value.explanation
+    with pytest.raises(AnswerFailure) as caught:
+        operation.decode(answer | {"paths": [path, path]}, rules)
+    assert caught.value.rule is AnswerRule.PATHS_DUPLICATE
+
+
+@pytest.mark.parametrize(("change", "rule"), [
+    ({"plan_path": "other", "message": "bad"}, AnswerRule.PLAN_PATH),
+    ({"paths": [3], "plan_path": "other"}, AnswerRule.PATHS_SHAPE),
+    ({"message": "bad", "explanation": None}, AnswerRule.MESSAGE),
+])
+def test_unfinished_plan_rule_order(change: dict[str, object], rule: AnswerRule) -> None:
+    answer = UNCHANGED | {"disposition": "incomplete", "paths": ["../unused"]}
+    with pytest.raises(AnswerFailure) as caught:
+        decode(answer | change, RULES)
+    assert caught.value.rule is rule
+
+
+def test_forbidden_plan_precedes_other_implement_failures() -> None:
+    with pytest.raises(AnswerFailure) as caught:
+        IMPLEMENT.decode(IMPLEMENTED | {"disposition": [], "paths": [EXPECTED, 3]}, CODE)
+    assert caught.value.rule is AnswerRule.PLAN_FORBIDDEN
+
+
+def test_run_failure_takes_precedence_over_answer_failure_detail() -> None:
+    failure = AnswerFailureData(rule=AnswerRule.MISSING, explanation="Answer must not be empty")
+    answer = AnswerState("missing", failure=failure)
+    assert report(stored(0, False, None, answer)).explanation == failure.describe()
+    assert report(stored(1, False, "worker_failed", answer)).explanation == ""
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+@pytest.mark.parametrize("value", [None, [], 3, "answer", {}])
+def test_answer_requires_an_object_with_all_required_keys(step: str, value: object) -> None:
+    operation = kind(step)
+    with pytest.raises(AnswerFailure) as caught:
+        operation.decode(value, operation.rules("tl-1"))
+    assert caught.value.rule is AnswerRule.SHAPE
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+def test_valid_answers_accept_the_exact_limits(step: str) -> None:
+    operation = kind(step)
+    rules = operation.rules("tl-1")
+    answer = PLANNED if step == "plan" else IMPLEMENTED
+    first = EXPECTED if step == "plan" else "src/first.py"
+    paths = [first, *(f"{rules.root}file{i}" for i in range(rules.max_paths - 1))]
+    found = operation.decode(answer | {"paths": paths, "message": "x" * 500, "explanation": "x" * 2000}, rules)
+    assert found.paths == tuple(paths) and found.message == "x" * 500 and found.explanation == "x" * 2000

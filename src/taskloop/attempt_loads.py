@@ -6,6 +6,7 @@ from dataclasses import astuple
 from any_agent.procs import Worker
 from pydantic import BaseModel, ConfigDict
 
+from taskloop import answer_failures
 from taskloop.agents.settings import AgentSetting
 from taskloop.attempt_reads import (
     AttemptReads,
@@ -206,13 +207,16 @@ class AttemptLoads(AttemptReads):
             as_nullable_text(row[16]),
         )
         evidence = Evidence(*(FileRef(as_text(row[i]), as_text(row[i + 1])) for i in (17, 19, 21, 23)))
-        kind, session_state = as_text(row[25]), as_text(row[30])
+        kind, session_state = as_text(row[25]), as_text(row[31])
         if kind not in ("validation_pending", "valid", "missing", "json_invalid", "schema_invalid"):
             raise StoreUnavailable("Invalid answer phase")
         if session_state not in ("complete", "pending", "conflict", "fault"):
             raise StoreUnavailable("Invalid session state")
-        answer = AnswerState(kind, as_nullable_text(row[26]), stored_effect(row[27]), as_listed(row[28]), as_nullable_text(row[29]))
-        return StoredExecution(key, facts, evidence, answer, session_state, verdict_of(row[31:35]))
+        answer = AnswerState(
+            kind, as_nullable_text(row[26]), stored_effect(row[27]), as_listed(row[28]), as_nullable_text(row[29]),
+            answer_failures.decode(row[30], kind),
+        )
+        return StoredExecution(key, facts, evidence, answer, session_state, verdict_of(row[32:36]))
 
     def collect(self, key: AttemptKey) -> StoredExecution | None:
         with self._connection() as con:

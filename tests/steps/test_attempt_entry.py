@@ -216,7 +216,8 @@ INCOMPLETE = "collected incomplete verify=not_applicable claim=held release=rele
     [
         (1, "", "collected run:vendor_blip verify=not_applicable claim=held release=released"),
         (1, json.dumps(PLAN), "collected run:vendor_blip verify=not_applicable claim=held release=released"),
-        (0, "not json", "collected answer:json_invalid verify=not_applicable claim=held release=released"),
+        (0, "not json", "collected answer:json_invalid: json: Answer must be one complete strict JSON value: "
+         "Expecting value: line 1 column 1 (char 0) verify=not_applicable claim=held release=released"),
         (0, json.dumps(PLAN | {"disposition": "incomplete", "plan_path": None, "paths": [], "message": None}), INCOMPLETE),
     ],
     ids=["failed_run_no_answer", "failed_run_valid_answer", "clean_run_bad_answer", "incomplete"],

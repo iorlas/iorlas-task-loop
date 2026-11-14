@@ -108,9 +108,9 @@ def test_current_project_and_lock_pins_including_stream_procs_own_version(tmp_pa
             )
     result = Inputs(tmp_path, project, lock, files).extract()
     assert isinstance(result, Identities)
-    assert tuple(item.version for item in result.packages) == ("0.11.0", "0.2.0", "0.21.0", "0.2.1", "0.1.0", "0.9.0")
+    assert tuple(item.version for item in result.packages) == ("0.15.0", "0.2.0", "0.22.0", "0.2.1", "0.1.0", "0.9.0")
     assert result.packages[0].commit == result.packages[-1].commit
-    assert result.packages[-1].requested_tag == "any-agent-v0.11.0"
+    assert result.packages[-1].requested_tag == "any-agent-v0.15.0"
 
 
 def test_manifest_reconciliation_requires_no_shelf_source(tmp_path: Path) -> None:

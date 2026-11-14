@@ -6,7 +6,8 @@ from typing import Final
 
 from git_porcelain import Tree
 
-from taskloop import step_text
+from taskloop import answer_decode, step_text
+from taskloop.answer_failures import AnswerFailure, AnswerRule
 from taskloop.attempt_types import (
     MODE,
     Answer,
@@ -18,8 +19,6 @@ from taskloop.attempt_types import (
     StepRules,
     Unreadable,
     Unsettled,
-    commit_message,
-    listed_paths,
     path_allowed,
 )
 from taskloop.input_context import InputContext
@@ -141,23 +140,21 @@ def decode(value: object, rules: StepRules) -> Answer:
     """Validate the factory's plan answer contract, without verifying Git effects; the single owner of its cross-field
     rules and every bound (the strict schema carries none). Unfinished answers ignore structurally valid paths without
     requesting a commit. The expected plan is `<rules.root>plan.md`."""
-    if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
-        raise ValueError("Invalid plan answer")
-    disposition, path, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
+    disposition, path, paths, message, explanation = answer_decode.fields(value, ANSWER_KEYS)
+    if not isinstance(disposition, str) or disposition not in DISPOSITIONS:
+        raise AnswerFailure(AnswerRule.DISPOSITION, "disposition must be one of: " + ", ".join(DISPOSITIONS))
     expected = rules.root + PLAN_NAME
-    if disposition in ("incomplete", "needs_owner"):
-        listed = () if isinstance(paths, list) and all(isinstance(path, str) for path in paths) else None
-    else:
-        listed = listed_paths(paths, rules)
+    listed = answer_decode.paths(paths, rules, unfinished=disposition in ("incomplete", "needs_owner"))
+    if path != expected and (path is not None or disposition == "planned"):
+        suffix = "" if disposition == "planned" else " or null"
+        raise AnswerFailure(AnswerRule.PLAN_PATH, f"plan_path must be {expected}{suffix}")
     if disposition == "planned":
-        fits = path == expected and listed is not None and expected in listed and commit_message(message)
-    else:
-        named = path == expected or path is None  # `unchanged` without a plan decodes: verification names `plan_missing`
-        fits = disposition in DISPOSITIONS and named and listed == () and message is None
-    if not fits or listed is None or not isinstance(explanation, str) or len(explanation) > 2000:
-        raise ValueError("Invalid plan answer")
-    text = message if isinstance(message, str) else None
-    return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
+        if expected not in listed:
+            raise AnswerFailure(AnswerRule.PATHS_REQUIRED, f"planned paths must include {expected}")
+    elif listed:
+        raise AnswerFailure(AnswerRule.PATHS_COUNT, "unchanged paths must be empty")
+    text = answer_decode.message(message, committing=disposition == "planned")
+    return Answer(disposition, EFFECT_OF[disposition], listed, text, answer_decode.explanation(explanation))
 
 
 def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
