@@ -40,6 +40,7 @@ class Card:
     ask: bool = False
     question: str | None = None
     hold_explanation: str | None = None
+    waiting_since: str | None = None
 
 
 @dataclass(frozen=True)

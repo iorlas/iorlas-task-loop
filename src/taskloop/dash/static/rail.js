@@ -1,6 +1,6 @@
 // One row per step attempt, with the factory's verification attached to its agent answer.
 // Past history is folded for display only; selection still uses the original (step, n).
-import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, fmtDur, since, stepInfo } from "./ui.js";
+import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, fmtDur, isWaiting, since, stepInfo, waitingNote } from "./ui.js";
 import { say, wordNode } from "./words.js";
 import { usageNode, usageText } from "./usage.js";
 
@@ -199,7 +199,8 @@ function landRow(t) {
   const word = t.column === "landed" ? LAND.done : here ? LAND[t.land ?? "unknown"] : null;
   const li = el("li", `relative py-1.5 pl-4 ${here ? "" : "text-slate-400 dark:text-slate-600"}`);
   li.append(marker(t.column === "landed" ? "border-emerald-500 bg-emerald-500" : here ? "border-amber-500" : "border-slate-300 dark:border-slate-600"), el("span", `text-[13px] ${here ? "font-medium" : ""}`, `${STEPS.at(-1).emoji} ${STEPS.at(-1).label}`));
-  if (word) li.append(el("span", `block text-[11px] ${word.text}`, t.status_note ?? word.row));
+  if (here && isWaiting(t)) li.append(waitingNote(t));
+  else if (word) li.append(el("span", `block text-[11px] ${word.text}`, t.status_note ?? word.row));
   else li.append(el("span", "ml-2 text-[11px]", "pending"));
   return li;
 }
