@@ -1,6 +1,7 @@
 // Shared constants and small DOM helpers for the dashboard page.
 
 import { say } from "./words.js";
+import { elapsedDuration, quietDuration } from "./duration.js";
 
 export const COLUMNS = [
   { id: "waiting", label: "Waiting", emoji: "⏳",
@@ -125,7 +126,8 @@ export function waitingNote(t) {
 const QUIET_AFTER_S = 120;
 const QUIET_LONG_S = 900;
 function tickQuiet(node) {
-  const s = (Date.now() - Date.parse(node.dataset.quiet)) / 1000;
+  const ms = quietDuration(node.dataset.quiet);
+  const s = ms === null ? 0 : ms / 1000;
   const level = s >= QUIET_LONG_S ? "long" : s >= QUIET_AFTER_S ? "slow" : "";
   node.hidden = !level;
   node.replaceChildren(dot(level === "long" ? "bg-rose-500" : "bg-amber-500"), `Last activity ${fmtDur(s * 1000)} ago`);
@@ -135,15 +137,28 @@ function tickQuiet(node) {
 }
 export function tick(node) {
   if (node.dataset.quiet) return tickQuiet(node);
+  if (node.dataset.duration) {
+    const ms = elapsedDuration(node.dataset.duration);
+    node.textContent = `${node.dataset.prefix || ""}${ms === null ? "—" : fmtDur(ms)}${node.dataset.suffix || ""}`;
+    return;
+  }
   if (node.dataset.waitingSince) {
     node.textContent = `Waiting since${startedAt(node.dataset.waitingSince)}`;
     return;
   }
   node.textContent = `${node.dataset.prefix || ""}${since(node.dataset.since)}${node.dataset.suffix || ""}`;
 }
-export function quietSpan(sinceIso) {
+export function elapsedSpan(duration, cls = "", prefix = "", suffix = "") {
+  const node = el("span", cls);
+  node.dataset.duration = duration.execution;
+  node.dataset.prefix = prefix;
+  node.dataset.suffix = suffix;
+  tick(node);
+  return node;
+}
+export function quietSpan(duration) {
   const node = el("span");
-  node.dataset.quiet = sinceIso;
+  node.dataset.quiet = duration.execution;
   tick(node);
   return node;
 }

@@ -8,6 +8,10 @@ import { initDrawer, openDrawer, closeDrawer, onTaskMoved } from "../../src/task
 import { apiSource } from "../../src/taskloop/dash/static/api.js";
 import { taskView } from "../../src/taskloop/dash/static/taskview.js";
 import { usageText } from "../../src/taskloop/dash/static/usage.js";
+import { receiveDuration } from "../../src/taskloop/dash/static/duration.js";
+
+let monotonic = 0;
+Object.defineProperty(performance, "now", { value: () => monotonic, configurable: true });
 
 const fixture = document.getElementById("fixture");
 const results = document.getElementById("results");
@@ -357,13 +361,15 @@ function vocabulary() {
   const clock = Date.now;
   Date.now = () => Date.parse("2026-11-14T10:15:00Z");
   try {
-    const activity = quietSpan("2026-11-14T10:13:01Z");
+    const duration = { execution: "vocabulary", number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
+    receiveDuration(duration);
+    const activity = quietSpan(duration);
     assert(activity.hidden, "activity age hidden under two minutes");
-    activity.dataset.quiet = "2026-11-14T10:13:00Z";
+    monotonic += 1;
     updateTime(activity);
     assert(!activity.hidden && activity.textContent === "Last activity 2m 00s ago", "activity age at two minutes");
     assert(activity.querySelector(".bg-amber-500"), "two-minute activity colour retained");
-    activity.dataset.quiet = "2026-11-14T10:00:00Z";
+    monotonic += 780000;
     updateTime(activity);
     assert(activity.textContent === "Last activity 15m 00s ago" && activity.querySelector(".bg-rose-500"),
       "fifteen-minute activity wording and colour");
@@ -389,6 +395,8 @@ async function waitingRows() {
     const source = {
       detail: async () => ({ task, attempts: [attempt(step, 1, {
         state: "running", started_at: "2026-11-14T10:00:00Z",
+        duration: step === "checks" ? null
+          : { execution: `waiting-${step}`, number: 1, elapsed_ms: 1000, quiet_ms: 1000, frozen: false },
       })], usage: {} }),
       tracker: async () => tracked,
       body: async () => ({ input: "Input", result: { summary: "pending", checks: [] } }),
@@ -447,9 +455,73 @@ async function usage() {
   closeDrawer();
 }
 
+async function liveDurations() {
+  const sample = { execution: "drawer-duration", number: 1, elapsed_ms: 119999, quiet_ms: 119999, frozen: false };
+  const live = { ...task, column: "implement", status: "running", duration: sample };
+  const list = [attempt("implement", 1, { state: "running", started_at: "2099-01-01T00:00:00Z", duration: sample,
+    feed: [{ type: "step", at: "1900-01-01T00:00:00Z", step: "implement", attempt: 1 }] })];
+  const interval = window.setInterval;
+  const wall = Date.now;
+  let poll;
+  let reads = 0;
+  let page = { events: [], cursor: null, replaced: false, available: true, duration: sample };
+  window.setInterval = (callback, ms) => ms === 2000 ? (poll = callback, 0) : interval(callback, ms);
+  initDrawer({
+    detail: async () => { reads++; return { task: live, attempts: structuredClone(list), usage: {} }; },
+    tracker: async () => tracked,
+    feed: async () => structuredClone(page),
+    body: async () => ({ input: "Input", result: { summary: "pending", checks: [] } }),
+  }, new Map([[task.id, live]]));
+  const drawer = document.getElementById("drawer");
+  const refresh = () => drawer.querySelectorAll("[data-duration],[data-quiet]").forEach(updateTime);
+  const times = (text) => {
+    const nodes = [...drawer.querySelectorAll("[data-duration]")];
+    assert(nodes.length === 2 && nodes.every((n) => n.textContent.startsWith(text)), `header and rail show ${text}`);
+  };
+  try {
+    await openDrawer(task.id); await tick();
+    times("1m 59s");
+    assert(drawer.querySelector("#quiet").hidden, "drawer quiet is hidden at 119999ms despite feed timestamp");
+    Date.now = () => wall() + 86400000;
+    monotonic += 1; refresh();
+    times("2m 00s");
+    assert(drawer.querySelector("#quiet .bg-amber-500"), "drawer amber at 120000ms");
+    Date.now = () => wall() - 86400000;
+    monotonic += 1000;
+    await onTaskMoved({ ...live, duration: { ...sample, number: 0, elapsed_ms: 0, quiet_ms: 0 } });
+    times("2m 01s");
+    assert(reads === 1, "same-signature card does not reload detail");
+    button(drawer, "Prompt").click(); await tick();
+    times("2m 01s");
+    button(drawer, "Lines").click();
+    page.duration = { ...sample, number: 2, elapsed_ms: 130000, quiet_ms: 130000 };
+    await poll();
+    times("2m 10s");
+    monotonic += 769999; refresh();
+    assert(drawer.querySelector("#quiet .bg-amber-500"), "drawer stays amber at 899999ms");
+    monotonic += 1; refresh();
+    times("15m 00s");
+    assert(drawer.querySelector("#quiet .bg-rose-500"), "empty page measurement reaches red at 900000ms");
+    page.duration = sample;
+    await poll(); times("15m 00s");
+    assert(drawer.querySelector("#quiet .bg-rose-500"), "stale feed sample cannot reset quiet age");
+    await onTaskMoved({ ...live, duration: { ...sample, number: 3, elapsed_ms: 900000, quiet_ms: 0 } });
+    assert(drawer.querySelector("#quiet").hidden, "same-signature card command evidence refreshes drawer quiet");
+    monotonic += 1000;
+    page = { ...page, duration: null, events: [{ type: "message", text: "hello", at: "1900-01-01T00:00:00Z" }] };
+    await poll(); refresh();
+    times("15m 01s");
+    assert(drawer.querySelector("#quiet").hidden, "feed display timestamps do not change command age");
+  } finally {
+    closeDrawer();
+    window.setInterval = interval;
+    Date.now = wall;
+  }
+}
+
 try {
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
-    drawerSelection, landSelection, landStaleReplies, words, vocabulary, waitingRows, usage]) {
+    drawerSelection, landSelection, landStaleReplies, words, vocabulary, waitingRows, usage, liveDurations]) {
     await test();
   }
   for (const dark of [false, true]) {
@@ -460,7 +532,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 12 browser contracts, both themes";
+  results.textContent = "PASS: 13 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;
