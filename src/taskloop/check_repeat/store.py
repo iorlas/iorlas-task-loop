@@ -102,6 +102,7 @@ class CheckRepeatStore(StoreConnection):
                 "tracker_root": source.tracker_root, "repo_id": repo_id, "slot": name,
                 "input_path": ref.path, "input_digest": ref.digest, "schema_version": 1,
                 "model": choices.model, "effort": choices.effort, "access_policy": encode_policy(choices.access),
+                "compaction_token_limit": choices.compaction_token_limit,
                 "harness": choices.harness, "provider": choices.provider, "deadline": deadline,
                 "number": row.number + 1, "seq": row.seq + 1, "previous_attempt_id": previous.attempt_id,
                 "repeat_reason": CheckRepeatReason.FAILED_CHECK.value, "repeat_listing": None,

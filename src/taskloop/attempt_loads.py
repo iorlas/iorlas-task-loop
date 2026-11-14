@@ -57,7 +57,8 @@ class RetainedInputs(BaseModel):
 
 def retained_on(con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | None:
     row = con.execute(
-        "SELECT repo_id,backlog,task_id,tracker_root,end_commit,input_path,input_digest,harness,provider,model,effort,access_policy "
+        "SELECT repo_id,backlog,task_id,tracker_root,end_commit,input_path,input_digest,harness,provider,model,effort,access_policy,"
+        "compaction_token_limit "
         "FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? AND step='implement'",
         astuple(key),
     ).fetchone()
@@ -66,7 +67,7 @@ def retained_on(con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | No
     return RetainedInputs(key=key, repo_id=as_text(row[0]), backlog=as_text(row[1]), task_id=as_text(row[2]),
                           tracker_root=as_text(row[3]), checked=as_text(row[4]),
                           input_ref=FileRef(as_text(row[5]), as_text(row[6])),
-                          setting=stored_setting(*row[7:12]))
+                          setting=stored_setting(*row[7:13]))
 
 
 def _counts(row: tuple[object, ...]) -> tuple[int | None, int | None, int | None] | None:
@@ -136,11 +137,11 @@ class AttemptLoads(AttemptReads):
         held = con.execute(
             "SELECT repo_id,generation,attempt_id FROM reservation WHERE slot=? AND repo_id=?", (row[3], row[2])
         ).fetchone()
-        if held != (row[2], key.reservation_generation, key.attempt_id) or row[30] is None:
+        if held != (row[2], key.reservation_generation, key.attempt_id) or row[31] is None:
             raise StoreRefused("stale_reservation")
         if not isinstance(row[9], (int, float)):
             raise StoreUnavailable("Malformed deadline")
-        start = as_nullable_text(row[31])
+        start = as_nullable_text(row[32])
         if (row[24] is None) != (start is None):  # a later attempt always starts where a captured one ended
             raise StoreUnavailable("Malformed previous attempt")
         admission = Admission(
@@ -148,9 +149,9 @@ class AttemptLoads(AttemptReads):
             TaskReference(TaskScope(as_text(row[0])), as_text(row[1])),
             RepoId(as_text(row[2])),
             as_text(row[3]),
-            as_text(row[30]),
+            as_text(row[31]),
             FileRef(as_text(row[4]), as_text(row[5])),
-            stored_setting(row[27], row[29], row[6], row[7], row[8]),
+            stored_setting(row[27], row[29], row[6], row[7], row[8], row[30]),
             float(row[9]),
             (as_int(row[10]), as_text(row[11]), as_text(row[12])),
             as_int(row[23]),

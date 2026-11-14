@@ -65,7 +65,7 @@ p.phase='captured' AND EXISTS (SELECT 1 FROM reservation r WHERE r.repo_id=p.rep
 AND EXISTS (SELECT 1 FROM execution e WHERE e.attempt_id=p.attempt_id AND e.answer_kind='valid' AND e.rc=0 AND e.timed_out=0
  AND e.effect IN ('commit','keep') AND e.session_state='complete')
 AND NOT EXISTS (SELECT 1 FROM verification v WHERE v.attempt_id=p.attempt_id),
-p.tracker_root,p.seq,p.slot_head,p.step,p.label,p.harness,p.provider
+p.tracker_root,p.seq,p.slot_head,p.step,p.label,p.harness,p.provider,p.compaction_token_limit
 FROM attempt p WHERE p.attempt_id=? AND p.dispatch_token=? AND p.generation=?"""
 
 
@@ -157,6 +157,7 @@ class ChainAdmission:
             "repeat_reason": request.reason, "repeat_listing": json.dumps(request.listing), "seq": as_count(row[13]) + 1,
             "slot_head": row[14], "step": row[15],
             "harness": row[17], "provider": row[18],
+            "compaction_token_limit": row[19],
             "after_commit": None, "label": row[16],  # a repeat starts at E, the chain's own
         })
         moved = con.execute(
@@ -351,6 +352,7 @@ class NextAdmission:
                     "schema_version": 1,
                     "model": request.setting.model,
                     "effort": request.setting.effort,
+                    "compaction_token_limit": request.setting.compaction_token_limit,
                     "access_policy": encode_policy(request.setting.access),
                     "deadline": request.deadline,
                     "number": 1,

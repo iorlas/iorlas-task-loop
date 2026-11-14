@@ -23,6 +23,7 @@ v21 (tl-8bh9.14.109): covering whole-task step counts for current-card reads.
 v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbox column.
 v21: durable preparation merges. Drain old entries before discarding an older database.
 v22: durable agent stop intents and signal-call reports. Drain old entries before discarding an older database.
+v27: captured per-attempt compaction threshold. Drain old entries before discarding an older database.
 """
 
 import sqlite3
@@ -46,7 +47,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=26,
+    version=27,
     name="factory",
     steps={},
     ddl=f"""
@@ -106,6 +107,8 @@ CREATE TABLE attempt (
  tracker_root TEXT NOT NULL CHECK(substr(tracker_root,1,1)='/'),
  repo_id TEXT NOT NULL, slot TEXT NOT NULL, input_path TEXT NOT NULL, input_digest TEXT NOT NULL,
  schema_version INTEGER NOT NULL CHECK(schema_version=1), model TEXT NOT NULL, effort TEXT NOT NULL,
+ compaction_token_limit INTEGER CHECK(compaction_token_limit IS NULL OR
+  (typeof(compaction_token_limit)='integer' AND compaction_token_limit>0)),
  access_policy TEXT NOT NULL CHECK(json_valid(access_policy)), deadline REAL NOT NULL, entry_pid INTEGER, entry_start TEXT, entry_boot TEXT,
  phase TEXT NOT NULL DEFAULT 'admitted' CHECK(phase IN ('admitted','dispatching','registered','captured')),
  rev INTEGER NOT NULL DEFAULT 0, worker_pid INTEGER, worker_pgid INTEGER, worker_start TEXT, worker_boot TEXT,
@@ -265,12 +268,13 @@ SLOT = "repo_id,name,path"
 RESERVATION = "slot,repo_id,generation,attempt_id"
 ATTEMPT_ADMITTED = (
     "attempt_id,dispatch_token,generation,step,adapter,backlog,task_id,tracker_root,repo_id,slot,input_path,input_digest,"
-    "schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,after_commit,label,harness,provider,source_checks_id"
+    "schema_version,model,effort,access_policy,deadline,number,previous_attempt_id,repeat_reason,repeat_listing,seq,slot_head,"
+    "after_commit,label,harness,provider,source_checks_id,compaction_token_limit"
 )
 ATTEMPT_LOADED = (
     "backlog,task_id,repo_id,slot,input_path,input_digest,model,effort,access_policy,deadline,entry_pid,entry_start,entry_boot,"
     "phase,rev,worker_pid,worker_pgid,worker_start,worker_boot,session_ref,session_conflict,base_commit,end_commit,"
-    "number,previous_attempt_id,step,after_commit,harness,source_checks_id,provider"
+    "number,previous_attempt_id,step,after_commit,harness,source_checks_id,provider,compaction_token_limit"
 )
 FACTS = (
     "rc,timed_out,stop,watch,work,stands,answered,reason,http_status,t_in,t_cached,t_out,"

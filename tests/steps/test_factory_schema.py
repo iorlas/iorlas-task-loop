@@ -12,7 +12,10 @@ from taskloop.factory_schema import SCHEMA
 from taskloop.factory_store import open_ro
 
 # Append a reviewed pin for each new version; never replace a version's existing digest.
-DDL_DIGESTS = {26: "728ea63362ce086f01b39e967b837e6875854238f49c3b073fddcdcba1666787"}
+DDL_DIGESTS = {
+    26: "728ea63362ce086f01b39e967b837e6875854238f49c3b073fddcdcba1666787",
+    27: "62ce0c0793427a8305ef420edd956d5adae7c832969b353265ad51d55a2ed2c0",
+}
 
 
 def assert_pinned_ddl(schema: Schema) -> None:
@@ -27,6 +30,19 @@ def test_ddl_change_without_a_version_bump_fails_the_guard() -> None:
     changed = replace(SCHEMA, ddl=SCHEMA.ddl.replace("CREATE TABLE merge_operation", "CREATE TABLE changed_merge_operation"))
     with pytest.raises(AssertionError, match="DDL requires a schema version bump"):
         assert_pinned_ddl(changed)
+
+
+@pytest.mark.parametrize("value,valid", [(None, True), (1, True), (100000, True), (0, False), (-1, False),
+                                        (0.5, False), ("invalid", False)])
+def test_attempt_compaction_storage_requires_a_positive_integer_or_null(
+    registered: sqlite3.Connection, value: object, valid: bool,
+) -> None:
+    if valid:
+        registered.execute("UPDATE attempt SET compaction_token_limit=?", (value,))
+        assert registered.execute("SELECT compaction_token_limit FROM attempt").fetchone() == (value,)
+    else:
+        with pytest.raises(sqlite3.IntegrityError):
+            registered.execute("UPDATE attempt SET compaction_token_limit=?", (value,))
 
 
 @pytest.mark.parametrize("missing", [None, "merge_operation", "drain_action"])
