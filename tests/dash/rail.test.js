@@ -206,6 +206,32 @@ async function drawerSelection() {
 }
 
 function words() {
+  for (const [code, expected] of [
+    ["needs_owner", "The agent needs your decision"],
+    ["failed:test:failed", "Checks failed: test"],
+    ["answer:schema_invalid", "The agent's answer was in the wrong format"],
+  ]) {
+    assert(say(code) === expected, `${code} exact label`);
+    const word = wordNode(el, code);
+    assert(word.textContent === expected && word.title === code, `${code} label and raw-code hover`);
+    const item = attempt("implement", 1, { state: "failed", summary: code });
+    const node = mount([item]);
+    const summary = node.querySelector(`button span[title="${code}"]`);
+    assert(summary?.textContent === expected, `${code} failed rail label and raw-code hover`);
+    const body = { result: { summary: code, checks: [] } };
+    const view = result(item, body, { key: "implement/1", opened: new Map() });
+    fixture.replaceChildren(view);
+    const conclusion = view.querySelector(`p[title="${code}"]`);
+    assert(conclusion?.textContent === expected, `${code} conclusion label and raw-code hover`);
+  }
+  const item = attempt("implement", 1, { state: "failed", summary: "needs_owner" });
+  const body = { result: { summary: "needs_owner", checks: [], answer: {
+    disposition: "needs_owner", text: '{"explanation":"Owner decision required"}', truncated: false,
+  } } };
+  const view = result(item, body, { key: "implement/1", opened: new Map() });
+  fixture.replaceChildren(view);
+  const disposition = view.querySelector('span[title="needs_owner"]');
+  assert(disposition?.textContent === "The agent needs your decision", "answer badge label and raw-code hover");
   for (const code of ["verification", "unsafe", "ignored", "uncommitted", "failed_check", "test:lint"]) assert(say(code) !== code, `${code} readable`);
   assert(say("unknown:new") === "unknown:new" && say("Owner changed scope") === "Owner changed scope", "unknown codes/prose preserved");
   assert(wordNode(el, "unsafe").title === "unsafe", "raw code hover retained");
