@@ -67,7 +67,7 @@ def test_released_harnesses_receive_typed_choices_and_writable_steps(tmp_path: P
 @pytest.mark.parametrize("sandbox", [CodexSandbox.WORKSPACE_WRITE, CodexSandbox.DANGER_FULL_ACCESS])
 @pytest.mark.parametrize("prepared", [False, True])
 @pytest.mark.parametrize("host_tmp", [None, "/host/scratch"], ids=["unset", "conflicting_host"])
-def test_codex_shell_gets_prepared_folders_under_both_policies(
+def test_codex_launch_limits_automatic_context_and_preserves_access(
     tmp_path: Path, sandbox: CodexSandbox, prepared: bool, host_tmp: str | None,
 ) -> None:
     files = EvidenceFiles(tmp_path)
@@ -83,6 +83,9 @@ def test_codex_shell_gets_prepared_folders_under_both_policies(
     try:
         argv = result.spec.argv
         settings = dict(item.split("=", 1) for index, item in enumerate(argv) if index and argv[index - 1] == "-c")
+        assert settings["skills.include_instructions"] == "false"
+        assert settings["features.multi_agent"] == "false"
+        assert settings["features.recommended_plugins"] == "false"
         prefix = "shell_environment_policy.set."
         shell_env = {key.removeprefix(prefix): json.loads(value) for key, value in settings.items() if key.startswith(prefix)}
         expected = {"TMPDIR": str(slot.parent / ".t" / "s1"),
