@@ -12,8 +12,10 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import astuple, dataclass
+from math import isfinite
 from typing import Final, Literal, override
 
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
@@ -32,7 +34,7 @@ SETUP_RUNS: Final = 2  # failed runs of one attempt before relaunches stop runni
 LIVE_AFTER: Final[tuple[CommandConclusion, ...]] = (CommandConclusion.LINGERING, CommandConclusion.TIMED_OUT)
 type ProcessSeen = Literal["gone", "alive", "unknown"]
 type SetupSeen = Callable[[OwnedProcess], ProcessSeen]  # a registered setup command and its group; another boot is gone
-COLUMNS: Final = "run,commit_sha,digest,command,pid,pgid,proc_start,boot,conclusion"
+COLUMNS: Final = "run,commit_sha,digest,command,pid,pgid,proc_start,boot,conclusion,started_at,ended_at"
 # The run's attempt is an agent attempt, a checks attempt or a land candidate (`setup_run` has no foreign key): an agent or
 # checks attempt `admitted`, or a candidate pending, holding its reservation at the key's generation. Bound with the key
 # three times.
@@ -53,12 +55,49 @@ class SetupRow:
     command: int
     process: OwnedProcess | None
     conclusion: CommandConclusion | None
+    started_at: float
+    ended_at: float | None
+
+    @property
+    def duration_seconds(self) -> float | None:
+        return duration_seconds(self.started_at, self.ended_at, self.conclusion)
 
     @property
     def unsettled(self) -> OwnedProcess | None:
         """The registered command whose group must be proven empty before the slot is reset, set up again or released:
         the run's while it is unfinished or concluded `LIVE_AFTER`; None when nothing ever registered."""
         return self.process if self.conclusion is None or self.conclusion in LIVE_AFTER else None
+
+
+def duration_seconds(started_at: float, ended_at: float | None, conclusion: CommandConclusion | None) -> float | None:
+    """Only a passed run with a finite, nonnegative recorded difference is a duration sample."""
+    if conclusion is not CommandConclusion.PASSED or ended_at is None:
+        return None
+    elapsed = ended_at - started_at
+    return elapsed if isfinite(elapsed) and elapsed >= 0 else None
+
+
+class SetupSample(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
+
+    attempt_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    repo_id: str = Field(min_length=1)
+    run: int = Field(ge=1)
+    started_at: float
+    ended_at: float | None
+    conclusion: CommandConclusion | None
+
+    @computed_field
+    @property
+    def duration_seconds(self) -> float | None:
+        return duration_seconds(self.started_at, self.ended_at, self.conclusion)
+
+
+def _time(value: object) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    raise StoreUnavailable("Malformed setup timestamp")
 
 
 def _conclusion(value: object) -> CommandConclusion | None:
@@ -74,7 +113,8 @@ def _conclusion(value: object) -> CommandConclusion | None:
 def _row(row: tuple[object, ...]) -> SetupRow:
     pid, pgid, start, boot = as_nullable_int(row[4]), as_nullable_int(row[5]), as_nullable_text(row[6]), as_nullable_text(row[7])
     process = None if pid is None or pgid is None or start is None or boot is None else OwnedProcess(pid, pgid, start, boot)
-    return SetupRow(as_int(row[0]), as_text(row[1]), as_text(row[2]), as_int(row[3]), process, _conclusion(row[8]))
+    return SetupRow(as_int(row[0]), as_text(row[1]), as_text(row[2]), as_int(row[3]), process, _conclusion(row[8]),
+                    _time(row[9]), None if row[10] is None else _time(row[10]))
 
 
 def latest_of(con: sqlite3.Connection, attempt_id: str) -> SetupRow | None:
@@ -115,6 +155,19 @@ class SetupStore(AttemptReads):
     def latest(self, key: AttemptKey) -> SetupRow | None:
         with self._connection() as con:
             return latest_of(con, key.attempt_id)
+
+    def samples(self, backlog: str) -> tuple[SetupSample, ...]:
+        """Ten most recent implement owners, each represented by its highest run, including unusable samples."""
+        with self._connection() as con:
+            rows = con.execute("""SELECT a.attempt_id,a.task_id,a.repo_id,s.run,s.started_at,s.ended_at,s.conclusion
+                FROM attempt a JOIN setup_run s ON s.attempt_id=a.attempt_id
+                WHERE a.backlog=? AND a.step='implement' AND a.previous_attempt_id IS NULL
+                AND s.run=(SELECT max(r.run) FROM setup_run r WHERE r.attempt_id=a.attempt_id)
+                ORDER BY s.started_at DESC,a.attempt_id ASC LIMIT 10""", (backlog,)).fetchall()
+            return tuple(SetupSample(attempt_id=as_text(row[0]), task_id=as_text(row[1]), repo_id=as_text(row[2]),
+                                     run=as_int(row[3]), started_at=_time(row[4]),
+                                     ended_at=None if row[5] is None else _time(row[5]), conclusion=_conclusion(row[6]))
+                         for row in rows)
 
     def failures(self, key: AttemptKey) -> int:
         """Runs of this attempt that ended as the setup's own failure (`FAILURES`)."""

@@ -23,7 +23,16 @@ from taskloop.land_summary import one_line
 
 
 def _when(at: float) -> str:
-    return f"{datetime.fromtimestamp(at, UTC):%Y-%m-%d %H:%M:%S} UTC"
+    try:
+        return f"{datetime.fromtimestamp(at, UTC):%Y-%m-%d %H:%M:%S} UTC"
+    except (ValueError, OverflowError, OSError):
+        return str(at)
+
+
+def setup_times(started_at: float, ended_at: float | None, duration: float | None) -> str:
+    end = "unfinished" if ended_at is None else _when(ended_at)
+    elapsed = "unavailable (no usable recorded duration)" if duration is None else f"{duration:g} s"
+    return f"started {_when(started_at)}; ended {end}; duration {elapsed}"
 
 
 def _common(each: AttemptView) -> tuple[list[str], str, list[str]]:
@@ -74,7 +83,8 @@ def setup_line(found: SetupShown | None) -> str:
     if found is None:
         return "Setup: none"
     row, whose = found.row, "" if found.attempt_id is None else f" (attempt {found.attempt_id}'s, which this repeat keeps)"
-    return f"Setup: run {row.run} {encode(row.conclusion) or 'unfinished'} at {row.commit}{whose}; log {found.log}"
+    return (f"Setup: run {row.run} {encode(row.conclusion) or 'unfinished'} at {row.commit}{whose}; log {found.log}; "
+            f"{setup_times(row.started_at, row.ended_at, row.duration_seconds)}")
 
 
 def check_line(row: ResultRow, log: Path | None, required: Required, prefix: str = "Check") -> str:

@@ -29,13 +29,16 @@ from taskloop.operations import (
     VerifiedTask,
 )
 from taskloop.publish import publish_word
+from taskloop.setup_timing import SetupTimingReport
 from taskloop.slot_release import Released, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
 from taskloop.task_status import task_status, words
 
 # every command result of the config, slot and step commands: rendered by `step_render.human`, shaped here, exit-coded by
 # `exit_codes`
-type StepResult = Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed
+type StepResult = (
+    Started | Shown | Listed | VerifiedTask | ReleasedTask | PublishedTask | Adoption | Loaded | Round | Ended | Failed | SetupTimingReport
+)
 type Result = StepResult | Landed | Withdrawn | LandSummary
 
 
@@ -158,11 +161,14 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
         case Shown():
             setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": encode(result.setup.row.conclusion),
                                                         "commit": result.setup.row.commit, "log": str(result.setup.log),
-                                                        "attempt_id": result.setup.attempt_id}
+                                                        "attempt_id": result.setup.attempt_id,
+                                                        "started_at": result.setup.row.started_at,
+                                                        "ended_at": result.setup.row.ended_at,
+                                                        "duration_seconds": result.setup.row.duration_seconds}
             return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log),
                                                    "events_path": str(result.events_path), "setup": setup,
                                                    "failed_checks": _checks_data(result.failed)}
-        case Listed() | Round() | Ended():
+        case Listed() | Round() | Ended() | SetupTimingReport():
             return _rows_data(result)
         case VerifiedTask() | ReleasedTask() | PublishedTask():
             return _released_data(result)
@@ -175,9 +181,11 @@ def rounds_data(backlog: str, every: int, log: str, label: str, max_running: int
     return {"status": "rounds", "backlog": backlog, "every": every, "log": log, "label": label, "max_running": max_running}
 
 
-def _rows_data(result: Listed | Round | Ended) -> dict[str, object]:
+def _rows_data(result: Listed | Round | Ended | SetupTimingReport) -> dict[str, object]:
     """`tl step list`: every current attempt; `tl step next`: each move in the order performed and `stopped`, the word that
     ended admission early, or null; `tl step rounds`: why the rounds ended."""
+    if isinstance(result, SetupTimingReport):
+        return result.model_dump(mode="json")
     if isinstance(result, Listed):
         return {"attempts": [_show_data(each) for each in result.attempts]}
     if isinstance(result, Ended):
