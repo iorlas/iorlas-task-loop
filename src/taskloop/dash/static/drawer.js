@@ -109,8 +109,8 @@ function follow() {
       const page = await source.feed(mine.id, a.step, a.n, a.feed_cursor ?? "0:0"); // a file not there yet follows from its start
       if (open !== mine || attemptOf() !== a) return;
       receiveDuration(page.duration);
-      const changed = page.duration && page.duration.execution !== a.duration?.execution;
-      a.duration = page.duration ?? a.duration;
+      const changed = page.duration?.execution !== a.duration?.execution || page.duration?.frozen !== a.duration?.frozen;
+      a.duration = page.duration;
       $("drawer").querySelectorAll("[data-duration]").forEach(tick);
       a.feedError = null;
       setNote(a);
@@ -331,14 +331,16 @@ function pane() {
     : `${nameOf(a.step).emoji} ${nameOf(a.step).label}, attempt ${a.n}`;
   top.append(el("h3", "text-sm font-semibold", title), tag(st.label, { dotCls: st.dot, cls: st.text }));
   const timing = a.state === "running" ? "still running" : a.ended_at && a.started_at ? `ran ${lasted(a)}` : "end not recorded";
-  if (a.state === "running" && a.duration && !a.duration.frozen) {
-    top.append(elapsedSpan(a.duration, "text-xs text-slate-500 dark:text-slate-400", "", " in step, still running"));
+  if (["plan", "implement"].includes(a.step)) {
+    const live = a.state === "running" && !a.duration?.frozen;
+    top.append(elapsedSpan(a.duration, "text-xs text-slate-500 dark:text-slate-400", live ? "" : "ran ",
+      live ? " in step, still running" : ""));
   } else if (a.step !== VERIFY.id) {
     top.append(el("span", "text-xs text-slate-500 dark:text-slate-400",
       `${a.started_at ? `started ${ago(a.started_at)}, ` : ""}${timing}`));
   }
   if (a.usage) top.append(usageNode(a.usage));
-  if (a.state === "running" && ["plan", "implement"].includes(a.step) && a.duration && !a.duration.frozen) {
+  if (a.state === "running" && ["plan", "implement"].includes(a.step) && !a.duration?.frozen) {
     const quiet = quietSpan(a.duration);
     quiet.id = "quiet";
     top.append(quiet);
@@ -365,9 +367,10 @@ export async function onTaskMoved(task) {
   receiveDuration(task.duration);
   if (signature(task) === open.sig) {
     const a = open.detail.attempts.at(-1);
-    if (a?.state === "running" && a.step === task.column && task.duration && !a.duration) {
+    if (a?.state === "running" && a.step === task.column && a.n === task.attempt) {
+      const changed = a.duration?.execution !== task.duration?.execution || a.duration?.frozen !== task.duration?.frozen;
       a.duration = task.duration;
-      render();
+      if (changed) render();
     }
     $("drawer").querySelectorAll("[data-duration],[data-quiet]").forEach(tick);
     return;

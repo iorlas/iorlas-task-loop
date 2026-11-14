@@ -85,3 +85,63 @@ test("sealed input does not advance or accept a later live receipt", (t) => {
   assert.equal(elapsedDuration("sealed"), 3000);
   assert.equal(quietDuration("sealed"), null);
 });
+
+test("final elapsed replaces extrapolation and survives ticks, reordering and a fresh module", async (t) => {
+  let now = 0;
+  t.mock.method(performance, "now", () => now);
+  const live = sample("final");
+  receiveDuration(live);
+  now = 900000;
+  assert.equal(elapsedDuration(live.execution), 1019999);
+  const final = { ...live, number: 2, elapsed_ms: 3000, quiet_ms: null, frozen: true };
+  receiveDuration(final);
+  for (const receipt of [live, final, { ...live, number: 3 }]) {
+    now += 86400000;
+    receiveDuration(receipt);
+    assert.equal(elapsedDuration(final.execution), 3000);
+    assert.equal(quietDuration(final.execution), null);
+  }
+  const fresh = await import("../../src/taskloop/dash/static/duration.js?terminal-refresh");
+  fresh.receiveDuration(final);
+  now += 86400000;
+  assert.equal(fresh.elapsedDuration(final.execution), 3000);
+});
+
+test("unknown presentation is explicit and neutral, while zero and frozen elapsed remain known", (t) => {
+  t.mock.method(performance, "now", () => 0);
+  const card = { dataset: {} };
+  const previous = globalThis.document;
+  globalThis.document = { createElement: () => ({
+    dataset: {}, closest: () => card,
+    replaceChildren(...children) { this.children = children; this.textContent = children.join(""); },
+  }) };
+  try {
+    const first = sample("availability", { elapsed_ms: 900000, quiet_ms: 900000 });
+    receiveDuration(first);
+    const quiet = quietSpan(first);
+    assert.equal(card.dataset.quietLevel, "long");
+    receiveDuration({ ...first, number: 2, quiet_ms: null });
+    tick(quiet);
+    assert.equal(quiet.textContent, "Last activity unknown");
+    assert.equal(quiet.hidden, false);
+    assert.equal(quiet.children.length, 1);
+    assert.equal(/amber|rose/.test(quiet.className), false);
+    assert.equal(card.dataset.quietLevel, "");
+    const unknown = elapsedSpan(null, "", "ran ", " in step");
+    assert.equal(unknown.textContent, "Unknown duration");
+    assert.equal(unknown.dataset.duration, undefined);
+    assert.equal(quietSpan(null).textContent, "Last activity unknown");
+    receiveDuration({ ...first, number: 3, quiet_ms: 900000 });
+    tick(quiet);
+    assert.equal(card.dataset.quietLevel, "long");
+    const final = sample("zero-final", { frozen: true, elapsed_ms: 0, quiet_ms: null });
+    receiveDuration(final);
+    const elapsed = elapsedSpan(final, "", "ran ");
+    tick(elapsed);
+    assert.equal(elapsed.textContent, "ran 0ms");
+    assert.equal(quietSpan(final).hidden, true);
+  } finally {
+    if (previous === undefined) delete globalThis.document;
+    else globalThis.document = previous;
+  }
+});

@@ -60,7 +60,12 @@ window.EventSource = class extends EventTarget {
     stream = this;
   }
 };
-const send = (message) => stream.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+const send = (message) => {
+  if (message.kind === "task") {
+    snapshot.tasks = [...snapshot.tasks.filter((t) => t.id !== message.task.id), message.task];
+  }
+  stream.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+};
 const node = (id) => document.querySelector(`article[data-id="${id}"]`);
 const ids = (parent) => [...parent.querySelectorAll("article")].map((n) => n.dataset.id).join(",");
 function summary(asks, held) {
@@ -219,6 +224,34 @@ async function liveDurations() {
   assert(quiet().hidden, "stale command evidence cannot restore severity");
   publish({ ...sample, execution: "board-next", elapsed_ms: 3000, quiet_ms: 0 });
   assert(elapsed() === "3.0s in step" && quiet().hidden, "new execution has its own receipt base");
+  publish({ ...sample, execution: "board-next", number: 2, elapsed_ms: 900000, quiet_ms: 900000 });
+  assert(node(live.id).dataset.quietLevel === "long", "warning before unavailable evidence");
+  publish(null);
+  send({ kind: "task", task: { ...live, duration: null, step_started_at: "1900-01-01T00:00:00Z" } });
+  assert(!node(live.id).querySelector("[data-duration]"), "null stream receipt removes cached elapsed binding");
+  assert(node(live.id).textContent.includes("Unknown duration"), "null stream receipt has explicit unknown elapsed");
+  assert(quiet().textContent === "Last activity unknown" && !quiet().querySelector("span"), "unknown quiet has no dot");
+  assert(!node(live.id).dataset.quietLevel && !/amber|rose/.test(quiet().className), "unknown quiet clears severity");
+  await resync([...mixed, { ...live, duration: null }]);
+  advance(86400000);
+  assert(node(live.id).textContent.includes("Unknown duration"), "null snapshot stays unknown across ticks");
+  const restored = { ...sample, execution: "board-next", number: 3, elapsed_ms: 1000000, quiet_ms: 900000 };
+  publish(restored);
+  assert(node(live.id).dataset.quietLevel === "long", "valid receipt restores warning");
+  await resync([...mixed, { ...live, duration: null }]);
+  assert(!node(live.id).dataset.quietLevel && quiet().textContent === "Last activity unknown", "null snapshot clears warning");
+  publish({ ...restored, number: 4, quiet_ms: null });
+  assert(quiet().textContent === "Last activity unknown" && !node(live.id).dataset.quietLevel, "unavailable quiet stays neutral");
+  const final = { ...restored, number: 5, elapsed_ms: 3000, quiet_ms: null, frozen: true };
+  publish(final);
+  assert(elapsed() === "3.0s in step" && !quiet(), "smaller final value replaces live extrapolation without quiet");
+  advance(86400000);
+  publish(final);
+  publish({ ...restored, number: 6 });
+  assert(elapsed() === "3.0s in step" && !node(live.id).dataset.quietLevel, "ticks and later live receipt cannot change final elapsed");
+  await resync([...mixed, { ...live, duration: final }]);
+  document.getElementById("view-columns").click();
+  assert(elapsed() === "3.0s in step" && !quiet(), "snapshot and redraw retain exact frozen duration");
   now = savedWall;
   await resync(mixed);
 }

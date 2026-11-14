@@ -47,7 +47,7 @@ function healthyRows() {
   assert(document.activeElement === marks(node)[1], "mark independently focusable");
   marks(node)[1].click();
   assert(clicks[0].join("/") === "verification/38", "verification number need not match agent attempt");
-  button(node, "Plan—").click();
+  button(node, "PlanUnknown duration").click();
   assert(clicks[1].join("/") === "plan/1", "step button selects its own result");
 }
 
@@ -101,7 +101,7 @@ function gaps() {
     assert(waiting.textContent.includes(status_note), "Land uses the server's policy explanation");
     assert(!waiting.textContent.includes("next round"), "Land makes no unconditional timing promise");
   }
-  assert(lasted(attempt("plan", 1, { started_at: "bad", ended_at: end })) === "—", "invalid attempt timing omitted");
+  assert(lasted(attempt("plan", 1, { started_at: "bad", ended_at: end })) === "Unknown duration", "missing evidence is explicit");
 }
 
 const repeat = (step, n, extra = {}) => attempt(step, n, { after: "repeat", repeat_of: n - 1, reason: "unsafe", ...extra });
@@ -244,7 +244,7 @@ async function landSelection() {
   assert(drawer.textContent.includes("Awaiting your delivery decision"), "waiting notes survive Land selection");
   button(drawer, "Task").click(); button(drawer, "Steps 5").click();
   assert(landButton(drawer).getAttribute("aria-pressed") === "true", "selection survives task view navigation");
-  button(drawer, "Implement—").click(); await tick();
+  button(drawer, "ImplementUnknown duration").click(); await tick();
   assert(drawer.querySelector("section h3").textContent.includes("Implement, attempt 1"), "Land returns to attempt navigation");
   landButton(drawer).click(); await tick();
   assert(calls === 1, "navigation reuses the selected summary");
@@ -440,7 +440,7 @@ async function usage() {
   await openDrawer(task.id); await tick();
   const drawer = document.getElementById("drawer");
   const header = drawer.querySelector("section > div");
-  assert(header.textContent.includes(text) && header.textContent.includes("end not recorded"), "attempt counts beside timing");
+  assert(header.textContent.includes(text) && header.textContent.includes("Unknown duration"), "attempt counts beside timing");
   const usage = header.querySelector("span[title*='one model request and its reply']");
   assert(usage, "reported turns explained in hover");
   assert(usage.title.includes("Historical values") && usage.title.includes("falls back"), "reporting limitations explained");
@@ -470,13 +470,14 @@ async function liveDurations() {
     detail: async () => { reads++; return { task: live, attempts: structuredClone(list), usage: {} }; },
     tracker: async () => tracked,
     feed: async () => structuredClone(page),
-    body: async () => ({ input: "Input", result: { summary: "pending", checks: [] } }),
+    body: async () => ({ input: "Input", added: [], result: { summary: "pending", checks: [] } }),
   }, new Map([[task.id, live]]));
   const drawer = document.getElementById("drawer");
   const refresh = () => drawer.querySelectorAll("[data-duration],[data-quiet]").forEach(updateTime);
   const times = (text) => {
     const nodes = [...drawer.querySelectorAll("[data-duration]")];
-    assert(nodes.length === 2 && nodes.every((n) => n.textContent.startsWith(text)), `header and rail show ${text}`);
+    assert(nodes.length === 2 && nodes.every((n) => n.textContent.startsWith(text) || n.textContent === `ran ${text}`),
+      `header and rail show ${text}: ${nodes.map((n) => n.textContent).join("; ")}`);
   };
   try {
     await openDrawer(task.id); await tick();
@@ -510,8 +511,31 @@ async function liveDurations() {
     monotonic += 1000;
     page = { ...page, duration: null, events: [{ type: "message", text: "hello", at: "1900-01-01T00:00:00Z" }] };
     await poll(); refresh();
+    assert(!drawer.querySelector("[data-duration]"), "null feed clears cached execution bindings");
+    assert(drawer.textContent.includes("Unknown duration"), "null feed makes elapsed unknown");
+    assert(drawer.querySelector("#quiet").textContent === "Last activity unknown", "null feed makes quiet unknown");
+    await onTaskMoved({ ...live, duration: null });
+    assert(!drawer.querySelector("[data-duration]"), "same-signature null card stays unknown");
+    await onTaskMoved({ ...live, duration: { ...sample, number: 4, elapsed_ms: 901000, quiet_ms: null } });
     times("15m 01s");
-    assert(drawer.querySelector("#quiet").hidden, "feed display timestamps do not change command age");
+    assert(drawer.querySelector("#quiet").textContent === "Last activity unknown", "known elapsed allows unknown quiet");
+    page.duration = { ...sample, number: 5, elapsed_ms: 3000, quiet_ms: null, frozen: true };
+    await poll();
+    times("3.0s");
+    assert(!drawer.querySelector("#quiet"), "frozen feed suppresses active quiet indicator");
+    monotonic += 86400000; refresh();
+    times("3.0s");
+    button(drawer, "Prompt").click(); await tick();
+    times("3.0s");
+    for (const state of ["succeeded", "failed"]) {
+      list[0] = { ...list[0], state, started_at: null, ended_at: null, duration: page.duration };
+      closeDrawer();
+      await openDrawer(task.id); await tick();
+      times("3.0s");
+      assert(drawer.querySelector("section > div").textContent.includes("ran 3.0s"), "terminal header uses final evidence");
+      assert(!drawer.querySelector("#quiet"), "terminal attempt has no quiet warning");
+      monotonic += 86400000; refresh(); times("3.0s");
+    }
   } finally {
     closeDrawer();
     window.setInterval = interval;

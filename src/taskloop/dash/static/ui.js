@@ -126,20 +126,23 @@ export function waitingNote(t) {
 const QUIET_AFTER_S = 120;
 const QUIET_LONG_S = 900;
 function tickQuiet(node) {
-  const ms = quietDuration(node.dataset.quiet);
+  const ms = node.dataset.quiet ? quietDuration(node.dataset.quiet) : null;
   const s = ms === null ? 0 : ms / 1000;
   const level = s >= QUIET_LONG_S ? "long" : s >= QUIET_AFTER_S ? "slow" : "";
-  node.hidden = !level;
-  node.replaceChildren(dot(level === "long" ? "bg-rose-500" : "bg-amber-500"), `Last activity ${fmtDur(s * 1000)} ago`);
-  node.className = `${node.closest("article") ? "mt-2 w-fit" : ""} inline-flex items-center gap-1.5 text-[11px] font-medium ${level === "long" ? "text-rose-700 dark:text-rose-300" : "text-amber-700 dark:text-amber-300"}`;
+  node.hidden = ms !== null && !level;
+  node.replaceChildren(...(level ? [dot(level === "long" ? "bg-rose-500" : "bg-amber-500")] : []),
+    ms === null ? "Last activity unknown" : `Last activity ${fmtDur(s * 1000)} ago`);
+  const color = ms === null ? "text-slate-500 dark:text-slate-400"
+    : level === "long" ? "text-rose-700 dark:text-rose-300" : "text-amber-700 dark:text-amber-300";
+  node.className = `${node.closest("article") ? "mt-2 w-fit" : ""} inline-flex items-center gap-1.5 text-[11px] font-medium ${color}`;
   const card = node.closest("article");
   if (card) card.dataset.quietLevel = level;
 }
 export function tick(node) {
-  if (node.dataset.quiet) return tickQuiet(node);
+  if ("quiet" in node.dataset) return tickQuiet(node);
   if (node.dataset.duration) {
     const ms = elapsedDuration(node.dataset.duration);
-    node.textContent = `${node.dataset.prefix || ""}${ms === null ? "—" : fmtDur(ms)}${node.dataset.suffix || ""}`;
+    node.textContent = ms === null ? "Unknown duration" : `${node.dataset.prefix || ""}${fmtDur(ms)}${node.dataset.suffix || ""}`;
     return;
   }
   if (node.dataset.waitingSince) {
@@ -148,17 +151,27 @@ export function tick(node) {
   }
   node.textContent = `${node.dataset.prefix || ""}${since(node.dataset.since)}${node.dataset.suffix || ""}`;
 }
+/** @param {import("./duration.js").Duration|null|undefined} duration */
 export function elapsedSpan(duration, cls = "", prefix = "", suffix = "") {
   const node = el("span", cls);
+  if (!duration) {
+    node.textContent = "Unknown duration";
+    return node;
+  }
   node.dataset.duration = duration.execution;
   node.dataset.prefix = prefix;
   node.dataset.suffix = suffix;
   tick(node);
   return node;
 }
+/** @param {import("./duration.js").Duration|null|undefined} duration */
 export function quietSpan(duration) {
   const node = el("span");
-  node.dataset.quiet = duration.execution;
+  if (duration?.frozen) {
+    node.hidden = true;
+    return node;
+  }
+  node.dataset.quiet = duration?.execution ?? "";
   tick(node);
   return node;
 }

@@ -1,7 +1,7 @@
 // The Lines tab of one attempt: the agent's latest actions as a grid, kept where the person scrolled it.
 // Shapes: docs/design/dashboard-ui.md (*Live event*).
 
-import { $, FEED_LIMIT, STATE, clock, el, fmtDur, stepInfo, tick } from "./ui.js";
+import { $, FEED_LIMIT, STATE, clock, el, fmtDur, quietSpan, stepInfo, tick } from "./ui.js";
 
 const offset = (e, a) => (a.started_at ? clock(Date.parse(e.at) - Date.parse(a.started_at)) : "");
 
@@ -47,9 +47,10 @@ export function setNote(a) {
 // Feed display timestamps never establish the attempt's quiet age.
 export function touchQuiet(a) {
   const node = $("quiet");
-  if (!node || !a.duration) return;
-  node.dataset.quiet = a.duration.execution;
-  tick(node);
+  if (!node) return;
+  const quiet = quietSpan(a.duration);
+  quiet.id = node.id;
+  node.replaceWith(quiet);
 }
 
 // One row: offset, kind emoji, content, duration. A faint "paused 33s" row sits above a line that came after a pause.
