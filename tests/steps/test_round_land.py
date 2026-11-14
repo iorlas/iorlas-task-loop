@@ -128,12 +128,13 @@ def test_a_conflict_comment_says_what_to_do_with_the_old_branch(rig: Checking) -
     assert "conflict with it" in text and "set the task's old branch aside" in text and "starts again on the current `main`" in text
 
 
-def test_an_unknown_is_tried_again_next_round_and_never_holds(rig: Checking) -> None:
+@pytest.mark.parametrize("reason", ["remote", "running", "unknown", "no_slot"])
+def test_an_unknown_is_tried_again_next_round_and_never_holds(rig: Checking, reason: str) -> None:
     passed(rig)
-    lands = Lands(LandMode.AUTO, Failed("unavailable", "remote"), Failed("unavailable", "remote"), "pushed")
+    lands = Lands(LandMode.AUTO, Failed("unavailable", reason), Failed("unavailable", reason), "pushed")
     rig.landing = lands.landing()
-    assert rig.round(rig.last.written) == [LAND_LINE, ("tl-1", "check", "land", "unavailable:remote")]
-    assert rig.round(rig.last.written) == [LAND_LINE, ("tl-1", "check", "land", "unavailable:remote")]
+    assert rig.round(rig.last.written) == [LAND_LINE, ("tl-1", "check", "land", f"unavailable:{reason}")]
+    assert rig.round(rig.last.written) == [LAND_LINE, ("tl-1", "check", "land", f"unavailable:{reason}")]
     assert rig.round(rig.last.written) == [LAND_LINE, ("tl-1", "check", "land", "pushed")]
     assert len(lands.requests) == 3 and rig.tracker.holds == []
 

@@ -152,8 +152,9 @@ class ConflictStore(StoreConnection):
             if inputs is None or not request.matches(inputs) or inputs != proposed.inputs:
                 raise AdmissionRefused(Outcome.SOURCE)
             checked = con.execute(
-                "SELECT after_attempt_id,target_commit FROM checks_attempt "
-                "WHERE attempt_id=? AND dispatch_token=? AND generation=?", astuple(request.checks),
+                "SELECT c.after_attempt_id,a.end_commit FROM checks_attempt c "
+                "JOIN attempt a ON a.attempt_id=c.after_attempt_id "
+                "WHERE c.attempt_id=? AND c.dispatch_token=? AND c.generation=?", astuple(request.checks),
             ).fetchone()
             if checked != (request.source.attempt_id, request.checked):
                 raise AdmissionRefused(Outcome.SOURCE)

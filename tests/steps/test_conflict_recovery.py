@@ -94,10 +94,10 @@ def test_the_guide_names_real_commands_and_an_aside_no_earlier_recovery_used() -
     assert "tl step release tl-1 --abandon" in first and "tl step start tl-1" in first
 
 
-def test_a_task_whose_x_conflicts_with_a_moved_main_is_restarted_abandoned_and_lands(b: LandBench) -> None:
+def test_manual_recovery_after_a_read_only_conflict_is_restarted_abandoned_and_lands(b: LandBench) -> None:
     b.advance({"src/x.py": "X = 2\n"})
-    found = b.land()
-    assert isinstance(found, Failed) and found.word == "refused:conflict" and "old/tl-1-" + b.x[:12] in found.detail
+    found = b.land(no_change=True)
+    assert isinstance(found, Failed) and found.word == "refused:conflict" and b.conflict_runs == []
     x2 = recover(b, 2, b.x, {"src/x.py": "X = 2\nY = 1\n"})
     landed = b.land()
     assert isinstance(landed, Landed) and b.files_of(b.origin_main())["src/x.py"] == "X = 2\nY = 1\n"
@@ -108,8 +108,8 @@ def test_a_second_conflict_has_a_working_recovery_with_its_own_aside_name(b: Lan
     b.advance({"src/x.py": "X = 2\n"})
     x2 = recover(b, 2, b.x, {"src/x.py": "X = 2\nY = 1\n"})
     b.advance({"src/x.py": "X = 3\n"}, "main moves again")
-    again = b.land()
-    assert isinstance(again, Failed) and again.word == "refused:conflict" and "old/tl-1-" + x2[:12] in again.detail
+    again = b.land(no_change=True)
+    assert isinstance(again, Failed) and again.word == "refused:conflict" and b.conflict_runs == []
     recover(b, 3, x2, {"src/x.py": "X = 3\nZ = 1\n"})
     assert isinstance(b.land(), Landed)
     assert {name for name, _sha in b.repo.branches("old/")} == {f"old/tl-1-{b.x[:12]}", f"old/tl-1-{x2[:12]}"}

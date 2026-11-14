@@ -27,7 +27,8 @@ def census() -> tuple[set[tuple[str, str]], set[tuple[str, str, str]]]:
             if reason is None:
                 continue
             if isinstance(reason, ast.Constant) and isinstance(reason.value, str):
-                literals.add(("land" if path.name.startswith("land_") or path.name == "land.py" else "step", reason.value))
+                context = "land" if path.name.startswith("land_") or path.name == "land.py" or "land_conflict" in path.parts else "step"
+                literals.add((context, reason.value))
             else:
                 dynamic.add((str(path.relative_to(ROOT)), node.func.id, ast.unparse(reason)))
     return literals, dynamic
@@ -92,6 +93,8 @@ REVIEWED_DYNAMIC = {
     ('land_check.py', 'Failed', 'refused_by.reason'),
     ('land_check.py', 'Failed', 'result.reason'),
     ('land_close.py', '_refused', 'row'),
+    ('land_conflict/handoff.py', 'Failed', "outcome.value if kind == 'unavailable' else 'conflict'"),
+    ('land_conflict/handoff.py', 'Failed', 'result.reason.value'),
     ('land_summary.py', 'Failed', "'profile' if kind == 'refused' else 'git'"),
     ('land_target.py', 'Failed', 'found.reason'),
     ('launch.py', 'LaunchRefused', 'Reason.DRAINING'),

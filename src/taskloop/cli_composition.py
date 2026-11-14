@@ -4,7 +4,6 @@ slot openers over `composition`'s real wiring. The attempt entry process never i
 import os
 import sqlite3
 import sys
-import threading
 import time
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
@@ -50,11 +49,11 @@ from taskloop.ids import NativeIds
 from taskloop.interrupts import Interrupts, installed
 from taskloop.land import How, Landed, LandRequest, land
 from taskloop.land_check import LandPorts
+from taskloop.land_conflict.composition import land_ports
 from taskloop.land_mode import known_slot_mode, land_mode
-from taskloop.land_store import LandStore
 from taskloop.machine_config import ConfigRefused, Flags, Loaded, config_file, resolve
 from taskloop.operations import Adoption, ChecksPorts, Ended, Failed, Quiet, Round, StartPorts, require_database
-from taskloop.owned_processes import current_boot, entry_seen, setup_seen, this_process, worker_gone
+from taskloop.owned_processes import current_boot, entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
 from taskloop.repeat import StepRepeat
 from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
@@ -62,11 +61,11 @@ from taskloop.round_land import Landing
 from taskloop.rounds import RoundsPorts, inputs
 from taskloop.rounds_lock import RoundsLockUnavailable, RoundsRunning, hold
 from taskloop.slot_files import RealSlotFiles
-from taskloop.slot_lock import landing, probe, refused, repeating
+from taskloop.slot_lock import probe, refused, repeating
 from taskloop.slot_release import SlotRelease
 from taskloop.slots import SlotGit
 from taskloop.task import TaskInspectionError
-from taskloop.tracker_client import inspect_tracker_task, tracker_claims, tracker_holds, tracker_reads
+from taskloop.tracker_client import inspect_tracker_task, tracker_holds, tracker_reads
 from taskloop.verifier import Verifier
 
 
@@ -381,10 +380,7 @@ def open_land(database: Path, artifacts: Path, views: GitViews, store: Store | N
         registration = registration if registration is not None else Store(SCHEMA)
         try:
             work = open_checking(database, artifacts, views, store, registration)
-            profiles = partial(GitProfileFiles, repos=views.remotes)
-            claims = tracker_claims()
-            yield LandPorts(work, LandStore(work.store.connect, work.store.begin), views.remotes, profiles, inspect_tracker_task,
-                            claims.heartbeat_for, threading.Event, this_process, probe, landing, os.environ, claims.close, ids=NativeIds())
+            yield land_ports(work, views)
         finally:
             if owns_registration:
                 registration.close_shared()

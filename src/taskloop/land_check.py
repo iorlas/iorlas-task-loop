@@ -34,6 +34,7 @@ from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import Checking
 from taskloop.factory_schema import LANDING
 from taskloop.ids import Ids
+from taskloop.land_conflict.handoff import Handoff
 from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, insert
 from taskloop.operations import Failed
 from taskloop.profile import ProfileFiles
@@ -69,6 +70,7 @@ class LandPorts:
     custody: Callable[[str, str], AbstractContextManager[None]]
     environ: Mapping[str, str]
     close: Close
+    conflicts: Handoff
     ids: Ids
 
 
@@ -76,6 +78,16 @@ def _release(ports: LandPorts, hold: Callable[[str, str], AbstractContextManager
     work = ports.work
     return ChecksRelease(work.store, work.checkouts, work.slot_files, work.entry_seen, hold, work.clock,
         work.seen, work.scratch, ids=ports.ids)
+
+
+def checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
+    """The validation of a pending candidate; passed is pushable, failed is `checks_failed`."""
+    found = validated(ports, row)
+    if isinstance(found, Failed) or found.validation == "passed":
+        return found
+    return Failed("refused", "checks_failed", f"The checks of S ({found.commit}) failed ({found.reason}), though they passed on "
+                  "the task's own commit: the change does not hold on the current main. The `Land check:` logs say which. Nothing was "
+                  "pushed; a flaky check may be retried (`tl step land`), otherwise the task starts again.")
 
 
 def released(ports: LandPorts, row: LandRow | None) -> tuple[LandRow | None, str | None] | tuple[Failed, None]:

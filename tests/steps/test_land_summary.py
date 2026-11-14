@@ -140,6 +140,18 @@ def test_the_summary_reports_a_conflict_and_no_change_as_facts(b: LandBench) -> 
     assert f"Origin main: {o}; conflict (1 paths): src/x.py" in lines(conflict)
     b.advance({"src/x.py": "X = 1\n"})
     assert summarized(b.land("summary")).state == "no_change" and b.rows() == ()
+    assert b.conflict_runs == [] and b.reservations() == [] and b.execs() == []
+
+
+def test_summary_with_retained_work_never_resumes_it_or_advances_delivery(b: LandBench) -> None:
+    b.advance({"src/x.py": "X = 2\n"})
+    b.land()
+    before = list(b.conflict_runs), b.reservations(), list(b.environment.events)
+    assert summarized(b.land("summary")).state == "conflict"
+    b.advance({"src/x.py": "X = 1\n"})
+    assert summarized(b.land("summary")).state == "no_change"
+    assert (b.conflict_runs, b.reservations(), b.environment.events) == before
+    assert b.rows() == () and b.repo.pushes == 0 and b.tracker == []
 
 
 def test_the_summary_compares_the_target_s_profile_with_x_s(b: LandBench) -> None:

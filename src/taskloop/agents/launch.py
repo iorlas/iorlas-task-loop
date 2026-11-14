@@ -83,6 +83,16 @@ def codex_access(policy: CodexPolicy, found: Folders | None = None, *, compactio
     )
 
 
+def probe_for(setting: AgentSetting, slot: Path, exe: str) -> tuple[str, ...] | None:
+    policy = setting.access
+    if not isinstance(policy, CodexPolicy) or policy.sandbox is not CodexSandbox.WORKSPACE_WRITE:
+        return None
+    found = folders(slot)
+    access = codex_access(policy, found, compaction_token_limit=setting.compaction_token_limit)
+    command = ["/bin/sh", "-c", PROBE, "sh", *(str(p) for p in found.roots)]
+    return tuple(access.sandbox_argv(exe, command))
+
+
 class AgentLaunch:
     def __init__(self, credentials: Credentials, *, ids: Ids) -> None:
         self.ids = ids
@@ -107,9 +117,8 @@ class AgentLaunch:
         if isinstance(policy, CodexPolicy):
             harness = CodexHarness(resume=resume)
             access = codex_access(policy, found, compaction_token_limit=setting.compaction_token_limit)
-            if found is not None and policy.sandbox is CodexSandbox.WORKSPACE_WRITE:  # full access asks for no sandbox to prove
-                command = ["/bin/sh", "-c", PROBE, "sh", *(str(p) for p in found.roots)]
-                probe = tuple(access.sandbox_argv(exe, command))
+            if found is not None:
+                probe = probe_for(setting, slot, exe)
         elif isinstance(policy, ClaudePolicy):
             harness = ClaudeHarness()
             access = ClaudeAccess(permission_mode=policy.permission_mode, settings=policy.settings)

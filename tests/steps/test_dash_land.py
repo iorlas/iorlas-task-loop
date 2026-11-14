@@ -63,3 +63,12 @@ def test_summary_refusals_keep_the_owning_operations_explanation(b: LandBench) -
     found = build_land(b.ports(), "tasks", "missing", b.repo.path)
     assert isinstance(found, Failed) and found.detail == "The task's current attempt is not a done implement attempt."
     assert b.rows() == () and b.repo.pushes == 0
+
+
+def test_selecting_delivery_with_retained_conflict_work_only_reads_facts(b: LandBench) -> None:
+    b.advance({"src/x.py": "X = 2\n"})
+    b.land()
+    before = list(b.conflict_runs), b.reservations(), list(b.environment.events)
+    assert any("blocked by conflicts" in action for action in read(b).actions)
+    assert (b.conflict_runs, b.reservations(), b.environment.events) == before
+    assert b.rows() == () and b.repo.pushes == 0 and b.tracker == []

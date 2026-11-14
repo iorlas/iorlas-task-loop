@@ -114,7 +114,7 @@ def test_record_failure_rolls_back_reservation_and_generation(on_slot: Path, rep
     ("UPDATE checks_attempt SET conclusion='failed',reason='failed'", Outcome.NOT_CHECKED),
     ("UPDATE slot_release SET claim='unclaimed'", Outcome.NOT_DONE),
     ("UPDATE checks_attempt SET dispatch_token='changed'", Outcome.SOURCE),
-    ("UPDATE checks_attempt SET target_commit='ffffffffffffffffffffffffffffffffffffffff'", Outcome.SOURCE),
+    ("UPDATE attempt SET end_commit='ffffffffffffffffffffffffffffffffffffffff'", Outcome.SOURCE),
 ])
 def test_ineligible_source_has_no_admission_effect(on_slot: Path, repo: FakeRepo, tmp_path: Path,
                                                  change: str, outcome: Outcome) -> None:

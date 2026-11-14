@@ -1,12 +1,5 @@
-"""`tl step land TASK` (tl-8bh9.14.8): one application operation, `land(ports, request)`, run by the person's command and,
-under the profile's `land: auto`, by a round (`round_land`, tl-8bh9.14.136); never by an entry (`entries-never-land`). It
-squashes the checked X onto origin's
-`main` at O as one commit S (Git objects only, no checkout written), validates S in a free slot in the foreground when
-S's tree is not X's or `main`'s required names changed, and delivers S to origin's `main` by `land_push`'s one rule
-(never forced), then closes the task in the person's local tracker (`land_close`: push first, then `bd close`; never
-synced). A rerun does only what is missing: a delivered candidate goes straight to the close, a closed one answers
-`already_landed` with no Git or tracker call. `--summary` (`land_summary`) makes S in Git objects only and reports the
-facts: no candidate, reservation, push or close.
+"""One land operation for the CLI and automatic rounds: squash checked X onto main, validate when needed, deliver and close.
+Reruns resume delivery or close. Summary inspects Git objects without admission, validation, push or close.
 
 Every read before any effect, in order (section 4): `--minutes`; this process's environment does not carry the agent's
 push bar (`push_barred`); the task's current attempt a done implement attempt (`not_done`); its latest checks attempt
@@ -17,11 +10,8 @@ delivered answers at once); the checkout is the attempt's repository, `origin` e
 are exactly X (`branch_moved`; skipped with `--no-change`), X readable (`commit_missing`), origin has `main`
 (`target`); one tracker read (`claim_lost`; `closed`, unless origin shows a pushable candidate already delivered).
 
-A new candidate (section 5): the bounded fetch of origin's `main` (O), the profile at O (`target_profile`, `target`,
-`no_required`), `Repo.squash` (`conflict`), then S's tree listing against X's (same tree) and O's (`no_change`, or
-`changes` with `--no-change`), and the required names at O against the checks attempt's. Inserted with its slot's
-reservation in one transaction (`land_store.insert`: `landing` when another land won) when it validates, else with
-`same_tree` (or `no_change`, delivered at insert). Its validation and the delivery are `land_check` and `land_push`.
+Retained conflict work resumes before another squash or validation. A fresh conflict is handed to detached execution;
+every conflict result stops delivery. Retained resolutions never become land candidates or checked input.
 """
 
 import sqlite3
@@ -30,7 +20,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, Literal
 
-from git_porcelain import GitUnavailable, MissingRemote
+from git_porcelain import Conflicted, GitUnavailable, MissingRemote
 
 from taskloop.admit import AdmitRefused, AdmitUnavailable, checkout_repo, open_store, read_task
 from taskloop.admit_chain import CURRENT, task_of
@@ -41,8 +31,9 @@ from taskloop.check_status import latest
 from taskloop.check_store import ChecksRow
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
-from taskloop.land_check import LandPorts, inserted, released, validated
+from taskloop.land_check import LandPorts, checked, inserted, released
 from taskloop.land_close import closed
+from taskloop.land_conflict.handoff import request_for
 from taskloop.land_gate import Gate, gate_of
 from taskloop.land_push import REMOTE, Delivered, Origin, Withdrawn, deliver, observed, remote_tips, withdraw
 from taskloop.land_store import LandRow
@@ -217,13 +208,15 @@ def _tracker(ports: LandPorts, origin: Origin, task: _Task, release: str | None)
 
 def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, number: int) -> LandRow | Failed:
     """Section 5: a new candidate S onto origin's `main` as fetched now, inserted (and validated when it must be)."""
-    target = fetched_target(ports.profiles, origin)
+    resumed = None if request.no_change else ports.conflicts.resume(origin.repo, task.implement, task.checks)
+    target = resumed or fetched_target(ports.profiles, origin)
     if isinstance(target, Failed):
         return target
     o, required = target
     squashed = squashed_onto(origin, task.checks, task.title, o)
-    if isinstance(squashed, Failed):
-        return squashed
+    if isinstance(squashed, (Conflicted, Failed)):
+        return squashed if isinstance(squashed, Failed) else ports.conflicts.conflicted(origin.repo,
+            request_for(task.implement, task.checks, o, 0.0), request.minutes, request.no_change, ports.work.clock)
     s, tree_s, tree_x, tree_o = squashed
     no_change = tree_s == tree_o
     if no_change != request.no_change:
@@ -239,7 +232,7 @@ def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, n
     if isinstance(deadline, Failed):
         return deadline
     row = inserted(ports, origin.repo, task.checks, (number, o, s, same, required), settled, deadline)
-    return row if isinstance(row, Failed) or row.validation is not None else _checked(ports, row)
+    return row if isinstance(row, Failed) or row.validation is not None else checked(ports, row)
 
 
 def _deadline(ports: LandPorts, minutes: int | None, validates: bool) -> float | Failed:
@@ -247,16 +240,6 @@ def _deadline(ports: LandPorts, minutes: int | None, validates: bool) -> float |
     if minutes is None:
         return NEEDS_MINUTES if validates else 0.0
     return deadline_after(minutes, ports.work.clock)
-
-
-def _checked(ports: LandPorts, row: LandRow) -> LandRow | Failed:
-    """The validation of a pending candidate; passed is pushable, failed is `checks_failed`."""
-    found = validated(ports, row)
-    if isinstance(found, Failed) or found.validation == "passed":
-        return found
-    return Failed("refused", "checks_failed", f"The checks of S ({found.commit}) failed ({found.reason}), though they passed on "
-                  "the task's own commit: the change does not hold on the current main. The `Land check:` logs say which. Nothing was "
-                  "pushed; a flaky check may be retried (`tl step land`), otherwise the task starts again.")
 
 
 def _no_change(ports: LandPorts, origin: Origin, current: LandRow | None, again: Callable[[], LandRow | Failed],
@@ -293,7 +276,7 @@ def _pending(ports: LandPorts, minutes: int | None, current: LandRow, origin: Or
         ports.lands.renew(current.key, deadline)
     except StoreRefused as refused:
         return Failed("unavailable", refused.reason, "The land candidate changed: rerun.")
-    resumed = _checked(ports, ports.lands.row(current.key) or current)
+    resumed = checked(ports, ports.lands.row(current.key) or current)
     return resumed if isinstance(resumed, Failed) else _landed(deliver(ports.lands, ports.work.clock, origin, resumed, again), release)
 
 
@@ -306,6 +289,10 @@ def _delivered(ports: LandPorts, request: LandRequest, task: _Task, origin: Orig
 
     if request.no_change:
         return _no_change(ports, origin, current, again, release)
+    if current is not None:
+        resumed = ports.conflicts.resume(origin.repo, task.implement, task.checks)
+        if resumed is not None:
+            return resumed
     if current is not None and current.pending:
         return _pending(ports, request.minutes, current, origin, release, again)
     if current is not None and current.pushable:
