@@ -151,7 +151,7 @@ def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
     if phase == "admitted":
         return "stuck:expired_admitted" if expired else "start"
     if phase in ("dispatching", "registered"):
-        return "stuck:entry_lost"
+        return "release"
     return "verify" if result.reason == "verification" else "stuck:uncollected"
 
 

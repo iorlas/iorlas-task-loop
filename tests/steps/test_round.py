@@ -34,10 +34,10 @@ from taskloop.ids import NativeIds
 from taskloop.launch import Launched, LaunchRefused, LaunchResult, LaunchUnavailable, LaunchUncertain
 from taskloop.operations import (
     Advance,
+    AgentRelease,
     Failed,
     Move,
     Publish,
-    Release,
     Round,
     Started,
     StartPorts,
@@ -138,6 +138,10 @@ class Recorded:
         self.calls.append("release")
         return self.released
 
+    def reconcile(self, key: AttemptKey) -> ReleaseResult:
+        self.calls.append("reconcile")
+        return self.released
+
     def publish(self, key: AttemptKey) -> PublishResult:
         self.calls.append("publish")
         return BranchPublished(X, X)
@@ -161,7 +165,7 @@ class Bench:
         self.lines: list[str] = []
         self.log: Callable[[str], None] = self.lines.append
         self.verifier: Verify = self.recorded
-        self.releaser: Release = self.recorded
+        self.releaser: AgentRelease = self.recorded
         self.publisher: Publish = self.recorded
         self.stopping: Callable[[], bool] = never
         self.advance: Advance = NoAdvance()
@@ -227,12 +231,12 @@ def moves(found: Round) -> list[tuple[str, str, str]]:
     ("admitted", ENTRY, "matching", 10, None, ("report", "running"), 0),
     ("admitted", ENTRY, "gone", 200, None, ("report", "stuck:expired_admitted"), 0),
     ("admitted", BEFORE_REBOOT, "different_process", 200, None, ("relaunch", "relaunched"), 1),
-    ("dispatching", BEFORE_REBOOT, "different_process", 200, None, ("report", "stuck:entry_lost"), 0),
+    ("dispatching", BEFORE_REBOOT, "different_process", 200, None, ("release", "released"), 0),
     ("admitted", ENTRY, "unknown", 10, None, ("report", "unknown"), 0),
-    ("dispatching", ENTRY, "gone", 10, None, ("report", "stuck:entry_lost"), 0),
+    ("dispatching", ENTRY, "gone", 10, None, ("release", "released"), 0),
     ("registered", ENTRY, "matching", 200, None, ("report", "stuck:hung"), 0),
     ("admitted", None, "gone", 10, "unclaimed", None, 0),
-    ("admitted", None, "gone", 10, "unclaiming", ("report", "release"), 0),
+    ("admitted", None, "gone", 10, "unclaiming", ("release", "released"), 0),
 ])
 def test_each_existing_attempt_by_its_next_word(
     factory: sqlite3.Connection, phase: str, entry: EntryIdentity | None, seen: Seen, now: float, claim: str | None,
@@ -246,7 +250,8 @@ def test_each_existing_attempt_by_its_next_word(
     found = bench.round()
     assert moves(found) == ([] if expected is None else [("tl-1", *expected)])
     assert (bench.launcher.calls, bench.launcher.minutes) == (["tl-1"] * launched, [30] * launched)
-    assert bench.admission.requests == bench.repeats.calls == bench.recorded.calls == []
+    assert bench.admission.requests == bench.repeats.calls == []
+    assert bench.recorded.calls == (["reconcile"] if expected == ("release", "released") else [])
     assert exit_code(found) == (3 if expected == ("report", "unknown") else 0)
 
 
@@ -284,7 +289,7 @@ def captured(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     ("repeat", ("repeat", "repeated"), []),
     ("repeats_exhausted", ("report", "repeats_exhausted"), []),
     ("failed", ("report", "failed:run:worker_failed"), []),
-    ("held", ("report", "release"), []),
+    ("held", ("release", "released"), ["release", "release"]),
 ])
 def test_a_step_that_ran_is_verified_repeated_or_reported_every_round(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,

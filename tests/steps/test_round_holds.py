@@ -198,13 +198,16 @@ def test_the_needs_owner_guide_is_not_repeated_once_the_attempt_is_abandoned(fac
     assert "answered `needs_owner`" not in text and "approval label" in text
 
 
-def test_a_task_started_by_hand_that_fails_is_reported_never_held(factory: Factory) -> None:
+def test_a_task_started_by_hand_that_fails_is_released_then_reported_never_held(factory: Factory) -> None:
     asks(factory, "tl-1", "plan")
     factory.by_hand("tl-1")
-    assert factory.round(frozenset()) == [("tl-1", "plan", "report", "release")]
-    assert factory.round(factory.last.written) == [("tl-1", "plan", "report", "release")] and len(factory.lines) == 2
+    assert factory.round(frozenset()) == [("tl-1", "plan", "release", "released")]
+    assert factory.round(factory.last.written) == [("tl-1", "plan", "report", "failed:needs_owner")]
+    count = len(factory.lines)
+    assert factory.round(factory.last.written) == [("tl-1", "plan", "report", "failed:needs_owner")]
+    assert len(factory.lines) == count
     assert factory.tracker.holds == [] and factory.tracker.beads["tl-1"].assignee == "taskloop"
-    assert factory.next_words() == {"tl-1": ("plan", "release")} and labels(factory, "tl-1") == [None]
+    assert factory.next_words() == {"tl-1": ("plan", "done")} and labels(factory, "tl-1") == [None]
 
 
 def test_a_bd_outage_mid_hold_is_pending_written_once_per_refusal_and_the_claim_returned_before_the_comment(factory: Factory) -> None:
@@ -488,9 +491,9 @@ def test_a_hold_whose_label_step_never_ran_is_superseded_and_held_removed_once_t
     found = factory.store.attempt_of("tasks", "tl-1")
     assert found is not None and factory.releaser().release(found[0], True)  # the person's abandon, then a start by hand
     factory.by_hand("tl-1")
-    assert factory.round() == [("tl-1", "plan", "report", "release"), ("tl-1", "", "hold", "cleared")]
+    assert factory.round() == [("tl-1", "plan", "release", "released"), ("tl-1", "", "hold", "cleared")]
     assert factory.con.execute("SELECT attempt_id,labels FROM task_hold").fetchall() == [(held, "superseded")]
-    assert factory.tracker.holds[-1] == "clear tl-1" and factory.round() == [("tl-1", "plan", "report", "release")]
+    assert factory.tracker.holds[-1] == "clear tl-1" and factory.round() == [("tl-1", "plan", "report", "failed:needs_owner")]
 
 
 def test_a_person_s_own_abandon_is_restarted_by_the_round_under_the_label_and_holds_nothing(factory: Factory) -> None:
