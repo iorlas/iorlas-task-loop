@@ -14,6 +14,61 @@ let slotNames = [];
 let notice = null; // why the board may be stale (the tracker could not be read)
 let lanes = false;
 let source = null;
+const streamLabel = tag("Stream connecting");
+const roundLabel = tag("Last round unavailable");
+let backlog = null;
+let roundAt = null;
+let logReload = 0;
+let roundRevision = 0;
+
+// Only the owning reader's round summaries for this dashboard's backlog can advance this observation.
+function roundTime(row, label) {
+  if (row.backlog !== label || row.move !== "round" || !Number.isFinite(Date.parse(row.at))) return null;
+  return new Date(row.at).toISOString().replace(".000Z", "Z") === row.at ? row.at : null;
+}
+
+function renderRound() {
+  delete roundLabel.dataset.since;
+  roundLabel.title = roundAt ?? "";
+  if (roundAt === null) {
+    roundLabel.textContent = "No round in available log";
+  } else if (Date.parse(roundAt) > Date.now()) {
+    roundLabel.textContent = "Last recorded round is in the future (clock discrepancy)";
+  } else {
+    roundLabel.dataset.since = roundAt;
+    roundLabel.dataset.prefix = "Last recorded round ";
+    roundLabel.dataset.suffix = " ago";
+    tick(roundLabel);
+  }
+}
+
+async function reloadRound() {
+  const reload = ++logReload;
+  const revision = roundRevision;
+  try {
+    const log = await source.logs();
+    if (reload !== logReload) return;
+    backlog = log.backlog;
+    const times = log.rows.map((row) => roundTime(row, backlog)).filter((at) => at !== null);
+    if (roundRevision !== revision && roundAt !== null) times.push(roundAt);
+    roundAt = times.sort().at(-1) ?? null;
+    renderRound();
+  } catch {
+    if (reload !== logReload || revision !== roundRevision) return;
+    roundAt = null;
+    delete roundLabel.dataset.since;
+    roundLabel.title = "";
+    roundLabel.textContent = "Last round unavailable";
+  }
+}
+
+function observeRound(row) {
+  const at = roundTime(row, backlog);
+  if (at === null) return;
+  roundRevision++;
+  if (roundAt === null || at > roundAt) roundAt = at;
+  renderRound();
+}
 
 const rects = () => new Map([...cards].map(([id, node]) => [id, node.getBoundingClientRect()]));
 const laneIds = () => (lanes ? [...slotNames, "none"] : ["all"]);
@@ -172,7 +227,7 @@ function drop(id) {
 }
 
 // After a reconnect or an error the stream may have missed moves: load the board again and drop cards that are gone.
-async function resync() {
+async function resyncBoard() {
   let snap;
   try {
     snap = await source.snapshot();
@@ -187,6 +242,10 @@ async function resync() {
   notice = snap.notice;
   if (lanes) buildBoard();
   renderBoard();
+}
+
+async function resync() {
+  await Promise.all([resyncBoard(), reloadRound()]);
 }
 
 function toggleTheme() {
@@ -208,7 +267,8 @@ async function start() {
   $("view-columns").addEventListener("click", () => setLanes(false));
   $("view-lanes").addEventListener("click", () => setLanes(true));
   source = apiSource();
-  $("mode").replaceChildren(tag(source.label, { dotCls: "bg-emerald-500", cls: "text-slate-600 dark:text-slate-300" }));
+  $("mode").className = "inline-flex items-center gap-2";
+  $("mode").replaceChildren(streamLabel, roundLabel);
   initDrawer(source, tasks);
   initLogs(openDrawer);
   setLanes(false);
@@ -221,12 +281,19 @@ async function start() {
       drop(msg.id);
       return renderBoard();
     }
-    if (msg.kind === "log") return onLog(msg.row);
+    if (msg.kind === "log") {
+      observeRound(msg.row);
+      return onLog(msg.row);
+    }
     tasks.set(msg.task.id, msg.task);
     renderBoard();
     onTaskMoved(msg.task);
-  });
-  setInterval(() => document.querySelectorAll("[data-since],[data-quiet]").forEach(tick), 1000);
+  }, (connected) => { streamLabel.textContent = connected ? "Stream connected" : "Stream disconnected"; });
+  setInterval(() => {
+    document.querySelectorAll("[data-since],[data-quiet]").forEach(tick);
+    // A future observation may become an elapsed time once the local clock catches up.
+    if (roundAt !== null) renderRound();
+  }, 1000);
 }
 
 start();
