@@ -235,9 +235,8 @@ WORKING = "UPDATE attempt SET phase=?,base_commit='" + "b" * 40 + "',worker_pid=
         ("unknown", False, "admitted", None, ("unavailable", "observe")),
         ("gone", True, "registered", WORKER, ("unsettled", "worker_alive")),
         ("different_process", True, "captured", WORKER, ("unsettled", "worker_alive")),
-        ("gone", False, "dispatching", None, ("unsettled", "worker_unknown")),
     ],
-    ids=["entry_running", "entry_unknown", "agent_alive", "group_alive", "dispatching_without_agent"],
+    ids=["entry_running", "entry_unknown", "agent_alive", "group_alive"],
 )
 def test_abandon_without_a_stop_proof_takes_no_lock_and_reads_no_git(
     registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles,

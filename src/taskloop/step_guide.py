@@ -84,9 +84,8 @@ GUIDE = {
     "interval": "The rounds interval (`--every`, machine config `round_seconds`) is whole seconds, at least 5; "
     "`git_read_seconds` is between 30 and 86400.",
     "rounds_lock": "The rounds lock file beside factory.db cannot be created: fix that folder's permissions.",
-    "stuck:entry_lost": "The agent may still run: if `Worker` names a pid, check its cwd is the slot (`lsof -a -p <pid> -d cwd`) "
-    f"and stop only its group (`kill -TERM -<pgid>`); then {ABANDON} With no `Worker` recorded it cannot be shown stopped: "
-    "only the whole-DB discard remains.",
+    "stuck:entry_lost": "The entry stopped before collecting its result. The factory keeps the slot reserved until the recorded "
+    "entry and any registered worker and group are proven stopped, then releases uncaptured work and returns its claim.",
     "stuck:hung": "Stop the worker first, the agent may keep editing the slot: check the `Worker` pid's cwd is the slot "
     "(`lsof -a -p <pid> -d cwd`), then `kill -TERM -<pgid>`. Then the entry: `ps -o command= -p <entry pid>` must show "
     f"taskloop.attempt_entry, then `kill -TERM <entry pid>`. Then {ABANDON}",
@@ -116,7 +115,7 @@ GUIDE = {
     "lock": "The slot's lock file under `<slots root>/<repo id>/.locks` cannot be created: fix that folder's permissions.",
     "not_terminal": "The step has not ended: wait for it, `tl step start` to repeat it, or `tl step release --abandon`.",
     "entry_running": "Its entry runs: wait, or stop it by verified pid (the `stuck:hung` guide), then run it again.",
-    "worker_unknown": "Dispatched with no agent recorded, so it cannot be shown stopped: the whole-DB discard is the only way out.",
+    "worker_unknown": "No agent identity was recorded. The slot stays reserved until its recorded entry is independently proven stopped.",
     "slot_dirty": "The slot stays held: remove or restore the listed files (`git -C <slot> status --short` lists them again; "
     "nothing is reset for you), then run it again.",
     "remote": "`origin` could not be reached: often credentials; check that `git push` works from this shell, then rerun. The "
