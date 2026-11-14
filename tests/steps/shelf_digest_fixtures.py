@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 from typing import override
 
@@ -9,7 +10,7 @@ from git_porcelain import Sha, Tree
 from git_porcelain.testing import FakeRepo
 
 from taskloop.shelf_digest.identities import PACKAGES, Identities, IdentityFailure, reconcile_manifests
-from taskloop.shelf_digest.installed import Distribution, InstalledMetadata
+from taskloop.shelf_digest.installed import Distribution, InstalledDistributions, InstalledMetadata
 from taskloop.shelf_digest.source import ReadFailure, open_source
 
 COMMIT = "a" * 40
@@ -41,6 +42,23 @@ class Case:
     shelf_files: dict[str, bytes]
 
 
+@cache
+def contract_sources() -> dict[str, bytes]:
+    """Use seven pinned installed modules as source data, without executing their code."""
+    files = {}
+    for package, modules in (
+        ("any-agent", ("supervisor", "protocol", "watch", "procs", "events")),
+        ("stream-proc", ("registered",)), ("git-porcelain", ("real_write",)),
+    ):
+        distribution, = InstalledDistributions().find(package)
+        for module in modules:
+            path = f"{package.replace('-', '_')}/{module}.py"
+            data = distribution.read(path)
+            assert isinstance(data, bytes)
+            files[f"packages/{package}/src/{path}"] = data + b"\n__all__ = ()\n"
+    return files
+
+
 def complete_case(path: Path, *, commit: str = COMMIT, reverse: bool = False, stream_version: str = "1.0") -> Case:
     declarations: list[str] = []
     records: list[str] = []
@@ -58,6 +76,7 @@ def complete_case(path: Path, *, commit: str = COMMIT, reverse: bool = False, st
         module = name.replace("-", "_")
         files[f"{directory}/src/{module}/__init__.py"] = b'"""Module warning."""\nVALUE = 1\n'
         files[f"{directory}/README.md"] = f"# {name}\n\nOnly valid when idle.\n\nExample: café\n".encode()
+    files.update(contract_sources())
     dependencies = ", ".join(f'"{name}=={stream_version if name == "stream-proc" else "1.0"}"' for name in PACKAGES)
     project = f'[project]\nname = "task-loop"\nversion = "0.1"\ndependencies = [{dependencies}]\n'
     project += '[tool.uv.sources]\n' + "\n".join(declarations)

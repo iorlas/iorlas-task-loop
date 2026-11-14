@@ -98,11 +98,12 @@ def test_capture_is_shared_by_extractors_and_isolated_from_later_mutation(tmp_pa
     signatures = extract_signatures(identities, captures.__getitem__)
     assert isinstance(signatures, tuple) and len(signatures) == 6
     for distribution in distributions.records.values():
-        assert len(distribution.reads) == 2 and len(set(distribution.reads)) == 2
+        assert len(distribution.reads) == len(distribution.contents) - sum("dist-info" in p for p in distribution.contents)
+        assert len(set(distribution.reads)) == len(distribution.reads)
         distribution.contents.clear()
     docs = extract_documentation(identities, signatures, captures.__getitem__)
-    assert isinstance(docs, tuple) and len(docs) == 12
-    assert all("Module warning." in item.text or "Only valid when idle." in item.text for item in docs)
+    assert isinstance(docs, tuple) and len(docs) == 19
+    assert sum("Module warning." in item.text or "Only valid when idle." in item.text for item in docs) == 12
     files = {"module.py": b"VALUE = 1"}
     independent = SourceSnapshot(COMMIT, files)
     files["module.py"] = b"changed"
