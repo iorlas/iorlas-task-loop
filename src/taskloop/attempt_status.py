@@ -148,6 +148,8 @@ def _stopped(phase: str, result: AttemptResult, expired: bool) -> Next:
     """The entry does not run (none, gone or a different process) and nothing is collected yet."""
     if result.status == "conflict":
         return "stuck:conflict"
+    if result.status == "pending" and result.execution is not None:
+        return "verify"
     if phase == "admitted":
         return "stuck:expired_admitted" if expired else "start"
     if phase in ("dispatching", "registered"):
