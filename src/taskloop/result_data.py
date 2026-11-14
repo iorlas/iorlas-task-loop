@@ -153,7 +153,8 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
             setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": result.setup.row.conclusion,
                                                         "commit": result.setup.row.commit, "log": str(result.setup.log),
                                                         "attempt_id": result.setup.attempt_id}
-            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log), "setup": setup,
+            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log),
+                                                   "events_path": str(result.events_path), "setup": setup,
                                                    "failed_checks": _checks_data(result.failed)}
         case Listed() | Round() | Ended():
             return _rows_data(result)

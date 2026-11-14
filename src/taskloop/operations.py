@@ -117,6 +117,7 @@ class Failed:
     admitted: bool = False
     checks: bool = False
     land: bool = False
+    config: ConfigRefused | None = None
 
     @property
     def word(self) -> str:
@@ -282,7 +283,7 @@ def require_database(open_ro: Callable[[], sqlite3.Connection | None]) -> sqlite
 
 
 def refused_config(refused: ConfigRefused) -> Failed:
-    return Failed("refused", refused.reason, refused.detail)
+    return Failed("refused", refused.reason, refused.detail, config=refused)
 
 
 def deadline_after(minutes: int, clock: Clock) -> float:

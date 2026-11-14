@@ -130,3 +130,17 @@ term is needed. This planning change commits only this file.
 Completion requires the independent completeness test, behavioral guidance assertions, correct read-only events
 paths in both output modes, the recorded doctor deferral and documented diagnostic procedure. A plan or a passing
 dictionary-membership test alone is not implementation completion.
+
+## As built
+
+Implemented the approved doctor/bug-report deferral and manual inspection procedure in the README. No command
+was added. Show results now carry the selected attempt's owning `events_path`, printed in human and JSON output
+without reading or creating events; repeat and latest-checks selection keep their own locations.
+
+Guidance is resolved by result context, including config/profile collisions, checks and candidate release.
+Round refusals, nested release/publication failures, slot rows and pending holds retain reason guidance. Automatic
+round and hold text describes the situation and decision without factory CLI instructions. Producer/finite-type
+coverage is independent of the presentation tables, and dynamic forwarding expressions require explicit review.
+The new focused tests cover refusal rendering and mutations, inspection contexts, and read-only events discovery.
+A pre-existing dashboard assertion referenced `Run.summary`; it now checks the existing `Run.access` field so the
+required gates can validate the intended full-access wording.

@@ -22,7 +22,7 @@ from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore, ResultRow
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold import ROUND_CAUSES, HoldMove, HoldPorts, clear_holds, hold_task
-from taskloop.hold_guide import KEPT_ACTIONS
+from taskloop.hold_guide import pending_guide
 from taskloop.hold_store import COMMENT_LEASE, HoldInsert, HoldRow, HoldStore, Uncleared
 from taskloop.operations import Failed, Move, Round
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult
@@ -146,7 +146,7 @@ def test_a_hold_records_moves_the_labels_abandons_then_comments_once(bench: Benc
     text = bench.tracker.texts[0]
     assert text.startswith("taskloop hold: failed:needs_owner\nStep plan, attempt 1 (a)")
     assert "task branch task/tl-1 is not published." in text and "removed `auto` and added `held` and returned its claim." in text
-    assert "`bd label add tl-1 auto`" in text and f"Evidence: {bench.root}/attempts/" in text
+    assert "restore the approval label `auto`" in text and f"Evidence: {bench.root}/attempts/" in text
 
 
 def test_a_finished_hold_called_again_writes_nothing_more(bench: Bench) -> None:
@@ -201,7 +201,7 @@ def test_each_label_answer_and_whether_it_comments(bench: Bench, answer: LabelSt
     row = bench.row()
     assert row.labels == answer and (row.commented_at is not None) == comments
     if answer == "not_ours":
-        assert "changed no label" in bench.tracker.texts[0] and "`tl step start tl-1`" in bench.tracker.texts[0]
+        assert "changed no label" in bench.tracker.texts[0] and "resolve its ownership with the current actor" in bench.tracker.texts[0]
 
 
 @pytest.mark.parametrize(("answer", "refusal", "detail"), [
@@ -546,9 +546,9 @@ def test_clear_lists_only_the_round_s_own_backlog(bench: Bench) -> None:
 def test_tl_step_next_prints_the_hold_guide_for_a_pending_hold_only() -> None:
     pending = Round("tasks", (Move("tl-1", "hold", "pending abandon held:slot_dirty", "a", step="plan"),))
     shown = human("next", pending, None)
-    assert [line for line in shown if line.startswith("hold: ")] == [f"hold: `held:slot_dirty`: {KEPT_ACTIONS['held:slot_dirty']}"]
+    assert [line for line in shown if line.startswith("hold: ")] == [f"hold: {pending_guide('pending abandon held:slot_dirty')}"]
     transient = Round("tasks", (Move("tl-1", "hold", "pending abandon unavailable:slot_busy", "a", step="plan"),))
-    assert "hold: `unavailable:slot_busy`: needs nothing" in "\n".join(human("next", transient, None))
+    assert "Another operation holds the slot lock" in "\n".join(human("next", transient, None))
     held = Round("tasks", (Move("tl-1", "hold", "held failed:needs_owner", "a", step="plan"),))
     assert not any(line.startswith("hold: ") for line in human("next", held, None))
 
@@ -557,5 +557,5 @@ def test_a_refusal_echoing_an_untrusted_id_prints_one_printable_line_per_detail_
     hostile = "tl\x1b[31m\u202e-1\nForged: yes" + "x" * 3000
     refused = Failed("refused", "absent", f"No attempt for {hostile} in backlog tasks")
     lines = human("show", refused, None)
-    assert lines[0] == "show: refused:absent" and lines[2].startswith("Forged: yes") and len(lines) == 3  # the newline is a line break only
+    assert lines[0] == "show: refused:absent" and lines[2].startswith("Forged: yes") and len(lines) == 4  # the newline is a line break only
     assert all(each.isprintable() and len(each) <= 2000 for each in lines) and "tl [31m -1" in lines[1]

@@ -168,11 +168,15 @@ def test_show_names_the_checks_attempt_s_directory_setup_logs_and_earlier_attemp
     SetupStore(lambda: status.bench.con).start(again.key, 1, x, "e" * 64, 11)
     store.start(again.key, store.block(again.key), 0, "check", "1" * 64, 600, 12)
     store.undefined(again.key, 1, 1, "smoke", 12)
-    artifacts = status.bench.done.path.parent / "artifacts"
+    artifacts = status.bench.done.path.parent / "custom artifacts with spaces"
     found = show_attempt(status.reads(), artifacts, "tasks", "tl-1")
     assert isinstance(found, Shown) and not artifacts.exists()
     directory = EvidenceFiles(artifacts).root / EvidenceFiles(artifacts).directory(again.key)
     assert (found.directory, found.entry_log) == (directory, directory / "entry.log")
+    assert found.events_path == EvidenceFiles(artifacts).events_path(again.key)
+    assert found.events_path != EvidenceFiles(artifacts).events_path(status.key)
+    assert as_data(found)["events_path"] == str(found.events_path)
+    assert f"Events: {found.events_path}" in human("tl step show", found, None)
     assert found.setup is not None
     assert (found.setup.row.run, found.setup.log, found.setup.attempt_id) == (1, directory / "setup-1.log", None)
     view = found.view

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from taskloop.attempt_types import MiB, StepRules
 
-CHECK_GIT = "look at the task branch and the slot (`tl step show` names them)"
+CHECK_GIT = "look at the task branch and the retained slot evidence"
 EVIDENCE = "its `stdout.txt`, `stderr.txt` and `diagnostics.txt` in the evidence directory"
 RULES = {  # the verdict rule words (`attempt_types.Rule`): what broke, and the fix ("" = retry as it is)
     "plan_missing": ("`plan.md` is absent from the commit (an `unchanged` answer needs an existing plan)", ""),

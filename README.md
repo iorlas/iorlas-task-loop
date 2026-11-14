@@ -41,6 +41,23 @@ Review remains future work; the retained designs describe more than the implemen
   changes to what decides a pass require `--accept-gate-changes` when reported by land. Tracker synchronization remains
   the person's responsibility. Publishing a task branch does not land it.
 
+For a refusal, retain its kind, reason and supplied detail and follow the reason-specific guidance. To inspect the
+local situation without advancing work, use `tl config show`, `tl repo inspect CHECKOUT`,
+`tl profile show --checkout CHECKOUT --at REV --target main`, and
+`tl task show TASK --backlog KEY --tracker-root TRACKER`. Inspect retained execution with
+`tl step list --stuck` and `tl step show TASK --backlog KEY`; add `--json` to these reads for structured output.
+Use the same machine config and database/artifacts overrides as the factory being inspected.
+
+`step show` prints `Directory:`, `Entry log:` and `Events:`; JSON includes `directory`, `entry_log` and `events_path`.
+These belong to the selected attempt, including a repeat or the latest checks attempt. Candidate logs are identified
+separately. An events path is a location even before launch or when no events file exists; showing it neither creates
+nor reads that file. Preserve the evidence when investigating a refusal, and review configuration, origins, agent
+input and transcripts for private data before sharing them.
+
+Dedicated doctor and bug-report commands are deferred. The implemented inspection commands above provide the manual
+diagnostic procedure. A future doctor needs an agreed definition of health and partial-failure behavior; a collected
+bug report also needs an agreed content and redaction policy. No report is collected automatically.
+
 A required check that exits nonzero can repeat implementation after its checks slot is released. The next agent starts
 at the checked commit in a free clean slot, with the first failed required check's name, exact argv and bounded output
 tail in its prompt. Path repeats and check-driven repeats share the three-attempt implement limit; an unchanged answer

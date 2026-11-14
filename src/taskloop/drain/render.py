@@ -1,7 +1,13 @@
 """One codec for drain progress and final results, in human and structured form."""
 
 from taskloop.drain.models import Conclusion, Result
-from taskloop.printable import one_line
+from taskloop.printable import block, one_line
+
+GUIDE = {
+    Conclusion.REFUSED: "Resolve the supplied refusal before requesting drain again; keep existing state and evidence intact.",
+    Conclusion.UNAVAILABLE: "Wait for reliable database and process observation; preserve state until idle can be verified.",
+    Conclusion.INTERRUPTED: "Drain can be requested again to continue waiting; the owner must wait for verified idle before upgrading.",
+}
 
 
 def data(result: Result) -> dict[str, object]:
@@ -14,7 +20,9 @@ def data(result: Result) -> dict[str, object]:
 
 
 def human(result: Result) -> str:
-    lines = [_human(result)]
+    lines = [block(_human(result))]
+    if result.conclusion in GUIDE:
+        lines.append(GUIDE[result.conclusion])
     for owner in (*result.active, *result.uncertain):
         process = owner.identity
         lines.append(

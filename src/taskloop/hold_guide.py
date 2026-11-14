@@ -9,27 +9,12 @@ from taskloop.attempt_status import AttemptView
 from taskloop.hold_cause import cause, next_step
 from taskloop.hold_store import HoldRow
 from taskloop.printable import one_line
+from taskloop.round_guide import automatic_guide
 
-# Section 12: what keeps a hold open, by the abandon's refusal word, and what the person does. A transient word needs nothing.
-KEPT_ACTIONS: Final = {
-    "held:slot_dirty": "the slot has files left by the attempt: save what you need, then empty its changes (`git -C <slot> "
-    "status`; restore tracked files, remove untracked ones). The factory never removes work.",
-    "held:slot_branch": "the slot was switched to another branch: `tl step show` names where the factory left it; put it back.",
-    "held:slot_redirected": "the slot's `.git` pointer changed: restore it, or remove the slot and `tl slot adopt` again.",
-    "held:slot_unborn": "the slot's HEAD has no commit: restore it, or remove the slot and `tl slot adopt` again.",
-    "unsettled:worker_alive": "the agent (or its group) outlived its entry: wait, or stop that process by its pid (never by "
-    "name).",
-    "unsettled:setup_running": "a setup command still runs: wait, or stop it by its pid.",
-    "unsettled:check_running": "a check's command still runs: wait, or stop it by its pid.",
-    "refused:landing": "a land of this task holds its slot: finish or withdraw it (`tl step land`).",
-    "refused:landed": "a land of this task is, or may be, on origin's main: finish it (`tl step land`).",
-}
-OPEN: Final = ("The factory holds this task for a person but has not finished the hold: the next round (or `tl step next` "
-               "now) records it, moves the labels, abandons the attempt and writes one comment on the task. The round's "
-               "`hold pending <step> <word>` line (`tl step next`) names what keeps it open and what to do; "
-               "`tl step release --abandon` says it too. Once that is cleared, the next round returns the claim and finishes "
-               "the hold.")
-TRANSIENT: Final = "needs nothing: the next round tries again."
+OPEN: Final = ("The factory holds this task for a person but has not finished the hold. The next round records it, "
+               "moves its labels, abandons the attempt and writes one comment on the task. The round's "
+               "hold pending <step> <word> line names the reason it must wait. Once that cause is resolved, "
+               "the next round returns the claim and finishes the hold.")
 HOLD: Final = OPEN
 LEAD: Final = "Held: the factory abandoned the attempt and waits for a person (the hold's comment on the task says why)."
 ON_HOLD: Final = (LEAD + " To answer, edit the task's description or acceptance criteria (the agent reads those, not comments), then "
@@ -67,7 +52,7 @@ def hold_lines(view: AttemptView) -> list[str]:
 def pending_guide(word: str) -> str:
     """What keeps a round's pending hold open (`pending <step> <refusal>`) and the action, for that refusal only."""
     refusal = word.rsplit(" ", 1)[-1]
-    return f"`{refusal}`: {KEPT_ACTIONS.get(refusal, TRANSIENT)}"
+    return f"`{refusal}`: {automatic_guide(refusal)}"
 
 
 def hold_guide(view: AttemptView) -> str:
