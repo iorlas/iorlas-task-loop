@@ -15,6 +15,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey
 from taskloop.hold_status import cause, reingests
 from taskloop.hold_store import HoldInsert, HoldStore
+from taskloop.ids import NativeIds
 from taskloop.merge.models import Phase, Reason, Terminal, Work
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.wip import is_saved
@@ -49,7 +50,7 @@ def conflict(registered: sqlite3.Connection, repo: FakeRepo, remote: FakeRemote,
 def releaser(con: sqlite3.Connection, case: Bench) -> SlotRelease:
     return SlotRelease(AttemptStore(lambda: con), case.views, case.files, lambda _entry: "gone", lambda _worker: True,
                        lambda _slot, _attempt: nullcontext(), lambda _root, _task: True, lambda: 20,
-                       lambda _process: "gone", lambda _path: True, HoldStore(lambda: con))
+                       lambda _process: "gone", lambda _path: True, HoldStore(lambda: con), ids=NativeIds())
 
 
 def test_unlabelled_terminal_merge_holds_and_preserves_before_abort(conflict: Bench, registered: sqlite3.Connection) -> None:

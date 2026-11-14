@@ -57,6 +57,13 @@ REFUSALS = {
     "change another attempt's slot.",
     "worker_alive": "The worker or its process group still runs. Wait for it to stop; any manual stop requires "
     "verifying its identity first.",
+    "merge_changed": "The retained merge record changed while it was being updated. The factory observes the winning "
+    "record; preserve the slot and its work.",
+    "merge_missing": "The retained merge record could not be found after it was started. Preserve the slot and its "
+    "work, then inspect the local state again.",
+    "merge_pending": "An active merge still owns the slot. Wait for its preservation to finish before the slot can be parked.",
+    "merge_reservation": "The attempt no longer owns the slot reservation for its merge. Inspect the current owner; "
+    "do not change another attempt's slot.",
     "slot_branch": "The slot is on an unexpected branch. Inspect and restore its expected branch before releasing it.",
     "slot_unborn": "The slot has no HEAD commit. Inspect and restore its expected commit before continuing.",
     "slot_redirected": "The slot's Git pointer changed. Restore the verified repository pointer; preserve the slot and its evidence.",

@@ -170,7 +170,7 @@ def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
     if facts.labels == "not_ours":
         retry = "resolve its ownership with the current actor: rounds do not take it again"
     else:
-        retry = (f"restore the approval label `{one_line(facts.label, 200)}`: "
+        retry = (f"restore the approval label `{one_line(facts.label or '', 200)}`: "
                  f"the next round starts it again at plan on task/{task} as it is")
     edit = "edit this task's description or acceptance criteria (the agent reads those, not comments)"
     lines = [] if found is None else [found.what]

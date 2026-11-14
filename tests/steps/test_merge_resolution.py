@@ -16,6 +16,7 @@ from merge_bench import Bench, MergeRepo, bench
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt_types import AttemptKey
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 from taskloop.merge.models import Completed, InProgress, Phase, Reason, Terminal, Work
 from taskloop.merge.resolve import Resolution
 from taskloop.merge.start import Merge
@@ -65,7 +66,7 @@ class Agent:
 
     def operation(self, root: Path) -> Merge:
         operation = self.case.operation()
-        operation.resolve = Resolution(self.case.store, AgentLaunch(lambda _h: ("/bin/codex", {})), EvidenceFiles(root),
+        operation.resolve = Resolution(self.case.store, AgentLaunch(lambda _h: ("/bin/codex", {}), ids=NativeIds()), EvidenceFiles(root),
                                        self.run, lambda _worker: self.gone, lambda: 10, lambda: None)
         return operation
 
