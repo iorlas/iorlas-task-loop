@@ -10,7 +10,7 @@ from taskloop.drain.models import Identity
 from taskloop.recovery.callbacks import Callbacks, PendingExecution
 from taskloop.recovery.continuation_models import ContinuationResult, State, refused
 from taskloop.recovery.execution_models import Phase
-from taskloop.recovery.models import Intent, Outcome, ReconciliationState, Result
+from taskloop.recovery.models import Intent, Outcome, ReconciliationState, Result, Snapshot
 from taskloop.recovery.recover import Recovery
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 
@@ -23,13 +23,16 @@ class Continuation:
 
     def __call__(
         self, key: AttemptKey, owner: Identity, *, custody: AbstractContextManager[None] | None = None,
+        intent: Intent | None = None,
     ) -> ContinuationResult:
+        if intent is not None and (intent.key != key or intent.owner != owner):
+            return refused(Result(outcome=Outcome.CHANGED, explanation="The supplied authorization belongs to another attempt or owner."))
         try:
             record = self.attempts.store.load(key)
             if record is None:
                 return refused(Result(outcome=Outcome.INELIGIBLE, explanation="The saved attempt is absent."))
             with self.recovery.custody(record.admission) if custody is None else custody:
-                return self._continue(record.admission, owner)
+                return self._continue(record.admission, owner, intent)
         except SlotBusy:
             return refused(Result(outcome=Outcome.CUSTODY_BUSY, explanation="Another operation holds the slot's custody."))
         except StoreRefused:
@@ -37,29 +40,39 @@ class Continuation:
         except (StoreUnavailable, SlotLockUnavailable):
             return ContinuationResult(state=State.UNAVAILABLE, explanation="Continuation storage or custody is unavailable.")
 
-    def _continue(self, admission: Admission, owner: Identity) -> ContinuationResult:
+    def _continue(self, admission: Admission, owner: Identity, intent: Intent | None) -> ContinuationResult:
         store, clock = self.recovery.store, self.recovery.clock
         snapshot = store.snapshot(admission.key, clock())
         if isinstance(snapshot, Result):
             return self._complete(admission) if snapshot.outcome is Outcome.CAPTURED else refused(snapshot)
-        previous = snapshot.intent
-        token = None
+        previous = intent if intent is not None else snapshot.intent
         if previous is not None:
             existing = self._existing(admission, previous)
-            if existing is not None:
+            if isinstance(existing, ContinuationResult):
                 return existing
-            if previous.execution is not None and previous.execution.phase is Phase.REGISTERED:
-                token = self.recovery.ids.hex()
-        authorized = self.recovery.authorize(admission.key, owner, token=token, custody=nullcontext())
-        if authorized.outcome is not Outcome.AUTHORIZED or authorized.intent is None:
-            return refused(authorized)
-        intended = store.execute(authorized.intent, clock)
+            snapshot = existing
+        admission, current = snapshot.attempt.admission, snapshot.intent
+        registered = current is not None and current.execution is not None and current.execution.phase is Phase.REGISTERED
+        if intent is not None:
+            if registered:
+                return refused(Result(outcome=Outcome.CHANGED,
+                                      explanation="The registered worker is gone; fresh authorization is required."))
+            selected = current
+        else:
+            authorized = self.recovery.authorize(admission.key, owner, token=self.recovery.ids.hex() if registered else None,
+                                                custody=nullcontext())
+            if authorized.outcome is not Outcome.AUTHORIZED:
+                return refused(authorized)
+            selected = authorized.intent
+        if selected is None:
+            raise StoreUnavailable("Recovery authorization is absent")
+        intended = store.execute(selected, clock)
         if intended.outcome is not Outcome.INTENDED or intended.intent is None:
             return refused(intended)
         returned = self.native(admission, intended.intent)
         return refused(returned) if isinstance(returned, Result) else self._capture(returned, intended.intent)
 
-    def _existing(self, admission: Admission, previous: Intent) -> ContinuationResult | None:
+    def _existing(self, admission: Admission, previous: Intent) -> ContinuationResult | Snapshot:
         reconciled = self.recovery.reconcile(previous, custody=nullcontext())
         if isinstance(reconciled, Result):
             return refused(reconciled)
@@ -70,7 +83,9 @@ class Continuation:
             return ContinuationResult(state=State.LIVE, explanation=reconciled.explanation, intent=saved)
         if reconciled.state is ReconciliationState.UNKNOWN:
             return refused(Result(outcome=Outcome.UNRESOLVED, explanation=reconciled.explanation, intent=previous))
-        return None
+        if reconciled.snapshot is None:
+            raise StoreUnavailable("Reconciliation snapshot is absent")
+        return reconciled.snapshot
 
     def capture(
         self, pending: PendingExecution, *, custody: AbstractContextManager[None] | None = None,
