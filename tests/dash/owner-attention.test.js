@@ -195,6 +195,99 @@ const deferred = () => {
   return { promise, resolve };
 };
 
+const lifecycle = (word, extra = {}) => round("2026-11-14T12:00:00Z", { move: "rounds", words: [word], ...extra });
+const stoppedNote = "Rounds last recorded as stopped; automatic landing awaits rounds resuming.";
+const stopped = (expected) => assert(node("land-waiting").textContent.includes(stoppedNote) === expected,
+  `Stopped explanation should be ${expected}: ${node("land-waiting").textContent}`);
+
+async function stoppedRounds() {
+  const waiting = ["waiting", "manual", "unknown", "landing"].map((land) => card(`land-${land}`, "00", {
+    column: "land", land, status_note: `Awaiting land: ${land}`,
+  }));
+  logSnapshot.rows = [lifecycle("started"), lifecycle("stopped", { words: ["stopped", "interrupted"] })];
+  await resync([...mixed, ...waiting]);
+  stopped(true);
+  health("No round in available log");
+  for (const task of waiting.slice(1)) {
+    assert(!node(task.id).textContent.includes(stoppedNote), `${task.land} explanation remains authoritative`);
+    assert(node(task.id).textContent.includes(task.status_note), `${task.land} retains its explanation`);
+  }
+  for (const layout of ["view-lanes", "view-columns"]) {
+    document.getElementById(layout).click();
+    stopped(true);
+  }
+  for (const row of [lifecycle("started", { backlog: "other" }), lifecycle("wait", { at: "invalid" }),
+    lifecycle("started", { at: "2026-02-30T12:00:00Z" }), lifecycle("warn"), round("2026-11-14T12:01:00Z")]) {
+    logEvent(row);
+    stopped(true);
+  }
+  for (const word of ["started", "wait"]) {
+    logEvent(lifecycle(word));
+    stopped(false);
+    logEvent(lifecycle("stopped", { words: ["stopped", "abrupt"] }));
+    stopped(true);
+  }
+  logEvent(lifecycle("started", { at: "2026-11-14T11:59:59Z" }));
+  stopped(true);
+  send({ kind: "task", task: { ...waiting[0], title: "Updated waiting task" } });
+  stopped(true);
+  send({ kind: "gone", id: "land-waiting" });
+  send({ kind: "task", task: waiting[0] });
+  stopped(true);
+  logSnapshot.rows = [lifecycle("stopped"), lifecycle("started")];
+  transport("open"); await tick();
+  stopped(false);
+  logSnapshot.rows = [lifecycle("stopped", { words: ["stopped", "abrupt"] })];
+  await reload();
+  stopped(true);
+  for (const rows of [[], [lifecycle("stopped", { backlog: "other" })], [round("2026-11-14T12:01:00Z")]]) {
+    logSnapshot.rows = rows;
+    await reload();
+    stopped(false);
+  }
+  logEvent(lifecycle("stopped"));
+  logResponse = () => { throw new Error("fixture log failed"); };
+  await reload();
+  stopped(false);
+  logResponse = () => logSnapshot;
+}
+
+async function stoppedRaces() {
+  for (const word of ["started", "wait", "stopped"]) {
+    const old = deferred();
+    logResponse = () => old.promise;
+    send({ kind: "resync" });
+    logEvent(lifecycle(word));
+    old.resolve({ backlog, rows: [lifecycle(word === "stopped" ? "started" : "stopped")] });
+    await tick();
+    stopped(word === "stopped");
+  }
+  const old = deferred();
+  logResponse = () => old.promise;
+  send({ kind: "resync" });
+  logSnapshot.rows = [lifecycle("wait")];
+  logResponse = () => logSnapshot;
+  await reload();
+  old.resolve({ backlog, rows: [lifecycle("stopped")] });
+  await tick();
+  stopped(false);
+  const empty = deferred();
+  logResponse = () => empty.promise;
+  send({ kind: "resync" });
+  logEvent(lifecycle("stopped"));
+  empty.resolve({ backlog, rows: [] });
+  await tick();
+  stopped(true);
+  const failed = deferred();
+  logResponse = async () => { await failed.promise; throw new Error("fixture log failed"); };
+  send({ kind: "resync" });
+  logEvent(lifecycle("started"));
+  failed.resolve();
+  await tick();
+  stopped(false);
+  logResponse = () => logSnapshot;
+}
+
 async function healthStates() {
   now = Date.parse("2026-11-14T12:00:00Z");
   logSnapshot = { backlog, rows: [round("2026-11-14T10:00:00Z"), round("2026-11-14T09:00:00Z")] };
@@ -296,6 +389,8 @@ try {
     document.documentElement.className = theme;
     await healthStates();
     await healthRaces();
+    await stoppedRounds();
+    await stoppedRaces();
     await resync(mixed);
     for (const layout of ["view-columns", "view-lanes"]) {
       document.getElementById(layout).click();
@@ -326,7 +421,8 @@ try {
     summary(2, 4);
     placement();
   }
-  results.textContent = "PASS: stream state and round age, reload races, owner attention and factory faults, both layouts and themes";
+  results.textContent = "PASS: stopped rounds, stream state and round age, reload races, owner attention and factory faults, "
+    + "both layouts and themes";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack ?? error}`;
   throw error;
