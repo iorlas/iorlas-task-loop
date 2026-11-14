@@ -4,7 +4,7 @@ import ast
 from dataclasses import dataclass, field
 from typing import Never
 
-from taskloop.shelf_digest.declarations import Declaration, declared_names, expression_name
+from taskloop.shelf_digest.declarations import Declaration, canonical_declaration, declared_names, expression_name
 from taskloop.shelf_digest.models import ExtractionError, SignatureFailure, SignatureFailureReason
 from taskloop.shelf_digest.source import ReadFailure, Source
 
@@ -115,10 +115,29 @@ class PackageExports:
             if module.exports is None or extra is None or not isinstance(node.op, ast.Add):
                 self.fail(SignatureFailureReason.UNSUPPORTED_EXPORT, module.path, "Unsupported __all__ update")
             module.exports += extra
+        elif isinstance(node, ast.If) and ast.unparse(node.test).startswith("sys.platform =="):
+            self._platform(module, node, values, aliases)
         elif any(isinstance(child, ast.Name) and child.id == "__all__" for child in ast.walk(node)):
             self.fail(SignatureFailureReason.UNSUPPORTED_EXPORT, module.path, "Dynamic __all__ declaration or mutation")
         if module.exports is not None:
             values["__all__"] = module.exports
+
+    def _platform(self, module: Module, node: ast.If, values: dict[str, tuple[str, ...]], aliases: dict[str, str]) -> None:
+        branches = []
+        for body in (node.body, node.orelse):
+            branch = Module(module.name, module.path, module.package, module.end_line)
+            for statement in body:
+                self._statement(branch, statement, dict(values), branch.aliases)
+            branches.append(branch)
+        left, right = branches
+        declarations = {name: canonical_declaration(nodes, name) for name, nodes in left.declarations.items()}
+        if declarations != {name: canonical_declaration(nodes, name) for name, nodes in right.declarations.items()}:
+            self.fail(SignatureFailureReason.UNSUPPORTED_EXPORT, module.path, "Incompatible platform declarations")
+        if left.exports != right.exports or left.stars or right.stars or left.aliases or right.aliases:
+            self.fail(SignatureFailureReason.UNSUPPORTED_EXPORT, module.path, "Unsupported platform exports")
+        for name, nodes in left.declarations.items():
+            module.declarations[name] = (*nodes, *right.declarations[name])
+            module.orders[name] = node.lineno
 
     def _imports(self, module: Module, node: ast.ImportFrom | ast.Import) -> None:
         if isinstance(node, ast.ImportFrom):
