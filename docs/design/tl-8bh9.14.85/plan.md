@@ -1,110 +1,124 @@
-# Small-model leak audit
+# Depth
 
-Status: **design**. Task: `tl-8bh9.14.85`. Prepared 2026-11-13 against
-`fe14d0f3a7b6a50cab00fe2f3bed7ff9599d1ac4`.
+Small: one audit produces a file-and-fix report in this task's documentation directory;
+backend, string and lifecycle leaks are dimensions of the report, not separate runtime
+behaviours. No missing owner decision or explicitly unlanded dependency is stated.
+Evidence budget: 6 model calls total for planning. Repair selection follows the report
+and does not prevent preparing it.
 
-Produce a reviewable list of backend, string and lifecycle details that a small model reading the current code
-could misread or copy into new work. Each finding names the file, explains the misleading pattern and proposes a
-bounded fix. The owner chooses which findings to repair. This task delivers the audit report; repair work remains
-with the selected owning tasks.
+## Size
 
-## Evidence and execution prerequisite
+- Estimated changed files: 2, including this revised plan and new `report.md`; no source,
+  test, dependency, schema, glossary or instruction-file changes.
+- Independent behaviours: 1, delivery of an evidence report. Acceptance: at the recorded
+  revision, every confirmed leak names an existing file and line, demonstrates a misleading
+  producer-to-consumer pattern, cites an effective rule, and proposes a bounded fix with
+  its owning module, affected callers and focused verification. The report addresses all
+  three requested dimensions, records exclusions and coverage limits, and leaves repair
+  selection pending. A keyword hit without a traced misreading is not a confirmed leak.
+- Estimated model calls for one implement attempt: 70, including discovery, tracing,
+  writing and a second verification pass. This is distinct from the planning evidence budget.
 
-The mandate is the supplied task description, originating in architecture-review session `local_16bd6c79`,
-2026-11-13. Read these sources before the audit:
+Task: `tl-8bh9.14.85`. Status: design. Revised 2026-11-14 against
+`cf7f10f90acb93dbb84601211c2bb5ee6d86797f` in its assigned managed worktree.
 
-- [Grilling record](../architecture-review/grilling-record.md), especially the closed-vocabulary/backend rules,
-  census findings and accepted version-control/harness decisions.
-- [Decision register](../architecture-review/decision-register.md), especially the tracker, version-control,
-  typed-output and adapter-explanation decisions, and the current repository `AGENTS.md` and `docs/glossary.md`.
-- The session scratchpad's `architecture-review-20261113.html`. It was readable during planning at
-  `/tmp/claude-501/-home-iorlas-Workspaces-iorlas-task-loop-b83c5d9a3f13cb9d-sleepy-nobel-d00460/b75c53f8-b204-48ba-bfee-a0095c237e4e/scratchpad/architecture-review-20261113.html`.
-  Its candidate cards supply leads, not accepted decisions or current defect counts. Later accepted decisions
-  and current instructions take precedence. If that temporary report disappears, record the missing evidence
-  and use the retained grilling/register material; do not imply the original was rechecked.
+## Current evidence and prerequisites
 
-Run the audit only after the task tracker's vocabulary and constitution prerequisites have settled and their
-accepted changes are present in the checkout. Re-read their final requirements and artifacts before scanning.
-Constitution task `tl-8bh9.14.81` has landed text in this revision; vocabulary task `tl-8bh9.14.112` has a separate
-managed branch. Neither observation establishes all prerequisite task statuses. During planning, `bd show
-tl-8bh9.14.85 --json` failed with `database not found: tl`; the complete dependency list could not be verified.
-Recheck it through the owning tracker/actor when available, preserving existing claims. Do not start the full
-audit or infer completion from a plan, historical implementation commit, comment or glossary definition alone.
-This prerequisite does not prevent preparing this plan.
+The supplied task and discussion are the complete requirements. Tracker access is unavailable
+by instruction; do not invoke `bd`, reconstruct tracker state, or repeat the previous attempt's
+requirement to restore tracker access. This revision supersedes the old plan; no audit is
+claimed complete.
 
-Record the exact audited Git revision and prerequisite evidence in the report. Revalidate the leads below at that
-revision: vocabulary work may remove or relocate them. Historical census counts are context, not acceptance targets.
+The effective constitution is the supplied AGENTS.md, including backend isolation, closed
+vocabulary, lifecycle, ownership and naming rules. Historical grilling/register proposals
+remain proposals where they conflict with current instructions, including CLAUDE.md mirroring,
+alternate scheduler names and configuration arrangements.
 
-## Scope and method
+Vocabulary prerequisite `tl-8bh9.14.112` now has an implemented artifact in this checkout.
+Its accepted scope is canonical command conclusions and an ID port; step and claim vocabularies
+are separate follow-ups. `command_conclusion.py` contains the enum and edge codec. Audit
+remaining literals against that bounded settlement; do not demand every deferred migration
+finish first. These are local artifact/source observations, not queried task status. The
+supplied constitution and implemented vocabulary scope provide the baseline. Describe any
+actual conflicting requirement discovered later, rather than treating lack of tracker access
+as an owner decision.
 
-Inventory production Python under `src/taskloop`, dashboard JavaScript, agent-facing prompts and schemas, CLI
-help/messages, and active documentation that directs new code. Inspect tests, semantic fakes and architecture
-contracts where they demonstrate or encourage a pattern. Historical design records and dependency source provide
-context; their literal backend identifiers are not automatically current-code findings.
+The old scratchpad path is no longer readable:
+`/tmp/claude-501/-home-iorlas-Workspaces-iorlas-task-loop-b83c5d9a3f13cb9d-sleepy-nobel-d00460/b75c53f8-b204-48ba-bfee-a0095c237e4e/scratchpad/architecture-review-20261113.html`.
+Record this limitation and use the retained grilling record/register. Do not imply the HTML
+report was reviewed or search other session data to reconstruct it.
 
-1. Map existing boundaries by responsibility: tracker translation, Git mechanics, harness/process access, stores,
-   application operations and presentation. Current adapters are named modules, not necessarily an `adapters/`
-   directory. Trace a suspect value from its originating adapter or edge through its consumers before classifying it.
-2. Search imports, identifiers, comments, prompt strings, commands and error messages for backend product/tool names
-   and types. Inspect error-text matching, backend error-kind branching, hard-coded harness selection and raw access
-   flags outside their owner. Follow explanations into CLI/dashboard output: generic typed results need adapter-supplied
-   explanations; raw diagnostics can remain attached detail rather than becoming workflow control or generic prose.
-3. Inspect `Literal` declarations, repeated membership lists, literal comparisons, composite reason strings and their
-   parsing. Identify which strings are closed vocabularies and where definitions/codecs compete. Trace storage and
-   display encoding separately from in-process decisions. Open text, task IDs, paths, opaque session references,
-   command arguments and correctly owned interchange formats are not closed vocabularies merely because they are strings.
-4. Follow task, step, attempt, session, entry process, agent process, claim, reservation and release through representative
-   admission, launch, collection, verification, checks, repeat/relaunch, publication and land paths. Check that phase,
-   status, conclusion, verdict and disposition retain their settled meanings. Explain an actual ambiguity or unsafe
-   inference, such as confusing a collected result with success or publication with capture; a word search is only a lead.
-5. Inspect current enforcement and tests for each confirmed finding. Record the gap and the smallest useful contract
-   or behavior check a later repair needs. Cross-reference existing owning tasks so already planned work is visible
-   without treating its plan as a repair or duplicating it here.
+The worktree was initially clean. History inspection found no WIP trailer for this task.
+The visible trailer embedded in `78696b90` belongs to integrated task `.160`; that commit
+has no changes under this task's directory. Preserve its agent settings.
 
-The glossary permits domain words such as commit, branch and merge. Backend tool names and commands remain adapter
-details even when only one backend is enabled. Library types inside their owning adapters and intentional edge
-encodings are legitimate. Read apparent exceptions in context and record why important search hits were excluded.
-Do not introduce new domain terms: propose options and reasons for an owner decision if a fix would require one.
+## Read list
 
-## Current leads to recheck
+- `docs/design/tl-8bh9.14.85/plan.md:1-23` — report scope and independently testable acceptance.
+- `docs/design/architecture-review/grilling-record.md:6-113` — original accepted rules and subsequent decisions; distinguish proposals.
+- `docs/design/architecture-review/decision-register.md:66-116` — tracker, Git, harness and vocabulary decisions.
+- `docs/design/tl-8bh9.14.112/plan.md:1-24` — settled vocabulary scope and deferred migrations.
+- `docs/design/tl-8bh9.14.112/plan.md:177-208` — implemented prerequisite evidence and handoff boundaries.
+- `docs/glossary.md:98-143` — missing lifecycle definitions, claims, reservations and holds; supplied definitions remain primary.
+- `src/taskloop/command_conclusion.py:1-47` — canonical vocabulary and codec; legitimate edge strings.
+- `src/taskloop/tracker.py:1-42` — task facts and error boundary consumed by application operations.
+- `src/taskloop/tracker_client.py:1-90` — originating backend contracts in the concrete tracker adapter.
+- `src/taskloop/admit.py:210-270` — claim call, backend error branching and uncertain-effect handling.
+- `src/taskloop/hold.py:155-181` — label-failure messages and backend wording outside the adapter.
+- `src/taskloop/step_render.py:130-187` — release/status presentation and actionable consumer messages.
+- `src/taskloop/claim_lease.py:1-38` — backend timing assumptions and lease renewal inputs.
+- `src/taskloop/attempt_result.py:1-54` — composite reasons, result construction and success predicate.
+- `src/taskloop/check_status.py:1-57` — check-result producer and shared attempt-result consumer contract.
+- `src/taskloop/attempt_types.py:275-340` — session capture, collection and disposition contracts.
+- `src/taskloop/attempt.py:180-306` — launch/collection callers and answer-to-verification lifecycle.
+- `src/taskloop/agents/launch.py:1-122` — harness translation and settings consumers; establish adapter ownership first.
+- `src/taskloop/agents/settings.py:107-174` — harness/settings model and policy encoding boundary.
+- `src/taskloop/step_guide.py:1-80` — agent-facing instructions that could teach a copyable pattern.
+- `src/taskloop/dash_model.py:163-240` — attempt/session read models and dashboard-facing contracts.
+- `src/taskloop/dash/static/words.js:1-69` — dashboard lifecycle words and displayed meanings.
+- `tests/rules/test_policy.py:226-241` — current backend import enforcement and its limits.
+- `.importlinter:123-159` — mechanism, lock, signal and step ownership contracts.
+- `tests/steps/test_admit.py:322-399` — semantic evidence for claim uncertainty and effect preservation.
 
-These examples establish that the audit is actionable; they are not a completed or exhaustive audit.
+## Implementation
 
-| Location at the planning revision | Lead and proposed direction |
-|---|---|
-| `src/taskloop/admit.py` (`BdError`, `NOT_CLAIMED`) | Admission knows backend error kinds and uncertain claim effects. Evaluate generic typed claim results supplied by the tracker adapter, preserving reconciliation and uncertain-claim safety. |
-| `src/taskloop/hold.py` and `src/taskloop/step_render.py` | A hold explanation names `bd`; the release renderer constructs `bd show`. Evaluate adapter-owned explanations carried through generic results. |
-| `src/taskloop/claim_lease.py` | Renewal timing/comments embed backend version and timeout assumptions. Determine which policy is generic and which timing guarantees belong to the adapter; preserve lease-loss and shutdown behavior. |
-| `src/taskloop/attempt_result.py` and `src/taskloop/check_status.py` | Composite reason strings and literal lifecycle words feed results and success decisions. Check remaining ownership after vocabulary work and propose typed distinctions with encoding at the edge. |
-| `src/taskloop/attempt_types.py` and `src/taskloop/attempt.py` | Shared contracts expose library types; execution selects a concrete harness. Trace the actual boundary before proposing factory-owned contracts or adapter configuration. |
-| `src/taskloop/dash_model.py`, `src/taskloop/dash_task.py`, prompts and dashboard scripts | Backend wording and lifecycle labels can teach consumers the wrong abstraction. Compare them with settled terminology and observable behavior. |
+Create **new** `docs/design/tl-8bh9.14.85/report.md`; this plan is its documentation
+integration point. The listed producers, callers, presentation models and contracts are
+existing integration points for findings. No runtime registration or audit framework is needed.
 
-`tests/rules/test_policy.py` currently limits construction/import of `Bd` to `tracker_client.py`; that narrow test
-does not confine `BdError` or backend text. `.importlinter` has process, entry, step and profile boundaries, but no
-general rule confining all backend names/types to adapters. Reinspect both after the prerequisites settle rather
-than assuming either the present gap or a proposed architecture contract still applies.
+1. Record the exact audited revision, effective instructions, prerequisite observations,
+   retained review sources and missing scratchpad. Apply supplied glossary definitions;
+   collect missing terms into at most one targeted glossary read. Introduce no terms.
+2. Inventory production Python, dashboard JavaScript and agent-facing text using bounded
+   searches for backend identifiers, Literal declarations, repeated comparisons, composite
+   reasons/parsing and lifecycle words. Active documentation supplies context; historical
+   proposals and correctly owned interchange are not defects by default. Additional targeted
+   searches may identify missed producers/callers or changed source. Follow concrete matches
+   rather than reading every module or dependency package.
+3. Trace candidates through tracker/admission, lease, attempt, check and presentation paths.
+   Distinguish backend mechanisms from defined domain words, closed vocabulary from open
+   text, and collection from verified success. Establish harness adapter ownership before
+   classifying library types or configuration as leaks. Preserve uncertain claims, explicit
+   holds, reconciliation and session capture in proposed fixes. Publication is not capture
+   or task completion.
+4. Group repeated occurrences only when the owner and fix coincide, listing affected files.
+   Each confirmed group needs file:line, symbol, short excerpt, producer/caller trace,
+   actual small-model misreading, effective rule, bounded fix, owning module and focused
+   verification. Flag schema/lifecycle consequences explicitly. Note repair-task overlap
+   only from supplied or inspected artifacts; unknown ownership remains unknown. Separate
+   unresolved leads, exclusions and unreviewed coverage from confirmed findings.
+5. Recheck each finding against source in a separate reading pass, including line references,
+   ownership and caller consequences. Ensure all three audit dimensions are addressed and
+   leave a selectable file-and-fix list. Do not implement repairs or create repair tasks.
 
-## Deliverable and validation
+## Validation and completion
 
-Write `docs/design/tl-8bh9.14.85/report.md`, with status **evidence**, the audited revision, scope, sources,
-prerequisite checks and any coverage limitations. Give every confirmed leak:
+Validate Read-list paths/ranges and final report references; review the documentation diff
+and Git status. Report coverage honestly: representative traces do not prove absence of
+other leaks. Missing historical evidence remains an explicit limitation. Keep only the plan
+and report under this task's directory; retain no temporary scans.
 
-- A current file path, line number, symbol and short excerpt or reproducible search.
-- The specific misreading or copyable pattern, traced producer/consumer boundary, and violated accepted rule.
-- A concrete bounded fix, its owning module/adapter, affected callers and suggested focused verification. Preserve
-  behavior and state ownership; identify any schema/lifecycle consequence rather than disguising it as a rename.
-- Any existing task covering the repair and any decision the owner must make. Leave repair selection explicitly pending.
-
-Group repeated occurrences only when the owner and fix are the same, listing the affected files. Distinguish
-confirmed leaks from unresolved questions; include significant exclusions and reasons. Report honest coverage,
-not a claim that a keyword scan proves the absence of leaks. No small-model benchmark or new audit framework is needed.
-
-Have an independent reader check the findings against the audited source and accepted decisions. Verify file/line
-references, links, proposed fixes, coverage and existing-task overlap. Review the final diff for documentation-only
-scope. Do not change production code, tests, dependencies, glossary or instruction files, or create repair tasks
-before the owner selects them. Audit artifacts stay under this task's design directory; retain no temporary scans.
-
-This documentation-only audit requires no runtime changes or test run. Later selected repairs carry their own
-focused tests and the repository's required `just check` and `just test` gates, with `justfile` read first and no
-historical whole-suite/live runs. Completion here means a source-checked file-and-fix list is ready for owner choice,
-not that its proposed fixes have been implemented.
+This documentation-only result needs no runtime tests or whole-suite/live checks. Available
+implementation gates are `just check` and `just test`; selected repair tasks carry their
+focused behaviour/contract tests and required gates. Completion means the verified report
+meets the acceptance criterion and is ready for owner selection, with repairs still pending.
