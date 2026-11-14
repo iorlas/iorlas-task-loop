@@ -10,6 +10,7 @@ from beads_client import Bd, BdError
 from beads_client.testing import Script
 
 from taskloop.claim_lease import BD_TIMEOUT_S
+from taskloop.hold_store import COMMENT_LEASE
 from taskloop.tracker_client import HoldAnswer, tracker_claims, tracker_holds
 
 ACTOR = ["--actor", "taskloop"]
@@ -92,7 +93,7 @@ def test_a_label_bd_would_read_as_a_flag_is_refused_before_any_call(tmp_path: Pa
 
 def test_a_locked_tracker_is_asked_once_and_retried_by_the_next_round(tmp_path: Path) -> None:
     script = Script().say("", "embeddeddolt: acquiring lock: busy", 1)
-    assert tracker_holds(script).comment(str(tmp_path), "tl-1", "text") == HoldAnswer("unavailable", "other")
+    assert tracker_holds(script).comment(str(tmp_path), "tl-1", "attempt-1", "text") == HoldAnswer("unavailable", "other")
     assert len(script.calls) == 1
 
 
@@ -102,13 +103,36 @@ def test_an_unanswered_read_writes_nothing(tmp_path: Path) -> None:
     assert calls(script) == [SHOW]
 
 
-def test_the_comment_and_the_clear_are_one_bd_call_each_with_no_read(tmp_path: Path) -> None:
-    script = Script()
-    holds = tracker_holds(script)
+@pytest.mark.parametrize("lost_response", [False, True])
+def test_keyed_delivery_reads_back_even_after_a_lost_response(tmp_path: Path, lost_response: bool) -> None:
     text = "taskloop hold: failed:run:timeout\nline two"
-    assert holds.comment(str(tmp_path), "tl-1", text) == HoldAnswer("done")
+    marked = text + "\n\n[comment-key: attempt-1]"
+    posted = json.dumps([{"author": "taskloop", "text": marked}])
+    script = Script().say("[]")
+    if lost_response:
+        script.say("", "bd: no answer in 30.0s", 124)
+    else:
+        script.say()
+    script.say(posted)
+    holds = tracker_holds(script)
+    assert holds.comment(str(tmp_path), "tl-1", "attempt-1", text) == HoldAnswer("done")
     assert holds.clear(str(tmp_path), "tl-1") == HoldAnswer("done")
-    assert calls(script) == [[*ACTOR, "comments", "add", "tl-1", text, "--json"], [*ACTOR, "label", "remove", "tl-1", "held", "--json"]]
+    read = [*ACTOR, "comments", "tl-1", "--json"]
+    assert calls(script) == [read, [*ACTOR, "comments", "add", "tl-1", marked, "--json"], read,
+                             [*ACTOR, "label", "remove", "tl-1", "held", "--json"]]
+    assert 3 * BD_TIMEOUT_S < COMMENT_LEASE
+
+
+def test_an_ambiguous_post_and_failed_readback_retry_only_through_the_key(tmp_path: Path) -> None:
+    posted = json.dumps([{"author": "taskloop", "text": "notice\n\n[comment-key: attempt-1]"}])
+    script = Script().say("[]").say("", "bd: no answer in 30.0s", 124).say(DOWN, "", 1)
+    holds = tracker_holds(script)
+    assert holds.comment(str(tmp_path), "tl-1", "attempt-1", "notice") == HoldAnswer("unavailable", "timeout")
+    script.say(posted)
+    assert holds.comment(str(tmp_path), "tl-1", "attempt-1", "changed text") == HoldAnswer("done")
+    read = [*ACTOR, "comments", "tl-1", "--json"]
+    assert calls(script) == [read, [*ACTOR, "comments", "add", "tl-1", "notice\n\n[comment-key: attempt-1]", "--json"],
+                             read, read]
 
 
 @pytest.mark.parametrize(("reply", "expected"), [
@@ -119,7 +143,7 @@ def test_a_failed_comment_or_clear_is_a_word(tmp_path: Path, reply: tuple[str, s
     for write in ("comment", "clear"):
         script = Script().say(*reply)
         holds = tracker_holds(script)
-        found = holds.comment(str(tmp_path), "tl-1", "text") if write == "comment" else holds.clear(str(tmp_path), "tl-1")
+        found = holds.comment(str(tmp_path), "tl-1", "attempt-1", "text") if write == "comment" else holds.clear(str(tmp_path), "tl-1")
         assert found == expected and len(script.calls) == 1
 
 
@@ -133,7 +157,7 @@ def test_every_hold_call_is_capped_at_bd_timeout_at_the_resolved_root(tmp_path: 
 
     holds = tracker_holds(Script(), client=Recorded)
     root = str(tmp_path / "x" / "..")
-    assert holds.labels(root, "tl-1", "auto") == holds.comment(root, "tl-1", "t") == holds.clear(root, "tl-1") == HoldAnswer(
+    assert holds.labels(root, "tl-1", "auto") == holds.comment(root, "tl-1", "attempt-1", "t") == holds.clear(root, "tl-1") == HoldAnswer(
         "unavailable", "timeout")
     # one try each (no lock retry): no call outlasts the comment lease
     assert built == [{"actor": "taskloop", "cwd": str(tmp_path.resolve()), "timeout": BD_TIMEOUT_S, "lock_retries": 0}] * 3
