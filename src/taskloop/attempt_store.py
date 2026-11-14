@@ -3,7 +3,7 @@
 import json
 import math
 import sqlite3
-from dataclasses import astuple
+from dataclasses import astuple, replace
 from typing import Literal
 
 from any_agent.procs import Worker
@@ -78,7 +78,20 @@ class AttemptStore(AttemptLoads):
                     (worker.pid, worker.pgid, worker.start, worker.boot, intent.key.attempt_id, current.revision))
         return current.revision + 1
 
-    def recovery(self, con: sqlite3.Connection, key: AttemptKey, now: float) -> AttemptRecord | Result:
+    def renew(self, con: sqlite3.Connection, current: AttemptRecord, deadline: float) -> AttemptRecord:
+        """Only recovery calls this, after proof and snapshot comparison under the same writer lock."""
+        admission = replace(current.admission, deadline=max(current.admission.deadline, deadline))
+        changed = con.execute(
+            "UPDATE attempt SET deadline=?,rev=rev+1 WHERE attempt_id=? AND dispatch_token=? AND generation=? AND rev=?",
+            (admission.deadline, *astuple(admission.key), current.revision),
+        ).rowcount
+        if changed != 1:
+            raise StoreRefused("changed_admission")
+        return replace(current, admission=admission, revision=current.revision + 1)
+
+    def recovery(
+        self, con: sqlite3.Connection, key: AttemptKey, now: float, *, allow_expired: bool = False,
+    ) -> AttemptRecord | Result:
         """Read eligibility inside the recovery store's transaction; no attempt facts are changed."""
         row = con.execute(
             f"""SELECT {SUCCESSOR},EXISTS(SELECT 1 FROM slot_release r WHERE r.attempt_id=p.attempt_id),
@@ -96,10 +109,13 @@ class AttemptStore(AttemptLoads):
             return Result(outcome=outcome, explanation=f"The attempt cannot be recovered: {error}.")
         if record is None:
             return Result(outcome=Outcome.INELIGIBLE, explanation="The attempt is absent.")
-        return self._recovery_session(con, record, now)
+        return self._recovery_session(con, record, now, allow_expired=allow_expired)
 
-    def _recovery_session(self, con: sqlite3.Connection, record: AttemptRecord, now: float) -> AttemptRecord | Result:
-        if not math.isfinite(now) or not math.isfinite(record.admission.deadline) or now >= record.admission.deadline:
+    def _recovery_session(
+        self, con: sqlite3.Connection, record: AttemptRecord, now: float, *, allow_expired: bool = False,
+    ) -> AttemptRecord | Result:
+        if (not math.isfinite(now) or not math.isfinite(record.admission.deadline)
+                or (not allow_expired and now >= record.admission.deadline)):
             return Result(outcome=Outcome.EXPIRED, explanation="The attempt's existing allowance has expired.")
         if record.phase != "registered" or record.worker is None:
             return Result(outcome=Outcome.UNRESOLVED, explanation="Complete entry and worker registration is required for stop proof.")
