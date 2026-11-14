@@ -52,6 +52,7 @@ from taskloop.machine_config import ConfigRefused
 from taskloop.publish import BranchPublished, NotPublished, PublishResult, publish_word
 from taskloop.slot_release import AlreadyReleased, NotReleased, Released, ReleaseResult, release_word
 from taskloop.slots import Adopted, NotAdopted, SlotView
+from taskloop.step_text import unsafe_details
 from taskloop.steps import CHECK, following
 
 type Clock = Callable[[], float]
@@ -595,5 +596,5 @@ def verify_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled 
     if isinstance(result, VerifyUnavailable) and result.reason == "inconsistent":  # same inputs, another verdict: a defect
         return Failed("defect", result.reason)
     if isinstance(result, Unsettled):
-        return Failed("unsettled", result.reason, "\n".join(result.listing))
+        return Failed("unsettled", result.reason, "\n".join(filter(None, (unsafe_details(result), "\n".join(result.listing)))))
     return Failed(VERIFY_KINDS[type(result)], result.what if isinstance(result, NotApplicable) else result.reason)

@@ -367,7 +367,8 @@ def test_show_prints_no_control_character_and_a_bounded_listing(
     if reason == "ignored":
         assert len(left) == 52 and left[-1] == "+951 more"
     else:
-        assert left[1:] == ("docs/design/tl-1/e?]0;owned??31m.md",)
+        assert json.dumps(EVIL, ensure_ascii=True) in left[1] and "execute bit" in left[1]
+        assert left[2:] == ("docs/design/tl-1/e?]0;owned??31m.md",)
 
 
 def test_a_staged_index_at_e_never_dispatches(step: Step, slot: FakeWorktree) -> None:

@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from test_steps import CONTEXT
 
 from taskloop.admit import task_text
-from taskloop.attempt_types import AttemptKey, Unsettled
+from taskloop.attempt_types import AttemptKey, PathExplanation, Unsettled
 from taskloop.check_repeat.feedback import RENDER_BYTES, TAIL_BYTES, Availability, FailedCheck
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.steps import failed_check_feedback, kind
@@ -85,7 +85,8 @@ def test_long_arguments_are_preserved_and_invalid_failed_check_inputs_are_refuse
 @pytest.mark.parametrize("path", ["src/executable.py", "src/.gitattributes", "src/a\x1b[31m\nfile.py"])
 def test_unsafe_explanation_identifies_the_first_unsafe_path_and_keeps_leftovers(path: str) -> None:
     step = kind("implement")
-    text = step.feedback(Unsettled("unsafe", (path, "scratch.txt")), step.rules("tl-1"), 1, "Task", "NONCE", unrecorded=True)
+    found = Unsettled("unsafe", (path, "scratch.txt"), (PathExplanation(path, "The file has an execute bit set."),))
+    text = step.feedback(found, step.rules("tl-1"), 1, "Task", "NONCE", unrecorded=True)
     first = text.splitlines()[0]
     assert json.dumps(path, ensure_ascii=True) in first and "cannot be committed" in first
     assert "scratch.txt" in text and "Nothing of attempt 1 was committed" in text

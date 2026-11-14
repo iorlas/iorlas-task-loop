@@ -81,7 +81,7 @@ def accepted(repo: Repo, slot: Worktree, files: SlotFiles, work: Work, answer: A
         return initial
     bad = unsafe_path(files, work.slot, StepRules(root="", max_paths=96, deletions=True), answer.paths, baseline.files)
     if bad is not None:
-        return f"The resolution contains an unsafe edit: {bad}."
+        return f"The resolution contains an unsafe edit: {bad.path!r}: {bad.explanation}"
     tree = repo.tree(str(slot.capture()))
     if tree is None:
         return "The resolution's working tree is unavailable."
