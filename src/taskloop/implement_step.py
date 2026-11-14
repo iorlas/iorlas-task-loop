@@ -22,6 +22,7 @@ from taskloop.attempt_types import (
 )
 from taskloop.check_repeat.feedback import FailedCheck, output_text
 from taskloop.command_conclusion import encode
+from taskloop.input_context import InputContext
 from taskloop.task import TaskInspection
 
 DISPOSITIONS: Final = ("implemented", "unchanged", "incomplete", "needs_owner")
@@ -102,10 +103,11 @@ def decode(value: object, rules: StepRules) -> Answer:
     return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
 
 
-def input_text(task: TaskInspection, rules: StepRules) -> str:
+def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
     """The implement step's admitted input: the task's own prose, then the fixed closing words. The plan is passed by
     reference: the slot starts on `task/<id>` at the published plan commit."""
-    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{_closing_words(task.reference.task_id, rules)}\n"
+    return (f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
+            f"{_closing_words(task.reference.task_id, rules)}\n")
 
 
 def _closing_words(task_id: str, rules: StepRules) -> str:

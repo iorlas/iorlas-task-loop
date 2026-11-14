@@ -14,6 +14,7 @@ from any_agent import (
     RunOutcome,
     decode_answer,
 )
+from git_porcelain import Repo
 
 from taskloop.agents.launch import AgentLaunch, LaunchFailure
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
@@ -38,6 +39,9 @@ from taskloop.attempt_types import (
 from taskloop.command_sink import CommandSink, WatchedHooks
 from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.git_views import GitProfileFiles
+from taskloop.input_context import InputError, refresh
+from taskloop.input_context import read as read_context
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
@@ -158,14 +162,38 @@ class Attempts:
             base = self._prepared(record, renew, credentials, probe)
             if isinstance(base, AttemptResult):
                 return base
-            self.registration_store.warm()  # the first registration open runs here, never inside the harness registration window
-            if self.store.dispatch(record, base.head) == "conflict":
-                return AttemptResult("pending", "dispatching")
+            spec = self._context(admission, base, spec)
+            if isinstance(spec, AttemptResult):
+                return spec
             running = True
-            return self._run(admission, harness, spec)
+            return self._dispatch(record, base, harness, spec)
         finally:
             if not running:
                 harness.cleanup()
+
+    def _dispatch(self, record: AttemptRecord, base: Prepared, harness: Harness, spec: LaunchSpec) -> AttemptResult:
+        running = False
+        try:
+            self.registration_store.warm()
+            if self.store.dispatch(record, base.head) == "conflict":
+                return AttemptResult("pending", "dispatching")
+            running = True
+            return self._run(record.admission, harness, spec)
+        finally:
+            if not running:
+                harness.cleanup()
+
+    def _context(self, admission: Admission, base: Prepared, spec: LaunchSpec) -> LaunchSpec | AttemptResult:
+        try:
+            path = Path(admission.slot_path)
+            def pinned(root: Path, /, *, git_dir: Path | None = None) -> Repo:
+                return self.checkouts(root, git_dir=base.gitdir)
+            context = read_context(GitProfileFiles(path, pinned), base.head)
+            spec = replace(spec, stdin=refresh(spec.stdin, context))
+            self.files.put_launched_input(admission.key, spec.stdin)
+            return spec
+        except (InputError, EvidenceError, OSError) as error:
+            return AttemptResult("refused", "input", explanation=str(error))
 
     def _prepared(
         self, record: AttemptRecord, renew: Renew | None, credentials: Launch, probe: tuple[str, ...] | None

@@ -266,6 +266,10 @@ class EvidenceFiles:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
 
+    def put_launched_input(self, key: AttemptKey, text: str) -> FileRef:
+        """The complete dispatched prompt and source commit, retaining admission's original input snapshot."""
+        return self._write(self.directory(key) + "/launched-input.txt", text)
+
     def prepare(self, key: AttemptKey, schema: Mapping[str, object]) -> tuple[str, str]:
         """Write the step kind's answer `schema` (`schema.json`) and return its path and the native answer path, without
         executing a harness."""

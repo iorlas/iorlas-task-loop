@@ -6,9 +6,12 @@ from taskloop.admit import task_text
 from taskloop.attempt_types import AttemptKey, StepRules, Unsettled
 from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.factory_commit import attributes
+from taskloop.input_context import InputContext
 from taskloop.step_text import GIT_WRITES, SAVED_WORK
 from taskloop.steps import IMPLEMENT, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
+
+CONTEXT = InputContext("a" * 40, ("just check", "just test"), "Partial glossary: task: Work.\n")
 
 TASK = TaskInspection(
     TaskReference(TaskScope("tasks"), "tl-1"), "Add a widget", "It must do X.\nAnd Y.", "- X works\n- Y works", (), "in_progress",
@@ -39,7 +42,7 @@ def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
 def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environment() -> None:
     """The task's own prose first, then the plan by reference and the rules' scope, then the environment the entry
     prepared: offline setup, `$TMPDIR`, and that only the checks run afterwards count."""
-    text = task_text(TASK, "implement")
+    text = task_text(TASK, "implement", CONTEXT)
     assert text.startswith("Add a widget\n\nIt must do X.\nAnd Y.\n\n- X works\n- Y works\n\nThe plan for this task is "
                            "`docs/design/tl-1/plan.md`, committed on this branch by the plan step.")
     assert "at most 96 files of at most 1 MiB each" in text and "anything under `.beads/`" in text and GIT_WRITES in text
@@ -111,7 +114,7 @@ def test_the_attributes_files_follow_the_step_root_and_the_listed_paths() -> Non
 
 
 def test_the_plan_input_sends_an_infeasible_or_empty_task_to_needs_owner_at_plan() -> None:
-    text = PLAN.input_text(TASK, StepRules("docs/design/tl-1/"))
+    text = PLAN.input_text(TASK, StepRules("docs/design/tl-1/"), CONTEXT)
     assert "answer `needs_owner`" in text and "write no plan" in text
 
 

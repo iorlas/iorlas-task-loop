@@ -76,7 +76,8 @@ class Repository:
         self.main.mkdir()
         git(self.main, "init", "-q", "-b", "main")
         (self.main / "README").write_text("one\n")
-        git(self.main, "add", "README")
+        (self.main / ".task-loop.json").write_text("{}")
+        git(self.main, "add", "README", ".task-loop.json")
         git(self.main, "commit", "-q", "-m", "base")
         slots = root / "slots"
         self.repo_id = RepoId(VIEWS.checkouts(self.main).identity().key)

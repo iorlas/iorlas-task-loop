@@ -47,6 +47,9 @@ from taskloop.drain.store import blocked
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER, REPEATED
 from taskloop.ids import Ids
+from taskloop.git_views import GitProfileFiles
+from taskloop.input_context import InputError
+from taskloop.input_context import read as read_context
 from taskloop.prepare import HEADS, MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
@@ -106,7 +109,7 @@ class ChainAdmission:
         key = AttemptKey(self.ids.hex(), self.ids.token(16), previous.reservation_generation + 1)
         try:
             ref = self.files.put_input(key, request.text)
-        except (EvidenceError, UnicodeError, OSError) as error:
+        except (EvidenceError, InputError, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
         try:
             return self._takeover(open_store(self.connect), request, key, ref)
@@ -232,10 +235,11 @@ class NextAdmission:
         found, names = ready.found, tuple(each.name for each in ready.free)
         try:
             key = AttemptKey(self.ids.hex(), self.ids.token(16), issued(ready.con, RepoId(found.repo_id), names) + 1)
-            ref = self.files.put_input(key, task_text(ready.task, ready.step))
+            context = read_context(GitProfileFiles(request.checkout, self.checkouts), ready.free[0].source)
+            ref = self.files.put_input(key, task_text(ready.task, ready.step, context))
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
-        except (EvidenceError, UnicodeError, OSError) as error:
+        except (EvidenceError, InputError, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
         try:
             return self._advance(ready, request, key, ref)

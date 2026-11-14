@@ -60,7 +60,8 @@ def test_a_detached_slot_is_prepared_on_its_task_branch_and_the_plan_is_committe
     main.mkdir()
     git(main, "init", "-q", "-b", "main")
     (main / "README").write_text("one\n")
-    git(main, "add", "README")
+    (main / ".task-loop.json").write_text("{}")
+    git(main, "add", "README", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
     slot = slots / folder_name(VIEWS.checkouts(main).identity()) / "s1"
     git(main, "worktree", "add", "-q", "--detach", str(slot), "HEAD")
