@@ -1,4 +1,4 @@
-"""The dashboard's HTTP server: JSON endpoints, one server-sent-events stream and the static page, on 127.0.0.1 only, in
+"""The dashboard's HTTP server: JSON endpoints, one server-sent-events stream and the static page, on a literal address, in
 threads of the rounds process. Read-only: every handler is a GET over reads that already exist (`dash_board`,
 `dash_task`, `round_reader`). One poller thread, only while a page is connected, turns changes into stream messages.
 This is the one module that imports the standard library's HTTP server (`.importlinter`: `no-runtime-mechanisms`)."""
@@ -6,12 +6,15 @@ This is the one module that imports the standard library's HTTP server (`.import
 import json
 import queue
 import re
+import socket
 import threading
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
+from socketserver import TCPServer
 from typing import override
 
 from pydantic import BaseModel
@@ -216,7 +219,7 @@ def respond(ports: DashPorts, path: str, query: str = "") -> Reply:
     return NOT_FOUND
 
 
-def _handler(ports: DashPorts, hub: Hub, hosts: set[str]) -> type[BaseHTTPRequestHandler]:
+def _handler(ports: DashPorts, hub: Hub, hosts: set[str] | None) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         @override
         def log_message(self, format: str, *args: object) -> None:
@@ -231,7 +234,7 @@ def _handler(ports: DashPorts, hub: Hub, hosts: set[str]) -> type[BaseHTTPReques
             self.wfile.write(reply.body)
 
         def do_GET(self) -> None:
-            if self.headers.get("Host") not in hosts:  # a page served under another name (DNS rebinding) never reads this
+            if hosts is not None and self.headers.get("Host") not in hosts:  # prevent DNS rebinding on loopback
                 return self._reply(FORBIDDEN)
             path, _, query = self.path.partition("?")
             path = path.strip("/")
@@ -269,15 +272,32 @@ def _handler(ports: DashPorts, hub: Hub, hosts: set[str]) -> type[BaseHTTPReques
     return Handler
 
 
+class _HTTPServer(ThreadingHTTPServer):
+    @override
+    def server_bind(self) -> None:
+        TCPServer.server_bind(self)
+        host, self.server_port = self.server_address[:2]
+        self.server_name = str(host)
+
+
+class _IPv6HTTPServer(_HTTPServer):
+    address_family = socket.AF_INET6
+
+
 class DashServer:
     """Serves until `stop`: the HTTP server and the poller, both daemon threads. `port` 0 picks a free one (`address`). Binding
-    raises OSError when the port is taken. Only requests addressed to 127.0.0.1 or localhost on that port are answered."""
+    raises OSError when the address or port is unavailable. Loopback requires a local Host authority; explicit non-loopback
+    binding accepts proxy Host authorities. The operator supplies the proxy with sign-in; the dashboard has no authentication."""
 
-    def __init__(self, ports: DashPorts, port: int) -> None:
-        self.hub, self.hosts = Hub(ports), set[str]()
-        self.http = ThreadingHTTPServer(("127.0.0.1", port), _handler(ports, self.hub, self.hosts))
+    def __init__(self, ports: DashPorts, host: IPv4Address | IPv6Address, port: int) -> None:
+        self.hub = Hub(ports)
+        self.hosts: set[str] | None = set() if host.is_loopback else None
+        server_type = _IPv6HTTPServer if isinstance(host, IPv6Address) else _HTTPServer
+        self.http = server_type((str(host), port), _handler(ports, self.hub, self.hosts))
         self.http.daemon_threads = True
-        self.hosts |= {f"127.0.0.1:{self.address[1]}", f"localhost:{self.address[1]}"}
+        if self.hosts is not None:
+            authority = f"[{host}]" if isinstance(host, IPv6Address) else str(host)
+            self.hosts |= {f"127.0.0.1:{self.address[1]}", f"localhost:{self.address[1]}", f"{authority}:{self.address[1]}"}
         self.ports, self.done = ports, threading.Event()
         self.threads = [threading.Thread(target=self.http.serve_forever, daemon=True), threading.Thread(target=self._poll, daemon=True)]
 

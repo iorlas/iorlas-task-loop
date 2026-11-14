@@ -3,6 +3,7 @@
 import json
 from collections.abc import Generator
 from contextlib import contextmanager
+from ipaddress import ip_address
 from pathlib import Path
 
 import pytest
@@ -102,11 +103,12 @@ def test_dashboard_selection_lifetime_and_output(
     flags = named + (["--json"] if structured else [])
     assert main(["step", "rounds", *CHOICES, "--db", str(db), "--artifacts", str(artifacts), *flags]) == 0
     number = int(port) if isinstance(port, int) else DASH_PORT
-    shown = None if port == "off" else DashRequest("tasks", "/tracker", "approved", number, db, artifacts, Path("/checkout"))
+    shown = None if port == "off" else DashRequest("tasks", "/tracker", "approved", ip_address("127.0.0.1"), number,
+                                                 db, artifacts, Path("/checkout"))
     assert dashboard.requests == [shown]
     assert execution.events == ["rounds entered", "dashboard entered", "rounds ran", "dashboard closed", "rounds closed"]
     output = capsys.readouterr()
-    notice = "Dashboard: http://127.0.0.1:8123/\n"
+    notice = "Dashboard: http://127.0.0.1:8123/ (read-only, unauthenticated)\n"
     if structured:
         assert [json.loads(line) for line in output.out.splitlines()] == [
             {"status": "rounds", "backlog": "tasks", "every": 60, "log": str(artifacts / "rounds.log"),
@@ -129,9 +131,44 @@ def test_dashboard_closes_when_rounds_are_interrupted(
     output = capsys.readouterr()
     assert json.loads(output.out)["status"] == "rounds"
     notice, ending = output.err.splitlines()
-    assert notice == "Dashboard: http://127.0.0.1:8123/"
+    assert notice == "Dashboard: http://127.0.0.1:8123/ (read-only, unauthenticated)"
     assert json.loads(ending) == {"status": "ended", "backlog": "tasks", "reason": "abrupt", "detail": None}
     assert execution.events[-3:] == ["rounds ran", "dashboard closed", "rounds closed"]
+
+
+@pytest.mark.parametrize(("host", "authority", "exposed"), [
+    ("127.0.0.2", "127.0.0.2", False), ("::1", "[::1]", False),
+    ("0.0.0.0", "0.0.0.0", True), ("192.0.2.4", "192.0.2.4", True), ("::", "[::]", True),
+])
+@pytest.mark.parametrize("structured", [False, True])
+def test_dashboard_address_selection_and_exposure_notice(
+    host: str, authority: str, exposed: bool, structured: bool, execution: Execution,
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    dashboard = Dashboard(execution.events, (host, 8123))
+    monkeypatch.setattr(dash_composition, "serving", dashboard.serving)
+    flags = ["--json"] if structured else []
+    assert main(["step", "rounds", *CHOICES, "--dash-host", host, "--dash-port", "0", *flags]) == 0
+    request = dashboard.requests[0]
+    assert request is not None and request.host == ip_address(host) and request.port == 0
+    output = capsys.readouterr()
+    notice = f"Dashboard: http://{authority}:8123/ (read-only, unauthenticated)"
+    if exposed:
+        notice += "; non-loopback exposure is your explicit choice; use a proxy with sign-in"
+    assert notice in (output.err if structured else output.out).splitlines()
+    if structured:
+        assert [json.loads(line)["status"] for line in output.out.splitlines()] == ["rounds", "ended"]
+    else:
+        assert output.err == ""
+
+
+@pytest.mark.parametrize("host", ["localhost", "proxy.example", "http://127.0.0.1", "127.0.0.1:8123", "127.0.0.1/8",
+                                  "[::1]", "300.0.0.1", ""])
+def test_invalid_dashboard_addresses_fail_before_execution(host: str, execution: Execution) -> None:
+    with pytest.raises(SystemExit) as ended:
+        main(["step", "rounds", *CHOICES, "--dash-host", host])
+    assert ended.value.code == 2
+    assert execution.events == [] and execution.requests == []
 
 
 @pytest.mark.parametrize("refused", [False, True])

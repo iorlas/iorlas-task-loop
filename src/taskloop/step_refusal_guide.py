@@ -136,8 +136,8 @@ REFUSALS = {
     "drained": "Idle was verified and new work remains blocked. The owner must decide whether to restart or upgrade.",
     "interrupted": "The operation was interrupted. Existing executions and evidence remain intact; inspect "
     "current state before continuing.",
-    "dashboard_port": "The local dashboard port cannot be bound. Select a free local port or resolve the existing "
-    "listener's ownership.",
+    "dashboard_port": "The dashboard address or port cannot be bound. Select an address available on this machine and a free "
+    "port, or resolve the existing listener's ownership.",
 }
 
 # Compound reason domains carry different remedies, even when the surrounding operation is the same.

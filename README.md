@@ -102,6 +102,11 @@ them. Answer by editing the task's description or acceptance criteria, then add 
 round starts it again at plan. Follow any pending cleanup instructions before reapproval. Comments alone are not answers.
 
 `tl step rounds` serves the dashboard on `127.0.0.1:8765` for the lifetime of rounds; `--dash-port PORT` changes the port (0 chooses a free port).
+`--dash-host ADDRESS` selects a literal IPv4 or IPv6 bind address (default `127.0.0.1`); names such as `localhost` are rejected.
+For a reverse proxy reaching a container over its network address, use e.g. `--dash-host 0.0.0.0` to listen on all IPv4 interfaces.
+The startup line reports the listener address and allocated port. The dashboard is read-only and unauthenticated.
+Binding anything but loopback is the operator's explicit choice: put it behind a proxy with sign-in and restrict direct access.
+The dashboard itself provides no authentication.
 `--no-dashboard` serves none. A dashboard startup failure warns on stderr while rounds continue.
 `step rounds --json` writes JSON Lines: one start record and one end record for a normal graceful session.
 Dashboard notices go to stderr in this mode, as do early refusals and abrupt end results; stdout records keep their
