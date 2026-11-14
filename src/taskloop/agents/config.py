@@ -34,6 +34,7 @@ class StepInput(Input):
     harness: HarnessKind = HarnessKind.CODEX
     model: str | None = None
     effort: str | None = None
+    compaction_token_limit: int | None = Field(default=None, strict=True, gt=0)
     access: dict[str, JsonValue] = Field(default_factory=dict)
 
 
@@ -50,12 +51,15 @@ def path_at(value: str, home: Path) -> Path:
 
 
 def _setting(raw: StepInput, home: Path, built: AgentSetting) -> AgentSetting:
+    if raw.compaction_token_limit is not None and raw.harness is not HarnessKind.CODEX:
+        raise ValueError("compaction_token_limit requires codex")
     model = raw.model
     effort = raw.effort if raw.effort is not None else built.effort
     if raw.harness is HarnessKind.CODEX:
         access = CodexInput.model_validate(raw.access)
         policy = CodexPolicy(sandbox=access.sandbox)
-        return AgentSetting(model=model if model is not None else built.model, effort=effort, access=policy)
+        return AgentSetting(model=model if model is not None else built.model, effort=effort, access=policy,
+                            compaction_token_limit=raw.compaction_token_limit)
     if model is None:
         raise ValueError("model is required when harness is not codex")
     if raw.harness is HarnessKind.CLAUDE:
@@ -80,7 +84,7 @@ def resolve_agents(value: object, home: Path) -> tuple[StepSettings, dict[str, s
             settings[step] = _setting(entry, home, default)
         except (ValueError, OSError) as error:
             raise ValueError(f"agents.{step}: {error}") from error
-        for field in ("harness", "model", "effort"):
+        for field in ("harness", "model", "effort", "compaction_token_limit"):
             if field in entry.model_fields_set:
                 sources[f"agents.{step}.{field}"] = "file"
         for field in ("sandbox", "settings_file", "permission_mode", "sandbox_file"):
@@ -102,7 +106,8 @@ def display(settings: StepSettings, sources: dict[str, str]) -> dict[str, dict[s
     for step in ("plan", "implement"):
         setting = settings.for_step(step)
         values = {"harness": setting.harness.value, "provider": setting.provider.value,
-                  "model": setting.model, "effort": setting.effort, "access.summary": setting.summary}
+                  "model": setting.model, "effort": setting.effort, "access.summary": setting.summary,
+                  "compaction_token_limit": "null" if setting.compaction_token_limit is None else str(setting.compaction_token_limit)}
         access = setting.access
         if isinstance(access, CodexPolicy):
             values["access.sandbox"] = str(access.sandbox)

@@ -272,6 +272,7 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
     registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
     key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
+    registered.execute("UPDATE attempt SET compaction_token_limit=100000 WHERE attempt_id=?", (key.attempt_id,))
     answer = {"disposition": "implemented", "paths": ["src/a.py"], "message": "A", "explanation": "x"}
 
     def change() -> None:
@@ -286,9 +287,26 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
     assert isinstance(repeated, Admitted)
     assert repeated.key.attempt_id == ids.fresh[0] and repeated.key.dispatch_token == ids.tokens[0][1]
     assert [size for size, _ in ids.tokens] == [16]
-    row = registered.execute("SELECT step,number,after_commit,previous_attempt_id FROM attempt WHERE attempt_id=?",
+    row = registered.execute("SELECT step,number,after_commit,previous_attempt_id,compaction_token_limit FROM attempt WHERE attempt_id=?",
                              (repeated.key.attempt_id,)).fetchone()
-    assert row == ("implement", 2, None, key.attempt_id)
+    assert row == ("implement", 2, None, key.attempt_id, 100000)
+
+
+def test_advancement_captures_the_next_step_compaction_choice(
+    registered: sqlite3.Connection, planned: str, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+) -> None:
+    registered.execute("UPDATE attempt SET compaction_token_limit=100000")
+    settings = StepSettings(plan=AgentSetting(compaction_token_limit=100000),
+                            implement=AgentSetting(compaction_token_limit=120000))
+    selected = settings.overridden(Overrides(effort="low")).implement
+    next_request = replace(request(slot.repo), setting=selected)
+    admitted = advancing(registered, tmp_path, checkouts, slot_files).admit_next(next_request)
+    assert isinstance(admitted, Admitted)
+    rows = registered.execute("SELECT step,compaction_token_limit FROM attempt ORDER BY seq").fetchall()
+    assert rows == [("plan", 100000), ("implement", 120000)]
+    assert AttemptStore(lambda: registered).register_entry(admitted.key, ENTRY, 10) == "accepted"
+    loaded = AttemptStore(lambda: registered).load(admitted.key)
+    assert loaded is not None and loaded.admission.setting == selected
 
 
 @pytest.mark.parametrize("label", ["auto", None])

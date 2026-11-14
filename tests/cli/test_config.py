@@ -245,3 +245,19 @@ settings_file = "{policy}"
 def test_invalid_file_choice_is_checked_even_when_a_flag_would_override_it(tmp_path: Path) -> None:
     result = resolve('[agents.implement]\nmodel = ""', Flags(), tmp_path)
     assert isinstance(result, ConfigRefused) and "agents.implement" in result.detail and "model" in result.detail
+
+
+def test_config_show_compaction_provenance_survives_existing_flags(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text("[agents.implement]\ncompaction_token_limit = 100000\n")
+    assert main(["--config", str(config), "config", "show", "--effort", "low", "--json"]) == 0
+    values = json.loads(capsys.readouterr().out)["settings"]
+    assert values["agents.implement.compaction_token_limit"] == {"value": "100000", "source": "file"}
+    assert values["agents.plan.compaction_token_limit"] == {"value": "null", "source": "default"}
+
+
+@pytest.mark.parametrize("value", ["true", "false", '"100000"', "100000.0", "0", "-1"])
+def test_invalid_compaction_is_refused_before_admission(value: str, tmp_path: Path) -> None:
+    result = resolve(f"[agents.implement]\ncompaction_token_limit = {value}\n", Flags(), tmp_path)
+    assert isinstance(result, ConfigRefused)
+    assert result.key == "agents.implement.compaction_token_limit"

@@ -382,20 +382,23 @@ def test_status_and_dashboard_reads_only_describe_the_repeat(rig: Repairing) -> 
     assert rig.con.total_changes == before and not rig.tracker.holds
 
 
-@pytest.mark.parametrize("harness", [HarnessKind.CLAUDE, HarnessKind.OPENCODE])
+@pytest.mark.parametrize("harness", list(HarnessKind))
 def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_reopening(rig: Repairing, harness: HarnessKind) -> None:
     policy = rig.tmp / "machine-policy.json"
     policy.write_text('{"env":{"CAPTURED":"first"}}' if harness is HarnessKind.CLAUDE else '{"scratch":".kept"}')
     field = "settings_file" if harness is HarnessKind.CLAUDE else "sandbox_file"
-    settings, _sources = resolve_agents({"plan": {"model": "plan-model"}, "implement": {
-        "harness": harness.value, "model": "chosen-model", "access": {field: str(policy)}}}, rig.tmp)
+    access = {"sandbox": "workspace-write"} if harness is HarnessKind.CODEX else {field: str(policy)}
+    settings, _sources = resolve_agents({"plan": {"model": "plan-model", "compaction_token_limit": 90000}, "implement": {
+        "harness": harness.value, "model": "chosen-model", "access": access,
+        "compaction_token_limit": 100000 if harness is HarnessKind.CODEX else None}}, rig.tmp)
     request = NextRequest("tasks", "/tracker", rig.slot.repo.path, "auto", settings, Overrides(), 30)
     for _turn in range(4):
         rig.now += 1
         assert isinstance(run_round(rig.ports(), request), Round)
     rows = rig.store.attempts("tasks", "tl-1")
     assert rows[0].step == "implement" and rows[0].run == settings.implement
-    assert rows[1].run == settings.plan and not rig.environment.probes
+    assert rows[1].run == settings.plan
+    assert bool(rig.environment.probes) is (harness is HarnessKind.CODEX)
     rig.bodies = ["failed"]
     rig.now += 1
     assert isinstance(run_round(rig.ports(), request), Round)
@@ -415,6 +418,8 @@ def test_rounds_switch_harness_and_check_repair_keeps_the_captured_policy_after_
     assert len(specs) == 1 and "chosen-model" in specs[0].argv and "changed-model" not in specs[0].argv
     if harness is HarnessKind.CLAUDE:
         assert json.loads(specs[0].argv[specs[0].argv.index("--settings") + 1]) == {"env": {"CAPTURED": "first"}}
+    if harness is HarnessKind.CODEX:
+        assert "model_auto_compact_token_limit=100000" in specs[0].argv
     assert rig.store.attempts("tasks", "tl-1")[0].run == settings.implement
 
 

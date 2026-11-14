@@ -209,12 +209,14 @@ def test_ordinary_builds_allocate_fresh_sessions(tmp_path: Path, harness: Harnes
 @pytest.mark.parametrize("prepared", [False, True])
 @pytest.mark.parametrize("host_tmp", [None, "/host/scratch"], ids=["unset", "conflicting_host"])
 @pytest.mark.parametrize("resume", [None, SAVED_SESSION])
+@pytest.mark.parametrize("limit", [None, 100000])
 def test_codex_launch_limits_automatic_context_and_preserves_access(
     tmp_path: Path, sandbox: CodexSandbox, prepared: bool, host_tmp: str | None, resume: str | None,
+    limit: int | None,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     schema, out = files.prepare(KEY, {"type": "object", "properties": {}})
-    chosen = AgentSetting(model="chosen", access=CodexPolicy(sandbox=sandbox))
+    chosen = AgentSetting(model="chosen", access=CodexPolicy(sandbox=sandbox), compaction_token_limit=limit)
     credentials = {"HOME": str(tmp_path)}
     if host_tmp is not None:
         credentials["TMPDIR"] = host_tmp
@@ -225,6 +227,8 @@ def test_codex_launch_limits_automatic_context_and_preserves_access(
     try:
         argv = result.spec.argv
         settings = dict(item.split("=", 1) for index, item in enumerate(argv) if index and argv[index - 1] == "-c")
+        compaction = [item for item in argv if item.startswith("model_auto_compact_token_limit=")]
+        assert compaction == ([] if limit is None else [f"model_auto_compact_token_limit={limit}"])
         assert settings["skills.include_instructions"] == "false"
         assert settings["features.multi_agent"] == "false"
         assert settings["features.recommended_plugins"] == "false"
@@ -251,6 +255,26 @@ def test_codex_launch_limits_automatic_context_and_preserves_access(
             assert settings["sandbox_workspace_write.exclude_tmpdir_env_var"] == "true"
     finally:
         result.harness.cleanup()
+
+
+def test_consecutive_compaction_overrides_are_isolated_and_leave_user_config_untouched(tmp_path: Path) -> None:
+    user_config = tmp_path / ".codex" / "config.toml"
+    user_config.parent.mkdir()
+    original = "model_auto_compact_token_limit = 250000\n"
+    user_config.write_text(original)
+    files = EvidenceFiles(tmp_path)
+    schema, out = files.prepare(KEY, {"type": "object"})
+    adapter = AgentLaunch(lambda _kind: ("/bin/codex", {"HOME": str(tmp_path)}), ids=NativeIds())
+    for limit in (100000, 120000, None):
+        chosen = AgentSetting(compaction_token_limit=limit)
+        result = adapter.build(chosen, tmp_path / "slot", False, files.launch_root(KEY), schema, out, "Task input")
+        assert isinstance(result, LaunchedAgent)
+        try:
+            overrides = [item for item in result.spec.argv if item.startswith("model_auto_compact_token_limit=")]
+            assert overrides == ([] if limit is None else [f"model_auto_compact_token_limit={limit}"])
+            assert user_config.read_text() == original
+        finally:
+            result.harness.cleanup()
 
 
 @pytest.mark.parametrize("harness", list(HarnessKind))
