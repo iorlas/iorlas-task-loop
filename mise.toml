@@ -1,5 +1,5 @@
 # Dev tools, pinned exactly (88 sec 6). Install: `mise install`. The justfile reads these pins; CI installs the same versions with uv.
-# The successor is installed as a wheel and currently declares no runtime dependencies.
+# The successor is installed as a wheel; package dependencies are declared in pyproject.toml.
 [tools]
 "aqua:gastownhall/beads" = "1.3.1"
 just = "1.58.0"
