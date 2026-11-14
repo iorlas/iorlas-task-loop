@@ -21,6 +21,7 @@ from taskloop.attempt_types import (
     listed_paths,
 )
 from taskloop.check_repeat.feedback import FailedCheck, output_text
+from taskloop.input_context import InputContext
 from taskloop.task import TaskInspection
 
 DISPOSITIONS: Final = ("implemented", "unchanged", "incomplete", "needs_owner")
@@ -42,10 +43,10 @@ ANSWER_SCHEMA: Final = {
     },
 }
 # The environment the entry prepared (S5e, design tl-8bh9.4.3.1.16.2 section 7): generic, no repository command named;
-# the agent reads `checks` in its own checkout's profile.
+# the input context supplies the committed profile's check commands.
 ENVIRONMENT: Final = (
     "The factory ran this repository's `setup` before you started; there is no network now. Before answering, run every "
-    "command listed under `checks` in `.task-loop.json` (while you work, a focused part such as one test file is fine) and "
+    "check command listed in the factory input context (while you work, a focused part such as one test file is fine) and "
     "fix what they report. Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere "
     "outside the repository. Your runs are evidence for you: after this step the checks run again outside your control, "
     "and only those results count."
@@ -82,10 +83,11 @@ def decode(value: object, rules: StepRules) -> Answer:
     return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
 
 
-def input_text(task: TaskInspection, rules: StepRules) -> str:
+def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
     """The implement step's admitted input: the task's own prose, then the fixed closing words. The plan is passed by
     reference: the slot starts on `task/<id>` at the published plan commit."""
-    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{_closing_words(task.reference.task_id, rules)}\n"
+    return (f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
+            f"{_closing_words(task.reference.task_id, rules)}\n")
 
 
 def _closing_words(task_id: str, rules: StepRules) -> str:

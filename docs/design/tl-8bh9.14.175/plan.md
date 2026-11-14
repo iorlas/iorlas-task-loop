@@ -1,6 +1,6 @@
 # Reduce repeated document reads in factory attempts
 
-Task: `tl-8bh9.14.175`. Status: proposed implementation plan.
+Task: `tl-8bh9.14.175`. Status: implemented; deployment measurement pending.
 
 ## Result and scope
 
@@ -166,3 +166,37 @@ The prefix/extract addition must cost less than the reads it removes. Report the
 separate plan-step accounting owned by `.192`. Glossary compliance remains a review
 check. Unit tests alone do not satisfy the six-attempt acceptance criterion, and the
 implementation must not be reported as fully measured before that evidence exists.
+
+## As built
+
+`input_context` supplies the common orientation directions, all validated profile
+commands rendered with shell quoting, the selected source commit and the generated
+extract. The pure step renderers receive it through `StepKind` and `admit.task_text`.
+Admission retains the existing branch rule's selected start on each free slot; next-step
+admission uses that same selection. No branch-selection rule was duplicated.
+
+The entry refreshes the common block after preparation and environment setup, from
+B through the pinned slot Git view, before dispatch. This covers moved refs and ordinary
+repeats. Failed-check admission also refreshes from the checked commit before saving
+its input. Admission's input snapshot remains intact; `launched-input.txt`, owned by
+`EvidenceFiles`, records the complete actual input including the answer schema and
+source commit. Existing repeat framing continues to use the first input, avoiding
+nested earlier feedback.
+
+`glossary_extract` validates term tables, handles escaped and inline-code pipes, selects
+whole definitions in priority/core/document order and rejects source content above
+128 KiB. It uses the existing time-bounded committed Git file reader and profile
+validator. The extract's entire rendered output has a 2,000 UTF-8-byte ceiling. The
+current glossary generates 1,995 bytes and keeps all eight priority terms; the shared
+context with current commands and a 40-character source commit is 3,150 UTF-8 bytes.
+No glossary definitions or repository check commands are copied into factory constants.
+
+Focused tests cover the renderer contract, profile argv quoting, source changes,
+selected local/remote/new branches, glossary failures and budgeting, and the inputs
+received by the semantic agent and retained for ordinary/failed-check repeats. Older
+execution fixtures now declare committed profiles. The required type gate also exposed
+an existing dashboard assertion using `Run.summary`; it now asserts the actual
+`Run.access` field.
+
+The later-attempt acceptance evidence is separate and remains pending in
+[measurement.md](measurement.md); no production token reduction is claimed here.

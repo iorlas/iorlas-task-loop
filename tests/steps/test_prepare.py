@@ -52,7 +52,7 @@ class CountingHarness(CodexHarness):
 @pytest.fixture
 def remote() -> FakeRemote:
     found = FakeRemote("https://example.invalid/repo.git")
-    found.advance("main", {"README": "one"})
+    found.advance("main", {"README": "one", ".task-loop.json": "{}"})
     return found
 
 

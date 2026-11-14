@@ -212,7 +212,7 @@ def test_a_hold_saves_edits_deletions_and_new_files_but_not_ignored_files(factor
     factory.round(frozenset())
     (saved,) = _saved(factory)
     files = factory.slot.repo.tree(saved.sha)
-    assert files is not None and sorted(files.files) == ["README", "new/file.txt"]
+    assert files is not None and sorted(files.files) == [".task-loop.json", "README", "new/file.txt"]
     assert files.read("README") == b"edited\n"
     assert not factory.slot.dirty().raw and factory.slot.dirty(ignored_under=["."]).ignored == ("junk.log",)
     assert len(_saved(factory)) == 1 and len(dict(factory.slot.repo.branches("task/"))) == 1

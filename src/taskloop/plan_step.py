@@ -21,6 +21,7 @@ from taskloop.attempt_types import (
     listed_paths,
     path_allowed,
 )
+from taskloop.input_context import InputContext
 from taskloop.task import TaskInspection
 
 DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
@@ -77,10 +78,11 @@ def decode(value: object, rules: StepRules) -> Answer:
     return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
 
 
-def input_text(task: TaskInspection, rules: StepRules) -> str:
+def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
     """The plan step's admitted input: the task's own prose, then the fixed closing words (where the plan goes,
     `unchanged` or `planned`, no Git write: the factory commits the listed paths)."""
-    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{_closing_words(rules)}\n"
+    return (f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
+            f"{_closing_words(rules)}\n")
 
 
 def _closing_words(rules: StepRules) -> str:

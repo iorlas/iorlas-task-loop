@@ -14,6 +14,7 @@ from git_porcelain.testing import FakeWorktree
 from round_bench import Tracker, scripted, scripts, task
 from sqlite_store import Store
 from test_checks_round import implemented
+from test_input_context import GLOSSARY
 
 from taskloop.admit import AdmitRefused, Admitted, Free
 from taskloop.agents.config import resolve_agents
@@ -27,7 +28,9 @@ from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_repeat.store import CheckRepeatStore
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
+from taskloop.glossary_extract import HEADING
 from taskloop.harness_choice import HarnessKind
+from taskloop.input_context import BEGIN
 from taskloop.launch import LaunchUnavailable
 from taskloop.operations import Failed, Round, Started, release_task, start
 from taskloop.round import NextRequest, run_round
@@ -39,6 +42,7 @@ from taskloop.steps import kind
 def rig(tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, slot_files: SlotFiles) -> Generator[Repairing]:
     root = slot.repo.worktree(slot.repo.identity().root)
     root.write_file(".task-loop.json", json.dumps(MAIN_PROFILE))
+    root.write_file("docs/glossary.md", GLOSSARY.decode())
     assert isinstance(root.record("profile", paths="all"), Recorded)
     path = tmp_path / "factory.db"
     con = Store(SCHEMA).open_rw(path)
@@ -86,6 +90,11 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert 'Command argv: ["just", "test"]' in spec.stdin and all(line in spec.stdin for line in ASSERTION.splitlines())
     assert "Widget tl-1" in spec.stdin and "docs/design/tl-1/plan.md" in spec.stdin
     assert "List only your new changes" in spec.stdin
+    assert spec.stdin.count(BEGIN) == spec.stdin.count(HEADING) == 1
+    assert f"Source commit: {x}" in spec.stdin and "task: Work to accomplish." in spec.stdin
+    assert "- just check\n- just test" in spec.stdin
+    assert (rig.tmp / EvidenceFiles(rig.tmp).directory(rig.store.attempts("tasks", "tl-1")[0].key) /
+            "launched-input.txt").read_text() == spec.stdin
     assert "--resume" not in spec.argv and "changed-model" not in spec.argv
     row = rig.store.attempts("tasks", "tl-1")[0]
     assert (row.number, row.previous_attempt_id, row.source_checks_id) == (2, previous.attempt_id, source.attempt_id)

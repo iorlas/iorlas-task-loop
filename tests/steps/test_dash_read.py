@@ -159,7 +159,7 @@ def test_a_full_access_attempt_says_the_container_is_the_boundary(registered: sq
     found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(found, TaskDetail)
     (attempt,) = found.attempts
-    assert attempt.run is not None and attempt.run.summary == "full access: the container is the boundary"
+    assert attempt.run is not None and attempt.run.access == "full access: the container is the boundary"
 
 
 def test_reasoning_is_a_collapsed_line_only_when_the_harness_gave_words(registered: sqlite3.Connection, tmp_path: Path) -> None:

@@ -116,7 +116,7 @@ def test_a_second_conflict_has_a_working_recovery_with_its_own_aside_name(b: Lan
 @pytest.fixture
 def remote() -> FakeRemote:
     made = FakeRemote("https://example.invalid/repo.git")
-    made.advance("main", {"README": "one"})
+    made.advance("main", {"README": "one", ".task-loop.json": "{}"})
     return made
 
 
