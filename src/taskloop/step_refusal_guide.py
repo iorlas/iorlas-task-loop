@@ -1,6 +1,10 @@
 """Reason-specific guidance for step refusals, kept apart from the status/Next prose."""
 
 REFUSALS = {
+    "recovery_running": "A saved recovery process or group still runs. The factory retains the reservation and "
+    "waits for confirmed completion before releasing the slot.",
+    "recovery_unknown": "A saved recovery process or group cannot be observed reliably. The factory preserves "
+    "the work, evidence and reservation until a stop proof is available.",
     "conflict": "The saved execution no longer owns the requested operation. The factory preserves the current "
     "authority and requires reconciliation before continuing.",
     "ineligible": "The saved attempt is no longer eligible for recovery. The factory preserves its work and waits "
