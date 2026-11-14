@@ -42,7 +42,7 @@ def test_restart_adopts_each_completed_effect(execution_case: ExecutionCase, mon
             raise KeyboardInterrupt
         return result
 
-    branches = dict(c.ports.repo.branches())
+    branches = dict(c.ports.repo.branches("task/"))
     monkeypatch.setattr(FakeWorktree, action, interrupted)
     with pytest.raises(KeyboardInterrupt):
         c.resume()
@@ -53,7 +53,7 @@ def test_restart_adopts_each_completed_effect(execution_case: ExecutionCase, mon
     work = c.ports.merges.get(c.record.key.attempt_id)
     assert work is not None and git.completed(c.ports.repo, result.commit, work)
     assert len([entry for entry in c.ports.repo.history([result.commit]) if "Task-Loop-Merge-Target:" in entry.body]) == 1
-    assert dict(c.ports.repo.branches()) == branches
+    assert dict(c.ports.repo.branches("task/")) == branches
 
 
 @pytest.mark.parametrize("dirty", [False, True])

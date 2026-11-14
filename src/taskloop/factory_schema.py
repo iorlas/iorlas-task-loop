@@ -45,7 +45,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=24,
+    version=25,
     name="factory",
     steps={},
     ddl=f"""
@@ -64,7 +64,7 @@ CREATE TABLE land_conflict (
  implement_id TEXT NOT NULL UNIQUE REFERENCES attempt(attempt_id),
  checks_id TEXT NOT NULL REFERENCES checks_attempt(attempt_id),
  repo_id TEXT NOT NULL, slot TEXT NOT NULL, generation INTEGER NOT NULL CHECK(generation>=1),
- data TEXT NOT NULL CHECK(json_valid(data)),
+ data TEXT NOT NULL CHECK(json_valid(data)), save_data TEXT CHECK(save_data IS NULL OR json_valid(save_data)),
  FOREIGN KEY(repo_id,slot) REFERENCES slot(repo_id,name),
  UNIQUE(repo_id,slot,generation),
  CHECK(json_extract(data,'$.key.attempt_id') IS operation_id),
