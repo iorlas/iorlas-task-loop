@@ -504,7 +504,8 @@ def launched(result: LaunchResult, backlog: str, task_id: str, key: AttemptKey, 
         case LaunchRefused(reason="dispatched"):
             return Started("already_dispatched", backlog, task_id, key.attempt_id, existing)
         case LaunchRefused() | LaunchUnavailable():
-            return Failed("refused" if isinstance(result, LaunchRefused) else "unavailable", result.reason)
+            return Failed("refused" if isinstance(result, LaunchRefused) else "unavailable", result.reason,
+                          result.explanation if isinstance(result, LaunchRefused) else "")
         case LaunchUncertain():
             return Failed("uncertain", "launch", "The registered entry may run; `tl step show` observes it")
 

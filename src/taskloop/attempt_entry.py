@@ -58,13 +58,17 @@ from taskloop.attempt_types import (
     entry_identity,
 )
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
-from taskloop.composition import open_attempts
+from taskloop.composition import open_attempts, open_continuation
+from taskloop.drain.models import Identity
 from taskloop.environment import Renew
 from taskloop.evidence_files import TERMINATED
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish, publish_word
+from taskloop.recovery.continue_attempt import Continuation
+from taskloop.recovery.entry import RecoveryEntry
+from taskloop.recovery.models import Intent, Outcome, Result
 from taskloop.slot_env import RealEnvFiles
 from taskloop.slot_release import SlotRelease, release_word
 from taskloop.tracker_client import tracker_claims, tracker_located
@@ -83,6 +87,8 @@ class _Registered:
     tracker_root: str
     slot_path: str  # the slot, from its stored `slot` row: its custody lock is beside it
     deadline: float
+    recovery: RecoveryEntry | None = None
+    intent: Intent | None = None
 
 
 @dataclass(frozen=True)
@@ -151,7 +157,8 @@ def shown(result: VerifyResult) -> str:
 
 
 def _registered(
-    args: EntryArgs, attempts: Callable[[Path, Path], Attempts], inspect: Callable[[int], ProcessObservation]
+    args: EntryArgs, attempts: Callable[[Path, Path], Attempts], inspect: Callable[[int], ProcessObservation],
+    continuation: Callable[[], Continuation] | None,
 ) -> _Registered | str:
     """The attempt this process is the registered entry of, with its tracker root; otherwise the refusal's log words."""
     try:
@@ -167,10 +174,19 @@ def _registered(
         return "refused absent"
     key, _phase, entry = found
     me = None if seen.kind != "matching" or seen.identity is None else entry_identity(seen.identity)
-    if me is None or me != entry:
+    if me is None:
         return "refused identity"
+    recovery, intent = None, None
+    if me != entry:
+        recovery = None if continuation is None else RecoveryEntry(continuation())
+        registered = (Result(outcome=Outcome.CHANGED, explanation="This process is not the registered entry.")
+                      if recovery is None else recovery.registered(key, me))
+        if isinstance(registered, Result):
+            return "refused identity" if recovery is None else f"refused {registered.outcome}: {registered.explanation}"
+        intent = registered
     record = _record(app, key)
-    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path, record.admission.deadline)
+    return record if isinstance(record, str) else _Registered(app, key, me, tracker, record.admission.slot_path,
+                                                            record.admission.deadline, recovery, intent)
 
 
 def _record(app: Attempts, key: AttemptKey) -> AttemptRecord | str:
@@ -201,7 +217,18 @@ def _step(
     """Execute once, retry an unavailable capture, verify once: the log words, whether the plan succeeded and whether
     the result read back is collected (terminal)."""
     app, key = found.app, found.key
-    result = app.execute(key, found.me, renew)
+    if found.recovery is not None and found.intent is not None:
+        continued = found.recovery.run(found.intent, Identity(pid=found.me[0], pgid=found.me[0], start=found.me[1], boot=found.me[2]),
+                                       clock, wait, RETRY_WAIT)
+        if continued.completion is None:
+            return f"{continued.state}: {continued.explanation}", False, False
+        completion = continued.completion
+        result = resumed(lambda: completion, lambda: app.execute(key, found.me), clock, wait, found.deadline)
+        execution = result.execution
+        if execution is None or execution.answer.kind == "validation_pending" or execution.session_state != "complete":
+            return f"{result.status} {result.reason}", False, False
+    else:
+        result = app.execute(key, found.me, renew)
     captured = _capture(app, result, clock, wait)
     accepted = captured is not None and captured.status in ACCEPTED
     if accepted:  # captured but maybe not finished (the store was busy again): finish it before verify commits anything
@@ -245,6 +272,7 @@ def enter(
     stop: Stop,
     unclaim: Unclaim,
     publishing: Checkouts,
+    continuation: Callable[[], Continuation] | None = None,
 ) -> int:
     """Run the attempt as its registered entry; the return code is display only. After the identity check the entry
     takes its slot's custody lock (`slot_lock`, never waiting: `refused slot_busy`, or `refused lock`) and holds it
@@ -254,7 +282,7 @@ def enter(
     only the log line's `claim=` word. A collected step then releases its own slot, settled (`unclaim` is the release's
     port; a settled release never calls it). A verified plan is then published once, after the lock is released and the
 keep-alive stopped, through `publishing` (the remote-capable Git views); the push never pins the slot."""
-    found = _registered(args, attempts, inspect)
+    found = _registered(args, attempts, inspect, continuation)
     if isinstance(found, str):
         log(found)
         return 1
@@ -303,6 +331,8 @@ def _claimed(
     alive.renew()
     if alive.word() == "lost":
         return "refused claim_lost", False
+    if found.recovery is not None and alive.word() != "held":
+        return "refused claim_unrenewed", False
     with keeping(alive):
         line, ok, collected = _step(found, clock, wait, gone, renewal(alive))
     line = f"{line} claim={alive.word()}"
@@ -328,7 +358,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         claims, views = tracker_claims(), GitViews(args.read_seconds)
         return enter(args, partial(open_attempts, views=views), inspect_process, time.time, time.sleep, log, worker_gone,
-                     claims.heartbeat_for, threading.Event(), claims.unclaim, views.remotes)
+                     claims.heartbeat_for, threading.Event(), claims.unclaim, views.remotes,
+                     partial(open_continuation, args.database, args.artifacts, views))
     except SystemExit as ended:  # `any_agent.supervisor` raises 128 + signal number from its SIGTERM/SIGHUP handler (1: parent gone)
         log("failed " + (TERMINATED if isinstance(ended.code, int) and ended.code > 128 else type(ended).__name__))
         return 1
