@@ -444,7 +444,7 @@ def test_main_builds_the_git_views_with_the_argv_seconds(monkeypatch: pytest.Mon
     seen: list[tuple[Callable[..., object], object]] = []
     monkeypatch.setattr("taskloop.attempt_entry.tracker_located", lambda: None)
     monkeypatch.setattr("taskloop.attempt_entry.tracker_claims", Claims)
-    monkeypatch.setattr("taskloop.attempt_entry.enter", lambda _args, opened, *rest: seen.append((opened, rest[-1])) or 0)
+    monkeypatch.setattr("taskloop.attempt_entry.enter", lambda _args, opened, *rest: seen.append((opened, rest[-2])) or 0)
     assert main(["/db", "/a", "45", "tasks", "tl-1"]) == 0
     opened, remotes = seen[0]
     assert isinstance(opened, partial) and opened.keywords == {"views": GitViews(45)}

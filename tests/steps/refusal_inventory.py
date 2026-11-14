@@ -3,6 +3,8 @@
 import ast
 from pathlib import Path
 
+from taskloop.recovery.models import Outcome
+
 ROOT = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 # Argument carrying a refusal reason, including helpers that construct owning results.
 PRODUCERS = {
@@ -98,7 +100,8 @@ REVIEWED_DYNAMIC = {
     ('land_summary.py', 'Failed', "'profile' if kind == 'refused' else 'git'"),
     ('land_target.py', 'Failed', 'found.reason'),
     ('launch.py', 'LaunchRefused', 'Reason.DRAINING'),
-    ('launch.py', 'LaunchRefused', 'refused.reason'),
+    ('launch.py', 'LaunchRefused', 'authorized.outcome'),
+    ('launch.py', 'LaunchRefused', "'registration_conflict' if answer == 'conflict' else 'registration_refused'"),
     ('launch.py', 'LaunchUnavailable', "'exec_failed_after_commit' if committed else 'start'"),
     ('operations.py', 'Failed', "'abandoned' if row.abandoned else found[1]"),
     ('operations.py', 'Failed', 'FeedbackReason.EVIDENCE'),
@@ -154,3 +157,6 @@ DYNAMIC_REASONS = {
     "environment:sandbox", "environment:exit", "environment:files", "environment:lingering", "environment:running",
     "environment:uncertain", "environment:unknown", "checks:uncertain",
 }
+DYNAMIC_REASONS |= {outcome.value for outcome in Outcome if outcome not in {
+    Outcome.AUTHORIZED, Outcome.INTENDED, Outcome.REGISTERED, Outcome.ACCEPTED,
+}}

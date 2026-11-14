@@ -1,6 +1,21 @@
 """Reason-specific guidance for step refusals, kept apart from the status/Next prose."""
 
 REFUSALS = {
+    "conflict": "The saved execution no longer owns the requested operation. The factory preserves the current "
+    "authority and requires reconciliation before continuing.",
+    "ineligible": "The saved attempt is no longer eligible for recovery. The factory preserves its work and waits "
+    "for the current attempt's state to be resolved.",
+    "captured": "The execution is already captured. The factory retains it for trusted completion before verification.",
+    "unresolved": "The saved execution cannot be confirmed stopped. The factory keeps its authority and waits "
+    "for reliable process observations before recovery.",
+    "occupied": "A prior recovery owner still runs or lacks stop proof. The factory retains that owner's authority "
+    "and waits before granting another execution.",
+    "claim_unknown": "The saved task's claim cannot be confirmed. The factory preserves the attempt and waits "
+    "for the bound task tracker to become readable.",
+    "custody_busy": "Another operation holds the slot's custody. The factory waits for that operation to finish "
+    "before continuing the saved execution.",
+    "unavailable": "Recovery storage or observations are unavailable. The factory preserves the saved attempt "
+    "and waits for those resources before continuing.",
     "recovery_changed": "The execution's recovery owner or generation changed. The factory refuses the old callback "
     "and preserves the current execution and evidence.",
     "recovery_unregistered": "Recovery owns the attempt but its replacement worker is not registered. The factory "
