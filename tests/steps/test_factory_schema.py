@@ -16,6 +16,7 @@ DDL_DIGESTS = {
     26: "728ea63362ce086f01b39e967b837e6875854238f49c3b073fddcdcba1666787",
     27: "62ce0c0793427a8305ef420edd956d5adae7c832969b353265ad51d55a2ed2c0",
     28: "21c4a4af7e596acc352e922680cec640ad249c52e44656fe27d2bef93d1728ac",
+    29: "0e6ec8a2ed329c07b67e95721833da0d974b9dc825f5e6702a36890743413a82",
 }
 
 
@@ -25,6 +26,21 @@ def assert_pinned_ddl(schema: Schema) -> None:
 
 def test_effective_ddl_matches_its_version_pin() -> None:
     assert_pinned_ddl(SCHEMA)
+
+
+@pytest.mark.parametrize(("value", "valid"), [(None, True), (False, True), (True, True), (2, False), (-1, False), ("true", False)])
+def test_usage_completeness_is_a_nullable_boolean(registered: sqlite3.Connection, value: object, valid: bool) -> None:
+    registered.execute(
+        """INSERT INTO execution (attempt_id,dispatch_token,generation,timed_out,work,stands,stdout_path,stdout_digest,
+        stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,session_state)
+        SELECT attempt_id,dispatch_token,generation,0,1,1,'o','d','e','d','a','d','g','d','complete' FROM attempt""",
+    )
+    if valid:
+        registered.execute("UPDATE execution SET usage_incomplete=?", (value,))
+        assert registered.execute("SELECT usage_incomplete FROM execution").fetchone() == (value,)
+    else:
+        with pytest.raises(sqlite3.IntegrityError):
+            registered.execute("UPDATE execution SET usage_incomplete=?", (value,))
 
 
 @pytest.mark.parametrize(("kind", "failure", "valid"), [

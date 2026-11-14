@@ -365,8 +365,9 @@ def test_forbidden_plan_precedes_other_implement_failures() -> None:
 def test_run_failure_takes_precedence_over_answer_failure_detail() -> None:
     failure = AnswerFailureData(rule=AnswerRule.MISSING, explanation="Answer must not be empty")
     answer = AnswerState("missing", failure=failure)
-    assert report(stored(0, False, None, answer)).explanation == failure.describe()
-    assert report(stored(1, False, "worker_failed", answer)).explanation == ""
+    missing_usage = "Usage was not reported by the agent stream."
+    assert report(stored(0, False, None, answer)).explanation == failure.describe() + " " + missing_usage
+    assert report(stored(1, False, "worker_failed", answer)).explanation == "run:worker_failed " + missing_usage
 
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
