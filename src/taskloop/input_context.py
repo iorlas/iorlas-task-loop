@@ -60,10 +60,12 @@ def read(files: ProfileFiles, commit: str) -> InputContext:
 
 def refresh(text: str, context: InputContext) -> str:
     """Replace the factory's delimited block, including inside repeat frames, exactly once."""
-    start = text.find(BEGIN)
-    if start < 0:
+    lines = text.splitlines(keepends=True)
+    starts = [index for index, line in enumerate(lines) if line.rstrip("\r\n") == BEGIN]
+    ends = [index for index, line in enumerate(lines) if line.rstrip("\r\n") == END]
+    if not starts and not ends:
         return text + "\n\n" + context.render() + "\n"
-    end = text.find(END, start)
-    if end < 0 or text.find(BEGIN, start + len(BEGIN)) >= 0:
+    if len(starts) != 1 or len(ends) != 1 or starts[0] >= ends[0]:
         raise InputError("Input has malformed or duplicate factory context")
-    return text[:start] + context.render() + text[end + len(END):]
+    lines[starts[0]:ends[0] + 1] = [context.render() + "\n"]
+    return "".join(lines)

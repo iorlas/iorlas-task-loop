@@ -42,6 +42,7 @@ from taskloop.admit import (
 from taskloop.admit_rows import as_count, insert_attempt, issue, reserve
 from taskloop.agents.settings import AgentSetting, encode_policy
 from taskloop.attempt_types import ATTEMPTS, AttemptKey, Checkouts, FileRef, RepeatReason, SlotFiles
+from taskloop.discussion import CollectDiscussion, empty
 from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
@@ -219,10 +220,11 @@ class NextAdmission:
         clock: Callable[[], float],
         probe: Probe,
         slot_files: SlotFiles,
-        *, ids: Ids,
+        *, ids: Ids, discussion: CollectDiscussion = empty,
     ) -> None:
         """The ports of a fresh admission (`admit.AttemptAdmission`) without the claim: an advance never claims."""
         self.ids = ids
+        self.discussion = discussion
         self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
         self.clock, self.probe, self.slot_files = clock, probe, slot_files
 
@@ -236,7 +238,8 @@ class NextAdmission:
         try:
             key = AttemptKey(self.ids.hex(), self.ids.token(16), issued(ready.con, RepoId(found.repo_id), names) + 1)
             context = read_context(GitProfileFiles(request.checkout, self.checkouts), ready.free[0].source)
-            ref = self.files.put_input(key, task_text(ready.task, ready.step, context))
+            discussion = self.discussion(ready.task, found.tracker_root)
+            ref = self.files.put_input(key, task_text(ready.task, ready.step, context, discussion))
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
         except (EvidenceError, InputError, UnicodeError, OSError) as error:

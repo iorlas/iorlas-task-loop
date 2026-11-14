@@ -13,8 +13,10 @@ from beads_client import Bd, BdError, Runner
 
 from taskloop.admit import Claim, Unclaim
 from taskloop.claim_lease import BD_TIMEOUT_S, Beat, Heartbeat, HeartbeatFor
+from taskloop.discussion import DiscussionSource
 from taskloop.task import ReadyTitle, TaskBinding, TaskComment, TaskFacts, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import ACTOR, HELD, ReadyRows, gone, inspect_task, ready_titles, task_comments, task_facts, task_titles
+from taskloop.tracker_discussion import read_discussion
 
 
 def _tracker_root(tracker_root: str) -> Path:
@@ -35,6 +37,11 @@ def inspect_tracker_task(task_id: str, backlog: str, tracker_root: str) -> TaskI
     scope = TaskScope(backlog)
     root = _tracker_root(tracker_root)
     return inspect_task(TaskBinding(scope, root), Bd(ACTOR, cwd=str(root)), task_id)
+
+
+def tracker_discussion(task: TaskInspection, tracker_root: str) -> tuple[DiscussionSource, ...]:
+    root = _tracker_root(tracker_root)
+    return read_discussion(task, TaskBinding(task.reference.scope, root), Bd(ACTOR, cwd=str(root)))
 
 
 def tracker_reads(tracker_root: str) -> ReadyRows:

@@ -32,6 +32,7 @@ from git_porcelain import GitUnavailable, NotARepo, Repo
 from taskloop.admit_rows import as_count, insert_attempt, reserve
 from taskloop.agents.settings import AgentSetting, encode_policy
 from taskloop.attempt_types import AttemptKey, Checkouts, FileRef, SlotFiles
+from taskloop.discussion import CollectDiscussion, empty, replace_block
 from taskloop.drain.models import BLOCKED, ActionKind, Identity, Reason
 from taskloop.drain.observe import identity
 from taskloop.drain.store import DrainStore, blocked
@@ -121,11 +122,12 @@ def why(error: BaseException) -> str:
     return f"{type(error).__name__}: {error}"[:300]
 
 
-def task_text(task: TaskInspection, step: str, context: InputContext) -> str:
+def task_text(task: TaskInspection, step: str, context: InputContext, discussion: str | None = None) -> str:
     """The step kind's input for the task (its own prose, then the step's closing words), stored as the admitted input
     under its digest."""
     found = kind(step)
-    return found.input_text(task, found.rules(task.reference.task_id), context)
+    text = found.input_text(task, found.rules(task.reference.task_id), context)
+    return replace_block(text, empty(task, "") if discussion is None else discussion)
 
 
 class AttemptAdmission:
@@ -142,11 +144,12 @@ class AttemptAdmission:
         probe: Probe,
         slot_files: SlotFiles,
         me: Callable[[], Identity | None] = identity,
-        *, ids: Ids,
+        *, ids: Ids, discussion: CollectDiscussion = empty,
     ) -> None:
         """`probe` reads a free-looking slot's lock (`slot_lock.probe`): a slot a release is still parking is not free.
         `slot_files` is the pointer check's port: a slot is observed free only through its verified, pinned view."""
         self.ids = ids
+        self.discussion = discussion
         self.me = me
         self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
         self.claim, self.unclaim, self.clock, self.probe, self.slot_files = claim, unclaim, clock, probe, slot_files
@@ -169,7 +172,8 @@ class AttemptAdmission:
         key = AttemptKey(self.ids.hex(), self.ids.token(16), generation)  # the key names the evidence directory
         try:
             context = read_context(GitProfileFiles(request.checkout, self.checkouts), free[0].source)
-            ref = self.files.put_input(key, task_text(prepared.task, FIRST, context))
+            discussion = self.discussion(prepared.task, prepared.request.tracker_root)
+            ref = self.files.put_input(key, task_text(prepared.task, FIRST, context, discussion))
         except (EvidenceError, InputError, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
         return self._claimed(con, prepared, free, key, ref)

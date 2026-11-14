@@ -30,6 +30,7 @@ from taskloop.composition import (
     open_checks_admission,
     open_checks_launcher,
     open_checks_releaser,
+    open_discussion,
     open_launcher,
     open_publisher,
     open_releaser,
@@ -144,12 +145,13 @@ def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Stor
     admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, store)
     launcher = open_launcher(database, artifacts, views)
     repeat = StepRepeat(reader, open_verifier(database, store, views), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
-                        time.time, repeating, ids=NativeIds())
+                        time.time, repeating, ids=NativeIds(), discussion=open_discussion(database, store).for_task)
     releaser = open_checks_releaser(database, store, views)
     checks = ChecksPorts(open_checks_admission(database, views, store), open_checks_launcher(database, artifacts, views), releaser)
     repair = CheckRepeat(CheckRepeatStore(lambda: store.shared_rw(database), store.begin_immediate), EvidenceFiles(artifacts),
                          inspect_tracker_task, views.checkouts, RealSlotFiles(), probe,
-                         partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time, ids=NativeIds())
+                         partial(GitProfileFiles, repos=views.checkouts), launcher, entry_seen, setup_seen, time.time, ids=NativeIds(),
+                         discussion=open_discussion(database, store).for_task)
     return StartPorts(reader, admission, launcher, time.time, repeat, open_advance(database, artifacts, views, store), checks, repair)
 
 

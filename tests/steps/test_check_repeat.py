@@ -28,6 +28,8 @@ from taskloop.check_repeat.repair import CheckRepeat
 from taskloop.check_repeat.status import CheckRepeatDecision, decision
 from taskloop.check_repeat.store import CheckRepeatStore
 from taskloop.command_conclusion import CommandConclusion
+from taskloop.discussion import BEGIN as DISCUSSION_BEGIN
+from taskloop.discussion import frame
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.glossary_extract import HEADING
@@ -61,6 +63,21 @@ def failed(rig: Repairing, body: str = "failed") -> tuple[AttemptKey, AttemptKey
     rig.bodies = [body]
     assert rig.round() == [("tl-1", "check", "advance", "started")]
     return previous, rig.key("tl-1")
+
+
+def test_repair_sends_fresh_discussion_once_alongside_check_feedback(rig: Repairing) -> None:
+    failed(rig)
+    specs = repair_agent(rig)
+    ports = rig.starting()
+    assert isinstance(ports.check_repeat, CheckRepeat)
+    block = frame(["Author: owner; time: 2026-11-13T12:00:00Z", "Decision after failed checks"])
+    repair = replace(ports.check_repeat, discussion=lambda _reference, _root: block)
+    result = start(replace(ports, check_repeat=repair), rig.request())
+    assert isinstance(result, Started)
+    text = specs[0].stdin
+    assert text.splitlines().count(DISCUSSION_BEGIN) == text.splitlines().count(BEGIN) == 1
+    assert text.count("Decision after failed checks") == 1 and "Failed check\n" in text
+    assert "No tracker discussion." not in text
 
 
 def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
