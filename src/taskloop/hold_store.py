@@ -22,6 +22,7 @@ from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_nul
 from taskloop.check_store import stored_nullable_real, stored_real, stored_word
 from taskloop.factory_schema import HOLD, LATER, LATEST_CHECKS, SUCCESSOR, marks, prefixed
 from taskloop.merge.models import PREFIX as MERGE
+from taskloop.task import TaskReference
 from taskloop.wip import SavedCommit, decode, encode
 
 type Labels = Literal["moved", "absent", "not_ours", "closed", "missing", "superseded"]
@@ -100,6 +101,13 @@ def _row(row: tuple[object, ...]) -> HoldRow:
 
 class HoldStore(StoreConnection):
     """The fenced writes and the reads of holds."""
+
+    def latest(self, task: TaskReference) -> HoldRow | None:
+        """Most recent recorded hold, including holds whose tracker label has been cleared."""
+        with self._connection() as con:
+            found = con.execute(LOADED + """ WHERE p.adapter=? AND p.backlog=? AND p.task_id=?
+             ORDER BY h.held_at DESC,p.seq DESC LIMIT 1""", (task.scope.adapter, task.scope.backlog, task.task_id)).fetchone()
+        return None if found is None else _row(found)
 
     def of_attempts(self, ids: tuple[str, ...]) -> dict[str, HoldRow]:
         """The holds of the given agent attempts, by attempt id (one query for a listing; absent ids have none)."""

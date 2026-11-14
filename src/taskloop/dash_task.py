@@ -39,7 +39,7 @@ from taskloop.dash_model import (
 )
 from taskloop.dash_verify import STEP as VERIFICATION
 from taskloop.dash_verify import applies, verification
-from taskloop.evidence_files import EvidenceFiles
+from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS
 from taskloop.hold_store import HoldStore
 from taskloop.merge.status import result as merge_result
@@ -131,14 +131,17 @@ def _run(row: AttemptRow) -> Run | None:
                SANDBOX_WORDS.get(choices.summary, choices.summary))
 
 
-def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody:
+def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: tuple[AttemptRow, ...]) -> AttemptBody | Failed:
     shown = ports.files.text_bounded(row.key, "answer.txt")
     disposition = None if result.execution is None else result.execution.answer.disposition
     answer = None if shown is None else Answer(disposition or "none", shown[0], shown[1])
-    shown = ports.files.text(row.key, "input.txt")
     earlier = next((each for each in rows if each.key.attempt_id == row.previous_attempt_id), None)
-    before = None if earlier is None else ports.files.text(earlier.key, "input.txt")
-    added = () if shown is None or before is None else added_lines(before, shown)
+    try:
+        shown = ports.files.read(ports.reads.store.input_ref(row.key))
+        before = None if earlier is None else ports.files.read(ports.reads.store.input_ref(earlier.key))
+    except EvidenceError as error:
+        return Failed("unavailable", "input", str(error))
+    added = () if before is None else added_lines(before, shown)
     return AttemptBody(shown, Outcome(result.explanation or result.reason or result.status, answer, (), None), added)
 
 

@@ -175,3 +175,23 @@ Completion requires the attempt input and dashboard regressions above plus
 both required gates passing. Until implemented, the coordinator's interim rule
 remains to put owner decisions into the task description; this plan does not
 make agents depend on that workaround.
+
+## As built
+
+`discussion.py` collects and frames each new attempt's discussion through a
+structured tracker read port. The adapter reads unique direct links in id order;
+the operation refuses more than 16 linked tasks or a complete block larger than
+32 KiB. Authors, original times, thread order and multiline decisions are kept.
+The latest recorded hold is read from `HoldStore`, including cleared history;
+only later, valid comment times are classified as comments after that hold.
+
+Initial admission, advancement, slot repeats and failed-check repair collect a
+new snapshot before saving input or taking a reservation. Resuming an admitted
+attempt reads its immutable input. All data lines are prefixed, and context
+replacement recognizes standalone framing. The dashboard reads the selected
+attempt's complete input through its stored reference and digest, reporting
+missing or damaged evidence as unavailable.
+
+Focused regressions live in `test_discussion.py` and
+`test_discussion_dashboard.py`, with additional repair and comparison coverage in
+the existing `test_check_repeat.py` and `test_dash_read.py`.
