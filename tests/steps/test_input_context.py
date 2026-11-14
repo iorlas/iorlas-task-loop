@@ -150,6 +150,9 @@ def committed(worktree: FakeWorktree, word: str) -> str:
     worktree.write_file("src/context.py", word)
     made = worktree.record(f"Context\n\n{TRAILER}: earlier", paths="all")
     assert isinstance(made, Recorded)
+    if worktree.branch() == "main":
+        worktree.push("main")
+        assert worktree.repo.fetch().ok
     return made.sha
 
 
@@ -185,6 +188,7 @@ def test_input_failure_precedes_claim_and_reservation(
     tree = repo.worktree(repo.identity().root)
     tree.write_file("docs/glossary.md", "malformed")
     assert isinstance(tree.record("bad glossary", paths="all"), Recorded)
+    tree.push("main")
     tracker = Tracker(factory, tmp_path / "artifacts")
     result = admission(factory, tmp_path, tracker, repo).admit(request(tmp_path, repo))
     assert isinstance(result, AdmitRefused) and result.reason == "input" and "term tables" in result.detail
@@ -220,6 +224,8 @@ def test_bad_glossary_never_dispatches_an_agent(surroundings: AttemptSurrounding
     tree = surroundings.slot.repo.worktree(surroundings.slot.repo.identity().root)
     tree.write_file("docs/glossary.md", "broken")
     assert isinstance(tree.record("bad glossary", paths="all"), Recorded)
+    tree.push("main")
+    assert tree.repo.fetch().ok
     run = fake()
     result = app(con, surroundings, run).execute(KEY, ENTRY)
     assert result.reason == "input" and "No glossary term tables" in result.explanation

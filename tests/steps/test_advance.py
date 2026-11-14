@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from doubles import Command, PinnedViews
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRemote, FakeWorktree
 from round_bench import Factory, Tracker, scripts, task
 
 from taskloop.attempt_status import Listed, StatusPorts, list_attempts
@@ -63,6 +63,23 @@ def test_two_done_tasks_and_one_slot_advance_oldest_release_first_and_new_work_w
     assert factory.round() == [("tl-1", "implement", "verify", "verified release=released branch=published"),
                                ("tl-2", "implement", "skip", "no_required"), ("tl-3", "plan", "start", "started")]
     assert factory.next_words() == {"tl-1": ("implement", "advance"), "tl-2": ("implement", "advance"), "tl-3": ("plan", "verify")}
+
+
+def test_advance_refreshes_origin_and_records_its_tip_for_parking(factory: Factory) -> None:
+    factory.tracker.beads.pop("tl-2")
+    factory.by_hand("tl-1")
+    repo = factory.slot.repo
+    original = dict(repo.branches())["main"]
+    retained = factory.tip("tl-1")
+    origin = FakeRemote("https://example.invalid/current.git")
+    repo.add_remote("origin", origin)
+    repo.worktree(repo.path).push("main")
+    target = origin.advance("main", {"other": "New landing\n"})
+    assert factory.round() == [("tl-1", "implement", "advance", "started")]
+    key = factory.store.attempt_of("tasks", "tl-1")
+    assert key is not None and factory.store.slot_base(key[0]) == target
+    assert repo.is_ancestor(retained, factory.tip("tl-1"))
+    assert dict(repo.branches())["main"] == original
 
 
 def test_a_task_a_person_abandoned_is_restarted_by_a_round_while_it_carries_the_label(factory: Factory) -> None:

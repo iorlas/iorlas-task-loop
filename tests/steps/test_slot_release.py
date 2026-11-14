@@ -18,7 +18,7 @@ from beads_client import BdError
 from beads_client.testing import Script
 from doubles import FakeSlotFiles
 from git_porcelain import Repo, WorktreeInfo
-from git_porcelain.testing import FakeWorktree
+from git_porcelain.testing import FakeRemote, FakeWorktree
 from plan_fixtures import PLAN_TEXT
 from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
@@ -177,6 +177,37 @@ def test_a_settled_release_parks_the_verified_slot_at_d_keeps_the_claim_and_then
     again = ports.releaser().release(KEY, False)
     assert again == AlreadyReleased("s1", "kept", False) and release_word(again) == "already_released"
     assert (ports.opens, ports.holds, len(ports.emptied)) == (0, 0, 1)
+
+
+def test_interrupted_release_converges_on_recorded_origin_tip_without_refreshing(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    x = verified(registered, tmp_path, slot, checkouts, slot_files)
+    repo = slot.repo
+    original = dict(repo.branches())["main"]
+    origin = FakeRemote("https://example.invalid/current.git")
+    repo.add_remote("origin", origin)
+    repo.worktree(repo.path).push("main")
+    target = origin.advance("main", {"other": "Admitted destination\n"})
+    assert repo.fetch().ok
+    registered.execute("UPDATE attempt SET slot_head=?", (target,))
+    origin.advance("main", {"later": "Leave the destination alone\n"})
+    release = Ports(registered, checkouts, slot_files).releaser()
+    record = SlotRelease._record
+
+    def interrupted(*_args: object, **_kwargs: object) -> NoReturn:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(repo, "fetch", lambda *_args, **_kwargs: pytest.fail("release fetched"))
+    monkeypatch.setattr(SlotRelease, "_record", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        release.release(KEY, False)
+    assert head(slot) == target and slot.branch() is None and tip(slot) == x
+    monkeypatch.setattr(SlotRelease, "_record", record)
+    assert isinstance(release.release(KEY, False), Released)
+    assert isinstance(release.release(KEY, False), AlreadyReleased)
+    assert head(slot) == target and tip(slot) == x and dict(repo.branches())["main"] == original
 
 
 @pytest.mark.parametrize("phase", ["admitted", "registered", "captured"])
