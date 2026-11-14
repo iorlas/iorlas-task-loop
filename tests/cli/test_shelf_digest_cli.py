@@ -76,7 +76,7 @@ def test_source_and_late_package_failures_leave_stdout_empty(
     elif failure == "documentation":
         case.shelf_files["packages/stream-proc/README.md"] = b"\xff"
     else:
-        case.shelf_files["packages/stream-proc/src/stream_proc/__init__.py"] = b'"""\\ud800"""\nVALUE = 1\n'
+        case.shelf_files["packages/any-agent/src/any_agent/events.py"] = b"\xff"
     assert cli.main(["--checkout", str(tmp_path / "root"), "--at", revision, "--shelf", str(tmp_path / "shelf")]) == 1
     captured = capsys.readouterr()
     assert captured.out == "" and captured.err.strip()
@@ -109,3 +109,19 @@ def test_git_failure_is_explained_without_stdout(
     assert cli.main(["--shelf", "shelf"]) == 1
     captured = capsys.readouterr()
     assert captured.out == "" and "object storage unavailable" in captured.err
+
+
+@pytest.mark.parametrize("failure", ["contract", "overflow"])
+def test_fact_and_bound_failures_are_buffered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], failure: str,
+) -> None:
+    case, _ = wired(tmp_path, monkeypatch)
+    if failure == "contract":
+        path = "packages/any-agent/src/any_agent/events.py"
+        case.shelf_files[path] = case.shelf_files[path].replace(b"usage: Tokens | None", b"usage: Tokens")
+    else:
+        monkeypatch.setattr("taskloop.shelf_digest.render.TOKEN_LIMIT", 1)
+    assert cli.main(["--shelf", str(tmp_path / "shelf")]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err.strip()
+    assert ("contract" if failure == "contract" else "bound") in captured.err

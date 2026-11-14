@@ -98,6 +98,19 @@ def test_relative_imports_and_attribute_assignment_aliases(tmp_path: Path) -> No
     assert result[0].declaration == "async def work[T](value: T, /, *, count: int=1) -> T:\n    ..."
 
 
+@pytest.mark.parametrize("other", ["pid: int", "pid: str"])
+def test_platform_branches_require_equivalent_declarations(tmp_path: Path, other: str) -> None:
+    result = extract(tmp_path, {"__init__.py": (
+        "import sys\nif sys.platform == 'darwin':\n def alive(pid: int) -> bool:\n  return True\n"
+        f"else:\n def alive({other}) -> bool:\n  return False\n"
+    )})
+    if other == "pid: str":
+        assert isinstance(result, SignatureFailure) and "platform" in result.explanation
+    else:
+        assert isinstance(result, tuple) and len(result) == 1
+        assert (result[0].start_line, result[0].end_line) == (3, 7)
+
+
 def test_star_cycles_keep_reachable_declarations(tmp_path: Path) -> None:
     result = extract(tmp_path, {
         "__init__.py": "from .left import *\n",

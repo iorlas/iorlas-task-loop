@@ -1,66 +1,49 @@
-"""One validated JSON boundary and canonical UTF-8 serializer."""
+"""Canonical JSON with a conservative one-token-per-UTF-8-byte upper bound."""
 
 import json
 
 from pydantic import BaseModel, ConfigDict
 
-from taskloop.shelf_digest.documentation import DocumentationKind, documentation_order
+from taskloop.shelf_digest.facts import FactName
 from taskloop.shelf_digest.generate import Digest
-from taskloop.shelf_digest.models import SignatureKind
+
+TOKEN_LIMIT = 2500
 
 
-class _Record(BaseModel):
-    model_config = ConfigDict(from_attributes=True, frozen=True)
-
-
-class _Identity(_Record):
-    name: str
-    version: str
-    repository_url: str
-    requested_tag: str
-    subdirectory: str
-    commit: str
-
-
-class _Signature(_Record):
-    identity: _Identity
-    commit: str
-    public_name: str
-    defining_name: str
-    path: str
-    start_line: int
-    end_line: int
-    kind: SignatureKind
-    declaration: str
-
-
-class _Documentation(_Record):
-    identity: _Identity
-    commit: str
-    path: str
-    start_line: int
-    end_line: int
-    kind: DocumentationKind
-    text: str
-    public_name: str | None
-    defining_name: str | None
-
-
-class _Digest(_Record):
+class _Digest(BaseModel):
+    model_config = ConfigDict(frozen=True)
     source_commit: str
-    packages: tuple[_Identity, ...]
-    signatures: tuple[_Signature, ...]
-    documentation: tuple[_Documentation, ...]
+    repositories: tuple[str, ...]
+    commits: tuple[str, ...]
+    # package: name, version, repository index, requested tag, subdirectory, commit index.
+    packages: tuple[tuple[str, str, int, str, str, int], ...]
+    # source: package index, package-relative path, first line, last line, SHA-256.
+    sources: tuple[tuple[int, str, int, int, str], ...]
+    facts: dict[FactName, tuple[str, tuple[int, ...]]]
 
 
 def render_digest(digest: Digest) -> bytes:
-    """Sort records and keys, preserve text values, and emit exactly one final LF."""
+    """Remove optional extraction material, retaining every identity and mandatory fact."""
+    if len(digest.facts) != len(FactName) or {fact.name for fact in digest.facts} != set(FactName):
+        raise ValueError("Cannot render digest: mandatory facts are missing or duplicated")
+    packages = sorted(digest.identities.packages, key=lambda item: item.name)
+    package_indices = {item.name: index for index, item in enumerate(packages)}
+    repositories = tuple(sorted({item.repository_url for item in packages}))
+    commits = tuple(sorted({item.commit for item in packages}))
+    evidence = sorted({item for fact in digest.facts for item in fact.evidence}, key=lambda item: (
+        item.package, item.path, item.start_line, item.end_line, item.sha256))
+    evidence_indices = {item: index for index, item in enumerate(evidence)}
+    directories = {item.name: item.subdirectory for item in packages}
     result = _Digest(
-        source_commit=digest.identities.source_commit,
-        packages=tuple(_Identity.model_validate(item) for item in sorted(digest.identities.packages, key=lambda item: item.name)),
-        signatures=tuple(_Signature.model_validate(item) for item in sorted(
-            digest.signatures, key=lambda item: (item.identity.name, item.path, item.start_line, item.end_line, item.public_name))),
-        documentation=tuple(_Documentation.model_validate(item) for item in sorted(digest.documentation, key=documentation_order)),
+        source_commit=digest.identities.source_commit, repositories=repositories, commits=commits,
+        packages=tuple((p.name, p.version, repositories.index(p.repository_url), p.requested_tag, p.subdirectory,
+                        commits.index(p.commit)) for p in packages),
+        sources=tuple((package_indices[e.package], e.path.removeprefix(directories[e.package] + "/"),
+                       e.start_line, e.end_line, e.sha256) for e in evidence),
+        facts={fact.name: (fact.text, tuple(sorted(evidence_indices[e] for e in fact.evidence))) for fact in digest.facts},
     )
-    text = json.dumps(result.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False)
-    return (text + "\n").encode("utf-8")
+    output = (json.dumps(result.model_dump(mode="json"), ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+    if len(output) > TOKEN_LIMIT:
+        raise ValueError(f"Shelf digest exceeds conservative {TOKEN_LIMIT}-token bound ({len(output)} UTF-8 bytes)")
+    return output
