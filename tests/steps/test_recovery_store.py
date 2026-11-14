@@ -48,8 +48,8 @@ def database(path: Path) -> sqlite3.Connection:
     return con
 
 
-def observed(store: RecoveryStore) -> Observations:
-    snapshot = store.snapshot(KEY, 10)
+def observed(store: RecoveryStore, *, now: float = 10, allow_expired: bool = False) -> Observations:
+    snapshot = store.snapshot(KEY, now, allow_expired=allow_expired)
     assert isinstance(snapshot, Snapshot), snapshot
     return Observations(snapshot=snapshot, entry=GONE, worker=GONE, owner=GONE, claim=OWNED)
 
@@ -82,18 +82,18 @@ def test_reopen_revalidates_exact_intent_and_preserves_attempt_facts(tmp_path: P
     con.close()
 
 
-def race(path: Path, *, replacement: bool) -> list[Result]:
+def race(path: Path, *, replacement: bool, deadline: float | None = None, now: float = 10) -> list[Result]:
     barrier = Barrier(2)
 
     def contender(number: int) -> Result:
         con = sqlite3.connect(path, isolation_level=None)
         try:
             store = RecoveryStore(lambda: con)
-            snapshot = observed(store)
+            snapshot = observed(store, now=now, allow_expired=deadline is not None)
             assert (snapshot.snapshot.intent is not None) is replacement
             barrier.wait(timeout=5)
             owner = Identity(pid=number, pgid=number, start=str(number), boot="boot")
-            return store.authorize(snapshot, owner, str(number), lambda: 10)
+            return store.authorize(snapshot, owner, str(number), lambda: now, deadline=deadline)
         finally:
             con.close()
 
@@ -124,10 +124,12 @@ def test_independent_connections_elect_one_owner_and_fence_loser(tmp_path: Path,
     con.close()
 
 
-def test_failed_commit_leaves_no_authorization_after_reopen(tmp_path: Path) -> None:
+@pytest.mark.parametrize("renewal", [False, True])
+def test_failed_commit_leaves_no_authorization_after_reopen(tmp_path: Path, renewal: bool) -> None:
     path = tmp_path / "factory.db"
     con = database(path)
     original = observed(RecoveryStore(lambda: con))
+    before = facts(con)
 
     @contextmanager
     def fail_commit(connection: sqlite3.Connection) -> Generator[None]:
@@ -136,10 +138,12 @@ def test_failed_commit_leaves_no_authorization_after_reopen(tmp_path: Path) -> N
             raise sqlite3.OperationalError("commit failed")
 
     with pytest.raises(StoreUnavailable):
-        RecoveryStore(lambda: con, fail_commit).authorize(original, OWNER, "rolled-back", lambda: 10)
+        RecoveryStore(lambda: con, fail_commit).authorize(original, OWNER, "rolled-back", lambda: 10,
+                                                        deadline=200 if renewal else None)
     con.close()
     con = sqlite3.connect(path, isolation_level=None)
     assert observed(RecoveryStore(lambda: con)).snapshot.intent is None
+    assert facts(con) == before
     con.close()
 
 
@@ -181,15 +185,18 @@ CHANGES = [
 
 
 @pytest.mark.parametrize(("change", "expected"), CHANGES)
+@pytest.mark.parametrize("renewal", [False, True])
 def test_local_changes_between_observation_and_commit_cannot_authorize(
-    tmp_path: Path, change: str, expected: Outcome,
+    tmp_path: Path, change: str, expected: Outcome, renewal: bool,
 ) -> None:
     con = database(tmp_path / "factory.db")
     store = RecoveryStore(lambda: con)
     snapshot = observed(store)
     con.execute(change)
     before = facts(con)
-    result = store.authorize(snapshot, OWNER, "intent", lambda: 10)
+    result = store.authorize(snapshot, OWNER, "intent", lambda: 10, deadline=200 if renewal else None)
+    if renewal and expected is Outcome.EXPIRED:
+        expected = Outcome.CHANGED
     assert result.outcome is expected and result.explanation
     assert con.execute("SELECT count(*) FROM recovery_intent").fetchone() == (0,)
     assert facts(con) == before
@@ -197,7 +204,8 @@ def test_local_changes_between_observation_and_commit_cannot_authorize(
 
 
 @pytest.mark.parametrize("checks", [False, True])
-def test_successor_created_after_observation_prevents_authorization(tmp_path: Path, checks: bool) -> None:
+@pytest.mark.parametrize("renewal", [False, True])
+def test_successor_created_after_observation_prevents_authorization(tmp_path: Path, checks: bool, renewal: bool) -> None:
     con = database(tmp_path / "factory.db")
     store = RecoveryStore(lambda: con)
     snapshot = observed(store)
@@ -208,7 +216,93 @@ def test_successor_created_after_observation_prevents_authorization(tmp_path: Pa
     else:
         seed(con, attempt="successor", task="tl-other", session="another")
         con.execute("UPDATE attempt SET task_id='tl-1',seq=2 WHERE attempt_id='successor'")
-    result = store.authorize(snapshot, OWNER, "intent", lambda: 10)
+    result = store.authorize(snapshot, OWNER, "intent", lambda: 10, deadline=200 if renewal else None)
     assert result.outcome is Outcome.INELIGIBLE and result.explanation
     assert con.execute("SELECT count(*) FROM recovery_intent").fetchone() == (0,)
+    con.close()
+
+
+@pytest.mark.parametrize("replacement", [False, True])
+def test_competing_renewals_elect_one_generation_and_reopen(tmp_path: Path, replacement: bool) -> None:
+    path = tmp_path / "factory.db"
+    con = database(path)
+    store = RecoveryStore(lambda: con)
+    if replacement:
+        assert store.authorize(observed(store), OWNER, "old", lambda: 10).outcome is Outcome.AUTHORIZED
+    before = observed(store).snapshot.attempt
+    con.close()
+    results = race(path, replacement=replacement, deadline=200, now=100)
+    assert sorted(result.outcome for result in results) == sorted((Outcome.AUTHORIZED, Outcome.CHANGED))
+    assert all(result.explanation for result in results)
+    winner = next(result.intent for result in results if result.outcome is Outcome.AUTHORIZED)
+    assert winner is not None and winner.generation == (2 if replacement else 1)
+    con = sqlite3.connect(path, isolation_level=None)
+    store = RecoveryStore(lambda: con)
+    snapshot = observed(store, now=110).snapshot
+    assert snapshot.intent == winner and snapshot.attempt.admission.deadline == 200
+    assert snapshot.attempt.revision == winner.attempt_revision == before.revision + 1
+    assert snapshot.attempt.admission.key == before.admission.key
+    assert snapshot.attempt.worker == before.worker and snapshot.attempt.session_ref == before.session_ref
+    again = store.authorize(observed(store, now=110), winner.owner, winner.token, lambda: 110, deadline=300)
+    assert again.outcome is Outcome.AUTHORIZED and again.intent == winner and again.explanation
+    assert observed(store, now=110).snapshot == snapshot
+    expired = store.authorize(observed(store, now=200, allow_expired=True), winner.owner, winner.token,
+                              lambda: 200, deadline=300)
+    assert expired.outcome is Outcome.EXPIRED and expired.explanation
+    assert con.execute("SELECT deadline,rev FROM attempt").fetchone() == (200, winner.attempt_revision)
+    for result in (store.snapshot(KEY, 200), store.compare(snapshot, lambda: 200),
+                   store.execute(winner, lambda: 200), store.register(winner, OWNER, lambda: 200)):
+        assert isinstance(result, Result) and result.outcome is Outcome.EXPIRED and result.explanation
+    con.close()
+
+
+@pytest.mark.parametrize("deadline", [float("nan"), float("inf"), -float("inf"), 0, 99, 100])
+def test_invalid_renewal_preserves_all_facts(tmp_path: Path, deadline: float) -> None:
+    con = database(tmp_path / "factory.db")
+    store = RecoveryStore(lambda: con)
+    snapshot = observed(store, now=100, allow_expired=True)
+    before = list(con.iterdump())
+    result = store.authorize(snapshot, OWNER, "invalid", lambda: 100, deadline=deadline)
+    assert result.outcome is Outcome.EXPIRED and result.explanation
+    assert list(con.iterdump()) == before
+    con.close()
+
+
+def test_renewal_never_shortens_existing_allowance(tmp_path: Path) -> None:
+    con = database(tmp_path / "factory.db")
+    store = RecoveryStore(lambda: con)
+    result = store.authorize(observed(store), OWNER, "renewal", lambda: 10, deadline=50)
+    assert result.outcome is Outcome.AUTHORIZED and result.intent is not None and result.explanation
+    assert con.execute("SELECT deadline,rev FROM attempt").fetchone() == (100, result.intent.attempt_revision)
+    con.close()
+
+
+def test_renewal_deadline_must_still_be_future_under_writer_lock(tmp_path: Path) -> None:
+    con = database(tmp_path / "factory.db")
+    snapshot = observed(RecoveryStore(lambda: con))
+    now = 10
+
+    @contextmanager
+    def delayed(connection: sqlite3.Connection) -> Generator[None]:
+        nonlocal now
+        with begin_immediate(connection):
+            now = 200
+            yield
+
+    before = list(con.iterdump())
+    result = RecoveryStore(lambda: con, delayed).authorize(snapshot, OWNER, "late", lambda: now, deadline=200)
+    assert result.outcome is Outcome.EXPIRED and result.explanation
+    assert list(con.iterdump()) == before
+    con.close()
+
+
+def test_intent_write_failure_rolls_back_renewed_deadline_and_revision(tmp_path: Path) -> None:
+    con = database(tmp_path / "factory.db")
+    store = RecoveryStore(lambda: con)
+    con.execute("""CREATE TRIGGER refuse_intent BEFORE INSERT ON recovery_intent
+                   BEGIN SELECT RAISE(ABORT,'intent write failed'); END""")
+    before = list(con.iterdump())
+    with pytest.raises(StoreUnavailable):
+        store.authorize(observed(store), OWNER, "failed", lambda: 100, deadline=200)
+    assert list(con.iterdump()) == before
     con.close()

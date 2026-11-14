@@ -80,18 +80,18 @@ class Recovery:
 
     def authorize(
         self, key: AttemptKey, owner: Identity, *, token: str | None = None,
-        custody: AbstractContextManager[None] | None = None,
+        custody: AbstractContextManager[None] | None = None, deadline: float | None = None,
     ) -> Result:
         """An already-held custody scope bypasses acquisition of the nonreentrant slot lock."""
         try:
-            snapshot = self.store.snapshot(key, self.clock())
+            snapshot = self.store.snapshot(key, self.clock(), allow_expired=deadline is not None)
             if isinstance(snapshot, Result):
                 return snapshot
             previous = snapshot.intent
             selected = token or (previous.token if previous is not None and previous.owner == owner else self.ids.hex())
             with self.custody(snapshot.attempt.admission) if custody is None else custody:
                 observed = self._observe(snapshot)
-                return self.store.authorize(observed, owner, selected, self.clock)
+                return self.store.authorize(observed, owner, selected, self.clock, deadline=deadline)
         except SlotBusy:
             return Result(outcome=Outcome.CUSTODY_BUSY, explanation="The slot's custody is held by another operation.")
         except (StoreUnavailable, ValueError, TypeError, SlotLockUnavailable) as error:
