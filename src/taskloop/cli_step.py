@@ -161,21 +161,22 @@ def views_for(loaded: Loaded) -> GitViews:
 
 def _start(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     request = StartRequest(arguments.task_id, arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.model,
-                           arguments.effort, arguments.minutes, harness=arguments.harness)
+                           arguments.effort, arguments.minutes, harness=arguments.harness,
+                           sandbox=loaded.settings.agent_sandbox.value.value)
     with cli_composition.open_start(loaded.settings.db.value, loaded.settings.artifacts.value, views_for(loaded)) as ports:
         return ports if isinstance(ports, Failed) else operations.start(ports, request)
 
 
-def _next_request(arguments: argparse.Namespace) -> NextRequest:
+def _next_request(arguments: argparse.Namespace, loaded: Loaded) -> NextRequest:
     return NextRequest(arguments.backlog, arguments.tracker_root, Path(arguments.checkout), arguments.label, arguments.model,
                        arguments.effort, arguments.minutes, max_running=arguments.max_running, retake=arguments.retake_lapsed,
-                       harness=arguments.harness)
+                       harness=arguments.harness, sandbox=loaded.settings.agent_sandbox.value.value)
 
 
 def _next(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings = loaded.settings
     with cli_composition.open_next(settings.db.value, settings.artifacts.value, views_for(loaded), arguments.tracker_root) as ports:
-        return ports if isinstance(ports, Failed) else run_round(ports, _next_request(arguments))
+        return ports if isinstance(ports, Failed) else run_round(ports, _next_request(arguments, loaded))
 
 
 def _dash_request(arguments: argparse.Namespace, settings: Effective) -> dash_composition.DashRequest | None:
@@ -191,7 +192,8 @@ def _rounds(arguments: argparse.Namespace, loaded: Loaded) -> Result:
     settings, request = loaded.settings, RoundsRequest(arguments.backlog, loaded.settings.round_seconds.value)
     log = settings.artifacts.value / "rounds.log"
     try:
-        with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded), _next_request(arguments)) as ports:
+        with cli_composition.open_rounds(settings.db.value, settings.artifacts.value, views_for(loaded),
+                                       _next_request(arguments, loaded)) as ports:
             if isinstance(ports, (Failed, Ended)):
                 return ports
             label = arguments.label.strip()  # as `run_round` reads it

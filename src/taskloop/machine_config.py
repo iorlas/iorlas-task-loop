@@ -10,6 +10,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Final, Literal
 
+from taskloop.access import Sandbox
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS, MIN_GIT_READ_SECONDS
 from taskloop.task import TaskInspectionError, TaskScope
 
@@ -33,11 +34,13 @@ class Effective:
     round_seconds: Setting[int]  # `tl step rounds`: seconds from the end of one regular round to the next
     git_read_seconds: Setting[int]  # seconds a Git read (status, diff, ls-files, ...) may take before it is `unavailable:git`
     backlog: Setting[str | None]  # the file's default for `tl step show`; its explicit flag remains a separate input
+    agent_sandbox: Setting[Sandbox]  # what every agent step of this machine runs under (`danger-full-access`: see `_sandbox`)
 
-    def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int] | Setting[str | None]], ...]:
+    def pairs(self) -> tuple[tuple[str, Setting[Path] | Setting[int] | Setting[str | None] | Setting[Sandbox]], ...]:
         """Every key with its setting, in key order."""
         return (("db", self.db), ("artifacts", self.artifacts), ("slots_root", self.slots_root), ("slot_count", self.slot_count),
-                ("round_seconds", self.round_seconds), ("git_read_seconds", self.git_read_seconds), ("backlog", self.backlog))
+                ("round_seconds", self.round_seconds), ("git_read_seconds", self.git_read_seconds), ("backlog", self.backlog),
+                ("agent_sandbox", self.agent_sandbox))
 
 
 KEYS: Final = tuple(field.name for field in fields(Effective))  # the file's only keys
@@ -85,6 +88,7 @@ def defaults(home: Path) -> Effective:
         Setting(60, "default"),
         Setting(DEFAULT_GIT_READ_SECONDS, "default"),
         Setting(None, "default"),
+        Setting(Sandbox.WORKSPACE_WRITE, "default"),
     )
 
 
@@ -120,6 +124,15 @@ def _backlog(key: str, value: object) -> str:
         return TaskScope(value).backlog
     except TaskInspectionError as error:
         raise _Refusal(ConfigRefused("type", key, detail)) from error
+
+
+def _sandbox(key: str, value: object) -> Sandbox:
+    """`danger-full-access` runs the agents with no sandbox: they can read and write everything the factory's user can and
+    reach the network, so only a machine whose container is the boundary should say it."""
+    try:
+        return Sandbox(value)
+    except ValueError as error:
+        raise _Refusal(ConfigRefused("type", key, f"{key} must be one of: {', '.join(Sandbox)}")) from error
 
 
 def _count(key: str, value: object) -> int:
@@ -171,6 +184,7 @@ def resolve(text: str | None, flags: Flags, home: Path) -> Effective | ConfigRef
             _chosen("git_read_seconds", table, flags.git_read_seconds, built.git_read_seconds,
                     _between(MIN_GIT_READ_SECONDS, MAX_GIT_READ_SECONDS)),
             _chosen("backlog", table, None, built.backlog, _backlog),
+            _chosen("agent_sandbox", table, None, built.agent_sandbox, _sandbox),
         )
     except _Refusal as refusal:
         return refusal.refused

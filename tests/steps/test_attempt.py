@@ -519,9 +519,9 @@ def test_only_the_registered_entry_executes(tmp_path: Path, surroundings: Attemp
     assert con.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)
 
 
-def test_only_the_workspace_write_sandbox_is_launched(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
+def test_only_a_known_sandbox_is_launched(tmp_path: Path, surroundings: AttemptSurroundings) -> None:
     con, execution = database(surroundings), fake()
-    con.execute("UPDATE attempt SET sandbox='danger-full-access'")
+    con.execute("UPDATE attempt SET sandbox='read-only'")
     result = app(con, surroundings, execution).execute(KEY, ENTRY)
     assert (result.status, result.reason) == ("refused", "sandbox") and execution.calls == []
     assert con.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)

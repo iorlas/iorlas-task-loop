@@ -4,7 +4,9 @@ and the sandbox probe's command."""
 import tomllib
 from pathlib import Path
 
-from taskloop.access import CODEX_ACCESS, PROBE, SANDBOX, agent_env, folders, prepared_access, probe_argv
+from any_agent.access import CodexApproval, CodexSandbox
+
+from taskloop.access import CODEX_ACCESS, PROBE, SANDBOX, Sandbox, agent_env, folders, full_access, prepared_access, probe_argv
 
 FOUND = folders(Path("/home/u/.local/share/task-loop/slots/0123456789ab/s1"))
 ROOTS = ["/home/u/.local/share/task-loop/slots/0123456789ab/.t/s1", "/home/u/.local/share/task-loop/slots/0123456789ab/.env/s1/uv-cache",
@@ -56,3 +58,18 @@ def test_the_probe_runs_codex_sandbox_with_the_agents_keys_on_the_three_roots() 
     assert argv[:split] == ["/bin/codex", "sandbox", "-c", 'sandbox_mode="workspace-write"', *keys]
     assert argv[split:] == ["--", "/bin/sh", "-c", PROBE, "sh", *ROOTS]
     assert "rm " not in PROBE and "mktemp -d /tmp/" in PROBE  # only its own folders go; /tmp is tried by an unguessable name
+
+
+def test_full_access_names_no_sandbox_keys_and_never_asks() -> None:
+    """Every `-c` it renders is outside the workspace-write keys: nothing there can ask Codex for bwrap."""
+    access = full_access(FOUND)
+    assert (access.sandbox, access.approval) == (CodexSandbox.DANGER_FULL_ACCESS, CodexApproval.NEVER)
+    assert access.flags() == ["--ignore-user-config", "--ignore-rules"]
+    assert not any("sandbox_workspace_write" in item for item in access.config())
+    assert 'approval_policy="never"' in access.config() and access.config()[-1].startswith("shell_environment_policy.set.")
+    assert full_access(None).shell_env == ()
+    assert dict(full_access(FOUND).shell_env) == agent_env(FOUND)
+
+
+def test_the_sandbox_vocabulary_is_the_two_modes_with_workspace_write_the_default() -> None:
+    assert [mode.value for mode in Sandbox] == ["workspace-write", "danger-full-access"] and SANDBOX == Sandbox.WORKSPACE_WRITE

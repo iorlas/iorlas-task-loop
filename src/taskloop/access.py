@@ -2,12 +2,23 @@
 outside its slot, and the environment that points its tools at them (S5e, design tl-8bh9.4.3.1.16.2 sections 3 and 5).
 A leaf: values and pure functions only; nothing here runs, reads or writes."""
 
+import enum
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-SANDBOX: Final = "workspace-write"  # the only mode CODEX_ACCESS constrains; both step kinds
+from any_agent.access import CodexAccess, CodexApproval, CodexSandbox
+
+
+class Sandbox(enum.StrEnum):
+    """The agent's sandbox, the machine config's `agent_sandbox`. It is stored on the attempt as its value."""
+
+    WORKSPACE_WRITE = "workspace-write"
+    DANGER_FULL_ACCESS = "danger-full-access"  # no sandbox: the machine's own boundary (a container) is the only one
+
+
+SANDBOX: Final = Sandbox.WORKSPACE_WRITE.value  # the default, and the only mode CODEX_ACCESS constrains; both step kinds
 ROOTS: Final = "sandbox_workspace_write.writable_roots="
 SHELL: Final = "shell_environment_policy.set."  # a variable for the agent's shell commands only, not Codex's own process
 # Neither the user's config nor a repo file widens or narrows these. The sandbox has no network; it writes the working
@@ -94,3 +105,12 @@ def probe_argv(exe: str, found: Folders) -> list[str]:
     keys = [item for item in prepared_access(found) if item not in EXEC_ONLY]
     return [exe, "sandbox", "-c", f'sandbox_mode="{SANDBOX}"', *keys, "--", "/bin/sh", "-c", PROBE, "sh",
             *(str(path) for path in found.roots)]
+
+
+def full_access(found: Folders | None) -> CodexAccess:
+    """The `danger-full-access` mode: CODEX_ACCESS's choices that are not about the sandbox (never ask, the person's config
+    and rules ignored, the output limit) and, for a kind with `environment` (`found`), the shell's variables of `agent_env`.
+    No root, network or temp-folder key: they belong to the workspace-write mode, and nothing asks for bwrap."""
+    shell = () if found is None else tuple(agent_env(found).items())
+    return CodexAccess(sandbox=CodexSandbox.DANGER_FULL_ACCESS, approval=CodexApproval.NEVER, tool_output_token_limit=3000,
+                       ignore_user_config=True, ignore_rules=True, shell_env=shell)

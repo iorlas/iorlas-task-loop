@@ -32,7 +32,7 @@ from typing import Literal, Protocol
 from git_porcelain import GitUnavailable, Repo
 from stream_proc import OwnedProcess
 
-from taskloop.access import TMP_BYTES, Folders, folders
+from taskloop.access import TMP_BYTES, Folders, Sandbox, folders
 from taskloop.attempt_types import AttemptKey, AttemptRecord, AttemptResult, Checkouts
 from taskloop.evidence_files import CappedLog, EvidenceFiles
 from taskloop.prepare import Prepared, task_branch
@@ -192,7 +192,8 @@ class Preparation:
         admission = record.admission
         target = SetupFor(admission.key, Path(admission.slot_path), None, task_branch(admission.task.task_id),
                           admission.deadline, admission.number == 1 or admission.source_checks_id is not None)
-        return self.prepare_for(target, slot, renew, launch[1], probe=launch)
+        full = admission.sandbox == Sandbox.DANGER_FULL_ACCESS  # no sandbox is asked for, so none is probed
+        return self.prepare_for(target, slot, renew, launch[1], probe=None if full else launch)
 
     def prepare_for(self, target: SetupFor, slot: Prepared, renew: Renew, env: Mapping[str, str], *,
                     probe: Launch | None) -> AttemptResult | None:

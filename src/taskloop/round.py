@@ -28,6 +28,7 @@ from functools import partial
 from pathlib import Path
 from typing import Final
 
+from taskloop.access import SANDBOX
 from taskloop.attempt_reads import StoreUnavailable
 from taskloop.attempt_result import succeeded
 from taskloop.attempt_status import AttemptView, Listed, StatusPorts, list_attempts
@@ -105,6 +106,7 @@ class NextRequest:
     max_running: int = 3  # in-flight tasks of the backlog (`in_flight`) at which nothing new starts
     retake: bool = False  # admit the factory's own lapsed claims that have no attempt here (after a factory.db discard)
     harness: HarnessKind = HarnessKind.CODEX  # the agent harness every step the round starts runs under
+    sandbox: str = SANDBOX  # the machine config's `agent_sandbox`: the sandbox every step the round starts runs under
 
 
 @dataclass(frozen=True)
@@ -134,7 +136,7 @@ def _word(result: Started | Failed) -> str:
 def _request(request: NextRequest, task_id: str) -> StartRequest:
     """The start of one task under the round's choices and label (stored only by a fresh admission)."""
     return StartRequest(task_id, request.backlog, request.tracker_root, request.checkout, request.model, request.effort, request.minutes,
-                        request.label, request.harness)
+                        request.label, request.harness, request.sandbox)
 
 
 def max_running_refused(count: int) -> Failed | None:

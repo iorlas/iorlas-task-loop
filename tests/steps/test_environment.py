@@ -372,6 +372,18 @@ def test_the_implement_agent_writes_its_folders_offline_and_the_probe_sees_what_
     assert "UV_OFFLINE" not in env.process.calls[0].env
 
 
+def test_full_access_launches_without_a_sandbox_and_runs_no_probe(entry: Entry) -> None:
+    entry.environment.con.execute("UPDATE attempt SET sandbox='danger-full-access'")
+    entry.environment.sandbox = False  # a host that cannot run `codex sandbox` at all: nothing asks it to
+    entry.execute()
+    assert "agent" in entry.environment.events
+    (spec,) = entry.specs
+    assert entry.environment.probes == []
+    assert spec.argv[spec.argv.index("-s") + 1] == "danger-full-access"
+    assert not any("sandbox_workspace_write" in item for item in spec.argv)
+    assert 'approval_policy="never"' in spec.argv and spec.env == {"HOME": "/home/p"}
+
+
 def test_a_plan_attempt_launches_with_plans_access_and_no_added_environment(
     registered: sqlite3.Connection, checkouts: Checkouts, slot_files: SlotFiles, tmp_path: Path
 ) -> None:

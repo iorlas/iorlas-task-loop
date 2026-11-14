@@ -165,6 +165,7 @@ class StartRequest:
     minutes: int
     label: str | None = None  # the round's approval label, stored on a fresh admission; None: `tl step start` by hand
     harness: HarnessKind = HarnessKind.CODEX  # the agent harness a fresh admission or an advance runs under; a repeat keeps its attempt's
+    sandbox: str = SANDBOX  # the machine config's `agent_sandbox`, stored by a fresh admission or an advance; a repeat keeps its attempt's
 
 
 @dataclass(frozen=True)
@@ -481,7 +482,7 @@ def _admit(ports: StartPorts, request: StartRequest, advance: _Advance | None) -
     """The new attempt's key (a fresh admission, or the next step's after `advance`), or the winner's after
     `task_attempted`; StoreUnavailable propagates."""
     deadline = deadline_after(request.minutes, ports.clock)
-    choices = (request.checkout, request.model, request.effort, SANDBOX, deadline)
+    choices = (request.checkout, request.model, request.effort, request.sandbox, deadline)
     checks = advance is not None and advance.step == CHECK
     if advance is None:  # the round's label (tl-8bh9.14.9 section 8); an advance and a repeat copy their attempt's
         admitted = ports.admission.admit(

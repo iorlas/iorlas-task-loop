@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from taskloop import cli_composition
+from taskloop.access import Sandbox
 from taskloop.cli import main
 from taskloop.machine_config import ConfigRefused, Effective, Flags, Setting, config_file, defaults, resolve
 
@@ -22,6 +23,7 @@ def test_no_file_and_no_flags_is_every_built_in_default() -> None:
         Setting(60, "default"),
         Setting(600, "default"),
         Setting(None, "default"),
+        Setting(Sandbox.WORKSPACE_WRITE, "default"),
     )
     assert config_file(HOME) == HOME / ".config/task-loop/config.toml"
 
@@ -31,6 +33,19 @@ def test_backlog_is_an_optional_file_default_using_task_scope_validation(value: 
     found = resolve(f"backlog = {json.dumps(value)}", Flags(), HOME)
     assert isinstance(found, Effective)
     assert found.backlog == Setting(value, "file")
+
+
+def test_agent_sandbox_is_workspace_write_unless_the_file_says_danger_full_access() -> None:
+    found = resolve('agent_sandbox = "danger-full-access"', Flags(), HOME)
+    assert isinstance(found, Effective)
+    assert found.agent_sandbox == Setting(Sandbox.DANGER_FULL_ACCESS, "file")
+    assert ("agent_sandbox", found.agent_sandbox) in found.pairs()
+
+
+@pytest.mark.parametrize("value", ['"read-only"', '"full"', '""', "true", "1"])
+def test_agent_sandbox_refuses_any_other_value(value: str) -> None:
+    found = resolve(f"agent_sandbox = {value}", Flags(), HOME)
+    assert found == ConfigRefused("type", "agent_sandbox", "agent_sandbox must be one of: workspace-write, danger-full-access")
 
 
 @pytest.mark.parametrize("key, flags, value", [
@@ -144,6 +159,7 @@ def test_config_show_prints_values_sources_and_the_file(
             "round_seconds": {"value": 60, "source": "default"},
             "git_read_seconds": {"value": 600, "source": "default"},
             "backlog": {"value": None, "source": "default"},
+            "agent_sandbox": {"value": "workspace-write", "source": "default"},
         },
     }
     assert main(["config", "show"]) == 0

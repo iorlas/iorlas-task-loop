@@ -162,6 +162,9 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
 
 
 SLOT_COUNT_NOTE = "slot_count only adds slots (`tl slot adopt`); lowering it retires none: rounds use every slot adopted in factory.db."
+SANDBOX_NOTE = ("agent_sandbox is workspace-write (the agent writes its own workspace only, no network) or danger-full-access: "
+                "no sandbox, so the agent can read and write everything this user can and reach the network; use it only where the "
+                "machine itself, such as a container, is the boundary.")
 
 
 def _setup_lines(result: Adoption | Loaded) -> list[str]:
@@ -174,4 +177,4 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         return lines + hints + (["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else [])
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
     lines += [f"{key} = {'unset' if each.value is None else each.value} ({each.source})" for key, each in result.settings.pairs()]
-    return [*lines, SLOT_COUNT_NOTE]
+    return [*lines, SLOT_COUNT_NOTE, SANDBOX_NOTE]

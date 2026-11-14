@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 
 from any_agent.activity import Activity
 
-from taskloop.access import SANDBOX
+from taskloop.access import SANDBOX, Sandbox
 from taskloop.activity_file import ActivityPage
 from taskloop.attempt_reads import AttemptRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
@@ -113,7 +113,8 @@ def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
     return tuple((start, end) for kind, _a, _b, start, end in found if kind in ("insert", "replace"))
 
 
-SANDBOX_WORDS = {SANDBOX: "can write its own workspace only, no network"}
+SANDBOX_WORDS = {SANDBOX: "can write its own workspace only, no network",
+                 Sandbox.DANGER_FULL_ACCESS.value: "full access: the container is the boundary"}
 
 
 def _run(row: AttemptRow) -> Run | None:

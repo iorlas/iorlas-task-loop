@@ -18,7 +18,7 @@ from any_agent import (
     decode_answer,
 )
 
-from taskloop.access import CODEX_ACCESS, SANDBOX, folders, prepared_access
+from taskloop.access import CODEX_ACCESS, Sandbox, folders, full_access, prepared_access
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_result import collect, report
 from taskloop.attempt_store import AttemptStore
@@ -149,7 +149,7 @@ class Attempts:
             return "expired"
         if not all(value.strip() for value in (admission.model, admission.effort, admission.sandbox)):
             return "choices"
-        return "sandbox" if admission.sandbox != SANDBOX else None
+        return "sandbox" if admission.sandbox not in set(Sandbox) else None
 
     def _start(self, record: AttemptRecord, me: EntryIdentity, renew: Renew | None) -> AttemptResult:
         """Credentials, files, the launch spec, then the slot's preparation onto its task branch and the base check
@@ -209,7 +209,9 @@ class Attempts:
         harness = launchable(admission.harness)
         if harness is None:  # the credentials are the machine's Codex login: no other harness has any yet
             return AttemptResult("unavailable", "harness:" + admission.harness)
-        access = prepared_access(folders(Path(admission.slot_path))) if kind(admission.step).environment else CODEX_ACCESS
+        found = folders(Path(admission.slot_path)) if kind(admission.step).environment else None
+        full = admission.sandbox == Sandbox.DANGER_FULL_ACCESS
+        access = [] if full else prepared_access(found) if found is not None else CODEX_ACCESS
         inputs = LaunchInputs(
             exe=exe,
             cwd=admission.slot_path,
@@ -221,6 +223,7 @@ class Attempts:
             sandbox=admission.sandbox,
             out_file=out_file,
             access=list(access),
+            access_policy=full_access(found) if full else None,
         )
         try:
             return harness, harness.launch_spec(inputs), (exe, env)

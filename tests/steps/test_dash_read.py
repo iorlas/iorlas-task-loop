@@ -151,6 +151,16 @@ def test_an_agent_attempt_says_what_ran_it_in_plain_words(registered: sqlite3.Co
                               "can write its own workspace only, no network")
 
 
+def test_a_full_access_attempt_says_the_container_is_the_boundary(registered: sqlite3.Connection, tmp_path: Path) -> None:
+    registered.execute("UPDATE attempt SET sandbox='danger-full-access'")
+    files = EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Plan the actual task")
+    found = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(found, TaskDetail)
+    (attempt,) = found.attempts
+    assert attempt.run is not None and attempt.run.sandbox == "full access: the container is the boundary"
+
+
 def test_reasoning_is_a_collapsed_line_only_when_the_harness_gave_words(registered: sqlite3.Connection, tmp_path: Path) -> None:
     files = EvidenceFiles(tmp_path)
     files.put_input(KEY, "Plan the actual task")
