@@ -139,9 +139,9 @@ def test_an_unknown_slot_or_pid_is_named_neutrally(outcome: Kept, says: str) -> 
     assert says in line and "None" not in line and "slot  " not in line
 
 
-def test_an_entry_ended_by_a_signal_is_said_so_and_its_agent_session_is_not_continued() -> None:
+def test_an_entry_signal_log_does_not_prove_its_sender_or_an_agent_stop() -> None:
     found = lines(replace(FACTS, reason="stuck:entry_lost", entry="failed terminated_by_signal"))
-    assert found[2] == "The attempt's entry was terminated by a signal; its agent was stopped with it and its session was not continued."
+    assert found[2] == "The attempt's entry was terminated by a signal; its sender is unknown."
     assert not any("terminated" in line for line in lines(replace(FACTS, entry="collected valid verify=verified")))
 
 
