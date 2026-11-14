@@ -14,6 +14,7 @@ export function apiSource() {
   return {
     snapshot: () => json("/api/board"),
     detail: (id) => json(`/api/tasks/${encodeURIComponent(id)}`),
+    delivery: (id) => json(`/api/tasks/${encodeURIComponent(id)}/delivery`),
     // The tracker's side of a task (`bd` calls, slow under load): a separate request, which `signal` can cancel.
     tracker: (id, signal) => json(`/api/tasks/${encodeURIComponent(id)}/tracker`, signal),
     logs: () => json("/api/log"),

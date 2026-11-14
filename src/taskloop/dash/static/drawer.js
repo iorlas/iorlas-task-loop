@@ -30,6 +30,12 @@ const signature = (t) => JSON.stringify([
 
 // Select an attempt: the given one, else the last of the step, else the last of the task.
 function select(step, n) {
+  if (step === "land") {
+    open.step = "land";
+    open.n = null;
+    render();
+    return;
+  }
   const list = open.detail.attempts;
   const a = n != null ? list.find((x) => x.step === step && x.n === n) : list.findLast((x) => !step || x.step === step) ?? list.at(-1);
   open.step = a?.step;
@@ -217,7 +223,7 @@ function render() {
   if (view === "task") return drawer.append(taskView(open.tracker, () => { loadTracker(open); render(); }, detail.usage));
   if (!detail.attempts.length) return drawer.append(el("p", "px-6 py-5 text-sm text-slate-500", "Not started: no attempt yet."));
   const body = el("div", "flex min-h-0 flex-1");
-  body.append(rail(detail.attempts, t, open, select, detail.step_usage), pane());
+  body.append(rail(detail.attempts, t, open, select, detail.step_usage), open.step === "land" ? deliveryPane() : pane());
   drawer.append(body);
   if ($("rail") && railTop) $("rail").scrollTop = railTop;
   else body.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest" });
@@ -226,6 +232,53 @@ function render() {
 }
 
 // ---------- selected attempt ----------
+
+function loadDelivery(mine) {
+  const own = {};
+  mine.delivery = own;
+  source.delivery(mine.id).then(
+    (detail) => { own.detail = detail; },
+    (error) => { own.error = error.message ?? String(error); },
+  ).then(() => { if (open === mine && mine.delivery === own && mine.step === "land") render(); });
+}
+
+function deliveryPane() {
+  const wrap = el("section", "min-w-0 flex-1 overflow-y-auto px-6 py-4");
+  wrap.append(el("h3", "text-sm font-semibold", "Land · Pending delivery"));
+  if (!open.delivery) loadDelivery(open);
+  const kept = open.delivery;
+  if (kept.error) {
+    wrap.append(el("p", "py-3 text-sm text-rose-700 dark:text-rose-300", `Delivery details cannot be read: ${kept.error}`));
+    const retry = el("button", "rounded border px-2 py-1 text-sm", "Retry");
+    retry.type = "button";
+    retry.addEventListener("click", () => { delete open.delivery; render(); });
+    wrap.append(retry);
+    return wrap;
+  }
+  if (!kept.detail) {
+    wrap.append(el("p", "py-3 text-sm text-slate-500", "Loading delivery details…"));
+    return wrap;
+  }
+  const detail = kept.detail;
+  wrap.append(el("h4", "mt-4 text-sm font-medium", "Intended actions"));
+  const actions = el("ul", "list-disc pl-5 text-sm");
+  for (const action of detail.actions) actions.append(el("li", "py-1", action));
+  wrap.append(actions, el("h4", "mt-4 text-sm font-medium", "Diff summary"));
+  wrap.append(el("p", "py-2 text-sm", detail.diff_files == null ? "Diff totals unavailable for this delivery."
+    : `${detail.diff_files} files changed (+${detail.added} −${detail.deleted})`));
+  wrap.append(el("pre", "overflow-x-auto whitespace-pre-wrap break-words text-xs", detail.summary.join("\n")));
+  for (const [label, command] of [["Diff command", detail.diff_command], ["Land command reference", detail.command]]) {
+    wrap.append(el("h4", "mt-4 text-sm font-medium", label), el("pre", "overflow-x-auto whitespace-pre-wrap break-words py-2 text-xs", command));
+  }
+  if (/^https?:\/\//i.test(detail.pr_url ?? "")) {
+    const link = el("a", "mt-3 inline-block text-sm underline", "View pull request");
+    link.href = detail.pr_url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    wrap.append(link);
+  }
+  return wrap;
+}
 
 // The Result and Prompt tabs read files, so they load when first shown (and again when the attempt has ended since).
 function bodyTab(a, tab) {
@@ -304,10 +357,12 @@ export async function onTaskMoved(task) {
     for (const a of fresh.attempts) if (open.bodies.get(`${a.step}/${a.n}`)?.state !== a.state) open.bodies.delete(`${a.step}/${a.n}`);
     open.detail = fresh;
   } catch (error) {
-    return showError(open.id, error);
+    if (open === mine) showError(mine.id, error);
+    return;
   }
   open.sig = signature(task);
-  if (following || !attemptOf()) select();
+  delete open.delivery;
+  if (open.step !== "land" && (following || !attemptOf())) select();
   else render();
   follow();
 }

@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import override
 
-from taskloop.dash_model import AttemptBody, Board, Card, FeedPage, TaskDetail, TrackerDetail
+from taskloop.dash_model import AttemptBody, Board, Card, FeedPage, LandDetail, TaskDetail, TrackerDetail
 from taskloop.operations import Failed
 from taskloop.round_log import IDENT
 from taskloop.round_reader import LogRow
@@ -37,6 +37,7 @@ class DashPorts:
     body: Callable[[str, str, int], AttemptBody | Failed | None]  # task, step, attempt number
     log: Callable[[], tuple[LogRow, ...]]
     feed: Callable[[str, str, int, str | None], FeedPage | Failed | None]  # task, step, attempt number, cursor
+    delivery: Callable[[str], LandDetail | Failed | None]
     backlog: str
     static: Path
     interval: float = 2.0
@@ -153,15 +154,19 @@ NOT_FOUND = Reply(404, b'{"error":"not_found"}', JSON)
 FORBIDDEN = Reply(403, b'{"error":"forbidden_host"}', JSON)
 
 
-def _json(found: Board | TaskDetail | TrackerDetail | AttemptBody | FeedPage | Failed | None) -> Reply:
+def _json(found: Board | TaskDetail | TrackerDetail | AttemptBody | FeedPage | LandDetail | Failed | None) -> Reply:
     if isinstance(found, Failed):
         return Reply(503, json.dumps({"error": found.word}).encode(), JSON)
-    return NOT_FOUND if found is None else Reply(200, json.dumps(asdict(found)).encode(), JSON)
+    if found is None:
+        return NOT_FOUND
+    data = found.model_dump(mode="json") if isinstance(found, LandDetail) else asdict(found)
+    return Reply(200, json.dumps(data).encode(), JSON)
 
 
 FEED = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})/feed")
 BODY = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/attempts/(?P<step>[a-z]+)/(?P<n>[0-9]{1,6})")
 TRACKER = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/tracker")
+DELIVERY = re.compile(r"api/tasks/(?P<task>[A-Za-z0-9._:@+-]{1,128})/delivery")
 AFTER = re.compile(r"after=([0-9]{1,20}:[0-9]{1,20})")
 
 
@@ -181,6 +186,10 @@ def _task_api(ports: DashPorts, path: str, query: str) -> Reply | None:
         return _json(ports.body(found["task"], found["step"], int(found["n"])))
     if found := TRACKER.fullmatch(path):
         return _json(ports.tracker(found["task"]))
+    if found := DELIVERY.fullmatch(path):
+        delivery = ports.delivery(found["task"])
+        return Reply(503, json.dumps({"error": delivery.detail or delivery.word}).encode(), JSON) \
+            if isinstance(delivery, Failed) else _json(delivery)
     if path.startswith("api/tasks/") and IDENT.fullmatch(path[10:]):
         return _json(ports.task(path[10:]))
     return None
