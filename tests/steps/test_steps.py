@@ -131,6 +131,76 @@ def test_the_plan_input_sends_an_infeasible_or_empty_task_to_needs_owner_at_plan
     assert "answer `needs_owner`" in text and "write no plan" in text
 
 
+@pytest.mark.parametrize(("depth", "rule"), [
+    ("Large", "more than 3 independent behaviours"),
+    ("Large", "a schema version change"),
+    ("Large", "an explicitly unlanded task dependency"),
+    ("Large", "more than 60 named files"),
+    ("Otherwise medium", "2 to 3 behaviours"),
+    ("Otherwise medium", "changes in 2 to 3 owning modules"),
+    ("Otherwise small", "one behaviour in one owning module"),
+])
+def test_plan_depth_rules_are_explicit_and_precede_exploration(depth: str, rule: str) -> None:
+    text = kind("plan").input_text(TASK, PLAN.rules("tl-1"), CONTEXT)
+    assessment = text.split("Apply these depth rules in order, using only facts in the task text:")[1].split("\n\n")[0]
+    assert rule in assessment.split(f"- {depth}: ")[1].split("\n")[0]
+    assert "Three behaviours meet the medium rule; four meet the large rule" in assessment
+    assert "60 named files do not trigger large; 61 do" in assessment
+    assert "A large trigger takes precedence over medium or small" in assessment
+
+
+@pytest.mark.parametrize(("depth", "calls"), [("small", 6), ("medium", 12), ("large", 20)])
+def test_plan_evidence_budgets_bound_total_evidence_not_implementation_estimates(depth: str, calls: int) -> None:
+    text = task_text(TASK, "plan", CONTEXT)
+    assert f"{depth} {calls}" in text.split("evidence-gathering budget in model calls: ")[1].split(".")[0]
+    assert "total evidence ceilings, not additional calls per search or file" in text
+    assert "distinct from the Size estimate for an implement attempt" in text
+    assert "Finish within the budget using bounded evidence; a budget alone is not an owner-refusal cause" in text
+
+
+def test_plan_assessment_precedes_task_orientation_and_reads_and_is_visible_and_persisted() -> None:
+    text = task_text(TASK, "plan", CONTEXT)
+    assessment = text.index("First assess depth from the supplied task text alone")
+    task, orientation = text.index(TASK.title), text.index("AGENTS.md is already in context")
+    plan_read = text.index("After the depth assessment permits planning, read `docs/design/tl-1/plan.md`")
+    assert text.startswith("Your final message must be the JSON answer only;")
+    assert assessment < text.index("Do not read source, an existing plan, glossary, tracker or history") < task
+    assert assessment < task < orientation < plan_read
+    assert "first commentary message so the dashboard conversation shows it for owner correction" in text
+    assert "The only optional cheap check is at most one search for identifiers named in the task" in text
+    assert "returning only a count of files and opening nothing" in text
+    assert "only then read the existing plan and gather bounded evidence" in text
+    assert "Planning is never skipped: a small task gets a short plan" in text
+    assert "The first lines of plan.md must be `# Depth`" in text
+    assert "depth, reason, decision/dependency status and evidence budget), followed by `## Size`" in text
+    assert "requires both current assessments; an existing plan without Depth needs revision, not `unchanged`" in text
+    assert "Use the included glossary excerpt at every depth" in text
+    assert "collect missing terms into at most one targeted glossary read, after the assessment permits planning" in text
+    assert "Depth is plain English: add no glossary term or new stage" in text
+
+
+@pytest.mark.parametrize(("cause", "explanation"), [
+    ("Large work with independent parts", "each part with a name, independently testable acceptance criterion and dependencies"),
+    ("A missing owner decision", "identify the decision and what the owner must resolve"),
+    ("An explicitly unlanded dependency named in the task", "identify the dependency and what must land first"),
+])
+def test_plan_early_refusals_name_the_cause_in_words_without_artifacts(cause: str, explanation: str) -> None:
+    text = task_text(TASK, "plan", CONTEXT)
+    early = text.split("Before exploring, answer `needs_owner` for exactly these three early causes:")[1].split("\n\n")[0]
+    assert f"- {cause}: " in early and explanation in early
+    assert "explicitly none where appropriate" in early
+    assert "put `# Depth`, the assessment and concrete reason in `explanation`, within 2000 characters" in early
+    assert "write no new plan and offer no commit" in early
+    assert "`paths: []`, `message: null`, and the expected or null `plan_path`" in early
+    assert "Preserve existing saved work" in early
+    assert "The owner or orchestrator creates split tasks; do not create them" in early
+    assert "Do not infer a missing decision from terse wording" in early
+    assert "or treat a reference to another task as proof it is unlanded" in early
+    assert "A single cohesive schema change may be large and still receive a bounded plan" in early
+    assert "Later refusal for actual contradictions or infeasibility and the separate Size limits still apply" in early
+    assert "write plan.md before you answer `planned`" in text
+
+
 def test_plan_success_requires_a_current_size_assessment_and_an_owner_created_split_on_refusal() -> None:
     text = task_text(TASK, "plan", CONTEXT)
     assert "Before answering `planned` or `unchanged`, require a `## Size` section" in text
