@@ -110,10 +110,12 @@ class RecoveryStore(StoreConnection):
                           intent=current.intent)
         return current
 
-    def compare(self, expected: Snapshot, clock: Callable[[], float]) -> Snapshot | Result:
+    def compare(
+        self, expected: Snapshot, clock: Callable[[], float], *, allow_expired: bool = False,
+    ) -> Snapshot | Result:
         """Revalidate every local fact without granting or changing authorization."""
         with self._connection(write=True) as con:
-            return self._compare(con, expected, clock())
+            return self._compare(con, expected, clock(), allow_expired=allow_expired)
 
     def authorize(
         self, observed: Observations, owner: Identity, token: str, clock: Callable[[], float], *, deadline: float | None = None,
