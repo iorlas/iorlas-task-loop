@@ -41,13 +41,15 @@ def test_the_check_step_follows_implement_and_is_no_agent_kind() -> None:
 
 def test_the_implement_input_names_the_committed_plan_its_scope_and_its_environment() -> None:
     """The task's own prose first, then the plan by reference and the rules' scope, then the environment the entry
-    prepared: offline setup, `$TMPDIR`, and that only the checks run afterwards count."""
+    prepared: uv offline after setup, `$TMPDIR`, and that only the checks run afterwards count."""
     text = task_text(TASK, "implement", CONTEXT)
     assert text.startswith("Add a widget\n\nIt must do X.\nAnd Y.\n\n- X works\n- Y works\n\n")
     assert "`docs/design/tl-1/plan.md`, committed on this branch by the plan step." in text
     assert "at most 96 files of at most 1 MiB each" in text and "anything under `.beads/`" in text and GIT_WRITES in text
-    assert "The factory ran this repository's `setup` before you started; there is no network now." in text
-    assert "Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere outside the repository." in text
+    assert "The factory ran this repository's `setup` before you started; uv uses the prepared cache offline." in text
+    assert "there is no network now" not in text
+    assert "Temporary files go to `$TMPDIR`; cleanup is attempted after release and required before the next agent." in text
+    assert "Do not write elsewhere outside the repository." in text
     assert "Your runs are evidence for you: after this step the checks run again outside your control, " in text
     assert "only those results count. " in text
     assert "retain heredoc edits with the bounded verification above. With `implemented`" in text
