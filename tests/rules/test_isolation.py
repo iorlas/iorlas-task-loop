@@ -46,7 +46,7 @@ def test_noneditable_install_matches_current_source() -> None:
 # commit than its own stream-proc-v0.9.0 tag): both must resolve to one shelf commit.
 SHARED = {
     "git-porcelain": "git-porcelain-v0.22.0",
-    "beads-client": "beads-client-v0.3.0",
+    "beads-client": "beads-client-v0.4.0",
     "any-agent": "any-agent-v0.15.0",
     "sqlite-store": "sqlite-store-v0.1.0",
     "process-lock": "process-lock-v0.2.1",

@@ -21,8 +21,8 @@ dependencies = [
 
 [[package]]
 name = "beads-client"
-version = "0.3.0"
-source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.3.0#360355749c62acbe019114c14dfff159b981968e" }
+version = "0.4.0"
+source = { git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.4.0#bf477df4c3d777f5f7efff02bbc6496ba518cf3a" }
 
 [[package]]
 name = "colorama"
@@ -79,7 +79,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "any-agent", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fany-agent&tag=any-agent-v0.15.0" },
-    { name = "beads-client", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.3.0" },
+    { name = "beads-client", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fbeads-client&tag=beads-client-v0.4.0" },
     { name = "git-porcelain", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fgit-porcelain&tag=git-porcelain-v0.22.0" },
     { name = "process-lock", git = "https://github.com/yoselabs/shelf.git?subdirectory=packages%2Fprocess-lock&tag=process-lock-v0.2.1" },
     { name = "pydantic", specifier = "==2.14.3" },

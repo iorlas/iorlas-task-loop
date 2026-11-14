@@ -289,7 +289,7 @@ def _labelled(bd: Bd, task_id: str, label: str | None) -> HoldAnswer[LabelStep]:
 
 def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHolds:
     """`TrackerHolds` over `Bd` as this actor at the resolved tracker root. A failed write is retried next round;
-    comments always use the same attempt key, including after ambiguous delivery. The keyed read/write/read fits
+    comments match by their text (it names the attempt), also after ambiguous delivery. The read/write/read fits
     within `hold_store.COMMENT_LEASE`; `client` is the seam a test checks the construction through."""
 
     def bd(tracker_root: str) -> Bd:
@@ -306,7 +306,7 @@ def tracker_holds(run: Runner | None = None, client: type[Bd] = Bd) -> TrackerHo
         return HoldAnswer("done")
 
     def comment(tracker_root: str, task_id: str, attempt_id: str, text: str) -> HoldAnswer[HoldWrite]:
-        return written(lambda: bd(tracker_root).comment_once(task_id, attempt_id, text))
+        return written(lambda: bd(tracker_root).comment_once(task_id, text))  # the attempt id is in the text
 
     def clear(tracker_root: str, task_id: str) -> HoldAnswer[HoldWrite]:
         return written(lambda: bd(tracker_root).remove_label(task_id, HELD))
