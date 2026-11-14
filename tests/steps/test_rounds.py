@@ -11,6 +11,7 @@ import pytest
 
 from taskloop.agents.settings import Overrides, StepSettings
 from taskloop.attempt_reads import SlotUse
+from taskloop.clock_jumps import ClockContext, ClockDirection, ClockJump
 from taskloop.exit_codes import exit_code
 from taskloop.operations import Ended, Failed, Move, Quiet, Round
 from taskloop.round import NextRequest
@@ -28,6 +29,7 @@ class Bench:
     def __init__(self, results: Sequence[Round | Failed], use: Callable[[float], SlotUse | None] = lambda _t: SlotUse(0, HELD)) -> None:
         self.results, self.use = list(results), use
         self.now, self.cost = 0.0, 0.0
+        self.wall_offset = 0.0
         self.stopped, self.warned = False, 0
         self.stop_at: int | None = None
         self.raise_at: int | None = None
@@ -37,6 +39,7 @@ class Bench:
         self.lines: list[str] = []
         self.log: Callable[[str], None] = self.lines.append
         self.during: Callable[[], object] = lambda: None
+        self.during_wait: Callable[[], object] = lambda: None
 
     def round(self, quiet: Quiet) -> Round | Failed:
         self.rounds.append((self.now, quiet))
@@ -53,6 +56,7 @@ class Bench:
     def wait(self, seconds: float) -> None:
         self.waits.append(seconds)
         self.now += seconds
+        self.during_wait()
         if len(self.waits) == self.raise_at:
             raise KeyboardInterrupt
         self.stopped = self.stopped or len(self.waits) == self.stop_at
@@ -61,7 +65,7 @@ class Bench:
         self.warned += 1
 
     def run(self, every: int = 60) -> Ended:
-        ports = RoundsPorts(self.round, self.slot_use, lambda: 1000 + self.now, lambda: self.now, self.wait, self.log,
+        ports = RoundsPorts(self.round, self.slot_use, lambda: 1000 + self.now + self.wall_offset, lambda: self.now, self.wait, self.log,
                        self.warn, lambda: self.stopped, 7)
         return run_rounds(ports, RoundsRequest("tasks", every))
 
@@ -283,3 +287,44 @@ def test_the_abrupt_line_is_best_effort() -> None:
 
     abrupt(failing, lambda: 0, "tasks")
     abrupt(pressed, lambda: 0, "tasks")
+
+
+@pytest.mark.parametrize("use", [lambda _t: SlotUse(0, frozenset()), gone, lambda _t: SlotUse(0, HELD)])
+@pytest.mark.parametrize("broken", [False, True])
+def test_idle_jumps_preserve_cadence_backoff_and_release_wakes(use: Callable[[float], SlotUse], broken: bool) -> None:
+    bench, control = Bench([TRACKER, TRACKER, CLEAN, CLEAN], use), Bench([TRACKER, TRACKER, CLEAN, CLEAN], use)
+    records: list[ClockJump] = []
+
+    def jump() -> None:
+        if len(bench.waits) == 1:
+            bench.wall_offset += 7200
+        elif len(bench.waits) == 2:
+            bench.wall_offset -= 14400
+
+    def log(line: str) -> None:
+        if " rounds clock-jump " in line:
+            records.append(ClockJump.model_validate_json(line.split(" rounds clock-jump ", 1)[1]))
+            if broken:
+                raise OSError("full")
+        bench.lines.append(line)
+
+    bench.during_wait, bench.log = jump, log
+    assert bench.run() == control.run()
+    assert (bench.times(), bench.waits, bench.reads) == (control.times(), control.waits, control.reads)
+    assert [record.context for record in records] == [ClockContext.IDLE, ClockContext.IDLE]
+    assert [record.direction for record in records] == [ClockDirection.FORWARD, ClockDirection.BACKWARD]
+    assert [record.difference for record in records] == [7200, -14400]
+
+
+def test_idle_round_boundaries_record_jumps_without_a_wait_callback() -> None:
+    bench = Bench([CLEAN, CLEAN])
+    offsets = iter([7200.0, -7200.0])
+
+    def jump() -> None:
+        bench.wall_offset = next(offsets)
+
+    bench.during = jump
+    bench.run()
+    records = [ClockJump.model_validate_json(line.split(" rounds clock-jump ", 1)[1])
+               for line in bench.lines if " rounds clock-jump " in line]
+    assert [record.difference for record in records] == [7200, -14400]

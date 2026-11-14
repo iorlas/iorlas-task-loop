@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from taskloop.attempt_reads import SlotUse
+from taskloop.clock_jumps import ClockContext, ClockJumps, encode
 from taskloop.drain.models import Reason
 from taskloop.evidence_files import EvidenceError
 from taskloop.operations import Ended, Failed, Quiet, Round, minutes_refused
@@ -110,20 +111,25 @@ def run_rounds(ports: RoundsPorts, request: RoundsRequest) -> Ended:
     word of a whole-round refusal (`refused:database`, `refused:schema`, ...). Per-task words never end or back off. A
     `KeyboardInterrupt` once `rounds started` is written adds the best-effort `rounds stopped abrupt` and passes on."""
     log = _Log(ports, request.backlog)
+    jumps = ClockJumps(ClockContext.IDLE, ports.clock, ports.monotonic, lambda jump: log.write("clock-jump", encode(jump)))
     log.write("started", f"every={request.every}", f"pid={ports.pid}")
     try:
-        return _rounds(ports, request, log)
+        return _rounds(ports, request, log, jumps)
     except KeyboardInterrupt:
         abrupt(ports.log, ports.clock, request.backlog)
         raise
 
 
-def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log) -> Ended:
+def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log, jumps: ClockJumps) -> Ended:
     quiet: Quiet = frozenset()
     backoff = _Backoff(request.every)
     while not ports.stopping() and not ports.draining():
+        jumps.sample()
         before = _held(ports)
-        found = ports.round(quiet)
+        try:
+            found = ports.round(quiet)
+        finally:
+            jumps.sample()
         if isinstance(found, Failed) and found.kind not in STOPPING_UNKNOWN:
             return _end(log, request.backlog, Reason.DRAINING if found.reason == Reason.DRAINING else found.word, found.detail)
         if isinstance(found, Round):
@@ -131,7 +137,7 @@ def _rounds(ports: RoundsPorts, request: RoundsRequest, log: _Log) -> Ended:
             quiet = found.written
         if ports.stopping():
             break
-        _pause(ports, backoff.after(found, log), _union(before, _held(ports)))
+        _pause(ports, backoff.after(found, log), _union(before, _held(ports)), jumps)
     return _end(log, request.backlog, Reason.DRAINING if ports.draining() else INTERRUPTED)
 
 
@@ -148,13 +154,15 @@ def _union(before: frozenset[tuple[str, str]] | None, after: frozenset[tuple[str
     return before | after
 
 
-def _pause(ports: RoundsPorts, delay: int, baseline: frozenset[tuple[str, str]] | None) -> None:
+def _pause(ports: RoundsPorts, delay: int, baseline: frozenset[tuple[str, str]] | None, jumps: ClockJumps) -> None:
     """Until the next regular round is due, a stop is asked, or a reserved slot of the baseline (read before and after
     the round) is no longer reserved. A slot reserved since never wakes; an empty baseline has nothing to lose and is not read
     again; a failed read neither wakes nor fails, and while there is no baseline each check retries it."""
+    jumps.sample()
     due = ports.monotonic() + delay
     while not ports.stopping() and not ports.draining() and (left := due - ports.monotonic()) > 0:
         ports.wait(min(CHECK, left))
+        jumps.sample()
         if baseline is not None and not baseline:
             continue
         now = _held(ports)

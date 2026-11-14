@@ -12,6 +12,7 @@ from any_agent import RunOutcome
 from taskloop.activity_file import ActivityPage, command_time, follow, tail
 from taskloop.attempt_types import AttemptKey, Evidence, FileRef
 from taskloop.check_repeat.feedback import TAIL_BYTES, TAIL_LINES, Availability, OutputTail
+from taskloop.clock_jumps import ClockJump, encode
 from taskloop.recovery.execution_models import Callback
 from taskloop.recovery.models import Intent
 from taskloop.round_log import WORD
@@ -23,6 +24,7 @@ ENTRY_WORDS: Final = 8  # at most: status, reason, publish=, then=, verify=, cla
 LOG_CAP: Final = 32 << 20  # bytes of one setup run's or one check's log, and of one agent attempt's stdout or stderr; then `[truncated]`
 TRUNCATED: Final = b"[truncated]\n"
 EVENTS_CAP: Final = 8 << 20  # bytes of one attempt's `events.jsonl` (its agent activity); then `[truncated]`
+CLOCK_JUMPS_CAP: Final = 1 << 20  # bytes of one attempt's clock-jump evidence, independent of agent activity
 TAIL_CAP: Final = 256 << 10  # bytes `round_tail` reads from the end of the round log
 
 
@@ -253,6 +255,23 @@ class EvidenceFiles:
     def events_path(self, key: AttemptKey) -> Path:
         """The attempt's agent-activity file (`events.jsonl`), made nothing."""
         return self._path(self.directory(key) + "/events.jsonl")
+
+    def clock_jumps_path(self, key: AttemptKey) -> Path:
+        """The attempt's clock evidence, made nothing by this read."""
+        return self._path(self.directory(key) + "/clock-jumps.jsonl")
+
+    def append_clock_jump(self, key: AttemptKey, jump: ClockJump) -> None:
+        """Append within the attempt's shared cap; the observer drops evidence errors."""
+        path = self.clock_jumps_path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        size = path.stat().st_size if path.exists() else 0
+        if size >= CLOCK_JUMPS_CAP:
+            return
+        log = CappedLog(path, CLOCK_JUMPS_CAP - size)
+        try:
+            log.write((encode(jump) + "\n").encode())
+        finally:
+            log.close()
 
     def open_events(self, key: AttemptKey) -> CappedLog:
         """`events_path`, its directory made, opened for append; OSError propagates (display only: the caller drops it)."""

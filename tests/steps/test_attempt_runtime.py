@@ -3,12 +3,16 @@
 from dataclasses import dataclass
 
 import pytest
-from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
+from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary, events
 from any_agent.testing import FakeRun
 from test_attempt import ENTRY, KEY, WORKER, AttemptSurroundings, CountingHarness, database, fake
 from test_attempt import surroundings as attempt_surroundings
 
 from taskloop.attempt_store import AttemptStore
+from taskloop.attempt_types import AttemptKey
+from taskloop.clock_jumps import ClockContext, ClockDirection, ClockJump
+from taskloop.command_sink import WatchedHooks
+from taskloop.evidence_files import EvidenceFiles
 
 surroundings = attempt_surroundings
 
@@ -104,8 +108,9 @@ def test_runtime_exhausted_at_registration_refuses_before_session_or_capture(
     assert cleanups == [1]
 
 
+@pytest.mark.parametrize("broken", [False, True])
 def test_runtime_timeout_after_registration_is_captured_and_collected_once(
-    surroundings: AttemptSurroundings, cleanups: list[int],
+    surroundings: AttemptSurroundings, cleanups: list[int], broken: bool,
 ) -> None:
     con, clock = database(surroundings), Clock()
     execution = FakeRun(RunOutcome(rc=-15, timed_out=True, worker=WORKER, summary=Summary(rc=-15)))
@@ -118,8 +123,94 @@ def test_runtime_timeout_after_registration_is_captured_and_collected_once(
         return outcome
 
     attempts = surroundings.attempts(AttemptStore(lambda: con), run, clock=clock.time, monotonic=clock.monotonic)
+    path = attempts.files.clock_jumps_path(KEY)
+    if broken:
+        path.mkdir(parents=True)  # a clock evidence write fails independently of the execution capture
     result = attempts.execute(KEY, ENTRY)
     assert result.reason == "run:timeout"
     assert con.execute("SELECT rc,timed_out FROM execution").fetchone() == (-15, 1)
     assert attempts.collect(KEY) == result and attempts.execute(KEY, ENTRY) == result
     assert len(execution.calls) == 1 and cleanups == [1]
+    if broken:
+        assert path.is_dir()
+    else:
+        records = [ClockJump.model_validate_json(line) for line in path.read_text().splitlines()]
+        assert [(record.context, record.direction, record.difference) for record in records] == [
+            (ClockContext.ACTIVE, ClockDirection.BACKWARD, -7290),
+        ]
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_active_jumps_survive_lost_activity_and_clock_evidence_without_changing_runtime(
+    surroundings: AttemptSurroundings, monkeypatch: pytest.MonkeyPatch, cleanups: list[int], broken: bool,
+) -> None:
+    con, clock = database(surroundings), Clock()
+    execution = fake(refs=("session",))
+    records: list[ClockJump] = []
+    append = EvidenceFiles.append_clock_jump
+
+    def write(files: EvidenceFiles, key: AttemptKey, jump: ClockJump) -> None:
+        records.append(jump)
+        if broken:
+            raise OSError("clock evidence full")
+        append(files, key, jump)
+
+    def lost_activity(_files: EvidenceFiles, _key: AttemptKey) -> None:
+        raise OSError("activity full")
+
+    def advance(difference: float) -> None:
+        clock.runtime += 2
+        clock.wall += 2 + difference
+
+    def run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
+        assert timeout == 90 and isinstance(hooks, WatchedHooks)
+        outcome = execution(harness, spec, timeout, hooks)
+        advance(7200)
+        hooks.live.started(WORKER.pid)
+        advance(-14400)
+        hooks.live.feed(events.Msg(text="thinking"))
+        advance(7200)
+        hooks.live.poll(2)
+        advance(0)
+        hooks.live.poll(2)
+        advance(-7200)
+        hooks.live.end("done")
+        advance(7200)  # no further callbacks: the return boundary must observe this jump
+        return outcome
+
+    monkeypatch.setattr(EvidenceFiles, "append_clock_jump", write)
+    monkeypatch.setattr(EvidenceFiles, "open_events", lost_activity)
+    attempts = surroundings.attempts(AttemptStore(lambda: con), run, clock=clock.time, monotonic=clock.monotonic)
+    result = attempts.execute(KEY, ENTRY)
+    assert result.reason == "verification"
+    assert attempts.collect(KEY) == result and attempts.execute(KEY, ENTRY) == result
+    assert len(execution.calls) == 1 and cleanups == [1]
+    assert con.execute("SELECT timed_out FROM execution").fetchone() == (0,)
+    assert [record.difference for record in records] == [7200, -14400, 7200, -7200, 7200]
+    assert all(record.context == ClockContext.ACTIVE and record.monotonic_elapsed == 2 for record in records)
+    path = attempts.files.clock_jumps_path(KEY)
+    if broken:
+        assert not path.exists()
+    else:
+        assert [ClockJump.model_validate_json(line) for line in path.read_text().splitlines()] == records
+    assert not attempts.files.events_path(KEY).exists()
+
+
+@pytest.mark.parametrize("difference", [7200, -7200])
+def test_an_eventless_failed_run_still_records_its_final_clock_jump(
+    surroundings: AttemptSurroundings, cleanups: list[int], difference: float,
+) -> None:
+    con, clock = database(surroundings), Clock()
+
+    def run(_harness: Harness, _spec: LaunchSpec, timeout: float, _hooks: RunHooks | None) -> RunOutcome:
+        assert timeout == 90
+        clock.wall += difference + 3
+        clock.runtime += 3
+        raise RuntimeError("execution lost")
+
+    attempts = surroundings.attempts(AttemptStore(lambda: con), run, clock=clock.time, monotonic=clock.monotonic)
+    result = attempts.execute(KEY, ENTRY)
+    assert result.reason == "run_failed:RuntimeError" and cleanups == [1]
+    records = [ClockJump.model_validate_json(line) for line in attempts.files.clock_jumps_path(KEY).read_text().splitlines()]
+    assert [record.difference for record in records] == [difference]
+    assert not attempts.files.events_path(KEY).exists()

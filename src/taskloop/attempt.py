@@ -41,6 +41,7 @@ from taskloop.attempt_types import (
     StoredExecution,
     execution_facts,
 )
+from taskloop.clock_jumps import ClockContext, ClockJumps
 from taskloop.command_sink import CommandSink, WatchedHooks
 from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
@@ -258,11 +259,14 @@ class Attempts:
     def _call(
         self, admission: Admission, harness: Harness, spec: LaunchSpec, remaining: float, runtime_clock: Callable[[], float]
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
+        jumps = ClockJumps(
+            ClockContext.ACTIVE, self.clock, self.monotonic, lambda jump: self.files.append_clock_jump(admission.key, jump),
+        )
         latch = SessionLatch(self.store, admission)
         stops = AgentStops(StopStore(self.registration_store.connect, self.registration_store.begin), admission, self.clock)
         hooks = WatchedHooks(
             started=registration_hook(self.registration_store, admission, runtime_clock), ref=latch.observe, unattended=False,
-            before_stop=stops.before, after_stop=stops.after, live=CommandSink(self.files, admission.key, self.clock),
+            before_stop=stops.before, after_stop=stops.after, live=CommandSink(self.files, admission.key, self.clock, jumps.sample),
         )
         try:
             return self.execution(harness, spec, remaining, hooks), latch.snapshot()
@@ -275,6 +279,7 @@ class Attempts:
         except Exception as error:  # registered worker and phase stay in the DB; nothing is erased or retried here
             return AttemptResult("unavailable", "run_failed:" + type(error).__name__)
         finally:
+            jumps.sample()
             harness.cleanup()
 
     def _capture(self, pending: PendingResult, callback: Callback | None = None) -> tuple[CaptureResult, PendingResult]:

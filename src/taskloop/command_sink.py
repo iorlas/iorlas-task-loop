@@ -21,15 +21,18 @@ class WatchedHooks(RunHooks):
 
 
 class CommandSink:
-    def __init__(self, files: EvidenceFiles, key: AttemptKey, clock: Callable[[], float]) -> None:
+    def __init__(
+        self, files: EvidenceFiles, key: AttemptKey, clock: Callable[[], float], observe: Callable[[], None] = lambda: None,
+    ) -> None:
         """`clock`: the wall time written for each observed action."""
         self._files, self._key, self._clock = files, key, clock
+        self._observe = observe
         # a vendor restarts its ids with each process: a resumed run's scope keeps it from reusing the last run's
         self._timeline, self._lost = Timeline(f"{int(clock() * 1000)}:"), False
         self._events: CappedLog | None = None  # opened at the first action
 
     def started(self, pid: int) -> None:
-        pass
+        self._observe()
 
     def _record(self, e: events.HarnessEvent) -> None:
         records = self._timeline.add(e, self._clock())
@@ -44,13 +47,15 @@ class CommandSink:
             self._lost = True  # display only: no events file, no retry, never a failed attempt
 
     def feed(self, e: events.HarnessEvent) -> None:
+        self._observe()
         with suppress(Exception):  # display only: a lost write never fails the attempt
             self._record(e)
 
     def poll(self, idle_s: float) -> None:
-        pass
+        self._observe()
 
     def end(self, status: str, cost_usd: float | None = None) -> None:
+        self._observe()
         if self._events is not None:
             with suppress(OSError):
                 self._events.close()
