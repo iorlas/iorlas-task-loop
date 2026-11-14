@@ -4,6 +4,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
+from time import monotonic
 
 from any_agent import (
     DecodedAnswer,
@@ -70,6 +71,7 @@ class Attempts:
         registration_store: AttemptStore | None = None,
         environment: Preparation | None = None,
         source_preparation: SourcePreparation | None = None,
+        monotonic: Callable[[], float] = monotonic,
     ) -> None:
         """`registration_store` serves only the harness registration write (composition bounds its busy wait); default `store`.
         `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot. `environment`
@@ -80,6 +82,7 @@ class Attempts:
         self.registration_store = store if registration_store is None else registration_store
         self.environment = environment
         self.source_preparation = source_preparation
+        self.monotonic = monotonic
 
     def collect(self, key: AttemptKey) -> AttemptResult:
         return collect(self.store, key)
@@ -142,10 +145,10 @@ class Attempts:
         self.store.capture(record.admission, None, stored.facts, stored.evidence, session_state, callback)
         return self.store.collect(record.admission.key) or stored
 
-    def _refusal(self, admission: Admission, me: EntryIdentity) -> str | None:
+    def _refusal(self, admission: Admission, me: EntryIdentity, now: float) -> str | None:
         if admission.entry != me:
             return "not_entry"
-        if self.clock() >= admission.deadline:
+        if now >= admission.deadline:
             return "expired"
         return None
 
@@ -155,9 +158,14 @@ class Attempts:
         before dispatch: their failure leaves the attempt `admitted`. The slot HEAD read there is B, recorded by the
         dispatch write."""
         admission = record.admission
-        refusal = self._refusal(admission, me)
+        now, started = self.clock(), self.monotonic()
+        refusal = self._refusal(admission, me, now)
         if refusal is not None:
             return AttemptResult("refused", refusal)
+
+        def runtime_clock() -> float:
+            return now + (self.monotonic() - started)
+
         try:
             prompt = self.files.read(admission.input_ref)
         except EvidenceError:
@@ -175,19 +183,21 @@ class Attempts:
             if isinstance(spec, AttemptResult):
                 return spec
             running = True
-            return self._dispatch(record, base, harness, spec)
+            return self._dispatch(record, base, harness, spec, runtime_clock)
         finally:
             if not running:
                 harness.cleanup()
 
-    def _dispatch(self, record: AttemptRecord, base: Prepared, harness: Harness, spec: LaunchSpec) -> AttemptResult:
+    def _dispatch(
+        self, record: AttemptRecord, base: Prepared, harness: Harness, spec: LaunchSpec, runtime_clock: Callable[[], float]
+    ) -> AttemptResult:
         running = False
         try:
             self.registration_store.warm()
             if self.store.dispatch(record, base.head) == "conflict":
                 return AttemptResult("pending", "dispatching")
             running = True
-            return self._run(record.admission, harness, spec)
+            return self._run(record.admission, harness, spec, runtime_clock)
         finally:
             if not running:
                 harness.cleanup()
@@ -229,12 +239,14 @@ class Attempts:
             return AttemptResult("unavailable", launch.reason, explanation=launch.explanation)
         return launch.harness, launch.spec, launch.credentials, launch.probe
 
-    def _run(self, admission: Admission, harness: Harness, spec: LaunchSpec) -> AttemptResult:
-        remaining = admission.deadline - self.clock()
+    def _run(
+        self, admission: Admission, harness: Harness, spec: LaunchSpec, runtime_clock: Callable[[], float]
+    ) -> AttemptResult:
+        remaining = admission.deadline - runtime_clock()
         if remaining <= 0:
             harness.cleanup()
             return AttemptResult("refused", "expired")
-        called = self._call(admission, harness, spec, remaining)
+        called = self._call(admission, harness, spec, remaining, runtime_clock)
         if isinstance(called, AttemptResult):
             return called
         raw, sessions = called
@@ -244,13 +256,14 @@ class Attempts:
         return AttemptResult("conflict" if result.status == "conflict" else "unavailable", result.reason, pending=pending)
 
     def _call(
-        self, admission: Admission, harness: Harness, spec: LaunchSpec, remaining: float
+        self, admission: Admission, harness: Harness, spec: LaunchSpec, remaining: float, runtime_clock: Callable[[], float]
     ) -> tuple[RunOutcome, SessionInput] | AttemptResult:
         latch = SessionLatch(self.store, admission)
         stops = AgentStops(StopStore(self.registration_store.connect, self.registration_store.begin), admission, self.clock)
-        hooks = WatchedHooks(started=registration_hook(self.registration_store, admission, self.clock), ref=latch.observe, unattended=False,
-                             before_stop=stops.before, after_stop=stops.after,
-                             live=CommandSink(self.files, admission.key, self.clock))
+        hooks = WatchedHooks(
+            started=registration_hook(self.registration_store, admission, runtime_clock), ref=latch.observe, unattended=False,
+            before_stop=stops.before, after_stop=stops.after, live=CommandSink(self.files, admission.key, self.clock),
+        )
         try:
             return self.execution(harness, spec, remaining, hooks), latch.snapshot()
         except RegistrationRefused as error:
