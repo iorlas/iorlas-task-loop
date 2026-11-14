@@ -47,12 +47,16 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version: increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=28,
+    version=29,
     name="factory",
     steps={},
     ddl=f"""
 CREATE TABLE agent_stop (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE TABLE task_content (
+ attempt_id TEXT PRIMARY KEY NOT NULL REFERENCES attempt(attempt_id),
+ digest TEXT NOT NULL CHECK(length(digest)=64 AND digest NOT GLOB '*[^0-9a-f]*')
 );
 CREATE TABLE recovery_intent (
  attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))

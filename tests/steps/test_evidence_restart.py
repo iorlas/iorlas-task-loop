@@ -10,6 +10,7 @@ from check_repeat_bench import Repairing
 from round_bench import task
 from sqlite_store import Store, begin_immediate
 from test_check_repeat import failed, rig
+from test_repeat import CONTENT_DIGEST
 
 from taskloop.admit import AdmitRefused, AdmitRequest, AdmitResult, Admitted, AttemptAdmission
 from taskloop.admit_chain import ChainAdmission, NextAdmission, NextStepRequest, RepeatRequest
@@ -71,7 +72,8 @@ def interrupted_commit(con: sqlite3.Connection) -> Generator[None]:
 
 
 def rows(con: sqlite3.Connection) -> Rows:
-    return tuple(tuple(con.execute(f"SELECT * FROM {table} ORDER BY rowid")) for table in ("attempt", "reservation", "slot"))
+    return tuple(tuple(con.execute(f"SELECT * FROM {table} ORDER BY rowid"))
+                 for table in ("attempt", "reservation", "slot", "task_content"))
 
 
 def initial(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin, bench: Repairing) -> AttemptAdmission:
@@ -163,7 +165,7 @@ def test_repeat_reopens_with_the_previous_reservation_and_a_fresh_key(rig: Repai
     assert rig.round() == [("tl-1", "plan", "start", "started")]
     previous = rig.store.attempt_of("tasks", "tl-1")
     assert previous is not None
-    repeated = RepeatRequest(previous[0], "Retry feedback", 1000, "unsafe")
+    repeated = RepeatRequest(previous[0], "Retry feedback", 1000, "unsafe", content_digest=CONTENT_DIGEST)
 
     def build(con: sqlite3.Connection, files: EvidenceFiles, begin: Begin) -> Call:
         admission = ChainAdmission(lambda: con, begin, files, lambda: rig.now, rig.checkouts, rig.files, ids=NativeIds())

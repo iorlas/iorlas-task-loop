@@ -39,6 +39,7 @@ from taskloop.operations import Clock, Failed, Launch, Started, deadline_after, 
 from taskloop.slot_lock import SlotBusy, SlotLockUnavailable
 from taskloop.slot_release import ParkHold, entry_stopped, worker_stopped
 from taskloop.steps import kind
+from taskloop.task_content import TaskContentDigest
 
 
 class Settle(Protocol):
@@ -85,10 +86,11 @@ class StepRepeat:
         held = self._index(current)
         if held is not None:
             return held
-        text = self._input(current, found[0], stopped)
-        if isinstance(text, Failed):
-            return text
-        request = RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1], found[0].listing)
+        prepared = self._input(current, found[0], stopped)
+        if isinstance(prepared, Failed):
+            return prepared
+        text, evidence = prepared
+        request = RepeatRequest(current, text, deadline_after(minutes, self.clock), found[1], found[0].listing, evidence)
         admitted = self._takeover(request, stopped.admission.slot_path)
         return self._launch(backlog, task_id, current, admitted, stopped.admission.number + 1, minutes)
 
@@ -115,25 +117,30 @@ class StepRepeat:
             return Failed("unavailable", "staged")
         return Failed("unsettled", "staged", "\n".join(held)) if held else None
 
-    def _input(self, current: AttemptKey, found: Unsettled, record: AttemptRecord) -> str | Failed:
+    def _input(self, current: AttemptKey, found: Unsettled, record: AttemptRecord) -> tuple[str, TaskContentDigest | None] | Failed:
         """The feedback over attempt 1's input, read through its digest."""
         try:
             steps = self.store.chain(current)  # read after the verify: C's commit, if it made one, is stored now
             task = without(self.files.read(steps[0].input_ref))
+            evidence = None
+            if record.admission.step == "plan" and self.discussion is None:
+                raise InputError("A plan repeat requires a structured discussion collector")
             if self.discussion is not None:
                 root = self.store.tracker_root(current)
                 if root is None:
                     raise InputError("The attempt's tracker binding is unavailable")
-                task = replace_block(task, self.discussion(record.admission.task, root))
+                snapshot = self.discussion(record.admission.task, root)
+                task = replace_block(task, snapshot.text)
+                evidence = snapshot.digest
         except StoreUnavailable as error:
             return Failed("unavailable", "store", str(error))
-        except (EvidenceError, InputError) as error:
+        except (EvidenceError, InputError, UnicodeError) as error:
             return Failed("refused", "input", str(error))
         unrecorded = steps[-1].effect == "commit" and steps[-1].end_commit is None
         admission = record.admission
         step = kind(admission.step)
         rules = step.rules(admission.task.task_id)
-        return step.feedback(found, rules, admission.number, task, self.ids.token(8), unrecorded=unrecorded)
+        return step.feedback(found, rules, admission.number, task, self.ids.token(8), unrecorded=unrecorded), evidence
 
     def _stopped(
         self, backlog: str, task_id: str, current: AttemptKey, entry: EntryIdentity | None, minutes: int

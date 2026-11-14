@@ -16,6 +16,7 @@ DDL_DIGESTS = {
     26: "728ea63362ce086f01b39e967b837e6875854238f49c3b073fddcdcba1666787",
     27: "62ce0c0793427a8305ef420edd956d5adae7c832969b353265ad51d55a2ed2c0",
     28: "21c4a4af7e596acc352e922680cec640ad249c52e44656fe27d2bef93d1728ac",
+    29: "8e55eed52217a0667873a7d7ed26f5d5f27b4896ff2f99e91d3a698f88272e20",
 }
 
 
@@ -67,7 +68,7 @@ def test_attempt_compaction_storage_requires_a_positive_integer_or_null(
             registered.execute("UPDATE attempt SET compaction_token_limit=?", (value,))
 
 
-@pytest.mark.parametrize("missing", [None, "merge_operation", "drain_action"])
+@pytest.mark.parametrize("missing", [None, "merge_operation", "drain_action", "task_content"])
 def test_read_only_open_requires_every_factory_table(tmp_path: Path, missing: str | None) -> None:
     path = tmp_path / "factory.db"
     writer = Store(SCHEMA).open_rw(path)
