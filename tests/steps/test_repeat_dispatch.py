@@ -219,7 +219,11 @@ def test_three_attempts_then_the_owner(step: Step, slot: FakeWorktree, tmp_path:
     assert not isinstance(shown_two, Failed) and (shown_two.view.number, shown_two.view.next) == (2, "repeat")
     third, entry = step.next_attempt(second)
     text = step.input(third)
-    assert text.startswith("Attempt 2 of this step") and text.count("BEGIN SLOT STATUS") == 1 and text.endswith(TASK)
+    assert text.startswith(
+        "Your final message must be the JSON answer only; write plan.md before you answer; "
+        "a message without a tool call ends the step.\n\nAttempt 2 of this step"
+    )
+    assert text.count("BEGIN SLOT STATUS") == 1 and text.endswith(TASK)
     step.run(third, entry, Agent(slot, {}, UNCHANGED))
     shown_three = show_attempt(reads, tmp_path / "art", "tasks", "tl-1")
     assert not isinstance(shown_three, Failed)
