@@ -47,6 +47,7 @@ from taskloop.input_context import read as read_context
 from taskloop.merge.prepare import SourcePreparation
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
+from taskloop.recovery.execution_models import Callback
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
 from taskloop.steps import kind
 
@@ -99,13 +100,13 @@ class Attempts:
         except StoreRefused as error:
             return AttemptResult("refused", str(error))
 
-    def capture(self, pending: PendingResult) -> CaptureResult:
+    def capture(self, pending: PendingResult, callback: Callback | None = None) -> CaptureResult:
         """Retry the unfinished DB capture of returned facts; never runs the agent."""
-        result, pending = self._capture(pending)
+        result, pending = self._capture(pending, callback)
         if result.status in ACCEPTED:
             # on failure the captured facts stay validation_pending; a later execute finishes the phase without the agent
             with suppress(StoreUnavailable, StoreRefused):
-                self._validate(pending.admission, pending.evidence, pending.raw.summary.text)
+                self._validate(pending.admission, pending.evidence, pending.raw.summary.text, callback)
         return result
 
     def _resume(self, key: AttemptKey, stored: StoredExecution) -> AttemptResult:
@@ -114,28 +115,29 @@ class Attempts:
         record = self.store.load(key)
         if record is None:
             return AttemptResult("refused", "absent")
+        callback = self.store.callback(key)
         if stored.session_state in ("pending", "fault"):
-            stored = self._refresh(record, stored)
+            stored = self._refresh(record, stored, callback)
         if stored.answer.kind != "validation_pending":
             return report(stored)
         try:
             text = self.files.read(stored.evidence.answer)
         except EvidenceError:
             return AttemptResult("unavailable", "evidence", stored)
-        return self._answered(record.admission, stored.evidence, text)
+        return self._answered(record.admission, stored.evidence, text, callback)
 
-    def _refresh(self, record: AttemptRecord, stored: StoredExecution) -> StoredExecution:
+    def _refresh(self, record: AttemptRecord, stored: StoredExecution, callback: Callback | None = None) -> StoredExecution:
         """Upgrade a stored pending/fault session state only on evidence: a recorded conflict, a reported session that is
         now recorded, or a session already accepted on the attempt. Otherwise it stays as it was."""
         if record.session_conflict:
             session_state = "conflict"
         elif stored.facts.session is not None:
-            session_state = reconcile(self.store, record.admission, SessionInput(), stored.facts)
+            session_state = reconcile(self.store, record.admission, SessionInput(), stored.facts, callback)
         elif record.session_ref is not None:
             session_state = "complete"
         else:
             return stored
-        self.store.capture(record.admission, None, stored.facts, stored.evidence, session_state)
+        self.store.capture(record.admission, None, stored.facts, stored.evidence, session_state, callback)
         return self.store.collect(record.admission.key) or stored
 
     def _refusal(self, admission: Admission, me: EntryIdentity) -> str | None:
@@ -260,36 +262,39 @@ class Attempts:
         finally:
             harness.cleanup()
 
-    def _capture(self, pending: PendingResult) -> tuple[CaptureResult, PendingResult]:
+    def _capture(self, pending: PendingResult, callback: Callback | None = None) -> tuple[CaptureResult, PendingResult]:
         """Capture evidence files, then facts with answer=validation_pending, before any answer decoding."""
         admission, evidence = pending.admission, pending.evidence
         if evidence is None:
             try:
-                evidence = self.files.capture(admission.key, pending.raw)
+                evidence = (self.files.capture(admission.key, pending.raw) if callback is None
+                            else self.files.capture(admission.key, pending.raw, callback))
             except EvidenceError:
                 return CaptureResult("unavailable", "evidence"), pending
             pending = replace(pending, evidence=evidence)
+        if callback is not None and evidence != self.files.capture_refs(admission.key, pending.raw, callback):
+            return CaptureResult("conflict", "evidence"), pending
         try:
             facts = pending.facts or execution_facts(pending.raw)
         except Exception as error:  # a projection fault must not lose the returned outcome: its evidence is already written
             return CaptureResult("unavailable", "projection:" + type(error).__name__), pending
         pending = replace(pending, facts=facts)
-        session_state = reconcile(self.store, admission, pending.sessions, facts)
+        session_state = reconcile(self.store, admission, pending.sessions, facts, callback)
         try:
-            status = self.store.capture(admission, pending.raw.worker, facts, evidence, session_state)
+            status = self.store.capture(admission, pending.raw.worker, facts, evidence, session_state, callback)
         except StoreUnavailable:
             return CaptureResult("unavailable", "store"), pending
         except StoreRefused as error:
             return CaptureResult("conflict", str(error)), pending
         return CaptureResult(status), pending
 
-    def _answered(self, admission: Admission, evidence: Evidence | None, text: str) -> AttemptResult:
-        if self._validate(admission, evidence, text) == "conflict":
+    def _answered(self, admission: Admission, evidence: Evidence | None, text: str, callback: Callback | None = None) -> AttemptResult:
+        if self._validate(admission, evidence, text, callback) == "conflict":
             return AttemptResult("conflict", "answer")
         stored = self.store.collect(admission.key)
         return AttemptResult("unavailable", "collect") if stored is None else report(stored)
 
-    def _validate(self, admission: Admission, evidence: Evidence | None, text: str) -> str:
+    def _validate(self, admission: Admission, evidence: Evidence | None, text: str, callback: Callback | None = None) -> str:
         """The released strict decoder plus the step kind's pure decoder; decoder faults propagate."""
         if evidence is None:
             return "conflict"
@@ -303,4 +308,4 @@ class Attempts:
             state = AnswerState("json_invalid" if answer.kind == "json" else "schema_invalid")
         else:
             state = AnswerState("missing")
-        return self.store.answer(admission, evidence, state)
+        return self.store.answer(admission, evidence, state, callback)

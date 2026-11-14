@@ -1,6 +1,10 @@
 """Reason-specific guidance for step refusals, kept apart from the status/Next prose."""
 
 REFUSALS = {
+    "recovery_changed": "The execution's recovery owner or generation changed. The factory refuses the old callback "
+    "and preserves the current execution and evidence.",
+    "recovery_unregistered": "Recovery owns the attempt but its replacement worker is not registered. The factory "
+    "refuses callbacks until that execution has a durable worker identity.",
     "dirty": "The slot has retained changes. Inspect and settle them before verification; preserve needed work.",
     "slot_head_moved": "The slot HEAD moved from its expected commit. Inspect and restore the expected commit before continuing.",
     "ref_moved": "The task branch moved while work was being saved. Preserve the slot and reconcile its branch before release.",

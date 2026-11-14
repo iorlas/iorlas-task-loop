@@ -2,14 +2,19 @@
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from taskloop.attempt_types import AttemptKey, AttemptRecord, EntryIdentity
 from taskloop.drain.models import Boundary, Identity, Seen
+from taskloop.recovery.execution_models import Execution, Phase
 
 
 class Outcome(StrEnum):
     AUTHORIZED = "authorized"
+    INTENDED = "intended"
+    REGISTERED = "registered"
+    ACCEPTED = "accepted"
+    CONFLICT = "conflict"
     CAPTURED = "captured"
     INELIGIBLE = "ineligible"
     UNRESOLVED = "unresolved"
@@ -52,6 +57,14 @@ class Intent(Model):
     session: str = Field(min_length=1)
     entry: EntryIdentity
     worker: Identity
+    execution: Execution | None = None
+
+    @model_validator(mode="after")
+    def consistent(self) -> Intent:
+        if (self.execution is not None and self.execution.phase is Phase.REGISTERED
+                and self.execution.revision != self.attempt_revision + 1):
+            raise ValueError("Execution revision does not match worker registration")
+        return self
 
 
 class Result(Model):
