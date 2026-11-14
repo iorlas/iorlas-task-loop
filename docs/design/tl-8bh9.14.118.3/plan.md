@@ -1,44 +1,49 @@
 # Depth
-Small: one cohesive behaviour, consistently pinning and locally verifying supported external-tool versions. No missing owner decision or explicitly unlanded dependency is identified in the task. Evidence budget: 6 model calls total.
+Small: one cohesive behaviour pins supported external-tool versions and verifies consistency through existing local checks. No missing owner decision or explicitly unlanded dependency is identified. Evidence budget: 6 model calls total.
 
 ## Size
-Estimate: 9 changed files, including this plan, configuration, documentation, one new developer check and one new pytest file; up to 10 if regenerating dashboard CSS changes its bytes. One independent behaviour. One implement attempt: approximately 45 model calls, including focused verification and the two required gates.
+Estimate: 10 changed files across the complete task, including this plan, configuration, documentation, generated CSS, the developer validator and its tests. Most implementation changes already exist; the next implement attempt should primarily verify them, with corrections only where evidence requires them. One independent behaviour; approximately 30 model calls for one implement attempt.
 
-Acceptance criterion: Git, Codex, Python and Tailwind each have an exact supported version recorded in one authoritative configuration; installation instructions, Python selection, tool lock entries where applicable and the dashboard build agree with it. Both existing local gates reject missing tools, mismatched executable versions and contradictory declarations, and pass with the supported versions. This is one version-consistency contract across four tools, not four unrelated feature changes.
+Acceptance criterion: Git 2.56.0, Codex 0.162.1, Python 3.15.0 and Tailwind 4.1.11 have authoritative pins; managed locks, Python selection, documented installation and the CSS compiler agree. Existing local gates pass with these tools and reject missing/failed probes, mismatched executable versions and contradictory declarations. This is one tool-version consistency contract. No schema change or task dependency is required.
 
-## Evidence and scope
-At source commit `7e493ce46744c51decefb70800da927f14e8adbc`, there is no saved plan for this task and no task-branch commit beyond that source, including unfinished work. The worktree is clean. `mise.toml` pins existing check tools but none of these four external tools. `.python-version` contains `3.15`; `pyproject.toml` and `uv.lock` declare `>=3.15`. README directs installation through mise and the existing `just check` / `just test` gates. The local prek hook currently calls `just lint`.
+## Current evidence
+At source commit `006bcd9d25bc77e8d6420af3c61930da6d9a08e5`, the worktree is clean. Commit `d9efd7d0` already supplies pins, build integration, documentation, a validator, tests and regenerated CSS. Task-branch history since the original plan contains no `Task-Loop-Wip:` trailer. Preserve the existing implementation and judge it against current acceptance; its presence does not establish completion.
 
-Observed executable versions are Git 2.56.0 and Codex 0.162.1. uv has CPython 3.15.0 installed, while the host's generic `python3` is 3.12.3 and `python` is absent. The committed dashboard stylesheet records Tailwind 4.1.11; no Tailwind executable is currently on PATH. Use 2.56.0, 0.162.1, 3.15.0 and 4.1.11 respectively as the supported pins, retaining the existing CSS compiler version rather than introducing an upgrade. A passing tool check must inspect the project-selected Python, not the host's generic interpreter.
+`mise.toml` owns the four supported versions, with Git a separately installed system prerequisite. `.python-version` selects 3.15.0; package metadata and `uv.lock` retain the separate `>=3.15` compatibility range. The validator checks executable reports, managed lock versions/backends, Python selection and the generated CSS marker. Existing tests cover successful validation and malformed, missing, failed and contradictory inputs. `pyrefly.toml` includes the developer tools directory.
 
-The supplied glossary suffices: this is a plan for one task, executed later in an implement attempt in a slot. No terminology addition or full glossary read is needed. Retain the parent's no-CI decision. Package versioning, Python package dependency alignment and first-task onboarding belong to the sibling work identified in the supplied discussion.
+The prior hold reported missing Tailwind. This planning attempt confirms `/home/iorlas/.local/bin/tailwindcss` now reports 4.1.11, matching the supplied owner repair. This establishes availability here, not successful factory checks. No implementation gates were run. The justfile was deliberately not read, as instructed for planning; inspect its gate wiring during implementation.
+
+The supplied glossary suffices: this plan concerns one task and a later implement attempt in its slot. No new term or glossary read is needed. Retain local enforcement and the parent's no-CI decision. Package versioning, dependency alignment and first-task onboarding remain outside this task.
 
 ## Implementation
-1. Record the four exact supported versions in `mise.toml`, using its tool entries for managed installations and a clearly documented variable for a prerequisite such as system Git if no supported install backend is suitable. Each version has one authoritative entry; check any necessary duplicate declaration against it. Select exact Python 3.15.0 in `.python-version`. Preserve the package's `>=3.15` compatibility declaration: a tested development interpreter pin is distinct from the package's supported Python range.
-2. Select supported mise backends for the managed executables without adding an unpinned Node dependency; prefer standalone Codex and Tailwind distributions. Regenerate `mise.lock` with mise rather than inventing URLs or checksums. README must distinguish mise-installed tools from any prerequisite installed separately, name the authoritative pins and explain a version-check failure in words. Remove the stale claim in `mise.toml` that CI installs these tools.
-3. Consult the compact justfile at implementation time to locate its existing pin reader, check/lint/test recipes and any dashboard build invocation. This planning attempt deliberately did not read it, as directed by the factory input. Make these consumers use the same pins, including Tailwind's build invocation; do not leave a second compiler version in a recipe or download URL. Retain the current stylesheet unless rebuilding with the same compiler actually changes it.
-4. Add a small developer-only native Python validator, new file `tools/check_tool_versions.py`. It reads the authoritative configuration and compares the four reported executable versions and the necessary committed declarations. External command execution remains in the build recipes; pass each command's successful version output to the validator as an explicit argument, with bounded execution and correct shell quoting. This does not add process imports or spawn helpers to factory source or tests. Validate configuration with a pydantic v2 model, keep inputs/results typed, and avoid a new library or generic tool-management framework. Interpret documented executable version output only; never use application logs or display messages for workflow control.
-5. Wire that single validator into both `just check` and `just test`, and the existing lint path used by prek, sharing the invocation rather than duplicating policy. Probe the interpreter selected by uv for the installed project. Missing binaries, unsuccessful probes, malformed output, an unexpected version or declaration drift must fail with tool name, expected version and observed detail. Do not silently install or upgrade tools during verification. Installation stays an explicit setup operation and runtime versions remain fixed until restart.
-6. Add new `tests/rules/test_tool_versions.py` exercising the developer check with temporary configuration and supplied command results. Cover the full supported set passing, one mismatched tool at a time, a missing/failed probe, malformed version data, Python selector drift, applicable lock drift and Tailwind build/compiler declaration drift. Exercise observable validation outcomes rather than testing each private parser. Use standard Python module loading for the standalone developer file; do not modify test bootstraps, package import paths or production dependencies.
+1. Review the existing implementation through the read list. Preserve the pins and single authoritative configuration. Confirm the justfile passes successful version reports to the shared native Python validator, uses the uv-selected project interpreter and checks versions from both required gates, the prek lint path and the CSS build. Confirm probe failures cannot be mistaken for successful version output. Avoid rebuilding an already correct mechanism.
+2. Correct only demonstrated gaps in that contract. Keep process execution in build recipes, with safe quoting and bounded probes; factory source and tests acquire no subprocess escape. Keep typed inputs, pydantic v2 configuration validation and useful expected/observed diagnostics. Verification must not silently install or upgrade tools. Preserve the package compatibility range and existing standalone tool backends. Regenerate locks with mise only if a declaration correction requires it.
+3. Retain existing public contract tests; extend them only for an uncovered observable failure. Preserve installed-package isolation, file/function caps and typing rules. No new files are anticipated: `tools/check_tool_versions.py` and `tests/rules/test_tool_versions.py` already exist. Their callers/integration points are the justfile, prek's lint entry and pytest discovery. Keep `tools` in pyrefly's project scope.
+4. Rebuild CSS only if needed to validate a changed build path, using the pinned compiler and existing input; inspect any artifact diff. Do not change sibling work or unrelated merged features. Do not weaken version validation to obtain a passing gate.
 
 ## Read list
-- `mise.toml:1-10` — authoritative existing tool declarations and stale setup comments; add the external pins here.
-- `mise.lock:1-33` — generated lock entry structure and managed-tool provenance; regenerate the file with mise.
-- `.python-version:1-1` — interpreter selection producer to align with the exact supported Python pin.
-- `pyproject.toml:5-18` — package Python compatibility and existing pydantic dependency; preserve these declarations.
-- `pyproject.toml:38-50` — pytest dependencies, rule-test discovery and import mode for the new contract tests.
-- `uv.lock:1-3` — frozen Python compatibility metadata; distinguish the minimum version from the interpreter pin.
-- `README.md:152-170` — setup instructions and the existing local verification contract; document supported versions and prerequisites here.
-- `justfile:1-33` — entire compact build integration point, including existing pin consumers and gate callers; inspect during implementation, not this plan attempt.
-- `.pre-commit-config.yaml:1-10` — prek's existing lint caller; ensure it reaches the shared version verification without a new CI path.
-- `tests/rules/test_isolation.py:16-38` — installed-wheel provenance and selected environment constraints that the new check must preserve.
-- `tests/rules/test_policy.py:13-60` — source/test size, typing and subprocess restrictions applying to the new developer-check tests.
-- `src/taskloop/dash/static/dash.css:1-1` — generated compiler version evidence and optional rebuilt artifact.
-- `src/taskloop/dash/static/dash.input.css:1-10` — Tailwind build input and source registration; preserve the current build scope.
+- `mise.toml:1-17` — authoritative pins, prerequisite and managed installation producers.
+- `mise.lock:31-78` — Codex and Tailwind versions, backends and downloads.
+- `mise.lock:139-162` — managed Python lock entry and downloads.
+- `.python-version:1-1` — uv interpreter selector.
+- `tools/check_tool_versions.py:1-58` — typed declarations and executable formats.
+- `tools/check_tool_versions.py:61-111` — validation operation and command-line boundary.
+- `tests/rules/test_tool_versions.py:1-106` — existing success and failure contracts.
+- `justfile:1-56` — existing build, probe and gate callers; read during implementation.
+- `.pre-commit-config.yaml:1-10` — prek caller of the lint gate.
+- `README.md:152-180` — installation and local verification instructions.
+- `pyrefly.toml:1-6` — developer validator type-check integration.
+- `pyproject.toml:5-18` — Python compatibility and declared validation dependency.
+- `pyproject.toml:38-50` — pytest discovery and size limits.
+- `uv.lock:1-3` — frozen package compatibility range.
+- `tests/rules/test_isolation.py:16-38` — installed-package provenance constraints.
+- `tests/rules/test_policy.py:13-60` — size, typing and process restrictions.
+- `src/taskloop/dash/static/dash.css:1-1` — generated compiler marker.
+- `src/taskloop/dash/static/dash.input.css:1-10` — CSS build input and registered sources.
 
-The new validator and test file do not exist yet. Their existing integration points are `mise.toml`, the justfile gate/build recipes, `.pre-commit-config.yaml`, and pytest discovery in `pyproject.toml`. Additional reads should be targeted to callers or declarations uncovered while editing these points.
+Additional searches must target missed callers or changed declarations. No foundation plan is needed.
 
 ## Verification and completion
-Install the declared tools through the documented setup and run `just install`. Run the new focused pytest contract through the installed environment with `uv run --frozen --no-sync python -I -m pytest tests/rules/test_tool_versions.py`. Demonstrate actual supported executable versions passing the shared developer check, and demonstrate a deliberately wrong reported version and an unavailable tool failing without editing the host installation. Rebuild dashboard CSS only with pinned Tailwind; inspect its diff and compiler marker.
+After `just install`, run `uv run --frozen --no-sync python -I -m pytest tests/rules/test_tool_versions.py`. Exercise the shared check with the actual supported executables, a deliberately wrong reported version and an unavailable executable using temporary inputs or an isolated PATH; leave the host installation intact. Confirm the real build recipes propagate a failed probe, not just the validator's synthetic tests.
 
-Run the required `just check` and `just test` once the focused checks pass; use their existing focused gates, without adding whole-suite or live-test invocations. Report both results and any setup failure accurately. Do not claim those commands passed from this planning attempt: no implementation gates were run. Completion requires all four pins, every identified consumer agreeing, meaningful failure coverage and both required gates passing. No remote publication, task-tracker mutation, schema change or runtime factory feature is part of this task.
+Run the required `just check` and `just test` and report their actual results. Use these prescribed gates without adding whole-suite or live-test commands. A repeat requires a change or an unresolved failure. If setup still fails, report the exact failing prerequisite and observed result without changing global setup or weakening acceptance. Completion requires consistent pins and consumers, meaningful rejection coverage, and both gates passing. No tracker mutation, publication or Git write is part of this planning attempt.
