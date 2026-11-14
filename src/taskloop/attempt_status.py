@@ -15,6 +15,8 @@ from typing import Final, Literal
 
 from stream_proc import OwnedProcess
 
+from taskloop.agents.stop_models import AgentStop
+from taskloop.agents.stop_store import StopStore
 from taskloop.attempt_reads import AttemptRow, PublishedRow, ReleaseRow, StoreUnavailable
 from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
@@ -93,6 +95,7 @@ class AttemptView:
     check_repeat_eligible: bool = False
     source_checks_id: str | None = None
     hold_due: str | None = None  # `Next: hold` with no hold recorded yet: the reason the next round holds it for
+    stop: AgentStop | None = None
 
 NEEDS_OWNER = "needs_owner"  # the answer's disposition (and the collected result's reason) of a step that needs a decision
 
@@ -376,6 +379,9 @@ def _holding(reads: StatusPorts, views: tuple[AttemptView, ...]) -> tuple[Attemp
     """Every view with its hold, read once for all (tl-8bh9.14.9 section 10); an unreadable hold table is `unknown`."""
     try:
         holds = HoldStore(reads.store.connect, reads.store.begin).of_attempts(tuple(map(agent_attempt, views)))
+        stops = StopStore(reads.store.connect, reads.store.begin)
+        views = tuple(replace(each, stop=stops.get(holds[agent_attempt(each)].cause_id if agent_attempt(each) in holds
+                                                 else each.attempt_id)) for each in views)
     except StoreUnavailable:
         return tuple(replace(each, next="unknown") for each in views)
     return tuple(with_hold(each, holds.get(agent_attempt(each))) for each in views)

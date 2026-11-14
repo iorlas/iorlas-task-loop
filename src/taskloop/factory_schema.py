@@ -22,6 +22,7 @@ No migration: an older factory.db is refused (`schema`).
 v21 (tl-8bh9.14.109): covering whole-task step counts for current-card reads.
 v20 (tl-8bh9.14.160): typed captured access policy replaces the universal sandbox column.
 v21: durable preparation merges. Drain old entries before discarding an older database.
+v22: durable agent stop intents and signal-call reports. Drain old entries before discarding an older database.
 """
 
 import sqlite3
@@ -44,10 +45,13 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=21,
+    version=22,
     name="factory",
     steps={},
     ddl=f"""
+CREATE TABLE agent_stop (
+ attempt_id TEXT PRIMARY KEY REFERENCES attempt(attempt_id), data TEXT NOT NULL CHECK(json_valid(data))
+);
 CREATE TABLE merge_operation (
  attempt_id TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data))
 );

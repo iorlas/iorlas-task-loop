@@ -5,6 +5,7 @@ status read decides the words (`hold_status`), the hold operation acts (`hold`).
 from datetime import UTC, datetime
 from typing import Final
 
+from taskloop.agents.stop_text import stop_text
 from taskloop.attempt_status import AttemptView
 from taskloop.hold_cause import cause, next_step
 from taskloop.hold_store import HoldRow
@@ -47,7 +48,11 @@ def hold_lines(view: AttemptView) -> list[str]:
     claim = ("returned" if ended is not None and ended.claim == "unclaimed" else
              "not held (it was no longer the factory's)" if ended is not None and ended.claim == "not_held" else
              "kept: the abandon has not finished")
-    return [f"Hold: {one_line(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", _tracker(row), f"Hold claim: {claim}"]
+    rc = None if view.result.execution is None or row.cause_id != view.attempt_id else view.result.execution.facts.rc
+    attribution = stop_text(view.stop, rc)
+    detail = [] if attribution is None else [f"Hold cause: {attribution}"]
+    return [f"Hold: {one_line(row.reason)} at {_when(row.held_at)} (cause {row.cause_id})", *detail,
+            _tracker(row), f"Hold claim: {claim}"]
 
 
 def pending_guide(word: str) -> str:
@@ -69,7 +74,8 @@ def hold_guide(view: AttemptView) -> str:
     if row.labels in ("closed", "missing"):
         return "Held: the task is closed or gone in the tracker; nothing to answer."
     task, label = view.task_id, one_line(row.label or "", 200)
-    found, ours = cause(row.reason), row.labels != "not_ours"
+    rc = None if view.result.execution is None or row.cause_id != view.attempt_id else view.result.execution.facts.rc
+    found, ours = cause(row.reason, stop=view.stop, rc=rc), row.labels != "not_ours"
     edit = "edit the task's description or acceptance criteria (the agent reads those, not comments)"
     again = f"the next round under that label starts it again at plan on task/{task} as it is"
     back = (f"add back the label the task was taken under (`bd label add {task} {label}`): {again}" if ours

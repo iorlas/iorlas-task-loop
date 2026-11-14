@@ -63,6 +63,9 @@ def test_caps_cannot_be_relaxed() -> None:
 
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
+    ("CREATE TABLE", "agent_stop"): "factory_schema.py",
+    ("INSERT", "agent_stop"): "agents/stop_store.py",
+    ("UPDATE", "agent_stop"): "agents/stop_store.py",
     ("CREATE TABLE", "merge_operation"): "factory_schema.py",
     ("INSERT", "merge_operation"): "merge/store.py",
     ("UPDATE", "merge_operation"): "merge/store.py",
