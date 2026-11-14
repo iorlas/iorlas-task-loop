@@ -34,6 +34,8 @@ from taskloop.attempt_types import (
 )
 from taskloop.earlier_attempt import EarlierAttempt
 from taskloop.factory_schema import ANSWER, ATTEMPT_LOADED, EVIDENCE, FACTS, VERDICT, prefixed
+from taskloop.recovery.execution_models import Callback
+from taskloop.recovery.state_store import fence
 from taskloop.repo import RepoId
 from taskloop.steps import RULES
 from taskloop.task import TaskReference, TaskScope
@@ -186,6 +188,7 @@ class AttemptLoads(AttemptReads):
         if row is None:
             return None
         tokens, cumulative = _counts(row[9:12]), _counts(row[12:15])
+        self._callback(con, key)
         facts = ExecutionFacts(
             as_nullable_int(row[0]),
             bool(row[1]),
@@ -213,3 +216,21 @@ class AttemptLoads(AttemptReads):
     def collect(self, key: AttemptKey) -> StoredExecution | None:
         with self._connection() as con:
             return self._execution(con, key)
+
+    def _callback(self, con: sqlite3.Connection, key: AttemptKey) -> Callback | None:
+        row = con.execute("SELECT recovery_callback FROM execution WHERE attempt_id=? AND dispatch_token=? AND generation=?",
+                          astuple(key)).fetchone()
+        identity = None if row is None or row[0] is None else Callback.model_validate_json(row[0])
+        if identity is not None and identity.key != key:
+            raise StoreUnavailable("Captured recovery identity does not match the execution")
+        if row is not None:
+            try:
+                fence(con, key, identity)
+            except StoreRefused as error:
+                raise StoreUnavailable("Captured recovery association does not match its authorization") from error
+        return identity
+
+    def callback(self, key: AttemptKey) -> Callback | None:
+        """Trusted completion reads the identity from captured execution, never the latest recovery owner."""
+        with self._connection() as con:
+            return self._callback(con, key)

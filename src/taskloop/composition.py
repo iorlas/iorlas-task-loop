@@ -41,6 +41,7 @@ from taskloop.launch import CHECK_ENTRY_MODULE, Launcher
 from taskloop.merge.prepare import SourcePreparation
 from taskloop.owned_processes import entry_seen, setup_seen, worker_gone
 from taskloop.publish import BranchPublish
+from taskloop.recovery.store import RecoveryStore
 from taskloop.setup_store import SetupSeen, SetupStore
 from taskloop.slot_env import RealEnvFiles, sandbox_probe, setup_process
 from taskloop.slot_files import RealSlotFiles
@@ -71,6 +72,12 @@ def _environment(setup: SetupStore, database: Path, artifacts: Path, views: GitV
         group_alive, EvidenceFiles(artifacts), time.time, sys.platform, shutil.rmtree.avoids_symlink_attacks, sandbox_probe,
         (artifacts.absolute(), database.absolute().parent),
     ))
+
+
+def open_recovery_registration(database: Path) -> RecoveryStore:
+    """The bounded registration writer for a caller holding a durable recovery execution intent."""
+    registration, bounded = _registration(database)
+    return RecoveryStore(bounded, registration.begin_immediate)
 
 
 def _run(harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
