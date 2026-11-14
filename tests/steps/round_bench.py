@@ -36,7 +36,7 @@ from taskloop.launch import Launched, LaunchResult
 from taskloop.merge.prepare import SourcePreparation
 from taskloop.operations import ChecksPorts, ChecksReleasing, Round, Started, StartPorts, StartRequest, start, verify_task
 from taskloop.publish import BranchPublish
-from taskloop.round import NextRequest, RoundPorts, run_round
+from taskloop.round import NextRequest, RoundPorts, repository_of, run_round
 from taskloop.slot_lock import custody, hold
 from taskloop.slot_release import SlotRelease
 from taskloop.task import TaskBinding, TaskInspection, TaskScope
@@ -146,8 +146,9 @@ class Factory:
     once; `failing` answers the next launch instead, with nothing run (an entry that never started)."""
 
     def __init__(self, con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: PinnedViews, files: SlotFiles,
-                 tracker: Tracker) -> None:
-        con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.repo.identity().key, str(slot.path)))
+                 tracker: Tracker, *, adopted: bool = False) -> None:
+        if not adopted:
+            con.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,'s1',?)", (slot.repo.identity().key, str(slot.path)))
         self.root = slot.path.parent
         self.con, self.tmp, self.slot, self.checkouts, self.files, self.tracker = con, tmp_path, slot, checkouts, files, tracker
         self.store = AttemptStore(lambda: con)
@@ -229,7 +230,7 @@ class Factory:
         publisher = BranchPublish(self.store, self.checkouts, self.files, lambda: self.now, ids=NativeIds())
         holding = self.holding(reads)
         return RoundPorts(reads, self.starting(), verifier, self.releaser(), publisher, holding, self.tracker,
-            self.lines.append, ids=NativeIds())
+            self.lines.append, repository=partial(repository_of, self.checkouts), ids=NativeIds())
 
     def round(
         self, quiet: frozenset[tuple[str, str, str, str]] | None = None, label: str = "auto", running: int = 10

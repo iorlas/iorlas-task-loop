@@ -6,11 +6,12 @@ from pathlib import Path
 
 from git_porcelain import GitUnavailable, NotARepo
 
-from taskloop.attempt_types import Checkouts
+from taskloop.attempt_types import Checkouts, SlotFiles
 from taskloop.git_views import GitProfileFiles
 from taskloop.land_push import TRACKING, fetched
 from taskloop.operations import Failed
 from taskloop.profile import LandMode, Profile, Refused, Unavailable, read_profile
+from taskloop.slot_state import repository
 
 
 def land_mode(remotes: Checkouts) -> Callable[[Path], LandMode | Failed]:
@@ -37,25 +38,33 @@ def land_mode(remotes: Checkouts) -> Callable[[Path], LandMode | Failed]:
 
 
 def known_mode(checkouts: Checkouts) -> Callable[[Path], LandMode | None]:
-    """The dashboard's read: the `land` key at the last fetched origin `main` (`refs/remotes/origin/main`; no fetch, a local read
-    only), None when it cannot be read (no checkout, no fetch yet, no valid profile): the dashboard then claims no policy."""
+    """Read the profile at one resolved, last-known origin main commit; no fetch or Git writes."""
 
     def read(checkout: Path) -> LandMode | None:
-        found = read_profile(GitProfileFiles(checkout.expanduser().resolve(), checkouts), TRACKING)
-        return found.land if isinstance(found, Profile) else None
+        try:
+            path = checkout.expanduser().resolve()
+            commit = next((ref.sha for ref in checkouts(path).refs([TRACKING]) if ref.name == TRACKING), None)
+            if commit is None:
+                return None
+            found = read_profile(GitProfileFiles(path, checkouts), commit)
+            return found.land if isinstance(found, Profile) else None
+        except (GitUnavailable, NotARepo, OSError, RuntimeError):
+            return None
 
     return read
 
 
-def cached_mode(read: Callable[[Path], LandMode | None], checkout: Path, monotonic: Callable[[], float],
-                seconds: float = 30.0) -> Callable[[], LandMode | None]:
-    """`read` for one checkout, asked again at most every `seconds` (a board poll reads it once per card of the land column)."""
-    held: list[tuple[float, LandMode | None]] = []
+def known_slot_mode(checkouts: Checkouts, files: SlotFiles) -> Callable[[Path, str], LandMode | None]:
+    """Resolve a slot's repository identity, regardless of its current task branch, before reading policy at the root."""
+    policy = known_mode(checkouts)
 
-    def mode() -> LandMode | None:
-        now = monotonic()
-        if not held or now - held[0][0] >= seconds:
-            held[:] = [(now, read(checkout))]
-        return held[0][1]
+    def read(slot: Path, repo_id: str) -> LandMode | None:
+        if not repo_id:
+            return None
+        try:
+            root = repository(checkouts, files, str(slot), repo_id)
+            return None if isinstance(root, str) else policy(root)
+        except (GitUnavailable, NotARepo, OSError, RuntimeError):
+            return None
 
-    return mode
+    return read

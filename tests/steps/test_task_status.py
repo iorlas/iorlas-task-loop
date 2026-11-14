@@ -18,6 +18,7 @@ from taskloop.dash_model import Board, Ready, TaskDetail
 from taskloop.dash_task import TaskPorts, build_task
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldRow
+from taskloop.land_status import LandState
 from taskloop.step_render import human
 from taskloop.task_status import Admission, Status, TaskStatus, Wait, blocker, in_flight, skipped, task_status, words
 
@@ -32,7 +33,7 @@ ASKED = Admission(frozenset({"tl-1"}), "auto")
     (VIEW, TaskStatus(Status.RUNNING)),
     (replace(VIEW, step="check"), TaskStatus(Status.CHECKING)),
     (replace(VIEW, next="verify"), TaskStatus(Status.SETTLING, "verify")),
-    (replace(VIEW, next="land", step="check"), TaskStatus(Status.WAITING_FOR_LAND)),
+    (replace(VIEW, next="land", step="check"), TaskStatus(Status.WAITING_FOR_LAND, land=LandState.UNKNOWN)),
     (replace(VIEW, next="landed", step="check"), TaskStatus(Status.LANDED)),
     (replace(VIEW, next="hold", hold=HOLD), TaskStatus(Status.HELD, "failed:needs_owner")),
     (replace(VIEW, next="hold", hold_due="stuck:entry_lost"), TaskStatus(Status.HELD, "stuck:entry_lost")),

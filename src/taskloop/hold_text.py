@@ -171,6 +171,8 @@ def _answer(facts: HoldFacts, outcome: Returned | Kept) -> list[str]:
                 "The task stays held; approval labels do not restart its plan or reset the resolution limit."]
     if facts.labels == "not_ours":
         retry = "resolve its ownership with the current actor: rounds do not take it again"
+    elif facts.label is None:
+        retry = "decide whether to restart this task; it stays held until a person approves a fresh attempt"
     else:
         retry = (f"restore the approval label `{one_line(facts.label or '', 200)}`: "
                  f"the next round starts it again at plan on task/{task} as it is")

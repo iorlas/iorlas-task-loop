@@ -81,8 +81,15 @@ function gaps() {
     const node = mount([attempt("plan", 1, { ended_at: end }), attempt("implement", 1, { started_at: start })]);
     assert(!node.textContent.includes("Factory work") && !node.textContent.includes("NaN"), "invalid gap omitted");
   }
-  const node = mount(healthy(), { ...task, column: "land", land: "manual" });
+  const node = mount(healthy(), { ...task, column: "land", land: "manual",
+    status_note: "waiting for land: waits for a person; the profile says land: manual" });
   assert(node.textContent.includes("land: manual") && !node.textContent.includes("idle"), "Land keeps policy, no idle line");
+  for (const [land, status_note] of [["unknown", "waiting for land: landing policy is unavailable"],
+    ["waiting", "waiting for land: waits for the factory"]]) {
+    const waiting = mount(healthy(), { ...task, column: "land", land, status_note });
+    assert(waiting.textContent.includes(status_note), "Land uses the server's policy explanation");
+    assert(!waiting.textContent.includes("next round"), "Land makes no unconditional timing promise");
+  }
   assert(lasted(attempt("plan", 1, { started_at: "bad", ended_at: end })) === "—", "invalid attempt timing omitted");
 }
 

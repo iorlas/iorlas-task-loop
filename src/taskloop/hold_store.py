@@ -21,6 +21,7 @@ from typing import Final, Literal
 from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_nullable_text, as_text
 from taskloop.check_store import stored_nullable_real, stored_real, stored_word
 from taskloop.factory_schema import HOLD, LATER, LATEST_CHECKS, SUCCESSOR, marks, prefixed
+from taskloop.hold_cause import LAND_CAUSE
 from taskloop.merge.models import PREFIX as MERGE
 from taskloop.task import TaskReference
 from taskloop.wip import SavedCommit, decode, encode
@@ -155,11 +156,11 @@ class HoldStore(StoreConnection):
         return None if found is None else _row(found)
 
     def insert(self, hold: HoldInsert) -> HoldRow:
-        """The hold's record (5.1 step 1): `unlabelled` when A was started by hand (no label: never held), `changed`
+        """The hold's record: hand-started attempts may be held for merge or land refusals; otherwise `unlabelled`. `changed`
         when A or its cause is no longer current or A already has a hold (a concurrent caller recorded it)."""
         with self._connection(write=True) as con:
             fenced = con.execute(FENCE, (hold.cause_id, hold.cause_id, hold.attempt_id)).fetchone()
-            if fenced is not None and not fenced[0] and not hold.reason.startswith(MERGE):
+            if fenced is not None and not fenced[0] and not hold.reason.startswith((MERGE, LAND_CAUSE)):
                 raise StoreRefused("unlabelled")
             if fenced is None or not fenced[1] or fenced[2]:
                 raise StoreRefused("changed")

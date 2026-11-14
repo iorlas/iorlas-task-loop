@@ -63,6 +63,7 @@ ERROR = {"kind", "reason", "message"}  # every refusal or unknown but an admissi
 ADMISSION_ERROR = ERROR | {"claim_leaked", "admitted", "slots"}  # `tl step start`
 STATUS_KEYS = {
     "backlog", "task", "step", "attempt_id", "slot", "phase", "entry", "result", "succeeded", "deadline_passed", "next", "status",
+    "status_note",
     "entry_process", "worker", "leftovers", "number", "previous_attempt_id", "repeat_reason", "earlier", "last_entry", "seq", "release",
     "published", "checks", "land", "label", "hold", "hold_due", "last_command", "source_checks_id", "agent_stop", "stop_cause",
 }
