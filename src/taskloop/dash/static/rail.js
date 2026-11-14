@@ -1,4 +1,4 @@
-// One row per step try, with the factory's verification attached to its agent answer.
+// One row per step attempt, with the factory's verification attached to its agent answer.
 // Past history is folded for display only; selection still uses the original (step, n).
 import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, fmtDur, since, stepInfo } from "./ui.js";
 import { say, wordNode } from "./words.js";
@@ -18,7 +18,7 @@ export function lasted(a) {
 
 export function verifyTitle(list, a) {
   const of = list[list.indexOf(a) - 1];
-  return `Check of ${stepInfo(of?.step ?? a.step).label}${of?.n > 1 ? ` try ${of.n}` : ""}`;
+  return `Check of ${stepInfo(of?.step ?? a.step).label}${of?.n > 1 ? ` attempt ${of.n}` : ""}`;
 }
 
 // Explicitly normalize the old presentation placeholder; it is not a recorded cause.
@@ -69,7 +69,7 @@ function verificationButtons(a, selected, select, agent) {
   const v = verdict(a);
   const mark = el("button", `shrink-0 rounded px-2 py-1.5 text-sm ${v.text} ${chosen(a, selected) ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`, v.mark);
   mark.type = "button";
-  const of = `${stepInfo(agent.step).label}${agent.n > 1 ? ` try ${agent.n}` : ""}`;
+  const of = `${stepInfo(agent.step).label}${agent.n > 1 ? ` attempt ${agent.n}` : ""}`;
   mark.title = `${of}: ${v.label}${a.summary ? ` (${a.summary})` : ""}`;
   mark.setAttribute("aria-label", `Verification of ${of}: ${v.label}. Open Result`);
   mark.setAttribute("aria-pressed", String(!!chosen(a, selected)));
@@ -123,10 +123,11 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
   if (chosen(a, selected)) btn.dataset.selected = "1";
   const top = el("span", "flex items-baseline gap-1");
   top.append(el("span", "text-[13px] font-medium", stepInfo(a.step).label));
-  if (a.n > 1) top.append(el("span", `text-[11px] ${muted}`, `try ${a.n}`));
+  if (a.n > 1) top.append(el("span", `text-[11px] ${muted}`, `attempt ${a.n}`));
   if (a.after === "repeat") {
     const tag = el("span", `text-[11px] ${JUMP.repeat.text}`, "Repeat");
-    tag.title = `Repeat of ${stepInfo(a.step).label}${a.repeat_of ? ` try ${a.repeat_of}` : ""}: ${changeReason(a)}${a.reason ? ` (${a.reason})` : ""}${gap === null ? "" : ` · ${gapWords(gap)}`}`;
+    tag.title = `Repeat of ${stepInfo(a.step).label}${a.repeat_of ? ` attempt ${a.repeat_of}` : ""}: ${changeReason(a)}`
+      + (a.reason ? ` (${a.reason})` : "") + (gap === null ? "" : ` · ${gapWords(gap)}`);
     top.append(tag);
   }
   top.append(el("span", `ml-auto text-[11px] tabular-nums ${muted}`, lasted(a)));
@@ -151,7 +152,7 @@ function row({ a, verification, gap }, selected, select, stepUsage) {
 }
 
 function summary(entries, n) {
-  const parts = [`Run ${n}`];
+  const parts = [`History ${n}`];
   for (const step of STEPS.slice(0, -1)) {
     const tries = entries.filter(({ a }) => a.step === step.id);
     if (!tries.length) continue;
@@ -187,7 +188,7 @@ function pastGroup(entries, n, selected, select, stepUsage) {
   if (containsSelection && selected.railSelection !== selectedKey) selected.runs.set(key, true);
   details.open = selected.runs.get(key) ?? false;
   const heading = el("summary", `cursor-pointer text-[11px] ${muted}`, summary(entries, n));
-  heading.title = "Expand to inspect every try and verification result, including earlier failures";
+  heading.title = "Expand to inspect every attempt and verification result, including earlier failures";
   details.append(heading, groupRows(entries, selected, select, stepUsage));
   details.addEventListener("toggle", () => { if (details.isConnected) selected.runs.set(key, details.open); });
   return details;

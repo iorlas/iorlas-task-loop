@@ -105,8 +105,8 @@ function buildBoard() {
 }
 
 const TIME = {
-  waiting: ["", " ready"], plan: ["", " in step"], implement: ["", " in step"], checks: ["", " in step"], land: ["", " in step"],
-  held: ["held ", ""], landed: ["landed ", " ago"],
+  waiting: ["", " waiting"], plan: ["", " in step"], implement: ["", " in step"], checks: ["", " in step"], land: ["", " in step"],
+  held: ["on hold ", ""], landed: ["landed ", " ago"],
 };
 
 function fillCard(node, t) {
@@ -183,7 +183,8 @@ function renderBoard(first = rects()) {
   const running = all.filter((t) => STEPS.some((s) => s.id === t.column)).length;
   const held = all.filter((t) => t.column === "held").length;
   const attention = `${all.filter(isAsk).length} need you`;
-  $("summary").textContent = `${all.length} tasks · ${running} running · ${attention} · ${held} held${notice ? ` · ${notice}` : ""}`;
+  $("summary").textContent = `${all.length} tasks · ${running} running · ${attention} · ${held} on hold`
+    + (notice ? ` · ${notice}` : "");
 }
 
 const viewButton = (on) => `rounded px-2.5 py-1 text-xs font-medium ${on ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"}`;

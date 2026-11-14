@@ -3,12 +3,14 @@
 import { say } from "./words.js";
 
 export const COLUMNS = [
-  { id: "waiting", label: "Ready", emoji: "⏳", help: "Approved by the person and not yet admitted to a slot." },
+  { id: "waiting", label: "Waiting", emoji: "⏳",
+    help: "Tasks with no current work, including queued and abandoned tasks. Each card explains its status." },
   { id: "plan", label: "Plan", emoji: "🧭", help: "A plan attempt is running in a slot." },
   { id: "implement", label: "Implement", emoji: "🛠️", help: "An implement attempt is running in a slot." },
-  { id: "checks", label: "Checks", emoji: "🧪", help: "A checks attempt is running the profile's checks." },
+  { id: "checks", label: "Check", emoji: "🧪", help: "A check attempt is running the profile's checks." },
   { id: "land", label: "Land", emoji: "🚀", help: "Checked and ready to land. A round lands it by itself when the repository profile says land: auto; under manual it waits for a person. A card says landing only while a land runs." },
-  { id: "held", label: "Held", emoji: "⛔", help: "The factory will not advance this task until a person acts. The hold cause says what to do." },
+  { id: "held", label: "Hold", emoji: "⛔",
+    help: "The factory will not advance this task until a person acts. The hold cause says what to do." },
   { id: "landed", label: "Landed", emoji: "✅", help: "Landed on main and closed." },
 ];
 export const STEPS = COLUMNS.slice(1, 5);
@@ -17,8 +19,8 @@ export const VERIFY = { id: "verification", label: "Verification", emoji: "🔎"
 export const stepInfo = (id) => (id === VERIFY.id ? VERIFY : STEPS.find((s) => s.id === id));
 export const STATE = {
   running: { label: "Running", dot: "bg-sky-500 animate-pulse-dot", text: "text-sky-700 dark:text-sky-300" },
-  succeeded: { label: "Succeeded", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" },
-  failed: { label: "Failed", dot: "bg-rose-500", text: "text-rose-700 dark:text-rose-300" },
+  succeeded: { label: "Success", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" },
+  failed: { label: "Failure", dot: "bg-rose-500", text: "text-rose-700 dark:text-rose-300" },
 };
 export const JUMP = {
   repeat: { label: "Repeat", glyph: "↻", text: "text-amber-700 dark:text-amber-300", bar: "border-amber-500" },
@@ -90,11 +92,11 @@ export function fmtDur(ms) {
   if (m < 60) return `${m}m ${String(Math.floor(s % 60)).padStart(2, "0")}s`;
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
-// Where a task is, in words that keep a step apart from a try: "step 2 of 4 · try 1" (the land has no tries of its own).
+// Where a task is: "step 2 of 4 · attempt 1" (land has no numbered attempt of its own).
 export function position(t) {
   const at = STEPS.findIndex((s) => s.id === t.column);
   if (at < 0) return null;
-  return `step ${at + 1} of ${STEPS.length}${t.column === "land" ? "" : ` · try ${t.attempt}`}`;
+  return `step ${at + 1} of ${STEPS.length}${t.column === "land" ? "" : ` · attempt ${t.attempt}`}`;
 }
 export const since = (iso) => fmtDur(Date.now() - Date.parse(iso));
 export const ago = (iso) => `${since(iso)} ago`;
@@ -102,14 +104,14 @@ export const ago = (iso) => `${since(iso)} ago`;
 export const startedAt = (iso) => (iso ? ` ${new Date(iso).toLocaleString([], { hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}, ${ago(iso)}` : "");
 export const clock = (ms) => `+${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
-// Quiet time of running work: nothing under 2 minutes, then amber, red from 15 minutes. Display only.
+// Age of recorded activity: nothing under 2 minutes, then amber, red from 15 minutes. Display only.
 const QUIET_AFTER_S = 120;
 const QUIET_LONG_S = 900;
 function tickQuiet(node) {
   const s = (Date.now() - Date.parse(node.dataset.quiet)) / 1000;
   const level = s >= QUIET_LONG_S ? "long" : s >= QUIET_AFTER_S ? "slow" : "";
   node.hidden = !level;
-  node.replaceChildren(dot(level === "long" ? "bg-rose-500" : "bg-amber-500"), `Quiet ${fmtDur(s * 1000)}`);
+  node.replaceChildren(dot(level === "long" ? "bg-rose-500" : "bg-amber-500"), `Last activity ${fmtDur(s * 1000)} ago`);
   node.className = `${node.closest("article") ? "mt-2 w-fit" : ""} inline-flex items-center gap-1.5 text-[11px] font-medium ${level === "long" ? "text-rose-700 dark:text-rose-300" : "text-amber-700 dark:text-amber-300"}`;
   const card = node.closest("article");
   if (card) card.dataset.quietLevel = level;
