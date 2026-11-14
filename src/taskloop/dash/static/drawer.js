@@ -2,7 +2,7 @@
 // it was given), and the task as the tracker holds it. It opens from factory.db and the evidence files at once; the tracker's
 // fields (`bd` calls) load second and fill the Task view in. Shapes: docs/design/dashboard-ui.md.
 
-import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, position, quietSpan, stepInfo, tag } from "./ui.js";
+import { $, COLUMNS, JUMP, LAND, STATE, VERIFY, ago, callout, el, holdCallout, position, quietSpan, stepInfo, tag } from "./ui.js";
 import { apply, atBottom, lines, setNote, show, touchQuiet } from "./lines.js";
 import { causeLink, changeReason, lasted, rail, verifyTitle } from "./rail.js";
 import { prompt, result } from "./result.js";
@@ -22,7 +22,9 @@ export function initDrawer(src, taskMap) {
 
 const attemptOf = () => open.detail?.attempts.find((a) => a.step === open.step && a.n === open.n);
 const tabOf = (a) => (a.step === VERIFY.id ? "result" : open.tab ?? (a.state === "running" ? "lines" : "result")); // a verification has only its result
-const signature = (t) => JSON.stringify([t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.land, t.status]); // what changes the attempts
+const signature = (t) => JSON.stringify([
+  t.column, t.attempt, t.repeat, t.slot, t.hold_cause, t.hold_explanation, t.ask, t.question, t.land, t.status,
+]); // what changes the attempts or their presentation
 
 // Select an attempt: the given one, else the last of the step, else the last of the task.
 function select(step, n) {
@@ -176,9 +178,10 @@ function render() {
     total.append(usageNode(detail.usage, "Task total", true));
     drawer.append(total);
   }
-  if (t.hold_cause) {
+  const notice = holdCallout(t);
+  if (notice) {
     const hold = el("div", "px-6 pb-3");
-    hold.append(callout("border-rose-500", "Held", t.hold_cause));
+    hold.append(notice);
     drawer.append(hold);
   }
   if (t.column === "waiting" && t.attempt > 0) {

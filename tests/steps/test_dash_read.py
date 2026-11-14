@@ -93,6 +93,7 @@ def test_current_agent_questions_agree_on_board_and_detail(
     detail = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.ask, card.question) == ("held", True, "Which database?\nUse <primary>?")
+    assert card.hold_explanation is None
     assert (card.slot is None) == released
 
 
@@ -116,15 +117,24 @@ def test_damaged_question_evidence_preserves_the_ask(
     assert isinstance(detail, TaskDetail) and detail.task == card
 
 
-@pytest.mark.parametrize("reason", ["branch_moved", "failed:run:timeout"])
+@pytest.mark.parametrize("reason,explanation", [
+    ("branch_moved", "The factory held this task with recorded cause: branch_moved."),
+    ("land:branch_moved", "The task branch no longer holds exactly the commit that was checked."),
+    ("failed:run:timeout", "The agent did not finish before its deadline ("),
+    ("unrecognized:cause", "The factory held this task with recorded cause: unrecognized:cause."),
+])
 def test_factory_holds_do_not_reuse_an_agent_question(
-    registered: sqlite3.Connection, tmp_path: Path, reason: str,
+    registered: sqlite3.Connection, tmp_path: Path, reason: str, explanation: str,
 ) -> None:
     files = EvidenceFiles(tmp_path)
     saved_ask(registered, files)
     HoldStore(lambda: registered).insert(HoldInsert("attempt", "attempt", reason, 10))
     card, = board_of(registered, files, Tracker()).tasks
     assert (card.column, card.ask, card.question, card.hold_cause) == ("held", False, None, reason)
+    assert card.hold_explanation is not None and explanation in card.hold_explanation
+    assert "Which database?" not in card.hold_explanation
+    detail = build_task(TaskPorts(reads_of(registered), files, Tracker()), "tasks", "tl-1")
+    assert isinstance(detail, TaskDetail) and detail.task == card
 
 
 def test_checks_hold_does_not_reuse_its_agents_question(checking: sqlite3.Connection, tmp_path: Path) -> None:
@@ -135,6 +145,7 @@ def test_checks_hold_does_not_reuse_its_agents_question(checking: sqlite3.Connec
     detail = build_task(TaskPorts(reads_of(checking), files, Tracker()), "tasks", "tl-1")
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.ask, card.question) == ("held", False, None)
+    assert card.hold_explanation
 
 
 def test_stop_explanation_takes_precedence_over_an_agent_question(registered: sqlite3.Connection, tmp_path: Path) -> None:
@@ -150,6 +161,7 @@ def test_stop_explanation_takes_precedence_over_an_agent_question(registered: sq
     assert isinstance(detail, TaskDetail) and detail.task == card
     assert (card.column, card.ask, card.question) == ("held", False, None)
     assert card.hold_cause is not None and "deadline expired" in card.hold_cause
+    assert card.hold_explanation == card.hold_cause
 
 
 def test_the_board_has_a_card_for_each_attempted_task_and_each_ready_task_without_one(

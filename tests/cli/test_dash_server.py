@@ -192,6 +192,21 @@ def test_agent_question_fields_reach_snapshots_and_question_only_stream_updates(
     stream.close()
 
 
+def test_factory_explanations_reach_snapshots_and_explanation_only_stream_updates(served: tuple[Ports, DashServer]) -> None:
+    fake, server = served
+    fake.cards = [replace(card(), column="held", hold_cause="branch_moved", hold_explanation="The checked branch moved.")]
+    status, body = get(server, "/api/board")
+    found = json.loads(body)["tasks"][0]
+    assert status == 200 and found["hold_explanation"] == "The checked branch moved."
+    assert found["ask"] is False and found["question"] is None
+    stream = Stream(server)
+    fake.cards = [replace(fake.cards[0], hold_explanation="The checked branch moved.\nAnother <commit> is there.")]
+    changed = part(stream.kinds({"task"})[-1]["task"])
+    assert changed["hold_explanation"] == fake.cards[0].hold_explanation
+    assert changed["hold_cause"] == "branch_moved" and changed["ask"] is False and changed["question"] is None
+    stream.close()
+
+
 @pytest.mark.parametrize("mode", ["failed", "raise"])
 def test_a_board_that_cannot_be_read_is_said_once_and_the_poller_carries_on(served: tuple[Ports, DashServer], mode: str) -> None:
     fake, server = served

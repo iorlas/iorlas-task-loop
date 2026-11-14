@@ -4,7 +4,7 @@
 import { initDrawer, onTaskMoved, openDrawer } from "./drawer.js";
 import { initLogs, loadLogs, onLog } from "./logs.js";
 import { apiSource } from "./api.js";
-import { $, COLUMNS, LAND, STEPS, callout, el, position, quietSpan, tag, tick } from "./ui.js";
+import { $, COLUMNS, LAND, STEPS, callout, el, holdCallout, position, quietSpan, tag, tick } from "./ui.js";
 
 const tasks = new Map(); // id -> board card
 const cards = new Map(); // id -> element
@@ -65,12 +65,8 @@ function fillCard(node, t) {
     const restart = t.repeat.kind === "restart_at_plan";
     notes.append(callout(restart ? "border-violet-500" : "border-amber-500", restart ? "↩ Restarted at plan" : "↻ Repeat", t.repeat.reason));
   }
-  if (isAsk(t)) {
-    const ask = callout("border-amber-500", "Needs you");
-    ask.append(el("p", "mt-0.5 whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300",
-      t.question || "Question unavailable: the saved agent answer could not be read."));
-    notes.append(ask);
-  } else if (t.hold_cause) notes.append(callout("border-rose-500", "Held", t.hold_cause));
+  const hold = holdCallout(t);
+  if (hold) notes.append(hold);
   if (t.column === "waiting" && t.attempt > 0) notes.append(callout("border-slate-400", t.status === "abandoned" ? "Abandoned" : "Queued", t.status_note));
   if (t.column === "land") notes.append(callout(LAND[t.land ?? "unknown"].bar,
     LAND[t.land ?? "unknown"].label, t.status_note));
