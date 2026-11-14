@@ -45,7 +45,7 @@ _UNDEFINED = encode(CommandConclusion.UNDEFINED)
 # This is also the runtime's persisted-state compatibility version. Increment it for incompatible changes to the
 # interpretation of execution state, even without a DDL change. Compatible code changes keep it and resume normally.
 SCHEMA = Schema(
-    version=22,
+    version=23,
     name="factory",
     steps={},
     ddl=f"""
@@ -54,6 +54,23 @@ CREATE TABLE agent_stop (
 );
 CREATE TABLE merge_operation (
  attempt_id TEXT PRIMARY KEY, data TEXT NOT NULL CHECK(json_valid(data))
+);
+CREATE TABLE land_conflict (
+ operation_id TEXT PRIMARY KEY, dispatch_token TEXT NOT NULL UNIQUE,
+ implement_id TEXT NOT NULL UNIQUE REFERENCES attempt(attempt_id),
+ checks_id TEXT NOT NULL REFERENCES checks_attempt(attempt_id),
+ repo_id TEXT NOT NULL, slot TEXT NOT NULL, generation INTEGER NOT NULL CHECK(generation>=1),
+ data TEXT NOT NULL CHECK(json_valid(data)),
+ FOREIGN KEY(repo_id,slot) REFERENCES slot(repo_id,name),
+ UNIQUE(repo_id,slot,generation),
+ CHECK(json_extract(data,'$.key.attempt_id') IS operation_id),
+ CHECK(json_extract(data,'$.key.dispatch_token') IS dispatch_token),
+ CHECK(json_extract(data,'$.key.reservation_generation') IS generation),
+ CHECK(json_extract(data,'$.inputs.key.attempt_id') IS implement_id),
+ CHECK(json_extract(data,'$.request.source.attempt_id') IS implement_id),
+ CHECK(json_extract(data,'$.request.checks.attempt_id') IS checks_id),
+ CHECK(json_extract(data,'$.request.repo_id') IS repo_id),
+ CHECK(json_extract(data,'$.slot') IS slot)
 );
 CREATE TABLE drain_state (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL CHECK(generation>=1),

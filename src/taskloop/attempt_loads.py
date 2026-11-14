@@ -4,7 +4,9 @@ import sqlite3
 from dataclasses import astuple
 
 from any_agent.procs import Worker
+from pydantic import BaseModel, ConfigDict
 
+from taskloop.agents.settings import AgentSetting
 from taskloop.attempt_reads import (
     AttemptReads,
     StoreRefused,
@@ -37,6 +39,34 @@ from taskloop.steps import RULES
 from taskloop.task import TaskReference, TaskScope
 
 
+class RetainedInputs(BaseModel):
+    """The implement attempt's original inputs, independent of its released slot."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    key: AttemptKey
+    repo_id: str
+    backlog: str
+    task_id: str
+    tracker_root: str
+    checked: str
+    input_ref: FileRef
+    setting: AgentSetting
+
+
+def retained_on(con: sqlite3.Connection, key: AttemptKey) -> RetainedInputs | None:
+    row = con.execute(
+        "SELECT repo_id,backlog,task_id,tracker_root,end_commit,input_path,input_digest,harness,provider,model,effort,access_policy "
+        "FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=? AND step='implement'",
+        astuple(key),
+    ).fetchone()
+    if row is None:
+        return None
+    return RetainedInputs(key=key, repo_id=as_text(row[0]), backlog=as_text(row[1]), task_id=as_text(row[2]),
+                          tracker_root=as_text(row[3]), checked=as_text(row[4]),
+                          input_ref=FileRef(as_text(row[5]), as_text(row[6])),
+                          setting=stored_setting(*row[7:12]))
+
+
 def _counts(row: tuple[object, ...]) -> tuple[int | None, int | None, int | None] | None:
     """Stored token counts (in, cached, out): known when any is stored, else None; an unknown count is NULL, never 0."""
     counts = (as_nullable_int(row[0]), as_nullable_int(row[1]), as_nullable_int(row[2]))
@@ -58,6 +88,10 @@ def verdict_of(row: tuple[object, ...]) -> Verdict | None:
 
 class AttemptLoads(AttemptReads):
     """The fenced reads an attempt's writers need; the status reads are `AttemptReads`'."""
+
+    def retained(self, key: AttemptKey) -> RetainedInputs | None:
+        with self._connection() as con:
+            return retained_on(con, key)
 
     def earlier(self, repo_id: str, backlog: str, task_id: str, tracker_root: str) -> EarlierAttempt | None:
         """Latest agent attempt for exactly this registered repo and tracker task; checks have their own table."""
