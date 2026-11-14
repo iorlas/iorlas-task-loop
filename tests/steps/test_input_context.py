@@ -2,16 +2,20 @@
 
 import json
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
 from shlex import split
 
 import pytest
+from doubles import Environment
 from git_porcelain import Recorded, Sha
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from shelf_input_fixtures import shelf_files, write_shelf
 from test_admit import Tracker, admission, request, slots
 from test_attempt import ENTRY, KEY, AttemptSurroundings, app, database, fake
 from test_attempt import surroundings as attempt_surroundings
-from test_repeat import SECOND, captured, repeater
+from test_repeat import SECOND, repeater
+from test_repeat import agent as repeat_agent
 from test_steps import TASK
 
 from taskloop.admit import AdmitRefused, Admitted
@@ -22,9 +26,10 @@ from taskloop.attempt_types import TRAILER, Checkouts, SlotFiles, Unsettled
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.glossary_extract import BUDGET, HEADING, MAX_BYTES, PRIORITY, extract
 from taskloop.ids import NativeIds
-from taskloop.input_context import BEGIN, END, InputContext, InputError, read, refresh
+from taskloop.input_context import BEGIN, END, SHELF_GUIDANCE, InputContext, InputError, read, refresh
 from taskloop.operations import Started
 from taskloop.profile import NoCommit, NotAFile, Unavailable
+from taskloop.shelf_digest.artifact import PATH as DIGEST_PATH
 from taskloop.step_text import SAVED_WORK
 from taskloop.steps import IMPLEMENT, PLAN, StepKind
 
@@ -36,17 +41,21 @@ PROFILE = {"checks": [{"name": "check", "argv": ["just", "check"], "timeout": 60
 
 class Files:
     def __init__(self, glossary: bytes | NotAFile | Unavailable | NoCommit | None = GLOSSARY, profile: bytes = b"{}",
-                 paths: tuple[str, ...] = ()) -> None:
+                 paths: tuple[str, ...] = (),
+                 blobs: Mapping[str, bytes | NotAFile | Unavailable | NoCommit | None] | None = None) -> None:
         self.glossary, self.profile = glossary, profile
         self.names = paths
         self.reads: list[tuple[str, str]] = []
+        self.blobs = blobs or {}
 
     def paths(self, commit: str) -> tuple[str, ...]:
         return self.names
 
     def blob(self, commit: str, path: str) -> bytes | NotAFile | Unavailable | NoCommit | None:
         self.reads.append((commit, path))
-        return self.profile if path == ".task-loop.json" else self.glossary
+        if path == ".task-loop.json":
+            return self.profile
+        return self.glossary if path == "docs/glossary.md" else self.blobs.get(path)
 
 
 @pytest.mark.parametrize("step", [PLAN, IMPLEMENT], ids=lambda step: step.step)
@@ -97,7 +106,7 @@ def test_all_validated_commands_keep_complete_shell_safe_argv() -> None:
     files = Files(profile=json.dumps(profile).encode())
     context = read(files, "chosen")
     assert len(context.commands) == 1 and split(context.commands[0]) == argv
-    assert files.reads == [("chosen", ".task-loop.json"), ("chosen", "docs/glossary.md")]
+    assert files.reads == [("chosen", path) for path in (".task-loop.json", "docs/glossary.md", DIGEST_PATH, "pyproject.toml")]
     with pytest.raises(InputError, match=r"Profile.*must name a program"):
         read(Files(profile=b'{"checks":[{"name":"bad","argv":[],"timeout":1}]}'), "chosen")
 
@@ -145,6 +154,7 @@ def test_absent_glossary_is_truthful() -> None:
 
 
 def committed(worktree: FakeWorktree, word: str) -> str:
+    write_shelf(worktree)
     worktree.write_file("docs/glossary.md", GLOSSARY.decode().replace("Work to accomplish.", word))
     worktree.write_file(".task-loop.json", json.dumps(PROFILE))
     worktree.write_file("src/context.py", word)
@@ -173,12 +183,14 @@ def test_admission_uses_the_selected_committed_source_not_dirty_checkout(
         if source == "remote":
             repo.delete_branch("task/tl-1", expected=Sha(commit))
     repo.worktree(repo.identity().root).write_file("docs/glossary.md", "dirty junk")
+    repo.worktree(repo.identity().root).write_file(DIGEST_PATH, "dirty digest")
     tracker = Tracker(factory, tmp_path / "artifacts")
     result = admission(factory, tmp_path, tracker, repo).admit(request(tmp_path, repo))
     assert isinstance(result, Admitted)
     text = tracker.files.read(tracker.files.inputs[0])
     assert f"Source commit: {commit}" in text and f"task: {source}" in text
     assert "dirty junk" not in text and "- just check\n- just test" in text
+    assert text.count(SHELF_GUIDANCE) == text.count("Validated shelf digest (") == 1 and "dirty digest" not in text
 
 
 def test_input_failure_precedes_claim_and_reservation(
@@ -197,7 +209,8 @@ def test_input_failure_precedes_claim_and_reservation(
 
 def test_moved_source_is_refreshed_before_dispatch_and_complete_input_is_retained(surroundings: AttemptSurroundings) -> None:
     con = database(surroundings)
-    before = InputContext("old", ("obsolete check",), extract(GLOSSARY), ("src/obsolete.py",)).render()
+    before = InputContext("old", ("obsolete check",), extract(GLOSSARY), ("src/obsolete.py",),
+                          shelf=f"{SHELF_GUIDANCE}\nobsolete digest\n").render()
     files = EvidenceFiles(surroundings.tmp)
     ref = files.put_input(KEY, f"Complete task spec\n{before}\n{SAVED_WORK}")
     con.execute("UPDATE attempt SET input_path=?, input_digest=?", (ref.path, ref.digest))
@@ -215,6 +228,7 @@ def test_moved_source_is_refreshed_before_dispatch_and_complete_input_is_retaine
     assert "task: New meaning." in glossary
     assert "src/obsolete.py" not in text and code_map.splitlines().count("src/context.py") == 1
     assert files.read(ref).find("Source commit: old") >= 0
+    assert text.count(SHELF_GUIDANCE) == text.count("Validated shelf digest (") == 1 and "obsolete digest" not in text
     path = surroundings.tmp / files.directory(KEY) / "launched-input.txt"
     assert path.read_text() == text and "Return exactly one JSON object" in text
 
@@ -232,24 +246,38 @@ def test_bad_glossary_never_dispatches_an_agent(surroundings: AttemptSurrounding
     assert not run.calls and con.execute("SELECT phase FROM attempt").fetchone() == ("admitted",)
 
 
+@pytest.mark.parametrize("stale", [False, True])
 def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
-    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles
+    registered: sqlite3.Connection, slot: FakeWorktree, tmp_path: Path, checkouts: Checkouts, slot_files: SlotFiles, stale: bool
 ) -> None:
+    slot.repo.worktree(slot.repo.identity().root).write_file("docs/design/tl-1/plan.md", "Plan")
     commit = committed(slot.repo.worktree(slot.repo.identity().root), "Original definition.")
-    context = InputContext(commit, ("just check", "just test"), extract(GLOSSARY), ("src/obsolete.py",))
+    context = read(Files(blobs=shelf_files("b" * 40)), commit)
     files = EvidenceFiles(tmp_path)
-    ref = files.put_input(KEY, PLAN.input_text(TASK, PLAN.rules("tl-1"), context))
-    registered.execute("UPDATE attempt SET input_path=?,input_digest=?", (ref.path, ref.digest))
-    captured(registered, tmp_path, slot, checkouts, slot_files, {"docs/design/tl-1/plan.md": "Plan", "stray": "leftovers"})
+    ref = files.put_input(KEY, IMPLEMENT.input_text(TASK, IMPLEMENT.rules("tl-1"), context))
+    registered.execute("UPDATE attempt SET step='implement',after_commit=?,input_path=?,input_digest=?", (commit, ref.path, ref.digest))
+    changed = {"stray": "leftovers",
+               DIGEST_PATH: shelf_files("c" * 40, stale=stale)[DIGEST_PATH].decode()}
+    answer = {"disposition": "implemented", "paths": [DIGEST_PATH],
+              "message": "Update digest", "explanation": "Done"}
+    prior = Attempts(AttemptStore(lambda: registered), files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
+                     repeat_agent(slot, changed, answer), lambda: 10, checkouts, slot_files,
+                     environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())
+    assert prior.execute(KEY, ENTRY, lambda: "held").reason == "verification"
     result = repeater(registered, tmp_path, checkouts, slot_files).repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(result, Started)
     store = AttemptStore(lambda: registered)
     current = store.attempt_of("tasks", "tl-1")
     assert current is not None
-    run = fake()
+    run = fake(json.dumps({"disposition": "unchanged", "paths": [], "message": None, "explanation": "Done"}))
     attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
-                       run, lambda: 10, checkouts, slot_files)
-    assert attempts.execute(current[0], SECOND).reason == "verification"
+                       run, lambda: 10, checkouts, slot_files,
+                       environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())
+    outcome = attempts.execute(current[0], SECOND, lambda: "held")
+    if stale:
+        assert outcome.reason == "input" and "package identities" in outcome.explanation and not run.calls
+        return
+    assert outcome.reason == "verification"
     text = run.calls[0][1].stdin
     record = store.load(current[0])
     assert record is not None and f"Source commit: {record.base_commit}" in text
@@ -262,3 +290,70 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     assert code_map.splitlines().count("src/context.py") == code_map.splitlines().count("docs/design/tl-1/plan.md") == 1
     assert TASK.requirements in text and SAVED_WORK in text and "- just check\n- just test" in text
     assert (tmp_path / files.directory(current[0]) / "launched-input.txt").read_text() == text
+    assert text.count(SHELF_GUIDANCE) == text.count("Validated shelf digest (") == 1
+    assert '"source_commit":"' + "c" * 40 + '"' in text and "b" * 40 not in text
+
+
+@pytest.mark.parametrize("step", [PLAN, IMPLEMENT], ids=lambda step: step.step)
+def test_steps_receive_one_validated_shelf_block_and_refresh_it(step: StepKind) -> None:
+    files = Files(blobs=shelf_files())
+    text = step.input_text(TASK, step.rules("tl-1"), read(files, "first"))
+    text = refresh(text, read(Files(blobs=shelf_files("b" * 40)), "second"))
+    assert text.count(SHELF_GUIDANCE) == text.count("Validated shelf digest (") == 1
+    assert "a" * 40 not in text and "b" * 40 in text
+    assert text.index(BEGIN) < text.index(SHELF_GUIDANCE) < text.index(END)
+    assert TASK.requirements in text
+    assert all(commit == "first" for commit, _path in files.reads)
+    assert ("first", "uv.lock") in files.reads
+
+
+@pytest.mark.parametrize(("blob", "reason"), [
+    (None, "missing"), (NotAFile("120000"), "not a regular file"), (Unavailable("offline"), "offline"),
+    (NoCommit(), "no commit"), (b"{", "Invalid JSON"), (shelf_files(stale=True)[DIGEST_PATH], "package identities"),
+])
+@pytest.mark.parametrize("step", [PLAN, IMPLEMENT], ids=lambda step: step.step)
+def test_required_digest_failures_are_explained(
+    blob: bytes | NotAFile | Unavailable | NoCommit | None, reason: str, step: StepKind
+) -> None:
+    blobs: dict[str, bytes | NotAFile | Unavailable | NoCommit | None] = dict(shelf_files())
+    blobs[DIGEST_PATH] = blob
+    with pytest.raises(InputError, match=rf"(?s)docs/shelf-digest.json.*{reason}"):
+        step.input_text(TASK, step.rules("tl-1"), read(Files(blobs=blobs), "selected"))
+
+
+def test_present_bad_digest_is_never_skipped_without_shelf_declarations() -> None:
+    with pytest.raises(InputError, match=r"docs/shelf-digest.json"):
+        read(Files(blobs={DIGEST_PATH: b"{}"}), "selected")
+
+
+@pytest.mark.parametrize("dependency", ["any-agent==0.15.0", "any-agent~=0.15", "any-agent!=0.14", "Any_Agent[extra]>=0.15"])
+def test_shelf_dependency_declarations_require_the_artifact(dependency: str) -> None:
+    project = f'[project]\ndependencies = ["{dependency}"]\n'.encode()
+    with pytest.raises(InputError, match="Required artifact is missing"):
+        read(Files(blobs={"pyproject.toml": project}), "selected")
+
+
+def test_stale_digest_prevents_claim_and_reservation(
+    factory: sqlite3.Connection, repo: FakeRepo, root: Path, tmp_path: Path
+) -> None:
+    slots(factory, repo, root, 1)
+    tree = repo.worktree(repo.identity().root)
+    write_shelf(tree, stale=True)
+    assert isinstance(tree.record("stale digest", paths="all"), Recorded)
+    tree.push("main")
+    tracker = Tracker(factory, tmp_path / "artifacts")
+    result = admission(factory, tmp_path, tracker, repo).admit(request(tmp_path, repo))
+    assert isinstance(result, AdmitRefused) and result.reason == "input" and "package identities" in result.detail
+    assert tracker.calls == [] and factory.execute("SELECT count(*) FROM reservation").fetchone() == (0,)
+
+
+def test_moved_source_with_stale_digest_never_launches(surroundings: AttemptSurroundings) -> None:
+    con = database(surroundings)
+    tree = surroundings.slot.repo.worktree(surroundings.slot.repo.identity().root)
+    write_shelf(tree, stale=True)
+    assert isinstance(tree.record("stale digest", paths="all"), Recorded)
+    tree.push("main")
+    assert tree.repo.fetch().ok
+    run = fake()
+    result = app(con, surroundings, run).execute(KEY, ENTRY)
+    assert result.reason == "input" and "docs/shelf-digest.json" in result.explanation and not run.calls
