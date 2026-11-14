@@ -34,7 +34,7 @@ from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.glossary_extract import HEADING
 from taskloop.harness_choice import HarnessKind
-from taskloop.input_context import BEGIN
+from taskloop.input_context import BEGIN, END
 from taskloop.launch import LaunchUnavailable
 from taskloop.operations import Failed, Round, Started, release_task, start
 from taskloop.round import NextRequest, run_round
@@ -116,7 +116,12 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert 'Command argv: ["just", "test"]' in spec.stdin and all(line in spec.stdin for line in ASSERTION.splitlines())
     assert "Widget tl-1" in spec.stdin and "docs/design/tl-1/plan.md" in spec.stdin
     assert "List only your new changes" in spec.stdin
-    assert spec.stdin.count(BEGIN) == spec.stdin.count(HEADING) == 1
+    assert spec.stdin.count(BEGIN) == spec.stdin.count(END) == spec.stdin.count(HEADING) == 1
+    assert spec.stdin.splitlines().count("CODE MAP") == 1
+    block = spec.stdin.split(BEGIN)[1].split(END)[0]
+    glossary, code_map = block.split("\nCODE MAP\n")
+    assert "task: Work to accomplish." in glossary
+    assert code_map.splitlines().count("docs/design/tl-1/plan.md") == 1
     assert f"Source commit: {x}" in spec.stdin and "task: Work to accomplish." in spec.stdin
     assert "- just check\n- just test" in spec.stdin
     assert (rig.tmp / EvidenceFiles(rig.tmp).directory(rig.store.attempts("tasks", "tl-1")[0].key) /
