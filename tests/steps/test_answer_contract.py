@@ -144,8 +144,6 @@ def test_the_decoder_accepts_each_disposition_in_its_shape() -> None:
         for path in (None, EXPECTED):
             found = decode(UNCHANGED | {"disposition": disposition, "plan_path": path}, RULES)
             assert (found.disposition, found.effect, found.paths) == (disposition, "none", ())
-    with pytest.raises(ValueError, match="Invalid plan answer"):
-        decode(UNCHANGED | {"disposition": "incomplete", "paths": [EXPECTED]}, RULES)
 
 
 def stored(rc: int | None, timed_out: bool, reason: str | None, answer: AnswerState, verdict: Verdict | None = None) -> StoredExecution:
@@ -229,9 +227,46 @@ def test_implement_answers_anywhere_in_the_repository_decode_with_their_effect(a
     {"paths": []}, {"message": None}, {"message": "Add\n\nTask-Loop-Attempt: x"}, {"paths": ["src/a.py", "src/a.py"]},
     {"paths": [f"src/m{i}.py" for i in range(97)]}, {"paths": [".beads/issues.jsonl"]}, {"paths": [".Beads/x"]},
     {"paths": [".gitignore"]}, {"paths": ["src/.git/x"]}, {"paths": [".github/workflows/x.yml"]}, {"paths": ["../x.py"]},
-    {"paths": [""]}, {"disposition": "planned"}, {"disposition": "unchanged"}, {"disposition": "incomplete", "message": None},
+    {"paths": [""]}, {"disposition": "planned"}, {"disposition": "unchanged"}, {"disposition": "incomplete"},
     {"plan_path": None}, {"explanation": "x" * 2001},
 ])
 def test_the_implement_decoder_owns_its_rules(change: dict[str, object]) -> None:
     with pytest.raises(ValueError, match="Invalid implement answer"):
         IMPLEMENT.decode(IMPLEMENTED | change, CODE)
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+@pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
+def test_unfinished_answers_ignore_unused_paths(step: str, disposition: str) -> None:
+    operation = kind(step)
+    rules = operation.rules("tl-1")
+    answer = {"disposition": disposition, "paths": [], "message": None, "explanation": "Work remains"}
+    if step == "plan":
+        answer["plan_path"] = EXPECTED
+    empty = operation.decode(answer, rules)
+    assert (empty.disposition, empty.effect, empty.paths, empty.message, empty.explanation) == (
+        disposition, "none", (), None, "Work remains")
+    for paths in ([EXPECTED], ["src/outside.py", "../outside", ".beads/x", ".git/x", "", *BAD_PATHS],
+                  [EXPECTED] * (rules.max_paths + 1)):
+        assert operation.decode(answer | {"paths": paths}, rules) == empty
+
+
+@pytest.mark.parametrize("step", ["plan", "implement"])
+@pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
+@pytest.mark.parametrize("change", [
+    {"paths": None}, {"paths": "src/a.py"}, {"paths": (EXPECTED,)}, {"paths": [EXPECTED, 3]},
+    {"message": "Save this"}, {"explanation": None}, {"explanation": "x" * 2001}, {"disposition": "unknown"},
+])
+def test_unfinished_answers_still_require_the_answer_shape(step: str, disposition: str, change: dict[str, object]) -> None:
+    operation = kind(step)
+    answer = {"disposition": disposition, "paths": [EXPECTED], "message": None, "explanation": "Work remains"}
+    if step == "plan":
+        answer["plan_path"] = None
+    with pytest.raises(ValueError, match=f"Invalid {step} answer"):
+        operation.decode(answer | change, operation.rules("tl-1"))
+
+
+@pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
+def test_unfinished_plan_answers_cannot_name_another_tasks_plan(disposition: str) -> None:
+    with pytest.raises(ValueError, match="Invalid plan answer"):
+        decode(UNCHANGED | {"disposition": disposition, "paths": [EXPECTED], "plan_path": "docs/design/tl-2/plan.md"}, RULES)

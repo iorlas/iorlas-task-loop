@@ -3,10 +3,11 @@
 import pytest
 
 from taskloop.admit import task_text
-from taskloop.attempt_types import StepRules, Unsettled
+from taskloop.attempt_types import AttemptKey, StepRules, Unsettled
+from taskloop.check_repeat.feedback import Availability, FailedCheck, OutputTail
 from taskloop.factory_commit import attributes
 from taskloop.step_text import GIT_WRITES, SAVED_WORK
-from taskloop.steps import IMPLEMENT, ORDER, PLAN, following, is_agent, kind, next_step
+from taskloop.steps import IMPLEMENT, ORDER, PLAN, failed_check_feedback, following, is_agent, kind, next_step
 from taskloop.task import TaskInspection, TaskReference, TaskScope
 
 TASK = TaskInspection(
@@ -74,3 +75,29 @@ def test_the_attributes_files_follow_the_step_root_and_the_listed_paths() -> Non
 def test_the_plan_input_sends_an_infeasible_or_empty_task_to_needs_owner_at_plan() -> None:
     text = PLAN.input_text(TASK, StepRules("docs/design/tl-1/"))
     assert "answer `needs_owner`" in text and "write no plan" in text
+
+
+@pytest.mark.parametrize(("step", "success"), [("plan", "planned"), ("implement", "implemented")])
+def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(step: str, success: str) -> None:
+    operation = kind(step)
+    text = task_text(TASK, step)
+    guidance = (
+        f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`, and the factory "
+        "saves unfinished slot work as a work-in-progress commit on the task branch when holding the task."
+    )
+    assert guidance in text and SAVED_WORK in text
+    assert f"With `{success}`, remove any other file you created; anything left uncommitted" in text
+    assert "ANSWER FORMAT" not in text
+    for unrecorded in (False, True):
+        repeated = operation.feedback(Unsettled("uncommitted", ("?? new.txt",)), operation.rules("tl-1"), 1,
+                                      text, "nonce", unrecorded=unrecorded)
+        assert repeated.endswith(text) and guidance in repeated and SAVED_WORK in repeated
+
+
+def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
+    text = task_text(TASK, "implement")
+    failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
+                         argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
+    feedback = failed_check_feedback(failed, text, "nonce")
+    assert feedback.endswith(text) and "Only with `implemented` should `paths` list files" in feedback
+    assert "the factory saves unfinished slot work" in feedback and SAVED_WORK in feedback
