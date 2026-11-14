@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail
+from taskloop.dash_model import AttemptBody, Board, Card, FeedEvent, FeedPage, Fields, Outcome, TaskDetail, TrackerDetail, Usage
 from taskloop.dash_server import PAGES, DashPorts, DashServer, Hub
 from taskloop.operations import Failed
 from taskloop.round_reader import LogRow
@@ -51,7 +51,8 @@ class Ports:
         return FeedPage((line,), "7:42", replaced=False, available=True) if cursor is None else FeedPage((), cursor, False, True)
 
     def task(self, task_id: str) -> TaskDetail | Failed:
-        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), ())
+        usage = Usage(16, 13, 7, 1, 1, 1)
+        return Failed("unavailable", "store") if task_id == "broken" else TaskDetail(card(task_id), (), {"plan": usage}, usage)
 
     def body(self, task_id: str, step: str, number: int) -> AttemptBody | Failed | None:
         return AttemptBody("prompt", Outcome("verified", None, (), None)) if (task_id, step, number) == ("tl-1", "plan", 1) else None
@@ -120,6 +121,9 @@ def test_the_endpoints_answer_json_the_page_is_served_and_nothing_else_is(served
     assert json.loads(get(server, "/api/log")[1])["rows"][0]["move"] == "admit"
     assert get(server, "/") == (200, b"<html>page</html>")
     assert get(server, "/api/tasks/unknown")[0] == 200 and get(server, "/api/tasks/broken")[0] == 503
+    detail = json.loads(get(server, "/api/tasks/tl-1")[1])
+    assert detail["step_usage"]["plan"] == detail["usage"] == {
+        "fresh": 16, "cached": 13, "output": 7, "turns": 1, "attempts": 1, "complete": 1}
     assert get(server, "/secret.txt")[0] == 404 and get(server, "/../secret.txt")[0] == 404 and get(server, "/api/tasks/a%2F..")[0] == 404
 
 

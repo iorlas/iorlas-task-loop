@@ -2,6 +2,7 @@
 // three states: loading (a skeleton), failed (the reason, and a retry) and ready.
 
 import { ago, el, tag } from "./ui.js";
+import { usageNode } from "./usage.js";
 
 const prose = (text) => el("div", "whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-slate-200", text);
 const heading = (text) => el("h4", "mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500", text);
@@ -29,7 +30,15 @@ function failure(message, retry) {
 }
 
 // `tracker` is {state: "loading"} | {state: "failed", error} | {state: "none"} | {state: "ready", fields, comments}.
-export function taskView(tracker, retry) {
+export function taskView(tracker, retry, usage) {
+  const wrap = el("div", "flex min-h-0 flex-1 flex-col");
+  const total = el("div", "px-6 pt-4");
+  total.append(usageNode(usage, "Task total", true));
+  wrap.append(total, trackerView(tracker, retry));
+  return wrap;
+}
+
+function trackerView(tracker, retry) {
   if (tracker.state === "loading") return skeleton();
   if (tracker.state === "failed") return failure(tracker.error, retry);
   if (tracker.state === "none") return el("p", "px-6 py-5 text-sm text-slate-500", "The tracker has no such task.");

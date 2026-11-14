@@ -145,6 +145,18 @@ class FeedPage:
 
 
 @dataclass(frozen=True)
+class Usage:
+    """Known counts and coverage: totals include reported values only when complete < attempts."""
+
+    fresh: int | None = None
+    cached: int | None = None
+    output: int | None = None
+    turns: int | None = None
+    attempts: int = 0
+    complete: int = 0
+
+
+@dataclass(frozen=True)
 class AttemptDetail:
     step: str
     n: int
@@ -160,6 +172,7 @@ class AttemptDetail:
     led_by: int | None = None  # a repeat of an agent attempt: the try of the `verification` step whose failure led to it
     past: bool = False  # belongs to a chain a person abandoned: history, not the task's current steps
     run: Run | None = None  # an agent attempt's: what ran it; None for a check or a verification
+    usage: Usage | None = None  # None for checks/verification; an agent with no report has empty counts
 
 
 @dataclass(frozen=True)
@@ -190,6 +203,8 @@ class TaskDetail:
 
     task: Card
     attempts: tuple[AttemptDetail, ...]
+    step_usage: dict[str, Usage]
+    usage: Usage
 
 
 @dataclass(frozen=True)

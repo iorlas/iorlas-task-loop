@@ -37,6 +37,7 @@ from taskloop.dash_model import (
     Verification,
     iso,
 )
+from taskloop.dash_usage import project, totals
 from taskloop.dash_verify import STEP as VERIFICATION
 from taskloop.dash_verify import applies, verification
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
@@ -110,7 +111,7 @@ def _agent(
     summary = result.explanation or result.reason or result.status
     return AttemptDetail(row.step, number, state, iso(started), iso(ended), summary, after, reason,
                          previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None,
-                         run=_run(row))
+                         run=_run(row), usage=project(None if result.execution is None else result.execution.facts))
 
 
 def added_lines(before: str, now: str) -> tuple[tuple[int, int], ...]:
@@ -287,7 +288,8 @@ def build_task(ports: TaskPorts, backlog: str, task_id: str) -> TaskDetail | Fai
     card = Card(task_id, title, "waiting", 0, None, None, None, None, None) if view is None else card_of(
         view, rows[0], title, ports.files, ports.reads.clock(), tries(rows).get(view.attempt_id),
         admission_of(ports.reads, frozenset(each.task_id for each in ports.tracker.ready())), ports.mode)
-    return TaskDetail(card, attempts)
+    step_usage, usage = totals(attempts)
+    return TaskDetail(card, attempts, step_usage, usage)
 
 
 def build_tracker(tracker: DashTracker, task_id: str) -> TrackerDetail | None:

@@ -2,6 +2,7 @@
 // Past history is folded for display only; selection still uses the original (step, n).
 import { JUMP, LAND, STATE, STEPS, VERIFY, dot, el, fmtDur, since, stepInfo } from "./ui.js";
 import { say, wordNode } from "./words.js";
+import { usageNode, usageText } from "./usage.js";
 
 const WORK_MS = 120000;
 const muted = "text-slate-500 dark:text-slate-400";
@@ -110,7 +111,7 @@ export function causeLink(a, select) {
   return btn;
 }
 
-function row({ a, verification, gap }, selected, select) {
+function row({ a, verification, gap }, selected, select, stepUsage) {
   const st = STATE[a.state];
   const li = el("li", `relative pl-3 ${a.past ? "opacity-60" : ""}`);
   if (!a.after) li.title = gapWords(gap);
@@ -135,6 +136,12 @@ function row({ a, verification, gap }, selected, select) {
   btn.addEventListener("click", () => select(a.step, a.n));
   line.append(btn);
   li.append(dotEl, line);
+  if (a.usage) {
+    li.title = [li.title, usageText(a.usage), usageText(stepUsage, "Step total", true)].filter(Boolean).join(" · ");
+    const total = el("div", "px-2 pb-1");
+    total.append(usageNode(stepUsage, "Step total", true));
+    li.append(total);
+  }
   if (verification) {
     const [mark, reason] = verificationButtons(verification, selected, select, a);
     line.append(mark);
@@ -156,7 +163,7 @@ function summary(entries, n) {
   return parts.join(" · ");
 }
 
-function groupRows(entries, selected, select) {
+function groupRows(entries, selected, select, stepUsage) {
   const ol = el("ol", "ml-1 border-l border-slate-200 dark:border-slate-700");
   for (const entry of entries) {
     if (entry.a.after === "restart_at_plan") ol.append(restart(entry, select));
@@ -165,12 +172,12 @@ function groupRows(entries, selected, select) {
       work.title = gapWords(entry.gap);
       ol.append(work);
     }
-    ol.append(row(entry, selected, select));
+    ol.append(row(entry, selected, select, stepUsage[entry.a.step]));
   }
   return ol;
 }
 
-function pastGroup(entries, n, selected, select) {
+function pastGroup(entries, n, selected, select, stepUsage) {
   const key = `${entries[0].a.step}/${entries[0].a.n}`;
   const details = el("details", "mb-2");
   details.dataset.run = key;
@@ -181,7 +188,7 @@ function pastGroup(entries, n, selected, select) {
   details.open = selected.runs.get(key) ?? false;
   const heading = el("summary", `cursor-pointer text-[11px] ${muted}`, summary(entries, n));
   heading.title = "Expand to inspect every try and verification result, including earlier failures";
-  details.append(heading, groupRows(entries, selected, select));
+  details.append(heading, groupRows(entries, selected, select, stepUsage));
   details.addEventListener("toggle", () => { if (details.isConnected) selected.runs.set(key, details.open); });
   return details;
 }
@@ -196,7 +203,7 @@ function landRow(t) {
   return li;
 }
 
-export function rail(list, t, selected, select) {
+export function rail(list, t, selected, select, stepUsage = {}) {
   selected.runs ??= new Map();
   const wrap = el("nav", "w-64 shrink-0 overflow-y-auto border-r border-slate-200 px-4 py-4 dark:border-slate-800");
   wrap.id = "rail";
@@ -204,8 +211,8 @@ export function rail(list, t, selected, select) {
   const groups = project(list);
   let current = null;
   groups.forEach((entries, i) => {
-    if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select));
-    else { current = groupRows(entries, selected, select); wrap.append(current); }
+    if (entries.every(({ a }) => a.past)) wrap.append(pastGroup(entries, i + 1, selected, select, stepUsage));
+    else { current = groupRows(entries, selected, select, stepUsage); wrap.append(current); }
   });
   selected.railSelection = `${selected.step}/${selected.n}`;
   if (t.column === "waiting") return wrap;
