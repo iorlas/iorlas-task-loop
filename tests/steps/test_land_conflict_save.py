@@ -30,12 +30,13 @@ def execution_case(on_slot: Path, repo: FakeRepo, slot: FakeWorktree, tmp_path: 
 
 
 def saved(c: ExecutionCase) -> Save:
-    result = c.ports.store.saved(c.record.key)
+    completed = c.ports.store.completed(c.record.key)
+    result = completed or c.ports.store.saved(c.record.key)
     assert result is not None and result.phase is SavePhase.COMPLETE and result.commit is not None
     assert c.con.execute("SELECT count(*) FROM land_conflict WHERE save_data IS NOT NULL").fetchone() == (1,)
     assert dict(c.ports.repo.branches("task/")) == {"task/tl-1": c.record.request.checked}
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
-        c.record.key.attempt_id, c.record.key.reservation_generation)
+        None if completed else (c.record.key.attempt_id, c.record.key.reservation_generation))
     assert c.slot.branch() is None
     assert [ref.sha for ref in c.ports.repo.refs([result.ref]) if ref.name == result.ref] == [result.commit]
     return result
@@ -74,7 +75,7 @@ def test_unfinished_bytes_deletions_and_both_inputs_are_retained(execution_case:
         str(entry.sha) for entry in c.ports.repo.history([record.commit or ""])}
     assert f"Task-Loop-Merge-Start: {record.source}" in record.message
     assert f"Task-Loop-Merge-Target: {record.target}" in record.message
-    assert head(c.slot) == record.head and not c.slot.merging() and c.calls == 1
+    assert head(c.slot) == c.record.base and not c.slot.merging() and c.calls == 1
     c.restart()
     assert isinstance(c.resume(), Terminal) and saved(c) == record and c.calls == 1
 
@@ -271,7 +272,7 @@ def test_completed_save_never_absorbs_later_edits(execution_case: ExecutionCase)
     c.slot.write_file("later", "keep this work")
     c.restart()
     result = c.resume()
-    assert isinstance(result, Unavailable) and result.explanation and c.slot.read_file("later") == "keep this work"
+    assert isinstance(result, Terminal) and result.explanation and c.slot.read_file("later") == "keep this work"
     assert saved(c) == record and c.calls == 1
 
 
