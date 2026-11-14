@@ -22,11 +22,19 @@ let backlog = null;
 let roundAt = null;
 let logReload = 0;
 let roundRevision = 0;
+let roundsState = null;
+let roundsRevision = 0;
 
-// Only the owning reader's round summaries for this dashboard's backlog can advance this observation.
-function roundTime(row, label) {
-  if (row.backlog !== label || row.move !== "round" || !Number.isFinite(Date.parse(row.at))) return null;
+// Only the owning reader's rows for this dashboard's backlog can advance these observations.
+function roundTime(row, label, move = "round") {
+  if (row.backlog !== label || row.move !== move || !Number.isFinite(Date.parse(row.at))) return null;
   return new Date(row.at).toISOString().replace(".000Z", "Z") === row.at ? row.at : null;
+}
+
+function recordedRounds(row, label) {
+  const at = roundTime(row, label, "rounds");
+  const word = row.words?.[0];
+  return at !== null && ["started", "wait", "stopped"].includes(word) ? { at, word } : null;
 }
 
 function renderRound() {
@@ -47,16 +55,30 @@ function renderRound() {
 async function reloadRound() {
   const reload = ++logReload;
   const revision = roundRevision;
+  const stateRevision = roundsRevision;
   try {
     const log = await source.logs();
     if (reload !== logReload) return;
+    const streamed = backlog === log.backlog && roundsRevision !== stateRevision ? roundsState : null;
     backlog = log.backlog;
+    roundsState = null;
+    for (const row of log.rows) {
+      const state = recordedRounds(row, backlog);
+      if (state && (roundsState === null || state.at >= roundsState.at)) roundsState = state;
+    }
+    if (streamed && (roundsState === null || streamed.at >= roundsState.at)) roundsState = streamed;
     const times = log.rows.map((row) => roundTime(row, backlog)).filter((at) => at !== null);
     if (roundRevision !== revision && roundAt !== null) times.push(roundAt);
     roundAt = times.sort().at(-1) ?? null;
     renderRound();
+    renderBoard();
   } catch {
-    if (reload !== logReload || revision !== roundRevision) return;
+    if (reload !== logReload) return;
+    if (stateRevision === roundsRevision) {
+      roundsState = null;
+      renderBoard();
+    }
+    if (revision !== roundRevision) return;
     roundAt = null;
     delete roundLabel.dataset.since;
     roundLabel.title = "";
@@ -66,10 +88,18 @@ async function reloadRound() {
 
 function observeRound(row) {
   const at = roundTime(row, backlog);
-  if (at === null) return;
-  roundRevision++;
-  if (roundAt === null || at > roundAt) roundAt = at;
-  renderRound();
+  if (at !== null) {
+    roundRevision++;
+    if (roundAt === null || at > roundAt) roundAt = at;
+    renderRound();
+  }
+  const state = recordedRounds(row, backlog);
+  if (state === null) return;
+  roundsRevision++;
+  if (roundsState === null || state.at >= roundsState.at) {
+    roundsState = state;
+    renderBoard();
+  }
 }
 
 const rects = () => new Map([...cards].map(([id, node]) => [id, node.getBoundingClientRect()]));
@@ -131,6 +161,9 @@ function fillCard(node, t) {
       t.column === "land" ? word.label : t.status === "abandoned" ? "Abandoned" : "Queued");
     if (isWaiting(t)) note.append(waitingNote(t));
     else if (t.status_note) note.append(el("p", "text-xs", t.status_note));
+    if (t.column === "land" && t.land === "waiting" && roundsState?.word === "stopped") {
+      note.append(el("p", "text-xs", "Rounds last recorded as stopped; automatic landing awaits rounds resuming."));
+    }
     notes.append(note);
   }
   if (notes.children.length) node.append(notes);
