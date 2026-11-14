@@ -1,85 +1,86 @@
 # Header
-Task: tl-8bh9.14.155.2.3; base: 06d1561b5b2b93364a1e051594457f16ff8309ae
-Depth: medium; three behaviours
-Decisions: none missing; dependencies A/B landed.
+Task: tl-8bh9.14.155.2.3; base: 78b59e0ec982ab229fbce5f586806059f12d9610
+Depth: medium; 3 behaviours: admission/resume, summary reads, resolution isolation.
+Decisions: none missing; A/B landed.
 Evidence budget: 12 model calls.
-Size: 14 changed files including plan; 3 independent behaviours; 65 implement calls.
+Size: 2 files (test, plan); 3 behaviours; 20 implement calls.
 
 ## Outcome and non-goals
-Ordinary land currently refuses a conflicting squash with restart instructions. Connect it to the delivered admission, execution, preservation and release operations; return their explained outcome without advancing delivery. Keep summaries observational.
-No schema upgrade, new command, adoption of resolutions as checked work, or change to merge execution limits. Preserve conflict-free delivery.
+Handoff, production wiring and individual admission, restart, summary and retained-resolution tests already exist. The remaining gap is combined regression coverage: summary/dashboard reads after an actual saved resolution, followed by ordinary land when main becomes clean. Verify current pins. No production rewrite, schema change, new command or automatic adoption of retained work is proposed.
 
 ## Settled decisions
-- Parts A and B landed.
-- The shared land operation owns admission/resumption; CLI and automatic rounds use that same operation.
-- Existing records retain their original target, deadline, inputs and ownership across retries.
-- Summary uses object inspection only and never invokes conflict admission or execution.
-- Retained resolution is evidence of merge work, not a validated delivery candidate.
-- Reuse typed outcomes and the Failed boundary; explanations state the situation in words.
+- Ordinary land uses Handoff; summary uses object inspection.
+- Retained Record owns target, deadline and checked identities across retries.
+- Completed conflict work returns an explained refusal before candidate creation.
+- Existing conflict-free delivery and round retry/hold behaviour remain acceptance baselines.
+- Reuse the execution fixture and semantic adapters; no additional shelf contract is needed.
 
 ## Open decisions
 - None.
 
 ## Change map
-- `src/taskloop/land.py`: `_made`, `_delivered` — resume retained work first; dispatch new conflicts and stop delivery; extract code to bring this 404-line file below its cap.
-- `src/taskloop/land_target.py`: `squashed_onto` — return typed `Conflicted` to its only production caller, `_made`; remove restart advice.
-- `src/taskloop/land_check.py`: `LandPorts` — require a conflict handoff port.
-- `src/taskloop/land_conflict/handoff.py` (new): connect `ConflictStore.find`, `admit`, `execute` and explained results to `_made`.
-- `src/taskloop/land_conflict/composition.py` (new): construct handoff dependencies for `open_land` using existing adapters.
-- `src/taskloop/cli_composition.py`: `open_land`, `_landed` — wire the port; preserve round result translation; delegate wiring to stay below the cap.
-- `tests/steps/land_bench.py`: `LandBench.ports`, `land` — wire semantic conflict dependencies.
-- `tests/steps/real/test_land_real.py`: `ports` — supply the required port; no live execution.
-- `tests/steps/test_land_conflict_handoff.py` (new): use both existing benches to cover durable retries and effect boundaries.
-- `tests/steps/test_land_summary.py`: conflict coverage — assert no admission or execution effects, including with retained work.
-- `tests/steps/test_conflict_recovery.py`: conflict assertions — replace automatic restart advice expectations; preserve independent manual recovery coverage.
-- `tests/steps/test_round_land.py`: `Bench.land` coverage — retry temporary results; hold terminal task refusals once.
-- `tests/steps/test_dash_land.py`: `build_land` coverage — selection cannot admit or resume work.
-- `docs/design/tl-8bh9.14.155.2.3/plan.md`: contract.
-- Consult callers: `cli_step` calls `land.land`; `round_land.land_passed` calls `_landed`; `dash_land.build_land` calls summary mode; `_summary` calls `made_s` and `land_summary.summarized`; `squashed_onto` also calls `made_s`.
-- Consult producers: `admit` supplies `Record`; `execute` supplies merge results; `ConflictStore.find/existing` matches source/checks regardless of new target. All LandPorts constructors are listed above; other land tests use the shared bench.
+- `tests/steps/test_land_conflict_handoff.py`: `executing`, `unchanged_input`, completed-resolution coverage — extend through repeated summary/dashboard reads, main movement and ordinary land.
+- `docs/design/tl-8bh9.14.155.2.3/plan.md`: remaining contract and verification scope.
+- `src/taskloop/land.py`: `_made`, `_delivered`, `_summary`, `land` — consult effect ordering; no planned edit.
+- `src/taskloop/land_target.py`: `squashed_onto`, `made_s` — consult conflict producer; callers are `_made`, and `_summary`/`squashed_onto`, respectively.
+- `src/taskloop/land_check.py`: `LandPorts.conflicts` — consult required port.
+- `src/taskloop/land_conflict/handoff.py`: `request_for`, `Handoff.resume/start/conflicted`, `stopped` — consult admission and result conversion.
+- `src/taskloop/land_conflict/execute.py`: `execute` — consult saved-result handling.
+- `src/taskloop/land_conflict/store.py`: `completed`, `saved`, `find` — consult retained identity/save readers.
+- `src/taskloop/land_conflict/composition.py`: `conflict_handoff`, `land_ports` — consult production Handoff/LandPorts producers.
+- `src/taskloop/cli_composition.py`: `open_land`, `_landed` — consult `land_ports` caller and round land adapter.
+- `src/taskloop/cli_step.py`: `land.land` call — consult CLI consumer.
+- `src/taskloop/round_land.py`: `land_passed` — consult shared-operation consumer and hold/retry translation.
+- `src/taskloop/round.py`: `land_passed` call — consult round integration.
+- `src/taskloop/dash_land.py`: `build_land` — use existing summary consumer in regression coverage.
+- `src/taskloop/dash_composition.py`: `_ports.delivery` — consult `build_land` caller.
+- `tests/steps/land_bench.py`: `LandBench.ports/conflicts` — reuse LandPorts/Handoff producers.
+- `tests/steps/land_conflict_bench.py`: `ExecutionCase` — reuse execution with fake external effects.
+- `tests/steps/real/test_land_real.py`: `ports` — consult remaining LandPorts/`conflict_handoff` producer; no live run.
+- `tests/steps/test_land_summary.py`: retained-work coverage — consult existing summary assertions.
+- `tests/steps/test_dash_land.py`: retained-work coverage — consult existing `build_land` callers.
+- `tests/steps/test_round_land.py`: `Lands.landing`, refusal/retry coverage — consult remaining Landing producer and baselines.
 
 ## Read list
-- `src/taskloop/land.py:217-404` — candidate creation, resume ordering, summary dispatch and outer effect guard.
-- `src/taskloop/land_target.py:45-96` — squash producer and conflict conversion.
-- `src/taskloop/land_check.py:54-82` — LandPorts contract.
-- `src/taskloop/cli_composition.py:185-198` — round result adapter.
-- `src/taskloop/cli_composition.py:365-392` — owning wiring and resource lifetime.
-- `src/taskloop/cli_step.py:260-269` — CLI caller and interruption mapping.
-- `src/taskloop/round_land.py:24-69` — shared-operation consumer and refusal holds.
-- `src/taskloop/dash_land.py:27-48` — summary-only caller.
-- `src/taskloop/land_summary.py:140-170` — typed summary production.
-- `src/taskloop/land_conflict/models.py:20-94` — exact Request, Record and admission outcomes.
-- `src/taskloop/land_conflict/admit.py:24-76` — admission ports, retained lookup and refusals.
-- `src/taskloop/land_conflict/execute.py:29-148` — execution dependencies, resume and preservation boundary.
-- `src/taskloop/land_conflict/store.py:24-47` — retained lookup and historical result reads.
-- `src/taskloop/land_conflict/store.py:126-168` — find, slot observation and checked-source admission.
-- `src/taskloop/merge/models.py:29-59` — reason and disposition vocabularies.
-- `src/taskloop/merge/models.py:112-149` — execution results.
-- `src/taskloop/composition.py:73-87` — environment and existing harness runner adapter.
-- `src/taskloop/composition.py:130-170` — checking dependencies available to wiring.
-- `tests/steps/land_bench.py:180-201` — shared LandPorts producer and caller.
-- `tests/steps/land_conflict_bench.py:35-142` — admission and execution integration fixtures.
-- `tests/steps/real/test_land_real.py:120-133` — third LandPorts producer.
-- `tests/steps/test_conflict_recovery.py:86-116` — existing conflict expectations and manual recovery.
-- `tests/steps/test_land_summary.py:125-164` — conflict and summary invariants.
-- `tests/steps/test_round_land.py:30-100` — round result fixtures and consumer expectations.
-- `tests/steps/test_dash_land.py:1-65` — dashboard read integration.
+- `tests/steps/test_land_conflict_handoff.py:32-181` — fixtures, invariants and completed-result coverage to extend.
+- `tests/steps/test_land_conflict_handoff.py:183-207` — production wiring and handoff caller.
+- `tests/steps/land_bench.py:185-223` — shared ports and execution fakes.
+- `tests/steps/land_conflict_bench.py:74-125` — execution counters and restart fixture.
+- `src/taskloop/land.py:209-238` — retained lookup before squash/validation.
+- `src/taskloop/land.py:282-390` — delivery ordering, summary dispatch and outer boundary.
+- `src/taskloop/land_target.py:44-76` — object-only producer and conflict result.
+- `src/taskloop/land_check.py:54-78` — required port.
+- `src/taskloop/land_conflict/handoff.py:19-68` — request, lookup, admission and result mapping.
+- `src/taskloop/land_conflict/execute.py:47-106` — retained completion and execution boundary.
+- `src/taskloop/land_conflict/store.py:24-64` — matching and saved-result readers.
+- `src/taskloop/land_conflict/store.py:127-140` — retained lookup.
+- `src/taskloop/land_conflict/composition.py:33-62` — production port producers.
+- `src/taskloop/cli_composition.py:175-196` — round Landing producer/result adapter.
+- `src/taskloop/cli_composition.py:365-383` — open_land lifetime and port creation.
+- `src/taskloop/cli_step.py:257-270` — CLI caller.
+- `src/taskloop/round_land.py:28-69` — automatic consumer, retry and hold.
+- `src/taskloop/round.py:188-199` — round caller and reservation accounting.
+- `src/taskloop/dash_land.py:29-48` — dashboard summary integration.
+- `src/taskloop/dash_composition.py:69-73` — dashboard delivery reader caller.
+- `tests/steps/real/test_land_real.py:122-133` — remaining LandPorts producer.
+- `tests/steps/test_land_summary.py:136-154` — retained-work summary baseline.
+- `tests/steps/test_dash_land.py:19-74` — dashboard callers and read baseline.
+- `tests/steps/test_round_land.py:30-60` — Landing producer.
+- `tests/steps/test_round_land.py:102-144` — terminal holds and temporary retries.
 
 ## Contract
-Intent: after existing source/checks, repository and tracker guards, find retained work before another squash. New main or a now-clean squash cannot bypass it. Resume the stored Record, target and deadline without requiring another free slot.
+Intent: keep Request, Record, Handoff, Completed and Failed unchanged. Exercise actual conflict completion through `executing`, rather than substituting a canned result.
 
-Effect: on a fresh Conflicted result require minutes before admission. Build existing Request from exact implement/checks keys, repo, tracker binding, checked commit and fetched target. Admission owns reservation and races; execute only its returned key outside write transactions. Withdraw, summary and no-change cannot admit or execute.
+Effect: establish an accepted saved resolution and snapshot its identity, execution count, reservation, environment events, checked inputs and task refs. Invoke summary and `build_land` repeatedly without minutes, against conflicting main and after main contains the checked changes. Object creation/fetch and outer land operation bookkeeping are allowed; conflict admission/execution, validation, delivery and tracker completion are not.
 
-Result: return Failed carrying typed outcome explanations. In-progress/unavailable results remain retryable; terminal task conflicts use the existing conflict refusal for round holding. Completed resolutions also stop before inserted, validated, deliver or closed. Repeated calls resume/read the same operation; task refs and checked input stay unchanged. Do not parse explanations or expose backend commands. Any new closed vocabulary uses an enum and one edge codec. No stored fields change.
-
-Require the port in every LandPorts producer; reuse adapter lifetimes. No new shelf API.
+Result: summary reports current Git facts, including no-change after main movement. Subsequent ordinary land still returns the retained operation's explained conflict result, preserving its original target/deadline and saved result. Assert no extra agent run, candidate, validation command, push or close. Compare remote main to the deliberately advanced target. No new typed names, states or stored fields.
 
 ## Work packages
-1. Add both conflict modules and wire LandPorts/open_land and test producers. Close A1 with actual admission/execution, semantic fakes, restart and race coverage.
-2. Connect `_made` and typed squash results; revise conflict recovery assertions. Close A1/A3 for fresh/retained conflicts, missing minutes and completed saves.
-3. Extend summary/dashboard/round coverage for A2 and consumer aspects of A1/A3. Run `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40` once each, last; no live tests.
+1. Extend `tests/steps/test_land_conflict_handoff.py` with completed-save summary/dashboard observations before and after main movement; reuse `executing` and `unchanged_input`. Close A2 and strengthen A3.
+2. Review existing A1 coverage and production callers in the read list. Verify ordinary land still returns the completed operation after those reads. Close A1/A3 through existing coverage plus the extended scenario. No production edit is expected; a demonstrated failure requires reassessing its bounded fix.
+3. Run `just check 2>&1 | tail -60` and `just test 2>&1 | tail -40` once each, last, recording gate exit status. Verify current pins and regressions without live tests.
 
 ## Acceptance behaviours
-A1: Land admits once and resumes after restart/main movement with the same target, deadline and ownership; unavailable work retries, terminal task conflicts are held once by rounds.
-A2: Summary/dashboard reads report conflicts without admission, reservation, execution, validation, delivery or close, including with retained work.
-A3: Completed resolutions, including repeated reads, preserve checked input/task refs and create no candidate, push or close; conflict-free delivery still passes its guards.
+A1: Fresh conflicts admit once; retries, restart, races and moved main preserve checked identities, target and deadline; temporary outcomes retry and terminal task refusals hold once.
+A2: Repeated summary/dashboard reads with an accepted saved resolution report current conflicting or clean Git facts without conflict execution, reservation changes, validation, push or close.
+A3: Ordinary land after a saved resolution and now-clean main still stops with an explanation, preserving saved work, checked input and task refs without creating a candidate; conflict-free delivery retains its guards.
