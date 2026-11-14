@@ -19,6 +19,7 @@ from taskloop import check_store
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, SlotFiles
 from taskloop.check_release import ChecksRelease
+from taskloop.ids import NativeIds
 from taskloop.land import Landed
 from taskloop.land_guide import restart
 from taskloop.operations import Failed, ReleasedTask, release_task
@@ -30,10 +31,10 @@ def abandon(b: LandBench) -> ReleasedTask | Failed:
     """`tl step release tl-1 --abandon`: the real operation, the real checks and implement releases."""
     work = b.checking()
     checks = ChecksRelease(work.store, work.checkouts, work.slot_files, lambda _entry: "gone", b.ports().custody, work.clock, work.seen,
-                           work.scratch)
+                           work.scratch, ids=NativeIds())
     store = AttemptStore(lambda: b.con)
     implement = SlotRelease(store, b.views, b.files, lambda _entry: "gone", lambda _worker: True, custody, lambda _root, _task: True,
-                            lambda: b.now, lambda _setup: "gone", lambda _scratch: True)
+                            lambda: b.now, lambda _setup: "gone", lambda _scratch: True, ids=NativeIds())
     return release_task(store, implement, checks, "tasks", "tl-1", abandon=True)
 
 
@@ -116,7 +117,7 @@ def test_a_second_conflict_has_a_working_recovery_with_its_own_aside_name(b: Lan
 @pytest.fixture
 def remote() -> FakeRemote:
     made = FakeRemote("https://example.invalid/repo.git")
-    made.advance("main", {"README": "one"})
+    made.advance("main", {"README": "one", ".task-loop.json": "{}"})
     return made
 
 

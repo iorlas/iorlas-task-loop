@@ -20,7 +20,9 @@ from taskloop.drain.reconcile import Reconcile
 from taskloop.drain.store import DrainStore
 from taskloop.factory_schema import SCHEMA, current, refusal
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.land_store import LandStore
+from taskloop.merge.store import MergeStore
 from taskloop.setup_store import SetupStore
 from taskloop.task import TaskInspectionError
 from taskloop.tracker import ACTOR
@@ -29,7 +31,8 @@ from taskloop.tracker_client import inspect_tracker_task, tracker_claims
 
 def _owners(attempts: AttemptStore) -> tuple[Owner, ...]:
     connect, begin = attempts.connect, attempts.begin
-    return attempts.drain_processes() + CheckStore(connect, begin).drain_processes() + SetupStore(connect, begin).drain_processes()
+    return (attempts.drain_processes() + CheckStore(connect, begin).drain_processes()
+            + SetupStore(connect, begin).drain_processes() + MergeStore(connect, begin).active_processes())
 
 
 def _return_claim(action: Action) -> bool:
@@ -73,7 +76,7 @@ def open_drain(database: Path, report: Callable[[Result], None] = lambda _result
                 _return_claim,
                 time.time,
             )
-            opened = Ports(DrainStore(lambda: writer), lambda: _owners(attempts), observe, reconcile, time.sleep, report)
+            opened = Ports(DrainStore(lambda: writer, ids=NativeIds()), lambda: _owners(attempts), observe, reconcile, time.sleep, report)
     except SchemaError as error:
         opened = Result(conclusion=Conclusion.REFUSED, detail=refusal(error, database))
     except (sqlite3.Error, OSError, StoreUnavailable) as error:

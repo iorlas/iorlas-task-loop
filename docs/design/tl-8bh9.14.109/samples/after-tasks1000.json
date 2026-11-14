@@ -1,0 +1,373 @@
+{
+  "revision": "65b1e466-worktree-schema21",
+  "python": "3.15.0",
+  "host": {
+    "system": "Linux",
+    "node": "devbox",
+    "release": "6.18.54",
+    "version": "#1-NixOS SMP PREEMPT_DYNAMIC Fri Sep 25 14:35:54 UTC 2026",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "mixed": false,
+  "package": "0",
+  "count": 10000,
+  "tasks": 1000,
+  "samples": 3,
+  "warmups": 1,
+  "filesystem_cold": false,
+  "facts": {
+    "rows": {
+      "drain_state": 0,
+      "drain_action": 0,
+      "slot": 3,
+      "reservation": 0,
+      "attempt": 10000,
+      "execution": 10000,
+      "verification": 10000,
+      "slot_release": 10000,
+      "published_branch": 10000,
+      "setup_run": 2000,
+      "checks_attempt": 2000,
+      "check_result": 2000,
+      "land_candidate": 2000,
+      "task_hold": 2000
+    },
+    "sizes": {
+      "synthetic.db-shm": 32768,
+      "evidence-2.txt": 256,
+      "synthetic.db-wal": 15075112,
+      "synthetic.db": 14848000,
+      "evidence-1.txt": 256,
+      "evidence-0.txt": 256,
+      "evidence-3.txt": 256
+    },
+    "index_bytes": 2400256,
+    "schema_version": 21,
+    "sqlite": "3.53.1",
+    "foreign_keys": []
+  },
+  "plans": {
+    "scoped": [
+      [
+        3,
+        0,
+        59,
+        "SEARCH p USING INDEX attempt_step_count (adapter=? AND backlog=? AND task_id=?)"
+      ]
+    ],
+    "later": [
+      [
+        3,
+        0,
+        61,
+        "SEARCH p USING INDEX sqlite_autoindex_attempt_5 (adapter=?)"
+      ],
+      [
+        9,
+        0,
+        0,
+        "CORRELATED SCALAR SUBQUERY 1"
+      ],
+      [
+        13,
+        9,
+        46,
+        "SEARCH q USING COVERING INDEX sqlite_autoindex_attempt_5 (adapter=? AND backlog=? AND task_id=? AND seq>?)"
+      ]
+    ],
+    "grouped": [
+      [
+        6,
+        0,
+        53,
+        "SEARCH attempt USING COVERING INDEX sqlite_autoindex_attempt_5 (adapter=?)"
+      ]
+    ],
+    "repo": [
+      [
+        5,
+        0,
+        46,
+        "SEARCH p USING INDEX sqlite_autoindex_attempt_1 (attempt_id=?)"
+      ],
+      [
+        10,
+        0,
+        47,
+        "SEARCH s USING INDEX sqlite_autoindex_slot_1 (repo_id=? AND name=?)"
+      ]
+    ]
+  },
+  "opens": {
+    "same_store": [
+      0.055270454147830606,
+      0.000444142147898674,
+      0.00029465905390679836
+    ],
+    "distinct_stores": [
+      0.05015445500612259,
+      0.056071283062919974,
+      0.04695980390533805
+    ],
+    "readonly": [
+      0.006428638938814402,
+      0.00028208503499627113,
+      0.00023605814203619957
+    ]
+  },
+  "timings": {
+    "all": {
+      "seconds": [
+        0.14561313088051975,
+        0.1465529950801283,
+        0.163401948986575
+      ],
+      "median": 0.1465529950801283,
+      "p95": 0.163401948986575,
+      "statements": [
+        2,
+        2,
+        2
+      ],
+      "returned_rows": [
+        10000,
+        10000,
+        10000
+      ],
+      "query_groups": {
+        "checks_attempt": 0,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 0,
+        "setup_run": 0,
+        "execution": 0
+      },
+      "peak_bytes": 30344805
+    },
+    "backlog": {
+      "seconds": [
+        0.03914973116479814,
+        0.043190541211515665,
+        0.05064706993289292
+      ],
+      "median": 0.043190541211515665,
+      "p95": 0.05064706993289292,
+      "statements": [
+        2,
+        2,
+        2
+      ],
+      "returned_rows": [
+        3340,
+        3340,
+        3340
+      ],
+      "query_groups": {
+        "checks_attempt": 0,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 0,
+        "setup_run": 0,
+        "execution": 0
+      },
+      "peak_bytes": 10126592
+    },
+    "task": {
+      "seconds": [
+        0.0013477180618792772,
+        0.0014458340592682362,
+        0.0006483199540525675
+      ],
+      "median": 0.0013477180618792772,
+      "p95": 0.0014458340592682362,
+      "statements": [
+        2,
+        2,
+        2
+      ],
+      "returned_rows": [
+        30,
+        30,
+        30
+      ],
+      "query_groups": {
+        "checks_attempt": 0,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 0,
+        "setup_run": 0,
+        "execution": 0
+      },
+      "peak_bytes": 79162
+    },
+    "scoped": {
+      "seconds": [
+        0.00010484899394214153,
+        0.00013989722356200218,
+        0.0002559858839958906
+      ],
+      "median": 0.00013989722356200218,
+      "p95": 0.0002559858839958906,
+      "statements": [
+        2,
+        2,
+        2
+      ],
+      "returned_rows": [
+        10,
+        10,
+        10
+      ],
+      "query_groups": {
+        "checks_attempt": 0,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 0,
+        "setup_run": 0,
+        "execution": 0
+      },
+      "peak_bytes": 27473
+    },
+    "agent_slot": {
+      "seconds": [
+        9.076902642846107e-06,
+        5.749985575675964e-06,
+        4.759058356285095e-06
+      ],
+      "median": 5.749985575675964e-06,
+      "p95": 9.076902642846107e-06,
+      "statements": [
+        2,
+        2,
+        2
+      ],
+      "returned_rows": [
+        1,
+        1,
+        1
+      ],
+      "query_groups": {
+        "checks_attempt": 1,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 0,
+        "setup_run": 0,
+        "execution": 0
+      },
+      "peak_bytes": 1256
+    },
+    "check_slot": {
+      "seconds": [
+        7.543014362454414e-06,
+        5.390029400587082e-06,
+        4.71901148557663e-06
+      ],
+      "median": 5.390029400587082e-06,
+      "p95": 7.543014362454414e-06,
+      "statements": [
+        2,
+        2,
+        2
+      ],
+      "returned_rows": [
+        0,
+        0,
+        0
+      ],
+      "query_groups": {
+        "checks_attempt": 1,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 0,
+        "setup_run": 0,
+        "execution": 0
+      },
+      "peak_bytes": 1199
+    },
+    "listing": {
+      "seconds": [
+        0.08073486597277224,
+        0.0549509790726006,
+        0.04764379095286131
+      ],
+      "median": 0.0549509790726006,
+      "p95": 0.08073486597277224,
+      "statements": [
+        2004,
+        2004,
+        2004
+      ],
+      "returned_rows": [
+        1000,
+        1000,
+        1000
+      ],
+      "query_groups": {
+        "checks_attempt": 0,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 1,
+        "setup_run": 0,
+        "execution": 1000
+      },
+      "peak_bytes": 5740938
+    },
+    "board": {
+      "seconds": [
+        0.08294167392887175,
+        0.07456097099930048,
+        0.07469664816744626
+      ],
+      "median": 0.07469664816744626,
+      "p95": 0.08294167392887175,
+      "statements": [
+        2009,
+        2009,
+        2009
+      ],
+      "returned_rows": [
+        1000,
+        1000,
+        1000
+      ],
+      "query_groups": {
+        "checks_attempt": 0,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 1,
+        "setup_run": 0,
+        "execution": 1000
+      },
+      "peak_bytes": 6062365
+    },
+    "current": {
+      "seconds": [
+        0.02183820097707212,
+        0.02118474105373025,
+        0.01946549885906279
+      ],
+      "median": 0.02118474105373025,
+      "p95": 0.02183820097707212,
+      "statements": [
+        2,
+        2,
+        2
+      ],
+      "returned_rows": [
+        1000,
+        1000,
+        1000
+      ],
+      "query_groups": {
+        "checks_attempt": 0,
+        "check_result": 0,
+        "land_candidate": 0,
+        "task_hold": 0,
+        "setup_run": 0,
+        "execution": 0
+      },
+      "peak_bytes": 3087936
+    }
+  }
+}

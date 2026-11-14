@@ -40,6 +40,7 @@ from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.factory_schema import LATER, PUBLISHED, current, marks
+from taskloop.ids import Ids
 from taskloop.prepare import task_branch
 from taskloop.slot_state import repository
 
@@ -138,10 +139,11 @@ class BranchPublish:
     remotes: Checkouts
     slot_files: SlotFiles
     clock: Callable[[], float]
+    ids: Ids
 
     def publish(self, key: AttemptKey) -> PublishResult:
         try:
-            with operation(self.store, ActionKind.FINALIZE, subject=key.attempt_id,
+            with operation(self.store, ActionKind.FINALIZE, ids=self.ids, subject=key.attempt_id,
                            existing=lambda owner: self.store.owns_entry(key, owner)) as call:
                 result = self._publish(key)
                 call.resolved = not isinstance(result, NotPublished) or result.kind != "unavailable"

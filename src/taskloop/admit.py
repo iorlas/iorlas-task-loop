@@ -17,15 +17,14 @@ step. A task whose current attempt was abandoned (`slot_release`) is admitted ag
 releases a slot; the claim is returned only to compensate a failed admission.
 """
 
+
 import math
-import secrets
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
-from uuid import uuid4
 
 from beads_client import BdError
 from git_porcelain import GitUnavailable, NotARepo, Repo
@@ -38,6 +37,10 @@ from taskloop.drain.observe import identity
 from taskloop.drain.store import DrainStore, blocked
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import current
+from taskloop.git_views import GitProfileFiles
+from taskloop.ids import Ids
+from taskloop.input_context import InputContext, InputError
+from taskloop.input_context import read as read_context
 from taskloop.prepare import branch_refusal, held_refusal, refusal_detail
 from taskloop.repo import RepoId, UnsupportedCheckout, inspect_repo
 from taskloop.slots import Probe, SlotGit, SlotsUnavailable, SlotView, observe, unusable_text
@@ -102,12 +105,13 @@ class Free:
 
     name: str
     head: str
+    source: str
 
 
 @dataclass(frozen=True)
 class _Prepared:
     request: AdmitRequest
-    text: str
+    task: TaskInspection
     repo: Repo
     repo_id: RepoId
 
@@ -117,11 +121,11 @@ def why(error: BaseException) -> str:
     return f"{type(error).__name__}: {error}"[:300]
 
 
-def task_text(task: TaskInspection, step: str) -> str:
+def task_text(task: TaskInspection, step: str, context: InputContext) -> str:
     """The step kind's input for the task (its own prose, then the step's closing words), stored as the admitted input
     under its digest."""
     found = kind(step)
-    return found.input_text(task, found.rules(task.reference.task_id))
+    return found.input_text(task, found.rules(task.reference.task_id), context)
 
 
 class AttemptAdmission:
@@ -138,9 +142,11 @@ class AttemptAdmission:
         probe: Probe,
         slot_files: SlotFiles,
         me: Callable[[], Identity | None] = identity,
+        *, ids: Ids,
     ) -> None:
         """`probe` reads a free-looking slot's lock (`slot_lock.probe`): a slot a release is still parking is not free.
         `slot_files` is the pointer check's port: a slot is observed free only through its verified, pinned view."""
+        self.ids = ids
         self.me = me
         self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
         self.claim, self.unclaim, self.clock, self.probe, self.slot_files = claim, unclaim, clock, probe, slot_files
@@ -160,10 +166,11 @@ class AttemptAdmission:
             generation = issued(con, prepared.repo_id, tuple(each.name for each in free)) + 1
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
-        key = AttemptKey(uuid4().hex, secrets.token_hex(16), generation)  # the key names the evidence directory
+        key = AttemptKey(self.ids.hex(), self.ids.token(16), generation)  # the key names the evidence directory
         try:
-            ref = self.files.put_input(key, prepared.text)
-        except (EvidenceError, UnicodeError, OSError) as error:
+            context = read_context(GitProfileFiles(request.checkout, self.checkouts), free[0].source)
+            ref = self.files.put_input(key, task_text(prepared.task, FIRST, context))
+        except (EvidenceError, InputError, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
         return self._claimed(con, prepared, free, key, ref)
 
@@ -183,7 +190,7 @@ class AttemptAdmission:
         if not isinstance(found, tuple):
             return found
         # the root as resolved now is the one claimed, stored and renewed (.4.3.1.9)
-        return _Prepared(replace(request, tracker_root=str(tracker)), task_text(task, FIRST), *found)
+        return _Prepared(replace(request, tracker_root=str(tracker)), task, *found)
 
     def _choices(self, request: AdmitRequest) -> AdmitRefused | None:
         return deadline_refusal(self.clock, request.deadline)
@@ -203,7 +210,7 @@ class AttemptAdmission:
         request, owner = prepared.request, self.me()
         if owner is None:
             return AdmitUnavailable("store", detail="The admission owner's identity cannot be established")
-        drain = DrainStore(lambda: con)
+        drain = DrainStore(lambda: con, ids=self.ids)
         try:
             action = drain.authorize(ActionKind.CLAIM, owner, subject=request.task_id, backlog=request.backlog,
                                      tracker_root=request.tracker_root)
@@ -374,7 +381,8 @@ def branched(repo: Repo, task_id: str, free: tuple[SlotView, ...]) -> tuple[Free
     if isinstance(found, str):
         held, detail = held_refusal(repo, task_id, free) if found == "branch_held" else ((), refusal_detail(found, task_id))
         return AdmitRefused(found, held, detail=detail)
-    passing = tuple(Free(view.name, head) for view in free if (head := heads.get(view.path)) is not None and head in found.passing)
+    passing = tuple(Free(view.name, head, found.start) for view in free
+                    if (head := heads.get(view.path)) is not None and head in found.passing)
     return passing or AdmitRefused("no_free_slot")
 
 

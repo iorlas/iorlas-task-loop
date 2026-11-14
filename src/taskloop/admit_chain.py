@@ -14,13 +14,11 @@ through `admit`'s shared writes.
 """
 
 import json
-import secrets
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import astuple, dataclass
 from pathlib import Path
-from uuid import uuid4
 
 from git_porcelain import GitUnavailable, Repo
 
@@ -48,6 +46,10 @@ from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import LATER, REPEATED
+from taskloop.git_views import GitProfileFiles
+from taskloop.ids import Ids
+from taskloop.input_context import InputError
+from taskloop.input_context import read as read_context
 from taskloop.prepare import HEADS, MAIN, REMOTES, lacks
 from taskloop.repo import RepoId
 from taskloop.slots import Probe, SlotGit
@@ -91,7 +93,9 @@ class ChainAdmission:
         begin: Callable[[sqlite3.Connection], AbstractContextManager[None]],
         files: EvidenceFiles,
         clock: Callable[[], float],
+        *, ids: Ids,
     ) -> None:
+        self.ids = ids
         self.connect, self.begin, self.files, self.clock = connect, begin, files, clock
 
     def admit_repeat(self, request: RepeatRequest) -> Admitted | AdmitRefused | AdmitUnavailable:
@@ -102,10 +106,10 @@ class ChainAdmission:
         if refused is not None:
             return refused
         previous = request.previous
-        key = AttemptKey(uuid4().hex, secrets.token_hex(16), previous.reservation_generation + 1)
+        key = AttemptKey(self.ids.hex(), self.ids.token(16), previous.reservation_generation + 1)
         try:
             ref = self.files.put_input(key, request.text)
-        except (EvidenceError, UnicodeError, OSError) as error:
+        except (EvidenceError, InputError, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
         try:
             return self._takeover(open_store(self.connect), request, key, ref)
@@ -215,8 +219,10 @@ class NextAdmission:
         clock: Callable[[], float],
         probe: Probe,
         slot_files: SlotFiles,
+        *, ids: Ids,
     ) -> None:
         """The ports of a fresh admission (`admit.AttemptAdmission`) without the claim: an advance never claims."""
+        self.ids = ids
         self.connect, self.begin, self.files, self.tasks, self.checkouts = connect, begin, files, tasks, checkouts
         self.clock, self.probe, self.slot_files = clock, probe, slot_files
 
@@ -228,11 +234,12 @@ class NextAdmission:
             return ready
         found, names = ready.found, tuple(each.name for each in ready.free)
         try:
-            key = AttemptKey(uuid4().hex, secrets.token_hex(16), issued(ready.con, RepoId(found.repo_id), names) + 1)
-            ref = self.files.put_input(key, task_text(ready.task, ready.step))
+            key = AttemptKey(self.ids.hex(), self.ids.token(16), issued(ready.con, RepoId(found.repo_id), names) + 1)
+            context = read_context(GitProfileFiles(request.checkout, self.checkouts), ready.free[0].source)
+            ref = self.files.put_input(key, task_text(ready.task, ready.step, context))
         except sqlite3.Error as error:
             return AdmitUnavailable("store", detail=why(error))
-        except (EvidenceError, UnicodeError, OSError) as error:
+        except (EvidenceError, InputError, UnicodeError, OSError) as error:
             return AdmitRefused("input", detail=why(error))
         try:
             return self._advance(ready, request, key, ref)

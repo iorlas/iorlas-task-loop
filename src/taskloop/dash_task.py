@@ -17,6 +17,7 @@ from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_status import StatusPorts, agent_attempt, current_view, with_hold
 from taskloop.attempt_types import AttemptResult
 from taskloop.check_store import ChecksRow, CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.dash_board import admission_of, card_of, tries
 from taskloop.dash_model import (
     Answer,
@@ -40,6 +41,8 @@ from taskloop.dash_verify import applies, verification
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.harness_choice import HARNESS_WORDS, PROVIDER_WORDS
 from taskloop.hold_store import HoldStore
+from taskloop.merge.status import result as merge_result
+from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
 from taskloop.profile import LandMode
 
@@ -103,7 +106,8 @@ def _agent(
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
     page = _page(ports.files.activity_tail(row.key, FEED_LINES), ended=state != "running")
-    return AttemptDetail(row.step, number, state, iso(started), iso(ended), result.reason or result.status, after, reason,
+    summary = result.explanation or result.reason or result.status
+    return AttemptDetail(row.step, number, state, iso(started), iso(ended), summary, after, reason,
                          previous if after == "repeat" else None, begun + page.events, page.cursor, led_by if after == "repeat" else None,
                          run=_run(row))
 
@@ -134,7 +138,7 @@ def _agent_body(ports: TaskPorts, row: AttemptRow, result: AttemptResult, rows: 
     earlier = next((each for each in rows if each.key.attempt_id == row.previous_attempt_id), None)
     before = None if earlier is None else ports.files.text(earlier.key, "input.txt")
     added = () if shown is None or before is None else added_lines(before, shown)
-    return AttemptBody(shown, Outcome(result.reason or result.status, answer, (), None), added)
+    return AttemptBody(shown, Outcome(result.explanation or result.reason or result.status, answer, (), None), added)
 
 
 def _took(result: ResultRow) -> int:
@@ -142,7 +146,7 @@ def _took(result: ResultRow) -> int:
 
 
 def _check_line(ports: TaskPorts, row: ChecksRow, result: ResultRow) -> CheckLine:
-    return CheckLine(result.name, result.conclusion == "passed", _took(result),
+    return CheckLine(result.name, result.conclusion == CommandConclusion.PASSED, _took(result),
                      ports.files.check_tail(row.key, result.block, result.name), result.block)
 
 
@@ -155,7 +159,8 @@ def _checks(store: CheckStore, row: ChecksRow, number: int, earlier: str | None)
     results = store.results(row.key)
     state, summary = _checks_state(row)
     started = min((each.started_at for each in results), default=None)
-    feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name, passed=each.conclusion == "passed",
+    feed = tuple(FeedEvent("check", iso(each.ended_at or each.started_at) or "", name=each.name,
+        passed=each.conclusion == CommandConclusion.PASSED,
                            duration_ms=_took(each)) for each in results if each.conclusion is not None)
     return AttemptDetail("checks", number, state, iso(started), iso(row.concluded_at), summary, "repeat" if earlier is not None else None,
                          earlier, number - 1 if earlier is not None else None, feed)
@@ -189,6 +194,9 @@ def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
     verified = checked = 0
     for row in reversed(rows):
         result = collect(ports.reads.store, row.key)
+        if row.phase == "admitted" and row.release is None:
+            result = merge_result(MergeStore(ports.reads.store.connect, ports.reads.store.begin), row.key.attempt_id,
+                                  ports.reads.clock()) or result
         found.append(Link(numbers[row.key.attempt_id], agent=row, result=result))
         if applies(result):
             verified += 1

@@ -10,6 +10,7 @@ from taskloop.attempt_status import AttemptView, Listed, Shown
 from taskloop.attempt_types import EntryIdentity
 from taskloop.check_status import ChecksView
 from taskloop.checks import differs
+from taskloop.command_conclusion import encode
 from taskloop.hold_store import HoldRow
 from taskloop.land import Landed
 from taskloop.land_data import land_data, view_data
@@ -45,7 +46,8 @@ def _show_data(each: AttemptView) -> dict[str, object]:
     return {
         "backlog": each.backlog, "task": each.task_id, "step": each.step, "attempt_id": each.attempt_id, "slot": each.slot,
         "phase": each.phase,
-        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason},
+        "entry": each.entry, "result": {"status": each.result.status, "reason": each.result.reason,
+                                       **({"explanation": each.result.explanation} if each.result.explanation else {})},
         "succeeded": succeeded(each.result), "deadline_passed": each.deadline_passed, "next": each.next,
         "status": task_status(each).status.value,
         "entry_process": _entry_data(each.entry_process),
@@ -74,7 +76,7 @@ def _checks_data(checks: ChecksView | None) -> dict[str, object] | None:
         return None
     row, required = checks.row, dict(checks.row.required)
     logs = checks.logs or (None,) * len(checks.results)
-    results = [{"name": each.name, "required": each.name in required, "conclusion": each.conclusion, "rc": each.rc,
+    results = [{"name": each.name, "required": each.name in required, "conclusion": encode(each.conclusion), "rc": each.rc,
                 "block": each.block, "started_at": each.started_at, "ended_at": each.ended_at,
                 "argv_differs": differs(row.required, each), "log": None if log is None else str(log)}
                for each, log in zip(checks.results, logs, strict=True)]
@@ -150,10 +152,11 @@ def _step_data(result: StepResult, *, admission: bool) -> dict[str, object]:
                     "existing": result.existing, "entry_process": _entry_data(result.entry), "number": result.number,
                     "result": result.result or None}
         case Shown():
-            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": result.setup.row.conclusion,
+            setup = None if result.setup is None else {"run": result.setup.row.run, "conclusion": encode(result.setup.row.conclusion),
                                                         "commit": result.setup.row.commit, "log": str(result.setup.log),
                                                         "attempt_id": result.setup.attempt_id}
-            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log), "setup": setup,
+            return _show_data(result.view) | {"directory": str(result.directory), "entry_log": str(result.entry_log),
+                                                   "events_path": str(result.events_path), "setup": setup,
                                                    "failed_checks": _checks_data(result.failed)}
         case Listed() | Round() | Ended():
             return _rows_data(result)

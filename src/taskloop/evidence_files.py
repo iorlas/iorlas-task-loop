@@ -266,6 +266,10 @@ class EvidenceFiles:
         """The admitted input, written once under the attempt's key-derived directory before any external effect."""
         return self._write(self.directory(key) + "/input.txt", text)
 
+    def put_launched_input(self, key: AttemptKey, text: str) -> FileRef:
+        """The complete dispatched prompt and source commit, retaining admission's original input snapshot."""
+        return self._write(self.directory(key) + "/launched-input.txt", text)
+
     def prepare(self, key: AttemptKey, schema: Mapping[str, object]) -> tuple[str, str]:
         """Write the step kind's answer `schema` (`schema.json`) and return its path and the native answer path, without
         executing a harness."""
@@ -275,6 +279,16 @@ class EvidenceFiles:
 
     def capture(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
         directory = self.directory(key)
-        diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
-        return Evidence(self._write(directory + "/stdout.txt", capped(raw.out)), self._write(directory + "/stderr.txt", capped(raw.err)),
-                        self._write(directory + "/answer.txt", raw.summary.text), self._write(directory + "/diagnostics.txt", diagnostic))
+        return Evidence(*(self._write(directory + "/" + name, text) for name, text in _capture_text(raw)))
+
+    def capture_refs(self, key: AttemptKey, raw: RunOutcome) -> Evidence:
+        """The capture's immutable expected references, for a consumer's intent before the file effects."""
+        directory = self.directory(key)
+        return Evidence(*(FileRef(directory + "/" + name, hashlib.sha256(text.encode()).hexdigest())
+                          for name, text in _capture_text(raw)))
+
+
+def _capture_text(raw: RunOutcome) -> tuple[tuple[str, str], ...]:
+    diagnostic = "\n".join([raw.summary.vendor, raw.summary.tail, raw.watch.msg, raw.watch.words, raw.secret or "", *raw.stream_tail])
+    return (("stdout.txt", capped(raw.out)), ("stderr.txt", capped(raw.err)),
+            ("answer.txt", raw.summary.text), ("diagnostics.txt", diagnostic))

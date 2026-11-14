@@ -28,6 +28,7 @@ from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.git_views import GitViews
 from taskloop.harness_choice import HarnessKind
+from taskloop.ids import NativeIds
 from taskloop.slot_lock import SlotBusy, acquire, lock_path
 
 KEY = AttemptKey("attempt", "dispatch", 1)
@@ -140,7 +141,8 @@ class Entry:
         self.opened.append((database, artifacts))
         store = Store(SCHEMA)
         connect = AttemptStore(lambda: store.shared_rw(database), store.begin_immediate)
-        return Attempts(connect, self.files, AgentLaunch(self.credentials), self.execution, self.clock, self.checkouts, self.slot_files)
+        return Attempts(connect, self.files, AgentLaunch(self.credentials, ids=NativeIds()), self.execution,
+            self.clock, self.checkouts, self.slot_files)
 
     def clock(self) -> float:
         return self.now
@@ -179,8 +181,8 @@ NOTE = "docs/design/tl-1/note.md"
 @pytest.mark.parametrize(
     ("files", "line", "code", "opens"),
     [
-        ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released branch=published", 0, 16),
-        ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 16),
+            ({P: "# Plan\n"}, "collected verified verify=verified claim=held release=released branch=published", 0, 17),
+            ({P: " \n"}, "collected rejected:plan_empty verify=rejected:plan_empty claim=held release=released", 1, 17),
         ({P: "# Plan\n", NOTE: "n"}, "pending verification verify=unsettled:uncommitted claim=held", 1, 13),
         ({}, "pending verification verify=unsettled:unsafe claim=held", 1, 9),
     ],
@@ -193,13 +195,13 @@ def test_the_registered_entry_executes_verifies_once_and_exits_0_only_when_verif
     assert entry() == code
     assert entry.lines == [line] and len(entry.run.calls) == 1 and entry.credential_calls == 1
     assert entry.opened == [(admitted, admitted.parent)]
-    # six Git opens before dispatch (the slot read: root, slot; the branch rule: root; take_branch: slot; the slot read
-    # again: root, slot); the one verification: four to commit (the staged set read before the
+    # Two context reads (profile and glossary) plus six Git opens before dispatch (slot: root, slot; branch rule: root;
+    # take_branch: slot; slot read again: root, slot); the one verification: four to commit (the staged set read before the
     # record), two for the clean check, one
     # to judge or list; a collected step's release: the slot read (root, slot) and the park (slot). The worker is observed
     # right before each Git write (stage, record), never when the paths are unsafe, and once more by the release's stop proof
     collected = line.startswith("collected")
-    assert entry.waits == [] and entry.git_opens == opens and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
+    assert entry.waits == [] and entry.git_opens == opens + 2 and entry.observed == [WORKER] * (0 if files == {} else 3 if collected else 2)
     assert (slot.branch(), entry.unclaimed) == (None if collected else "task/tl-1", [])  # parked at D; the claim kept
     assert (entry.remote_opens > 0) == (code == 0)  # only a verified plan is published; its Git views are the publication's
 

@@ -14,6 +14,7 @@ from any_agent import (
     RunOutcome,
     decode_answer,
 )
+from git_porcelain import Repo
 
 from taskloop.agents.launch import AgentLaunch, LaunchFailure
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
@@ -38,6 +39,10 @@ from taskloop.attempt_types import (
 from taskloop.command_sink import CommandSink, WatchedHooks
 from taskloop.environment import Launch, Preparation, Renew
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
+from taskloop.git_views import GitProfileFiles
+from taskloop.input_context import InputError, refresh
+from taskloop.input_context import read as read_context
+from taskloop.merge.prepare import SourcePreparation
 from taskloop.prepare import Prepared
 from taskloop.prepare import base as prepared_base
 from taskloop.session import RegistrationRefused, SessionLatch, reconcile, registration_hook
@@ -59,6 +64,7 @@ class Attempts:
         slot_files: SlotFiles,
         registration_store: AttemptStore | None = None,
         environment: Preparation | None = None,
+        source_preparation: SourcePreparation | None = None,
     ) -> None:
         """`registration_store` serves only the harness registration write (composition bounds its busy wait); default `store`.
         `slot_files` is the plain-read port the slot pointer check uses before any Git call on the slot. `environment`
@@ -68,6 +74,7 @@ class Attempts:
         self.execution, self.clock, self.checkouts, self.slot_files = execution, clock, checkouts, slot_files
         self.registration_store = store if registration_store is None else registration_store
         self.environment = environment
+        self.source_preparation = source_preparation
 
     def collect(self, key: AttemptKey) -> AttemptResult:
         return collect(self.store, key)
@@ -158,21 +165,46 @@ class Attempts:
             base = self._prepared(record, renew, credentials, probe)
             if isinstance(base, AttemptResult):
                 return base
-            self.registration_store.warm()  # the first registration open runs here, never inside the harness registration window
-            if self.store.dispatch(record, base.head) == "conflict":
-                return AttemptResult("pending", "dispatching")
+            spec = self._context(admission, base, spec)
+            if isinstance(spec, AttemptResult):
+                return spec
             running = True
-            return self._run(admission, harness, spec)
+            return self._dispatch(record, base, harness, spec)
         finally:
             if not running:
                 harness.cleanup()
+
+    def _dispatch(self, record: AttemptRecord, base: Prepared, harness: Harness, spec: LaunchSpec) -> AttemptResult:
+        running = False
+        try:
+            self.registration_store.warm()
+            if self.store.dispatch(record, base.head) == "conflict":
+                return AttemptResult("pending", "dispatching")
+            running = True
+            return self._run(record.admission, harness, spec)
+        finally:
+            if not running:
+                harness.cleanup()
+
+    def _context(self, admission: Admission, base: Prepared, spec: LaunchSpec) -> LaunchSpec | AttemptResult:
+        try:
+            path = Path(admission.slot_path)
+            def pinned(root: Path, /, *, git_dir: Path | None = None) -> Repo:
+                return self.checkouts(root, git_dir=base.gitdir)
+            context = read_context(GitProfileFiles(path, pinned), base.head)
+            spec = replace(spec, stdin=refresh(spec.stdin, context))
+            self.files.put_launched_input(admission.key, spec.stdin)
+            return spec
+        except (InputError, EvidenceError, OSError) as error:
+            return AttemptResult("refused", "input", explanation=str(error))
 
     def _prepared(
         self, record: AttemptRecord, renew: Renew | None, credentials: Launch, probe: tuple[str, ...] | None
     ) -> Prepared | AttemptResult:
         """The slot on its branch (`prepare.base`), then, for a kind with `environment`, its setup sequence with the
         credentials' executable and scrubbed environment."""
-        base = prepared_base(self.checkouts, self.slot_files, record, self.clock)
+        base = (prepared_base(self.checkouts, self.slot_files, record, self.clock) if self.source_preparation is None else
+                self.source_preparation.prepare(record, renew, credentials, probe))
         if isinstance(base, AttemptResult) or not kind(record.admission.step).environment:
             return base
         if self.environment is None or renew is None:

@@ -18,9 +18,10 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_text
+from taskloop.attempt_reads import StoreConnection, StoreRefused, as_int, as_nullable_text, as_text
 from taskloop.check_store import stored_nullable_real, stored_real, stored_word
 from taskloop.factory_schema import HOLD, LATER, LATEST_CHECKS, SUCCESSOR, marks, prefixed
+from taskloop.merge.models import PREFIX as MERGE
 from taskloop.wip import SavedCommit, decode, encode
 
 type Labels = Literal["moved", "absent", "not_ours", "closed", "missing", "superseded"]
@@ -78,7 +79,7 @@ class HoldRow:
     backlog: str
     task_id: str
     tracker_root: str
-    label: str
+    label: str | None
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,7 @@ def _row(row: tuple[object, ...]) -> HoldRow:
     return HoldRow(
         as_text(row[0]), as_text(row[1]), as_text(row[2]), stored_real(row[3]), stored_word(row[4], LABELS),
         stored_nullable_real(row[5]), stored_nullable_real(row[6]), stored_nullable_real(row[7]), stored_nullable_real(row[8]),
-        as_int(row[9]), as_text(row[10]), as_text(row[11]), as_text(row[12]), as_text(row[13]),
+        as_int(row[9]), as_text(row[10]), as_text(row[11]), as_text(row[12]), as_nullable_text(row[13]),
     )
 
 
@@ -150,7 +151,7 @@ class HoldStore(StoreConnection):
         when A or its cause is no longer current or A already has a hold (a concurrent caller recorded it)."""
         with self._connection(write=True) as con:
             fenced = con.execute(FENCE, (hold.cause_id, hold.cause_id, hold.attempt_id)).fetchone()
-            if fenced is not None and not fenced[0]:
+            if fenced is not None and not fenced[0] and not hold.reason.startswith(MERGE):
                 raise StoreRefused("unlabelled")
             if fenced is None or not fenced[1] or fenced[2]:
                 raise StoreRefused("changed")

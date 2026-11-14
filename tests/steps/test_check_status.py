@@ -20,6 +20,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, AttemptResult, EntryIdentity, Seen
 from taskloop.check_status import commands_seen
 from taskloop.check_store import CheckStore, ResultRow
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.command_sink import CommandSink
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.result_data import as_data
@@ -168,11 +169,15 @@ def test_show_names_the_checks_attempt_s_directory_setup_logs_and_earlier_attemp
     SetupStore(lambda: status.bench.con).start(again.key, 1, x, "e" * 64, 11)
     store.start(again.key, store.block(again.key), 0, "check", "1" * 64, 600, 12)
     store.undefined(again.key, 1, 1, "smoke", 12)
-    artifacts = status.bench.done.path.parent / "artifacts"
+    artifacts = status.bench.done.path.parent / "custom artifacts with spaces"
     found = show_attempt(status.reads(), artifacts, "tasks", "tl-1")
     assert isinstance(found, Shown) and not artifacts.exists()
     directory = EvidenceFiles(artifacts).root / EvidenceFiles(artifacts).directory(again.key)
     assert (found.directory, found.entry_log) == (directory, directory / "entry.log")
+    assert found.events_path == EvidenceFiles(artifacts).events_path(again.key)
+    assert found.events_path != EvidenceFiles(artifacts).events_path(status.key)
+    assert as_data(found)["events_path"] == str(found.events_path)
+    assert f"Events: {found.events_path}" in human("tl step show", found, None)
     assert found.setup is not None
     assert (found.setup.row.run, found.setup.log, found.setup.attempt_id) == (1, directory / "setup-1.log", None)
     view = found.view
@@ -190,7 +195,7 @@ def test_show_reads_the_checks_entry_s_own_last_line(status: Status, tmp_path: P
 
 def test_the_commands_a_dead_checks_entry_left_are_its_setup_and_its_unsettled_results_by_the_entry_s_rule() -> None:
     setup, check, done = (OwnedProcess(pid, pid, "start", "boot") for pid in (1, 2, 3))
-    passed = ResultRow(1, 1, "test", "d" * 64, 60, done, 1.0, 2.0, 0, "passed")  # settled: never observed
+    passed = ResultRow(1, 1, "test", "d" * 64, 60, done, 1.0, 2.0, 0, CommandConclusion.PASSED)  # settled: never observed
     running = ResultRow(1, 0, "check", "c" * 64, 60, check, 1.0, None, None, None)
     seen: dict[int, ProcessSeen] = {}
 

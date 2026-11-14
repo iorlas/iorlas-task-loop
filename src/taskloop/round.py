@@ -23,7 +23,7 @@ move (the graceful stop: no further move, `stopped=interrupted`).
 
 import sqlite3
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import Final
@@ -39,6 +39,7 @@ from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.drain.store import DrainStore
 from taskloop.hold import HoldPorts, clear_holds, hold_task
 from taskloop.hold_status import MAIN_MOVED
+from taskloop.ids import Ids
 from taskloop.operations import (
     UNKNOWN_KINDS,
     Failed,
@@ -119,6 +120,7 @@ class RoundPorts:
     holding: HoldPorts
     ready: ReadyRows
     log: Callable[[str], None]
+    ids: Ids = field(kw_only=True)
     stopping: Callable[[], bool] = never
     drain_store: DrainStore | None = None
     generation: int | None = None  # captured at explicit rounds startup; older loops cannot schedule after reopening
@@ -149,7 +151,7 @@ def max_running_refused(count: int) -> Failed | None:
 
 def run_round(ports: RoundPorts, request: NextRequest) -> Round | Failed:
     try:
-        with operation(ports.drain_store or ports.starting.reader, ActionKind.ROUND, generation=ports.generation):
+        with operation(ports.drain_store or ports.starting.reader, ActionKind.ROUND, ids=ports.ids, generation=ports.generation):
             return _run_round(ports, request)
     except Fenced:
         return Failed("refused", Reason.DRAINING, BLOCKED)

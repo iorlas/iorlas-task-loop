@@ -21,6 +21,7 @@ from taskloop.attempt_types import (
     listed_paths,
     path_allowed,
 )
+from taskloop.input_context import InputContext
 from taskloop.task import TaskInspection
 
 DISPOSITIONS: Final = ("planned", "unchanged", "incomplete", "needs_owner")
@@ -61,11 +62,16 @@ def step_rules(task_id: str) -> StepRules:
 
 def decode(value: object, rules: StepRules) -> Answer:
     """Validate the factory's plan answer contract, without verifying Git effects; the single owner of its cross-field
-    rules and every bound (the strict schema carries none). The expected plan is `<rules.root>plan.md`."""
+    rules and every bound (the strict schema carries none). Unfinished answers ignore structurally valid paths without
+    requesting a commit. The expected plan is `<rules.root>plan.md`."""
     if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
         raise ValueError("Invalid plan answer")
     disposition, path, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
-    expected, listed = rules.root + PLAN_NAME, listed_paths(paths, rules)
+    expected = rules.root + PLAN_NAME
+    if disposition in ("incomplete", "needs_owner"):
+        listed = () if isinstance(paths, list) and all(isinstance(path, str) for path in paths) else None
+    else:
+        listed = listed_paths(paths, rules)
     if disposition == "planned":
         fits = path == expected and listed is not None and expected in listed and commit_message(message)
     else:
@@ -77,10 +83,11 @@ def decode(value: object, rules: StepRules) -> Answer:
     return Answer(str(disposition), EFFECT_OF[str(disposition)], listed, text, explanation)
 
 
-def input_text(task: TaskInspection, rules: StepRules) -> str:
+def input_text(task: TaskInspection, rules: StepRules, context: InputContext) -> str:
     """The plan step's admitted input: the task's own prose, then the fixed closing words (where the plan goes,
     `unchanged` or `planned`, no Git write: the factory commits the listed paths)."""
-    return f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{_closing_words(rules)}\n"
+    return (f"{task.title}\n\n{task.requirements}\n\n{task.acceptance}\n\n{context.render()}\n\n"
+            f"{_closing_words(rules)}\n")
 
 
 def _closing_words(rules: StepRules) -> str:
@@ -90,10 +97,13 @@ def _closing_words(rules: StepRules) -> str:
         f"nothing and answer `unchanged`. Otherwise write the plan there (rewrite it in place if it exists) and answer "
         f"`planned`; other files only under `{root}`. {step_text.GIT_WRITES} With `planned`, list in `paths` every file "
         "you want committed and give a "
-        "one-line commit `message`; the factory commits exactly those paths. Remove any other file you created. Anything "
-        "left uncommitted is reported back to you as a failed step. If the task cannot be planned as written (it contradicts "
+        "one-line commit `message`; the factory commits exactly those paths. With `planned`, remove any other file you "
+        "created; anything left uncommitted is reported back to you as a failed step. If the task cannot be planned as "
+        "written (it contradicts "
         "itself or the code, is empty or too vague to act on), write no plan: answer `needs_owner` and say in `explanation` "
-        "what the owner must decide. " + step_text.SAVED_WORK
+        "what the owner must decide. Only with `planned` should `paths` list files; otherwise return `paths: []` and "
+        "`message: null`, and the factory saves unfinished slot work as a work-in-progress commit on the task branch "
+        "when holding the task. " + step_text.SAVED_WORK
     )
 
 

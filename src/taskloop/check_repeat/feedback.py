@@ -6,6 +6,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from taskloop.attempt_types import AttemptKey
+from taskloop.command_conclusion import CommandConclusion
 from taskloop.profile import MAX_ARG, MAX_ARGV, MAX_NAME, NAME_CHARS
 
 TAIL_BYTES = 16 * 1024
@@ -21,10 +22,6 @@ class Availability(StrEnum):
 
 class CheckRepeatReason(StrEnum):
     FAILED_CHECK = "failed_check"
-
-
-class FailedResult(StrEnum):
-    FAILED = "failed"
 
 
 class FeedbackReason(StrEnum):
@@ -68,9 +65,16 @@ class FailedCheck(BaseModel):
     commit: str = Field(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
     name: str = Field(min_length=1, max_length=MAX_NAME)
     argv: tuple[Annotated[str, Field(min_length=1, max_length=MAX_ARG)], ...] = Field(min_length=1, max_length=MAX_ARGV)
-    result: FailedResult = FailedResult.FAILED
+    result: CommandConclusion = CommandConclusion.FAILED
     rc: int
     output: OutputTail
+
+    @field_validator("result")
+    @classmethod
+    def failed(cls, value: CommandConclusion) -> CommandConclusion:
+        if value is not CommandConclusion.FAILED:
+            raise ValueError("A failed check needs a failed conclusion")
+        return value
 
     @field_validator("name")
     @classmethod

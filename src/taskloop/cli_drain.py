@@ -10,6 +10,7 @@ from taskloop.drain.drain import drain
 from taskloop.drain.models import Conclusion, Result
 from taskloop.drain.render import data, human
 from taskloop.exit_codes import ExitCode
+from taskloop.inspection_guide import CONFIG
 from taskloop.machine_config import ConfigRefused, Flags
 
 
@@ -31,7 +32,8 @@ def run(arguments: argparse.Namespace) -> int:
         with open_drain(loaded.settings.db.value, report) as opened:
             result = opened if isinstance(opened, Result) else drain(opened)
     failed = result.conclusion not in {Conclusion.WAITING, Conclusion.COMPLETE}
-    print(json.dumps(data(result)) if arguments.json_output else human(result), file=sys.stderr if failed else sys.stdout)
+    text = human(result) + (f"\n{CONFIG[loaded.reason]}" if isinstance(loaded, ConfigRefused) else "")
+    print(json.dumps(data(result)) if arguments.json_output else text, file=sys.stderr if failed else sys.stdout)
     return {Conclusion.COMPLETE: ExitCode.SUCCESS, Conclusion.REFUSED: ExitCode.REFUSED, Conclusion.INTERRUPTED: ExitCode.INTERRUPTED}.get(
         result.conclusion, ExitCode.UNKNOWN
     )

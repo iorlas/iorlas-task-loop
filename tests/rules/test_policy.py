@@ -63,6 +63,9 @@ def test_caps_cannot_be_relaxed() -> None:
 
 # Every SQL write in the source, by (verb, table) -> the one module allowed to issue it. Anything unlisted is refused.
 WRITERS = {
+    ("CREATE TABLE", "merge_operation"): "factory_schema.py",
+    ("INSERT", "merge_operation"): "merge/store.py",
+    ("UPDATE", "merge_operation"): "merge/store.py",
     ("CREATE TABLE", "drain_state"): "factory_schema.py",
     ("CREATE TABLE", "drain_action"): "factory_schema.py",
     ("CREATE INDEX", "drain_action"): "factory_schema.py",
@@ -81,6 +84,7 @@ WRITERS = {
     ("CREATE TABLE", "checks_attempt"): "factory_schema.py",
     ("CREATE TABLE", "check_result"): "factory_schema.py",
     ("CREATE TABLE", "land_candidate"): "factory_schema.py",
+    ("CREATE INDEX", "attempt"): "factory_schema.py",
     ("CREATE INDEX", "land_candidate"): "factory_schema.py",  # `land_delivered`: at most one delivered candidate per checks attempt
     ("CREATE TABLE", "task_hold"): "factory_schema.py",
     ("INSERT", "task_hold"): "hold_store.py",  # a hold's record, fenced on its attempt and cause being current
@@ -152,6 +156,7 @@ def test_write_pattern_catches_spelling_variants(statement: str, write: tuple[st
 GIT_WRITES = frozenset({
     "stage", "stage_tracked", "record", "take_branch", "park", "push", "fetch", "sync", "delete_remote_at", "push_refspecs",
     "push_request", "push_lease", "delete_branch", "clean", "reset", "squash",
+    "start_merge", "finish_merge", "abort_merge", "commit_tree", "update_ref",
 })
 
 
@@ -178,7 +183,8 @@ def git_names(tree: ast.AST) -> set[str]:
 
 def git_writers() -> set[tuple[str, str]]:
     """Every use of a Git write in the factory source, by module (`git_names`)."""
-    return {(name, path.name) for path in (ROOT / "src" / "taskloop").glob("*.py") for name in git_names(ast.parse(path.read_text()))}
+    root = ROOT / "src" / "taskloop"
+    return {(name, str(path.relative_to(root))) for path in root.rglob("*.py") for name in git_names(ast.parse(path.read_text()))}
 
 
 @pytest.mark.parametrize(("source", "names"), [
@@ -197,6 +203,10 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
     expected = {
         ("stage", "factory_commit.py"), ("record", "factory_commit.py"), ("take_branch", "prepare.py"), ("park", "prepare.py"),
         ("park", "slot_release.py"), ("park", "wip.py"), ("reset", "wip.py"),
+        ("stage", "wip.py"), ("commit_tree", "wip.py"), ("update_ref", "wip.py"), ("abort_merge", "slot_release.py"),
+        ("park", "merge/start.py"), ("start_merge", "merge/start.py"), ("finish_merge", "merge/start.py"),
+        ("fetch", "merge/start.py"),
+        ("stage", "merge/start.py"), ("stage", "merge/git.py"), ("update_ref", "merge/git.py"), ("take_branch", "merge/git.py"),
             ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
         ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }

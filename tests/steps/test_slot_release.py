@@ -30,6 +30,7 @@ from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileStat, Seen, SlotFiles, Verified
 from taskloop.evidence_files import EvidenceFiles
+from taskloop.ids import NativeIds
 from taskloop.repo import RepoId
 from taskloop.setup_store import ProcessSeen
 from taskloop.slot_lock import custody, lock_path, probe
@@ -109,7 +110,7 @@ class Ports:
 
     def releaser(self) -> SlotRelease:
         return SlotRelease(AttemptStore(lambda: self.con), self.checkouts, self.files, self.observe, self.gone, self.hold, self.unclaim,
-                           lambda: 30, self.setup_seen, self.scratch)
+                           lambda: 30, self.setup_seen, self.scratch, ids=NativeIds())
 
 
 def agent(slot: FakeWorktree, files: dict[str, str], rc: int = 0) -> Callable[[Harness, LaunchSpec, float, RunHooks | None], RunOutcome]:
@@ -129,7 +130,7 @@ def executed(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     attempts = Attempts(
         store,
         EvidenceFiles(tmp_path),
-        AgentLaunch(lambda _harness: ("/bin/codex", {})),
+        AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()),
         agent(slot, written, rc),
         lambda: 10,
         checkouts,
@@ -142,7 +143,7 @@ def verified(con: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checko
     """The registered attempt run and verified: X, on `task/tl-1`."""
     assert executed(con, tmp_path, slot, checkouts, files, {P: "# Plan\n"}) == "verification"
     store = AttemptStore(lambda: con)
-    assert isinstance(Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere).verify(KEY), Verified)
+    assert isinstance(Verifier(store, checkouts, files, lambda _w: True, lambda: 20, nowhere, ids=NativeIds()).verify(KEY), Verified)
     return head(slot)
 
 
@@ -355,7 +356,7 @@ def test_the_abandon_through_the_real_unclaim_ends_for_a_closed_or_deleted_task(
     assert isinstance(Ports(registered, checkouts, slot_files).releaser().release(KEY, False), Released)
     ports, script = Ports(registered, checkouts, slot_files), Script().say(*reply)
     releaser = SlotRelease(AttemptStore(lambda: registered), ports.checkouts, slot_files, ports.observe, ports.gone, ports.hold,
-                           tracker_claims(script).unclaim, lambda: 30, ports.setup_seen, ports.scratch)
+                           tracker_claims(script).unclaim, lambda: 30, ports.setup_seen, ports.scratch, ids=NativeIds())
     assert releaser.release(KEY, True) == Released("s1", None, False, claim, True)
     assert stored(registered) == ([], [(d, 30.0, claim)]) and len(script.calls) == 1
 
@@ -370,7 +371,7 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
     with pytest.raises(StoreRefused, match="stale_reservation"):
         store.load(KEY)
     assert store.register_entry(KEY, (8, "later", "boot"), 10) == "refused"
-    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10)
+    admission = ChainAdmission(lambda: registered, begin_immediate, EvidenceFiles(tmp_path), lambda: 10, ids=NativeIds())
     assert admission.admit_repeat(RepeatRequest(KEY, "feedback", 1000, "unsafe")) == AdmitRefused("not_repeatable")
     opened: list[Path] = []
 
@@ -378,7 +379,8 @@ def test_after_a_release_every_other_writer_meets_the_fence_and_the_slot_is_free
         opened.append(path)
         return checkouts(path, git_dir=git_dir)
 
-    assert isinstance(Verifier(store, counted, slot_files, never, lambda: 20, never).verify(KEY), Verified) and opened == []
+    assert isinstance(Verifier(store, counted, slot_files, never, lambda: 20, never,
+        ids=NativeIds()).verify(KEY), Verified) and opened == []
     git = SlotGit(checkouts, slot_files)
     adopt(lambda: registered, begin_immediate, slot.repo, git, root, 1)  # the freed slot, detached and clean, is free again
     repo_id = RepoId(slot.repo.identity().key)

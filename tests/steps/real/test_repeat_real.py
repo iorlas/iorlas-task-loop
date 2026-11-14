@@ -25,6 +25,7 @@ from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import DEFAULT_GIT_READ_SECONDS, AttemptKey, Unsettled, Verified
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.git_views import GitViews
+from taskloop.ids import NativeIds
 from taskloop.operations import Started
 from taskloop.repeat import StepRepeat
 from taskloop.slot_files import RealSlotFiles
@@ -65,7 +66,8 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
     main.mkdir()
     git(main, "init", "-q", "-b", "main")
     (main / "README").write_text("one\n")
-    git(main, "add", "README")
+    (main / ".task-loop.json").write_text("{}")
+    git(main, "add", "README", ".task-loop.json")
     git(main, "commit", "-q", "-m", "base")
     git(main, "worktree", "add", "-q", "-b", "task/tl-1", str(slot), "HEAD")
     base = git(slot, "rev-parse", "HEAD").strip()
@@ -85,17 +87,18 @@ def test_a_repeat_commits_x2_on_x1_from_the_dirty_worktree_and_the_chain_verifie
 
     def attempts(run: Execution) -> Attempts:
         return Attempts(
-            store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {})), run, lambda: 10, VIEWS.checkouts, files
+            store, EvidenceFiles(art), AgentLaunch(lambda _harness: ("/bin/codex", {}), ids=NativeIds()), run,
+                lambda: 10, VIEWS.checkouts, files
         )
 
-    verifier = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold)
+    verifier = Verifier(store, VIEWS.checkouts, files, lambda _worker: True, lambda: 20, hold, ids=NativeIds())
     assert attempts(agent(slot, {P: "# Plan\n", "scratch.txt": "s"}, (), [P])).execute(KEY, ENTRY).reason == "verification"
     assert verifier.verify(KEY) == Unsettled("uncommitted", ("?? scratch.txt",))
     x1 = git(slot, "rev-parse", "HEAD").strip()
-    admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10)
+    admission = ChainAdmission(lambda: factory, begin_immediate, EvidenceFiles(art), lambda: 10, ids=NativeIds())
     repeat = StepRepeat(store, verifier, EvidenceFiles(art), admission, RegisteringLauncher(store, SECOND),
                         lambda _w: True, lambda _e: "gone", lambda: 10,
-                        repeating)
+                        repeating, ids=NativeIds())
     started = repeat.repeat("tasks", "tl-1", KEY, ENTRY, 30)
     assert isinstance(started, Started) and started.status == "repeated"
     found = store.attempt_of("tasks", "tl-1")

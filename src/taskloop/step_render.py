@@ -8,6 +8,7 @@ from taskloop.attempt_status import Listed, Shown
 from taskloop.attempt_types import ATTEMPTS
 from taskloop.drain.models import Reason
 from taskloop.hold_guide import hold_guide, pending_guide
+from taskloop.inspection_guide import CONFIG, SLOT
 from taskloop.land import Landed
 from taskloop.land_guide import CANDIDATE_RELEASE, LAND_GUIDE
 from taskloop.land_push import Withdrawn
@@ -29,13 +30,13 @@ from taskloop.operations import (
 from taskloop.printable import block
 from taskloop.publish import is_published, publish_word
 from taskloop.result_data import Result, StepResult
+from taskloop.round_guide import automatic_guide
 from taskloop.show_render import last_command, show_lines
 from taskloop.slot_release import Released, is_released, release_word
 from taskloop.slots import Adopted
-from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, PUBLISH, STEP_ONLY, discard, guide
+from taskloop.step_guide import GUIDE, HELD, NEEDS_OWNER, STEP_ONLY, discard, guide, refusal_guide
 from taskloop.task_status import task_status
 from taskloop.task_status import words as status_words
-from taskloop.tracker import leaked_claim
 
 
 def human(command: str, result: Result, db: Path | None) -> list[str]:
@@ -53,8 +54,8 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
         case Failed():
             lines = [f"{command}: {result.word}", *(block(result.detail).split("\n") if result.detail else [])]  # an echoed id is untrusted
             lines += [f"  {view.name} {view.state} {view.reason or view.attempt_id or ''} {view.path}" for view in result.slots]
-            named = "`tl step release --abandon`" in result.detail  # the detail names the action (`HALF_DONE`, `UNCLAIMING`)
-            lines += [] if named else _guides(result)
+            lines += list(dict.fromkeys(SLOT[view.reason] for view in result.slots if view.reason is not None))
+            lines += _guides(result)
             return lines + ([f"Admitted: {HELD} Re-run `tl step start` to retry the launch."] if result.admitted else [])
         case Started():
             entry = "" if result.entry is None else f"; entry pid {result.entry[0]}"
@@ -66,7 +67,7 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
             lines += ["existing attempt; its admitted choices stand"] if result.existing else [HELD]
             return [*lines, f"Step commands ({STEP_ONLY}). Follow it with `tl step show {result.task_id} --backlog {result.backlog}`."]
         case Shown(view=each):
-            paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}"]
+            paths = [f"Directory: {result.directory}", f"Entry log: {result.entry_log}", f"Events: {result.events_path}"]
             ended = each.release
             abandoning = each.next == "release" and each.land is not None and each.land.row.superseded == "abandoned"
             told = guide(each.next, checks=each.checks is not None, land=each.land is not None)
@@ -89,9 +90,12 @@ def _step_lines(command: str, result: StepResult, db: Path | None) -> list[str]:
 
 def _guides(result: Failed) -> list[str]:
     """The guide of the kind and the reason: a land candidate's release (`result.land`) has its own words first."""
-    found = [CANDIDATE_RELEASE.get(each) if result.land else None for each in (result.kind, result.reason)]
-    return [text or guide(each, checks=result.checks) for each, text in zip((result.kind, result.reason), found, strict=True)
-            if text is not None or each in GUIDE]
+    if result.config is not None:
+        return [CONFIG[result.config.reason]]
+    text = CANDIDATE_RELEASE.get(result.reason) if result.land else None
+    kind = CANDIDATE_RELEASE.get(result.kind) if result.land else None
+    kind = kind or (guide(result.kind, checks=result.checks) if result.kind in GUIDE else None)
+    return list(dict.fromkeys([*([kind] if kind else []), text or refusal_guide(result.reason, checks=result.checks)]))
 
 
 def _path(move: Move) -> list[str]:
@@ -110,7 +114,7 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
         if result.reason in ended:
             return [ended[result.reason]]
         return [f"{command}: {result.reason}", *([result.detail] if result.detail else []),
-                *(GUIDE[each] for each in result.reason.split(":") if each in GUIDE)]
+                automatic_guide(result.reason)]
     if isinstance(result, Listed):
         attempts = result.attempts
         rows = [f"{a.task_id}\t{a.backlog}\t{a.step}\t{a.number}{'' if a.checks else f'/{ATTEMPTS}'}\t{a.slot}\t{a.phase}\t{a.entry}\t"
@@ -126,11 +130,11 @@ def _rows_lines(command: str, result: Listed | Round | Ended, stuck: list[str]) 
     lines += [f"Stopped: {result.stopped}"] if result.stopped else []
     lines += [] if result.moves or result.stopped else [f"Nothing to do in backlog {result.backlog}."]
     words = [("abandoned_skip" if each.word == "abandoned" else each.word) for each in result.moves
-             if each.action in ("report", "skip", "advance")]
+             if each.action in ("report", "skip", "advance") or ":" in each.word]
     pending = dict.fromkeys(pending_guide(each.word) for each in result.moves if each.action == "hold" and each.word.startswith("pending "))
-    keys = dict.fromkeys(key for word in [*words, result.stopped] for key in (word, word.split(":")[0]) if key in GUIDE)
-    leaked = [f"claim_leaked: {leaked_claim(each.task_id)}" for each in result.moves if each.word == "claim_leaked"]
-    return lines + [f"{key}: {GUIDE[key]}" for key in keys] + [f"hold: {each}" for each in pending] + leaked
+    words = [word for word in words if not word.startswith("pending ")]
+    keys = dict.fromkeys([*words, *([result.stopped] if result.stopped else [])])
+    return lines + [f"{key}: {automatic_guide(key)}" for key in keys] + [f"hold: {each}" for each in pending]
 
 
 def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list[str]:
@@ -142,8 +146,9 @@ def _released_lines(result: VerifiedTask | ReleasedTask | PublishedTask) -> list
         return [f"{done}: task/{result.task_id} at {found.commit} on origin (attempt {result.attempt_id}, backlog {result.backlog})",
                 *(["Nothing changed: it was published before."] if done == "already_published" else [])]
     if isinstance(result, VerifiedTask):
-        held = [f"Release: {result.release}"] + ([] if is_released(result.release) else [GUIDE["release"]])
-        held += [f"Publish: {result.published}"] + ([] if is_published(result.published) else [PUBLISH])
+        held = [f"Release: {result.release}"] + ([] if is_released(result.release) else [refusal_guide(result.release.split(":", 1)[1])])
+        held += [f"Publish: {result.published}"] + ([] if is_published(result.published) else [
+            refusal_guide(result.published.split(":", 1)[1])])
         return [f"{result.status}: attempt {result.attempt_id} for {result.task_id} (backlog {result.backlog})", *held]
     found, task = result.result, result.task_id
     first = [] if result.land is None else _released_lines(result.land)
@@ -172,7 +177,9 @@ def _setup_lines(result: Adoption | Loaded) -> list[str]:
         missing = any(not isinstance(each, Adopted) and each.reason == "not_listed" for each in slots)
         attached = any(not isinstance(each, Adopted) and each.reason == "attached" for each in slots)
         hints = ["Make each not_listed slot with `git worktree add --detach <path>`, then adopt again."] if missing else []
-        return lines + hints + (["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else [])
+        hints += ["Run `git switch --detach` in a slot left on a task branch, then adopt again."] if attached else []
+        return lines + hints + list(
+            dict.fromkeys(SLOT[each.reason] for each in slots if not isinstance(each, Adopted)))
     lines = [f"Config file: {result.path} ({'exists' if result.exists else 'missing: built-in defaults'})"]
     lines += [f"{key} = {'unset' if each.value is None else each.value} ({each.source})" for key, each in result.settings.pairs()]
     lines += [f"{key} = {each['value']} ({each['source']})"

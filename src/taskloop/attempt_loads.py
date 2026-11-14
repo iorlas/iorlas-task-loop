@@ -106,6 +106,15 @@ class AttemptLoads(AttemptReads):
         with self._connection() as con:
             return self._load(con, key)
 
+    def slot_base(self, key: AttemptKey) -> str:
+        """The reservation's original park point D, independent of the branch source and prepared B."""
+        with self._connection() as con:
+            row = con.execute("SELECT slot_head FROM attempt WHERE attempt_id=? AND dispatch_token=? AND generation=?",
+                              astuple(key)).fetchone()
+        if row is None:
+            raise StoreRefused("absent")
+        return as_text(row[0])
+
     def _execution(self, con: sqlite3.Connection, key: AttemptKey) -> StoredExecution | None:
         row: tuple[object, ...] | None = con.execute(
             f"""SELECT {prefixed("e", FACTS)},{prefixed("e", EVIDENCE)},{prefixed("e", ANSWER)},{prefixed("v", VERDICT)}

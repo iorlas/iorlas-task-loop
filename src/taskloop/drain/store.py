@@ -3,11 +3,11 @@
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from uuid import uuid4
 
 from sqlite_store import begin_immediate
 
 from taskloop.drain.models import Action, ActionKind, ActionState, Boundary, Identity, State
+from taskloop.ids import Ids
 
 type Connect = Callable[[], sqlite3.Connection | None]
 type Begin = Callable[[sqlite3.Connection], AbstractContextManager[None]]
@@ -24,7 +24,8 @@ def blocked(con: sqlite3.Connection) -> bool:
 
 
 class DrainStore:
-    def __init__(self, connect: Connect, begin: Begin = begin_immediate) -> None:
+    def __init__(self, connect: Connect, begin: Begin = begin_immediate, *, ids: Ids) -> None:
+        self.ids = ids
         self.connect, self.begin = connect, begin
 
     def _con(self) -> sqlite3.Connection:
@@ -66,7 +67,7 @@ class DrainStore:
             if current.state is not State.OPEN or (generation is not None and generation != current.generation):
                 return None
             action = Action(
-                action_id=uuid4().hex,
+                action_id=self.ids.hex(),
                 kind=kind,
                 owner=owner,
                 subject=subject,
@@ -130,31 +131,7 @@ class DrainStore:
         return any(action.owner == owner and action.state is ActionState.PENDING for action in self.pending())
 
     def pending(self) -> tuple[Action, ...]:
-        rows = (
-            self._con()
-            .execute(
-                "SELECT action_id,kind,pid,pgid,start,boot,subject,backlog,tracker_root,state,checkout,rev FROM drain_action "
-                "WHERE state<>? ORDER BY action_id",
-                (ActionState.DONE.value,),
-            )
-            .fetchall()
-        )
-        return tuple(
-            Action.model_validate(
-                {
-                    "action_id": row[0],
-                    "kind": row[1],
-                    "owner": {"pid": row[2], "pgid": row[3], "start": row[4], "boot": row[5]},
-                    "subject": row[6],
-                    "backlog": row[7],
-                    "tracker_root": row[8],
-                    "state": row[9],
-                    "checkout": row[10],
-                    "rev": row[11],
-                }
-            )
-            for row in rows
-        )
+        return pending(con=self._con())
 
     def complete(self, generation: int) -> bool:
         con = self._con()
@@ -174,3 +151,19 @@ class DrainStore:
                 return None
             con.execute("UPDATE drain_state SET state=?,generation=generation+1 WHERE singleton=1", (State.OPEN.value,))
             return Boundary(state=State.OPEN, generation=current.generation + 1)
+
+
+def pending(con: sqlite3.Connection) -> tuple[Action, ...]:
+    """The owning read shared by drain and registration fences; it never authorizes an action."""
+    rows = con.execute(
+        "SELECT action_id,kind,pid,pgid,start,boot,subject,backlog,tracker_root,state,checkout,rev FROM drain_action "
+        "WHERE state<>? ORDER BY action_id", (ActionState.DONE.value,),
+    ).fetchall()
+    return tuple(
+        Action.model_validate({
+            "action_id": row[0], "kind": row[1],
+            "owner": {"pid": row[2], "pgid": row[3], "start": row[4], "boot": row[5]},
+            "subject": row[6], "backlog": row[7], "tracker_root": row[8], "state": row[9], "checkout": row[10], "rev": row[11],
+        })
+        for row in rows
+    )
