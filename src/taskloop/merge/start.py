@@ -55,6 +55,7 @@ class Merge:
 
     def _put(self, work: Work, **changes: object) -> Work:
         # Revalidate model_copy updates before crossing the database boundary.
+        self.fence()
         updated = Work.model_validate(work.model_dump() | changes)
         return self.store.put(work, updated)
 
@@ -77,6 +78,9 @@ class Merge:
             if state.branch is not None or state.head != work.source:
                 return Terminal(reason=Reason.SLOT, explanation="The resolution moved the reserved source or attached a branch.")
             return self._resolve(work, view)
+        if (work.phase is Phase.START and state.branch is None and not state.dirty and state.head is not None
+                and not view.worktree(work.slot).merging() and git.completed(view, state.head, work)):
+            return self._put(work, phase=Phase.ATTACH, result=state.head)
         actions = {Phase.FETCH: lambda: self._fetch(work, view), Phase.SETUP: lambda: self._setup(work, state, view),
                    Phase.START: lambda: self._start(work, state, view), Phase.FINISH: lambda: self._finish(work, state, view),
                    Phase.ATTACH: lambda: self._attach(work, state, view)}
@@ -86,19 +90,23 @@ class Merge:
 
     def _setup(self, work: Work, state: SlotState, view: Repo) -> Work | Result:
         setup_leftovers = state.branch is None and state.head == work.target
+        allowed = (work.source, work.target, work.base) if work.branch is None else (work.source, work.target)
         if ((state.dirty and not setup_leftovers) or state.branch not in (None, work.branch)
-                or state.head not in (work.source, work.target)):
+                or state.head not in allowed or view.worktree(work.slot).merging()):
             return Terminal(reason=Reason.SLOT, explanation="The slot changed before the merge environment was prepared.")
         if state.branch is not None or state.head != work.target:
+            self.fence()
             view.worktree(work.slot).park(work.target or work.source)
+        self.fence()
         stopped = self.setup(work)
         return stopped or self._put(work, phase=Phase.START)
 
     def _finish(self, work: Work, state: SlotState, view: Repo) -> Work | Result:
         slot = view.worktree(work.slot)
         if slot.merging() and state.head == work.source and state.branch is None:
+            self.fence()
             result = str(slot.finish_merge(git.message(work)))
-        elif state.branch is None and state.head is not None and git.completed(view, state.head, work):
+        elif not state.dirty and state.branch is None and state.head is not None and git.completed(view, state.head, work):
             result = state.head
         else:
             return Terminal(reason=Reason.SLOT, explanation="The merge's HEAD or parents changed before completion.")
@@ -108,13 +116,16 @@ class Merge:
 
     def _attach(self, work: Work, state: SlotState, view: Repo) -> Work | Result:
         slot = view.worktree(work.slot)
-        if state.dirty or slot.merging() or state.head not in (work.source, work.result):
+        allowed = (work.base, work.source, work.result) if work.branch is None else (work.source, work.result)
+        if state.dirty or slot.merging() or state.head not in allowed:
             return Terminal(reason=Reason.SLOT, explanation="The slot changed before the prepared commit could be attached.")
         if state.branch is not None and state.branch != work.branch:
             return Terminal(reason=Reason.MOVED, explanation="The task branch changed before the prepared commit could be attached.")
         if state.head != work.result:
+            self.fence()
             slot.park(work.result or work.source)
-        refused = git.attach(view, slot, work)
+        self.fence()
+        refused = git.attach(view, slot, work, self.fence)
         return refused or self._put(work, phase=Phase.COMPLETE,
                                    explanation="Current main and the retained task work are prepared; the ordinary step continues.")
 
@@ -122,6 +133,7 @@ class Merge:
         target = work.target
         if target is None:
             remote = self.remotes(work.root)
+            self.fence()
             fetched = remote.fetch("origin", refspecs=("+refs/heads/main:refs/remotes/origin/main",), timeout=120)
             if not fetched.ok:
                 return Unavailable(reason=Reason.GIT, explanation=f"Current main could not be refreshed: {fetched.output}")
@@ -154,7 +166,9 @@ class Merge:
             if state.dirty or state.head not in (work.target, work.source):
                 return Terminal(reason=Reason.SLOT, explanation="The reserved source changed before merging main.")
             if state.head != work.source:
+                self.fence()
                 slot.park(work.source)
+            self.fence()
             slot.start_merge(work.target or work.source)
         elif state.head != work.source:
             return Terminal(reason=Reason.SLOT, explanation="The active merge no longer starts at the retained source.")
@@ -175,7 +189,9 @@ class Merge:
         if not slot.merging():
             return Terminal(reason=Reason.SLOT, explanation="The reserved merge disappeared before resolution.")
         if work.baseline is None:
+            self.fence()
             slot.stage(work.conflicts)
+            self.fence()
             work = self._put(work, baseline=str(slot.capture()))
         resolved = self.resolve(work)
         if not isinstance(resolved, Work):
@@ -186,7 +202,7 @@ class Merge:
         if answer is not None and answer.disposition is Disposition.OWNER:
             return self._put(resolved, phase=Phase.TERMINAL, reason=Reason.OWNER, explanation=answer.explanation)
         if answer is not None and answer.disposition is Disposition.RESOLVED:
-            problem = git.accepted(view, slot, self.files, resolved, answer)
+            problem = git.accepted(view, slot, self.files, resolved, answer, self.fence)
             if problem is None:
                 return self._put(resolved, phase=Phase.FINISH)
         else:
@@ -194,6 +210,7 @@ class Merge:
         if len(resolved.executions) >= 3:
             return self._put(resolved, phase=Phase.TERMINAL, reason=Reason.EXHAUSTED,
                              explanation=f"Three merge resolution executions ended without an accepted result. {problem}")
+        self.fence()
         self.store.put(resolved, resolved.model_copy(update={"executions": (*resolved.executions[:-1],
                                       execution.model_copy(update={"reviewed": True}))}))
         return InProgress(reason=Reason.RUNNING, explanation=f"Main's merge is awaiting another resolution execution. {problem}")
