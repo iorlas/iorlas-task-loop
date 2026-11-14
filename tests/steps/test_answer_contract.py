@@ -268,8 +268,10 @@ def test_unfinished_answers_ignore_unused_paths(step: str, disposition: str) -> 
     empty = operation.decode(answer, rules)
     assert (empty.disposition, empty.effect, empty.paths, empty.message, empty.explanation) == (
         disposition, "none", (), None, "Work remains")
-    for paths in ([EXPECTED], ["src/outside.py", "../outside", ".beads/x", ".git/x", "", *BAD_PATHS],
-                  [EXPECTED] * (rules.max_paths + 1)):
+    unused = EXPECTED if step == "plan" else "src/work.py"
+    bad_paths = BAD_PATHS if step == "plan" else [path for path in BAD_PATHS if path != "/" + EXPECTED]
+    for paths in ([unused], ["src/outside.py", "../outside", ".beads/x", ".git/x", "", *bad_paths],
+                  [unused] * (rules.max_paths + 1)):
         assert operation.decode(answer | {"paths": paths}, rules) == empty
 
 
@@ -281,7 +283,7 @@ def test_unfinished_answers_ignore_unused_paths(step: str, disposition: str) -> 
 ])
 def test_unfinished_answers_still_require_the_answer_shape(step: str, disposition: str, change: dict[str, object]) -> None:
     operation = kind(step)
-    answer = {"disposition": disposition, "paths": [EXPECTED], "message": None, "explanation": "Work remains"}
+    answer = {"disposition": disposition, "paths": ["src/work.py"], "message": None, "explanation": "Work remains"}
     if step == "plan":
         answer["plan_path"] = None
     with pytest.raises(ValueError, match=f"Invalid {step} answer"):
@@ -292,3 +294,13 @@ def test_unfinished_answers_still_require_the_answer_shape(step: str, dispositio
 def test_unfinished_plan_answers_cannot_name_another_tasks_plan(disposition: str) -> None:
     with pytest.raises(ValueError, match="Invalid plan answer"):
         decode(UNCHANGED | {"disposition": disposition, "paths": [EXPECTED], "plan_path": "docs/design/tl-2/plan.md"}, RULES)
+
+
+@pytest.mark.parametrize("disposition", ["implemented", "unchanged", "incomplete", "needs_owner"])
+@pytest.mark.parametrize("path", [EXPECTED, "/" + EXPECTED, "docs/design/tl-2/plan.md", "plan.md", "docs/PLAN.MD", "plan.md/"])
+def test_every_implement_answer_rejects_plan_paths_before_discarding_unfinished_paths(disposition: str, path: str) -> None:
+    answer: dict[str, object] = {**IMPLEMENTED, "disposition": disposition, "paths": ["src/a.py", path]}
+    if disposition != "implemented":
+        answer["message"] = None
+    with pytest.raises(ValueError, match=r"Do not include plan\.md"):
+        IMPLEMENT.decode(answer, IMPLEMENT.rules("tl-1"))

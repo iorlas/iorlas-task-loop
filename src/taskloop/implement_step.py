@@ -80,6 +80,10 @@ OPENING: Final[dict[RepeatReason, str]] = {
     "ignored": "These paths are ignored by Git. A listed path Git ignores can never be committed, and an ignored attributes "
     "file on the way to a listed path blocks the commit.",
 }
+PLAN_HANDOFF: Final = (
+    "Do not edit plan.md; the answer's paths list must not contain any plan.md, including another task's plan or a "
+    "deletion. The handoff of what was built belongs in the one-line commit message."
+)
 
 
 def step_rules(_task_id: str) -> StepRules:
@@ -95,6 +99,10 @@ def decode(value: object, rules: StepRules) -> Answer:
     if not isinstance(value, dict) or set(value) != set(ANSWER_KEYS):
         raise ValueError("Invalid implement answer")
     disposition, paths, message, explanation = (value[key] for key in ANSWER_KEYS)
+    if isinstance(paths, list) and any(
+        isinstance(path, str) and path.rstrip("/").rsplit("/", 1)[-1].casefold() == "plan.md" for path in paths
+    ):
+        raise ValueError("Invalid implement answer: Do not include plan.md in paths; put the handoff in the commit message")
     if disposition in ("incomplete", "needs_owner"):
         listed = () if isinstance(paths, list) and all(isinstance(path, str) for path in paths) else None
     else:
@@ -120,7 +128,7 @@ def _closing_words(task_id: str, rules: StepRules) -> str:
     return (
         f"The plan for this task is `docs/design/{task_id}/plan.md`, committed on this branch by the plan step. Read it "
         "first. Immediately after reading the plan, reassess scope before broad exploration or editing. "
-        "Read its Read list by the stated line ranges before exploring other files. Search with `rg -n` and read "
+        "Read the files and symbols in its Change map before exploring other files. Search with `rg -n` and read "
         "only needed ranges; searching for an omitted caller is allowed. Do not `cat` a file over 300 lines. Before any "
         "`cat` of a file over 150 lines, run `rg -n '^def |^class '` on it and use range reads, even if the symbol search "
         "is empty. Do not batch whole-file dumps. Do not read a file again within this session unless it changed since "
@@ -142,7 +150,7 @@ def _closing_words(task_id: str, rules: StepRules) -> str:
         f"{rules.file_cap // MiB} MiB each, except: any path with a component starting with `.git`, anything under "
         f"`{'`, `'.join(rules.excluded)}`, executable files and symlinks. Do not edit `plan.md`, including status, progress "
         f"or \"As built\" sections. Other artifacts in the plan's own folder may change under the same rules; add no audit "
-        f"artifact. {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
+        f"artifact. {PLAN_HANDOFF} {step_text.GIT_WRITES} Do not add or upgrade dependencies. {ENVIRONMENT} With "
         "`implemented`, list in `paths` every file you changed, "
         "added or deleted and give a one-line commit `message`; the factory commits exactly those paths. With "
         "`implemented`, remove any other file you created; anything left uncommitted is reported back to you as a failed "
@@ -170,7 +178,7 @@ def repeat_instructions(number: int, *, unrecorded: bool) -> str:
         "deleted and do not want committed: read the original content with `git show HEAD:<path>` and restore it with "
         "`apply_patch`, following the editing rules below. You cannot run `git checkout` or `git restore`. "
         f"With `implemented`, `paths` lists every file you want committed, changed, added or deleted; "
-        f"leave files you did not change out of paths. {last}"
+        f"leave files you did not change out of paths. {last} {PLAN_HANDOFF}"
     )
 
 
@@ -188,6 +196,7 @@ def failed_check_feedback(found: FailedCheck, task: str, nonce: str) -> str:
     return "\n".join([
         "Failed check",
         "The factory's check failed. Fix the reported failure and run the checks before answering.",
+        PLAN_HANDOFF,
         f"Check: {found.name}",
         f"Command argv: {json.dumps(list(found.argv), ensure_ascii=False)}",
         f"Result: {encode(found.result)}, exit {found.rc}",

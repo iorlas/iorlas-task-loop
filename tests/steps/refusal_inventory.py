@@ -42,6 +42,9 @@ def typed_reasons() -> set[str]:
         for node in ast.walk(ast.parse((ROOT / name).read_text())):
             if isinstance(node, ast.TypeAlias) and isinstance(node.name, ast.Name) and node.name.id in names:
                 reasons.update(n.value for n in ast.walk(node.value) if isinstance(n, ast.Constant) and isinstance(n.value, str))
+            if name == "attempt_types.py" and isinstance(node, ast.ClassDef) and node.name == "PlanContentRule":
+                reasons.update(n.value for field in node.body if isinstance(field, ast.Assign)
+                               for n in ast.walk(field.value) if isinstance(n, ast.Constant) and isinstance(n.value, str))
     for name, names in fields.items():
         for node in ast.walk(ast.parse((ROOT / name).read_text())):
             if not isinstance(node, ast.ClassDef) or node.name not in names:
