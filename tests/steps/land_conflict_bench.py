@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -82,6 +82,7 @@ class ExecutionCase:
     disposition: Disposition = Disposition.RESOLVED
     gone: bool = True
     interrupt: bool = False
+    edit: Callable[[FakeWorktree], None] | None = None
 
     def run(self, harness: Harness, spec: LaunchSpec, timeout: float, hooks: RunHooks | None) -> RunOutcome:
         self.calls += 1
@@ -94,6 +95,8 @@ class ExecutionCase:
         if self.disposition is Disposition.RESOLVED:
             self.slot.write_file("README", "X\ncurrent main\n")
             paths = ["README"]
+        if self.edit is not None:
+            self.edit(self.slot)
         text = json.dumps({"disposition": self.disposition, "paths": paths, "explanation": "Retain both sides."})
         raw = RunOutcome(rc=0, worker=worker, summary=Summary(text=text, rc=0, stands=True, res={"ref": f"session-{self.calls}"}))
         return FakeRun(raw)(harness, spec, timeout, hooks)
@@ -113,10 +116,13 @@ class ExecutionCase:
             self.ports.renew, self.ports.credentials, self.ports.probe)
 
 
-def execution_case(on_slot: Path, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path) -> Generator[ExecutionCase]:
+def execution_case(on_slot: Path, repo: FakeRepo, slot: FakeWorktree, tmp_path: Path,
+                   target_edit: Callable[[FakeWorktree], None] | None = None) -> Generator[ExecutionCase]:
     b = bench(on_slot, repo, tmp_path)
     author = repo.add_worktree(tmp_path / "author", head(slot))
     author.write_file("README", "current main\n")
+    if target_edit is not None:
+        target_edit(author)
     target = author.record("current main", paths="all")
     assert isinstance(target, Recorded)
     repo.drop_worktree(author.path)

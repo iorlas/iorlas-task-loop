@@ -73,6 +73,7 @@ WRITERS = {
     ("CREATE TABLE", "merge_operation"): "factory_schema.py",
     ("CREATE TABLE", "land_conflict"): "factory_schema.py",
     ("INSERT", "land_conflict"): "land_conflict/store.py",
+    ("UPDATE", "land_conflict"): "land_conflict/store.py",
     ("INSERT", "merge_operation"): "merge/store.py",
     ("UPDATE", "merge_operation"): "merge/store.py",
     ("CREATE TABLE", "drain_state"): "factory_schema.py",
@@ -216,6 +217,8 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
         ("park", "merge/start.py"), ("start_merge", "merge/start.py"), ("finish_merge", "merge/start.py"),
         ("fetch", "merge/start.py"),
         ("stage", "merge/start.py"), ("stage", "merge/git.py"), ("update_ref", "merge/git.py"), ("take_branch", "merge/git.py"),
+        ("stage", "land_conflict/preserve.py"), ("commit_tree", "land_conflict/preserve.py"),
+        ("update_ref", "land_conflict/preserve.py"),
             ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
         ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }

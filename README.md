@@ -179,6 +179,24 @@ The Git, task tracker, agent, SQLite, process-lock and stream boundaries come fr
 [shelf](https://github.com/yoselabs/shelf) libraries, pinned in [pyproject.toml](pyproject.toml) and [uv.lock](uv.lock)
 and checked for portable source provenance.
 
+The direct runtime dependencies are pinned as follows:
+
+| Package | Version |
+| --- | --- |
+| any-agent | 0.11.0 |
+| beads-client | 0.2.0 |
+| git-porcelain | 0.21.0 |
+| process-lock | 0.2.1 |
+| pydantic | 2.14.3 |
+| sqlite-store | 0.1.0 |
+| stream-proc | 0.9.0 |
+
+The build requirement is hatchling 1.33.0. Development requirements are pytest 9.2.0
+and pytest-xdist 3.8.0. [pyproject.toml](pyproject.toml) owns these declarations;
+[uv.lock](uv.lock) owns the frozen dependency resolutions. stream-proc's package
+version is 0.9.0, but its shelf source uses the `any-agent-v0.11.0` tag so that
+stream-proc and any-agent resolve to the same shelf commit.
+
 [Design and acceptance](docs/design/tl-8bh9.8.7/plan.md) describe the boundary of this
 foundation. Preserved design documents may describe future behavior or the historical implementation;
 they are not additional executable commands.

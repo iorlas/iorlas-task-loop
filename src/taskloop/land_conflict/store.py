@@ -10,7 +10,7 @@ from taskloop.admit_rows import reserve
 from taskloop.attempt_loads import retained_on
 from taskloop.attempt_reads import StoreConnection, StoreRefused, StoreUnavailable, as_int, as_text
 from taskloop.attempt_types import AttemptKey
-from taskloop.land_conflict.models import AdmissionRefused, Outcome, Record, Request, Slot
+from taskloop.land_conflict.models import AdmissionRefused, Outcome, Record, Request, Save, SavePhase, Slot
 from taskloop.land_conflict.reservation_store import owns
 from taskloop.land_store import require_checked
 from taskloop.repo import RepoId
@@ -28,6 +28,42 @@ def existing(con: sqlite3.Connection, request: Request) -> Record | None:
 
 
 class ConflictStore(StoreConnection):
+    def saved(self, key: AttemptKey) -> Save | None:
+        with self._connection() as con:
+            if not owns(con, key):
+                raise StoreRefused("stale_reservation")
+            row = con.execute("SELECT save_data FROM land_conflict WHERE operation_id=?", (key.attempt_id,)).fetchone()
+        if row is None:
+            raise StoreRefused("stale_reservation")
+        try:
+            return None if row[0] is None else Save.model_validate_json(as_text(row[0]))
+        except ValueError as error:
+            raise StoreUnavailable("Malformed retained conflict save") from error
+
+    def save(self, key: AttemptKey, previous: Save | None, updated: Save) -> Save:
+        value = Save.model_validate(updated.model_dump())
+        if value.key != key:
+            raise StoreRefused("stale_reservation")
+        progress = {SavePhase.CAPTURE: SavePhase.OBJECT, SavePhase.OBJECT: SavePhase.REF, SavePhase.REF: SavePhase.COMPLETE}
+        if previous is None:
+            if value.phase is not SavePhase.CAPTURE:
+                raise StoreRefused("stale_reservation")
+        elif (progress.get(previous.phase) is not value.phase
+              or previous.model_dump(exclude={"phase", "tree", "commit"}) != value.model_dump(exclude={"phase", "tree", "commit"})
+              or (previous.tree is not None and previous.tree != value.tree)
+              or (previous.commit is not None and previous.commit != value.commit)):
+            raise StoreRefused("stale_reservation")
+        with self._connection(write=True) as con:
+            if not owns(con, key):
+                raise StoreRefused("stale_reservation")
+            changed = con.execute(
+                "UPDATE land_conflict SET save_data=? WHERE operation_id=? AND save_data IS ?",
+                (value.model_dump_json(), key.attempt_id, None if previous is None else previous.model_dump_json()),
+            ).rowcount
+            if changed != 1:
+                raise StoreRefused("stale_reservation")
+        return value
+
     def load(self, key: AttemptKey) -> Record:
         with self._connection() as con:
             if not owns(con, key):

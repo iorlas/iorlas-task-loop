@@ -34,11 +34,11 @@ def execution_case(on_slot: Path, repo: FakeRepo, slot: FakeWorktree, tmp_path: 
 
 def test_execution_prepares_the_reserved_base_and_keeps_checked_refs(execution_case: ExecutionCase) -> None:
     c = execution_case
-    branches = dict(c.ports.repo.branches())
+    branches = dict(c.ports.repo.branches("task/"))
     result = c.resume()
     assert isinstance(result, Completed) and result.source == c.record.request.checked and result.target == c.record.request.target
     assert c.slot.branch() is None and head(c.slot) == result.commit and not c.slot.merging()
-    assert dict(c.ports.repo.branches()) == branches and c.calls == 1
+    assert dict(c.ports.repo.branches("task/")) == branches and c.calls == 1
     assert c.environment.probes and c.environment.process.calls[0].cwd == c.record.slot_path
     assert c.con.execute("SELECT attempt_id,generation FROM reservation").fetchone() == (
         c.record.key.attempt_id, c.record.key.reservation_generation)
