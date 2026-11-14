@@ -43,7 +43,7 @@ ANSWER_SCHEMA: Final = {
         "explanation": {"type": "string"},
     },
 }
-# The prepared environment and bounded verification policy (design tl-8bh9.14.178).
+# The prepared environment, bounded verification policy (design tl-8bh9.14.178) and editing guidance (tl-8bh9.14.182).
 ENVIRONMENT: Final = (
     "The factory ran this repository's `setup` before you started; there is no network now. "
     "While working, run only focused test files for the code you changed. For lint and type validation, run "
@@ -65,7 +65,13 @@ ENVIRONMENT: Final = (
     "function (`PLR0911`), and no function-local imports (`PLC0415`). In `explanation`, name the result of each final "
     "command. Temporary files go to `$TMPDIR`, which is emptied after the step; do not write elsewhere "
     "outside the repository. Your runs are evidence for you: after this step the checks run again outside your control, "
-    "and only those results count."
+    "and only those results count. "
+    "First confirm that `apply_patch` is offered in your implement tool set. Make every file edit with `apply_patch`, "
+    "never with a Python or sed script. This includes additions, deletions and repairs; do not rewrite repository files "
+    "with shell redirection. The project interpreter is `.venv/bin/python`; "
+    "use `uv run --frozen --no-sync python -I` for execution or inspection scripts, never for file edits. "
+    "Bare `python3` is the host's Python 3.12, not the project's Python 3.15. Only if `apply_patch` is absent, report "
+    "the tool gap in the plan and in `explanation` and retain heredoc edits with the bounded verification above."
 )
 OPENING: Final[dict[RepeatReason, str]] = {
     "uncommitted": "Attempt {number} of this step left changes in the slot that it did not list for commit.",
@@ -143,8 +149,9 @@ def repeat_instructions(number: int, *, unrecorded: bool) -> str:
     )
     return (
         "Remove every untracked file listed that you do not want committed. Restore every tracked file you changed or "
-        "deleted and do not want committed (`git show HEAD:<path> > <path>`); you cannot run `git checkout` or `git "
-        f"restore`. With `implemented`, `paths` lists every file you want committed, changed, added or deleted. {last}"
+        "deleted and do not want committed: read the original content with `git show HEAD:<path>` and restore it with "
+        "`apply_patch`, following the editing rules below. You cannot run `git checkout` or `git restore`. "
+        f"With `implemented`, `paths` lists every file you want committed, changed, added or deleted. {last}"
     )
 
 

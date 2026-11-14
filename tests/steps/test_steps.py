@@ -93,16 +93,28 @@ def test_the_implement_input_bounds_working_and_final_checks_without_hiding_fail
     assert "no function-local imports (`PLC0415`)" in text
     assert "In `explanation`, name the result of each final command." in text
     assert "run every command" not in text
+    assert "Make every file edit with `apply_patch`, never with a Python or sed script" in text
+    assert "additions, deletions and repairs" in text and "do not rewrite repository files with shell redirection" in text
+    assert "The project interpreter is `.venv/bin/python`" in text
+    assert "`uv run --frozen --no-sync python -I` for execution or inspection scripts, never for file edits" in text
+    assert "Bare `python3` is the host's Python 3.12, not the project's Python 3.15" in text
+    assert "First confirm that `apply_patch` is offered in your implement tool set" in text
+    assert "Only if `apply_patch` is absent, report the tool gap in the plan and in `explanation`" in text
+    assert "retain heredoc edits with the bounded verification above" in text
     assert "at most twice while working" not in task_text(TASK, "plan", CONTEXT)
 
 
-def test_an_implement_repeat_frames_the_listing_with_its_own_words() -> None:
+@pytest.mark.parametrize("unrecorded", [True, False])
+def test_an_implement_repeat_frames_the_listing_and_preserves_the_complete_input(unrecorded: bool) -> None:
     found = Unsettled("ignored", ("!! .venv/x",))
     original = task_text(TASK, "implement", CONTEXT)
-    text = IMPLEMENT.feedback(found, IMPLEMENT.rules("tl-1"), 2, original, "abcd", unrecorded=True)
+    text = IMPLEMENT.feedback(found, IMPLEMENT.rules("tl-1"), 2, original, "abcd", unrecorded=unrecorded)
     assert text.startswith("These paths are ignored by Git. A listed path Git ignores can never be committed")
-    assert "BEGIN SLOT STATUS abcd\n!! .venv/x\nEND SLOT STATUS abcd" in text and "Nothing of attempt 2 was committed" in text
+    assert "BEGIN SLOT STATUS abcd\n!! .venv/x\nEND SLOT STATUS abcd" in text
+    assert ("Nothing of attempt 2 was committed" in text) is unrecorded
     assert "answer `implemented`" in text and text.endswith(f"The task, for reference:\n\n{original}")
+    assert "read the original content with `git show HEAD:<path>` and restore it with `apply_patch`" in text
+    assert "git show HEAD:<path> >" not in text
     assert "at most twice while working" in text and "Do not rerun either successful final command." in text
     assert "run `just check 2>&1 | tail -60` once and then `just test 2>&1 | tail -40` once" in text
 

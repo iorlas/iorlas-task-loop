@@ -143,3 +143,34 @@ edit. Report any missing-tool exception, missing evidence or failure explicitly.
 Do not manufacture six live attempts, infer compliance from prompt assertions,
 or claim the estimated savings as measured. This later observation does not
 justify adding workflow control derived from logs or new persistent state.
+
+## As built — 2026-11-14
+
+The implementation session's actual offered tools include callable
+`tools.apply_patch`; every implementation edit used it. No missing-tool exception
+was needed. `.venv/bin/python --version` reported Python 3.15.0. The task branch
+contained only the plan commit beyond `99655d38`, with no unfinished task commit.
+`bd show tl-8bh9.14.182` again reported not found; no task claims were changed.
+
+The implement input now carries patch-only edits, the conditional missing-tool
+exception, immediate verification with combined output limited to 60 lines and
+pipefail, and project interpreter guidance. Repeat restoration reads with
+`git show` and edits with `apply_patch`. Public-input tests cover those rules;
+ordinary repeats (both recorded and unrecorded) and failed-check repair inputs
+preserve the complete original implement input and existing evidence framing.
+No test files were added.
+
+Validation used `set -o pipefail` and combined output piped through `tail -60`:
+
+- `just check` initially failed on an existing assertion in
+  `tests/steps/test_dash_read.py` that used nonexistent `Run.summary`. Corrected
+  that assertion to the model's existing `Run.access` field. The next `just check`
+  passed lint, types and all nine import contracts.
+- `uv run --frozen --no-sync python -I -m pytest -q tests/steps/test_steps.py tests/steps/test_implement_feedback.py`
+  passed all 21 focused tests against the rebuilt installed package.
+- `just test` passed all 3,420 tests in the required focused directories.
+- `git diff --check` passed.
+
+The six later implement attempts have not been observed in this session. Their
+heredoc counts and delivered output sizes remain a later observation; no measured
+token savings are claimed.
