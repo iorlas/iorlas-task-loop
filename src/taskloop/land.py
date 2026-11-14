@@ -10,8 +10,8 @@ delivered answers at once); the checkout is the attempt's repository, `origin` e
 are exactly X (`branch_moved`; skipped with `--no-change`), X readable (`commit_missing`), origin has `main`
 (`target`); one tracker read (`claim_lost`; `closed`, unless origin shows a pushable candidate already delivered).
 
-Retained conflict work resumes before another squash or validation. A fresh conflict is handed to detached execution;
-every conflict result stops delivery. Retained resolutions never become land candidates or checked input.
+Retained conflict completion supplies candidate content while preserving checked input. Persisted candidates resume
+validation or delivery before conflict work; a resolved candidate always needs fresh validation.
 """
 
 import sqlite3
@@ -39,6 +39,7 @@ from taskloop.land_push import REMOTE, Delivered, Origin, Withdrawn, deliver, ob
 from taskloop.land_store import LandRow
 from taskloop.land_summary import LandSummary, summarized
 from taskloop.land_target import fetched_target, gated, made_s, squashed_onto
+from taskloop.merge.models import Completed
 from taskloop.operations import Failed, deadline_after, minutes_refused
 from taskloop.prepare import HEADS, REMOTES
 from taskloop.steps import CHECK, following
@@ -209,14 +210,19 @@ def _tracker(ports: LandPorts, origin: Origin, task: _Task, release: str | None)
 def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, number: int) -> LandRow | Failed:
     """Section 5: a new candidate S onto origin's `main` as fetched now, inserted (and validated when it must be)."""
     resumed = None if request.no_change else ports.conflicts.resume(origin.repo, task.implement, task.checks)
-    target = resumed or fetched_target(ports.profiles, origin)
+    target = resumed if isinstance(resumed, Failed) else fetched_target(ports.profiles, origin)
+    if isinstance(resumed, Completed) and not isinstance(target, Failed) and target[0] != resumed.target:
+        target = Failed("refused", "conflict", "Origin's main moved after the resolution; its retained content awaits reconciliation.")
     if isinstance(target, Failed):
         return target
     o, required = target
-    squashed = squashed_onto(origin, task.checks, task.title, o)
+    squashed = squashed_onto(origin, task.checks, task.title, o, resumed.commit if isinstance(resumed, Completed) else None)
+    if isinstance(squashed, Conflicted) and isinstance(resumed, Completed):
+        squashed = Failed("refused", "conflict", "The retained resolution still conflicts with its target; delivery stopped.")
     if isinstance(squashed, (Conflicted, Failed)):
-        return squashed if isinstance(squashed, Failed) else ports.conflicts.conflicted(origin.repo,
+        result = squashed if isinstance(squashed, Failed) else ports.conflicts.conflicted(origin.repo,
             request_for(task.implement, task.checks, o, 0.0), request.minutes, request.no_change, ports.work.clock)
+        return result if isinstance(result, Failed) else _made(ports, request, task, origin, number)
     s, tree_s, tree_x, tree_o = squashed
     no_change = tree_s == tree_o
     if no_change != request.no_change:
@@ -227,7 +233,7 @@ def _made(ports: LandPorts, request: LandRequest, task: _Task, origin: Origin, n
     if refused is not None:
         return refused
     same, names = tree_s == tree_x, {name for name, _ in required} != {name for name, _ in task.checks.required}
-    settled = "no_change" if no_change else "same_tree" if same and not names else None
+    settled = None if isinstance(resumed, Completed) else "no_change" if no_change else "same_tree" if same and not names else None
     deadline = _deadline(ports, request.minutes, settled is None)
     if isinstance(deadline, Failed):
         return deadline
@@ -289,10 +295,6 @@ def _delivered(ports: LandPorts, request: LandRequest, task: _Task, origin: Orig
 
     if request.no_change:
         return _no_change(ports, origin, current, again, release)
-    if current is not None:
-        resumed = ports.conflicts.resume(origin.repo, task.implement, task.checks)
-        if resumed is not None:
-            return resumed
     if current is not None and current.pending:
         return _pending(ports, request.minutes, current, origin, release, again)
     if current is not None and current.pushable:
