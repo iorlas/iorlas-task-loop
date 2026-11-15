@@ -129,6 +129,7 @@ forbidden_modules =
     http
     multiprocessing
 allow_indirect_imports = True
+unmatched_ignore_alerting = error
 ignore_imports =
     taskloop.dash_server -> http.server
     taskloop.shelf_digest.identities -> urllib.parse
@@ -138,6 +139,7 @@ name = Only slot custody and the rounds lock import the process lock library
 type = forbidden
 source_modules = taskloop
 forbidden_modules = process_lock
+unmatched_ignore_alerting = error
 ignore_imports =
     taskloop.slot_lock -> process_lock
     taskloop.rounds_lock -> process_lock
@@ -147,6 +149,7 @@ name = Only the rounds process's SIGINT, SIGTERM and SIGHUP handlers import sign
 type = forbidden
 source_modules = taskloop
 forbidden_modules = signal
+unmatched_ignore_alerting = error
 ignore_imports =
     taskloop.interrupts -> signal
 
