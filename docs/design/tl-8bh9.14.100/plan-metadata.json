@@ -1,0 +1,10 @@
+{
+  "prepared_commit": "c8906e46b26e0dc092047e0e681f075e8f89fe46",
+  "cited_paths": [
+    "src/taskloop",
+    "tests/rules",
+    "tests/steps",
+    "tests/cli/test_writer_lifetime.py",
+    "tools"
+  ]
+}

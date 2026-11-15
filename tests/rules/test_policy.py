@@ -141,16 +141,46 @@ def write_of(match: re.Match[str]) -> tuple[str, str]:
     return kind, match.group(2).lower()
 
 
-def sql_writes() -> set[tuple[str, str, str]]:
-    paths = (ROOT / "src" / "taskloop").rglob("*.py")
-    return {(*write_of(match), str(path.relative_to(ROOT / "src" / "taskloop"))) for path in paths
+def sql_writes(root: Path = ROOT / "src" / "taskloop") -> set[tuple[str, str, str]]:
+    paths = root.rglob("*.py")
+    return {(*write_of(match), path.relative_to(root).as_posix()) for path in paths
             for match in WRITE.finditer(path.read_text())}
 
 
 def test_every_sql_write_has_its_one_owner() -> None:
     found = sql_writes()
-    assert {(kind, table): owner for kind, table, owner in found} == WRITERS
-    assert len(found) == len(WRITERS), sorted(found)
+    assert_sql_owners(found, WRITERS)
+
+
+def assert_sql_owners(found: set[tuple[str, str, str]], writers: dict[tuple[str, str], str]) -> None:
+    assert {(kind, table): owner for kind, table, owner in found} == writers, sorted(found)
+    assert len(found) == len(writers), sorted(found)
+
+
+@pytest.mark.parametrize("change", ["none", "misplaced", "competing", "unexpected", "missing"])
+def test_sql_ownership_distinguishes_nested_stores(tmp_path: Path, change: str) -> None:
+    statements = {
+        "one/store.py": 'con.execute("INSERT INTO first VALUES (1)")',
+        "two/store.py": 'con.execute("UPDATE second SET value=1")',
+    }
+    writers = {("INSERT", "first"): "one/store.py", ("UPDATE", "second"): "two/store.py"}
+    if change in {"misplaced", "competing"}:
+        statements["two/store.py"] += '\ncon.execute("INSERT INTO first VALUES (2)")'
+    if change in {"misplaced", "missing"}:
+        statements["one/store.py"] = ""
+    if change == "unexpected":
+        statements["two/store.py"] += '\ncon.execute("DELETE FROM second")'
+    for relative, source in statements.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+    found = sql_writes(tmp_path)
+    if change == "none":
+        assert found == {("INSERT", "first", "one/store.py"), ("UPDATE", "second", "two/store.py")}
+        assert_sql_owners(found, writers)
+    else:
+        with pytest.raises(AssertionError):
+            assert_sql_owners(found, writers)
 
 
 @pytest.mark.parametrize(("statement", "write"), [
