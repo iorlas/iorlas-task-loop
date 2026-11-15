@@ -10,6 +10,7 @@ import { taskView } from "../../src/taskloop/dash/static/taskview.js";
 import { usageText } from "../../src/taskloop/dash/static/usage.js";
 import { receiveDuration } from "../../src/taskloop/dash/static/duration.js";
 import { commandExpansion, toolRows, messageFolding, jumpToLatest } from "./lines.test.js";
+import { checkFollowing, checkActivation, checkStaleFeed } from "./check-lines.test.js";
 
 let monotonic = 0;
 Object.defineProperty(performance, "now", { value: () => monotonic, configurable: true });
@@ -766,7 +767,7 @@ try {
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
     drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
     landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations,
-    commandExpansion, toolRows, messageFolding, jumpToLatest]) {
+    commandExpansion, toolRows, messageFolding, jumpToLatest, checkFollowing, checkActivation, checkStaleFeed]) {
     await test();
   }
   }
@@ -778,7 +779,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 22 browser contracts, both themes";
+  results.textContent = "PASS: 25 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;

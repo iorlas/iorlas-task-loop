@@ -20,7 +20,7 @@ export function pause(e, prev) {
 
 export const atBottom = (box) => box.scrollHeight - box.scrollTop - box.clientHeight < BOTTOM_PX;
 
-export function lines(a) {
+export function lines(a, activate) {
   const view = el("div", "flex min-h-0 min-w-0 flex-1 flex-col");
   const box = el("div", "min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4");
   box.id = "tail";
@@ -29,7 +29,7 @@ export function lines(a) {
   list.id = "lines";
   if (!a.feed.length) list.append(el("p", "py-3 text-sm text-slate-500", "No lines recorded for this attempt."));
   const start = a.state === "running" ? Math.max(0, a.feed.length - FEED_LIMIT) : 0;
-  a.feed.slice(start).forEach((e, i) => list.append(line(e, a, a.feed[start + i - 1])));
+  a.feed.slice(start).forEach((e, i) => list.append(line(e, a, a.feed[start + i - 1], false, activate)));
   const note = el("p", "mb-1 text-[11px]");
   note.id = "feednote";
   box.append(note, list);
@@ -47,8 +47,15 @@ export function lines(a) {
 export function setNote(a, note = $("feednote")) {
   if (!note) return;
   note.className = `mb-1 text-[11px] ${a.feedError ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"}`;
-  note.textContent = a.feedError ? `Feed stopped: ${a.feedError}. Reconnecting.`
+  note.textContent = a.feedError ? `Feed stopped: ${a.feedError}.${a.state === "running" ? " Reconnecting." : ""}`
+    : a.feedAvailable === false ? "Check output unavailable: the log file is missing or cannot be read."
     : a.state === "running" ? `Latest ${FEED_LIMIT} lines, live` : "Retained lines";
+  if (a.feedError && a.state !== "running" && a.feedRetry) {
+    const retry = el("button", "ml-2 text-sky-600 dark:text-sky-400", "Retry feed");
+    retry.type = "button";
+    retry.addEventListener("click", a.feedRetry);
+    note.append(retry);
+  }
 }
 
 // Feed display timestamps never establish the attempt's quiet age.
@@ -61,7 +68,7 @@ export function touchQuiet(a) {
 }
 
 // One row: offset, kind emoji and words, content, duration. A faint "paused 33s" row sits above a line that came after a pause.
-function line(e, a, prev, fresh = false) {
+function line(e, a, prev, fresh = false, activate) {
   const idle = pause(e, prev);
   const row = el("div", `${fresh ? "animate-line-in" : ""} event-row grid grid-cols-[3.25rem_3.25rem_minmax(0,1fr)_auto] items-baseline gap-x-3 py-1.5 text-xs`);
   row.dataset.eid = e.id || "";
@@ -73,12 +80,12 @@ function line(e, a, prev, fresh = false) {
   kind.title = WORD[e.type];
   const content = el("span", `col-start-3 ${r} min-w-0`);
   const right = el("span", `col-start-4 ${r} text-right tabular-nums text-slate-500 dark:text-slate-400`);
-  fill(e, content, right);
+  fill(e, content, right, activate);
   row.append(at, kind, content, right);
   return row;
 }
 
-function fill(e, content, right) {
+function fill(e, content, right, activate) {
   if (e.type === "command" || e.type === "tool") {
     const running = e.state === "running";
     const failed = !running && e.exit_code != null && e.exit_code !== 0;
@@ -105,13 +112,31 @@ function fill(e, content, right) {
     content.className += e.type === "error" ? " font-medium text-rose-600 dark:text-rose-400" : " text-amber-600 dark:text-amber-400";
     content.textContent = e.text;
   } else if (e.type === "check") {
-    const color = e.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
-    content.append(el("span", "font-mono text-[12px]", e.name), "  ",
-      el("span", `font-medium ${color}`, e.passed ? STATE.succeeded.label : STATE.failed.label));
-    right.textContent = fmtDur(e.duration_ms);
+    content.append(checkLine(e, activate));
+    if (e.duration_ms != null) right.textContent = fmtDur(e.duration_ms);
   } else {
     content.append(el("span", "text-slate-500 dark:text-slate-400", `${stepInfo(e.step)?.label ?? e.step} attempt ${e.attempt} started`));
   }
+}
+
+function checkLine(e, activate) {
+  const node = el(activate ? "button" : "span", "block w-full min-w-0 text-left");
+  if (activate) {
+    node.type = "button";
+    node.setAttribute("aria-label", `Open Result for ${e.name}${e.block == null ? "" : `, block ${e.block}`}`);
+    node.addEventListener("click", () => activate({ block: e.block, name: e.name }));
+  }
+  node.append(el("span", "font-mono text-[12px]", e.name), "  ");
+  if (e.text != null) node.append(el("span", "block whitespace-pre-wrap break-words font-mono text-[12px]", e.text));
+  else {
+    const known = e.passed === true || e.passed === false;
+    const color = !known ? "text-slate-500 dark:text-slate-400"
+      : e.passed ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
+    const label = known ? (e.passed ? STATE.succeeded.label : STATE.failed.label)
+      : e.state === "running" ? "Running" : e.state === "unfinished" ? "Unfinished" : "Outcome unavailable";
+    node.append(el("span", `font-medium ${color}`, label));
+  }
+  return node;
 }
 
 function command(text) {
@@ -157,14 +182,14 @@ export function apply(attempt, e) {
 
 // The new line in the open Lines tab: in place of its running line, else at the end. The view follows the end only when it was
 // already there; a person who scrolled up keeps the place, even while the oldest rows drop off the top.
-export function show(attempt, e) {
+export function show(attempt, e, activate) {
   const list = $("lines");
   const box = $("tail");
   if (!list || !box || box.dataset.key !== `${attempt.step}/${attempt.n}`) return;
   const follow = atBottom(box);
   if (list.firstChild?.tagName === "P") list.replaceChildren();
   const index = attempt.feed.indexOf(e);
-  const row = line(e, attempt, attempt.feed[index - 1], true);
+  const row = line(e, attempt, attempt.feed[index - 1], true, activate);
   const old = e.id && [...list.children].find((c) => c.dataset.eid === e.id);
   if (old) old.replaceWith(row);
   else list.append(row);
