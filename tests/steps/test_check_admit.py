@@ -172,7 +172,14 @@ def test_a_re_run_is_refused_while_a_land_candidate_of_the_task_is_delivered_or_
     if word is None:
         assert isinstance(found, Admitted)
         return
-    assert isinstance(found, AdmitRefused) and found.reason == word and "tl step land" in found.detail and bench.stored() == before
+    assert isinstance(found, AdmitRefused) and found.reason == word and bench.stored() == before
+    assert "checks cannot re-run" in found.detail
+    assert all(syntax not in found.detail for syntax in ("tl ", "--", "`"))
+    if word == "landed":
+        assert "delivered its code to origin's main" in found.detail and "Task closure still needs to finish" in found.detail
+    else:
+        assert "holds its slot or may already be on origin's main" in found.detail
+        assert "Delivery must finish or the candidate must be withdrawn" in found.detail
 
 
 def test_a_number_other_than_the_store_s_is_task_attempted(bench: ChecksBench) -> None:
