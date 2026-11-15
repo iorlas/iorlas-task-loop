@@ -1,0 +1,12 @@
+{
+  "prepared_commit": "3f0f48292becc35d10f14f67ff6a915b75307a18",
+  "cited_paths": [
+    "src/taskloop",
+    "tests/rules/test_ratchet.py",
+    "tests/rules/test_policy.py",
+    "tests/rules/test_decision_boundaries.py",
+    "tests/rules/test_sqlite_contracts.py",
+    "tests/rules/test_slice_contracts.py",
+    "pyproject.toml"
+  ]
+}
