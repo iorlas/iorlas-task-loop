@@ -3,7 +3,7 @@ import { rail, changeReason, lasted, verifyTitle } from "../../src/taskloop/dash
 import { say, wordNode } from "../../src/taskloop/dash/static/words.js";
 import { COLUMNS, STATE, el, position, quietSpan, tick as updateTime } from "../../src/taskloop/dash/static/ui.js";
 import { result } from "../../src/taskloop/dash/static/result.js";
-import { lines, setNote } from "../../src/taskloop/dash/static/lines.js";
+import { apply, lines, setNote, show } from "../../src/taskloop/dash/static/lines.js";
 import { initDrawer, openDrawer, closeDrawer, onTaskMoved } from "../../src/taskloop/dash/static/drawer.js";
 import { apiSource } from "../../src/taskloop/dash/static/api.js";
 import { taskView } from "../../src/taskloop/dash/static/taskview.js";
@@ -37,8 +37,9 @@ function mount(list, t = task, selected = {}, select = () => {}) {
 function healthyRows() {
   const clicks = [];
   const node = mount(healthy(), task, { step: "verification", n: 38 }, (...args) => clicks.push(args));
-  assert(primary(node).length === 4 && button(node, "Check—"), "healthy task: Plan, Implement, Check, Land");
-  assert(marks(node).length === 2 && marks(node).every((b) => b.textContent === "✓"), "success marks attached to agents");
+  assert(primary(node).length === 4 && button(node, "Check—Success"), "healthy task: Plan, Implement, Check, Land");
+  assert(marks(node).length === 2 && marks(node).every((b) => b.textContent === "✓ Checked and committed"),
+    "success marks have visible verdict words attached to agents");
   assert(!node.textContent.includes("attempt 1") && !node.textContent.includes("Factory checked"), "no routine attempt/verification text");
   assert(!node.querySelector("button button"), "no nested buttons");
   assert(marks(node)[1].getAttribute("aria-pressed") === "true", "selected verification has an indication");
@@ -47,8 +48,14 @@ function healthyRows() {
   assert(document.activeElement === marks(node)[1], "mark independently focusable");
   marks(node)[1].click();
   assert(clicks[0].join("/") === "verification/38", "verification number need not match agent attempt");
-  button(node, "PlanUnknown duration").click();
+  button(node, "PlanUnknown durationSuccess").click();
   assert(clicks[1].join("/") === "plan/1", "step button selects its own result");
+  for (const [state, label] of Object.entries(STATE)) {
+    const row = primary(mount([attempt("implement", 1, { state })]))[0];
+    assert(row.querySelector(`.${label.dot.split(" ")[0]}`), `${state} dot retained`);
+    const text = [...row.querySelectorAll("span")].find((s) => s.textContent === label.label);
+    assert(text && !text.hidden && !text.classList.contains("sr-only"), `${state} has adjacent visible state words`);
+  }
 }
 
 function verificationStates() {
@@ -56,10 +63,11 @@ function verificationStates() {
     const failed = !["verified", "reused"].includes(code);
     const selected = [];
     const node = mount([attempt("plan", 1, { state: failed ? "failed" : "succeeded", summary: failed ? "verification" : "verified" }), verify(42, { summary: code, state: failed ? "failed" : "succeeded" })], task, {}, (...args) => selected.push(args));
-    assert(marks(node)[0].textContent === (failed ? "✗" : "✓"), code);
+    const label = failed && !say(code).startsWith("Not committed:") ? `Not committed: ${say(code)}` : say(code);
+    assert(marks(node)[0].textContent === `${failed ? "✗" : "✓"} ${label}`, `${code} mark has visible verdict words`);
     marks(node)[0].click();
     if (failed) {
-      const why = [...node.querySelectorAll("button")].find((b) => b.textContent.startsWith("Not committed:"));
+      const why = [...node.querySelectorAll("button")].find((b) => b.textContent.startsWith("✗ Not committed:"));
       assert(why && !why.textContent.includes("Not committed: Not committed:"), "one rejection prefix");
       assert(why.title.includes(code), "raw failure code in hover");
       assert(!node.textContent.includes("The factory's check of the answer failed"), "verification failure not duplicated on agent row");
@@ -68,7 +76,7 @@ function verificationStates() {
     assert(selected.every((args) => args.join("/") === "verification/42"), "all failure controls select Result");
   }
   let node = mount([attempt("plan"), verify(4, { state: "running", summary: "pending" })]);
-  assert(marks(node)[0].textContent === "…" && !node.textContent.includes("Not committed:"), "pending neutral");
+  assert(marks(node)[0].textContent === "… Not checked yet" && !node.textContent.includes("Not committed:"), "pending neutral with words");
   node = mount([attempt("plan"), verify(4, { state: "failed", summary: "pending" })]);
   assert(node.textContent.includes("verification outcome was not recorded"), "terminal missing outcome truthful");
   node = mount([attempt("plan")]);
@@ -157,7 +165,8 @@ function reviewed() {
 async function pastRuns() {
   const selected = { step: "checks", n: 2 };
   let node = mount(reviewed(), task, selected);
-  assert(node.querySelector("summary").textContent === "History 1 · Plan ✓ · Implement ✓ · Check ✓",
+  assert(node.querySelector("summary").textContent ===
+    "History 1 · Plan ✓ Checked and committed · Implement ✓ Checked and committed · Check ✓ Success",
     "past status from actual results");
   assert(node.querySelector("summary").title.includes("every attempt and verification result"), "history tooltip uses attempt");
   assert(!node.querySelector("details").open && primary(node).length === 6, "reviewed shape folds past, about eight lines including failure");
@@ -178,10 +187,18 @@ async function pastRuns() {
   node = mount(history);
   const summaries = [...node.querySelectorAll("summary")];
   assert(summaries.length === 2 && summaries[1].textContent.startsWith("History 2"), "restart boundaries split past history");
-  assert(summaries[0].textContent.includes("Plan ✓ (earlier failure)"), "success never hides earlier failures");
+  assert(summaries[0].textContent.includes("Plan ✓ Checked and committed (earlier failure)"), "success never hides earlier failures");
   node = mount([attempt("plan", 1, { past: true })], { ...task, column: "waiting" });
   assert(!node.textContent.includes("pending") && !primary(node).length, "entirely past waiting task invents no steps");
-  assert(node.querySelector("summary").textContent.includes("Plan …"), "unverified answer never marked committed");
+  assert(node.querySelector("summary").textContent.includes("Plan … Success; Not checked yet"),
+    "unverified answer never marked committed and has visible outcome words");
+  for (const state of ["running", "failed"]) {
+    node = mount([attempt("checks", 1, { past: true, state })]);
+    assert(node.querySelector("summary").textContent.includes(STATE[state].label), `folded ${state} check has words`);
+  }
+  node = mount([attempt("plan", 1, { past: true }), verify(1, { past: true, state: "failed", summary: "unsettled:unsafe" })]);
+  assert(node.querySelector("summary").textContent.includes("✗ Not committed: a listed path is unsafe"),
+    "folded verification failure explains its mark");
 }
 
 async function drawerSelection() {
@@ -212,7 +229,7 @@ async function drawerSelection() {
     button(drawer, tab).click(); await tick();
     assert(drawer.textContent.includes("A listed path is unsafe"), "selected repeat reason translated");
     assert(drawer.textContent.includes("Began after a repeat of Implement, attempt 2"), "agent repeat wording preserved");
-    const mark = marks(drawer).find((b) => b.textContent === "✗");
+    const mark = marks(drawer).find((b) => b.textContent.startsWith("✗ "));
     mark.click(); await tick();
     assert(drawer.querySelector("section h3").textContent.includes("Check of Implement attempt 2"), "verification title");
     assert(drawer.querySelector("section").textContent.includes("Failure"), "failed attempt and validation badges");
@@ -277,7 +294,7 @@ async function landSelection() {
   assert(drawer.textContent.includes("Awaiting your delivery decision"), "waiting notes survive Land selection");
   button(drawer, "Task").click(); button(drawer, "Steps 5").click();
   assert(landButton(drawer).getAttribute("aria-pressed") === "true", "selection survives task view navigation");
-  button(drawer, "ImplementUnknown duration").click(); await tick();
+  button(drawer, "ImplementUnknown durationSuccess").click(); await tick();
   assert(drawer.querySelector("section h3").textContent.includes("Implement, attempt 1"), "Land returns to attempt navigation");
   landButton(drawer).click(); await tick();
   assert(calls === 1, "navigation reuses the selected summary");
@@ -357,6 +374,41 @@ function words() {
   assert(say("unknown:new") === "unknown:new" && say("Owner changed scope") === "Owner changed scope", "unknown codes/prose preserved");
   assert(wordNode(el, "unsafe").title === "unsafe", "raw code hover retained");
   assert(say("run:unknown") === "The agent attempt failed: unknown", "agent failure family keeps its tail");
+}
+
+function eventIndicators() {
+  const at = "2026-11-14T10:00:00Z";
+  const cases = [
+    ["command", "💻 Command", { cmd: "build", state: "running" }],
+    ["tool", "🧰 Tool", { name: "Read", cmd: "source", state: "running" }],
+    ["message", "💬 Agent message", { text: "Hello" }],
+    ["think", "🧠 Agent reasoning", { text: "Consider the task" }],
+    ["error", "❌ Error", { text: "Unavailable" }],
+    ["waiting", "⏳ Waiting", { text: "Pending reply" }],
+    ["check", "🧪 Check", { name: "lint", passed: true, duration_ms: 1000 }],
+    ["step", "🚦 Step", { step: "implement", attempt: 1 }],
+  ];
+  const feed = cases.map(([type, , fields]) => ({ type, id: type, at, ...fields }));
+  const item = attempt("implement", 1, { feed });
+  fixture.replaceChildren(lines(item));
+  const assertLabels = () => {
+    const rows = [...fixture.querySelectorAll("#lines > div")];
+    assert(rows.length === cases.length, "one row per event kind");
+    cases.forEach(([, label], i) => {
+      const kind = rows[i].children[1];
+      assert(kind.textContent === label && !kind.hidden && !kind.classList.contains("sr-only"),
+        `${label} has adjacent visible words`);
+    });
+  };
+  assertLabels();
+  item.feed = [];
+  fixture.replaceChildren(lines(item));
+  for (const event of feed) { apply(item, event); show(item, event); }
+  assertLabels();
+  const completed = { ...feed[0], state: "finished", exit_code: 1, duration_ms: 1000 };
+  apply(item, completed); show(item, completed);
+  assertLabels();
+  assert(fixture.querySelector("#lines > div").textContent.includes("exit 1"), "replacement keeps failure words");
 }
 
 function vocabulary() {
@@ -578,7 +630,8 @@ async function liveDurations() {
 
 try {
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
-    drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, vocabulary, waitingRows, usage, liveDurations]) {
+    drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
+    waitingRows, usage, liveDurations]) {
     await test();
   }
   for (const dark of [false, true]) {
@@ -589,7 +642,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 13 browser contracts, both themes";
+  results.textContent = "PASS: 15 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;
