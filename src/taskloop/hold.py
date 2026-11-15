@@ -24,12 +24,14 @@ from taskloop.attempt_reads import AttemptRow, StoreRefused, StoreUnavailable
 from taskloop.attempt_status import AttemptView, agent_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold_cause import LAND_CAUSE
+from taskloop.hold_event import event
 from taskloop.hold_facts import Pending, facts, outcome, refusal
 from taskloop.hold_status import MAIN_MOVED, cause
 from taskloop.hold_store import HoldInsert, HoldRow, HoldStore
 from taskloop.hold_text import Kept, Returned, comment
 from taskloop.operations import ChecksReleasing, Clock, Failed, Release, release_task
+from taskloop.task_event_cause import LandCause, RoundCause, TaskEventCause
+from taskloop.task_event_codec import reason as event_reason
 from taskloop.tracker import ACTOR
 from taskloop.tracker_client import TrackerHolds
 
@@ -37,7 +39,6 @@ type Missing = Literal["", "labels", "abandon", "comment", "retire"]
 type Status = Callable[[str, str], AttemptView | None]  # (backlog, task): its current view read now, before any hold word
 type Claim = Literal["ours", "not_ours", "unknown"]
 COMMENTING: Final = ("moved", "absent", "not_ours")  # the label words after which the hold writes its one comment
-ROUND_CAUSES: Final = frozenset({"claim_lost", "branch_moved"})  # the advance's and publication's refusals (no status word)
 ROUND_WORDS: Final = frozenset({"advance", "publish"})  # the view's word while such a cause still stands
 
 
@@ -90,12 +91,12 @@ class Cleared:
     detail: str = ""
 
 
-def hold_task(ports: HoldPorts, view: AttemptView, reason: str | None = None) -> HoldMove:
-    """Hold the view's task for `reason` (default: the view's due cause; a recorded hold keeps its own), or finish a hold
+def hold_task(ports: HoldPorts, view: AttemptView, decided: TaskEventCause | None = None) -> HoldMove:
+    """Hold the view's task for a typed decision (default: the view's due cause; a recorded hold keeps its own), or finish a hold
     already recorded. `view` is the round's status view of the task's current attempt (a checks view's cause is its
     checks attempt; A is the implement attempt it follows)."""
     agent = agent_attempt(view)
-    why = reason or view.hold_due or ""
+    why = view.hold_due or ""
 
     def move(word: Literal["held", "pending", "refused"], missing: Missing = "", refused: str = "", detail: str = "") -> HoldMove:
         return HoldMove(view.task_id, agent, view.step, why, word, missing, refused, detail)
@@ -104,9 +105,11 @@ def hold_task(ports: HoldPorts, view: AttemptView, reason: str | None = None) ->
     try:
         row = ports.store.of_attempts((agent,)).get(agent)
         if row is None:
-            if not why:
+            if not why and decided is None:
                 return move("refused", refused="refused:no_cause")
-            row = ports.store.insert(HoldInsert(agent, view.attempt_id, why, ports.clock()))
+            captured = event(ports.files, ports.reader, _agent_row(ports.reader, view, agent), view, decided)
+            why = event_reason(captured)
+            row = ports.store.insert(HoldInsert(event=captured, now=ports.clock()))
         why = row.reason
         if not _caused(ports, row):
             return _retired(ports, row, move)
@@ -133,9 +136,9 @@ def _caused(ports: HoldPorts, row: HoldRow) -> bool:
         return True
     if fresh.attempt_id != row.cause_id:
         return False
-    if row.reason.startswith(LAND_CAUSE):  # the refused land leaves the view at its `land` (or an abandon's `release`)
+    if isinstance(row.event.cause, LandCause):  # the refused land leaves the view at its `land` (or an abandon's `release`)
         return fresh.next in ("land", "release")
-    if row.reason not in ROUND_CAUSES:
+    if not isinstance(row.event.cause, RoundCause):
         return cause(fresh) is not None
     return fresh.next in ROUND_WORDS or (fresh.checks is not None and fresh.result.reason == MAIN_MOVED)  # or a checks re-run's
 
@@ -193,8 +196,7 @@ def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move, cl
     if isinstance(found, Pending):
         return move("pending", "abandon", found.word, detail)
     if row.labels in COMMENTING and row.commented_at is None:
-        leftovers = view.leftovers if view.checks is None and view.attempt_id == row.attempt_id else ()
-        written = _comment(ports, row, agent, found, leftovers)
+        written = _comment(ports, row, agent, found)
         if isinstance(written, str):
             return move("pending", "comment", written) if isinstance(found, Returned) else move("pending", "abandon", word, written)
         row = written
@@ -203,7 +205,7 @@ def _abandoned(ports: HoldPorts, view: AttemptView, row: HoldRow, move: Move, cl
     return move("held")
 
 
-def _comment(ports: HoldPorts, row: HoldRow, agent: AttemptRow, found: Returned | Kept, leftovers: tuple[str, ...]) -> HoldRow | str:
+def _comment(ports: HoldPorts, row: HoldRow, agent: AttemptRow, found: Returned | Kept) -> HoldRow | str:
     """The one comment under the lease: a lost lease (another caller's, live) writes nothing (`refused:leased`); a
     posted comment (or a task deleted meanwhile, which can take none) is recorded. A tracker failure releases the lease;
     a lost caller's lease expires after `COMMENT_LEASE`. Both retry with the same attempt key."""
@@ -212,7 +214,7 @@ def _comment(ports: HoldPorts, row: HoldRow, agent: AttemptRow, found: Returned 
     if leased is None or labels not in COMMENTING:
         return "refused:leased"
     saved = tuple(each.sha for each in ports.store.saved(leased.attempt_id))
-    text = comment(replace(facts(ports.files, ports.reader, leased, labels, agent, leftovers), saved=saved), found)
+    text = comment(replace(facts(ports.files, ports.reader, leased, labels, agent), saved=saved), found)
     answer = ports.tracker.comment(leased.tracker_root, leased.task_id, leased.attempt_id, text)
     if answer.word == "unavailable":  # one capped try failed: the lease is given back, so the next round retries at once
         ports.store.uncommenting(leased.attempt_id, leased.rev)

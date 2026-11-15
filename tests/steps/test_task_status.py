@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from doubles import D
+from hold_fixtures import row
 from test_dash_read import KEY, Tracker
 
 from taskloop.attempt_reads import ReleaseRow
@@ -17,7 +18,6 @@ from taskloop.dash_board import BoardPorts, admission_of, build_board, column_of
 from taskloop.dash_model import Board, Ready, TaskDetail
 from taskloop.dash_task import TaskPorts, build_task
 from taskloop.evidence_files import EvidenceFiles
-from taskloop.hold_store import HoldRow
 from taskloop.land_status import LandState
 from taskloop.step import Step
 from taskloop.step_render import human
@@ -25,7 +25,7 @@ from taskloop.task_status import Admission, Status, TaskStatus, Wait, blocker, i
 
 PASSED = AttemptResult("collected", "passed")
 VIEW = AttemptView("tasks", "tl-1", "plan", "a", "s1", "admitted", "running", AttemptResult("pending", "admitted"), False, "wait")
-HOLD = HoldRow("a", "a", "failed:needs_owner", 10.0, "not_ours", 11.0, 12.0, 13.0, None, 4, "tasks", "tl-1", "/tracker", "auto")
+HOLD = row(labels="not_ours")
 ABANDONED = replace(VIEW, next="start", entry="gone", release=ReleaseRow(D, 5.0, "unclaimed"))
 ASKED = Admission(frozenset({"tl-1"}), "auto")
 
@@ -72,10 +72,11 @@ def test_a_task_a_person_abandoned_is_queued_to_start_once_the_tracker_lists_it_
 
 
 def test_a_hold_abandon_is_taken_again_only_by_the_answer_to_its_label() -> None:
-    held = replace(ABANDONED, next="on_hold", hold=replace(HOLD, labels="moved", label="auto"), release=ReleaseRow(D, 5.0, "unclaimed"))
+    held = replace(ABANDONED, next="on_hold", hold=HOLD.model_copy(update={"labels": "moved", "label": "auto"}),
+                   release=ReleaseRow(D, 5.0, "unclaimed"))
     assert task_status(held, ASKED).status is Status.QUEUED
     assert task_status(held, replace(ASKED, label="night")).status is Status.HELD  # another round label: not the person's answer
-    assert task_status(replace(held, hold=replace(HOLD, labels="not_ours")), ASKED).status is Status.HELD
+    assert task_status(replace(held, hold=HOLD.model_copy(update={"labels": "not_ours"})), ASKED).status is Status.HELD
 
 
 @pytest.mark.parametrize(("free", "reserve", "running", "bound", "wait"), [

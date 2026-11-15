@@ -144,7 +144,7 @@ def test_a_conflict_comment_preserves_retained_work_and_restored_labels_do_not_r
 
 
 @pytest.mark.parametrize("evidence", ["valid", "identity", "active", "malformed"])
-def test_terminal_notice_retries_an_interrupted_effect_and_reads_released_resolution_evidence(rig: Checking, evidence: str) -> None:
+def test_terminal_notice_captures_verified_resolution_before_effects_and_keeps_it_on_retry(rig: Checking, evidence: str) -> None:
     passed(rig)
     [agent] = rig.store.current_attempts()
     checks = rig.checks.row(rig.key("tl-1"))
@@ -174,6 +174,14 @@ def test_terminal_notice_retries_an_interrupted_effect_and_reads_released_resolu
     rig.tracker.down.add("comment")
     rig.round(rig.last.written)
     assert rig.tracker.comments == []
+    if evidence != "valid":
+        assert rig.con.execute("SELECT count(*) FROM task_hold").fetchone() == (0,)
+        assert rig.tracker.holds == []
+    changed = work.model_copy(update={"explanation": "Later evidence must not replace the recorded decision."})
+    if evidence == "valid":
+        held = HoldStore(lambda: rig.con).of_attempts((agent.key.attempt_id,))[agent.key.attempt_id]
+        assert held.event.cause.explanation == work.explanation
+        merges.put(work, changed)
     rig.tracker.down.clear()
     if evidence == "malformed":
         rig.con.execute("UPDATE merge_operation SET data=? WHERE attempt_id=?", (work.model_dump_json(), record.key.attempt_id))
@@ -187,8 +195,8 @@ def test_terminal_notice_retries_an_interrupted_effect_and_reads_released_resolu
     rig.tracker.beads["tl-1"] = replace(rig.tracker.beads["tl-1"], labels=("auto",))
     for _ in range(2):
         assert rig.round(rig.last.written) == [("tl-1", "implement", "skip", "abandoned")]
-    assert rig.tracker.holds == holds and len(lands.requests) == 1
-    assert merges.get(record.key.attempt_id) == work
+    assert rig.tracker.holds == holds and len(lands.requests) == (1 if evidence == "valid" else 2)
+    assert merges.get(record.key.attempt_id) == (changed if evidence == "valid" else work)
 
 
 def test_a_crash_after_posting_a_terminal_notice_reconciles_without_posting_it_twice(

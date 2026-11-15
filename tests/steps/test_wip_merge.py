@@ -6,8 +6,10 @@ from dataclasses import replace
 import pytest
 from git_porcelain import GitUnavailable, MergeStarted, Recorded, UnmergedPaths
 from git_porcelain.testing import FakeRepo, FakeWorktree
+from hold_fixtures import event
 
 from taskloop.hold_store import HoldInsert, HoldStore
+from taskloop.task_event_cause import StuckCause, StuckReason
 from taskloop.wip import Refused, SaveReason, Source, is_saved, park, save, saved_since
 
 
@@ -39,7 +41,7 @@ def test_saved_work_in_new_ancestry_survives_ordinary_and_merge_commits(
 def log(registered: sqlite3.Connection) -> HoldStore:
     registered.execute("UPDATE attempt SET label='auto'")
     log = HoldStore(lambda: registered)
-    log.insert(HoldInsert("attempt", "attempt", "stuck:expired_admitted", 101.0))
+    log.insert(HoldInsert(event=event(StuckCause(reason=StuckReason.EXPIRED_ADMITTED), "attempt"), now=101.0))
     return log
 
 

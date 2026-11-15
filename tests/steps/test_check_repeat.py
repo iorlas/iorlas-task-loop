@@ -11,6 +11,7 @@ from check_repeat_bench import ASSERTION, Repairing
 from doubles import MAIN_PROFILE, FixedIds, PinnedViews
 from git_porcelain import Recorded
 from git_porcelain.testing import FakeRemote, FakeWorktree
+from hold_fixtures import event
 from round_bench import Tracker, scripted, scripts, task
 from shelf_input_fixtures import shelf_files, write_shelf
 from sqlite_store import Store
@@ -44,6 +45,8 @@ from taskloop.setup_store import SetupStore
 from taskloop.shelf_digest.artifact import PATH as DIGEST_PATH
 from taskloop.steps import kind
 from taskloop.task_content_store import TaskContentStore
+from taskloop.task_event_cause import ChecksCause, ChecksReason
+from taskloop.task_event_codec import encode as encode_event
 
 
 @pytest.fixture
@@ -227,8 +230,9 @@ def test_restart_after_admission_uses_one_successor_and_the_captured_input(rig: 
 def test_ineligible_or_changed_sources_never_launch_an_implement_repeat(rig: Repairing, condition: str) -> None:
     previous, source = failed(rig)
     if condition == "held":
-        rig.con.execute("INSERT INTO task_hold (attempt_id,cause_id,reason,held_at) VALUES (?,?,?,?)",
-                        (previous.attempt_id, source.attempt_id, "explicit", rig.now))
+        rig.con.execute("INSERT INTO task_hold (attempt_id,event,held_at) VALUES (?,?,?)",
+                        (previous.attempt_id, encode_event(event(ChecksCause(reason=ChecksReason.EXPIRED),
+                                                               previous.attempt_id, source.attempt_id)), rig.now))
     elif condition == "abandoned":
         rig.con.execute("UPDATE checks_attempt SET abandoned=1")
     elif condition == "old":

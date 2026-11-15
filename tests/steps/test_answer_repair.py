@@ -11,6 +11,7 @@ from typing import Literal
 
 import pytest
 from any_agent.procs import Worker
+from hold_fixtures import STUCK_SQL
 from sqlite_store import Store
 from test_attempt import ENTRY, KEY, PLAN, WORKER, AttemptSurroundings, app, fake, seed
 from test_attempt import surroundings as attempt_surroundings
@@ -167,7 +168,7 @@ def test_two_admitters_converge_on_one_successor(failed: sqlite3.Connection, sur
     "UPDATE execution SET session_state='pending'",
     "UPDATE execution SET session='different'",
     "UPDATE reservation SET generation=2",
-    "INSERT INTO task_hold(attempt_id,cause_id,reason,held_at) VALUES('attempt','cause','held',10)",
+    STUCK_SQL,
     "INSERT INTO drain_state VALUES(1,1,'draining')",
 ])
 def test_ineligible_work_is_not_repaired(failed: sqlite3.Connection, surroundings: AttemptSurroundings, change: str) -> None:

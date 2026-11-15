@@ -6,6 +6,7 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 
 import pytest
+from hold_fixtures import STUCK_SQL
 from sqlite_store import begin_immediate
 from test_attempt import AttemptSurroundings
 from test_attempt import surroundings as attempt_surroundings
@@ -87,7 +88,7 @@ def test_captured_completion_preserves_live_or_unknown_entry(captured_work: Atte
 
 @pytest.mark.parametrize("change", [
     "UPDATE reservation SET generation=2",
-    "INSERT INTO task_hold(attempt_id,cause_id,reason,held_at) VALUES('attempt','cause','held',10)",
+    STUCK_SQL,
     "UPDATE attempt SET session_conflict=1",
 ])
 def test_captured_completion_reloads_ownership_under_custody(captured_work: Attempts, change: str) -> None:

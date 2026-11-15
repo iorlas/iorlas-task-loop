@@ -17,11 +17,11 @@ from pathlib import Path
 from typing import Final
 
 from taskloop.attempt_status import AttemptView
-from taskloop.hold_cause import LAND_CAUSE
 from taskloop.land import How, LandRequest
 from taskloop.operations import Failed, Move
 from taskloop.profile import LandMode
 from taskloop.round_trail import Trail
+from taskloop.task_event_cause import LandCause, LandReason
 from taskloop.task_status import waiting_for_land
 
 # the refusals that are about the task's change: hold it instead of trying again every round
@@ -43,7 +43,7 @@ def _waiting(current: Iterable[AttemptView]) -> list[AttemptView]:
 
 
 def land_passed(landing: Landing | None, backlog: str, checkout: Path, minutes: int, current: Iterable[AttemptView], trail: Trail,
-                hold: Callable[[AttemptView, str], Move]) -> frozenset[str]:
+                hold: Callable[[AttemptView, LandCause], Move]) -> frozenset[str]:
     """The tasks this phase finished (landed or held): the free-slot reserve for a waiting land no longer counts them."""
     waiting = _waiting(current)
     if landing is None or not waiting:
@@ -61,7 +61,11 @@ def land_passed(landing: Landing | None, backlog: str, checkout: Path, minutes: 
             trail.add(Move(each.task_id, "land", found, each.attempt_id, step=each.step))
             return frozenset({each.task_id})
         if found.kind == "refused" and found.reason in HOLDING:
-            trail.add(hold(each, f"{LAND_CAUSE}{found.reason}"))
+            decision = LandCause(reason=LandReason(found.reason),
+                                 explanation=found.detail or f"Automatic land was refused: {found.reason}.",
+                                 source=each.checks.row.commit if each.checks is not None else None,
+                                 target=each.checks.row.target if each.checks is not None else None)
+            trail.add(hold(each, decision))
             return frozenset({each.task_id})
         trail.add(Move(each.task_id, "land", found.word, each.attempt_id, found.detail, each.step))
         if found.kind != "refused":

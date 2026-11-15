@@ -8,6 +8,7 @@ import pytest
 from doubles import FakeSlotFiles, PinnedViews
 from git_porcelain import GitUnavailable
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
+from hold_fixtures import event
 from merge_bench import Bench, MergeRepo, bench, head
 
 from taskloop.attempt_status import StatusPorts, current_view
@@ -18,6 +19,7 @@ from taskloop.hold_store import HoldInsert, HoldStore
 from taskloop.ids import NativeIds
 from taskloop.merge.models import Phase, Reason, Terminal, Work
 from taskloop.slot_release import NotReleased, Released, SlotRelease
+from taskloop.task_event_cause import MergeCause, MergeReason
 from taskloop.wip import is_saved
 
 
@@ -58,7 +60,8 @@ def test_unlabelled_terminal_merge_holds_and_preserves_before_abort(conflict: Be
     view = current_view(StatusPorts(store, lambda _entry: "gone", lambda: 10, lambda _key: None, lambda: "boot"), "tasks", "tl-1")
     assert view is not None and view.next == "hold" and cause(view) == "merge:needs_owner" and view.result.explanation
     log = HoldStore(lambda: registered)
-    row = log.insert(HoldInsert("attempt", "attempt", "merge:needs_owner", 10))
+    row = log.insert(HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER,
+                                                     explanation=view.result.explanation), "attempt"), now=10))
     assert row.label is None and not reingests("on_hold", row, "auto")
     markers = conflict.slot.read_file("README")
     result = releaser(registered, conflict).release(AttemptKey("attempt", "dispatch", 1), True)
@@ -78,7 +81,8 @@ def test_preservation_failure_keeps_the_merge_and_reservation(
     conflict: Bench, registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     log = HoldStore(lambda: registered)
-    log.insert(HoldInsert("attempt", "attempt", "merge:needs_owner", 10))
+    log.insert(HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER,
+                                               explanation="Resolve retained merge work."), "attempt"), now=10))
 
     def unavailable(*_args: object) -> None:
         raise GitUnavailable("capture failed")
@@ -94,7 +98,8 @@ def test_crash_after_abort_adopts_preservation_without_saving_a_reverted_tree(
     conflict: Bench, registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     log = HoldStore(lambda: registered)
-    log.insert(HoldInsert("attempt", "attempt", "merge:needs_owner", 10))
+    log.insert(HoldInsert(event=event(MergeCause(reason=MergeReason.NEEDS_OWNER,
+                                               explanation="Resolve retained merge work."), "attempt"), now=10))
     abort = FakeWorktree.abort_merge
 
     def interrupted(self: FakeWorktree) -> None:

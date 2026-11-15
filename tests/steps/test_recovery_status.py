@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from doubles import PinnedViews
 from git_porcelain.testing import FakeWorktree
+from hold_fixtures import STUCK_SQL
 from round_bench import Factory, Tracker
 from test_recovery import Processes, recovery
 from test_recovery_registration import WORKER, intended
@@ -111,7 +112,7 @@ def test_captured_completion_and_explicit_holds_keep_their_own_paths(tmp_path: P
     assert view is not None and view.next == "verify"
     con.execute("DELETE FROM execution")
     con.execute("UPDATE attempt SET phase='registered', label='auto'")
-    con.execute("INSERT INTO task_hold(attempt_id,cause_id,reason,held_at) VALUES('attempt','attempt','stuck:entry_lost',10)")
+    con.execute(STUCK_SQL)
     before = list(con.iterdump())
     shown = show_attempt(ports(con, Processes()), tmp_path / "artifacts", "tasks", "tl-1")
     assert isinstance(shown, Shown) and shown.view.next == "hold"
