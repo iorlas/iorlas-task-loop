@@ -29,6 +29,7 @@ from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
     Checkouts,
+    CommitRefused,
     Committed,
     SlotFiles,
     Unsettled,
@@ -183,7 +184,7 @@ def test_a_read_only_verifier_asked_to_write_is_its_own_unknown(
     captured(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
     found = FactoryCommit(AttemptStore(lambda: registered), checkouts, slot_files, lambda _worker: True,
         lambda: 20, refused, ids=NativeIds()).commit(KEY)
-    assert found == VerifyUnavailable("read_only") and writes == []
+    assert found == CommitRefused("read_only") and writes == []
 
 
 def test_a_verify_reads_the_attempt_again_under_the_lock(

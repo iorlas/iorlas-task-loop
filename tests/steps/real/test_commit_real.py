@@ -23,6 +23,7 @@ from taskloop.attempt_types import (
     AnswerState,
     AttemptKey,
     ChainLink,
+    CommitRefused,
     Committed,
     FileRef,
     Rejected,
@@ -135,7 +136,7 @@ def test_a_symlink_indirected_pointer_to_the_persons_git_directory_is_redirected
     attempt = admission(main, slot)
     plan(slot)
     redirect(slot, main / ".git")  # Git would commit the slot's files onto the person's `main`
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert git(main, "rev-parse", "main").strip() == branch and list(markers.iterdir()) == []
 
 
@@ -152,7 +153,7 @@ def test_a_fake_git_directory_in_the_slot_whose_filter_would_run_is_redirected(
         config.write(f"[filter \"x\"]\n\tclean = sh -c 'touch {markers / 'filter'}; cat'\n")
     (fake / "info/attributes").write_text("* filter=x\n")
     redirect(slot, fake)
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert list(markers.iterdir()) == [] and git(main, "rev-parse", "main").strip() == branch
     assert git(slot, "--git-dir", str(main / ".git/worktrees/s1"), "rev-parse", "HEAD").strip() == base
 
@@ -189,7 +190,7 @@ def test_a_pointer_swapped_after_the_check_before_the_stage_does_not_change_the_
     git(tmp_path, "config", "--file", str(fake / "config"), "filter.x.clean", f"touch '{markers / 'filter'}' && cat")
     (fake / "info/attributes").write_text("* filter=x\n")
     files = SwappedAfter(slot, fake, check=2)
-    assert settle(VIEWS.checkouts, files, attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, files, attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert files.seen == 2 and list(markers.iterdir()) == []  # the third check fails before its back-pointer read
     verified = ("--git-dir", str(main / ".git/worktrees/s1"), "--work-tree", str(slot))
     assert git(slot, *verified, "diff", "--cached", "--name-only").strip() == P
@@ -219,7 +220,7 @@ def test_a_crash_leftover_is_adopted_through_real_history_only_as_one_trailer_co
     git(slot, *hookless, "commit", "-q", "-m", "Plan tl-1\n\nTask-Loop-Attempt: attempt")
     head = git(slot, "rev-parse", "HEAD").strip()
     found = settle(VIEWS.checkouts, RealSlotFiles(), admission(main, slot), base, ANSWER, quiet)
-    assert found == (Unsettled("head_moved") if extra else factory_commit.Committed(head))
+    assert found == (CommitRefused("head_moved") if extra else factory_commit.Committed(head))
 
 
 def test_a_slot_whose_git_file_is_gone_never_reaches_an_enclosing_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,7 +238,7 @@ def test_a_slot_whose_git_file_is_gone_never_reaches_an_enclosing_repository(tmp
     plan(slot)
     attempt = admission(main, slot)
     (slot / ".git").unlink()
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     view = VIEWS.checkouts(slot).worktree(slot)  # what a Git call after a passed check would meet
     with pytest.raises(GitUnavailable):
         view.stage([P])
@@ -257,7 +258,7 @@ def test_a_pointer_through_an_agent_made_symlink_is_redirected_even_to_the_right
     plan(slot)
     (slot / "glink").symlink_to(main / ".git/worktrees/s1")
     (slot / ".git").write_text("gitdir: glink\n")
-    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == Unsettled("redirected")
+    assert settle(VIEWS.checkouts, RealSlotFiles(), attempt, base, ANSWER, quiet) == CommitRefused("redirected")
     assert list(markers.iterdir()) == []
 
 

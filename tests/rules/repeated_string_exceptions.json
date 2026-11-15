@@ -432,7 +432,7 @@
     "store": 6,
     "unavailable": 12,
     "uncertain": 3,
-    "unsettled": 4
+    "unsettled": 3
   },
   "src/taskloop/owned_processes.py": {
     "gone": 3,

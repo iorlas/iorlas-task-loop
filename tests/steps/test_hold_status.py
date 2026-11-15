@@ -17,7 +17,7 @@ from taskloop.answer_failures import AnswerFailureData, AnswerRule, encode
 from taskloop.attempt_reads import ReleaseRow, StoreUnavailable
 from taskloop.attempt_status import AttemptView, Listed, Shown, StatusPorts, agent_attempt, list_attempts, show_attempt, with_hold
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import AttemptResult, Unsettled
+from taskloop.attempt_types import AttemptResult, CommitRefused, Unsettled
 from taskloop.check_status import ChecksView
 from taskloop.check_store import CheckStore
 from taskloop.evidence_files import EvidenceFiles
@@ -308,12 +308,12 @@ def test_a_moved_head_shows_the_refs_the_agent_made_but_stays_next_verify_not_a_
     factory.execute("""INSERT INTO execution (attempt_id,dispatch_token,generation,rc,timed_out,work,stands,stdout_path,
         stdout_digest,stderr_path,stderr_digest,answer_path,answer_digest,diagnostic_path,diagnostic_digest,answer_kind,effect,
         session_state) VALUES ('a','a-token',1,0,0,1,1,'o','d','e','d','a','d','g','d','valid','commit','complete')""")
-    ports = replace(reads(factory), leftovers=lambda _key: Unsettled("head_moved", ("refs/tags/task/evil",)))
+    ports = replace(reads(factory), leftovers=lambda _key: CommitRefused("head_moved", ("refs/tags/task/evil",)))
     found = list_attempts(ports)
     assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [
         ("verify", ("head_moved", "refs/tags/task/evil"))]
     for reason in ("branch", "unborn"):  # no listing: the reason alone, which the `unsettled` guide's `branch` text answers
-        found = list_attempts(replace(ports, leftovers=lambda _key, why=reason: Unsettled(why)))
+        found = list_attempts(replace(ports, leftovers=lambda _key, why=reason: CommitRefused(why)))
         assert isinstance(found, Listed) and [(each.next, each.leftovers) for each in found.attempts] == [("verify", (reason,))]
     found = list_attempts(replace(ports, leftovers=lambda _key: Unsettled("dirty", ("a",))))  # not shown: only the three
     assert isinstance(found, Listed) and [each.leftovers for each in found.attempts] == [()]

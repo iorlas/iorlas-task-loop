@@ -30,13 +30,13 @@ from taskloop.attempt_result import collect, succeeded
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import (
     AttemptKey,
+    CommitRefused,
     CommitResult,
     Committed,
     EntryIdentity,
     NotApplicable,
     Rejected,
     Unsettled,
-    VerifyRefused,
     VerifyUnavailable,
 )
 from taskloop.captured_start import AnswerRepairing, start_captured
@@ -61,10 +61,10 @@ type FailureKind = Literal["refused", "unavailable", "uncertain", "rejected", "n
 UNKNOWN_KINDS: Final = ("unavailable", "uncertain", "unsettled")  # re-running is safe: exit 3
 UNCLAIMING: Final = "Abandoned, but the tracker claim has not been returned. The abandon must finish before fresh admission."
 LATE: Final = "late_relaunch"  # the counted word of a round's relaunch of a checks attempt past its deadline
-COMMIT_KINDS: Final[dict[type[Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
+COMMIT_KINDS: Final[dict[type[Rejected | NotApplicable | CommitRefused | Unsettled | VerifyUnavailable], FailureKind]] = {
     Rejected: "rejected",
     NotApplicable: "not_applicable",
-    VerifyRefused: "refused",
+    CommitRefused: "refused",
     Unsettled: "unsettled",
     VerifyUnavailable: "unavailable",
 }
@@ -596,10 +596,10 @@ def publish_task(reader: AttemptStore, publisher: Publish, backlog: str, task_id
     return PublishedTask(backlog, task_id, found[0].attempt_id, result)
 
 
-def commit_failure(result: Rejected | NotApplicable | VerifyRefused | Unsettled | VerifyUnavailable) -> Failed:
+def commit_failure(result: Rejected | NotApplicable | CommitRefused | Unsettled | VerifyUnavailable) -> Failed:
     """An unsettled slot carries its listing (`bounded` where it was read) as the detail, as `tl step show` prints it."""
-    if isinstance(result, VerifyUnavailable) and result.reason == "inconsistent":  # same inputs, another verdict: a defect
-        return Failed("defect", result.reason)
-    if isinstance(result, Unsettled):
-        return Failed("unsettled", result.reason, "\n".join(filter(None, (unsafe_details(result), "\n".join(result.listing)))))
+    if isinstance(result, (Unsettled, CommitRefused)):
+        details = ((unsafe_details(result),) if isinstance(result, Unsettled) else
+                   ("Contradictory retained facts: inconsistent verdict or end commit.",) if result.reason == "inconsistent" else ())
+        return Failed(COMMIT_KINDS[type(result)], result.reason, "\n".join(filter(None, (*details, "\n".join(result.listing)))))
     return Failed(COMMIT_KINDS[type(result)], result.what if isinstance(result, NotApplicable) else result.reason)
