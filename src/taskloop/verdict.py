@@ -18,7 +18,8 @@ def judge(repo: Repo, root: Path, commit: str, step: StepKind, rules: StepRules,
     """The rules in order over the step's chain; the first broken one decides. Every read is of content-addressed
     objects. S: each earlier attempt of effect `commit`'s stored X, then `commit` (Xn) when the last attempt's effect is
     `commit`. Xn is len(S) first-parent commits on attempt 1's B, each S_k one commit on S_k-1 judged against its own
-    attempt's `paths`; then the kind's artifact rule at Xn. No commit in the whole step (`commit` is B1): only the
+    attempt's `paths` for plans, or all reviewed slot changes for implementation; then the kind's artifact rule at Xn.
+    No commit in the whole step (`commit` is B1): only the
     artifact rule, `reused`. Attempt 1 alone is the one-step chain."""
     tip = repo.tree(f"{commit}^{{commit}}")
     if tip is None or tip.sha != commit:  # never a tag, tree or abbreviation that resolves to some other commit
@@ -35,7 +36,7 @@ def judge(repo: Repo, root: Path, commit: str, step: StepKind, rules: StepRules,
     if relation.behind != len(chain):
         return Rejected("chain_length")
     for sha, paths in chain:
-        broken = _link(repo, root, sha, parent, rules, paths)
+        broken = _link(repo, root, sha, parent, step, rules, paths)
         if broken is not None:
             return Rejected(broken)
         parent = sha
@@ -47,9 +48,9 @@ def _artifact(step: StepKind, tip: Tree, rules: StepRules, *, reused: bool) -> V
     return found if isinstance(found, Rejected) else Verified(found, reused)
 
 
-def _link(repo: Repo, root: Path, sha: str, parent: str, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:
+def _link(repo: Repo, root: Path, sha: str, parent: str, step: StepKind, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:
     """One commit of the chain: a commit whose first parent is `parent` (else a merge brought it in), its changes held
-    to its own attempt's listed `paths`."""
+    to the step's rules and, for plans, its own attempt's listed `paths`."""
     tree = repo.tree(f"{sha}^{{commit}}")
     if tree is None or tree.sha != sha:
         return "commit_absent"
@@ -58,16 +59,17 @@ def _link(repo: Repo, root: Path, sha: str, parent: str, rules: StepRules, paths
         raise Unreadable("parent")
     if up.sha != parent:
         return "not_descendant"
-    return _changes(repo, root, tree, up, rules, paths)
+    return _changes(repo, root, tree, up, step, rules, paths)
 
 
-def _changes(repo: Repo, root: Path, tip: Tree, base: Tree, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:
+def _changes(repo: Repo, root: Path, tip: Tree, base: Tree, step: StepKind, rules: StepRules, paths: tuple[str, ...]) -> Rule | None:
     """One diff B..X: each change added or modified (deletions only when the step allows them), on an allowed path the
-    answer listed, mode 100644 at X and, for a change or deletion, at B too (a type change, which the diff reports as a
+    answer listed when planning, mode 100644 at X and, for a change or deletion, at B too (a type change, which the diff reports as a
     change, never turns a symlink, gitlink or executable into a plain file), and every committed blob at most
     `file_cap` bytes after the full read."""
     for change in repo.worktree(root).diff(base.sha, tip.sha, cap=0).changes:
-        if (change.kind == "D" and not rules.deletions) or not path_allowed(change.path, rules) or change.path not in paths:
+        if ((change.kind == "D" and not rules.deletions) or not path_allowed(change.path, rules)
+                or (step.step == "plan" and change.path not in paths)):
             return "paths"
         if change.kind != "A":
             before = base.files.get(change.path)
