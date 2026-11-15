@@ -118,7 +118,7 @@ WRITERS = {
     ("INSERT", "slot_release"): "slot_release_store.py",
     ("UPDATE", "slot_release"): "slot_release_store.py",
     ("DELETE FROM", "reservation"): "slot_release_store.py",
-    ("INSERT", "published_branch"): "publish.py",
+    ("INSERT", "published_branch"): "publish_store.py",
     ("INSERT", "execution"): "attempt_write_store.py",
     ("INSERT", "verification"): "attempt_write_store.py",
     ("UPDATE", "attempt"): "attempt_write_store.py",  # also deadline renewal after a reboot in the entry registration's write
@@ -227,6 +227,7 @@ def test_only_the_commit_prepare_release_publish_environment_and_land_modules_wr
         ("park", "land_conflict/release.py"),
             ("abort_merge", "land_conflict/abort.py"),
             ("push", "publish.py"), ("clean", "environment.py"), ("reset", "environment.py"),
+        ("record", "publish.py"),  # PublishStore.record persists the publication; the matcher sees every receiver.
         ("squash", "land_target.py"), ("fetch", "land_push.py"), ("push", "land_push.py"),
     }
     assert git_writers() == expected
