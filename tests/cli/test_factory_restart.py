@@ -19,7 +19,8 @@ from taskloop.cli import main
 from taskloop.drain import composition as drain_composition
 from taskloop.drain.models import ActionKind, ActionState, Identity, Reason, Seen, State
 from taskloop.drain.store import DrainStore
-from taskloop.factory_schema import SCHEMA, refusal
+from taskloop.factory_schema import SCHEMA
+from taskloop.factory_store import refusal
 from taskloop.git_views import GitViews
 from taskloop.ids import NativeIds
 from taskloop.interrupts import Interrupts

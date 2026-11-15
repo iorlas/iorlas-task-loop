@@ -8,7 +8,8 @@ from pathlib import Path
 
 from sqlite_store import begin_immediate
 
-from taskloop.factory_schema import SLOT, current, marks
+from taskloop.factory_schema import SLOT, marks
+from taskloop.factory_store import current
 
 
 class SlotsUnavailable(Exception):

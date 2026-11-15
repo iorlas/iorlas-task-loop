@@ -25,7 +25,7 @@ from taskloop.drain.store import DrainStore, blocked
 from taskloop.earlier_attempt import EarlierAttempt
 from taskloop.earlier_input import EarlierInput, commit_names
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
-from taskloop.factory_schema import current
+from taskloop.factory_store import current
 from taskloop.git_views import GitProfileFiles
 from taskloop.hold_store import HoldStore
 from taskloop.ids import Ids

@@ -193,6 +193,22 @@ def test_a_number_other_than_the_store_s_is_task_attempted(bench: ChecksBench) -
     assert isinstance(found, AdmitRefused) and found.reason == "task_attempted" and bench.stored() == ([], []) and bench.reads == []
 
 
+@pytest.mark.parametrize("abandoned", [False, True])
+def test_latest_number_keeps_earlier_land_facts_and_abandon_refusal_precedence(bench: ChecksBench, abandoned: bool) -> None:
+    first = bench.admit()
+    assert isinstance(first, Admitted)
+    bench.concluded("failed")
+    assert isinstance(bench.admit(2), Admitted)
+    bench.concluded("failed", abandoned=abandoned)
+    bench.con.execute(f"""INSERT INTO land_candidate ({CANDIDATE_COLUMNS},validation,validated_at,delivery,delivered_at)
+    VALUES ('candidate','candidate-token',1,?,1,?,?,1,'[]','no_change',3,'no_change',3)""",
+                      (first.key.attempt_id, bench.done.target, bench.done.x))
+    before = bench.stored()
+    found = bench.admit(3)
+    assert isinstance(found, AdmitRefused) and found.reason == ("not_advanceable" if abandoned else "landed")
+    assert bench.stored() == before
+
+
 def racer(bench: ChecksBench) -> None:
     """Another start's admission of number 1, committed between this admission's reads and its write."""
     repo_id = bench.repo.identity().key

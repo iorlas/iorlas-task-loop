@@ -39,12 +39,12 @@ from taskloop.admit_rows import Task
 from taskloop.admit_store import current, issued, reserve, task_of, unheld
 from taskloop.attempt_reads import StoreRefused
 from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
+from taskloop.check_admit_store import latest
 from taskloop.check_status import HALF_DONE
 from taskloop.check_store import ChecksAdmitted, Required, insert
 from taskloop.checks import argv_digest, main_seen
 from taskloop.drain.models import BLOCKED, Reason
 from taskloop.drain.store import blocked
-from taskloop.factory_schema import LANDED, LANDING
 from taskloop.ids import Ids
 from taskloop.prepare import HEADS, REMOTES, lacks
 from taskloop.profile import Profile, ProfileFiles, Refused, Unavailable, read_profile
@@ -56,9 +56,6 @@ from taskloop.tracker import ACTOR
 
 type Profiles = Callable[[Path], ProfileFiles]  # the person's checkout: a file at a commit (`git_views.GitProfileFiles`)
 TARGET = "main"  # the only land target M2 checks against (another one is B6's)
-# The latest checks attempt of one implement attempt: what decides the number the next one takes.
-LATEST = f"""SELECT number,phase,conclusion,released_at IS NOT NULL,abandoned,{LANDED},{LANDING} FROM checks_attempt c
-WHERE after_attempt_id=? ORDER BY number DESC LIMIT 1"""
 LAND_GUIDE = {
     "landed": "A land of the task delivered its code to origin's main. Task closure still needs to finish; checks cannot re-run.",
     "landing": "A land candidate of the task holds its slot or may already be on origin's main. "
@@ -98,16 +95,16 @@ def next_number(con: sqlite3.Connection, previous: AttemptKey) -> int | AdmitRef
     if row is None or row.key != previous or not row.done or following(row.step) != CHECK:
         return AdmitRefused("not_advanceable", detail="The implement attempt is not the task's current, done (verified, released "
                             "with its claim kept, published) attempt")
-    latest: tuple[object, ...] | None = con.execute(LATEST, (previous.attempt_id,)).fetchone()
-    if latest is None:
+    checks = latest(con, previous)
+    if checks is None:
         return 1
-    number, phase, conclusion, released, abandoned, landed, landing = latest
-    if abandoned:
+    if checks.abandoned:
         return AdmitRefused("not_advanceable", detail=HALF_DONE)
-    if landed or landing:
-        return AdmitRefused("landed", detail=LAND_GUIDE["landed"]) if landed else AdmitRefused("landing", detail=LAND_GUIDE["landing"])
-    if phase == "concluded" and conclusion == "failed" and released and isinstance(number, int):
-        return number + 1
+    if checks.landed or checks.landing:
+        return (AdmitRefused("landed", detail=LAND_GUIDE["landed"]) if checks.landed
+                else AdmitRefused("landing", detail=LAND_GUIDE["landing"]))
+    if checks.failed_released:
+        return checks.number + 1
     return AdmitRefused("task_attempted", detail="The task's latest checks attempt is current")
 
 
