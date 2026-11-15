@@ -1,4 +1,4 @@
-"""The factory's commit of what a step's agent listed, outside the sandbox, and the clean-tree check at its result.
+"""The factory's commit of a step's selected changes, outside the sandbox, and the clean-tree check at its result.
 
 Git and the slot file port only: no factory.db (the verifier stores what this module finds). The only factory module
 that calls `stage` or `record`. The slot pointer is checked before any Git call on the slot and again right before each
@@ -28,6 +28,7 @@ from taskloop.attempt_types import (
     Unreadable,
     Unsettled,
     dot_git,
+    path_allowed,
 )
 from taskloop.prepare import MAIN, task_branch
 from taskloop.slot_state import SlotState, bounded, listing, observe_slot, pointer, staged
@@ -125,7 +126,7 @@ def _reviewed(checkouts: Checkouts, files: SlotFiles, admission: Admission, stat
 def _commit(
     checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, answer: AnswerState, quiet: GitQuiet
 ) -> Settled:
-    """Step 4 (the listed paths, Git's own files near them, ignored files), then step 5: stage exactly the listed paths
+    """Step 4 (the selected paths, Git's own files near them, ignored files), then step 5: stage exactly the reviewed paths
     and commit them with the agent's message and this attempt's trailer, `quiet` and the pointer checked before each Git
     write. Every slot call runs from the slot, under its ceiling, pinned to the Git directory `state` verified."""
     path = Path(admission.slot_path)
@@ -135,7 +136,8 @@ def _commit(
     if refused is not None:
         return refused
     if not paths:
-        return _unwritten(checkouts, files, admission, base)
+        foreign = _foreign(checkouts, admission, paths, state.gitdir) if admission.step == "implement" else None
+        return foreign or _unwritten(checkouts, files, admission, base)
     blocked = _blocked(quiet, files, admission, state)
     if blocked is not None:
         return blocked
@@ -158,7 +160,7 @@ def _blocked(quiet: GitQuiet, files: SlotFiles, admission: Admission, state: Slo
 
 
 def _foreign(checkouts: Checkouts, admission: Admission, paths: tuple[str, ...], gitdir: Path) -> Unsettled | None:
-    """`record` commits the whole index: any staged path the answer did not list (a person's, or an earlier attempt's
+    """`record` commits the whole index: any staged path the review did not select (a person's, or an earlier attempt's
     left staged by a superseded verify) is `staged`, nothing committed."""
     path = Path(admission.slot_path)
     extra = sorted(set(staged(checkouts(path, git_dir=gitdir), path)) - set(paths))
@@ -176,8 +178,23 @@ def _review(
     rules = kind(admission.step).rules(admission.task.task_id)
     path = Path(admission.slot_path)
     tree = _base_tree(view, base)
-    paths = tuple(each for each in answer.paths if not _unchanged(files, path, tree, each))
+    implement = admission.step == "implement"
+    selected = answer.paths
+    if implement:
+        dirty = view.worktree(path).dirty(base)
+        selected = tuple(sorted(set(dirty.tracked + dirty.untracked)))
+    paths = tuple(each for each in selected if not _unchanged(files, path, tree, each))
     unsafe = tuple(found for each in paths if (found := unsafe_path(files, path, rules, (each,), tree.files)) is not None)
+    if implement:
+        unsafe += tuple(PathExplanation(each, "A changed Git file affects how the selected paths are staged."
+                                        if git_file((each,), rules, paths) is not None else
+                                        "The path must be an allowed relative file of at most 255 bytes, without excluded "
+                                        "prefixes, .git-prefixed or empty/dot components, NUL, newline or backslash.")
+                        for each in paths if not path_allowed(each, rules))
+        unsafe += tuple(PathExplanation(each, "An implement step cannot change plan.md.")
+                        for each in paths if each.rsplit("/", 1)[-1].casefold() == "plan.md")
+        if len(paths) > rules.max_paths:
+            unsafe += (PathExplanation(paths[0], f"The slot has {len(paths)} changed paths; the limit is {rules.max_paths} paths."),)
     dirt = view.worktree(path).dirty(base, ignored_under=attributes(rules, paths))
     git_paths = tuple(each for each in dirt.tracked + dirt.untracked if git_file((each,), rules, paths) is not None)
     unsafe += tuple(PathExplanation(each, "A changed Git file affects how the listed paths are staged.")
