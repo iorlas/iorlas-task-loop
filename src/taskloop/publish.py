@@ -40,6 +40,7 @@ from taskloop.attempt_types import AttemptKey, Checkouts, SlotFiles
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import BLOCKED, ActionKind, Reason
 from taskloop.ids import Ids
+from taskloop.operation_evidence import OperationKind, OperationState, OperationTiming, measured
 from taskloop.prepare import task_branch
 from taskloop.publish_store import PublishRow, PublishStore, RecordOutcome
 from taskloop.slot_state import repository
@@ -103,6 +104,7 @@ class BranchPublish:
     slot_files: SlotFiles
     clock: Callable[[], float]
     ids: Ids
+    timing: OperationTiming | None = None
 
     def publish(self, key: AttemptKey) -> PublishResult:
         try:
@@ -177,7 +179,10 @@ class BranchPublish:
         """One non-force push of the pinned X; no Git output is kept."""
         branch = task_branch(task_id)
         try:
-            pushed = repo.worktree(root).push(branch, remote=REMOTE, head=Sha(x))
+            slot = repo.worktree(root)
+            with measured(self.timing, key, OperationKind.PUBLISH) as observed:
+                pushed = slot.push(branch, remote=REMOTE, head=Sha(x))
+                observed.state = OperationState.COMPLETED if isinstance(pushed, Pushed) else OperationState.FAILED
         except GitUnavailable as error:
             return _unavailable("git", f"Git could not push ({type(error).__name__}). Resolve noninteractive Git access first.")
         if isinstance(pushed, Pushed):

@@ -266,7 +266,7 @@ def _setup_times(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _verify(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_verify(loaded.settings.db.value, views_for(loaded)) as opened:
+    with cli_composition.open_verify(loaded.settings.db.value, views_for(loaded), loaded.settings.artifacts.value) as opened:
         return opened if isinstance(opened, Failed) else operations.verify_task(*opened, arguments.backlog, arguments.task_id)
 
 
@@ -278,7 +278,7 @@ def _release(arguments: argparse.Namespace, loaded: Loaded) -> Result:
 
 
 def _publish(arguments: argparse.Namespace, loaded: Loaded) -> Result:
-    with cli_composition.open_publish(loaded.settings.db.value, views_for(loaded)) as opened:
+    with cli_composition.open_publish(loaded.settings.db.value, views_for(loaded), loaded.settings.artifacts.value) as opened:
         return opened if isinstance(opened, Failed) else operations.publish_task(*opened, arguments.backlog, arguments.task_id)
 
 

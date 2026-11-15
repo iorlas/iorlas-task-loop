@@ -3,6 +3,9 @@
 import json
 from collections.abc import Sequence
 from dataclasses import replace
+from functools import partial
+from pathlib import Path
+from typing import Literal
 
 import pytest
 from doubles import FakeSlotFiles, PinnedViews
@@ -12,7 +15,10 @@ from git_porcelain.testing import FakeRepo, FakeWorktree
 from taskloop import implement_step, plan_step, step_text
 from taskloop.agents.settings import AgentSetting
 from taskloop.attempt_types import Admission, AnswerState, AttemptKey, FileRef, FileStat, PathExplanation, Rejected, Unsettled
+from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_commit import Committed, leftovers, settle
+from taskloop.ids import NativeIds
+from taskloop.operation_evidence import OperationKind, OperationState
 from taskloop.operations import verify_failure
 from taskloop.prepare import task_branch
 from taskloop.repo import RepoId
@@ -55,6 +61,73 @@ def answer(*paths: str) -> AnswerState:
 
 def head(slot: FakeWorktree) -> str | None:
     return next(info.head for info in slot.repo.worktrees() if info.path == slot.path)
+
+
+@pytest.mark.parametrize("broken_evidence", [False, True])
+def test_commit_retry_measures_staging_through_record_and_suppresses_adoption(
+    tmp_path: Path, admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews,
+    monkeypatch: pytest.MonkeyPatch, broken_evidence: bool,
+) -> None:
+    base = record(slot)
+    slot.write_file("edit.txt", "changed")
+    files, now = EvidenceFiles(tmp_path / "artifacts"), [0.0]
+    timing = partial(files.observe_operation, clock=lambda: now[0], wall=lambda: 100.0, ids=NativeIds())
+    original, record_original = FakeWorktree.stage, FakeWorktree.record
+
+    def stage(self: FakeWorktree, paths: Sequence[str], *, literal: bool = True) -> None:
+        if not broken_evidence:
+            assert any(sample.state is OperationState.ACTIVE for sample in files.operations(admission.key))
+        now[0] += 3
+        original(self, paths, literal=literal)
+
+    def recording(self: FakeWorktree, message: str, *, paths: Literal["staged"], hooks: bool) -> Recorded:
+        now[0] += 2
+        result = record_original(self, message, paths=paths, hooks=hooks)
+        assert isinstance(result, Recorded)
+        return result
+
+    def broken(*_args: object) -> None:
+        raise OSError("Evidence unavailable")
+
+    monkeypatch.setattr(FakeWorktree, "stage", stage)
+    monkeypatch.setattr(FakeWorktree, "record", recording)
+    if broken_evidence:
+        monkeypatch.setattr(files, "write_operation", broken)
+    quiet_calls = []
+
+    def quiet() -> Unsettled | None:
+        quiet_calls.append(True)
+        return Unsettled("worker_alive") if len(quiet_calls) == 2 else None
+
+    assert settle(checkouts, slot_files, admission, base, answer("edit.txt"), quiet, timing) == Unsettled("worker_alive")
+    assert head(slot) == base and len(quiet_calls) == 2
+    made = settle(checkouts, slot_files, admission, base, answer("edit.txt"), lambda: None, timing)
+    assert isinstance(made, Committed) and made.sha != base
+    assert settle(checkouts, slot_files, admission, base, answer("edit.txt"), lambda: None, timing) == made
+    samples = files.operations(admission.key)
+    if broken_evidence:
+        assert samples == ()
+    else:
+        assert len(samples) == 2 and all(sample.kind is OperationKind.COMMIT for sample in samples)
+        assert {(sample.state, sample.elapsed) for sample in samples} == {
+            (OperationState.FAILED, 3.0), (OperationState.COMPLETED, 5.0),
+        }
+
+
+@pytest.mark.parametrize("saved", [False, True])
+def test_keep_only_measures_saved_work_review(
+    tmp_path: Path, admission: Admission, slot: FakeWorktree, slot_files: FakeSlotFiles, checkouts: PinnedViews, saved: bool,
+) -> None:
+    message = "Saved\n\nTask-Loop-Wip: preserved" if saved else "Baseline"
+    made = slot.record(message, paths="all", allow_empty=True)
+    assert isinstance(made, Recorded)
+    files = EvidenceFiles(tmp_path / "artifacts")
+    timing = partial(files.observe_operation, clock=lambda: 1.0, wall=lambda: 100.0, ids=NativeIds())
+    kept = AnswerState("valid", "unchanged", "keep")
+    result = settle(checkouts, slot_files, admission, made.sha, kept, lambda: None, timing)
+    assert isinstance(result, Committed) and (result.sha != made.sha) == saved
+    assert len(files.operations(admission.key)) == int(saved)
+    assert all(sample.state is OperationState.COMPLETED for sample in files.operations(admission.key))
 
 
 @pytest.mark.parametrize("existing", [False, True])

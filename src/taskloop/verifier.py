@@ -37,6 +37,7 @@ from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import ActionKind, Reason
 from taskloop.factory_commit import NotSettled, clean_at, leftovers, settle
 from taskloop.ids import Ids
+from taskloop.operation_evidence import OperationTiming
 from taskloop.slot_lock import ReadOnly, SlotBusy, SlotLockUnavailable
 from taskloop.slot_state import SlotState, bounded, observe_slot, staged
 from taskloop.steps import kind
@@ -71,7 +72,7 @@ class Verifier:
 
     def __init__(
         self, store: AttemptStore, checkouts: Checkouts, files: SlotFiles, gone: WorkerGone,
-        clock: Callable[[], float], hold: VerifyHold, *, ids: Ids,
+        clock: Callable[[], float], hold: VerifyHold, *, ids: Ids, timing: OperationTiming | None = None,
     ) -> None:
         """`gone` observes the registered worker before the factory writes Git in its slot (`worker_alive` otherwise).
         `hold` is the slot's custody around the commit through the verdict: the entry already holds it (a no-op here),
@@ -79,6 +80,7 @@ class Verifier:
         A held slot is `unavailable:slot_busy`, an unopenable lock file `unavailable:lock`, a write asked of a read-only
         verifier `unavailable:read_only`."""
         self.ids = ids
+        self.timing = timing
         self.store, self.checkouts, self.files, self.gone, self.clock, self.hold = store, checkouts, files, gone, clock, hold
 
     def verify(self, key: AttemptKey) -> VerifyResult:
@@ -172,7 +174,7 @@ class Verifier:
         step's chain."""
         admission, answer, commit = record.admission, stored.answer, record.end_commit
         if commit is None:
-            settled = settle(self.checkouts, self.files, admission, base, answer, lambda: self._quiet(record))
+            settled = settle(self.checkouts, self.files, admission, base, answer, lambda: self._quiet(record), self.timing)
             if isinstance(settled, Unsettled):
                 return settled
             if isinstance(settled, Rejected):  # nothing_written: no commit to bind

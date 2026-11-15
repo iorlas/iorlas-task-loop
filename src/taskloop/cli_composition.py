@@ -144,7 +144,8 @@ def open_start(database: Path, artifacts: Path, views: GitViews) -> Generator[St
 def _starting(reader: AttemptStore, database: Path, artifacts: Path, store: Store, views: GitViews) -> StartPorts:
     admission, chain = open_admission(database, artifacts, views, store), open_chain(database, artifacts, views, store)
     launcher = open_launcher(database, artifacts, views)
-    repeat = StepRepeat(reader, open_verifier(database, store, views), EvidenceFiles(artifacts), chain, launcher, worker_gone, entry_seen,
+    repeat = StepRepeat(reader, open_verifier(database, store, views, artifacts), EvidenceFiles(artifacts), chain, launcher,
+                        worker_gone, entry_seen,
                         time.time, repeating, ids=NativeIds(), discussion=open_discussion(database, store).for_task)
     releaser = open_checks_releaser(database, store, views)
     checks = ChecksPorts(open_checks_admission(database, views, store), open_checks_launcher(database, artifacts, views), releaser)
@@ -187,8 +188,9 @@ def open_next(database: Path, artifacts: Path, views: GitViews, tracker_root: st
                                 partial(current_view, reads))
             with open_land(database, artifacts, views, store, registration) as lands:  # the land's ports, the ones `tl step land` opens
                 landing = None if isinstance(lands, Failed) else Landing(land_mode(views.remotes), partial(_landed, lands))
-                yield RoundPorts(reads, _starting(reader, database, artifacts, store, views), open_verifier(database, store, views),
-                                 releaser, open_publisher(database, store, views), holding, ready, EvidenceFiles(artifacts).log_round,
+                yield RoundPorts(reads, _starting(reader, database, artifacts, store, views),
+                                 open_verifier(database, store, views, artifacts), releaser,
+                                 open_publisher(database, store, views, artifacts), holding, ready, EvidenceFiles(artifacts).log_round,
                                  repository=partial(repository_of, views.checkouts), landing=landing,
                                  completion=open_completion(database, artifacts, views),
                                  drain_store=DrainStore(lambda: store.shared_rw(database),
@@ -316,28 +318,28 @@ def open_rounds(database: Path, artifacts: Path, views: GitViews, request: NextR
 
 
 @contextmanager
-def open_verify(database: Path, views: GitViews) -> Generator[tuple[AttemptStore, Verifier, SlotRelease, BranchPublish] | Failed]:
-    """The database guard first, then the verifier's, the releaser's and the publisher's shared writer: no empty factory.db
-    is ever created."""
+def open_verify(database: Path, views: GitViews, artifacts: Path
+                ) -> Generator[tuple[AttemptStore, Verifier, SlotRelease, BranchPublish] | Failed]:
+    """Open guarded verification, release and publication over one shared writer."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
             if isinstance(con, Failed):
                 yield con
             else:
-                yield (_reader(con), open_verifier(database, store, views), open_releaser(database, store, views),
-                       open_publisher(database, store, views))
+                yield (_reader(con), open_verifier(database, store, views, artifacts), open_releaser(database, store, views),
+                       open_publisher(database, store, views, artifacts))
         finally:
             store.close_shared()
 
 
 @contextmanager
-def open_publish(database: Path, views: GitViews) -> Generator[tuple[AttemptStore, BranchPublish] | Failed]:
+def open_publish(database: Path, views: GitViews, artifacts: Path) -> Generator[tuple[AttemptStore, BranchPublish] | Failed]:
     """The database guard first, then the publisher's shared writer (`tl step publish`)."""
     store = Store(SCHEMA)
     with _read_only(database) as con:
         try:
-            yield con if isinstance(con, Failed) else (_reader(con), open_publisher(database, store, views))
+            yield con if isinstance(con, Failed) else (_reader(con), open_publisher(database, store, views, artifacts))
         finally:
             store.close_shared()
 
@@ -379,12 +381,7 @@ def adopt(database: Path, checkout: Path, root: Path, count: int, git: SlotGit) 
 @contextmanager
 def open_land(database: Path, artifacts: Path, views: GitViews, store: Store | None = None,
               registration: Store | None = None) -> Generator[LandPorts | Failed]:
-    """`tl step land` (tl-8bh9.14.8): the database guard first, then the land's ports over `composition.open_checking`'s
-    real wiring (the validation's), the candidates' store on its connections, the person's checkout through the
-    remote-capable view (`remotes`: hooks off, bounded transport, the person's credentials), the tracker read and claim
-    heartbeat, a new stop event per keep-alive, this process's identity, the slot lock's probe and custody (`landing`),
-    this process's environment, and the tracker's close. Here, never in `composition`: neither entry may import the land
-    (`entries-never-land`)."""
+    """Wire land after its database guard. Neither entry may import land (`entries-never-land`)."""
     with _read_only(database) as con:
         if isinstance(con, Failed):
             yield con

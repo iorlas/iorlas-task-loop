@@ -30,6 +30,7 @@ from taskloop.attempt_types import (
     dot_git,
     path_allowed,
 )
+from taskloop.operation_evidence import OperationKind, OperationState, OperationTiming, measured
 from taskloop.prepare import MAIN, task_branch
 from taskloop.slot_state import SlotState, bounded, listing, observe_slot, pointer, staged
 from taskloop.step import Step
@@ -90,7 +91,8 @@ def trailer(admission: Admission) -> str:
     return f"{TRAILER}: {admission.key.attempt_id}"
 
 
-def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet) -> Settled:
+def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: str, answer: AnswerState, quiet: GitQuiet,
+           timing: OperationTiming | None = None) -> Settled:
     """Steps 2 to 5 of the step commit for a valid answer of effect `commit` or `keep` with no stored `end_commit`.
     `quiet` is asked right before each Git write: its answer (`worker_alive`, `superseded`) stops it, nothing written."""
     state = _observed(checkouts, files, admission)
@@ -102,30 +104,35 @@ def settle(checkouts: Checkouts, files: SlotFiles, admission: Admission, base: s
     if answer.effect == "keep":  # X is B: a `keep` step never adopts a commit
         if head != base:
             return _moved(checkouts(state.root), head, base, admission)
-        return (_reviewed(checkouts, files, admission, state, base, quiet)
+        return (_reviewed(checkouts, files, admission, state, base, quiet, timing)
                 if wip.needs_review(checkouts(state.root), base) else Committed(base))
     if head != base:
         view = checkouts(state.root)
         return Committed(head) if _ours(view, head, base, admission) else _moved(view, head, base, admission)
-    return _commit(checkouts, files, admission, state, base, answer, quiet)
+    return _commit(checkouts, files, admission, state, base, answer, quiet, timing)
 
 
-def _reviewed(checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, quiet: GitQuiet) -> Settled:
+def _reviewed(checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, quiet: GitQuiet,
+              timing: OperationTiming | None) -> Settled:
     """A `keep` answer over a base that is saved work: B is preservation, never a result, so the step ends at its own commit
     of the same tree (parent B, this attempt's trailer), made only for this valid answer: the hold never made it."""
     blocked = _blocked(quiet, files, admission, state)
     if blocked is not None:
         return blocked
     path = Path(admission.slot_path)
-    made = checkouts(path, git_dir=state.gitdir).worktree(path).record(
-        f"Review saved work of {admission.task.task_id}\n\n{trailer(admission)}", paths="staged", hooks=False, allow_empty=True)
+    slot = checkouts(path, git_dir=state.gitdir).worktree(path)
+    with measured(timing, admission.key, OperationKind.COMMIT) as observed:
+        made = slot.record(
+            f"Review saved work of {admission.task.task_id}\n\n{trailer(admission)}", paths="staged", hooks=False, allow_empty=True)
+        observed.state = OperationState.COMPLETED if isinstance(made, Recorded) else OperationState.FAILED
     if isinstance(made, Recorded):
         return Committed(made.sha)
     raise NotSettled("git:HookRejected")
 
 
 def _commit(
-    checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, answer: AnswerState, quiet: GitQuiet
+    checkouts: Checkouts, files: SlotFiles, admission: Admission, state: SlotState, base: str, answer: AnswerState, quiet: GitQuiet,
+    timing: OperationTiming | None,
 ) -> Settled:
     """Step 4 (the selected paths, Git's own files near them, ignored files), then step 5: stage exactly the reviewed paths
     and commit them with the agent's message and this attempt's trailer, `quiet` and the pointer checked before each Git
@@ -142,11 +149,14 @@ def _commit(
     blocked = _blocked(quiet, files, admission, state)
     if blocked is not None:
         return blocked
-    slot.stage(paths, literal=True)
-    blocked = _blocked(quiet, files, admission, state) or _foreign(checkouts, admission, paths, state.gitdir)
-    if blocked is not None:
-        return blocked
-    made = slot.record(f"{answer.message}\n\n{trailer(admission)}", paths="staged", hooks=False)
+    with measured(timing, admission.key, OperationKind.COMMIT) as observed:
+        slot.stage(paths, literal=True)
+        blocked = _blocked(quiet, files, admission, state) or _foreign(checkouts, admission, paths, state.gitdir)
+        if blocked is not None:
+            observed.state = OperationState.FAILED
+            return blocked
+        made = slot.record(f"{answer.message}\n\n{trailer(admission)}", paths="staged", hooks=False)
+        observed.state = OperationState.COMPLETED if isinstance(made, Recorded) else OperationState.FAILED
     if isinstance(made, Recorded):
         return Committed(made.sha)
     if isinstance(made, NothingToRecord):

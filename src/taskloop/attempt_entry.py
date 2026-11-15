@@ -234,7 +234,9 @@ def _step(
     accepted = captured is not None and captured.status in ACCEPTED
     if accepted:  # captured but maybe not finished (the store was busy again): finish it before verify commits anything
         resumed(lambda: app.collect(key), lambda: app.execute(key, found.me), clock, wait, found.deadline)
-    verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held, ids=app.agent.ids).verify(key)
+    timing = partial(app.files.observe_operation, clock=app.monotonic, wall=app.clock, ids=app.agent.ids)
+    verified = Verifier(app.store, app.checkouts, app.slot_files, gone, app.clock, _held,
+                        ids=app.agent.ids, timing=timing).verify(key)
     # newly stored facts or a stored verdict: read the terminal result back
     latest = app.collect(key) if accepted or isinstance(verified, (Verified, Rejected)) else result
     line = f"{latest.status} {latest.reason}"
@@ -311,7 +313,9 @@ def _branch(found: _Registered, publishing: Checkouts) -> str:
     read) is `unavailable:git` or `unavailable:store`: it never loses the step's log line or a verified plan's exit 0."""
     app = found.app
     try:
-        return publish_word(BranchPublish(app.store, publishing, app.slot_files, app.clock, ids=app.agent.ids).publish(found.key))
+        timing = partial(app.files.observe_operation, clock=app.monotonic, wall=app.clock, ids=app.agent.ids)
+        return publish_word(BranchPublish(app.store, publishing, app.slot_files, app.clock,
+                                          ids=app.agent.ids, timing=timing).publish(found.key))
     except (GitUnavailable, ValueError, OSError):
         return "unavailable:git"
     except (sqlite3.Error, StoreUnavailable):

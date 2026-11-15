@@ -29,6 +29,7 @@ from taskloop.drain.store import DrainStore
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.ids import Ids
+from taskloop.operation_evidence import OperationKind, OperationState, OperationTiming, measured
 from taskloop.recovery.models import Outcome, Result
 
 REGISTRATION_TIMEOUT = 5.0  # stated, not padded: the callback is bounded at REGISTRATION_BUSY_MS plus one short write
@@ -138,6 +139,7 @@ class Launcher:
         self, database: Path, files: EvidenceFiles, clock: Callable[[], float], start: Start, observe: ObserveProcess, executable: str,
         targets: Targets = AttemptStore, module: str = ENTRY_MODULE,
         *, read_seconds: int, ids: Ids, recovery: Callable[[AttemptKey, Identity, float], Result] | None = None,
+        timing: OperationTiming | None = None,
     ) -> None:
         """`targets` and `module`: the agent attempts' store and entry by default, `CheckStore` and `CHECK_ENTRY_MODULE`
         for checks attempts. `read_seconds`: the Git read bound the entry's views carry (argv)."""
@@ -146,6 +148,7 @@ class Launcher:
         self.start, self.observe, self.executable = start, observe, executable
         self.targets, self.module, self.read_seconds = targets, module, read_seconds
         self.recovery = recovery
+        self.timing = timing
 
     def launch(self, backlog: str, task_id: str, minutes: int) -> LaunchResult:
         """Start the task's admitted attempt unless its registered entry still runs; never creates factory.db.
@@ -241,27 +244,27 @@ class Launcher:
             log = os.open(self.files.entry_log(key), os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o600)
         except (EvidenceError, OSError):
             return LaunchUnavailable("log")
-        try:
-            child, identity = self.start(
-                argv,
-                registered=registered,
-                cwd=str(self.files.root),
-                env=None,
-                stderr=log,
-                start_new_session=True,
-                registration_timeout=REGISTRATION_TIMEOUT,
-            )
-        except _CallbackRefused as refused:
-            return refused.refusal
-        except StoreUnavailable:
-            return LaunchUnavailable("store")
-        except RegisteredStartUncertainError as uncertain:
-            return LaunchUncertain(key, entry_identity(uncertain.identity))
-        except (OSError, IdentityUnavailableError, RuntimeError):
-            # before the commit nothing was registered and the library cleaned the child; after it, the exec failed
-            return LaunchUnavailable("exec_failed_after_commit" if committed else "start")
-        finally:
-            os.close(log)
+        with measured(self.timing if self.module == CHECK_ENTRY_MODULE else None, key, OperationKind.CHECKS_START) as observed:
+            try:
+                child, identity = self.start(
+                    argv, registered=registered, cwd=str(self.files.root), env=None, stderr=log,
+                    start_new_session=True, registration_timeout=REGISTRATION_TIMEOUT,
+                )
+                observed.state = OperationState.COMPLETED
+            except _CallbackRefused as refused:
+                observed.state = OperationState.FAILED
+                return refused.refusal
+            except StoreUnavailable:
+                observed.state = OperationState.FAILED
+                return LaunchUnavailable("store")
+            except RegisteredStartUncertainError as uncertain:
+                return LaunchUncertain(key, entry_identity(uncertain.identity))
+            except (OSError, IdentityUnavailableError, RuntimeError):
+                observed.state = OperationState.FAILED
+                # before registration the child is cleaned; after it the exec failed
+                return LaunchUnavailable("exec_failed_after_commit" if committed else "start")
+            finally:
+                os.close(log)
         for pipe in (child.stdin, child.stdout):
             if pipe is not None:
                 pipe.close()

@@ -740,6 +740,8 @@ source_modules =
     taskloop.merge.resolve
     taskloop.merge.start
     taskloop.merge.status
+    taskloop.operation_evidence
+    taskloop.operation_file
     taskloop.operations
     taskloop.owned_processes
     taskloop.plan_content
