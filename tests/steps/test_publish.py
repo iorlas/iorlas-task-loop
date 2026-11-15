@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import override
 
 import pytest
+from admission_boundaries import guard_git, outside_transaction
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
@@ -19,6 +20,7 @@ from git_porcelain import GitTimeout, GitUnavailable, HookRejected, MissingRemot
 from git_porcelain.api import PushResult
 from git_porcelain.testing import FakeRemote, FakeRepo, FakeWorktree
 from plan_fixtures import PLAN_TEXT
+from sqlite_store import begin_immediate
 
 from taskloop.agents.launch import AgentLaunch
 from taskloop.attempt import Attempts
@@ -77,6 +79,26 @@ class Pushing(FakeWorktree):
         if isinstance(answer, GitUnavailable):
             raise answer
         return answer if answer is not None else super().push(dst, remote=remote, head=head)
+
+
+@pytest.fixture(autouse=True)
+def external_git(registered: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch) -> None:
+    guard_git(registered, monkeypatch)
+    for method in ("worktree", "is_ancestor", "remote_url"):
+        monkeypatch.setattr(ScriptedPushRepo, method, outside_transaction(registered, getattr(ScriptedPushRepo, method)))
+    monkeypatch.setattr(Pushing, "push", outside_transaction(registered, Pushing.push))
+
+
+def test_push_guard_rejects_a_write_transaction_before_effects(
+    registered: sqlite3.Connection, repo: ScriptedPushRepo, remote: FakeRemote,
+) -> None:
+    worktree = repo.worktree(repo.path)
+    effects: list[str] = []
+    repo.during = lambda: effects.append("push")
+    before = remote.branches()
+    with begin_immediate(registered), pytest.raises(AssertionError, match="outside the write transaction"):
+        worktree.push("task/tl-1")
+    assert effects == [] and remote.branches() == before
 
 
 @pytest.fixture
