@@ -1,0 +1,13 @@
+{
+  "prepared_commit": "c8906e46b26e0dc092047e0e681f075e8f89fe46",
+  "cited_paths": [
+    "src/taskloop",
+    "tests/steps",
+    "tests/cli",
+    "tests/rules",
+    ".importlinter",
+    "ruff.toml",
+    "pyproject.toml",
+    "tools/generate_import_contracts.py"
+  ]
+}
