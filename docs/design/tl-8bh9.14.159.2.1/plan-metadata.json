@@ -1,8 +1,10 @@
 {
-  "prepared_commit": "2b8754b78a9fdd0bc551e59c21bd95220ff50087",
+  "prepared_commit": "6ae80fbdf660bdf4bcdd80c5546fae15aaadb470",
   "cited_paths": [
     "docs/glossary.md",
     "docs/design/tl-8bh9.14.159.1/naming-map.md",
+    "docs/design/tl-8bh9.14.159.2.1/plan.md",
+    "docs/design/tl-8bh9.14.159.2.1/plan-metadata.json",
     "src/taskloop",
     "tests/steps",
     "tests/cli",
