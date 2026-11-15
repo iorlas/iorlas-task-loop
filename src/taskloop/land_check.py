@@ -15,7 +15,6 @@ supervision stops the running check's tree, and the rerun's reconcile marks it `
 """
 
 import contextlib
-import sqlite3
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
@@ -32,10 +31,9 @@ from taskloop.check_release import CandidateTarget, ChecksRelease
 from taskloop.check_store import ChecksRow, Required
 from taskloop.claim_lease import HeartbeatFor, KeepAlive, Stop, keeping, renewal
 from taskloop.composition import Checking
-from taskloop.factory_schema import LANDING
 from taskloop.ids import Ids
 from taskloop.land_conflict.handoff import Handoff
-from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, insert
+from taskloop.land_store import LandAdmitted, LandRow, LandStore, Settled, admission_raced, insert
 from taskloop.operations import Failed
 from taskloop.profile import ProfileFiles
 from taskloop.repo import RepoId
@@ -131,21 +129,13 @@ def _reserved(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, d
     with ports.lands.begin(con):
         chosen = next((slot for each in free if (slot := unheld(con, repo_id, each, key.reservation_generation)) is not None), None)
         if chosen is None:
-            return _raced(con, checks, number)
+            if admission_raced(con, checks.key.attempt_id, number):
+                return Failed("refused", "landing", f"{RACED} Nothing was recorded.")
+            return Failed("unavailable", "no_free_slot", NO_SLOT)
         reserve(con, repo_id, chosen[0], key)
         insert(con, LandAdmitted(key, checks.key.attempt_id, number, o, s, same, required, chosen[0], chosen[1], deadline, None,
                                  ports.work.clock()))
     return ports.lands.row(key) or Failed("unavailable", "changed")
-
-
-def _raced(con: sqlite3.Connection, checks: ChecksRow, number: int) -> Failed:
-    """No slot left at this candidate's generation: another land of the task came first (a candidate numbered this one or
-    later, or `LANDING`), else every slot is in use."""
-    found = con.execute(f"SELECT (SELECT coalesce(max(number),0) FROM land_candidate WHERE checks_attempt_id=c.attempt_id),{LANDING} "
-                        "FROM checks_attempt c WHERE c.attempt_id=?", (checks.key.attempt_id,)).fetchone()
-    if found is not None and (int(found[0]) >= number or found[1]):
-        return Failed("refused", "landing", f"{RACED} Nothing was recorded.")
-    return Failed("unavailable", "no_free_slot", NO_SLOT)
 
 
 def inserted(ports: LandPorts, repo: Repo, checks: ChecksRow, squash: Squash, settled: Settled | None, deadline: float) -> LandRow | Failed:

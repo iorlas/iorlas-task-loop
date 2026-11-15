@@ -161,6 +161,13 @@ def blocks_conflict(con: sqlite3.Connection, checks: str) -> bool:
     ).fetchone() is not None
 
 
+def admission_raced(con: sqlite3.Connection, checks: str, number: int) -> bool:
+    """A candidate numbered this one or later, or LANDING evidence across this implement attempt's checks runs."""
+    found = con.execute(f"SELECT (SELECT coalesce(max(number),0) FROM land_candidate WHERE checks_attempt_id=c.attempt_id),{LANDING} "
+                        "FROM checks_attempt c WHERE c.attempt_id=?", (checks,)).fetchone()
+    return found is not None and (as_int(found[0]) >= number or bool(found[1]))
+
+
 def require_checked(con: sqlite3.Connection, checks: str, *, no_change: bool = False, conflict: bool = False) -> None:
     """Shared source eligibility fence, inside an admission transaction."""
     checked = con.execute(CHECKED, (checks,)).fetchone()
