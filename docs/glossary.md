@@ -16,11 +16,11 @@ presentation words, not additional factory terms or states. Capitalization, plur
 change a concept: “held” means on hold, “landed” means land completed, and “passed”/“succeeded” or “failed” describe
 success or failure. Explanatory sentences may use those verbs; outcome badges say **Success** or **Failure**.
 
-- **Attempt** identifies a concrete execution, including numbered attempts, repeat references and verification titles.
+- **Attempt** identifies a concrete execution, including numbered attempts, repeat references and factory commit titles.
   **Check** names the check step in columns and step headings. **Checks** names the collection of configured validation
-  commands, including result lists and “Checks failed” explanations. A **Check of Plan/Implement**, or **Verification**,
-  is the factory checking an agent answer and its files; it is attached to that attempt, not an extra step or column.
-  Verification marks mean success (✓), failure (✗), or no recorded conclusion yet (…). **Not reached** means a validation
+  commands, including result lists and “Checks failed” explanations. **Factory commit of Plan/Implement** names
+  [factory commit](#factory-commit); it is attached to that attempt, not an extra step or column.
+  Factory commit marks mean success (✓), failure (✗), or no recorded conclusion yet (…). **Not reached** means a validation
   was not executed. **Running**, **Starting**, **pending**, **unfinished** and **end not recorded** describe the recorded
   execution or missing facts; they do not assert agent health. **Hold** names the column for a task the factory will not
   advance until a person acts. **Needs you**/“need you” points to an agent ask; **Factory problem** introduces a hold cause.
@@ -142,6 +142,34 @@ it; **metadata** holds structured task facts; **comments** hold discussion and o
 Git tags or treat an execution log as task discussion. A parent task can group child tasks without adding another
 execution entity.
 
+## Factory commit
+
+**Factory commit** completes an agent attempt's valid answer with effect `commit` or `keep`, from a completed,
+successful agent run. Its short operation and command name is **commit**. It belongs to the plan or implement attempt
+that supplied the answer; it has no separately scheduled step, attempt, dashboard column or agent invocation.
+
+The factory holds the slot's custody while it obtains the result commit, checks the tree and judges the step's rules.
+For `commit`, it reviews the listed paths and commits the permitted files with the attempt's identifying trailer.
+After an interrupted operation it can adopt its own already-created commit rather than create it again.
+For `keep` (an `unchanged` answer), it normally retains the admission base. If that base preserves unfinished saved
+work, the valid answer instead receives its own review commit with the same tree: preservation alone is not a result.
+Both effects require the slot on its task branch at the result commit, without tracked or untracked leftovers,
+and a verdict over the step's retained chain and any required artifact.
+
+Factory commit completes when the verdict is stored for that attempt: success, including an accepted unchanged result,
+or rejection with the first broken rule. A commit in Git or a captured agent answer alone is insufficient.
+The current stored success word is `verified`; its displayed word is `reused` when the step's chain kept earlier work.
+That unchanged result is distinct from reuse of a stored check pass.
+A rejection is `rejected:<rule>` and is terminal for the attempt. Reading a stored verdict returns it without new Git
+reads or writes. An interrupted operation without a stored verdict reconciles retained facts before finishing.
+Unknown evidence never counts as success.
+
+Files still needing attention are `uncommitted:*`; conditions that prevent the operation are `refused:*`;
+temporary waits or unavailable observations are `waiting:*`. They retain their explanation and any path listing.
+The [naming map](design/tl-8bh9.14.159.1/naming-map.md) specifies targets for the existing `verify`, `verification`
+and `unsettled:*` names. Those runtime names remain as built until the parent task implements the rename.
+Configured checks, slot release, publication and land retain their own completion conditions.
+
 ## Factory vocabulary as built
 
 Added 2026-11-11 from the successor tree (factory.db v14 since H1 of tl-8bh9.14.9, holds since H2, applied by the round since H3; the check step built through S6e; the land, `tl step land`, through L5 of tl-8bh9.14.8). Each word has one meaning across the code, CLI, database and
@@ -163,7 +191,8 @@ logs; use it for nothing else. Words for owner-visible output are listed as the 
 | move | One thing a round did or saw for one task: one `rounds.log` line. | A round is a list of moves. A task at `Next: land` is one `report land` move, written once while unchanged; under `land: auto` the same round follows it with `land <how>` or the hold's line, under `manual` it waits for the person's `tl step land` (tl-8bh9.14.27, tl-8bh9.14.136). |
 | settle | A round's first part: reading each existing attempt's state and doing its next action (verify, release, repeat, publish). | A settled release is the one that follows a collected result. |
 | repeat | A new attempt of the same step after the previous one left the slot unsettled, or after its required check failed with a nonzero exit, numbered 1 to 3 within a step (`attempt.number`, `repeat_reason`). Path and check-driven implement repeats share this cap. A check-driven repeat reserves a free clean slot at the checked commit, runs its own setup and retains `source_checks_id` (schema v17); its prompt includes the first failed required check’s exact argv and a bounded output tail. | The step-level retry. The CLI, the DB and the log say repeat (`repeat`, `repeats_exhausted`); do not say retry for it. A capture retry (`CAPTURE_RETRIES`) is a DB write retried inside one attempt, not a repeat. |
-| verdict | The verifier's judgment of one attempt: `verified` or `rejected:<rule>`. | Not a check pass. `reused` is a verified verdict for a step that changed nothing (`effect` `keep`), distinct from the reuse of a stored pass. |
+| factory commit | Complete an agent attempt's valid `commit` or `keep` answer. | See [factory commit](#factory-commit). |
+| verdict | The stored judgment of factory commit for one attempt. | Its result words are defined [above](#factory-commit). |
 | disposition | The agent's answer word: plan `planned`, implement `implemented`; both `unchanged`, `incomplete`, `needs_owner`. | A property of the answer. Compare effect. |
 | step kind | The few values and functions that make a step that step (`steps.StepKind`): its rules, input, answer schema and decoder, artifact rule and repeat feedback. | A code concept, not a registry or plugin: the kinds are a fixed tuple in order (`steps.STEPS` is `(PLAN, IMPLEMENT)`), reached through `steps.kind(step)`; `steps.next_step` is the one sequencing rule, over `steps.ORDER` (`plan`, `implement`, `check`). The check step is no kind (`steps.is_agent` is False): its attempt is a checks attempt. |
 | effect | What the factory does with a disposition: `commit`, `keep` or `none` (`execution.effect`). | `planned` and `implemented` are `commit`, `unchanged` is `keep`, `incomplete` and `needs_owner` are `none`. |
