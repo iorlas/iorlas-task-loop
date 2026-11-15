@@ -2,9 +2,7 @@
 typed free/held/unknown observation; no reservation writer."""
 
 import re
-import sqlite3
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, get_args
@@ -12,9 +10,9 @@ from typing import Final, Literal, get_args
 from git_porcelain import GitUnavailable, Repo, RepoIdentity, WorktreeInfo
 
 from taskloop.attempt_types import Checkouts, SlotFiles
-from taskloop.factory_schema import SLOT, current, marks
 from taskloop.repo import RepoId
 from taskloop.slot_state import SlotState, observe_slot
+from taskloop.slots_store import SlotsStore, SlotsUnavailable
 
 type Unclean = Literal["not_listed", "main", "unborn", "attached", "redirected", "dirty", "git_unavailable"]
 type Unknown = Unclean | Literal["store_unavailable", "locked", "lock_unavailable"]
@@ -69,10 +67,6 @@ class NotAdopted:
     path: Path | None = None
 
 
-class SlotsUnavailable(Exception):
-    """The slot rows themselves could not be read, so no slot is known (none is free)."""
-
-
 def slot_names(count: int) -> tuple[str, ...]:
     if count < 1:
         raise ValueError("A slot count of at least 1 is required")
@@ -110,32 +104,26 @@ def _clean(git: SlotGit, listed: tuple[WorktreeInfo, ...], path: Path, repo_id: 
     return "unborn" if state.head is None else "attached" if state.branch is not None else "dirty" if state.dirty else None
 
 
-def _adopted(con: sqlite3.Connection, repo_id: str) -> dict[str, str]:
-    rows: list[tuple[str, str]] = con.execute("SELECT name,path FROM slot WHERE repo_id=?", (repo_id,)).fetchall()
-    return dict(rows)
-
-
 def folder_name(identity: RepoIdentity) -> str:
     """The repo's readable folder name under the slots root: the origin's last path part, else the checkout folder's."""
     origin = (identity.origin_url or "").rstrip("/").removesuffix(".git")
     return re.sub(r"[^A-Za-z0-9._-]", "-", re.split(r"[/:]", origin)[-1] or identity.root.name).strip(".-") or "repo"
 
 
-def _folder(con: sqlite3.Connection, root: Path, identity: RepoIdentity) -> Path:
+def _folder(store: SlotsStore, root: Path, identity: RepoIdentity) -> Path:
     """`<root>/<repo name>`: the name is the origin's last path part (else the checkout folder's), readable; the repo's key
     joins it only when another repository's slots already use that name."""
     name = folder_name(identity)
-    rows: list[tuple[str, str]] = con.execute("SELECT repo_id,path FROM slot").fetchall()
+    rows = store.paths()
     joined = root / f"{name}-{identity.key}"
     named = root / name
-    if any(repo == identity.key and Path(path).parent == joined for repo, path in rows):
+    if any(repo == identity.key and path.parent == joined for repo, path in rows):
         return joined
-    return joined if any(repo != identity.key and Path(path).parent == named for repo, path in rows) else named
+    return joined if any(repo != identity.key and path.parent == named for repo, path in rows) else named
 
 
 def adopt(
-    connect: Callable[[], sqlite3.Connection | None],
-    begin: Callable[[sqlite3.Connection], AbstractContextManager[None]],
+    store: SlotsStore,
     repo: Repo,
     git: SlotGit,
     root: Path,
@@ -154,26 +142,21 @@ def adopt(
         return tuple(NotAdopted(name, "git_unavailable") for name in names)
     repo_id, base = identity.key, root.resolve() / folder_name(identity)
     try:
-        con = connect()
-        if con is None or not current(con):
-            return tuple(NotAdopted(name, "store_unavailable", base / name) for name in names)
-        known = _adopted(con, repo_id)
-        base = _folder(con, root.resolve(), identity)
+        store.require_current()
+        known = store.adopted(repo_id)
+        base = _folder(store, root.resolve(), identity)
         pending = [name for name in names if name not in known]
         listed = repo.worktrees() if pending else ()
     except GitUnavailable:
         return tuple(NotAdopted(name, "git_unavailable", base / name) for name in names)
-    except sqlite3.Error:
+    except SlotsUnavailable:
         return tuple(NotAdopted(name, "store_unavailable", base / name) for name in names)
     refused = _refusals(git, listed, base, pending, repo_id)
     accepted = [name for name in pending if name not in refused]
     if accepted:
         try:
-            with begin(con):
-                for name in accepted:
-                    con.execute(f"INSERT OR IGNORE INTO slot ({SLOT}) VALUES ({marks(SLOT)})", (repo_id, name, str(base / name)))
-                known = _adopted(con, repo_id)
-        except sqlite3.Error:
+            known = store.insert(repo_id, {name: base / name for name in accepted})
+        except SlotsUnavailable:
             for name in accepted:
                 refused[name] = "store_unavailable"
     return tuple(_result(name, base, known, refused) for name in names)
@@ -186,27 +169,27 @@ def _refusals(git: SlotGit, listed: tuple[WorktreeInfo, ...], base: Path, pendin
     return {name: reason for name in pending if (reason := _clean(git, listed, base / name, repo_id)) is not None}
 
 
-def _result(name: str, base: Path, known: dict[str, str], refused: dict[str, Unadoptable]) -> Adopted | NotAdopted:
+def _result(name: str, base: Path, known: dict[str, Path], refused: dict[str, Unadoptable]) -> Adopted | NotAdopted:
     if name in refused:
         return NotAdopted(name, refused[name], base / name)
     if name not in known:
         return NotAdopted(name, "store_unavailable", base / name)
-    return Adopted(name, base / name) if Path(known[name]) == base / name else NotAdopted(name, "other_root", base / name)
+    return Adopted(name, base / name) if known[name] == base / name else NotAdopted(name, "other_root", base / name)
 
 
-def _free(git: SlotGit, listed: tuple[WorktreeInfo, ...] | None, slot_path: str, repo_id: RepoId, probe: Probe) -> Unknown | None:
+def _free(git: SlotGit, listed: tuple[WorktreeInfo, ...] | None, slot_path: Path, repo_id: RepoId, probe: Probe) -> Unknown | None:
     """An unreserved slot is free when Git lists it clean and detached and its lock is free now: a held lock (`locked`:
     a release still parking it) or an unknown one (`lock_unavailable`) is never free."""
     if listed is None:
         return "git_unavailable"
-    found = _clean(git, listed, Path(slot_path), repo_id)
+    found = _clean(git, listed, slot_path, repo_id)
     if found is not None:
         return found
-    lock = probe(slot_path)
+    lock = probe(str(slot_path))
     return None if lock else "locked" if lock is False else "lock_unavailable"
 
 
-def observe(con: sqlite3.Connection, repo: Repo, git: SlotGit, repo_id: RepoId, probe: Probe) -> tuple[SlotView, ...]:
+def observe(store: SlotsStore, repo: Repo, git: SlotGit, repo_id: RepoId, probe: Probe) -> tuple[SlotView, ...]:
     """Every adopted slot of the repo, lowest name first; store or Git failure never yields `free`, nor does a slot whose
     pointer check fails (`redirected`: no Git call on the slot, whose status is read only pinned). Only an unreserved,
     clean, detached slot is probed (`probe`), and its reservation is read again after the probe: a slot reserved meanwhile
@@ -215,15 +198,11 @@ def observe(con: sqlite3.Connection, repo: Repo, git: SlotGit, repo_id: RepoId, 
     read or written, and `tl step start` relaunches it. The probe writes the lock file's holder record only when nobody
     held the lock, so it never overwrites a live holder's record; it leaves a stale `probe` record until the next taker
     (the record is informational: who wrote last)."""
+    slots = sorted(store.adopted(repo_id).items(), key=lambda item: _order(item[0]))
     try:
-        slots = sorted(_adopted(con, repo_id).items(), key=lambda item: _order(item[0]))
-    except sqlite3.Error as error:
-        raise SlotsUnavailable("Slot rows unavailable") from error
-    try:
-        rows: list[tuple[str, str]] = con.execute("SELECT slot,attempt_id FROM reservation WHERE repo_id=?", (repo_id,)).fetchall()
-    except sqlite3.Error:
-        return tuple(SlotView(name, Path(slot_path), "unknown", "store_unavailable") for name, slot_path in slots)
-    held = dict(rows)
+        held = store.reservations(repo_id)
+    except SlotsUnavailable:
+        return tuple(SlotView(name, path, "unknown", "store_unavailable") for name, path in slots)
     listed: tuple[WorktreeInfo, ...] | None = None
     if any(name not in held for name, _slot_path in slots):
         try:
@@ -231,23 +210,21 @@ def observe(con: sqlite3.Connection, repo: Repo, git: SlotGit, repo_id: RepoId, 
         except GitUnavailable:
             listed = None
     views: list[SlotView] = []
-    for name, slot_path in slots:
-        path = Path(slot_path)
+    for name, path in slots:
         if name in held:
             views.append(SlotView(name, path, "held", attempt_id=held[name]))
             continue
-        reason = _free(git, listed, slot_path, repo_id, probe)
+        reason = _free(git, listed, path, repo_id, probe)
         views.append(SlotView(name, path, "free") if reason is None else SlotView(name, path, "unknown", reason))
         if reason is None:  # reserved meanwhile: the probe raced another admission, so the slot is not free
-            views[-1] = _again(con, repo_id, name, path)
+            views[-1] = _again(store, repo_id, name, path)
     return tuple(views)
 
 
-def _again(con: sqlite3.Connection, repo_id: RepoId, name: str, path: Path) -> SlotView:
+def _again(store: SlotsStore, repo_id: RepoId, name: str, path: Path) -> SlotView:
     """The reservation read again after the probe: `free` only while still unreserved."""
     try:
-        found = "SELECT attempt_id FROM reservation WHERE repo_id=? AND slot=?"
-        row: tuple[object, ...] | None = con.execute(found, (repo_id, name)).fetchone()
-    except sqlite3.Error:
+        attempt_id = store.reservation(repo_id, name)
+    except SlotsUnavailable:
         return SlotView(name, path, "unknown", "store_unavailable")
-    return SlotView(name, path, "free") if row is None else SlotView(name, path, "held", attempt_id=str(row[0]))
+    return SlotView(name, path, "free") if attempt_id is None else SlotView(name, path, "held", attempt_id=attempt_id)

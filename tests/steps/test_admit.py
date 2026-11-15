@@ -35,6 +35,7 @@ from taskloop.ids import NativeIds
 from taskloop.slot_lock import custody
 from taskloop.slot_release import NotReleased, Released, SlotRelease
 from taskloop.slots import SlotGit, adopt, folder_name
+from taskloop.slots_store import SlotsStore
 from taskloop.task import TaskBinding, TaskInspection, TaskInspectionError, TaskScope
 from taskloop.tracker import inspect_task
 from taskloop.tracker_client import BD_DISCOVERY, tracker_claims, tracker_located
@@ -106,7 +107,7 @@ def slots(con: sqlite3.Connection, repo: FakeRepo, root: Path, count: int) -> No
     """A person's `git worktree add --detach` at each derived path, then adoption."""
     for number in range(1, count + 1):
         repo.add_worktree(root.resolve() / folder_name(repo.identity()) / f"s{number}", "HEAD")
-    adopt(lambda: con, begin_immediate, repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
+    adopt(SlotsStore(lambda: con, begin_immediate), repo, SlotGit(PinnedViews(repo), FakeSlotFiles(repo)), root, count)
 
 
 def request(tmp_path: Path, repo: FakeRepo, *, deadline: float = 100, model: str = "chosen", task_id: str = "tl-1",
