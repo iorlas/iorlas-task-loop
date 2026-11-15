@@ -9,7 +9,7 @@ import { apiSource } from "../../src/taskloop/dash/static/api.js";
 import { taskView } from "../../src/taskloop/dash/static/taskview.js";
 import { usageText } from "../../src/taskloop/dash/static/usage.js";
 import { receiveDuration } from "../../src/taskloop/dash/static/duration.js";
-import { messageFolding, jumpToLatest } from "./lines.test.js";
+import { commandExpansion, toolRows, messageFolding, jumpToLatest } from "./lines.test.js";
 
 let monotonic = 0;
 Object.defineProperty(performance, "now", { value: () => monotonic, configurable: true });
@@ -765,7 +765,8 @@ try {
     document.documentElement.classList.toggle("light", !dark);
   for (const test of [healthyRows, verificationStates, gaps, restartsAndRepeats, pastRuns,
     drawerSelection, checksRestartDetail, landSelection, landStaleReplies, words, eventIndicators, vocabulary,
-    landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations, messageFolding, jumpToLatest]) {
+    landEvents, waitingRows, usage, feedDisplay, liveFeedDisplay, liveDurations,
+    commandExpansion, toolRows, messageFolding, jumpToLatest]) {
     await test();
   }
   }
@@ -777,7 +778,7 @@ try {
   }
   document.documentElement.classList.toggle("dark", location.hash === "#dark");
   document.documentElement.classList.toggle("light", location.hash !== "#dark");
-  results.textContent = "PASS: 20 browser contracts, both themes";
+  results.textContent = "PASS: 22 browser contracts, both themes";
   document.documentElement.dataset.result = "passed";
 } catch (error) {
   results.textContent = `FAIL: ${error.stack}`;
