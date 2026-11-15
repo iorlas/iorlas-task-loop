@@ -22,7 +22,8 @@ from taskloop.recovery.state_store import callback, save
 from taskloop.recovery.store import RecoveryStore
 from taskloop.release_proof import RecoveryReason, recovery_stopped
 from taskloop.setup_store import ProcessSeen
-from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease, _Row
+from taskloop.slot_release import AlreadyReleased, NotReleased, Released, SlotRelease
+from taskloop.slot_release_store import ReleaseRow
 
 
 def saved_recovery(con: sqlite3.Connection, owner: Identity = OWNER) -> Intent:
@@ -137,7 +138,7 @@ def test_recovery_drift_retains_reservation_and_reports_completed_park(
     else:
         record = SlotRelease._record
 
-        def drift_record(app: SlotRelease, row: _Row, commit: str, abandon: bool) -> bool:
+        def drift_record(app: SlotRelease, row: ReleaseRow, commit: str, abandon: bool) -> bool:
             change()
             return record(app, row, commit, abandon)
 

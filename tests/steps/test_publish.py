@@ -367,6 +367,30 @@ def test_an_abandon_committed_during_the_push_is_refused_and_records_nothing(
     assert rows(registered) == [] and remote.branches()["task/tl-1"] == x  # the remote keeps X; nothing else is undone
 
 
+def test_a_changed_commit_during_the_push_records_nothing_and_can_be_retried(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, repo: ScriptedPushRepo, remote: FakeRemote, checkouts: Checkouts,
+    slot_files: SlotFiles,
+) -> None:
+    x = run(registered, tmp_path, slot, checkouts, slot_files, {P: PLAN_TEXT})
+    repo.during = lambda: registered.execute("UPDATE attempt SET end_commit=slot_head")
+    clock_calls: list[bool] = []
+
+    def clock() -> float:
+        assert registered.in_transaction
+        clock_calls.append(True)
+        return 40.0
+
+    app = BranchPublish(AttemptStore(lambda: registered), checkouts, slot_files, clock, ids=NativeIds())
+    found = app.publish(KEY)
+    assert found == NotPublished("unavailable", "changed",
+                                 f"The attempt changed during the push: origin holds {x}; nothing was recorded.")
+    assert rows(registered) == [] and remote.branches()["task/tl-1"] == x and clock_calls == []
+    repo.during = lambda: None
+    registered.execute("UPDATE attempt SET end_commit=?", (x,))
+    assert app.publish(KEY) == BranchPublished(x, x)
+    assert rows(registered) == [("attempt", x, x, 40.0)] and clock_calls == [True]
+
+
 def test_a_failed_record_is_unavailable_store_and_a_rerun_records_it(
     registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles
 ) -> None:
