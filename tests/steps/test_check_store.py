@@ -14,7 +14,8 @@ from sqlite_store import begin_immediate
 from stream_proc import OwnedProcess
 
 from taskloop import check_store, land_store
-from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable
+from taskloop.attempt_reads import StoreRefused, StoreUnavailable
+from taskloop.attempt_store import AttemptReads
 from taskloop.attempt_types import AttemptKey, Replaced
 from taskloop.check_store import ChecksAdmitted, CheckStore, Recorded, ResultRow, latest_results, record_release, unsettled
 from taskloop.command_conclusion import CommandConclusion, decode, encode

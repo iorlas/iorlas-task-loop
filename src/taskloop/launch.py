@@ -21,7 +21,7 @@ from sqlite_store import Store
 from stream_proc import IdentityUnavailableError, OwnedProcess, ProcessObservation, RegisteredStartUncertainError
 
 from taskloop.attempt_reads import StoreUnavailable
-from taskloop.attempt_store import REGISTRATION_BUSY_MS, AttemptStore
+from taskloop.attempt_store import AttemptStore, configure_registration
 from taskloop.attempt_types import AttemptKey, EntryIdentity, Replaced, entry_identity
 from taskloop.drain.actions import Fenced, Unobservable, operation
 from taskloop.drain.models import ActionKind, Identity, Reason
@@ -167,7 +167,7 @@ class Launcher:
             writer = store.open_rw(self.database)  # a file removed since the read-only open would be created here
             if writer is None:
                 return LaunchUnavailable("store")
-            writer.execute(f"PRAGMA busy_timeout={REGISTRATION_BUSY_MS}")
+            configure_registration(writer)
             drain = DrainStore(lambda: writer, store.begin_immediate, ids=self.ids)
             return self._authorized(drain, target, (backlog, task_id), self.targets(lambda: writer,
                 store.begin_immediate), minutes)
