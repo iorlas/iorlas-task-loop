@@ -19,6 +19,7 @@ from taskloop.dash_task import TaskPorts, build_task
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldRow
 from taskloop.land_status import LandState
+from taskloop.step import Step
 from taskloop.step_render import human
 from taskloop.task_status import Admission, Status, TaskStatus, Wait, blocker, in_flight, skipped, task_status, words
 
@@ -46,6 +47,21 @@ ASKED = Admission(frozenset({"tl-1"}), "auto")
 def test_each_view_has_one_status_with_its_stored_reason(view: AttemptView, expected: TaskStatus) -> None:
     assert task_status(view) == expected
     assert words(expected)  # every status has plain words
+
+
+@pytest.mark.parametrize("step", [*Step, "check"])
+def test_members_and_text_agree_on_status_precedence_and_in_flight_membership(step: str) -> None:
+    view = replace(VIEW, step=step)
+    expected = TaskStatus(Status.CHECKING if step == "check" else Status.RUNNING)
+    assert task_status(view) == task_status(replace(view, step=str(step))) == expected
+    assert words(task_status(view)) == words(expected)
+    assert column_of(view) == ("checks" if step == "check" else str(step))
+    held = replace(view, next="on_hold", hold=HOLD)
+    assert task_status(held) == TaskStatus(Status.HELD, "failed:needs_owner")
+    queued = replace(ABANDONED, step=step)
+    assert task_status(queued, ASKED) == TaskStatus(Status.QUEUED, "start", Wait.READY)
+    assert in_flight((view,)) == {"tl-1"}
+    assert in_flight((held, queued)) == frozenset()
 
 
 def test_a_task_a_person_abandoned_is_queued_to_start_once_the_tracker_lists_it_under_the_label() -> None:

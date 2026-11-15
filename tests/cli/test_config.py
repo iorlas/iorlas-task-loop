@@ -219,6 +219,35 @@ def test_an_explicit_config_file_must_exist_while_the_fixed_one_may_be_absent(tm
     assert not isinstance(absent, ConfigRefused) and not absent.exists and absent.settings == defaults(tmp_path)
 
 
+@pytest.mark.parametrize("structured", [False, True])
+@pytest.mark.parametrize("overridden", [False, True])
+def test_config_show_preserves_each_steps_choices_and_flag_provenance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], structured: bool, overridden: bool,
+) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text('[agents.plan]\nmodel = "plan-model"\neffort = "low"\n'
+                      '[agents.implement]\nmodel = "implement-model"\neffort = "high"\n')
+    flags = ["--harness", "codex", "--model", "flag-model", "--effort", "ultra"] if overridden else []
+    assert main(["--config", str(config), "config", "show", *flags, *(["--json"] if structured else [])]) == 0
+    output = capsys.readouterr()
+    assert output.err == ""
+    values = json.loads(output.out)["settings"] if structured else {}
+    for name, file_model, file_effort in (("plan", "plan-model", "low"), ("implement", "implement-model", "high")):
+        source = "flag" if overridden else "file"
+        expected = {
+            "model": ("flag-model" if overridden else file_model, source),
+            "effort": ("ultra" if overridden else file_effort, source),
+            "harness": ("codex", "flag" if overridden else "default"),
+            "provider": ("openai", "derived"),
+        }
+        for field, (value, origin) in expected.items():
+            key = f"agents.{name}.{field}"
+            if structured:
+                assert values[key] == {"value": value, "source": origin}
+            else:
+                assert f"{key} = {value} ({origin})" in output.out
+
+
 def test_config_show_has_safe_policy_provenance_and_per_field_override_sources(
     tmp_path: Path, capsys: pytest.CaptureFixture[str],
 ) -> None:

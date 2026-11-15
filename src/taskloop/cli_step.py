@@ -25,6 +25,7 @@ from taskloop.result_data import Result
 from taskloop.round import NextRequest, run_round
 from taskloop.rounds import RoundsRequest, run_rounds
 from taskloop.setup_store import SetupStore
+from taskloop.step import Step, encode_step
 from taskloop.step_guide import ROUNDS, STEP_ONLY
 from taskloop.step_render import human
 from taskloop.tracker import leaked_claim
@@ -307,10 +308,10 @@ def _configuration(arguments: argparse.Namespace, loaded: Loaded) -> Loaded | Fa
     except ValueError as error:
         return Failed("refused", "choices", str(error))
     sources = dict(loaded.settings.agent_sources)
-    for step in ("plan", "implement"):
+    for step in Step:
         for key in ("harness", "model", "effort"):
             if getattr(flags, key) is not None:
-                sources[f"agents.{step}.{key}"] = "flag"
+                sources[f"agents.{encode_step(step)}.{key}"] = "flag"
     return replace(loaded, settings=replace(loaded.settings, agents=settings, agent_sources=sources))
 
 

@@ -49,6 +49,7 @@ from taskloop.land_store import LandStore
 from taskloop.merge.status import result as merge_result
 from taskloop.merge.store import MergeStore
 from taskloop.operations import Failed
+from taskloop.step import Step
 
 
 @dataclass(frozen=True)
@@ -133,7 +134,7 @@ def _agent(
     ended = None if state == "running" or row.release is None else row.release.released_at
     if state != "running" and ended is None and result.execution is not None:
         ended = ports.files.captured_at(result.execution.evidence.diagnostics)
-    after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == "plan" and row.seq > 1 else None
+    after = "repeat" if row.previous_attempt_id is not None else "restart_at_plan" if row.step == Step.PLAN and row.seq > 1 else None
     reason = row.repeat_reason if after == "repeat" else "restarted at plan" if after else None
     begun = () if started is None else (FeedEvent("step", iso(started) or "", step=row.step, attempt=number),)
     activity = ports.files.activity_complete(row.key) if state != "running" else ports.files.activity_tail(row.key, FEED_LINES)
@@ -233,7 +234,7 @@ def _chain(ports: TaskPorts, rows: tuple[AttemptRow, ...]) -> tuple[Link, ...]:
             verified += 1
             successor = next((each for each in rows if each.previous_attempt_id == row.key.attempt_id), None)
             found.append(Link(verified, agent=row, result=result, verifies=True, of=numbers[row.key.attempt_id], successor=successor))
-        for checks in store.of_attempt(row.key.attempt_id) if row.step == "implement" else ():
+        for checks in store.of_attempt(row.key.attempt_id) if row.step == Step.IMPLEMENT else ():
             checked += 1
             found.append(Link(checked, checks=checks))
     return tuple(found)

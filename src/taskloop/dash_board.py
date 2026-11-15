@@ -15,9 +15,10 @@ from taskloop.dash_model import Board, Card, Column, DashTracker, Repeat, iso
 from taskloop.evidence_files import EvidenceError, EvidenceFiles
 from taskloop.hold_cause import cause as hold_cause
 from taskloop.operations import Failed
+from taskloop.step import Step, decode_step
 from taskloop.task_status import FRESH, Admission, Status, TaskStatus, blocker, task_status, words
 
-STEP_COLUMN: dict[str, Column] = {"plan": "plan", "implement": "implement", "check": "checks"}
+STEP_COLUMN: dict[Step, Column] = {Step.PLAN: "plan", Step.IMPLEMENT: "implement"}
 
 
 def column_of(view: AttemptView, found: TaskStatus | None = None) -> Column:
@@ -32,7 +33,13 @@ def column_of(view: AttemptView, found: TaskStatus | None = None) -> Column:
         return "waiting"
     if found.status in (Status.WAITING_FOR_LAND, Status.LANDING) or view.land is not None:
         return "land"
-    return STEP_COLUMN.get(view.step, "implement")
+    if view.step == "check":
+        return "checks"
+    try:
+        column = STEP_COLUMN[decode_step(view.step)]
+    except ValueError:
+        column = "implement"
+    return column
 
 
 def admission_of(reads: StatusPorts, approved: frozenset[str], use: SlotUse | None = None) -> Admission:
@@ -48,7 +55,7 @@ def admission_of(reads: StatusPorts, approved: frozenset[str], use: SlotUse | No
 def _repeat(view: AttemptView) -> Repeat | None:
     if view.previous_attempt_id is not None or view.number > 1:
         return Repeat("repeat", view.repeat_reason or "repeat")
-    if view.step == "plan" and view.seq > 1:
+    if view.step == Step.PLAN and view.seq > 1:
         return Repeat("restart_at_plan", view.repeat_reason or "Reason not recorded")
     return None
 
@@ -130,7 +137,7 @@ def card_of(
 
 
 def duration_of(view: AttemptView, row: AttemptRow | None, reads: StatusPorts, files: EvidenceFiles) -> Duration | None:
-    if row is None or view.checks is not None or view.land is not None or view.step not in ("plan", "implement"):
+    if row is None or view.checks is not None or view.land is not None or view.step not in Step:
         return None
     return read_duration(reads.store, files, row, view.result)
 
