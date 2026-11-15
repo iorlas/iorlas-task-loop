@@ -202,6 +202,7 @@ protected_modules =
 allowed_importers =
 
     taskloop.agents
+    taskloop.agents.api
     taskloop.agents.config
     taskloop.agents.launch
     taskloop.agents.settings
@@ -610,6 +611,7 @@ source_modules =
     taskloop.admit_store
     taskloop.agent_credentials
     taskloop.agents
+    taskloop.agents.api
     taskloop.agents.config
     taskloop.agents.launch
     taskloop.agents.settings
@@ -816,6 +818,9 @@ source_modules =
     taskloop.task
     taskloop.task_content
     taskloop.task_content_store
+    taskloop.task_event
+    taskloop.task_event_cause
+    taskloop.task_event_codec
     taskloop.task_status
     taskloop.tracker
     taskloop.tracker_client
