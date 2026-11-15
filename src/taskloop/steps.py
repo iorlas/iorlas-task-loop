@@ -12,9 +12,10 @@ from typing import Final, Protocol
 from git_porcelain import Tree
 
 from taskloop import implement_step, plan_step
-from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, Step, StepRules, Unsettled
+from taskloop.attempt_types import CHAIN_RULES, Answer, Rejected, Rule, StepRules, Unsettled
 from taskloop.check_repeat.feedback import FailedCheck
 from taskloop.input_context import InputContext
+from taskloop.step import Step
 from taskloop.task import TaskInspection
 
 
@@ -44,11 +45,11 @@ class StepKind:
 
 
 PLAN: Final = StepKind(
-    "plan", plan_step.step_rules, plan_step.input_text, plan_step.ANSWER_SCHEMA, plan_step.decode, plan_step.artifact,
+    Step.PLAN, plan_step.step_rules, plan_step.input_text, plan_step.ANSWER_SCHEMA, plan_step.decode, plan_step.artifact,
     plan_step.feedback,
 )
 IMPLEMENT: Final = StepKind(
-    "implement", implement_step.step_rules, implement_step.input_text, implement_step.ANSWER_SCHEMA, implement_step.decode,
+    Step.IMPLEMENT, implement_step.step_rules, implement_step.input_text, implement_step.ANSWER_SCHEMA, implement_step.decode,
     implement_step.artifact, implement_step.feedback, environment=True,
 )
 STEPS: Final[tuple[StepKind, ...]] = (PLAN, IMPLEMENT)  # the agent steps, in order

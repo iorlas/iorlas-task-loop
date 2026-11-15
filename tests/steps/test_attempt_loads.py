@@ -8,6 +8,7 @@ from test_attempt_store import FIRST, KEY, seed
 from taskloop.attempt_reads import StoreRefused, StoreUnavailable
 from taskloop.attempt_store import AttemptLoads, AttemptStore, retained_on
 from taskloop.attempt_types import AttemptKey, FileRef
+from taskloop.step import Step
 
 
 @pytest.fixture
@@ -69,6 +70,12 @@ def test_retained_inputs_and_earlier_evidence_survive_release_on_callers_connect
     assert retained.input_ref == FileRef("input.txt", "0") and retained.setting.model == "chosen"
     earlier = loads.earlier("repo", "tasks", "tl-1", "/tracker")
     assert earlier is not None and earlier.key == KEY and earlier.end_commit == retained.checked
+    assert earlier.step is Step.IMPLEMENT
+    assert con.execute("SELECT step FROM attempt WHERE attempt_id=?", (KEY.attempt_id,)).fetchone() == ("implement",)
+    assert loads.earlier("other-repo", "tasks", "tl-1", "/tracker") is None
+    assert loads.earlier("repo", "other-tasks", "tl-1", "/tracker") is None
+    assert loads.earlier("repo", "tasks", "other-task", "/tracker") is None
+    assert loads.earlier("repo", "tasks", "tl-1", "/other-tracker") is None
     assert loads.earlier_for(KEY) == earlier
     with pytest.raises(StoreRefused, match="stale_reservation"):
         loads.load(KEY)

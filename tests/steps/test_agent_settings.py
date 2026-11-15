@@ -19,6 +19,7 @@ from taskloop.agents.settings import (
     encode_policy,
 )
 from taskloop.harness_choice import HarnessKind, Provider
+from taskloop.step import Step
 
 
 def test_defaults_and_individual_overrides_are_selected_for_the_actual_step() -> None:
@@ -29,6 +30,20 @@ def test_defaults_and_individual_overrides_are_selected_for_the_actual_step() ->
     assert apply(settings.implement, Overrides(effort="ultra")).model == "gpt-6.1-sol"
     with pytest.raises(ValueError, match="matching per-step"):
         apply(settings.plan, Overrides(harness=HarnessKind.CLAUDE, model="opus"))
+
+
+@pytest.mark.parametrize("step", list(Step))
+def test_step_text_and_members_select_the_same_settings(step: Step) -> None:
+    settings = StepSettings()
+    expected = settings.plan if step is Step.PLAN else settings.implement
+    assert settings.for_step(step) is expected
+    assert settings.for_step(str(step)) is expected
+
+
+@pytest.mark.parametrize("text", ["", "unknown", "PLAN", "Implement", " plan", "implement ", "check"])
+def test_settings_reject_non_agent_or_noncanonical_steps(text: str) -> None:
+    with pytest.raises(ValueError):
+        StepSettings().for_step(text)
 
 
 @pytest.mark.parametrize("limit", [None, 1, 100000])

@@ -1,7 +1,6 @@
 """Immutable per-step choices, stored policies and their single database codec."""
 
 import json
-from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal, Self
 
@@ -10,6 +9,7 @@ from any_agent.harnesses.opencode_sandbox import Sandbox
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from taskloop.harness_choice import HarnessKind, Provider, provider_of
+from taskloop.step import Step, decode_step
 
 
 class Input(BaseModel):
@@ -132,11 +132,6 @@ class AgentSetting(Input):
         return self.access.summary
 
 
-class AgentStep(StrEnum):
-    PLAN = "plan"
-    IMPLEMENT = "implement"
-
-
 class Overrides(Input):
     harness: HarnessKind | None = None
     model: str | None = None
@@ -153,7 +148,7 @@ class StepSettings(Input):
     implement: AgentSetting = AgentSetting(effort="medium")
 
     def for_step(self, step: str) -> AgentSetting:
-        return self.plan if AgentStep(step) is AgentStep.PLAN else self.implement
+        return self.plan if decode_step(step) is Step.PLAN else self.implement
 
     def overridden(self, flags: Overrides) -> Self:
         return type(self)(plan=apply(self.plan, flags), implement=apply(self.implement, flags))
