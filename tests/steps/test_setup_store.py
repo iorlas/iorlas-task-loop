@@ -8,7 +8,8 @@ import pytest
 from doubles import CANDIDATE, CHECKS, SQUASH, X
 from stream_proc import OwnedProcess
 
-from taskloop.attempt_reads import AttemptReads, StoreRefused, StoreUnavailable
+from taskloop.attempt_reads import StoreRefused, StoreUnavailable
+from taskloop.attempt_store import AttemptReads
 from taskloop.attempt_types import AttemptKey
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.setup_store import SetupRow, SetupStore, running
