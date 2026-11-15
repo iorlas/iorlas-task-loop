@@ -1,0 +1,23 @@
+{
+  "prepared_commit": "771f57ad2b82b9cb5e6e01e14966c82ad1705b7f",
+  "cited_paths": [
+    "src/taskloop/dash_land.py",
+    "src/taskloop/dash_model.py",
+    "src/taskloop/dash_task.py",
+    "src/taskloop/dash_composition.py",
+    "src/taskloop/dash_server.py",
+    "src/taskloop/dash_board.py",
+    "src/taskloop/land_store.py",
+    "src/taskloop/check_store.py",
+    "src/taskloop/land_status.py",
+    "src/taskloop/land_check.py",
+    "src/taskloop/land_summary.py",
+    "src/taskloop/dash/static/rail.js",
+    "src/taskloop/dash/static/drawer.js",
+    "src/taskloop/dash/static/ui.js",
+    "tests/steps/test_dash_land.py",
+    "tests/steps/test_dash_read.py",
+    "tests/dash/rail.test.js",
+    "tests/dash/rail.html"
+  ]
+}

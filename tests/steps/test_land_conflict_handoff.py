@@ -148,7 +148,7 @@ def test_completed_resolution_and_repeated_reads_preserve_content_without_minute
             assert isinstance(dashboard, LandDetail)
             action = "main already contains" if clean else "blocked by conflicts"
             assert any(action in each for each in dashboard.actions)
-            assert dashboard.command.endswith("--no-change") is clean
+            assert (dashboard.diff_files is not None) is clean
             assert case.calls == 1 and b.environment.events == before
             assert b.reservations() == reservations and ports.conflicts.store.completed(case.record.key) == saved
             assert case.ports.merges.get(case.record.key.attempt_id) == work
