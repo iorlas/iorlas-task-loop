@@ -150,6 +150,20 @@ def external_ports(factory: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch)
     guard_git(factory, monkeypatch)
 
 
+@pytest.mark.parametrize("method", ["claim", "unclaim"])
+def test_tracker_guard_rejects_a_write_transaction_before_effects(factory: sqlite3.Connection, tmp_path: Path, method: str) -> None:
+    tracker = Tracker(factory, tmp_path)
+    call = tracker.claim if method == "claim" else tracker.unclaim
+    with begin_immediate(factory), pytest.raises(AssertionError, match="outside any transaction"):
+        call("tasks", "tl-1")
+    assert tracker.calls == []
+
+
+def test_git_read_guard_rejects_a_write_transaction(factory: sqlite3.Connection, repo: FakeRepo) -> None:
+    with begin_immediate(factory), pytest.raises(AssertionError, match="outside the write transaction"):
+        repo.refs(["refs/heads/"])
+
+
 def admit(con: sqlite3.Connection, tmp_path: Path, repo: FakeRepo, tracker: Tracker | None = None) -> AdmitResult:
     tracker = tracker or Tracker(con, tmp_path / "artifacts")
     return admission(con, tmp_path, tracker, repo).admit(request(tmp_path, repo))

@@ -139,26 +139,31 @@ def test_the_launchers_git_bound_is_in_the_entry_argv(admitted: Path) -> None:
     assert isinstance(argv, list) and argv[-3:] == ["45", "tasks", "tl-1"]
 
 
+def probe_writer(db: Path) -> tuple[object, ...]:
+    """A separate writer must be permitted at the process start boundary."""
+    con = sqlite3.connect(db, timeout=0, isolation_level=None)
+    try:
+        with begin_immediate(con):
+            assert con.execute("SELECT count(*) FROM drain_action WHERE state='pending'").fetchone() == (1,)
+        return stored(db)
+    finally:
+        con.close()
+
+
 def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted: Path) -> None:
     seen: list[tuple[object, ...]] = []
     start = FakeStart()
 
     def observe_start() -> None:
-        # A second process can acquire the write lock before spawn and after registration,
-        # while the dispatch intent remains durable until launch returns.
-        con = sqlite3.connect(admitted, timeout=0, isolation_level=None)
-        try:
-            with begin_immediate(con):
-                assert con.execute("SELECT count(*) FROM drain_action WHERE state='pending'").fetchone() == (1,)
-            seen.append(stored(admitted))
-        finally:
-            con.close()
+        seen.append(probe_writer(admitted))
 
     start.before = start.after = observe_start
     result = launcher(admitted, start).launch("tasks", "tl-1", 30)
     assert result == Launched(KEY, (9, "new-start", "boot"))
     assert seen == [(None, None, None, "admitted"), (9, "new-start", "boot", "admitted")]
     assert stored(admitted) == seen[-1]
+
+
     call = start.calls[0]
     root = str(admitted.parent)
     assert call["argv"] == ["/venv/bin/python", "-I", "-m", "taskloop.attempt_entry", str(admitted), root, "600", "tasks", "tl-1"]
@@ -171,6 +176,19 @@ def test_launch_registers_before_the_permit_and_leaves_the_child_alone(admitted:
     assert isinstance(fd, int)
     with pytest.raises(OSError):
         os.fstat(fd)  # the coordinator's copy of the log descriptor is closed
+
+
+def test_start_guard_rejects_a_held_writer_before_registration_or_permission(admitted: Path) -> None:
+    start = FakeStart(before=lambda: probe_writer(admitted))
+    registered: list[OwnedProcess] = []
+    con = sqlite3.connect(admitted, timeout=0, isolation_level=None)
+    try:
+        with admitted.open("rb") as log, begin_immediate(con), pytest.raises(sqlite3.OperationalError, match="locked"):
+            start(["entry"], registered=registered.append, stderr=log.fileno())
+    finally:
+        con.close()
+    assert registered == [] and not start.permitted
+    assert stored(admitted) == (None, None, None, "admitted")
 
 
 @pytest.mark.parametrize("mode", ["popen", "bootstrap", "timeout", "identity"])
