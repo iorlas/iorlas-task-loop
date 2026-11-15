@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from admission_boundaries import guard_git, outside_transaction
 from any_agent import Harness, LaunchSpec, RunHooks, RunOutcome, Summary
 from any_agent.procs import Worker
 from any_agent.testing import FakeRun
@@ -28,6 +29,7 @@ from taskloop.attempt import Attempts
 from taskloop.attempt_status import Shown, StatusPorts, show_attempt
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Checkouts, EntryIdentity, FileRef, SlotFiles
+from taskloop.discussion import empty
 from taskloop.earlier_input import START
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.ids import NativeIds
@@ -97,8 +99,8 @@ def tasks(*beads: Bead) -> Callable[[str, str, str], TaskInspection]:
 
 
 def advancing(con: sqlite3.Connection, tmp_path: Path, checkouts: Checkouts, files: SlotFiles, bead: Bead = CLAIMED) -> NextAdmission:
-    return NextAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), tasks(bead), checkouts,
-        lambda: 10, lambda _p: True, files, ids=NativeIds())
+    return NextAdmission(lambda: con, begin_immediate, EvidenceFiles(tmp_path), outside_transaction(con, tasks(bead)), checkouts,
+        lambda: 10, lambda _p: True, files, ids=NativeIds(), discussion=outside_transaction(con, empty))
 
 
 def request(repo: FakeRepo, previous: AttemptKey = KEY) -> NextStepRequest:
@@ -112,12 +114,16 @@ def tip(repo: FakeRepo) -> str:
 
 
 @pytest.fixture
-def planned(registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles) -> str:
+def planned(
+    registered: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, checkouts: Checkouts, slot_files: SlotFiles,
+    monkeypatch: pytest.MonkeyPatch,
+) -> str:
     """The registered plan attempt ran, was verified, released settled and published: its X."""
     answer = {"disposition": "planned", "plan_path": PLAN, "paths": [PLAN], "message": "Plan", "explanation": "done"}
     assert execute(registered, tmp_path, KEY, agent(answer, lambda: slot.write_file(PLAN, PLAN_TEXT)), checkouts, slot_files) == (
         "verification")
     assert finish(registered, checkouts, slot_files).published == "published"
+    guard_git(registered, monkeypatch)
     return tip(slot.repo)
 
 
@@ -233,8 +239,8 @@ def test_a_superseded_or_racing_advance_is_task_attempted_and_one_attempt_is_adm
     """A second advance wins between the first one's read and its transaction: the first finds another current attempt."""
     other = advancing(registered, tmp_path, checkouts, slot_files)
     files = Racing(tmp_path, lambda: other.admit_next(request(slot.repo)))
-    racing = NextAdmission(lambda: registered, begin_immediate, files, tasks(CLAIMED), checkouts, lambda: 10,
-        lambda _p: True, slot_files, ids=NativeIds())
+    racing = NextAdmission(lambda: registered, begin_immediate, files, outside_transaction(registered, tasks(CLAIMED)),
+        checkouts, lambda: 10, lambda _p: True, slot_files, ids=NativeIds())
     found = racing.admit_next(request(slot.repo))
     assert isinstance(files.won, Admitted)
     assert isinstance(found, AdmitRefused) and found.reason == "task_attempted"
