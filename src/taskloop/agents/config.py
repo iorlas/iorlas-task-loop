@@ -15,6 +15,7 @@ from taskloop.agents.settings import (
     StepSettings,
 )
 from taskloop.harness_choice import HarnessKind
+from taskloop.step import Step, encode_step
 
 
 class CodexInput(Input):
@@ -76,21 +77,22 @@ def _setting(raw: StepInput, home: Path, built: AgentSetting) -> AgentSetting:
 
 def resolve_agents(value: object, home: Path) -> tuple[StepSettings, dict[str, str]]:
     raw = AgentsInput.model_validate(value)
-    settings: dict[str, AgentSetting] = {}
+    settings: dict[Step, AgentSetting] = {}
     sources: dict[str, str] = {}
     built = StepSettings()
-    for step, entry, default in (("plan", raw.plan, built.plan), ("implement", raw.implement, built.implement)):
+    for step, entry in ((Step.PLAN, raw.plan), (Step.IMPLEMENT, raw.implement)):
+        name = encode_step(step)
         try:
-            settings[step] = _setting(entry, home, default)
+            settings[step] = _setting(entry, home, built.for_step(step))
         except (ValueError, OSError) as error:
-            raise ValueError(f"agents.{step}: {error}") from error
+            raise ValueError(f"agents.{name}: {error}") from error
         for field in ("harness", "model", "effort", "compaction_token_limit"):
             if field in entry.model_fields_set:
-                sources[f"agents.{step}.{field}"] = "file"
+                sources[f"agents.{name}.{field}"] = "file"
         for field in ("sandbox", "settings_file", "permission_mode", "sandbox_file"):
             if field in entry.access:
-                sources[f"agents.{step}.access.{field}"] = "file"
-    return StepSettings(plan=settings["plan"], implement=settings["implement"]), sources
+                sources[f"agents.{name}.access.{field}"] = "file"
+    return StepSettings(plan=settings[Step.PLAN], implement=settings[Step.IMPLEMENT]), sources
 
 
 def configuration_error(error: ValueError | OSError) -> tuple[str, str]:
@@ -103,7 +105,7 @@ def configuration_error(error: ValueError | OSError) -> tuple[str, str]:
 
 def display(settings: StepSettings, sources: dict[str, str]) -> dict[str, dict[str, str]]:
     found: dict[str, dict[str, str]] = {}
-    for step in ("plan", "implement"):
+    for step in Step:
         setting = settings.for_step(step)
         values = {"harness": setting.harness.value, "provider": setting.provider.value,
                   "model": setting.model, "effort": setting.effort, "access.summary": setting.summary,
@@ -116,6 +118,6 @@ def display(settings: StepSettings, sources: dict[str, str]) -> dict[str, dict[s
         elif access.sandbox_file is not None:
             values["access.sandbox_file"] = str(access.sandbox_file)
         for name, value in values.items():
-            key = f"agents.{step}.{name}"
+            key = f"agents.{encode_step(step)}.{name}"
             found[key] = {"value": value, "source": "derived" if name in {"provider", "access.summary"} else sources.get(key, "default")}
     return found

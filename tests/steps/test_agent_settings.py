@@ -6,7 +6,7 @@ import pytest
 from any_agent.access import ClaudePermissionMode
 from pydantic import ValidationError
 
-from taskloop.agents.config import resolve_agents
+from taskloop.agents.config import display, resolve_agents
 from taskloop.agents.settings import (
     AgentSetting,
     ClaudePolicy,
@@ -30,6 +30,24 @@ def test_defaults_and_individual_overrides_are_selected_for_the_actual_step() ->
     assert apply(settings.implement, Overrides(effort="ultra")).model == "gpt-6.1-sol"
     with pytest.raises(ValueError, match="matching per-step"):
         apply(settings.plan, Overrides(harness=HarnessKind.CLAUDE, model="opus"))
+
+
+def test_each_step_resolves_and_displays_its_own_file_choices(tmp_path: Path) -> None:
+    settings, sources = resolve_agents({
+        "plan": {"model": "plan-model", "effort": "low"},
+        "implement": {"model": "implement-model", "effort": "ultra", "compaction_token_limit": 100000},
+    }, tmp_path)
+    assert settings.for_step(Step.PLAN).model == "plan-model"
+    assert settings.for_step(Step.PLAN).effort == "low"
+    assert settings.for_step(Step.IMPLEMENT).model == "implement-model"
+    assert settings.for_step(Step.IMPLEMENT).effort == "ultra"
+    shown = display(settings, sources)
+    assert shown["agents.plan.model"] == {"value": "plan-model", "source": "file"}
+    assert shown["agents.implement.model"] == {"value": "implement-model", "source": "file"}
+    assert shown["agents.plan.compaction_token_limit"] == {"value": "null", "source": "default"}
+    assert shown["agents.implement.compaction_token_limit"] == {"value": "100000", "source": "file"}
+    assert shown["agents.plan.harness"] == shown["agents.implement.harness"] == {"value": "codex", "source": "default"}
+    assert shown["agents.plan.provider"] == shown["agents.implement.provider"] == {"value": "openai", "source": "derived"}
 
 
 @pytest.mark.parametrize("step", list(Step))

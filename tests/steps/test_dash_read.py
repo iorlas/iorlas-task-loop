@@ -3,7 +3,7 @@
 import json
 import os
 import sqlite3
-from dataclasses import astuple
+from dataclasses import astuple, replace
 from pathlib import Path
 
 import pytest
@@ -16,19 +16,20 @@ from sqlite_store import begin_immediate
 
 from taskloop import activity_file, check_store
 from taskloop.agents.stop_models import AgentStop, Identity, StopCause, encode
-from taskloop.attempt_status import StatusPorts
+from taskloop.attempt_status import StatusPorts, current_view
 from taskloop.attempt_store import AttemptStore
 from taskloop.attempt_types import AttemptKey, Seen
 from taskloop.check_store import CheckStore
 from taskloop.command_conclusion import CommandConclusion
 from taskloop.command_sink import CommandSink
-from taskloop.dash_board import BoardPorts, build_board
+from taskloop.dash_board import BoardPorts, build_board, card_of, column_of, duration_of
 from taskloop.dash_model import AttemptBody, Board, Comment, FeedPage, Fields, LandEventKind, Ready, Run, TaskDetail
-from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker
+from taskloop.dash_task import TaskPorts, build_body, build_feed, build_task, build_tracker, history
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.hold_store import HoldInsert, HoldStore
 from taskloop.land_status import LandView, land_state, land_view
 from taskloop.profile import LandMode
+from taskloop.step import Step, decode_step
 
 KEY = AttemptKey("attempt", "dispatch", 1)
 FIELDS = Fields("P1", ("auto",), "task/tl-1", "taskloop", "2026-11-12T10:00:00Z", "2026-11-12T11:00:00Z", ("tl-0",), "Why", "Done when",
@@ -223,6 +224,34 @@ def test_stop_explanation_takes_precedence_over_an_agent_question(registered: sq
     assert card.hold_explanation == card.hold_cause
 
 
+@pytest.mark.parametrize("step", list(Step))
+def test_board_members_and_text_have_the_same_columns_restarts_repeats_and_duration(
+    registered: sqlite3.Connection, tmp_path: Path, step: Step,
+) -> None:
+    reads, files = reads_of(registered), EvidenceFiles(tmp_path)
+    files.put_input(KEY, "Plan the actual task")
+    view = current_view(reads, "tasks", "tl-1")
+    assert view is not None
+    row, = reads.store.attempts("tasks", "tl-1")
+    text = replace(view, step=str(step), seq=2)
+    member = replace(text, step=step)
+    shown = card_of(member, replace(row, step=step), "Title", files, 1000.0)
+    assert shown == card_of(text, replace(row, step=str(step)), "Title", files, 1000.0)
+    assert shown.column == str(step)
+    if step is Step.PLAN:
+        assert shown.repeat is not None and shown.repeat.kind == "restart_at_plan"
+    else:
+        assert shown.repeat is None
+    repeated = replace(member, previous_attempt_id="earlier", number=2, repeat_reason="unsafe")
+    repeat = card_of(repeated, row, "Title", files, 1000.0).repeat
+    assert repeat is not None and (repeat.kind, repeat.reason) == ("repeat", "unsafe")
+    assert duration_of(member, replace(row, step=step), reads, files) == duration_of(text, row, reads, files)
+    assert column_of(replace(member, step="check")) == "checks"
+    assert column_of(replace(member, step="unknown")) == "implement"
+    assert duration_of(replace(member, step="check"), row, reads, files) is None
+    assert duration_of(replace(member, step="unknown"), row, reads, files) is None
+
+
 def test_the_board_has_a_card_for_each_attempted_task_and_each_ready_task_without_one(
     registered: sqlite3.Connection, tmp_path: Path,
 ) -> None:
@@ -307,6 +336,13 @@ def test_the_checks_attempt_follows_its_implement_attempt_in_the_history(checkin
     assert isinstance(found, TaskDetail)
     assert [(each.step, each.n) for each in found.attempts] == [("implement", 1), ("checks", 1)]
     assert found.attempts[1].state == "running"
+    ports = TaskPorts(reads_of(checking), EvidenceFiles(tmp_path), Tracker())
+    rows = tuple(replace(row, step=decode_step(row.step)) for row in ports.reads.store.attempts("tasks", "tl-1"))
+    assert history(ports, rows) == found.attempts
+    assert build_body(ports, "tasks", "tl-1", "checks", 1) is not None
+    assert isinstance(build_feed(ports, "tasks", "tl-1", "checks", 1, None), FeedPage)
+    assert build_body(ports, "tasks", "tl-1", "unknown", 1) is None
+    assert build_feed(ports, "tasks", "tl-1", "unknown", 1, None) is None
 
 
 def test_an_agent_attempts_detail_and_feed_show_its_commands_and_messages_as_live_lines(
@@ -614,6 +650,8 @@ def test_a_plan_restarted_at_plan_is_its_own_try_that_can_be_read_by_its_number(
         ("plan", 1, None), ("implement", 1, None), ("plan", 2, "restart_at_plan")]
     assert found.task.attempt == 2 and found.task.repeat is not None and found.task.repeat.kind == "restart_at_plan"
     assert found.task.repeat.reason == "Reason not recorded"
+    rows = tuple(replace(row, step=decode_step(row.step)) for row in ports.reads.store.attempts("tasks", "tl-1"))
+    assert history(ports, rows) == found.attempts
     board_task, = board_of(registered, files, Tracker()).tasks
     assert board_task.attempt == 2 and board_task.repeat is not None
     assert (board_task.repeat.kind, board_task.repeat.reason) == ("restart_at_plan", "Reason not recorded")
