@@ -8,12 +8,13 @@ from conftest import DONE
 from doubles import D
 from sqlite_store import SchemaError, Store
 
-from taskloop.attempt_reads import StoreUnavailable
+from taskloop.attempt_reads import ReleaseRow, SlotUse, StoreUnavailable
 from taskloop.attempt_status import Listed, StatusPorts, list_attempts
 from taskloop.attempt_store import AttemptStore
-from taskloop.attempt_types import Seen
+from taskloop.attempt_types import ATTEMPTS, AttemptKey, ChainLink, Seen
 from taskloop.dash_board import BoardPorts, build_board, tries
 from taskloop.dash_model import Board, Ready
+from taskloop.drain.models import Identity
 from taskloop.evidence_files import EvidenceFiles
 from taskloop.factory_schema import SCHEMA
 from taskloop.operations import Failed
@@ -117,6 +118,88 @@ def test_scoped_predicates_use_the_task_index(registered: sqlite3.Connection) ->
     select = next(query for query in sql if "FROM attempt p" in query)
     plan = registered.execute("EXPLAIN QUERY PLAN " + select).fetchall()
     assert any("SEARCH p USING INDEX" in row[3] and "backlog=? AND task_id=?" in row[3] for row in plan)
+
+
+def test_status_inputs_and_slot_metadata_survive_release(registered: sqlite3.Connection) -> None:
+    store = AttemptStore(lambda: registered)
+    row = store.attempts()[0]
+    identity = Identity(pid=7, pgid=7, start="entry-start", boot="boot")
+    assert store.owns_entry(row.key, identity)
+    assert not store.owns_entry(replace(row.key, dispatch_token="wrong"), identity)
+    assert store.state(row.key) == ("admitted", False)
+    assert store.step_of("attempt") == "plan" and store.step_of("missing") is None
+    assert store.tracker_root(row.key) == "/tracker"
+    assert store.input_ref(row.key).path == "input.txt"
+    assert store.backlogs() == ("tasks",)
+    assert store.slot_use() == SlotUse(0, frozenset({(row.repo_id, "s1")}))
+    for name in ("s10", "s2"):
+        registered.execute("INSERT INTO slot (repo_id,name,path) VALUES (?,?,?)", (row.repo_id, name, f"/slots/{name}"))
+    assert store.slot_names() == ("s1", "s2", "s10")
+    registered.execute("DELETE FROM reservation")
+    registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,5,'kept')", (D,))
+    assert store.slot_use() == SlotUse(3, frozenset())
+    assert store.release_of(row.key) == ReleaseRow(D, 5, "kept")
+    assert store.attempts()[0] == replace(row, held=False, release=ReleaseRow(D, 5, "kept"))
+    assert store.state(row.key) == ("admitted", False) and store.input_ref(row.key).path == "input.txt"
+
+
+@pytest.mark.parametrize("claim", [None, "kept", "unclaimed", "not_held"])
+def test_previous_abandoned_uses_the_previous_task_identity(registered: sqlite3.Connection, claim: str | None) -> None:
+    store = AttemptStore(lambda: registered)
+    original = store.attempts()[0]
+    add(registered, "other", 2, repo="other-repo")
+    add(registered, "restart", 3, repo=original.repo_id)
+    key = AttemptKey("restart", "restart", 1)
+    assert not store.previous_abandoned(key)
+    if claim is not None:
+        registered.execute("INSERT INTO slot_release VALUES ('attempt','dispatch',1,?,5,?)", (D, claim))
+    assert store.previous_abandoned(key) == (claim in ("unclaimed", "not_held"))
+    assert not store.previous_abandoned(AttemptKey("attempt", "dispatch", 1))
+    assert not store.previous_abandoned(AttemptKey("missing", "missing", 1))
+
+
+def test_chain_is_oldest_first_and_refuses_more_than_the_attempt_bound(registered: sqlite3.Connection) -> None:
+    store = AttemptStore(lambda: registered)
+    original = store.attempts()[0]
+    expected = [ChainLink(1, D, None, None, (), store.input_ref(original.key))]
+    registered.execute("UPDATE attempt SET base_commit=?", (D,))
+    previous = "attempt"
+    for number in range(2, ATTEMPTS + 2):
+        key = f"repeat-{number}"
+        add(registered, key, number, previous=previous)
+        registered.execute("UPDATE attempt SET base_commit=?,number=? WHERE attempt_id=?", (D, number, key))
+        expected.append(ChainLink(number, D, None, None, (), store.input_ref(AttemptKey(key, key, 1))))
+        if number <= ATTEMPTS:
+            assert store.chain(AttemptKey(key, key, 1)) == tuple(expected)
+        else:
+            with pytest.raises(StoreUnavailable, match="Malformed step chain"):
+                store.chain(AttemptKey(key, key, 1))
+        previous = key
+
+
+@pytest.mark.parametrize("broken", ["missing", "undispatched", "number_gap"])
+def test_broken_chains_are_unavailable(registered: sqlite3.Connection, broken: str) -> None:
+    store = AttemptStore(lambda: registered)
+    key = AttemptKey("attempt", "dispatch", 1)
+    if broken == "missing":
+        key = replace(key, dispatch_token="wrong")
+    elif broken == "number_gap":
+        add(registered, "repeat", 2, previous="attempt")
+        registered.execute("UPDATE attempt SET base_commit=?", (D,))
+        registered.execute("UPDATE attempt SET number=3 WHERE attempt_id='repeat'")
+        key = AttemptKey("repeat", "repeat", 1)
+    with pytest.raises(StoreUnavailable):
+        store.chain(key)
+
+
+@pytest.mark.parametrize("change", ["deadline='broken'", "repeat_listing='{}'", "access_policy='{}'"])
+def test_malformed_listing_values_are_unavailable(registered: sqlite3.Connection, change: str) -> None:
+    registered.execute(f"UPDATE attempt SET {change}")
+    store = AttemptStore(lambda: registered)
+    with pytest.raises(StoreUnavailable):
+        store.attempts()
+    with pytest.raises(StoreUnavailable):
+        store.current_attempts()
 
 
 def test_previous_schema_is_refused_without_changing_the_database(tmp_path: Path) -> None:
