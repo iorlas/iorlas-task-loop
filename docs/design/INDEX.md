@@ -1,6 +1,6 @@
 # Design index
 
-Status: **built** for this navigation inventory, updated 2026-11-13; it does not track task completion.
+Status: **built** for this navigation inventory, updated 2026-11-15; it does not track task completion.
 Every regular file below `docs/design`, including INDEX itself, has one path-sorted inventory row.
 Plans stay at `docs/design/<task-id>/plan.md`; the task tracker owns requirements and task status.
 
@@ -17,6 +17,10 @@ The ten ADRs under `tl-8bh9.14.119/` record delivery/publication, ready-task sel
 check results, skills/hooks, admission/host power, execution storage, land continuation, hierarchical priority
 and the factory management boundary. Their individual rows below link to provenance, supersession and exact
 pytest enforcement. Accepted rationale and mechanically enforced behavior are separate claims.
+
+The [ratchet ADR](tl-8bh9.14.98/adr-ratchet.md) records exact import exceptions, shrinking ceilings
+and strict unmatched-ignore handling. Its [reusable ADR template](tl-8bh9.14.98/adr-template.md)
+requires one decision and a concrete enforcing pytest reference.
 
 ## Inventory
 
@@ -201,6 +205,10 @@ or additional design authority. Prototype documents describe historical experime
 | [tl-8bh9.14.9/live-smoke.md](tl-8bh9.14.9/live-smoke.md) | M4 live smoke: holds and keep-awake in the unattended loop (owner- or authorized-agent-run, after H3 and K1) | evidence |
 | [tl-8bh9.14.9/m4-smoke-findings.md](tl-8bh9.14.9/m4-smoke-findings.md) | M4 live smoke: findings (2026-11-12) | evidence |
 | [tl-8bh9.14.9/plan.md](tl-8bh9.14.9/plan.md) | tl-8bh9.14.9: questions and holds, and the rest of the unattended loop (block B7 with B11 and B13, milestone M4) | built for H1–H3 and K1 (sections 24–27), and G1/G2 (section 14, including the later timeout implementation) |
+| [tl-8bh9.14.98/adr-ratchet.md](tl-8bh9.14.98/adr-ratchet.md) | Ratchet import-contract exceptions and enforcing tests | built |
+| [tl-8bh9.14.98/adr-template.md](tl-8bh9.14.98/adr-template.md) | One-decision ADR template requiring an enforcing test | design |
+| [tl-8bh9.14.98/plan-metadata.json](tl-8bh9.14.98/plan-metadata.json) | Ratchet enforcement plan metadata | design |
+| [tl-8bh9.14.98/plan.md](tl-8bh9.14.98/plan.md) | Ratchet enforcement implementation plan | design |
 | [tl-8bh9.2/lifecycle.md](tl-8bh9.2/lifecycle.md) | Workspace lifecycle and state ownership | design |
 | [tl-8bh9.2/plan.md](tl-8bh9.2/plan.md) | Workspace ownership and concurrency | design |
 | [tl-8bh9.3.2.1/plan.md](tl-8bh9.3.2.1/plan.md) | First one-shot plan execution | built for this bounded successor slice |
