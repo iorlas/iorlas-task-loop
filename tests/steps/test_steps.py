@@ -174,7 +174,7 @@ def test_implement_allows_latest_shelf_releases_and_stops_for_missing_capabiliti
         "task identifiers and task text do not pin versions",
         "acquisition of its latest release is allowed when absent from the prepared cache",
         "Shelf is read-only for agents",
-        "If shelf lacks a needed capability, stop with disposition `needs_owner`, `paths: []`, `message: null`",
+        "If shelf lacks a needed capability, stop with disposition `needs_owner`, `message: null`",
         '`explanation: {"package": "<distribution name>", "capability": "<missing capability>"}`',
         "Use this structured explanation only with `needs_owner`",
         "The owner or supervisor can address the request in the shelf repository",
@@ -319,7 +319,7 @@ def test_implement_reassesses_before_exploration_and_stops_with_unfinished_work_
     assert "stop at the first coherent boundary without proceeding into another work package" in text
     assert "Explain completed and remaining scope and propose named parts" in text
     assert "each with an acceptance criterion and dependencies (explicitly none where appropriate)" in text
-    assert "Partial work is unfinished: use `needs_owner`, `paths: []`, `message: null`; the hold saves it" in text
+    assert "Partial work is unfinished: use `needs_owner`, `message: null`; the hold saves it" in text
     assert "The owner or orchestrator creates parts in the task tracker; do not create them" in text
     assert "or ask the owner to run a CLI command" in text
     assert "100 estimated model calls limit is distinct from this implement reassessment at about 60 calls" in text
@@ -334,8 +334,13 @@ def test_implement_reassesses_before_exploration_and_stops_with_unfinished_work_
 def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(step: str, success: str) -> None:
     operation = kind(step)
     text = task_text(TASK, step, CONTEXT)
+    condition = (
+        f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`"
+        if step == "plan" else
+        "Only with `implemented` should `message` contain a commit message; otherwise return `message: null`"
+    )
     guidance = (
-        f"Only with `{success}` should `paths` list files; otherwise return `paths: []` and `message: null`, and the factory "
+        f"{condition}, and the factory "
         "saves unfinished slot work as a work-in-progress commit on the task branch when holding the task."
     )
     assert guidance in text and SAVED_WORK in text
@@ -344,9 +349,9 @@ def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(s
         assert "the factory commits exactly those paths" in text
     else:
         assert "The factory derives the commit paths from all tracked and untracked slot changes, including deletions" in text
-        assert "paths list does not select what is committed" in text
         assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in text
-        assert "still list in `paths` every file you changed, added or deleted" in text
+        assert "With `implemented`, give a one-line commit `message`" in text
+        assert "`paths`" not in text and "paths list" not in text
         assert GIT_WRITES in text
     assert "ANSWER FORMAT" not in text
     for unrecorded in (False, True):
@@ -357,7 +362,7 @@ def test_fixed_input_and_repeat_keep_unfinished_answer_and_saved_work_guidance(s
             instructions = repeated.removesuffix(text)
             assert "The factory derives the commit paths" in instructions
             assert "Remove unwanted untracked files and restore unwanted tracked edits before answering" in instructions
-            assert "still list every changed, added or deleted file in `paths`" in instructions
+            assert "`paths`" not in instructions and "paths list" not in instructions
             assert "apply_patch" in instructions
 
 
@@ -366,7 +371,8 @@ def test_failed_check_feedback_keeps_the_fixed_implement_guidance() -> None:
     failed = FailedCheck(source=AttemptKey("check", "dispatch", 1), block=1, commit="a" * 40, name="test",
                          argv=("just", "test"), rc=1, output=OutputTail(availability=Availability.EMPTY))
     feedback = failed_check_feedback(failed, text, "nonce")
-    assert feedback.endswith(text) and "Only with `implemented` should `paths` list files" in feedback
+    assert feedback.endswith(text) and "Only with `implemented` should `message` contain a commit message" in feedback
+    assert "`paths`" not in feedback and "paths list" not in feedback
     assert "the factory saves unfinished slot work" in feedback and SAVED_WORK in feedback
 
 
@@ -451,6 +457,6 @@ def test_implement_reading_directions_survive_both_retry_routes(route: str) -> N
                    "`rg -n '^def |^class '`", "even if the symbol search is empty", "Do not batch whole-file dumps",
                    "Do not read a file again within this session unless it changed", "read only the changed range",
                    "including verification after an edit", "edit without reopening unchanged content",
-                   "Do not edit plan.md", "paths list must not contain any plan.md", "including another task's plan or a deletion",
+                   "Do not change any plan.md", "including another task's plan or a deletion",
                    "handoff of what was built belongs in the one-line commit message"):
         assert phrase in text

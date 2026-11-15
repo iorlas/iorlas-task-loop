@@ -33,7 +33,7 @@ from taskloop.profile import Unavailable
 KEY = AttemptKey("attempt", "dispatch", 1)
 ENTRY = (7, "entry-start", "boot")
 WORKER = Worker(pid=42, pgid=42, start="native-start", boot="boot")
-UNCHANGED = {"disposition": "unchanged", "paths": [], "message": None, "explanation": "nothing to do"}
+UNCHANGED = {"disposition": "unchanged", "message": None, "explanation": "nothing to do"}
 ROW = "SELECT run,conclusion,rc,command,pid FROM setup_run ORDER BY run"
 
 

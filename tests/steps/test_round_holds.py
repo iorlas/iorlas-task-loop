@@ -43,9 +43,9 @@ def factory(factory: sqlite3.Connection, tmp_path: Path, slot: FakeWorktree, che
 
 def asks(factory: Factory, task_id: str, step: str) -> None:
     """The task's agent of `step` answers `needs_owner` and changes nothing."""
-    plan = {"plan_path": None} if step == "plan" else {}
+    plan = {"plan_path": None, "paths": []} if step == "plan" else {}
     factory.agents[task_id, step] = scripted(
-        factory.slot.repo, {"disposition": "needs_owner", **plan, "paths": [], "message": None, "explanation": ASKED}, {})
+        factory.slot.repo, {"disposition": "needs_owner", **plan, "message": None, "explanation": ASKED}, {})
 
 
 def ready(factory: Factory, task_id: str) -> None:
@@ -79,7 +79,7 @@ def test_a_missing_shelf_capability_is_reconstructed_from_evidence_and_held(fact
     before = factory.tip("tl-1")
     factory.agents["tl-1", "implement"] = scripted(
         factory.slot.repo,
-        {"disposition": "needs_owner", "paths": [], "message": None,
+        {"disposition": "needs_owner", "message": None,
          "explanation": {"package": "git-porcelain", "capability": "Observe a pending external action"}}, {},
     )
     assert factory.round() == [("tl-1", "implement", "advance", "started")]
@@ -125,10 +125,10 @@ def test_a_size_refusal_holds_the_parent_once_and_keeps_any_coherent_part_unfini
     )
     if step == "implement":
         explanation += " Completed: hand-start fix. Remaining: conflict-resolution flow."
-    plan = {"plan_path": None} if step == "plan" else {}
+    plan = {"plan_path": None, "paths": []} if step == "plan" else {}
     factory.agents["tl-1", step] = scripted(
         factory.slot.repo,
-        {"disposition": "needs_owner", **plan, "paths": [], "message": None, "explanation": explanation},
+        {"disposition": "needs_owner", **plan, "message": None, "explanation": explanation},
         {"README": "coherent hand-start fix\n"} if step == "implement" else {},
     )
     assert factory.round() == [("tl-1", step, "start" if step == "plan" else "advance", "started")]
@@ -309,16 +309,16 @@ def test_a_hold_of_a_clean_slot_saves_nothing(factory: Factory) -> None:
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
 @pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
-def test_unfinished_answers_with_paths_hold_save_and_resume_the_whole_slot(
+def test_unfinished_answers_hold_save_and_resume_the_whole_slot(
     factory: Factory, step: str, disposition: str
 ) -> None:
     if step == "implement":
         assert factory.round() == [("tl-1", "plan", "start", "started")]
         assert factory.round() == [("tl-1", "plan", "verify", "verified release=released branch=published")]
-    plan = {"plan_path": None} if step == "plan" else {}
+    plan = {"plan_path": None, "paths": ["README", "../unused"]} if step == "plan" else {}
     factory.agents["tl-1", step] = scripted(
         factory.slot.repo,
-        {"disposition": disposition, **plan, "paths": ["README", "../unused"], "message": None,
+        {"disposition": disposition, **plan, "message": None,
          "explanation": "Work remains"},
         {"README": "partial edit\n", "unlisted.txt": "unfinished new file\n"},
     )

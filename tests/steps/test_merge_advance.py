@@ -51,7 +51,7 @@ def test_implementation_starts_with_its_published_plan_and_main_without_another_
         here = repo.worktree(Path(spec.cwd or ""))
         assert here.read_file(path) == HEADER + "# Retained plan\n" + CHANGE_MAP
         assert here.read_file("other") == "another task landed\n"
-        return scripted(repo, {"disposition": "implemented", "paths": ["code.py"], "message": "Implement retained plan",
+        return scripted(repo, {"disposition": "implemented", "message": "Implement retained plan",
                                "explanation": "Both changes retained."}, {"code.py": "value = 1\n"})(harness, spec, timeout, hooks)
 
     case.agents["tl-1", "implement"] = implementation
@@ -83,7 +83,7 @@ def test_sequential_main_landings_do_not_restart_several_waiting_plans(
         case.agents[task, "plan"] = scripted(repo, {"disposition": "planned", "plan_path": path,
             "paths": [path], "message": f"Plan {task}", "explanation": "Retained plan."},
             {path: HEADER + f"# Plan {task}\n" + CHANGE_MAP})
-        case.agents[task, "implement"] = scripted(repo, {"disposition": "implemented", "paths": [f"{task}.py"],
+        case.agents[task, "implement"] = scripted(repo, {"disposition": "implemented",
             "message": f"Implement {task}", "explanation": "Completed retained work."}, {f"{task}.py": "value = 1\n"})
         case.by_hand(task)
     for index, task in enumerate(tasks):

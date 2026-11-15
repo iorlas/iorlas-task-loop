@@ -327,5 +327,5 @@ def scripts(factory: Factory, slot: FakeWorktree, *task_ids: str) -> None:
             slot.repo, {"disposition": "planned", "plan_path": plan, "paths": [plan], "message": "Plan", "explanation": "planned"},
             {plan: PLAN_TEXT})
         factory.agents[task_id, "implement"] = scripted(
-            slot.repo, {"disposition": "implemented", "paths": [code, test], "message": "Add it", "explanation": "ran just check"},
+            slot.repo, {"disposition": "implemented", "message": "Add it", "explanation": "ran just check"},
             {code: "X = 1\n", test: "def test_x() -> None: ...\n"})

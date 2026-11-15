@@ -260,7 +260,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     registered.execute("UPDATE attempt SET step='implement',after_commit=?,input_path=?,input_digest=?", (commit, ref.path, ref.digest))
     changed = {"stray": "leftovers",
                DIGEST_PATH: shelf_files("c" * 40, stale=stale)[DIGEST_PATH].decode()}
-    answer = {"disposition": "implemented", "paths": [DIGEST_PATH],
+    answer = {"disposition": "implemented",
               "message": "Update digest", "explanation": "Done"}
     prior = Attempts(AttemptStore(lambda: registered), files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
                      repeat_agent(slot, changed, answer), lambda: 10, checkouts, slot_files,
@@ -277,7 +277,7 @@ def test_ordinary_repeat_uses_original_spec_and_current_committed_context_once(
     store = AttemptStore(lambda: registered)
     current = store.attempt_of("tasks", "tl-1")
     assert current is not None
-    run = fake(json.dumps({"disposition": "unchanged", "paths": [], "message": None, "explanation": "Done"}))
+    run = fake(json.dumps({"disposition": "unchanged", "message": None, "explanation": "Done"}))
     attempts = Attempts(store, files, AgentLaunch(lambda _kind: ("/bin/codex", {}), ids=NativeIds()),
                        run, lambda: 10, checkouts, slot_files,
                        environment=Environment(registered, checkouts, tmp_path, tmp_bytes=4096).preparation())

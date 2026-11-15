@@ -62,16 +62,16 @@ def test_the_answer_is_stored_with_its_effect(
 
 @pytest.mark.parametrize("step", ["plan", "implement"])
 @pytest.mark.parametrize("disposition", ["incomplete", "needs_owner"])
-def test_unfinished_answers_with_paths_are_collected_without_commit_or_repeat(
+def test_unfinished_answers_are_collected_without_commit_or_repeat(
     surroundings: AttemptSurroundings, step: str, disposition: str
 ) -> None:
     con = database(surroundings)
     head = next(worktree.head for worktree in surroundings.slot.repo.worktrees() if worktree.path == surroundings.slot.path)
     con.execute("UPDATE attempt SET step=?,after_commit=?", (step, head if step == "implement" else None))
-    unused = P if step == "plan" else "src/unused.py"
-    answer = {"disposition": disposition, "paths": [unused, "../unused", unused], "message": None, "explanation": "Work remains"}
+    answer: dict[str, object] = {"disposition": disposition, "message": None, "explanation": "Work remains"}
     if step == "plan":
         answer["plan_path"] = None
+        answer["paths"] = [P, "../unused", P]
     execution = fake(json.dumps(answer))
     attempts = Attempts(
         AttemptStore(lambda: con), EvidenceFiles(surroundings.tmp), AgentLaunch(codex, ids=NativeIds()), execution, lambda: 10,

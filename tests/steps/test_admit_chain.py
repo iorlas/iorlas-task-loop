@@ -280,14 +280,13 @@ def test_the_implement_step_commits_on_the_plan_and_is_published_then_advances_t
     assert task is not None and task.step is Step.IMPLEMENT
     assert row is not None and row.step is Step.IMPLEMENT
     assert predecessor is not None and predecessor.step is Step.PLAN
-    paths = ["src/widget.py", "tests/test_widget.py", "README"]
 
     def change() -> None:
         slot.write_file("src/widget.py", "X = 1\n")
         slot.write_file("tests/test_widget.py", "def test_x() -> None: ...\n")
         slot.remove_file("README")
 
-    answer = {"disposition": "implemented", "paths": paths, "message": "Add the widget", "explanation": "ran the tests"}
+    answer = {"disposition": "implemented", "message": "Add the widget", "explanation": "ran the tests"}
     assert execute(registered, tmp_path, key, agent(answer, change), checkouts, slot_files) == "verification"
     assert finish(registered, checkouts, slot_files) == VerifiedTask("verified", "tasks", "tl-1", key.attempt_id, "released", "published")
     x = tip(slot.repo)
@@ -306,7 +305,7 @@ def test_a_repeat_of_implement_stays_in_implement_and_names_no_after_commit(
 ) -> None:
     key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
     registered.execute("UPDATE attempt SET compaction_token_limit=100000 WHERE attempt_id=?", (key.attempt_id,))
-    answer = {"disposition": "implemented", "paths": ["src/a.py"], "message": "A", "explanation": "x"}
+    answer = {"disposition": "implemented", "message": "A", "explanation": "x"}
 
     def change() -> None:
         slot.write_file("src/a.py", "A = 1\n")
@@ -351,7 +350,7 @@ def test_the_advance_and_the_repeat_copy_the_label_the_task_was_taken_under(
 ) -> None:
     registered.execute("UPDATE attempt SET label=? WHERE attempt_id='attempt'", (label,))  # as its admission stored it
     key = implement(registered, tmp_path, slot.repo, checkouts, slot_files)
-    answer = {"disposition": "implemented", "paths": ["src/a.py"], "message": "A", "explanation": "x"}
+    answer = {"disposition": "implemented", "message": "A", "explanation": "x"}
 
     def change() -> None:
         slot.write_file("src/a.py", "A = 1\n")

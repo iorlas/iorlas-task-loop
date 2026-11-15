@@ -92,7 +92,7 @@ def test_repair_sends_fresh_discussion_once_alongside_check_feedback(rig: Repair
 
 def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
     specs: list[LaunchSpec] = []
-    answer = {"disposition": "implemented" if change else "unchanged", "paths": ["src/fix.py"] if change else [],
+    answer = {"disposition": "implemented" if change else "unchanged",
               "message": "Fix columns" if change else None, "explanation": "Ran checks"}
     agent = scripted(rig.slot.repo, answer, {"src/fix.py": "fixed = True\n", "src/omitted.py": "safe = True\n"} if change else {})
 
@@ -107,7 +107,7 @@ def repair_agent(rig: Repairing, *, change: bool = False) -> list[LaunchSpec]:
 @pytest.mark.parametrize("stale", [False, True])
 def test_failed_check_repair_validates_checked_digest_and_refreshes_once(rig: Repairing, stale: bool) -> None:
     inputs: list[str] = []
-    agent = scripted(rig.slot.repo, {"disposition": "implemented", "paths": [DIGEST_PATH],
+    agent = scripted(rig.slot.repo, {"disposition": "implemented",
                                    "message": "Update digest", "explanation": "Done"},
                      {DIGEST_PATH: shelf_files("b" * 40, stale=stale)[DIGEST_PATH].decode()})
 
@@ -160,7 +160,7 @@ def test_start_dispatches_failed_check_output_at_x_and_fresh_checks_can_pass(rig
     assert "Failed check\n" in spec.stdin and "Check: test" in spec.stdin
     assert 'Command argv: ["just", "test"]' in spec.stdin and all(line in spec.stdin for line in ASSERTION.splitlines())
     assert "Widget tl-1" in spec.stdin and "docs/design/tl-1/plan.md" in spec.stdin
-    assert "Still list only your new changes" in spec.stdin
+    assert "Only new slot changes will be committed" in spec.stdin
     assert spec.stdin.count(BEGIN) == spec.stdin.count(END) == spec.stdin.count(HEADING) == 1
     assert spec.stdin.splitlines().count("CODE MAP") == 1
     block = spec.stdin.split(BEGIN)[1].split(END)[0]
@@ -396,7 +396,7 @@ def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
     rig.round()  # plan
     rig.round()  # verify, release, publish
     rig.agents["tl-1", "implement"] = scripted(rig.slot.repo, {
-        "disposition": "unchanged", "paths": [], "message": None, "explanation": "Work left for review",
+        "disposition": "unchanged", "message": None, "explanation": "Work left for review",
     }, {"src/x.py": "x = 1\n", "scratch.txt": "leftover"})
     rig.round()  # implement 1
     assert rig.store.attempts("tasks", "tl-1")[0].number == 1
@@ -429,11 +429,11 @@ def test_a_prior_path_repeat_consumes_the_same_budget(rig: Repairing) -> None:
 
 
 @pytest.mark.parametrize("path", ["src/.gitattributes", "src/.git\x1b[31mfile"])
-def test_unsafe_feedback_names_a_nearby_git_file_even_when_not_listed_in_the_answer(rig: Repairing, path: str) -> None:
+def test_unsafe_feedback_names_a_nearby_git_file_from_the_slot(rig: Repairing, path: str) -> None:
     rig.round()
     rig.round()
     rig.agents["tl-1", "implement"] = scripted(rig.slot.repo, {
-        "disposition": "implemented", "paths": ["src/x.py"], "message": "Implement", "explanation": "ran checks",
+        "disposition": "implemented", "message": "Implement", "explanation": "ran checks",
     }, {"src/x.py": "x = 1\n", path: "unsafe"})
     rig.round()
     row = rig.store.attempts("tasks", "tl-1")[0]

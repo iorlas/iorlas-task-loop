@@ -70,9 +70,10 @@ def board_of(con: sqlite3.Connection, files: EvidenceFiles, tracker: Tracker) ->
 
 def saved_ask(con: sqlite3.Connection, files: EvidenceFiles, key: AttemptKey = KEY, step: str = "plan",
               text: str = "Which database?\nUse <primary>?") -> None:
-    answer = {"disposition": "needs_owner", "paths": [], "message": None, "explanation": text}
+    answer: dict[str, object] = {"disposition": "needs_owner", "message": None, "explanation": text}
     if step == "plan":
         answer["plan_path"] = None
+        answer["paths"] = []
     evidence = files.capture(key, RunOutcome(rc=0, summary=Summary(text=json.dumps(answer))))
     os.utime(files.root / evidence.diagnostics.path, (8, 8))
     refs = tuple(value for ref in astuple(evidence) for value in ref)
