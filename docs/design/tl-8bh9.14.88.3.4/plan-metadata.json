@@ -1,0 +1,21 @@
+{
+  "prepared_commit": "771f57ad2b82b9cb5e6e01e14966c82ad1705b7f",
+  "cited_paths": [
+    "src/taskloop/attempt_entry.py",
+    "src/taskloop/attempt_store.py",
+    "src/taskloop/attempt_write_store.py",
+    "src/taskloop/attempt_status_store.py",
+    "src/taskloop/attempt_loads.py",
+    "src/taskloop/check_entry.py",
+    "src/taskloop/launch.py",
+    "src/taskloop/evidence_files.py",
+    "tests/rules/test_attempt_sql_ownership.py",
+    "tests/steps/test_attempt_entry.py",
+    "tests/steps/test_attempt_store.py",
+    "tests/steps/test_check_entry.py",
+    "tests/steps/test_recovery_entry.py",
+    "tests/steps/test_launch.py",
+    "tests/steps/test_verifier.py",
+    "tests/steps/test_repeat_dispatch.py"
+  ]
+}
