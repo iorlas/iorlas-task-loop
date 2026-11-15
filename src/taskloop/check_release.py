@@ -55,9 +55,9 @@ from taskloop.slot_release import (
     ReleaseResult,
     Scratch,
     entry_stopped,
-    free,
     setup_stopped,
 )
+from taskloop.slot_release_store import free
 from taskloop.slot_state import SlotState, observe_slot
 
 

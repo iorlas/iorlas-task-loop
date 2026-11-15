@@ -115,9 +115,9 @@ WRITERS = {
     ("INSERT", "attempt"): "admit_store.py",
     ("UPDATE", "reservation"): "admit_store.py",  # a repeat's takeover
     ("UPDATE", "slot"): "admit_store.py",
-    ("INSERT", "slot_release"): "slot_release.py",
-    ("UPDATE", "slot_release"): "slot_release.py",
-    ("DELETE FROM", "reservation"): "slot_release.py",
+    ("INSERT", "slot_release"): "slot_release_store.py",
+    ("UPDATE", "slot_release"): "slot_release_store.py",
+    ("DELETE FROM", "reservation"): "slot_release_store.py",
     ("INSERT", "published_branch"): "publish.py",
     ("INSERT", "execution"): "attempt_write_store.py",
     ("INSERT", "verification"): "attempt_write_store.py",
